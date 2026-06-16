@@ -109,7 +109,7 @@ describe("critical effect proposal generation", () => {
     ).toBe(1);
   });
 
-  it("keeps physical minimum damage floors as notes instead of duplicate damage rows", () => {
+  it("stores physical minimum damage floors on the proposal instead of duplicate effect rows", () => {
     const proposal = buildCriticalEffectProposalFromDamageResult({
       existingCommittedDamageAmount: 2,
       finalCriticalRoll: 13,
@@ -120,16 +120,12 @@ describe("critical effect proposal generation", () => {
       (effect) => effect.sourceEffectKey === "sharp|arm|13|01",
     );
 
-    expect(minimumFloor).toMatchObject({
-      kind: "note",
-      label: "Minimum damage floor 5",
-      sourceCritKey: "sharp|arm|13",
-      sourceKind: "critical_table",
-    });
-    expect(minimumFloor?.notes).toContain("GM may add 3 damage");
+    expect(proposal.minTotalDamage).toBe(5);
+    expect(proposal.minDamageReason).toBe("amputation / severing");
+    expect(minimumFloor).toBeUndefined();
   });
 
-  it("maps structured numeric modifier templates to editable modifier drafts", () => {
+  it("maps loss-of-use templates to semantic rows instead of arbitrary modifiers", () => {
     const proposal = buildCriticalEffectProposalFromDamageResult({
       existingCommittedDamageAmount: 1,
       finalCriticalRoll: 1,
@@ -139,12 +135,44 @@ describe("critical effect proposal generation", () => {
 
     expect(proposal.proposedEffects).toContainEqual(
       expect.objectContaining({
-        kind: "modifier",
-        modifierBucket: "obSkill",
-        modifierValue: -1,
+        kind: "special",
+        rowCategory: "loss_of_use",
         sourceEffectKey: "sharp|arm|01|01",
       }),
     );
+  });
+
+  it("maps bleed and no-action critical templates to typed review rows", () => {
+    const proposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 2,
+      finalCriticalRoll: 13,
+      rng: () => 0.5,
+      selectedHitLocation: "leftArm",
+      weaponDamageClass: "edged",
+    });
+
+    expect(proposal.proposedEffects).toContainEqual(
+      expect.objectContaining({
+        kind: "special",
+        label: "Unconscious - no combat action possible",
+        rowCategory: "no_combat_action",
+        sourceEffectKey: "sharp|arm|13|02",
+      }),
+    );
+    expect(proposal.proposedEffects).toContainEqual(
+      expect.objectContaining({
+        kind: "special",
+        label: "Bleed",
+        rateValuePerRound: 3,
+        rowCategory: "bleed",
+        sourceEffectKey: "sharp|arm|13|03",
+      }),
+    );
+    expect(
+      proposal.proposedEffects.some(
+        (effect) => effect.sourceEffectKey === "sharp|arm|13|05",
+      ),
+    ).toBe(false);
   });
 
   it("maps prose-heavy special rows to editable special drafts", () => {
@@ -158,7 +186,8 @@ describe("critical effect proposal generation", () => {
     expect(proposal.proposedEffects).toContainEqual(
       expect.objectContaining({
         kind: "special",
-        label: "vision_penalty",
+        label: "vision penalty",
+        rowCategory: "special_note",
         sourceEffectKey: "sharp|head|07|02",
       }),
     );

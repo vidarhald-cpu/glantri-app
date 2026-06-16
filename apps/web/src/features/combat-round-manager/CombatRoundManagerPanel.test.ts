@@ -196,6 +196,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
     expect(source).toContain("Damage review");
+    expect(source).toContain("Outcome summary");
+    expect(source).toContain("Proposed character-sheet rows");
+    expect(source).toContain("No character-sheet rows proposed.");
     expect(source).toContain("criticalEffectProposal");
     expect(source).toContain("Critical table mapping unavailable");
     expect(source).toContain("Critical effects proposed:");
@@ -217,6 +220,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("skipCombatRoundCurrentPhaseAction");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
     expect(source).toContain("Additional immediate effects");
+    expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
+    expect(source).toContain("getCombatDamageReviewDraftEffectTarget");
     expect(source).toContain("Add modifier effect");
     expect(source).toContain("Add note effect");
     expect(source).toContain("Save review");

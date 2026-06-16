@@ -508,6 +508,19 @@ export const combatRoundDamageReviewAdditionalEffectKindSchema = z.enum([
   "special",
   "note",
 ]);
+export const combatRoundDamageReviewRowCategorySchema = z.enum([
+  "physical_damage",
+  "general_modifier",
+  "ob_skill_modifier",
+  "db_parry_modifier",
+  "fatigue",
+  "bleed",
+  "internal_bleed",
+  "no_combat_action",
+  "loss_of_use",
+  "dropped_item",
+  "special_note",
+]);
 export const combatRoundDamageReviewModifierBucketSchema = z.enum([
   "general",
   "obSkill",
@@ -530,6 +543,7 @@ export const combatRoundCriticalEffectRollReportSchema = z.object({
 
 export const combatRoundDamageReviewAdditionalEffectSchema = z
   .object({
+    accepted: z.boolean().optional(),
     durationRounds: z.number().int().positive().optional(),
     effectOrder: z.number().int().positive().optional(),
     id: idSchema,
@@ -541,9 +555,12 @@ export const combatRoundDamageReviewAdditionalEffectSchema = z
     modifierValue: z.number().int().optional(),
     notes: z.string().optional(),
     phase: combatRoundDamageReviewEffectPhaseSchema.optional(),
+    rateValuePerRound: z.number().positive().optional(),
+    rowCategory: combatRoundDamageReviewRowCategorySchema.optional(),
     rollReports: z.array(combatRoundCriticalEffectRollReportSchema).optional(),
     sourceCritKey: z.string().min(1).optional(),
     sourceEffectKey: z.string().min(1).optional(),
+    sourceText: z.string().min(1).optional(),
     sourceKind: z.literal("critical_table").optional(),
   })
   .superRefine((effect, context) => {
@@ -719,6 +736,8 @@ export const combatRoundDamageResultSchema = z.object({
           critKey: z.string().min(1).optional(),
           family: z.string().min(1).optional(),
           location: z.string().min(1).optional(),
+          minDamageReason: z.string().min(1).optional(),
+          minTotalDamage: z.number().int().min(0).optional(),
           rollReports: z.array(combatRoundCriticalEffectRollReportSchema).default([]),
           title: z.string().min(1).optional(),
           warnings: z.array(z.string().min(1)).default([]),
@@ -3932,8 +3951,8 @@ function getCombatRoundReviewedCriticalGrade(input: {
 function getCombatRoundCriticalMinimumTotalDamage(
   review?: CombatRoundDamageReview,
 ): { minDamageReason?: string; minTotalDamage?: number } {
-  let minTotalDamage: number | undefined;
-  let minDamageReason: string | undefined;
+  let minTotalDamage = review?.criticalEffectProposal?.minTotalDamage;
+  let minDamageReason = review?.criticalEffectProposal?.minDamageReason;
 
   for (const effect of review?.additionalEffects ?? []) {
     if (effect.minTotalDamage === undefined) {
@@ -5316,7 +5335,15 @@ function formatCombatRoundDamageCommitPhaseLabel(phase: CombatRoundPhase): strin
 function formatCombatRoundDamageReviewEffectDescription(
   effect: CombatRoundDamageReviewAdditionalEffect,
 ): string {
-  return effect.notes?.trim() ? `${effect.label}: ${effect.notes.trim()}` : effect.label;
+  const notes = effect.notes?.trim();
+
+  if (!notes) {
+    return effect.label;
+  }
+
+  return notes.toLowerCase().startsWith(`${effect.label.toLowerCase()}:`)
+    ? notes
+    : `${effect.label}: ${notes}`;
 }
 
 function formatCombatRoundDamageReviewEffectDuration(
@@ -5339,6 +5366,75 @@ function formatCombatRoundDamageReviewEffectDuration(
   }
 
   return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+export function getCombatRoundDamageReviewEffectRowPreview(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): {
+  accepted: boolean;
+  details: string;
+  duration?: string;
+  rowType: string;
+  target: string;
+  value: string;
+} {
+  const shape = getCombatRoundDamageReviewEffectRowShape(effect);
+  const duration = formatCombatRoundDamageReviewEffectDuration(effect);
+  const rowType =
+    effect.rowCategory === "bleed"
+      ? "Bleed"
+      : effect.rowCategory === "internal_bleed"
+        ? "Internal bleed"
+        : effect.rowCategory === "no_combat_action"
+          ? "No combat action"
+          : effect.rowCategory === "loss_of_use"
+            ? "Loss of use"
+            : effect.rowCategory === "dropped_item"
+              ? "Dropped item"
+              : effect.rowCategory === "ob_skill_modifier"
+                ? "OB/Skill modifier"
+                : effect.rowCategory === "db_parry_modifier"
+                  ? "DB/Parry modifier"
+                  : effect.rowCategory === "general_modifier"
+                    ? "General modifier"
+                    : effect.rowCategory === "fatigue" || effect.kind === "fatigue"
+                      ? "Fatigue"
+                      : effect.kind === "note"
+                        ? "Note"
+                        : shape.type === "special"
+                          ? "Special"
+                          : effect.label;
+  const target =
+    shape.effectGroup === "obSkill"
+      ? "OB/Skill"
+      : shape.effectGroup === "db"
+        ? "DB/Parry"
+        : shape.effectGroup === "general"
+          ? "General"
+          : shape.effectGroup === "bleed"
+            ? "Bleed"
+            : shape.effectGroup === "fatigue"
+              ? "Fatigue"
+              : shape.effectGroup === "special"
+                ? "Special"
+                : "None";
+  const value =
+    effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed"
+      ? effect.rateValuePerRound !== undefined
+        ? `${effect.rateValuePerRound} HP/round`
+        : ""
+      : shape.modifierValue !== undefined
+        ? `${shape.modifierValue > 0 ? "+" : ""}${shape.modifierValue}`
+        : "";
+
+  return {
+    accepted: effect.accepted !== false,
+    details: formatCombatRoundDamageReviewEffectDescription(effect),
+    duration,
+    rowType,
+    target,
+    value,
+  };
 }
 
 function getAcceptedCombatRoundOperationalConsequences(
@@ -5387,6 +5483,66 @@ function getCombatRoundDamageReviewEffectRowShape(
   modifierValue?: number;
   type: CombatEffectType;
 } {
+  if (effect.rowCategory === "bleed") {
+    return {
+      effectGroup: "bleed",
+      modifierValue: effect.rateValuePerRound ?? effect.modifierValue,
+      type: "bleed",
+    };
+  }
+
+  if (effect.rowCategory === "internal_bleed") {
+    return {
+      effectGroup: "bleed",
+      modifierValue: effect.rateValuePerRound ?? effect.modifierValue,
+      type: "internal_bleed",
+    };
+  }
+
+  if (effect.rowCategory === "fatigue") {
+    return {
+      effectGroup: "fatigue",
+      modifierValue: effect.modifierValue,
+      type: "fatigue",
+    };
+  }
+
+  if (effect.rowCategory === "general_modifier") {
+    return {
+      effectGroup: "general",
+      modifierValue: effect.modifierValue,
+      type: "general_modifier",
+    };
+  }
+
+  if (effect.rowCategory === "ob_skill_modifier") {
+    return {
+      effectGroup: "obSkill",
+      modifierValue: effect.modifierValue,
+      type: "ob_skill_modifier",
+    };
+  }
+
+  if (effect.rowCategory === "db_parry_modifier") {
+    return {
+      effectGroup: "db",
+      modifierValue: effect.modifierValue,
+      type: "db_modifier",
+    };
+  }
+
+  if (
+    effect.rowCategory === "no_combat_action" ||
+    effect.rowCategory === "loss_of_use" ||
+    effect.rowCategory === "dropped_item" ||
+    effect.rowCategory === "special_note"
+  ) {
+    return {
+      effectGroup: "special",
+      type: "special",
+    };
+  }
+
   if (effect.kind === "fatigue") {
     return {
       effectGroup: "fatigue",
@@ -5465,6 +5621,15 @@ function formatCombatRoundDamageCommitDescription(input: {
     criticalRoll: input.criticalRoll,
     review: input.damageResult.review,
   });
+  const location = getCombatRoundCommittedDamageLocation(
+    effectiveDamage.effectiveSelectedHitLocation,
+  );
+  const target =
+    location?.label ??
+    (effectiveDamage.effectiveSelectedHitLocation
+      ? getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation)
+      : "unlocated hit");
+  const weapon = input.damageResult.weaponName ?? "Attack";
   const critical = effectiveDamage.effectiveCriticalGrade
     ? ` Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()} pending.`
     : "";
@@ -5472,35 +5637,40 @@ function formatCombatRoundDamageCommitDescription(input: {
     input.criticalRoll?.status === "rolled" && effectiveCritical.finalCriticalRoll !== undefined
       ? ` Critical roll ${effectiveCritical.finalCriticalRoll}${
           effectiveCritical.criticalLocation
-            ? ` at ${effectiveCritical.criticalLocation}`
+            ? ` at ${getHitLocationFullLabel(effectiveCritical.criticalLocation).toLowerCase()}`
             : ""
         }.`
       : "";
-  const damage =
+  const damage = effectiveDamage.criticalMinApplied
+    ? `${effectiveDamage.effectiveTotalDamage} damage`
+    : `${effectiveDamage.effectiveTotalDamage} damage`;
+  const damageAdjustment =
     effectiveDamage.criticalMinApplied &&
     effectiveDamage.criticalMinTotalDamage !== undefined
-      ? `${effectiveDamage.preCriticalEffectiveDamage} damage after armor, raised to critical minimum ${effectiveDamage.criticalMinTotalDamage}`
+      ? ` Critical minimum raised damage from ${effectiveDamage.preCriticalEffectiveDamage} to ${effectiveDamage.criticalMinTotalDamage}.`
       : effectiveDamage.effectiveMaxDamageApplied &&
           effectiveDamage.effectiveMaxDamageCap !== undefined
-      ? `${effectiveDamage.effectiveRawTotalDamage} raw damage, capped to ${effectiveDamage.effectiveTotalDamage}`
-      : `${effectiveDamage.effectiveTotalDamage} damage`;
-  const tableDamage =
-    effectiveDamage.effectiveTableDamage !== undefined
-      ? `table damage ${effectiveDamage.effectiveTableDamage}`
-      : "";
+        ? ` Maximum damage capped raw ${effectiveDamage.effectiveRawTotalDamage} to ${effectiveDamage.effectiveTotalDamage}.`
+        : "";
   const armor =
     effectiveDamage.effectiveArmorRegionLabel && effectiveDamage.effectiveArmorCoverageLabel
-      ? `armor ${effectiveDamage.effectiveArmorCoverageLabel} at ${effectiveDamage.effectiveArmorRegionLabel.toLowerCase()}/${effectiveDamage.effectiveAttackDirection} adjusts to ${effectiveDamage.effectiveRawTotalDamage}`
+      ? ` Armor ${effectiveDamage.effectiveArmorCoverageLabel} at ${effectiveDamage.effectiveArmorRegionLabel.toLowerCase()}/${effectiveDamage.effectiveAttackDirection}${
+          effectiveDamage.effectiveTableDamage !== undefined
+            ? ` reduced damage from ${effectiveDamage.effectiveTableDamage} to ${effectiveDamage.preCriticalEffectiveDamage}`
+            : ` resulted in ${effectiveDamage.preCriticalEffectiveDamage} damage`
+        }.`
       : "";
-  const calculation = [tableDamage, armor].filter(Boolean).join(", ");
   const armorWarnings = effectiveDamage.effectiveArmorWarnings.length
     ? ` ${effectiveDamage.effectiveArmorWarnings.join(" ")}`
     : "";
   const notes = input.damageResult.review?.notes?.trim()
     ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
-  const additionalEffects = input.damageResult.review?.additionalEffects?.length
-    ? ` Additional effects: ${input.damageResult.review.additionalEffects
+  const acceptedAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
+    (effect) => effect.accepted !== false,
+  );
+  const additionalEffects = acceptedAdditionalEffects.length
+    ? ` Additional rows: ${acceptedAdditionalEffects
         .map((effect) => effect.label)
         .join(", ")}.`
     : "";
@@ -5515,7 +5685,7 @@ function formatCombatRoundDamageCommitDescription(input: {
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${calculation ? `${calculation}; ` : ""}${damage}.${critical}${criticalRoll}${armorWarnings}${notes}${additionalEffects}${operational}`;
+  )} damage result: ${weapon} to ${target.toLowerCase()}: ${damage}.${armor}${damageAdjustment}${critical}${criticalRoll}${armorWarnings}${notes}${additionalEffects}${operational}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -5551,7 +5721,9 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const reviewAdditionalEffects = input.damageResult.review?.additionalEffects ?? [];
+  const reviewAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
+    (effect) => effect.accepted !== false,
+  );
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
@@ -6864,12 +7036,14 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       : [];
   const createdAdditionalCombatEffectIds = (
     input.damageResult.review?.additionalEffects ?? []
-  ).map((effect) =>
-    buildCombatRoundDamageCommitEffectId({
-      ...idInput,
-      kind: `additional-${effect.id}`,
-    }),
-  );
+  )
+    .filter((effect) => effect.accepted !== false)
+    .map((effect) =>
+      buildCombatRoundDamageCommitEffectId({
+        ...idInput,
+        kind: `additional-${effect.id}`,
+      }),
+    );
   const createdOperationalCombatEffectIds = acceptedOperationalConsequences
     .filter(isCombatRoundOperationalConsequenceCommittedAsEffect)
     .map((consequence) =>
@@ -6891,7 +7065,9 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     facts: {
       attackResultId: input.damageResult.attackResultId,
       attackerParticipantId: input.damageResult.attackerParticipantId,
-      additionalEffects: input.damageResult.review?.additionalEffects ?? [],
+      additionalEffects: (input.damageResult.review?.additionalEffects ?? []).filter(
+        (effect) => effect.accepted !== false,
+      ),
       cancelledActions,
       createdAdditionalCombatEffectIds,
       createdCombatEffectEventId,

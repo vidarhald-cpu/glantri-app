@@ -4808,7 +4808,7 @@ describe("combat round manager", () => {
       ]),
     );
     expect(committed.combatEffects.events[0]?.description).toContain(
-      "2 damage after armor, raised to critical minimum 5",
+      "Critical minimum raised damage from 2 to 5",
     );
     expect(getCombatRoundParticipantPhaseStepStatus({
       participantId: "guard",
@@ -5189,7 +5189,7 @@ describe("combat round manager", () => {
       type: "commit_phase_damage",
     });
     expect(committed.combatEffects.events[0]?.description).toContain(
-      "23 raw damage, capped to 21",
+      "Maximum damage capped raw 23 to 21",
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
@@ -6180,6 +6180,31 @@ describe("combat round manager", () => {
             label: "Dropped weapon",
             notes: "manual special note",
           },
+          {
+            id: "guard-no-action",
+            kind: "special",
+            label: "No combat action possible",
+            notes: "Unconscious.",
+            rowCategory: "no_combat_action",
+          },
+          {
+            id: "guard-bleed",
+            kind: "special",
+            label: "Bleed",
+            notes: "Bleed: 2 HP per round until treated.",
+            rateValuePerRound: 2,
+            rowCategory: "bleed",
+          },
+          {
+            accepted: false,
+            id: "guard-declined-db",
+            kind: "modifier",
+            label: "Declined DB row",
+            modifierBucket: "db",
+            modifierValue: -8,
+            notes: "GM declined this row.",
+            rowCategory: "db_parry_modifier",
+          },
         ],
         armorModifierOverride: -2,
         criticalGradeOverride: "a",
@@ -6250,6 +6275,10 @@ describe("combat round manager", () => {
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-stun";
     const expectedNoteEffectId =
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-note";
+    const expectedNoActionEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-no-action";
+    const expectedBleedEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-bleed";
     const clearedCommitState = clearCombatRoundStep({
       state: {
         ...committed.state,
@@ -6292,6 +6321,19 @@ describe("combat round manager", () => {
         expect.objectContaining({
           id: "guard-note",
           kind: "note",
+        }),
+        expect.objectContaining({
+          id: "guard-no-action",
+          rowCategory: "no_combat_action",
+        }),
+        expect.objectContaining({
+          id: "guard-bleed",
+          rateValuePerRound: 2,
+          rowCategory: "bleed",
+        }),
+        expect.objectContaining({
+          accepted: false,
+          id: "guard-declined-db",
         }),
       ],
       armorModifierOverride: -2,
@@ -6337,14 +6379,29 @@ describe("combat round manager", () => {
           expect.objectContaining({
             id: "guard-note",
           }),
+          expect.objectContaining({
+            id: "guard-no-action",
+            rowCategory: "no_combat_action",
+          }),
+          expect.objectContaining({
+            id: "guard-bleed",
+            rowCategory: "bleed",
+          }),
         ],
         attackerParticipantId: "gladiator",
-        createdAdditionalCombatEffectIds: [expectedStunEffectId, expectedNoteEffectId],
+        createdAdditionalCombatEffectIds: [
+          expectedStunEffectId,
+          expectedNoteEffectId,
+          expectedNoActionEffectId,
+          expectedBleedEffectId,
+        ],
         createdCombatEffectEventId: expectedCommitEventId,
         createdCombatEffectIds: [
           expectedCommitEffectId,
           expectedStunEffectId,
           expectedNoteEffectId,
+          expectedNoActionEffectId,
+          expectedBleedEffectId,
         ],
         createdDamageEffectIds: [expectedCommitEffectId],
         criticalGrade: "a",
@@ -6385,7 +6442,7 @@ describe("combat round manager", () => {
     expect(
       committed.combatEffects.events.find((event) => event.id === expectedCommitEventId)
         ?.description,
-    ).toContain("Additional effects: Stunned, Dropped weapon.");
+    ).toContain("Additional rows: Stunned, Dropped weapon, No combat action possible, Bleed.");
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
         damage: 6,
@@ -6421,12 +6478,42 @@ describe("combat round manager", () => {
         type: "special",
       }),
     );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "No combat action possible: Unconscious.",
+        effectGroup: "special",
+        id: expectedNoActionEffectId,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Bleed: 2 HP per round until treated.",
+        effectGroup: "bleed",
+        id: expectedBleedEffectId,
+        modifierValue: 2,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "bleed",
+      }),
+    );
+    expect(committed.combatEffects.effects).not.toContainEqual(
+      expect.objectContaining({
+        id: expect.stringContaining("guard-declined-db"),
+      }),
+    );
     expect(committed.state.phaseResolutionResults[0]?.damageProposal).toMatchObject({
       committedCombatEffectEventId: expectedCommitEventId,
       committedCombatEffectIds: [
         expectedCommitEffectId,
         expectedStunEffectId,
         expectedNoteEffectId,
+        expectedNoActionEffectId,
+        expectedBleedEffectId,
       ],
       status: "committed",
     });
@@ -6448,6 +6535,18 @@ describe("combat round manager", () => {
           }),
           expect.objectContaining({
             id: "guard-note",
+          }),
+          expect.objectContaining({
+            id: "guard-no-action",
+            rowCategory: "no_combat_action",
+          }),
+          expect.objectContaining({
+            id: "guard-bleed",
+            rowCategory: "bleed",
+          }),
+          expect.objectContaining({
+            accepted: false,
+            id: "guard-declined-db",
           }),
         ],
         armorModifierOverride: -2,
@@ -6473,6 +6572,12 @@ describe("combat round manager", () => {
     );
     expect(cleanedCombatEffects.effects).not.toContainEqual(
       expect.objectContaining({ id: expectedNoteEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedNoActionEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedBleedEffectId }),
     );
     expect(cleanedCombatEffects.events).toContainEqual(
       expect.objectContaining({

@@ -32,12 +32,28 @@ export interface CriticalEffectProposalSummary {
   critKey?: string;
   family?: CriticalFamily;
   location?: CriticalLocationScope;
+  minDamageReason?: string;
+  minTotalDamage?: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
   title?: string;
   warnings: readonly string[];
 }
 
+export type CriticalEffectProposalRowCategory =
+  | "general_modifier"
+  | "ob_skill_modifier"
+  | "db_parry_modifier"
+  | "fatigue"
+  | "bleed"
+  | "internal_bleed"
+  | "no_combat_action"
+  | "loss_of_use"
+  | "dropped_item"
+  | "special_note"
+  | "physical_damage";
+
 export interface CriticalEffectProposalAdditionalEffect {
+  accepted?: boolean;
   durationRounds?: number;
   effectOrder?: number;
   id: string;
@@ -49,9 +65,12 @@ export interface CriticalEffectProposalAdditionalEffect {
   modifierValue?: number;
   notes?: string;
   phase?: "phase1" | "phase2" | "round" | "untilCleared";
+  rateValuePerRound?: number;
+  rowCategory?: CriticalEffectProposalRowCategory;
   rollReports?: readonly CriticalEffectProposalRollReport[];
   sourceCritKey?: string;
   sourceEffectKey?: string;
+  sourceText?: string;
   sourceKind?: "critical_table";
 }
 
@@ -65,6 +84,8 @@ export interface CriticalEffectProposalResult {
     location: CriticalLocationScope;
     title: string;
   };
+  minDamageReason?: string;
+  minTotalDamage?: number;
   proposedEffects: readonly CriticalEffectProposalAdditionalEffect[];
   rollReports: readonly CriticalEffectProposalRollReport[];
   warnings: readonly string[];
@@ -177,18 +198,74 @@ function normalizePenalty(value: number | undefined): number | undefined {
   return value > 0 ? -value : value;
 }
 
+function normalizeEffectText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function formatCriticalEffectActionState(effect: CriticalEffectTemplate): string | undefined {
+  const actionState = normalizeEffectText(effect.actionState);
+  const sourceValue = normalizeEffectText(effect.sourceValue);
+
+  if (actionState === "unconscious" || sourceValue?.toUpperCase() === "UNCONSCIOUS") {
+    return "Unconscious";
+  }
+
+  if (actionState === "collapse") {
+    return "Collapse";
+  }
+
+  if (actionState === "no_action" || sourceValue?.toUpperCase() === "NO ACTION") {
+    return "No combat action possible";
+  }
+
+  if (actionState === "parry_only") {
+    return "Action limited to parry";
+  }
+
+  if (actionState === "impaired") {
+    return "Combat action impaired";
+  }
+
+  return actionState;
+}
+
 function buildEffectNotes(input: {
   effect: CriticalEffectTemplate;
   existingCommittedDamageAmount: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
 }): string {
   const details: string[] = [];
+  const actionState = formatCriticalEffectActionState(input.effect);
 
-  if (input.effect.sourceValue) {
+  if (input.effect.type === "Bleed" || input.effect.type === "Internal bleed") {
+    const bleedLabel = input.effect.type === "Internal bleed" ? "Internal bleed" : "Bleed";
+    const rateReport = input.rollReports.find((report) => report.purpose === "rate");
+    const rate =
+      rateReport !== undefined
+        ? `${rateReport.total} HP / round`
+        : normalizeEffectText(input.effect.rateRaw);
+
+    details.push(rate ? `${bleedLabel}: ${rate}` : bleedLabel);
+  } else if (actionState) {
+    details.push(actionState);
+  } else if (input.effect.subtype === "loss_of_use") {
+    details.push("Loss of use");
+  } else if (input.effect.specialFlag) {
+    details.push(input.effect.specialFlag.replace(/_/g, " "));
+  } else if (input.effect.sourceValue) {
     details.push(input.effect.sourceValue);
   }
 
-  if (input.effect.implementationNote) {
+  if (
+    input.effect.implementationNote &&
+    input.effect.type !== "Stun" &&
+    input.effect.type !== "Bleed" &&
+    input.effect.type !== "Internal bleed" &&
+    input.effect.subtype !== "loss_of_use" &&
+    input.effect.subtype !== "minimum_damage_floor" &&
+    !input.effect.specialFlag
+  ) {
     details.push(input.effect.implementationNote);
   }
 
@@ -209,7 +286,7 @@ function buildEffectNotes(input: {
 
     details.push(
       difference > 0
-        ? `Minimum total damage floor ${input.effect.minTotalDamage}; current committed damage is ${input.existingCommittedDamageAmount}, so the GM may add ${difference} damage if appropriate.`
+        ? `Minimum total damage floor ${input.effect.minTotalDamage}; commit raises physical damage by ${difference} if no GM override is final.`
         : `Minimum total damage floor ${input.effect.minTotalDamage} is covered by current committed damage ${input.existingCommittedDamageAmount}.`,
     );
   }
@@ -219,8 +296,6 @@ function buildEffectNotes(input: {
       `${report.purpose} roll ${report.formula}: ${report.rolls.join(" + ")} = ${report.total}`,
     );
   }
-
-  details.push(`Source: ${input.effect.effectKey}`);
 
   return details.join(" ");
 }
@@ -247,8 +322,28 @@ function getDraftDurationRounds(
 }
 
 function getCriticalEffectLabel(effect: CriticalEffectTemplate): string {
+  const actionState = formatCriticalEffectActionState(effect);
+
+  if (effect.type === "Stun" && actionState) {
+    return actionState === "Unconscious"
+      ? "Unconscious - no combat action possible"
+      : actionState;
+  }
+
+  if (effect.type === "Bleed") {
+    return "Bleed";
+  }
+
+  if (effect.type === "Internal bleed") {
+    return "Internal bleed";
+  }
+
+  if (effect.subtype === "loss_of_use") {
+    return "Loss of use";
+  }
+
   if (effect.specialFlag) {
-    return effect.specialFlag;
+    return effect.specialFlag.replace(/_/g, " ");
   }
 
   if (effect.subtype && effect.subtype !== "none") {
@@ -261,13 +356,65 @@ function getCriticalEffectLabel(effect: CriticalEffectTemplate): string {
   return effect.type;
 }
 
+function getCriticalEffectRateValuePerRound(
+  effect: CriticalEffectTemplate,
+  rollReports: readonly CriticalEffectProposalRollReport[],
+): number | undefined {
+  const rateReport = rollReports.find((report) => report.purpose === "rate");
+
+  if (rateReport) {
+    return rateReport.total;
+  }
+
+  return effect.rateValuePerRound;
+}
+
+function isCriticalEffectMinimumDamageFloor(effect: CriticalEffectTemplate): boolean {
+  return effect.type === "Physical" && effect.subtype === "minimum_damage_floor";
+}
+
+function isCriticalEffectDropItemTag(effect: CriticalEffectTemplate): boolean {
+  return effect.specialFlag === "drop_item" || effect.sourceValue?.toLowerCase() === "drop_item";
+}
+
+function criticalEffectBlocksOrLimitsAction(effect: CriticalEffectTemplate): boolean {
+  const actionState = effect.actionState?.toLowerCase();
+  const sourceValue = effect.sourceValue?.toUpperCase();
+  const text = [
+    effect.actionState,
+    effect.durationRaw,
+    effect.specialFlag,
+    effect.sourceField,
+    effect.sourceValue,
+    effect.implementationNote,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(" ")
+    .toLowerCase();
+
+  return Boolean(
+    actionState === "no_action" ||
+      actionState === "no_meaningful_action" ||
+      actionState === "unconscious" ||
+      actionState === "collapse" ||
+      actionState === "parry_only" ||
+      sourceValue === "NO ACTION" ||
+      text.includes("unconscious") ||
+      text.includes("no action") ||
+      text.includes("may do nothing") ||
+      text.includes("parry only") ||
+      text.includes("collapse"),
+  );
+}
+
 function mapCriticalEffectTemplateToReviewEffect(input: {
   effect: CriticalEffectTemplate;
   existingCommittedDamageAmount: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
-}): CriticalEffectProposalAdditionalEffect {
+}): CriticalEffectProposalAdditionalEffect | undefined {
   const modifierValue = normalizePenalty(input.effect.penaltyPct);
   const common = {
+    accepted: true,
     durationRounds: getDraftDurationRounds(input.effect, input.rollReports),
     effectOrder: input.effect.effectOrder,
     id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
@@ -282,14 +429,53 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
     rollReports: input.rollReports,
     sourceCritKey: input.effect.critKey,
     sourceEffectKey: input.effect.effectKey,
+    sourceText: input.effect.sourceValue,
     sourceKind: "critical_table" as const,
   };
 
-  if (input.effect.type === "Physical" && input.effect.subtype === "minimum_damage_floor") {
+  if (isCriticalEffectMinimumDamageFloor(input.effect)) {
+    return undefined;
+  }
+
+  if (isCriticalEffectDropItemTag(input.effect)) {
+    return undefined;
+  }
+
+  if (input.effect.type === "Bleed") {
     return {
       ...common,
-      kind: "note",
-      label: `Minimum damage floor ${input.effect.minTotalDamage ?? ""}`.trim(),
+      kind: "special",
+      label: "Bleed",
+      rateValuePerRound: getCriticalEffectRateValuePerRound(input.effect, input.rollReports),
+      rowCategory: "bleed",
+    };
+  }
+
+  if (input.effect.type === "Internal bleed") {
+    return {
+      ...common,
+      kind: "special",
+      label: "Internal bleed",
+      rateValuePerRound: getCriticalEffectRateValuePerRound(input.effect, input.rollReports),
+      rowCategory: "internal_bleed",
+    };
+  }
+
+  if (input.effect.type === "Stun" && criticalEffectBlocksOrLimitsAction(input.effect)) {
+    return {
+      ...common,
+      kind: "special",
+      label: common.label || "No combat action possible",
+      rowCategory: "no_combat_action",
+    };
+  }
+
+  if (input.effect.subtype === "loss_of_use") {
+    return {
+      ...common,
+      kind: "special",
+      label: common.label || "Loss of use",
+      rowCategory: "loss_of_use",
     };
   }
 
@@ -301,6 +487,7 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
         label: common.label || "OB/Skill modifier",
         modifierBucket: "obSkill",
         modifierValue,
+        rowCategory: "ob_skill_modifier",
       };
     }
 
@@ -311,6 +498,7 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
         label: common.label || "DB modifier",
         modifierBucket: "db",
         modifierValue,
+        rowCategory: "db_parry_modifier",
       };
     }
 
@@ -321,29 +509,26 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
         label: common.label || "General modifier",
         modifierBucket: "general",
         modifierValue,
+        rowCategory: "general_modifier",
       };
     }
-  }
 
-  if (input.effect.type === "Bleed" || input.effect.type === "Internal bleed") {
-    return {
-      ...common,
-      kind: "special",
-      label: input.effect.type,
-    };
-  }
-
-  if (input.effect.type === "Stun") {
-    return {
-      ...common,
-      kind: "special",
-      label: input.effect.actionState || common.label || "Stun/action state",
-    };
+    if (input.effect.type === "Stun") {
+      return {
+        ...common,
+        kind: "modifier",
+        label: common.label || "Stunned",
+        modifierBucket: "general",
+        modifierValue,
+        rowCategory: "general_modifier",
+      };
+    }
   }
 
   return {
     ...common,
     kind: input.effect.type === "Special" ? "special" : "note",
+    rowCategory: "special_note",
   };
 }
 
@@ -404,15 +589,27 @@ export function buildCriticalEffectProposalFromDamageResult(
 
   const rng = input.rng ?? Math.random;
   const rollReports: CriticalEffectProposalRollReport[] = [];
-  const proposedEffects = resultWithEffects.effects.map((effect) => {
+  let minTotalDamage: number | undefined;
+  let minDamageReason: string | undefined;
+  const proposedEffects = resultWithEffects.effects.flatMap((effect) => {
+    if (
+      isCriticalEffectMinimumDamageFloor(effect) &&
+      effect.minTotalDamage !== undefined &&
+      (minTotalDamage === undefined || effect.minTotalDamage > minTotalDamage)
+    ) {
+      minTotalDamage = effect.minTotalDamage;
+      minDamageReason = effect.minDamageReason;
+    }
+
     const effectRollReports = getEffectRollReports({ effect, rng, warnings });
     rollReports.push(...effectRollReports);
-
-    return mapCriticalEffectTemplateToReviewEffect({
+    const reviewEffect = mapCriticalEffectTemplateToReviewEffect({
       effect,
       existingCommittedDamageAmount: input.existingCommittedDamageAmount,
       rollReports: effectRollReports,
     });
+
+    return reviewEffect ? [reviewEffect] : [];
   });
 
   return {
@@ -425,6 +622,8 @@ export function buildCriticalEffectProposalFromDamageResult(
       location: resultWithEffects.result.location,
       title: resultWithEffects.result.title,
     },
+    minDamageReason,
+    minTotalDamage,
     proposedEffects,
     rollReports,
     warnings,
@@ -441,6 +640,8 @@ export function buildCriticalEffectProposalSummary(
     critKey: proposal.criticalResult?.critKey,
     family: proposal.criticalResult?.family,
     location: proposal.criticalResult?.location,
+    minDamageReason: proposal.minDamageReason,
+    minTotalDamage: proposal.minTotalDamage,
     rollReports: proposal.rollReports,
     title: proposal.criticalResult?.title,
     warnings: proposal.warnings,

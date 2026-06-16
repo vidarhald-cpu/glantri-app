@@ -209,6 +209,19 @@ const stepCellStyle = {
   textAlign: "center",
 } as const;
 
+const combatReviewRowHeaderStyle = {
+  borderBottom: "1px solid #ddd3bf",
+  color: "#5e5a50",
+  padding: "0.25rem 0.35rem",
+  textAlign: "left",
+} as const;
+
+const combatReviewRowCellStyle = {
+  borderBottom: "1px solid #ede6d8",
+  padding: "0.25rem 0.35rem",
+  verticalAlign: "top",
+} as const;
+
 const roundBoundaryStartBorder = "2px solid #c9bea4";
 
 const inspectorNavStyle = {
@@ -249,6 +262,7 @@ interface CombatParrySourceSelection {
 }
 
 interface CombatDamageReviewAdditionalEffectDraft {
+  accepted: boolean;
   durationRounds: string;
   effectOrder?: number;
   id: string;
@@ -260,9 +274,12 @@ interface CombatDamageReviewAdditionalEffectDraft {
   modifierValue: string;
   notes: string;
   phase: string;
+  rateValuePerRound: string;
+  rowCategory?: CombatRoundDamageReviewAdditionalEffect["rowCategory"];
   rollReports?: CombatRoundDamageReviewAdditionalEffect["rollReports"];
   sourceCritKey?: string;
   sourceEffectKey?: string;
+  sourceText?: string;
   sourceKind?: CombatRoundDamageReviewAdditionalEffect["sourceKind"];
 }
 
@@ -1118,6 +1135,7 @@ function createCombatDamageReviewEffectDraft(
 
   if (kind === "modifier") {
     return {
+      accepted: true,
       durationRounds: "",
       id,
       kind,
@@ -1126,10 +1144,13 @@ function createCombatDamageReviewEffectDraft(
       modifierValue: "-1",
       notes: "",
       phase: "",
+      rateValuePerRound: "",
+      rowCategory: "general_modifier",
     };
   }
 
   return {
+    accepted: true,
     durationRounds: "",
     id,
     kind,
@@ -1138,6 +1159,8 @@ function createCombatDamageReviewEffectDraft(
     modifierValue: "",
     notes: "",
     phase: "",
+    rateValuePerRound: "",
+    rowCategory: "special_note",
   };
 }
 
@@ -1155,6 +1178,7 @@ function buildCombatDamageReviewDraft(
 
   return {
     additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
+      accepted: effect.accepted !== false,
       durationRounds: effect.durationRounds?.toString() ?? "",
       effectOrder: effect.effectOrder,
       id: effect.id,
@@ -1166,9 +1190,12 @@ function buildCombatDamageReviewDraft(
       modifierValue: effect.modifierValue?.toString() ?? "",
       notes: effect.notes ?? "",
       phase: effect.phase ?? "",
+      rateValuePerRound: effect.rateValuePerRound?.toString() ?? "",
+      rowCategory: effect.rowCategory,
       rollReports: effect.rollReports,
       sourceCritKey: effect.sourceCritKey,
       sourceEffectKey: effect.sourceEffectKey,
+      sourceText: effect.sourceText,
       sourceKind: effect.sourceKind,
     })),
     attackDirectionOverride: effectiveDamage?.effectiveAttackDirection ?? "front",
@@ -1322,8 +1349,13 @@ function buildCombatDamageReviewFromDraft(input: {
             (bucket) => bucket.value === effect.modifierBucket,
           )?.value ?? "general"
         : undefined;
+    const rateValuePerRound =
+      effect.rateValuePerRound.trim() && /^\d+(\.\d+)?$/.test(effect.rateValuePerRound.trim())
+        ? Number(effect.rateValuePerRound)
+        : undefined;
 
     return {
+      accepted: effect.accepted,
       durationRounds,
       effectOrder: effect.effectOrder,
       id: effect.id,
@@ -1335,9 +1367,12 @@ function buildCombatDamageReviewFromDraft(input: {
       modifierValue,
       notes: effect.notes.trim() || undefined,
       phase: phase || undefined,
+      rateValuePerRound,
+      rowCategory: effect.rowCategory,
       rollReports: effect.rollReports,
       sourceCritKey: effect.sourceCritKey,
       sourceEffectKey: effect.sourceEffectKey,
+      sourceText: effect.sourceText,
       sourceKind: effect.sourceKind,
     };
   });
@@ -1472,6 +1507,202 @@ function buildCombatDamageReviewFromDraft(input: {
   }
 
   return review;
+}
+
+interface CombatDamageReviewProposedSheetRow {
+  accepted: boolean;
+  details: string;
+  duration: string;
+  rowType: string;
+  target: string;
+  value: string;
+}
+
+function getCombatDamageReviewDraftEffectRowType(
+  effect: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  if (effect.rowCategory === "bleed") {
+    return "Bleed";
+  }
+
+  if (effect.rowCategory === "internal_bleed") {
+    return "Internal bleed";
+  }
+
+  if (effect.rowCategory === "no_combat_action") {
+    return "No combat action";
+  }
+
+  if (effect.rowCategory === "loss_of_use") {
+    return "Loss of use";
+  }
+
+  if (effect.rowCategory === "dropped_item") {
+    return "Dropped item";
+  }
+
+  if (effect.rowCategory === "ob_skill_modifier") {
+    return "OB/Skill modifier";
+  }
+
+  if (effect.rowCategory === "db_parry_modifier") {
+    return "DB/Parry modifier";
+  }
+
+  if (effect.rowCategory === "general_modifier") {
+    return "General modifier";
+  }
+
+  if (effect.kind === "fatigue" || effect.rowCategory === "fatigue") {
+    return "Fatigue";
+  }
+
+  if (effect.kind === "note") {
+    return "Note";
+  }
+
+  return effect.kind === "special" ? "Special" : "Modifier";
+}
+
+function getCombatDamageReviewDraftEffectTarget(
+  effect: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  if (effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed") {
+    return "Bleed";
+  }
+
+  if (effect.rowCategory === "no_combat_action" || effect.rowCategory === "loss_of_use") {
+    return "Special";
+  }
+
+  if (effect.kind === "modifier") {
+    return (
+      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+        (bucket) => bucket.value === effect.modifierBucket,
+      )?.label ?? "General/Fatigue"
+    );
+  }
+
+  if (effect.kind === "fatigue") {
+    return "Fatigue";
+  }
+
+  return "Special";
+}
+
+function getCombatDamageReviewDraftEffectValue(
+  effect: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  if (effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed") {
+    return effect.rateValuePerRound.trim()
+      ? `${effect.rateValuePerRound.trim()} HP/round`
+      : "";
+  }
+
+  const value = effect.modifierValue.trim();
+
+  if (!value) {
+    return "";
+  }
+
+  return value.startsWith("-") || value.startsWith("+") ? value : `+${value}`;
+}
+
+function formatCombatDamageReviewDraftEffectDuration(
+  effect: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  const parts = [];
+
+  if (effect.durationRounds.trim()) {
+    parts.push(`${effect.durationRounds.trim()} round${effect.durationRounds.trim() === "1" ? "" : "s"}`);
+  }
+
+  const phaseLabel = COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.find(
+    (phase) => phase.value === effect.phase,
+  )?.label;
+
+  if (phaseLabel && effect.phase) {
+    parts.push(phaseLabel);
+  }
+
+  return parts.join(" · ");
+}
+
+function buildCombatDamageReviewProposedSheetRows(input: {
+  damageResult: CombatRoundDamageResult;
+  draft: CombatDamageReviewDraft;
+}): CombatDamageReviewProposedSheetRow[] {
+  let effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+
+  try {
+    effectiveDamage = getCombatRoundEffectiveDamageResult({
+      ...input.damageResult,
+      review: buildCombatDamageReviewFromDraft({
+        damageResult: input.damageResult,
+        draft: input.draft,
+      }),
+    });
+  } catch {
+    effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  }
+  const location = effectiveDamage.effectiveSelectedHitLocation
+    ? getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation)
+    : "General";
+  const physicalDetails = [
+    input.damageResult.weaponName
+      ? `${input.damageResult.weaponName} hit to ${location.toLowerCase()}.`
+      : `Hit to ${location.toLowerCase()}.`,
+    effectiveDamage.effectiveCriticalGrade
+      ? `Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()}.`
+      : undefined,
+    effectiveDamage.criticalMinApplied && effectiveDamage.criticalMinTotalDamage !== undefined
+      ? `Critical minimum raises damage from ${effectiveDamage.preCriticalEffectiveDamage} to ${effectiveDamage.criticalMinTotalDamage}.`
+      : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+  const rows: CombatDamageReviewProposedSheetRow[] =
+    effectiveDamage.effectiveTotalDamage > 0
+      ? [
+          {
+            accepted: true,
+            details: physicalDetails.join(" "),
+            duration: "active",
+            rowType: "Physical damage",
+            target: location,
+            value: `${effectiveDamage.effectiveTotalDamage} damage`,
+          },
+        ]
+      : [];
+
+  for (const effect of input.draft.additionalEffects) {
+    rows.push({
+      accepted: effect.accepted,
+      details: effect.notes.trim() ? `${effect.label}: ${effect.notes.trim()}` : effect.label,
+      duration: formatCombatDamageReviewDraftEffectDuration(effect),
+      rowType: getCombatDamageReviewDraftEffectRowType(effect),
+      target: getCombatDamageReviewDraftEffectTarget(effect),
+      value: getCombatDamageReviewDraftEffectValue(effect),
+    });
+  }
+
+  for (const consequence of input.draft.operationalConsequences) {
+    rows.push({
+      accepted: consequence.accepted,
+      details: consequence.notes.trim()
+        ? `${consequence.label}: ${consequence.notes.trim()}`
+        : consequence.reason,
+      duration: "active",
+      rowType:
+        consequence.kind === "drop_item"
+          ? "Dropped item"
+          : consequence.kind === "cancel_pending_action"
+            ? "Cancelled action"
+            : "Special",
+      target: consequence.phase || "Special",
+      value: consequence.itemLabel || "",
+    });
+  }
+
+  return rows;
 }
 
 function getCombatTableCell(input: {
@@ -1897,6 +2128,25 @@ function CombatDamageReviewPanel(input: {
       : effectiveDamage.criticalMinTotalDamage !== undefined
         ? `Critical minimum damage floor ${effectiveDamage.criticalMinTotalDamage} is covered.`
         : undefined;
+  const proposedRows = buildCombatDamageReviewProposedSheetRows({
+    damageResult: input.damageResult,
+    draft: input.draft,
+  });
+  const outcomeSummary = [
+    `${effectiveDamage.effectiveTotalDamage} physical damage to ${
+      effectiveDamage.effectiveSelectedHitLocation
+        ? getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation).toLowerCase()
+        : "general"
+    }`,
+    effectiveDamage.effectiveCriticalGrade
+      ? `Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()}`
+      : undefined,
+    criticalEffectProposal?.title,
+    proposedRows
+      .filter((row) => row.accepted && row.rowType !== "Physical damage")
+      .map((row) => row.rowType)
+      .join(", ") || undefined,
+  ].filter((entry): entry is string => Boolean(entry));
   const updateAdditionalEffect = (
     effectId: string,
     patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
@@ -1929,6 +2179,56 @@ function CombatDamageReviewPanel(input: {
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Damage review</strong>
+      <section
+        style={{
+          background: "#fbfaf6",
+          border: "1px solid #e6e0d2",
+          borderRadius: "6px",
+          display: "grid",
+          gap: "0.35rem",
+          padding: "0.65rem",
+        }}
+      >
+        <strong style={{ fontSize: "0.9rem" }}>Outcome summary</strong>
+        <div style={{ color: "#2f342b", fontSize: "0.9rem" }}>
+          {outcomeSummary.join(" · ")}
+        </div>
+      </section>
+      <section style={{ display: "grid", gap: "0.35rem" }}>
+        <strong style={{ fontSize: "0.9rem" }}>Proposed character-sheet rows</strong>
+        {proposedRows.length === 0 ? (
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            No character-sheet rows proposed.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: "0.82rem", width: "100%" }}>
+              <thead>
+                <tr>
+                  <th style={combatReviewRowHeaderStyle}>Accept</th>
+                  <th style={combatReviewRowHeaderStyle}>Row</th>
+                  <th style={combatReviewRowHeaderStyle}>Target</th>
+                  <th style={combatReviewRowHeaderStyle}>Value</th>
+                  <th style={combatReviewRowHeaderStyle}>Duration</th>
+                  <th style={combatReviewRowHeaderStyle}>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposedRows.map((row, index) => (
+                  <tr key={`${row.rowType}-${index}`}>
+                    <td style={combatReviewRowCellStyle}>{row.accepted ? "Yes" : "No"}</td>
+                    <td style={combatReviewRowCellStyle}>{row.rowType}</td>
+                    <td style={combatReviewRowCellStyle}>{row.target}</td>
+                    <td style={combatReviewRowCellStyle}>{row.value || "—"}</td>
+                    <td style={combatReviewRowCellStyle}>{row.duration || "—"}</td>
+                    <td style={combatReviewRowCellStyle}>{row.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       <div
         style={{
           display: "grid",
@@ -2289,6 +2589,19 @@ function CombatDamageReviewPanel(input: {
               >
                 <label style={{ display: "grid", gap: "0.2rem" }}>
                   <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Accept
+                  </span>
+                  <input
+                    checked={effect.accepted}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { accepted: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
                     Kind
                   </span>
                   <select
@@ -2304,6 +2617,12 @@ function CombatDamageReviewPanel(input: {
                           nextKind === "modifier" || nextKind === "fatigue"
                             ? effect.modifierValue || "-1"
                             : "",
+                        rowCategory:
+                          nextKind === "modifier"
+                            ? "general_modifier"
+                            : nextKind === "fatigue"
+                              ? "fatigue"
+                              : "special_note",
                       });
                     }}
                     value={effect.kind}
@@ -2337,6 +2656,12 @@ function CombatDamageReviewPanel(input: {
                       onChange={(event) =>
                         updateAdditionalEffect(effect.id, {
                           modifierBucket: event.target.value,
+                          rowCategory:
+                            event.target.value === "obSkill"
+                              ? "ob_skill_modifier"
+                              : event.target.value === "db"
+                                ? "db_parry_modifier"
+                                : "general_modifier",
                         })
                       }
                       value={effect.modifierBucket}

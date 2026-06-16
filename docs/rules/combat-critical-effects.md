@@ -25,7 +25,7 @@ bleed, loss of use, and special handling.
 ## Effect templates
 
 Each critical result can have one or more effect template rows. Templates are converted into editable
-D1/D2 review rows where the current combatEffects system can represent them safely.
+D1/D2 review rows that describe the character-sheet rows the GM is about to commit.
 
 Supported effect Types in the current canonical data are:
 
@@ -159,8 +159,11 @@ The GM may override the reviewed critical index without rerolling the stored cri
 `1` through `16` rebuilds the table proposal for that index; choosing no effect removes generated
 critical proposal rows while leaving the original dice and computed final roll available for audit.
 
-GM review remains required before any critical-derived effect rows are committed. Structured General,
-OB/Skill, and DB modifier templates become editable modifier drafts. Prose-heavy special results,
-stun/action states, bleed/internal bleed, mobility, loss of use, and treatment gates become editable
-special or note drafts until richer typed effect rows are implemented. Automatic critical, stun,
-bleeding, unconsciousness, and permanent injury automation remain future table-driven work.
+GM review remains required before any critical-derived effect rows are committed. The review is
+outcome-focused: it shows proposed physical damage, modifier, bleed, internal bleed, fatigue,
+no-action/loss-of-use, dropped-item, and special-note rows before commit. Bleed and internal bleed use
+the existing typed combatEffect rows when a safe rate is available. Clear no-action, collapse, and
+unconscious results become special rows such as "No combat action possible" rather than arbitrary DB
+modifiers. Ambiguous numeric or prose-heavy rows become special notes and keep their source text for
+GM review instead of being guessed as a mechanical modifier. Automatic permanent injury and long-term
+incapacitation automation remain future table-driven work.
