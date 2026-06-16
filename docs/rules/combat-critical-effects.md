@@ -25,7 +25,9 @@ bleed, loss of use, and special handling.
 ## Effect templates
 
 Each critical result can have one or more effect template rows. Templates are converted into editable
-D1/D2 review rows that describe the character-sheet rows the GM is about to commit.
+D1/D2 review rows that describe the character-sheet rows the GM is about to commit. The review shows
+a short outcome summary, then the proposed rows themselves. Calculation details remain available as
+audit information, but they are secondary to the outcome rows.
 
 Supported effect Types in the current canonical data are:
 
@@ -60,6 +62,10 @@ the struck hand, losing use of an arm, collapsing, becoming unconscious, or othe
 to act. When the table provides clear drop-item, loss-of-use, or no-action signals and the app can
 identify a matching pending same-round attack, D1/D2 review proposes operational consequence rows for
 GM approval.
+
+Operational consequences are shown separately from character-sheet rows. A consequence may still
+create a visible combat/session effect when accepted, such as a dropped-item special row, but it is
+not mixed into the ordinary physical damage, bleed, modifier, fatigue, or special-effect row list.
 
 Current supported proposals are:
 
@@ -161,9 +167,10 @@ critical proposal rows while leaving the original dice and computed final roll a
 
 GM review remains required before any critical-derived effect rows are committed. The review is
 outcome-focused: it shows proposed physical damage, modifier, bleed, internal bleed, fatigue,
-no-action/loss-of-use, dropped-item, and special-note rows before commit. Bleed and internal bleed use
-the existing typed combatEffect rows when a safe rate is available. Clear no-action, collapse, and
-unconscious results become special rows such as "No combat action possible" rather than arbitrary DB
-modifiers. Ambiguous numeric or prose-heavy rows become special notes and keep their source text for
-GM review instead of being guessed as a mechanical modifier. Automatic permanent injury and long-term
-incapacitation automation remain future table-driven work.
+no-action/loss-of-use, and special-note rows before commit. Bleed and internal bleed use the existing
+typed combatEffect rows when a safe rate is available. Clear no-action, collapse, and unconscious
+results become special rows such as "No combat action possible" rather than arbitrary DB modifiers.
+Ambiguous numeric or prose-heavy rows become special notes and keep their source text for GM review
+instead of being guessed as a mechanical modifier. The full critical text is kept as reference for the
+review and physical damage row, not copied into every effect row. Automatic permanent injury and
+long-term incapacitation automation remain future table-driven work.

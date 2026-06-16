@@ -174,9 +174,7 @@ export const combatRoundDamageArmorCoverageSchema = z
     head: combatRoundDamageArmorCoverageEntrySchema.optional(),
   })
   .default({});
-export type CombatRoundDamageArmorCoverage = z.infer<
-  typeof combatRoundDamageArmorCoverageSchema
->;
+export type CombatRoundDamageArmorCoverage = z.infer<typeof combatRoundDamageArmorCoverageSchema>;
 
 export const combatRoundCommandTypeSchema = z.enum([
   "declare_action",
@@ -252,9 +250,7 @@ export const combatRoundEndEffectProposalSchema = z.object({
   previousDuration: z.string().min(1).optional(),
   previousExpiresAtRound: z.number().int().positive().optional(),
 });
-export type CombatRoundEndEffectProposal = z.infer<
-  typeof combatRoundEndEffectProposalSchema
->;
+export type CombatRoundEndEffectProposal = z.infer<typeof combatRoundEndEffectProposalSchema>;
 
 export const combatRoundEndDamageProposalSchema = z.object({
   accepted: z.boolean().default(true),
@@ -266,9 +262,7 @@ export const combatRoundEndDamageProposalSchema = z.object({
   participantId: idSchema,
   sourceEffectId: idSchema,
 });
-export type CombatRoundEndDamageProposal = z.infer<
-  typeof combatRoundEndDamageProposalSchema
->;
+export type CombatRoundEndDamageProposal = z.infer<typeof combatRoundEndDamageProposalSchema>;
 
 export const combatRoundEndRemovalProposalSchema = z.object({
   accepted: z.boolean().default(true),
@@ -282,9 +276,7 @@ export const combatRoundEndRemovalProposalSchema = z.object({
   previousExpiresAtRound: z.number().int().positive().optional(),
   previousStatus: z.enum(["active", "resolved", "expired", "superseded"]).default("active"),
 });
-export type CombatRoundEndRemovalProposal = z.infer<
-  typeof combatRoundEndRemovalProposalSchema
->;
+export type CombatRoundEndRemovalProposal = z.infer<typeof combatRoundEndRemovalProposalSchema>;
 
 export const combatRoundEndHealthRollResultSchema = z.object({
   difficulty: z.number().int().positive(),
@@ -297,9 +289,7 @@ export const combatRoundEndHealthRollResultSchema = z.object({
   rollTotal: z.number().int(),
   success: z.boolean(),
 });
-export type CombatRoundEndHealthRollResult = z.infer<
-  typeof combatRoundEndHealthRollResultSchema
->;
+export type CombatRoundEndHealthRollResult = z.infer<typeof combatRoundEndHealthRollResultSchema>;
 
 export const combatRoundEndHealthRollProposalSchema = z.object({
   accepted: z.boolean().default(true),
@@ -330,9 +320,7 @@ export const combatRoundEndParticipantReviewSchema = z.object({
   status: combatRoundEndParticipantReviewStatusSchema.default("pending"),
   warnings: z.array(z.string().min(1)).default([]),
 });
-export type RoundEndParticipantReview = z.infer<
-  typeof combatRoundEndParticipantReviewSchema
->;
+export type RoundEndParticipantReview = z.infer<typeof combatRoundEndParticipantReviewSchema>;
 
 export const combatRoundEndReviewSchema = z.object({
   participantReviews: z.record(idSchema, combatRoundEndParticipantReviewSchema).default({}),
@@ -521,11 +509,7 @@ export const combatRoundDamageReviewRowCategorySchema = z.enum([
   "dropped_item",
   "special_note",
 ]);
-export const combatRoundDamageReviewModifierBucketSchema = z.enum([
-  "general",
-  "obSkill",
-  "db",
-]);
+export const combatRoundDamageReviewModifierBucketSchema = z.enum(["general", "obSkill", "db"]);
 export const combatRoundDamageReviewEffectPhaseSchema = z.enum([
   "phase1",
   "phase2",
@@ -638,7 +622,9 @@ export const combatRoundCriticalRollResultSchema = z
       }),
     attackResultId: idSchema.optional(),
     attackerParticipantId: idSchema.optional(),
-    criticalDice: z.tuple([z.number().int().min(1).max(8), z.number().int().min(1).max(8)]).optional(),
+    criticalDice: z
+      .tuple([z.number().int().min(1).max(8), z.number().int().min(1).max(8)])
+      .optional(),
     criticalDiceTotal: z.number().int().optional(),
     criticalGrade: z.string().min(1).optional(),
     criticalTypeModifier: z.number().int().optional(),
@@ -874,10 +860,7 @@ function criticalEffectImpliesDropItem(
 }
 
 function criticalEffectHasStructuredDropItem(effect: CriticalEffectTemplate): boolean {
-  return (
-    effect.specialFlag === "drop_item" ||
-    effect.sourceValue?.toLowerCase() === "drop_item"
-  );
+  return effect.specialFlag === "drop_item" || effect.sourceValue?.toLowerCase() === "drop_item";
 }
 
 function criticalEffectImpliesLossOfArmUse(
@@ -923,20 +906,20 @@ function criticalEffectBlocksCombatAction(
 
   return Boolean(
     actionState === "no_action" ||
-      actionState === "no_meaningful_action" ||
-      actionState === "unconscious" ||
-      sourceValue === "NO ACTION" ||
-      specialFlag === "unconscious" ||
-      specialFlag === "collapse" ||
-      resultTags.includes("unconscious") ||
-      resultTags.includes("collapse") ||
-      resultTags.includes("collapse_from_shock") ||
-      text.includes("unconscious") ||
-      text.includes("no action") ||
-      text.includes("no actions") ||
-      text.includes("may do nothing") ||
-      text.includes("collapses") ||
-      text.includes("collapse"),
+    actionState === "no_meaningful_action" ||
+    actionState === "unconscious" ||
+    sourceValue === "NO ACTION" ||
+    specialFlag === "unconscious" ||
+    specialFlag === "collapse" ||
+    resultTags.includes("unconscious") ||
+    resultTags.includes("collapse") ||
+    resultTags.includes("collapse_from_shock") ||
+    text.includes("unconscious") ||
+    text.includes("no action") ||
+    text.includes("no actions") ||
+    text.includes("may do nothing") ||
+    text.includes("collapses") ||
+    text.includes("collapse"),
   );
 }
 
@@ -1045,16 +1028,22 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   }
 
   const primaryEffect =
-    relevantEffects.find((effect) => criticalEffectBlocksCombatAction(effect, resultWithEffects.result)) ??
+    relevantEffects.find((effect) =>
+      criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
+    ) ??
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
-    relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect, resultWithEffects.result)) ??
+    relevantEffects.find((effect) =>
+      criticalEffectImpliesDropItem(effect, resultWithEffects.result),
+    ) ??
     relevantEffects[0];
   const actionBlockingEffect = relevantEffects.find((effect) =>
     criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
   );
   const dropEffect =
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
-    relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect, resultWithEffects.result));
+    relevantEffects.find((effect) =>
+      criticalEffectImpliesDropItem(effect, resultWithEffects.result),
+    );
   const sourceText = resultWithEffects.result.bodyText;
   const participantId = input.damageResult.defenderParticipantId;
   const hand = getCombatRoundHandForHitLocation(input.damageResult.selectedHitLocation);
@@ -1152,7 +1141,8 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
       )}-no-action`,
       kind: "note",
       label: "No combat action possible",
-      notes: "Committed as a visible special combat/session row. Full next-round action gating remains GM-managed for now.",
+      notes:
+        "Committed as a visible special combat/session row. Full next-round action gating remains GM-managed for now.",
       participantId,
       reason: "Critical effect clearly prevents combat action.",
       sourceCritKey: criticalResult.critKey,
@@ -1175,7 +1165,8 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
           : "Critical may cancel limb-dependent action",
         notes: "GM should choose the affected item/action if one is pending.",
         participantId,
-        reason: "Critical effect was clear, but the app could not safely identify a matching pending item/action.",
+        reason:
+          "Critical effect was clear, but the app could not safely identify a matching pending item/action.",
         sourceCritKey: criticalResult.critKey,
         sourceEffectKey: effect.effectKey,
         sourceText,
@@ -2488,8 +2479,7 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       participantId: input.participantId,
       phase: input.phase,
       state: normalized,
-    }) &&
-      targetParticipantId,
+    }) && targetParticipantId,
   );
 }
 
@@ -3241,7 +3231,9 @@ export function skipCombatRoundCurrentPhaseAction(input: {
       state: normalized,
     })
   ) {
-    throw new RangeError("Current phase action cannot be skipped because it is not attack-capable.");
+    throw new RangeError(
+      "Current phase action cannot be skipped because it is not attack-capable.",
+    );
   }
 
   if (
@@ -3600,7 +3592,7 @@ export function recordCombatRoundParryResolution(input: {
               ? "Parry resolved successfully. Damage is not required."
               : undefined,
             status: "not_required",
-    },
+          },
     damageResult: undefined,
     hitLocationRoll:
       input.attackResult.hit && input.parryResolution.success !== true
@@ -3769,10 +3761,7 @@ export function getCombatRoundDamageResultId(input: { attackResultId: string }):
   return `${input.attackResultId}:damage`;
 }
 
-function rollCombatDamageDie(input: {
-  rng: () => number;
-  sides: number;
-}): number {
+function rollCombatDamageDie(input: { rng: () => number; sides: number }): number {
   if (!Number.isInteger(input.sides) || input.sides < 1) {
     throw new RangeError("Combat damage die must have at least one side.");
   }
@@ -3802,7 +3791,7 @@ function buildCombatRoundHitLocationRollResult(input: {
   const targetedLocation = Boolean(input.targetLocation && input.targetLocation !== "none");
   const rollA = input.hitLocationRolls?.[0] ?? rollClosedCombatD20(rng);
   const rollB = targetedLocation
-    ? input.hitLocationRolls?.[1] ?? rollClosedCombatD20(rng)
+    ? (input.hitLocationRolls?.[1] ?? rollClosedCombatD20(rng))
     : undefined;
   const hitLocationSelection = resolveHitLocationSelection({
     rollA,
@@ -3917,22 +3906,20 @@ function combatRoundReviewHasOwnField(
   return Boolean(review && Object.prototype.hasOwnProperty.call(review, field));
 }
 
-function hasCombatRoundDamageReviewOverrides(
-  review: CombatRoundDamageReview | undefined,
-): boolean {
+function hasCombatRoundDamageReviewOverrides(review: CombatRoundDamageReview | undefined): boolean {
   return Boolean(
     review &&
-      (review.armorModifierOverride !== undefined ||
-        review.attackDirectionOverride !== undefined ||
-        review.armorCriticalModifierOverride !== undefined ||
-        (review.additionalEffects?.length ?? 0) > 0 ||
-        review.criticalLocationOverride !== undefined ||
-        review.criticalTypeModifierOverride !== undefined ||
-        review.finalCriticalRollOverride !== undefined ||
-        review.selectedHitLocationOverride !== undefined ||
-        review.totalDamageOverride !== undefined ||
-        combatRoundReviewHasOwnField(review, "criticalGradeOverride") ||
-        Boolean(review.notes?.trim())),
+    (review.armorModifierOverride !== undefined ||
+      review.attackDirectionOverride !== undefined ||
+      review.armorCriticalModifierOverride !== undefined ||
+      (review.additionalEffects?.length ?? 0) > 0 ||
+      review.criticalLocationOverride !== undefined ||
+      review.criticalTypeModifierOverride !== undefined ||
+      review.finalCriticalRollOverride !== undefined ||
+      review.selectedHitLocationOverride !== undefined ||
+      review.totalDamageOverride !== undefined ||
+      combatRoundReviewHasOwnField(review, "criticalGradeOverride") ||
+      Boolean(review.notes?.trim())),
   );
 }
 
@@ -3948,9 +3935,10 @@ function getCombatRoundReviewedCriticalGrade(input: {
   return input.tableCriticalGrade ?? input.computedCriticalGrade;
 }
 
-function getCombatRoundCriticalMinimumTotalDamage(
-  review?: CombatRoundDamageReview,
-): { minDamageReason?: string; minTotalDamage?: number } {
+function getCombatRoundCriticalMinimumTotalDamage(review?: CombatRoundDamageReview): {
+  minDamageReason?: string;
+  minTotalDamage?: number;
+} {
   let minTotalDamage = review?.criticalEffectProposal?.minTotalDamage;
   let minDamageReason = review?.criticalEffectProposal?.minDamageReason;
 
@@ -3985,10 +3973,7 @@ function getCombatRoundMaxDamageCap(input: {
   return 17 + input.attackerStrengthGm;
 }
 
-function applyCombatRoundMaxDamageCap(input: {
-  maxDamageCap?: number;
-  rawTotalDamage: number;
-}): {
+function applyCombatRoundMaxDamageCap(input: { maxDamageCap?: number; rawTotalDamage: number }): {
   cappedTotalDamage?: number;
   maxDamageApplied: boolean;
   totalDamage: number;
@@ -4056,9 +4041,10 @@ export function mapHitLocationAndDirectionToArmorRegion(input: {
   }
 }
 
-export function parseCombatRoundArmorCoverageLabel(
-  value: string | undefined | null,
-): { armorClass?: CombatArmorModifierClass; armorValue?: number } {
+export function parseCombatRoundArmorCoverageLabel(value: string | undefined | null): {
+  armorClass?: CombatArmorModifierClass;
+  armorValue?: number;
+} {
   if (!value) {
     return {};
   }
@@ -4193,11 +4179,7 @@ function calculateCombatRoundArmorAdjustedDamage(input: {
     input.tableMinDamage === undefined
       ? undefined
       : Math.max(0, input.tableMinDamage + input.armorDamageModifier);
-  const rawTotalDamage = Math.max(
-    provisionalDamageAfterArmor,
-    minimumDamageAfterArmor ?? 0,
-    0,
-  );
+  const rawTotalDamage = Math.max(provisionalDamageAfterArmor, minimumDamageAfterArmor ?? 0, 0);
 
   return {
     minimumDamageAfterArmor,
@@ -4298,11 +4280,10 @@ export function getCombatRoundEffectiveDamageResult(
             })
           : undefined;
       effectiveMinimumDamageAfterArmor = adjustedGrazingDamage?.minimumDamageAfterArmor;
-      effectiveProvisionalDamageAfterArmor =
-        adjustedGrazingDamage?.provisionalDamageAfterArmor;
+      effectiveProvisionalDamageAfterArmor = adjustedGrazingDamage?.provisionalDamageAfterArmor;
       effectiveRawTotalDamage = hasTotalDamageOverride
-        ? damageResult.review?.totalDamageOverride ?? 0
-        : adjustedGrazingDamage?.rawTotalDamage ?? damageResult.totalDamage;
+        ? (damageResult.review?.totalDamageOverride ?? 0)
+        : (adjustedGrazingDamage?.rawTotalDamage ?? damageResult.totalDamage);
       effectiveDamageRoll = {
         derivedFromLookupTotal: grazingReferenceHitLookupTotal,
         derivedNormalDamageTotal: referenceTableDamage,
@@ -4444,13 +4425,14 @@ export function getCombatRoundEffectiveCriticalRoll(input: {
     armorCriticalModifier:
       review?.armorCriticalModifierOverride ?? criticalRoll?.armorCriticalModifier,
     criticalLocation: review?.criticalLocationOverride ?? criticalRoll?.selectedHitLocation,
-    criticalTypeModifier: review?.criticalTypeModifierOverride ?? criticalRoll?.criticalTypeModifier,
+    criticalTypeModifier:
+      review?.criticalTypeModifierOverride ?? criticalRoll?.criticalTypeModifier,
     finalCriticalRoll: review?.finalCriticalRollOverride ?? criticalRoll?.finalCriticalRoll,
     hasReviewOverrides: Boolean(
       review?.armorCriticalModifierOverride !== undefined ||
-        review?.criticalLocationOverride !== undefined ||
-        review?.criticalTypeModifierOverride !== undefined ||
-        review?.finalCriticalRollOverride !== undefined,
+      review?.criticalLocationOverride !== undefined ||
+      review?.criticalTypeModifierOverride !== undefined ||
+      review?.finalCriticalRollOverride !== undefined,
     ),
   };
 }
@@ -5315,16 +5297,16 @@ function buildCombatRoundDamageCommitIdBase(input: CombatRoundDamageCommitIdInpu
   ].join(":");
 }
 
-export function buildCombatRoundDamageCommitEventId(
-  input: CombatRoundDamageCommitIdInput,
-): string {
+export function buildCombatRoundDamageCommitEventId(input: CombatRoundDamageCommitIdInput): string {
   return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect-event`;
 }
 
-export function buildCombatRoundDamageCommitEffectId(input: CombatRoundDamageCommitIdInput & {
-  commandId: string;
-  kind: string;
-}): string {
+export function buildCombatRoundDamageCommitEffectId(
+  input: CombatRoundDamageCommitIdInput & {
+    commandId: string;
+    kind: string;
+  },
+): string {
   return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect:${formatCombatRoundDamageCommitIdPart(input.kind)}`;
 }
 
@@ -5338,6 +5320,19 @@ function formatCombatRoundDamageReviewEffectDescription(
   const notes = effect.notes?.trim();
 
   if (!notes) {
+    return effect.label;
+  }
+
+  const normalizedLabel = effect.label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const normalizedNotes = notes
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  if (normalizedNotes && normalizedLabel.includes(normalizedNotes)) {
     return effect.label;
   }
 
@@ -5366,6 +5361,18 @@ function formatCombatRoundDamageReviewEffectDuration(
   }
 
   return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+function formatCombatRoundDamageReviewRateValue(value: number): string {
+  if (value > 0 && value < 1) {
+    const rounds = 1 / value;
+
+    if (Number.isInteger(rounds)) {
+      return `1 HP / ${rounds} round${rounds === 1 ? "" : "s"}`;
+    }
+  }
+
+  return `${value} HP / round`;
 }
 
 export function getCombatRoundDamageReviewEffectRowPreview(
@@ -5421,7 +5428,7 @@ export function getCombatRoundDamageReviewEffectRowPreview(
   const value =
     effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed"
       ? effect.rateValuePerRound !== undefined
-        ? `${effect.rateValuePerRound} HP/round`
+        ? formatCombatRoundDamageReviewRateValue(effect.rateValuePerRound)
         : ""
       : shape.modifierValue !== undefined
         ? `${shape.modifierValue > 0 ? "+" : ""}${shape.modifierValue}`
@@ -5474,6 +5481,30 @@ function formatCombatRoundOperationalConsequenceSummary(
   }
 
   return consequence.label;
+}
+
+function formatCombatRoundCriticalReference(input: {
+  criticalGrade?: string;
+  proposal?: CombatRoundDamageReview["criticalEffectProposal"];
+}): string {
+  const grade = input.criticalGrade?.trim().toUpperCase();
+  const title = input.proposal?.title?.trim();
+  const bodyText = input.proposal?.bodyText?.trim();
+
+  if (!grade && !title && !bodyText) {
+    return "";
+  }
+
+  const heading = grade
+    ? title
+      ? `Critical ${grade}: ${title}.`
+      : `Critical ${grade}.`
+    : title
+      ? `Critical: ${title}.`
+      : "Critical.";
+  const fullText = bodyText ? ` Full text: ${bodyText}` : "";
+
+  return ` ${heading}${fullText}`;
 }
 
 function getCombatRoundDamageReviewEffectRowShape(
@@ -5644,9 +5675,12 @@ function formatCombatRoundDamageCommitDescription(input: {
   const damage = effectiveDamage.criticalMinApplied
     ? `${effectiveDamage.effectiveTotalDamage} damage`
     : `${effectiveDamage.effectiveTotalDamage} damage`;
+  const criticalReference = formatCombatRoundCriticalReference({
+    criticalGrade: effectiveDamage.effectiveCriticalGrade,
+    proposal: input.damageResult.review?.criticalEffectProposal,
+  });
   const damageAdjustment =
-    effectiveDamage.criticalMinApplied &&
-    effectiveDamage.criticalMinTotalDamage !== undefined
+    effectiveDamage.criticalMinApplied && effectiveDamage.criticalMinTotalDamage !== undefined
       ? ` Critical minimum raised damage from ${effectiveDamage.preCriticalEffectiveDamage} to ${effectiveDamage.criticalMinTotalDamage}.`
       : effectiveDamage.effectiveMaxDamageApplied &&
           effectiveDamage.effectiveMaxDamageCap !== undefined
@@ -5670,13 +5704,9 @@ function formatCombatRoundDamageCommitDescription(input: {
     (effect) => effect.accepted !== false,
   );
   const additionalEffects = acceptedAdditionalEffects.length
-    ? ` Additional rows: ${acceptedAdditionalEffects
-        .map((effect) => effect.label)
-        .join(", ")}.`
+    ? ` Accepted rows: ${acceptedAdditionalEffects.map((effect) => effect.label).join(", ")}.`
     : "";
-  const operationalConsequences = getAcceptedCombatRoundOperationalConsequences(
-    input.damageResult,
-  );
+  const operationalConsequences = getAcceptedCombatRoundOperationalConsequences(input.damageResult);
   const operational = operationalConsequences.length
     ? ` Operational consequences: ${operationalConsequences
         .map(formatCombatRoundOperationalConsequenceSummary)
@@ -5685,7 +5715,53 @@ function formatCombatRoundDamageCommitDescription(input: {
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${weapon} to ${target.toLowerCase()}: ${damage}.${armor}${damageAdjustment}${critical}${criticalRoll}${armorWarnings}${notes}${additionalEffects}${operational}`;
+  )} damage result: ${weapon} to ${target.toLowerCase()}: ${damage}.${armor}${damageAdjustment}${criticalReference || critical}${criticalRoll}${armorWarnings}${notes}${additionalEffects}${operational}`;
+}
+
+function formatCombatRoundPhysicalDamageEffectDescription(input: {
+  criticalRoll?: CombatRoundCriticalRollResult;
+  damageResult: CombatRoundDamageResult;
+}): string {
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll: input.criticalRoll,
+    review: input.damageResult.review,
+  });
+  const location = getCombatRoundCommittedDamageLocation(
+    effectiveDamage.effectiveSelectedHitLocation,
+  );
+  const target =
+    location?.label ??
+    (effectiveDamage.effectiveSelectedHitLocation
+      ? getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation)
+      : "unlocated hit");
+  const weapon = input.damageResult.weaponName ?? "Attack";
+  const armor =
+    effectiveDamage.effectiveArmorCoverageLabel &&
+    effectiveDamage.effectiveTableDamage !== undefined
+      ? ` Armor ${effectiveDamage.effectiveArmorCoverageLabel} reduced damage from ${effectiveDamage.effectiveTableDamage} to ${effectiveDamage.preCriticalEffectiveDamage}.`
+      : "";
+  const criticalMin =
+    effectiveDamage.criticalMinApplied && effectiveDamage.criticalMinTotalDamage !== undefined
+      ? ` Critical minimum raised damage from ${effectiveDamage.preCriticalEffectiveDamage} to ${effectiveDamage.criticalMinTotalDamage}.`
+      : "";
+  const criticalReference = formatCombatRoundCriticalReference({
+    criticalGrade: effectiveDamage.effectiveCriticalGrade,
+    proposal: input.damageResult.review?.criticalEffectProposal,
+  });
+  const criticalRoll =
+    input.criticalRoll?.status === "rolled" && effectiveCritical.finalCriticalRoll !== undefined
+      ? ` Critical roll ${effectiveCritical.finalCriticalRoll}${
+          effectiveCritical.criticalLocation
+            ? ` at ${getHitLocationFullLabel(effectiveCritical.criticalLocation).toLowerCase()}`
+            : ""
+        }.`
+      : "";
+  const notes = input.damageResult.review?.notes?.trim()
+    ? ` GM review: ${input.damageResult.review.notes.trim()}`
+    : "";
+
+  return `${weapon} hit ${target.toLowerCase()} for ${effectiveDamage.effectiveTotalDamage} damage.${armor}${criticalMin}${criticalReference}${criticalRoll}${notes}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -5759,6 +5835,10 @@ function buildCombatRoundDamageCommitRows(input: {
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
   });
+  const physicalDamageDescription = formatCombatRoundPhysicalDamageEffectDescription({
+    criticalRoll: input.criticalRoll,
+    damageResult: input.damageResult,
+  });
   const event = combatEffectEventSchema.parse({
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
@@ -5780,8 +5860,8 @@ function buildCombatRoundDamageCommitRows(input: {
             createdAt: input.command.createdAt,
             damage: damageLocation ? effectiveDamage.effectiveTotalDamage : 0,
             description: damageLocation?.note
-              ? `${description} ${damageLocation.note}`
-              : description,
+              ? `${physicalDamageDescription} ${damageLocation.note}`
+              : physicalDamageDescription,
             effectGroup: "none",
             generalDamage: damageLocation ? 0 : effectiveDamage.effectiveTotalDamage,
             id:
@@ -6101,9 +6181,7 @@ export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean
   });
 }
 
-export function getCombatRoundStartNextRoundBlocker(
-  state: CombatRoundState,
-): string | undefined {
+export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): string | undefined {
   const normalized = combatRoundStateSchema.parse(state);
   const review = normalized.roundEndReview;
 
@@ -6225,7 +6303,9 @@ type CombatRoundEndUpdatedEffectFact = {
   previousEffect?: unknown;
 };
 
-function isCombatRoundEndUpdatedEffectFact(value: unknown): value is CombatRoundEndUpdatedEffectFact {
+function isCombatRoundEndUpdatedEffectFact(
+  value: unknown,
+): value is CombatRoundEndUpdatedEffectFact {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -6604,8 +6684,8 @@ export function removeCombatRoundEndParticipantReviewEffects(input: {
   const existingWithoutCreated = currentCombatEffects.effects.filter(
     (effect) => !effectIdSet.has(effect.id),
   );
-  const restoredExisting = existingWithoutCreated.map((effect) =>
-    restoredById.get(effect.id) ?? effect,
+  const restoredExisting = existingWithoutCreated.map(
+    (effect) => restoredById.get(effect.id) ?? effect,
   );
   const missingRestored = [...restoredById.values()].filter(
     (effect) => !restoredExisting.some((existingEffect) => existingEffect.id === effect.id),
@@ -6812,11 +6892,7 @@ function buildCombatRoundOperationalCancelledActions(input: {
   const actions: CombatRoundOperationalCancelledAction[] = [];
 
   for (const consequence of getAcceptedCombatRoundOperationalConsequences(input.damageResult)) {
-    if (
-      consequence.kind !== "cancel_pending_action" ||
-      !consequence.phase ||
-      !consequence.step
-    ) {
+    if (consequence.kind !== "cancel_pending_action" || !consequence.phase || !consequence.step) {
       continue;
     }
 
@@ -7034,9 +7110,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
-  const createdAdditionalCombatEffectIds = (
-    input.damageResult.review?.additionalEffects ?? []
-  )
+  const createdAdditionalCombatEffectIds = (input.damageResult.review?.additionalEffects ?? [])
     .filter((effect) => effect.accepted !== false)
     .map((effect) =>
       buildCombatRoundDamageCommitEffectId({
@@ -7318,7 +7392,9 @@ function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
     state: normalized,
   });
   const attackResultId =
-    input.attackResultId ?? target.resolution?.attackResultId ?? target.damageResult?.attackResultId;
+    input.attackResultId ??
+    target.resolution?.attackResultId ??
+    target.damageResult?.attackResultId;
   const damageResult = target.damageResult;
   const resolution = target.resolution;
   const effectiveDamage = damageResult
@@ -7750,22 +7826,22 @@ function combatRoundCursorHasValidPhaseAttackTarget(input: {
 
   return Boolean(
     declaration &&
-      getCombatDeclarationAttackPhases({
-        actionId: declaration.actionId,
-        secondaryActionId: declaration.secondaryActionId,
-      }).includes(input.cursor.phase) &&
-      targetParticipantId &&
-      input.validTargetIds.has(targetParticipantId),
+    getCombatDeclarationAttackPhases({
+      actionId: declaration.actionId,
+      secondaryActionId: declaration.secondaryActionId,
+    }).includes(input.cursor.phase) &&
+    targetParticipantId &&
+    input.validTargetIds.has(targetParticipantId),
   );
 }
 
 function combatRoundCursorsMatch(left?: CombatRoundCursor, right?: CombatRoundCursor): boolean {
   return Boolean(
     left &&
-      right &&
-      left.roundNumber === right.roundNumber &&
-      left.step === right.step &&
-      left.participantId === right.participantId,
+    right &&
+    left.roundNumber === right.roundNumber &&
+    left.step === right.step &&
+    left.participantId === right.participantId,
   );
 }
 
@@ -8243,17 +8319,19 @@ export function initializeCombatRoundState(input: {
   const fallbackCursor = targetRepairCursor
     ? targetRepairCursor
     : phaseStepRecoveryCursor
-    ? phaseStepRecoveryCursor
-    : repairsUnsupportedPhaseStep
-    ? getFallbackCombatRoundCursor({
-        commands,
-        participantId: participants[0]?.participantId,
-        participantIds,
-        roundNumber,
-      })
-    : undefined;
+      ? phaseStepRecoveryCursor
+      : repairsUnsupportedPhaseStep
+        ? getFallbackCombatRoundCursor({
+            commands,
+            participantId: participants[0]?.participantId,
+            participantIds,
+            roundNumber,
+          })
+        : undefined;
   const phaseStepRecoveryPhase = phaseStepRecoveryCursor
-    ? getCombatRoundAttackPhaseForStep(getCombatRoundStepForCursorStep(phaseStepRecoveryCursor.step))
+    ? getCombatRoundAttackPhaseForStep(
+        getCombatRoundStepForCursorStep(phaseStepRecoveryCursor.step),
+      )
     : undefined;
   const fallbackPhaseResolutionCursor =
     phaseStepRecoveryCursor?.participantId && phaseStepRecoveryPhase
@@ -8271,9 +8349,7 @@ export function initializeCombatRoundState(input: {
       ? participants.map(resetCombatRoundParticipantToRoundStart)
       : participants.map(resetCombatRoundPhaseProgress)
     : participants;
-  const phaseResolutionResultsForState = repairsUnsupportedPhaseStep
-    ? []
-    : phaseResolutionResults;
+  const phaseResolutionResultsForState = repairsUnsupportedPhaseStep ? [] : phaseResolutionResults;
   const phaseResolutionStatusesForState = repairsUnsupportedPhaseStep
     ? {}
     : phaseResolutionStatuses;
@@ -8322,8 +8398,7 @@ export function initializeCombatRoundState(input: {
     ? existingPhaseResolutionCursorCandidate
     : undefined;
   const recoveredPhaseResolutionCursor =
-    !canUseExistingCurrentCursor &&
-    existingPhaseResolutionCursor
+    !canUseExistingCurrentCursor && existingPhaseResolutionCursor
       ? getCombatRoundCursorForPhaseResolutionCursor({
           cursor: existingPhaseResolutionCursor,
           roundNumber,
@@ -8348,18 +8423,17 @@ export function initializeCombatRoundState(input: {
     currentStep === "select_actions" &&
     existing?.selectedStep !== undefined &&
     existing.selectedStep !== "select_actions";
-  const selectedParticipantId =
-    fallbackCursor?.participantId
-      ? fallbackCursor.participantId
-      : canUseExistingCurrentCursor && existingCursorParticipantId
+  const selectedParticipantId = fallbackCursor?.participantId
+    ? fallbackCursor.participantId
+    : canUseExistingCurrentCursor && existingCursorParticipantId
       ? existingCursorParticipantId
       : canUseRecoveredPhaseResolutionCursor && recoveredPhaseResolutionCursor.participantId
         ? recoveredPhaseResolutionCursor.participantId
-      : !resetsStaleDeclarationSelection &&
-          existing?.selectedParticipantId &&
-          participantIds.has(existing.selectedParticipantId)
-        ? existing.selectedParticipantId
-        : participantsForState[0]?.participantId;
+        : !resetsStaleDeclarationSelection &&
+            existing?.selectedParticipantId &&
+            participantIds.has(existing.selectedParticipantId)
+          ? existing.selectedParticipantId
+          : participantsForState[0]?.participantId;
   const activeParticipantId =
     existing?.activeParticipantId && participantIds.has(existing.activeParticipantId)
       ? existing.activeParticipantId
@@ -8371,22 +8445,21 @@ export function initializeCombatRoundState(input: {
     currentCursor: fallbackCursor
       ? fallbackCursor
       : canUseExistingCurrentCursor
-      ? existing.currentCursor
-      : canUseRecoveredPhaseResolutionCursor
-        ? recoveredPhaseResolutionCursor
-      : isGlobalCombatRoundStep(currentStep)
-        ? getDefaultCombatRoundCursor({
-            participantId: selectedParticipantId,
-            roundNumber,
-            step: currentStep,
-          })
-        : undefined,
+        ? existing.currentCursor
+        : canUseRecoveredPhaseResolutionCursor
+          ? recoveredPhaseResolutionCursor
+          : isGlobalCombatRoundStep(currentStep)
+            ? getDefaultCombatRoundCursor({
+                participantId: selectedParticipantId,
+                roundNumber,
+                step: currentStep,
+              })
+            : undefined,
     encounterId: input.encounter.id,
     currentStep,
-    phaseResolutionCursor:
-      fallbackPhaseResolutionCursor
-        ? fallbackPhaseResolutionCursor
-        : currentStep === "select_actions" || !existingPhaseResolutionCursor
+    phaseResolutionCursor: fallbackPhaseResolutionCursor
+      ? fallbackPhaseResolutionCursor
+      : currentStep === "select_actions" || !existingPhaseResolutionCursor
         ? undefined
         : existingPhaseResolutionCursor,
     phaseResolutionResults: phaseResolutionResultsForState,
@@ -8399,10 +8472,10 @@ export function initializeCombatRoundState(input: {
     selectedStep: fallbackCursor
       ? currentStep
       : canUseExistingCurrentCursor
-      ? currentStep
-      : resetsStaleDeclarationSelection
-        ? "select_actions"
-        : (existing?.selectedStep ?? currentStep),
+        ? currentStep
+        : resetsStaleDeclarationSelection
+          ? "select_actions"
+          : (existing?.selectedStep ?? currentStep),
     stepSnapshots: stepSnapshotsForState,
   };
 }
@@ -8630,12 +8703,11 @@ export function advanceCombatRoundStep(
       ...completedRoundState,
       activeParticipantId: undefined,
       commands: [],
-      currentCursor:
-        getDefaultCombatRoundCursor({
-          participantId: nextParticipantId,
-          roundNumber: nextRoundNumber,
-          step: "select_actions",
-        }),
+      currentCursor: getDefaultCombatRoundCursor({
+        participantId: nextParticipantId,
+        roundNumber: nextRoundNumber,
+        step: "select_actions",
+      }),
       currentStep: "select_actions",
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
@@ -8682,9 +8754,8 @@ export function advanceCombatRoundStep(
             ...participant.stepStatuses,
             [normalized.currentStep]:
               advanceCommand && isGlobalCombatRoundStep(normalized.currentStep)
-                ? (commandBackedGlobalAdvanceStatusByParticipantId.get(
-                    participant.participantId,
-                  ) ?? participant.stepStatuses[normalized.currentStep])
+                ? (commandBackedGlobalAdvanceStatusByParticipantId.get(participant.participantId) ??
+                  participant.stepStatuses[normalized.currentStep])
                 : advancesDeclarationStep
                   ? participant.stepStatuses.select_actions === "submitted" ||
                     participant.stepStatuses.select_actions === "gmEdited"
@@ -9130,7 +9201,7 @@ function resetCombatRoundDamageForAttackResult(input: {
               ? "Parry resolved successfully. Damage is not required."
               : undefined,
             status: "not_required",
-        },
+          },
     damageResult: undefined,
     hitLocationRoll: input.preserveHitLocationRoll
       ? input.resolution.hitLocationRoll
@@ -9326,7 +9397,7 @@ function clearCombatRoundStepLegacy(input: {
           : globalDependencyPhase &&
               normalized.phaseResolutionCursor?.phase === globalDependencyPhase
             ? undefined
-          : normalized.phaseResolutionCursor,
+            : normalized.phaseResolutionCursor,
     phaseResolutionResults: clearResolutionPhase
       ? normalized.phaseResolutionResults
           .filter((result) => {
@@ -9564,7 +9635,9 @@ export function undoLatestCombatRoundGlobalParticipantCommand(input: {
   });
 }
 
-function getCombatRoundAttackCommandPhase(command: CombatRoundCommand): CombatRoundPhase | undefined {
+function getCombatRoundAttackCommandPhase(
+  command: CombatRoundCommand,
+): CombatRoundPhase | undefined {
   if (command.phase) {
     return command.phase;
   }
@@ -9774,11 +9847,7 @@ function undoCombatRoundParryCommandAtIndex(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const command = normalized.commands[input.commandIndex];
 
-  if (
-    !command ||
-    command.roundNumber !== normalized.roundNumber ||
-    command.type !== "roll_parry"
-  ) {
+  if (!command || command.roundNumber !== normalized.roundNumber || command.type !== "roll_parry") {
     return undefined;
   }
 
@@ -10716,7 +10785,8 @@ function combatRoundSelectedStepHasClearableState(input: {
           phase,
           state: normalized,
         }),
-      ) || hasNonPendingStatus
+      ) ||
+      hasNonPendingStatus
     );
   }
 
@@ -11336,9 +11406,7 @@ type CombatRoundLatestEventParticipantLabel = {
   participantId: string;
 };
 
-function getCombatRoundLatestEventFactRecord(
-  value: unknown,
-): Record<string, unknown> | undefined {
+function getCombatRoundLatestEventFactRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
@@ -11402,16 +11470,14 @@ function getCombatRoundLatestEventCriticalEffectCount(effects: readonly unknown[
 
     return Boolean(
       record &&
-        (record.sourceKind === "critical_table" ||
-          typeof record.sourceCritKey === "string" ||
-          typeof record.sourceEffectKey === "string"),
+      (record.sourceKind === "critical_table" ||
+        typeof record.sourceCritKey === "string" ||
+        typeof record.sourceEffectKey === "string"),
     );
   }).length;
 }
 
-function getCombatRoundLatestEventCriticalProposalDetails(
-  damageResult?: CombatRoundDamageResult,
-): {
+function getCombatRoundLatestEventCriticalProposalDetails(damageResult?: CombatRoundDamageResult): {
   proposedCriticalEffects: number;
   proposalStatus?: string;
   warnings: string[];
@@ -11438,7 +11504,7 @@ function getCombatRoundLatestEventCriticalProposalDetails(
 
   return {
     proposedCriticalEffects,
-    proposalStatus: `Critical effects proposed: ${proposedCriticalEffects} row${
+    proposalStatus: `Critical-derived rows: ${proposedCriticalEffects} row${
       proposedCriticalEffects === 1 ? "" : "s"
     }.`,
     warnings: [],
@@ -11450,7 +11516,7 @@ function getCombatRoundLatestEventLabel(input: {
   participantId?: string;
 }): string {
   return input.participantId
-    ? input.labelByParticipantId.get(input.participantId) ?? input.participantId
+    ? (input.labelByParticipantId.get(input.participantId) ?? input.participantId)
     : "Unknown participant";
 }
 
@@ -11536,10 +11602,7 @@ function getCombatRoundLatestEventForCommand(input: {
   }
 
   if (command.type === "commit_round_end_participant_review") {
-    const damageIds = getCombatRoundLatestEventFactArray(
-      facts,
-      "acceptedDamageProposalIds",
-    );
+    const damageIds = getCombatRoundLatestEventFactArray(facts, "acceptedDamageProposalIds");
     const healthIds = getCombatRoundLatestEventFactArray(facts, "acceptedHealthRollIds");
 
     return {
@@ -11599,9 +11662,9 @@ function getCombatRoundLatestEventForCommand(input: {
       criticalGrade || finalCriticalRoll !== undefined
         ? ` Critical${criticalGrade ? ` ${criticalGrade.toUpperCase()} pending` : ""}${
             finalCriticalRoll !== undefined
-              ? `${criticalGrade ? "," : ""} critical roll ${finalCriticalRoll}${
-                  getCombatRoundLatestEventDamageLocationSuffix(criticalLocation)
-                }`
+              ? `${criticalGrade ? "," : ""} critical roll ${finalCriticalRoll}${getCombatRoundLatestEventDamageLocationSuffix(
+                  criticalLocation,
+                )}`
               : ""
           }.`
         : "";
@@ -11733,8 +11796,7 @@ function getCombatRoundLatestEventForCommand(input: {
         getCombatRoundLatestEventFactString(facts, "defenderParticipantId"),
     });
     const hit = attackResult?.hit ?? getCombatRoundLatestEventFactBoolean(facts, "hit");
-    const grazing =
-      attackResult?.grazing ?? getCombatRoundLatestEventFactBoolean(facts, "grazing");
+    const grazing = attackResult?.grazing ?? getCombatRoundLatestEventFactBoolean(facts, "grazing");
     const resultLabel = grazing ? "grazed" : hit ? "hit" : "missed";
 
     return {
@@ -11755,10 +11817,7 @@ function getCombatRoundLatestEventForCommand(input: {
     };
   }
 
-  if (
-    command.type === "roll_initiative_phase1" ||
-    command.type === "roll_initiative_phase2"
-  ) {
+  if (command.type === "roll_initiative_phase1" || command.type === "roll_initiative_phase2") {
     const phase = command.type === "roll_initiative_phase1" ? "phase1" : "phase2";
     const participant = state.participants.find(
       (entry) => entry.participantId === command.participantId,

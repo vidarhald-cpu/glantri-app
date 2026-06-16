@@ -91,9 +91,7 @@ import {
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
-import {
-  updateScenarioParticipantStateOnServer,
-} from "@/lib/api/scenarioClient";
+import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import {
   clearCurrentCombatRoundStepOnServer,
   rollCombatAttackOnServer,
@@ -625,8 +623,7 @@ function formatCombatDamageCalculationLine(
       effectiveDamage.effectiveDamageRoll.rawGrazingDamage ??
       effectiveDamage.effectiveDamageRoll.total;
     const rollLabel =
-      effectiveDamage.effectiveDamageRoll.diceExpression &&
-      rawGrazingDamage !== undefined
+      effectiveDamage.effectiveDamageRoll.diceExpression && rawGrazingDamage !== undefined
         ? `${effectiveDamage.effectiveDamageRoll.diceExpression} = ${rawGrazingDamage}`
         : "required roll";
     const referenceHitLookupTotal =
@@ -753,9 +750,7 @@ function formatHitLocationTargetLabel(
     : "None";
 }
 
-function formatCombatLocationCalculationLine(
-  resolution: CombatRoundPhaseResolutionResult,
-): string {
+function formatCombatLocationCalculationLine(resolution: CombatRoundPhaseResolutionResult): string {
   const locationRoll = resolution.hitLocationRoll;
 
   if (locationRoll.status !== "rolled") {
@@ -773,9 +768,7 @@ function formatCombatLocationCalculationLine(
     : `Roll: ${rollsLabel}`;
 }
 
-function formatCombatLocationResultLine(
-  resolution: CombatRoundPhaseResolutionResult,
-): string {
+function formatCombatLocationResultLine(resolution: CombatRoundPhaseResolutionResult): string {
   const locationRoll = resolution.hitLocationRoll;
 
   if (locationRoll.status !== "rolled" || !locationRoll.selectedHitLocation) {
@@ -898,9 +891,9 @@ function formatCombatPhaseResolutionResultLines(input: {
       : `${parryLine} · ${damageLine}`;
   const damageResultLine =
     damageResult && resolvedDamageLine
-      ? `Result: ${getCombatRoundEffectiveDamageResult(
-          damageResult,
-        ).effectiveTotalDamage} damage${formatCombatDamageResultLocationSuffix(damageResult)}`
+      ? `Result: ${
+          getCombatRoundEffectiveDamageResult(damageResult).effectiveTotalDamage
+        } damage${formatCombatDamageResultLocationSuffix(damageResult)}`
       : proposal.status === "committed"
         ? `Result: ${proposalLine}`
         : `Result: ${formatResolutionStatusLabel(proposal.status)}`;
@@ -947,7 +940,7 @@ function formatCombatPhaseResolutionResultLines(input: {
     proposalLine:
       proposal.status === "committed"
         ? proposalLine
-        : resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
+        : (resolvedDamageResultLine ?? parryResultLine ?? proposalLine),
     armorLine: resolvedArmorLine,
     locationLine: resolvedHitLocationLine,
     sections,
@@ -1231,18 +1224,15 @@ function buildCombatDamageReviewDraft(
   };
 }
 
-function getCombatDamageReviewEffectLabel(
-  draft: CombatDamageReviewAdditionalEffectDraft,
-): string {
+function getCombatDamageReviewEffectLabel(draft: CombatDamageReviewAdditionalEffectDraft): string {
   if (draft.label.trim()) {
     return draft.label.trim();
   }
 
   if (draft.kind === "modifier") {
     const bucketLabel =
-      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
-        (bucket) => bucket.value === draft.modifierBucket,
-      )?.label ?? "Modifier";
+      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find((bucket) => bucket.value === draft.modifierBucket)
+        ?.label ?? "Modifier";
 
     return bucketLabel;
   }
@@ -1294,7 +1284,7 @@ function buildCombatDamageReviewFromDraft(input: {
   const criticalGradeOverride =
     selectedCriticalGrade === effectiveDamage.computedCriticalGrade
       ? undefined
-      : selectedCriticalGrade ?? (effectiveDamage.computedCriticalGrade ? null : undefined);
+      : (selectedCriticalGrade ?? (effectiveDamage.computedCriticalGrade ? null : undefined));
   const armorModifier = parseOptionalCombatReviewInteger(
     input.draft.armorModifierOverride,
     "Armor modifier override",
@@ -1345,9 +1335,9 @@ function buildCombatDamageReviewFromDraft(input: {
         : undefined;
     const modifierBucket =
       kind === "modifier"
-        ? COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+        ? (COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
             (bucket) => bucket.value === effect.modifierBucket,
-          )?.value ?? "general"
+          )?.value ?? "general")
         : undefined;
     const rateValuePerRound =
       effect.rateValuePerRound.trim() && /^\d+(\.\d+)?$/.test(effect.rateValuePerRound.trim())
@@ -1513,6 +1503,7 @@ interface CombatDamageReviewProposedSheetRow {
   accepted: boolean;
   details: string;
   duration: string;
+  effectId?: string;
   rowType: string;
   target: string;
   value: string;
@@ -1577,9 +1568,8 @@ function getCombatDamageReviewDraftEffectTarget(
 
   if (effect.kind === "modifier") {
     return (
-      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
-        (bucket) => bucket.value === effect.modifierBucket,
-      )?.label ?? "General/Fatigue"
+      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find((bucket) => bucket.value === effect.modifierBucket)
+        ?.label ?? "General/Fatigue"
     );
   }
 
@@ -1590,12 +1580,27 @@ function getCombatDamageReviewDraftEffectTarget(
   return "Special";
 }
 
+function formatCombatDamageReviewRateValue(value: string): string {
+  const trimmed = value.trim();
+  const numeric = Number(trimmed);
+
+  if (Number.isFinite(numeric) && numeric > 0 && numeric < 1) {
+    const rounds = 1 / numeric;
+
+    if (Number.isInteger(rounds)) {
+      return `1 HP / ${rounds} round${rounds === 1 ? "" : "s"}`;
+    }
+  }
+
+  return `${trimmed} HP / round`;
+}
+
 function getCombatDamageReviewDraftEffectValue(
   effect: CombatDamageReviewAdditionalEffectDraft,
 ): string {
   if (effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed") {
     return effect.rateValuePerRound.trim()
-      ? `${effect.rateValuePerRound.trim()} HP/round`
+      ? formatCombatDamageReviewRateValue(effect.rateValuePerRound)
       : "";
   }
 
@@ -1614,7 +1619,9 @@ function formatCombatDamageReviewDraftEffectDuration(
   const parts = [];
 
   if (effect.durationRounds.trim()) {
-    parts.push(`${effect.durationRounds.trim()} round${effect.durationRounds.trim() === "1" ? "" : "s"}`);
+    parts.push(
+      `${effect.durationRounds.trim()} round${effect.durationRounds.trim() === "1" ? "" : "s"}`,
+    );
   }
 
   const phaseLabel = COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.find(
@@ -1626,6 +1633,36 @@ function formatCombatDamageReviewDraftEffectDuration(
   }
 
   return parts.join(" · ");
+}
+
+function formatCombatDamageReviewDraftEffectDetails(
+  effect: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  const label = effect.label.trim();
+  const notes = effect.notes.trim();
+
+  if (!notes) {
+    return label;
+  }
+
+  const normalizedLabel = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const normalizedNotes = notes
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  if (normalizedNotes && normalizedLabel.includes(normalizedNotes)) {
+    return label;
+  }
+
+  return label && notes.toLowerCase().startsWith(`${label.toLowerCase()}:`)
+    ? notes
+    : label
+      ? `${label}: ${notes}`
+      : notes;
 }
 
 function buildCombatDamageReviewProposedSheetRows(input: {
@@ -1676,29 +1713,12 @@ function buildCombatDamageReviewProposedSheetRows(input: {
   for (const effect of input.draft.additionalEffects) {
     rows.push({
       accepted: effect.accepted,
-      details: effect.notes.trim() ? `${effect.label}: ${effect.notes.trim()}` : effect.label,
+      details: formatCombatDamageReviewDraftEffectDetails(effect),
       duration: formatCombatDamageReviewDraftEffectDuration(effect),
+      effectId: effect.id,
       rowType: getCombatDamageReviewDraftEffectRowType(effect),
       target: getCombatDamageReviewDraftEffectTarget(effect),
       value: getCombatDamageReviewDraftEffectValue(effect),
-    });
-  }
-
-  for (const consequence of input.draft.operationalConsequences) {
-    rows.push({
-      accepted: consequence.accepted,
-      details: consequence.notes.trim()
-        ? `${consequence.label}: ${consequence.notes.trim()}`
-        : consequence.reason,
-      duration: "active",
-      rowType:
-        consequence.kind === "drop_item"
-          ? "Dropped item"
-          : consequence.kind === "cancel_pending_action"
-            ? "Cancelled action"
-            : "Special",
-      target: consequence.phase || "Special",
-      value: consequence.itemLabel || "",
     });
   }
 
@@ -2109,16 +2129,18 @@ function CombatDamageReviewPanel(input: {
       : (input.commitReadiness.reason ?? "Cannot commit: phase damage is not ready.")
     : undefined;
   const criticalDraftEffectCount = input.draft.additionalEffects.filter((effect) =>
-    Boolean(effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey),
+    Boolean(
+      effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey,
+    ),
   ).length;
   const criticalEffectStatus = criticalEffectProposal
     ? criticalEffectProposal.criticalIndexStatus === "no_effect"
       ? "No critical effect."
       : criticalEffectProposal.warnings.length > 0
-      ? `Critical effects unavailable: ${criticalEffectProposal.warnings.join(" ")}`
-      : `Critical effects proposed: ${criticalDraftEffectCount} row${
-          criticalDraftEffectCount === 1 ? "" : "s"
-        }.`
+        ? `Critical effects unavailable: ${criticalEffectProposal.warnings.join(" ")}`
+        : `Critical-derived rows: ${criticalDraftEffectCount} row${
+            criticalDraftEffectCount === 1 ? "" : "s"
+          }.`
     : effectiveDamage.effectiveCriticalGrade
       ? "Critical effects not accepted/committed yet."
       : undefined;
@@ -2132,6 +2154,16 @@ function CombatDamageReviewPanel(input: {
     damageResult: input.damageResult,
     draft: input.draft,
   });
+  const acceptedEffectLabels = Array.from(
+    new Set(
+      proposedRows
+        .filter((row) => row.accepted && row.rowType !== "Physical damage")
+        .map((row) => row.rowType.toLowerCase()),
+    ),
+  );
+  const acceptedOperationalLabels = input.draft.operationalConsequences
+    .filter((consequence) => consequence.accepted)
+    .map((consequence) => consequence.label.toLowerCase());
   const outcomeSummary = [
     `${effectiveDamage.effectiveTotalDamage} physical damage to ${
       effectiveDamage.effectiveSelectedHitLocation
@@ -2139,14 +2171,27 @@ function CombatDamageReviewPanel(input: {
         : "general"
     }`,
     effectiveDamage.effectiveCriticalGrade
-      ? `Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()}`
+      ? `Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()}${
+          criticalEffectProposal?.title ? `: ${criticalEffectProposal.title}` : ""
+        }`
       : undefined,
-    criticalEffectProposal?.title,
-    proposedRows
-      .filter((row) => row.accepted && row.rowType !== "Physical damage")
-      .map((row) => row.rowType)
-      .join(", ") || undefined,
+    acceptedEffectLabels.length ? `Effects: ${acceptedEffectLabels.join(", ")}` : undefined,
+    acceptedOperationalLabels.length
+      ? `Operational: ${acceptedOperationalLabels.join(", ")}`
+      : undefined,
   ].filter((entry): entry is string => Boolean(entry));
+  const representedRollReportKeys = new Set(
+    input.draft.additionalEffects.flatMap((effect) =>
+      (effect.rollReports ?? []).map(
+        (report) => `${report.effectKey}:${report.purpose}:${report.formula}`,
+      ),
+    ),
+  );
+  const unrepresentedRollReports =
+    criticalEffectProposal?.rollReports.filter(
+      (report) =>
+        !representedRollReportKeys.has(`${report.effectKey}:${report.purpose}:${report.formula}`),
+    ) ?? [];
   const updateAdditionalEffect = (
     effectId: string,
     patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
@@ -2190,12 +2235,16 @@ function CombatDamageReviewPanel(input: {
         }}
       >
         <strong style={{ fontSize: "0.9rem" }}>Outcome summary</strong>
-        <div style={{ color: "#2f342b", fontSize: "0.9rem" }}>
-          {outcomeSummary.join(" · ")}
-        </div>
+        <ul style={{ color: "#2f342b", fontSize: "0.9rem", margin: 0, paddingLeft: "1.1rem" }}>
+          {outcomeSummary.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
       </section>
       <section style={{ display: "grid", gap: "0.35rem" }}>
-        <strong style={{ fontSize: "0.9rem" }}>Proposed character-sheet rows</strong>
+        <strong style={{ fontSize: "0.9rem" }}>
+          Proposed character-sheet rows: {proposedRows.length}
+        </strong>
         {proposedRows.length === 0 ? (
           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
             No character-sheet rows proposed.
@@ -2216,7 +2265,20 @@ function CombatDamageReviewPanel(input: {
               <tbody>
                 {proposedRows.map((row, index) => (
                   <tr key={`${row.rowType}-${index}`}>
-                    <td style={combatReviewRowCellStyle}>{row.accepted ? "Yes" : "No"}</td>
+                    <td style={combatReviewRowCellStyle}>
+                      <input
+                        checked={row.accepted}
+                        disabled={disabled || !row.effectId}
+                        onChange={(event) =>
+                          row.effectId
+                            ? updateAdditionalEffect(row.effectId, {
+                                accepted: event.target.checked,
+                              })
+                            : undefined
+                        }
+                        type="checkbox"
+                      />
+                    </td>
                     <td style={combatReviewRowCellStyle}>{row.rowType}</td>
                     <td style={combatReviewRowCellStyle}>{row.target}</td>
                     <td style={combatReviewRowCellStyle}>{row.value || "—"}</td>
@@ -2259,9 +2321,7 @@ function CombatDamageReviewPanel(input: {
           </select>
         </label>
         <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Direction
-          </span>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Direction</span>
           <select
             disabled={disabled}
             onChange={(event) =>
@@ -2278,111 +2338,13 @@ function CombatDamageReviewPanel(input: {
         </label>
         <label style={{ display: "grid", gap: "0.2rem" }}>
           <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Armor</span>
-          <input
-            disabled={disabled}
-            inputMode="numeric"
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                armorModifierOverride: event.target.value,
-              })
-            }
-            type="text"
-            value={input.draft.armorModifierOverride}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Damage</span>
-          <input
-            disabled={disabled}
-            inputMode="numeric"
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                totalDamageOverride: event.target.value,
-              })
-            }
-            type="text"
-            value={input.draft.totalDamageOverride}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Critical</span>
-          <select
-            disabled={disabled}
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                criticalGradeOverride: event.target.value,
-              })
-            }
-            value={input.draft.criticalGradeOverride}
-          >
-            <option value="none">None</option>
-            {["a", "b", "c", "d", "e", "f"].map((grade) => (
-              <option key={grade} value={grade}>
-                {grade.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Critical location
+          <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            {effectiveDamage.effectiveArmorCoverageLabel
+              ? `${effectiveDamage.effectiveArmorCoverageLabel} at ${
+                  effectiveDamage.effectiveArmorRegionLabel ?? "selected location"
+                }`
+              : "No armor coverage"}
           </span>
-          <select
-            disabled={disabled}
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                criticalLocationOverride: event.target.value,
-              })
-            }
-            value={input.draft.criticalLocationOverride}
-          >
-            {input.draft.criticalLocationOverride ? null : (
-              <option value="">Not recorded</option>
-            )}
-            {HIT_LOCATIONS.map((location) => (
-              <option key={location} value={location}>
-                {getHitLocationFullLabel(location)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Critical type mod
-          </span>
-          <input
-            disabled={disabled}
-            inputMode="numeric"
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                criticalTypeModifierOverride: event.target.value,
-              })
-            }
-            type="text"
-            value={input.draft.criticalTypeModifierOverride}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Armor critical
-          </span>
-          <input
-            disabled={disabled}
-            inputMode="numeric"
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                armorCriticalModifierOverride: event.target.value,
-              })
-            }
-            type="text"
-            value={input.draft.armorCriticalModifierOverride}
-          />
         </label>
         <label style={{ display: "grid", gap: "0.2rem" }}>
           <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
@@ -2436,14 +2398,11 @@ function CombatDamageReviewPanel(input: {
           {criticalEffectProposal.bodyText ? (
             <div style={{ lineHeight: 1.45 }}>{criticalEffectProposal.bodyText}</div>
           ) : null}
-          {criticalEffectProposal.rollReports.length > 0 ? (
+          {unrepresentedRollReports.length > 0 ? (
             <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-              App rolls:{" "}
-              {criticalEffectProposal.rollReports
-                .map(
-                  (report) =>
-                    `${report.formula} ${report.rolls.join(" + ")} = ${report.total}`,
-                )
+              App-side rolls:{" "}
+              {unrepresentedRollReports
+                .map((report) => `${report.formula} ${report.rolls.join(" + ")} = ${report.total}`)
                 .join("; ")}
             </div>
           ) : null}
@@ -2460,13 +2419,144 @@ function CombatDamageReviewPanel(input: {
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
       ) : null}
       {criticalMinimumStatus ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-          {criticalMinimumStatus}
-        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalMinimumStatus}</div>
       ) : null}
+      <details
+        style={{
+          borderTop: "1px solid #e6e0d2",
+          color: "#5e5a50",
+          fontSize: "0.86rem",
+          paddingTop: "0.45rem",
+        }}
+      >
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Calculation details</summary>
+        <div
+          style={{
+            display: "grid",
+            gap: "0.5rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(8rem, 1fr))",
+            marginTop: "0.5rem",
+          }}
+        >
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Damage override
+            </span>
+            <input
+              disabled={disabled}
+              inputMode="numeric"
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  totalDamageOverride: event.target.value,
+                })
+              }
+              type="text"
+              value={input.draft.totalDamageOverride}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Armor modifier
+            </span>
+            <input
+              disabled={disabled}
+              inputMode="numeric"
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  armorModifierOverride: event.target.value,
+                })
+              }
+              type="text"
+              value={input.draft.armorModifierOverride}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Critical grade
+            </span>
+            <select
+              disabled={disabled}
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  criticalGradeOverride: event.target.value,
+                })
+              }
+              value={input.draft.criticalGradeOverride}
+            >
+              <option value="none">None</option>
+              {["a", "b", "c", "d", "e", "f"].map((grade) => (
+                <option key={grade} value={grade}>
+                  {grade.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Critical location
+            </span>
+            <select
+              disabled={disabled}
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  criticalLocationOverride: event.target.value,
+                })
+              }
+              value={input.draft.criticalLocationOverride}
+            >
+              {input.draft.criticalLocationOverride ? null : <option value="">Not recorded</option>}
+              {HIT_LOCATIONS.map((location) => (
+                <option key={location} value={location}>
+                  {getHitLocationFullLabel(location)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Critical type mod
+            </span>
+            <input
+              disabled={disabled}
+              inputMode="numeric"
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  criticalTypeModifierOverride: event.target.value,
+                })
+              }
+              type="text"
+              value={input.draft.criticalTypeModifierOverride}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Armor critical
+            </span>
+            <input
+              disabled={disabled}
+              inputMode="numeric"
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  armorCriticalModifierOverride: event.target.value,
+                })
+              }
+              type="text"
+              value={input.draft.armorCriticalModifierOverride}
+            />
+          </label>
+        </div>
+      </details>
       {input.draft.operationalConsequences.length > 0 ? (
         <section style={{ display: "grid", gap: "0.5rem" }}>
-          <strong style={{ fontSize: "0.9rem" }}>Operational consequences</strong>
+          <strong style={{ fontSize: "0.9rem" }}>
+            Operational consequences: {input.draft.operationalConsequences.length}
+          </strong>
           {input.draft.operationalConsequences.map((consequence) => (
             <div
               key={consequence.id}
@@ -2530,7 +2620,7 @@ function CombatDamageReviewPanel(input: {
       ) : null}
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          <strong style={{ fontSize: "0.9rem" }}>Additional immediate effects</strong>
+          <strong style={{ fontSize: "0.9rem" }}>Edit character-sheet rows</strong>
           <button
             disabled={disabled}
             onClick={() =>
@@ -2544,7 +2634,7 @@ function CombatDamageReviewPanel(input: {
             }
             type="button"
           >
-            Add modifier effect
+            Add modifier row
           </button>
           <button
             disabled={disabled}
@@ -2559,12 +2649,12 @@ function CombatDamageReviewPanel(input: {
             }
             type="button"
           >
-            Add note effect
+            Add note row
           </button>
         </div>
         {input.draft.additionalEffects.length === 0 ? (
           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            No additional immediate effects.
+            No additional character-sheet rows.
           </div>
         ) : null}
         {input.draft.additionalEffects.map((effect) => {
@@ -2781,9 +2871,7 @@ function CombatRoundEndReviewPanel(input: {
     <section style={playerCombatPanelCardStyle}>
       <strong>Round-end review</strong>
       {!review ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-          No SU proposals built yet.
-        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No SU proposals built yet.</div>
       ) : (
         <>
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
@@ -2864,10 +2952,7 @@ function CombatRoundEndReviewPanel(input: {
                         : " · pending"}
                     </div>
                     {proposal.warnings.map((warning) => (
-                      <div
-                        key={warning}
-                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
-                      >
+                      <div key={warning} style={{ color: "#8a3b1f", fontSize: "0.82rem" }}>
                         {warning}
                       </div>
                     ))}
@@ -3012,10 +3097,11 @@ export default function CombatRoundManagerPanel({
       state: roundState,
       step: inspector.step,
     });
-  const clearCurrentStepAvailable = canClearCombatRoundStep({
-    state: roundState,
-    step: inspector.step,
-  }) && selectedRoundIsActive;
+  const clearCurrentStepAvailable =
+    canClearCombatRoundStep({
+      state: roundState,
+      step: inspector.step,
+    }) && selectedRoundIsActive;
   const selectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspector.participant?.participantId,
   );
@@ -3256,7 +3342,11 @@ export default function CombatRoundManagerPanel({
         participants: effectiveScenarioParticipants,
         selectedParticipantId: selectedScenarioParticipant?.id,
       }),
-    [effectiveScenarioParticipants, encounterScenarioParticipantIds, selectedScenarioParticipant?.id],
+    [
+      effectiveScenarioParticipants,
+      encounterScenarioParticipantIds,
+      selectedScenarioParticipant?.id,
+    ],
   );
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
@@ -3541,10 +3631,10 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorRoundEndReviewHasProposals = Boolean(
     inspectorRoundEndReview &&
-      (inspectorRoundEndReview.proposedEffects.length > 0 ||
-        inspectorRoundEndReview.proposedRemovals.length > 0 ||
-        inspectorRoundEndReview.proposedDamage.length > 0 ||
-        inspectorRoundEndReview.proposedHealthRolls.length > 0),
+    (inspectorRoundEndReview.proposedEffects.length > 0 ||
+      inspectorRoundEndReview.proposedRemovals.length > 0 ||
+      inspectorRoundEndReview.proposedDamage.length > 0 ||
+      inspectorRoundEndReview.proposedHealthRolls.length > 0),
   );
   const inspectorActionValidationMessage =
     inspectorTargetValidationMessage ??
@@ -3586,39 +3676,40 @@ export default function CombatRoundManagerPanel({
     ? "Attack already rolled"
     : inspectorIsInspectionOnly
       ? "Inspecting step - use Current task to resume"
-    : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-      ? "Build/Review round-end effects"
-    : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
-      ? inspectorRoundEndReviewHasProposals
-        ? "Commit participant SU review"
-        : "Mark SU review complete"
-    : inspector.step === "round_summary" &&
-        inspectorRoundEndReview?.status === "health_roll_pending"
-      ? "Roll health check"
-    : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
-      ? "Round-end review complete"
-    : inspectorDamageCommitted
-      ? "Phase damage committed"
-      : inspectorDamageSubstate === "critical_pending"
-        ? "Roll critical"
-      : inspectorDamageSubstate === "location_pending"
-        ? "Roll hit location"
-      : inspectorDamageSubstate === "location_rolled"
-        ? "Prepare damage review"
-      : inspectorDamageProposalReady
-        ? "Commit phase damage"
-      : inspectorCanRollParry
-      ? "Roll parry"
-      : inspectorAttackSourceValidationMessage
-        ? inspectorAttackSourceValidationMessage
-      : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
-        ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-        : getCombatResolutionButtonLabel({
-            hasPhaseAttack: inspectorActionPhaseHasAttack,
-            phase: inspectorCurrentResolutionPhase,
-            step: inspector.step,
-            substep: inspectorActionPhaseResolutionStatus?.substep,
-          });
+      : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+        ? "Build/Review round-end effects"
+        : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
+          ? inspectorRoundEndReviewHasProposals
+            ? "Commit participant SU review"
+            : "Mark SU review complete"
+          : inspector.step === "round_summary" &&
+              inspectorRoundEndReview?.status === "health_roll_pending"
+            ? "Roll health check"
+            : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
+              ? "Round-end review complete"
+              : inspectorDamageCommitted
+                ? "Phase damage committed"
+                : inspectorDamageSubstate === "critical_pending"
+                  ? "Roll critical"
+                  : inspectorDamageSubstate === "location_pending"
+                    ? "Roll hit location"
+                    : inspectorDamageSubstate === "location_rolled"
+                      ? "Prepare damage review"
+                      : inspectorDamageProposalReady
+                        ? "Commit phase damage"
+                        : inspectorCanRollParry
+                          ? "Roll parry"
+                          : inspectorAttackSourceValidationMessage
+                            ? inspectorAttackSourceValidationMessage
+                            : inspectorCurrentResolutionPhase &&
+                                inspectorActionPhaseHasAttack === false
+                              ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                              : getCombatResolutionButtonLabel({
+                                  hasPhaseAttack: inspectorActionPhaseHasAttack,
+                                  phase: inspectorCurrentResolutionPhase,
+                                  step: inspector.step,
+                                  substep: inspectorActionPhaseResolutionStatus?.substep,
+                                });
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -3629,9 +3720,9 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorActionResult = inspectorPhaseResolutionLines
     ? {
-        detailLines: [
-          inspectorPhaseResolutionLines.armorLine,
-        ].filter((line): line is string => Boolean(line)),
+        detailLines: [inspectorPhaseResolutionLines.armorLine].filter((line): line is string =>
+          Boolean(line),
+        ),
         interpretedResult: inspectorPhaseResolutionLines.statusLine,
         rankLabel: inspectorPhaseResolutionLines.attackLine,
         resultLabel: inspectorPhaseResolutionLines.proposalLine,
@@ -3810,9 +3901,7 @@ export default function CombatRoundManagerPanel({
       } catch (caughtError) {
         if (!cancelled) {
           setSaveError(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to load combat content.",
+            caughtError instanceof Error ? caughtError.message : "Unable to load combat content.",
           );
         }
       }
@@ -5418,9 +5507,7 @@ export default function CombatRoundManagerPanel({
             ) : null}
           </>
         ) : (
-          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-            No resolved combat event yet.
-          </div>
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No resolved combat event yet.</div>
         )}
       </section>
 
@@ -5460,8 +5547,7 @@ export default function CombatRoundManagerPanel({
                   style={{
                     background: "#efe7d3",
                     borderBottom: "1px solid #d1c7aa",
-                    borderLeft:
-                      roundIndex > 0 ? roundBoundaryStartBorder : "1px solid #e3e1dc",
+                    borderLeft: roundIndex > 0 ? roundBoundaryStartBorder : "1px solid #e3e1dc",
                     padding: "0.35rem",
                     textAlign: "center",
                   }}
@@ -5527,8 +5613,7 @@ export default function CombatRoundManagerPanel({
                       const roundNumber = timelineRoundState.roundNumber;
                       const roundParticipant =
                         timelineRoundState.participants.find(
-                          (candidate) =>
-                            candidate.participantId === participant.participantId,
+                          (candidate) => candidate.participantId === participant.participantId,
                         ) ?? participant;
                       const selected =
                         roundNumber === selectedRoundNumber &&
@@ -5567,9 +5652,7 @@ export default function CombatRoundManagerPanel({
                       return (
                         <td
                           className={
-                            roundIndex > 0 && stepIndex === 0
-                              ? "round-boundary-start"
-                              : undefined
+                            roundIndex > 0 && stepIndex === 0 ? "round-boundary-start" : undefined
                           }
                           key={`${roundNumber}-${step}`}
                           style={{
@@ -5696,7 +5779,9 @@ export default function CombatRoundManagerPanel({
                   <PlayerCombatActionSelectorPanel
                     actionId={inspectorDisplayDraft.actionId}
                     additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
-                    controlsDisabled={saving || !selectedRoundIsActive || Boolean(inspectorSnapshot)}
+                    controlsDisabled={
+                      saving || !selectedRoundIsActive || Boolean(inspectorSnapshot)
+                    }
                     movementId={inspectorDisplayDraft.movementId}
                     onActionChange={(actionId) => updateInspectorDraft({ actionId })}
                     onAdditionalActionNotesChange={(additionalActionNotes) =>
@@ -5732,8 +5817,7 @@ export default function CombatRoundManagerPanel({
                             attackResultId: inspectorDisplayPhaseResolutionResult.attackResultId,
                             parryBase: inspectorParryBase,
                             parryModifierCalculation: inspectorParryModifierCalculation,
-                            parryResolution:
-                              inspectorDisplayPhaseResolutionResult.parryResolution,
+                            parryResolution: inspectorDisplayPhaseResolutionResult.parryResolution,
                             parrySourceLabel: formatSelectedCombatParrySourceName({
                               selection: inspectorParrySelection,
                               sources: inspectorParryDefenderPhaseSummary?.parrySources,
@@ -5945,22 +6029,22 @@ export default function CombatRoundManagerPanel({
                         void (inspector.step === "round_summary"
                           ? advanceInspectorRoundEndReview()
                           : inspectorCurrentStepIsInitiative
-                          ? rollInspectorInitiative()
-                          : inspectorCanRollParry
-                            ? rollInspectorParry()
-                            : inspectorCurrentResolutionPhase &&
-                                (inspectorActionPhaseHasAttack === false ||
-                                  inspectorActionPhaseResolutionStatus?.substep === "effects")
-                              ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                            ? rollInspectorInitiative()
+                            : inspectorCanRollParry
+                              ? rollInspectorParry()
                               : inspectorCurrentResolutionPhase &&
-                                  (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
-                                    inspectorActionPhaseResolutionStatus?.substep === "damage")
-                                ? advanceInspectorPhaseResolutionSubstep(
-                                    inspectorCurrentResolutionPhase,
-                                  )
-                                : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                                  ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                : saveInspectorDeclaration())
+                                  (inspectorActionPhaseHasAttack === false ||
+                                    inspectorActionPhaseResolutionStatus?.substep === "effects")
+                                ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                                : inspectorCurrentResolutionPhase &&
+                                    (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
+                                      inspectorActionPhaseResolutionStatus?.substep === "damage")
+                                  ? advanceInspectorPhaseResolutionSubstep(
+                                      inspectorCurrentResolutionPhase,
+                                    )
+                                  : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                    ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                    : saveInspectorDeclaration())
                       }
                       onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
                       saving={saving}

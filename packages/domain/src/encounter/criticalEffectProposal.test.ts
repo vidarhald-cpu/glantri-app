@@ -59,7 +59,9 @@ describe("critical effect proposal generation", () => {
 
     expect(proposal.criticalResult).toBeUndefined();
     expect(proposal.criticalIndexStatus).toBe("unsupported_high");
-    expect(proposal.warnings.join(" ")).toContain("outside the supported critical table index range");
+    expect(proposal.warnings.join(" ")).toContain(
+      "outside the supported critical table index range",
+    );
   });
 
   it("treats final critical rolls below 1 as no critical effect", () => {
@@ -169,9 +171,7 @@ describe("critical effect proposal generation", () => {
       }),
     );
     expect(
-      proposal.proposedEffects.some(
-        (effect) => effect.sourceEffectKey === "sharp|arm|13|05",
-      ),
+      proposal.proposedEffects.some((effect) => effect.sourceEffectKey === "sharp|arm|13|05"),
     ).toBe(false);
   });
 

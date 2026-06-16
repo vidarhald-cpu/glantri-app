@@ -201,38 +201,49 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("No character-sheet rows proposed.");
     expect(source).toContain("criticalEffectProposal");
     expect(source).toContain("Critical table mapping unavailable");
-    expect(source).toContain("Critical effects proposed:");
+    expect(source).toContain("Critical-derived rows:");
     expect(source).toContain("Critical effects unavailable:");
     expect(source).toContain("No critical effect.");
-    expect(source).toContain("criticalIndexStatus === \"no_effect\"");
+    expect(source).toContain('criticalIndexStatus === "no_effect"');
     expect(source).toContain("Critical effects not accepted/committed yet.");
     expect(source).toContain("getCombatRoundPhaseDamageCommitReadiness");
     expect(source).toContain("Ready to commit");
     expect(source).toContain("Cannot commit:");
     expect(source).toContain("inspectorDamageCommitValidationMessage");
-    expect(source).toContain("attackResultId: existingDamageResolution.damageResult.attackResultId");
-    expect(source).toContain("App rolls:");
+    expect(source).toContain(
+      "attackResultId: existingDamageResolution.damageResult.attackResultId",
+    );
+    expect(source).toContain("App-side rolls:");
     expect(source).toContain("Operational consequences");
     expect(source).toContain("operationalConsequences");
     expect(source).toContain("Consequence notes");
     expect(source).toContain("Critical minimum raises damage from");
+    expect(source).toContain("Calculation details");
     expect(source).toContain("Skip current action");
     expect(source).toContain("skipCombatRoundCurrentPhaseAction");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
-    expect(source).toContain("Additional immediate effects");
+    expect(source).toContain("Edit character-sheet rows");
     expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
     expect(source).toContain("getCombatDamageReviewDraftEffectTarget");
-    expect(source).toContain("Add modifier effect");
-    expect(source).toContain("Add note effect");
+    expect(source).toContain("Add modifier row");
+    expect(source).toContain("Add note row");
     expect(source).toContain("Save review");
     expect(source).toContain("reviewCombatRoundDamageResult");
     expect(source).toContain("commitCombatRoundPhaseDamage");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("combatEffects: committed.combatEffects");
-    expect(source).toContain("selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation");
-    expect(source).toContain("criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? \"none\"");
-    expect(source).toContain("armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString()");
-    expect(source).toContain("attackDirectionOverride: effectiveDamage?.effectiveAttackDirection ?? \"front\"");
+    expect(source).toContain(
+      "selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation",
+    );
+    expect(source).toContain(
+      'criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? "none"',
+    );
+    expect(source).toContain(
+      "armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString()",
+    );
+    expect(source).toContain(
+      'attackDirectionOverride: effectiveDamage?.effectiveAttackDirection ?? "front"',
+    );
     expect(source).toContain("Direction");
     expect(source).toContain(
       "armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString()",
@@ -244,8 +255,12 @@ describe("CombatRoundManagerPanel", () => {
       "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
     );
     expect(source).toContain("Critical roll / effect index");
-    expect(source).toContain("totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()");
-    expect(source).toContain("selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation");
+    expect(source).toContain(
+      "totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()",
+    );
+    expect(source).toContain(
+      "selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation",
+    );
     expect(source).toContain("armorModifier !== effectiveDamage.computedArmorModifier");
     expect(source).toContain("reviewWithoutTotalDamageOverride");
     expect(source).toContain("totalDamage !== draftEffectiveDamage.effectiveTotalDamage");
@@ -271,7 +286,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
     expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
     expect(source).toContain("targetLocation:");
-    expect(source).toContain("attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation");
+    expect(source).toContain(
+      "attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation",
+    );
     expect(source).toContain("damageProposal,");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
@@ -281,7 +298,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
-    expect(source).toContain("weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)");
+    expect(source).toContain(
+      "weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)",
+    );
     expect(source).toContain("armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
@@ -362,7 +381,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseModel.showAttackStats");
     expect(source).toContain("phaseModel.showAttackLocationSelector");
     expect(source).toContain("inspectorAttackSourceValidationMessage");
-    expect(source).toContain("No ${formatCombatPhaseLabel(inspectorCurrentAttackPhase)} attack source available.");
+    expect(source).toContain(
+      "No ${formatCombatPhaseLabel(inspectorCurrentAttackPhase)} attack source available.",
+    );
     expect(source).toContain("phaseKey: input.phaseKey");
     expect(source).toContain("inspectorTargetOptions");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
@@ -483,9 +504,7 @@ describe("CombatRoundManagerPanel", () => {
   it("keeps Clear current step visible by avoiding explicit scroll after clear", () => {
     const source = readSource();
 
-    expect(source).toContain(
-      "function focusRoundTable(",
-    );
+    expect(source).toContain("function focusRoundTable(");
     expect(source).toContain("scrollMode?: CombatRoundTimelineScrollMode");
     expect(source).toContain("input.scrollIntoView !== false");
     expect(source).toContain(
@@ -520,7 +539,9 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const inspectorSelectedAttackAlreadyRolled = Boolean(");
-    expect(source).toContain("const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled");
+    expect(source).toContain(
+      "const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled",
+    );
     expect(source).toContain('? "Attack already rolled"');
     expect(source).toContain(
       "const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({",

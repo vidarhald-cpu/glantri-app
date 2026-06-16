@@ -132,12 +132,7 @@ function rollFormula(input: {
   const count = match[1] ? Number(match[1]) : 1;
   const sides = Number(match[2]);
 
-  if (
-    !Number.isInteger(count) ||
-    count < 1 ||
-    count > 20 ||
-    !SUPPORTED_DICE_SIDES.has(sides)
-  ) {
+  if (!Number.isInteger(count) || count < 1 || count > 20 || !SUPPORTED_DICE_SIDES.has(sides)) {
     return undefined;
   }
 
@@ -237,10 +232,17 @@ function buildEffectNotes(input: {
 }): string {
   const details: string[] = [];
   const actionState = formatCriticalEffectActionState(input.effect);
+  const durationReport = input.rollReports.find((report) => report.purpose === "duration");
+  const rateReport = input.rollReports.find((report) => report.purpose === "rate");
+  const formatRollReport = (report: CriticalEffectProposalRollReport): string => {
+    const purpose = report.purpose.charAt(0).toUpperCase() + report.purpose.slice(1);
+    const rolls = report.rolls.length > 1 ? ` (${report.rolls.join(" + ")})` : "";
+
+    return `${purpose} roll ${report.formula} = ${report.total}${rolls}.`;
+  };
 
   if (input.effect.type === "Bleed" || input.effect.type === "Internal bleed") {
     const bleedLabel = input.effect.type === "Internal bleed" ? "Internal bleed" : "Bleed";
-    const rateReport = input.rollReports.find((report) => report.purpose === "rate");
     const rate =
       rateReport !== undefined
         ? `${rateReport.total} HP / round`
@@ -248,9 +250,15 @@ function buildEffectNotes(input: {
 
     details.push(rate ? `${bleedLabel}: ${rate}` : bleedLabel);
   } else if (actionState) {
-    details.push(actionState);
+    details.push(actionState.endsWith(".") ? actionState : `${actionState}.`);
   } else if (input.effect.subtype === "loss_of_use") {
-    details.push("Loss of use");
+    const target = normalizeEffectText(input.effect.target);
+
+    details.push(
+      target
+        ? `Loss of use: no actions with affected ${target}.`
+        : "Loss of use: no actions with affected body part.",
+    );
   } else if (input.effect.specialFlag) {
     details.push(input.effect.specialFlag.replace(/_/g, " "));
   } else if (input.effect.sourceValue) {
@@ -269,16 +277,29 @@ function buildEffectNotes(input: {
     details.push(input.effect.implementationNote);
   }
 
-  if (input.effect.durationRaw) {
+  if (
+    input.effect.durationRaw &&
+    !durationReport &&
+    input.effect.durationRaw.toLowerCase() !== "instant"
+  ) {
     details.push(`Duration: ${input.effect.durationRaw}`);
   }
 
-  if (input.effect.rateRaw) {
+  if (
+    input.effect.rateRaw &&
+    !rateReport &&
+    input.effect.type !== "Bleed" &&
+    input.effect.type !== "Internal bleed"
+  ) {
     details.push(`Rate: ${input.effect.rateRaw}`);
   }
 
   if (input.effect.treatmentGate) {
-    details.push(`Treatment: ${input.effect.treatmentGate}`);
+    details.push(
+      input.effect.treatmentGate.endsWith(".")
+        ? input.effect.treatmentGate
+        : `${input.effect.treatmentGate}.`,
+    );
   }
 
   if (input.effect.minTotalDamage !== undefined) {
@@ -292,9 +313,7 @@ function buildEffectNotes(input: {
   }
 
   for (const report of input.rollReports) {
-    details.push(
-      `${report.purpose} roll ${report.formula}: ${report.rolls.join(" + ")} = ${report.total}`,
-    );
+    details.push(formatRollReport(report));
   }
 
   return details.join(" ");
@@ -325,9 +344,7 @@ function getCriticalEffectLabel(effect: CriticalEffectTemplate): string {
   const actionState = formatCriticalEffectActionState(effect);
 
   if (effect.type === "Stun" && actionState) {
-    return actionState === "Unconscious"
-      ? "Unconscious - no combat action possible"
-      : actionState;
+    return actionState === "Unconscious" ? "Unconscious - no combat action possible" : actionState;
   }
 
   if (effect.type === "Bleed") {
@@ -394,16 +411,16 @@ function criticalEffectBlocksOrLimitsAction(effect: CriticalEffectTemplate): boo
 
   return Boolean(
     actionState === "no_action" ||
-      actionState === "no_meaningful_action" ||
-      actionState === "unconscious" ||
-      actionState === "collapse" ||
-      actionState === "parry_only" ||
-      sourceValue === "NO ACTION" ||
-      text.includes("unconscious") ||
-      text.includes("no action") ||
-      text.includes("may do nothing") ||
-      text.includes("parry only") ||
-      text.includes("collapse"),
+    actionState === "no_meaningful_action" ||
+    actionState === "unconscious" ||
+    actionState === "collapse" ||
+    actionState === "parry_only" ||
+    sourceValue === "NO ACTION" ||
+    text.includes("unconscious") ||
+    text.includes("no action") ||
+    text.includes("may do nothing") ||
+    text.includes("parry only") ||
+    text.includes("collapse"),
   );
 }
 
