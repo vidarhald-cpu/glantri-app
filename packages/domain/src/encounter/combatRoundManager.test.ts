@@ -24,6 +24,7 @@ import {
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   combatRoundAttackRollResultSchema,
+  ensureCombatRoundEndReviewPrepared,
   getCombatRoundPhaseResolutionOrder,
   getCombatRoundPhaseResolutionStatus,
   getPlayerCombatCurrentRollAction,
@@ -66,6 +67,7 @@ import {
   recordCombatRoundParticipantStepReview,
   prepareCombatRoundEndReview,
   commitCombatRoundEndParticipantReview,
+  removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
   rollCombatRoundEndHealthCheck,
   removeCombatRoundCommittedDamageEffects,
@@ -6282,7 +6284,7 @@ describe("combat round manager", () => {
             id: "guard-bleed",
             kind: "special",
             label: "Bleed",
-            notes: "Bleed: 2 HP per round until treated.",
+            notes: "Bleed: 2/10 HP per round until treated.",
             rateValuePerRound: 2,
             rowCategory: "bleed",
           },
@@ -6639,7 +6641,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: "Bleed: 2 HP per round until treated.",
+        description: "Bleed: 2/10 HP per round until treated.",
         effectGroup: "bleed",
         id: expectedBleedEffectId,
         modifierValue: 2,
@@ -7396,6 +7398,30 @@ describe("combat round manager", () => {
     expect(getCombatRoundStartNextRoundBlocker(completedReview)).toBeUndefined();
   });
 
+  it("auto-prepares SU review for the first participant when requested", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const prepared = ensureCombatRoundEndReviewPrepared({
+      command: {
+        createdAt: "2026-01-01T00:09:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: roundSummaryState,
+    });
+
+    expect(prepared.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
+    expect(prepared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(prepared.commands.at(-1)).toMatchObject({
+      type: "prepare_round_end_review",
+    });
+  });
+
   it("requires explicit SU acknowledgement for participants with no proposals", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
@@ -7461,7 +7487,7 @@ describe("combat round manager", () => {
 
   it("keeps SU current on a participant until required health rolls are complete", () => {
     const roundSummaryState = advanceToStep(
-      initializeCombatRoundState({ encounter: encounter() }),
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
       "round_summary",
     );
     const guardEffects = combatEffectsWith([
@@ -7470,6 +7496,7 @@ describe("combat round manager", () => {
         effectGroup: "bleed",
         id: "guard-bleed",
         modifierValue: 2,
+        roundNumber: 1,
         targetParticipantId: "scenario-guard",
         type: "bleed",
       },
@@ -7494,29 +7521,19 @@ describe("combat round manager", () => {
 
     expect(committedGladiator.state.currentCursor).toEqual({
       participantId: "guard",
-      roundNumber: 3,
+      roundNumber: 10,
       step: "SU",
     });
 
-    const committedGuard = commitCombatRoundEndParticipantReview({
-      command: {
-        createdAt: "2026-01-01T00:11:00.000Z",
-      },
-      combatEffects: guardEffects,
-      participantId: "guard",
-      scenarioParticipantId: "scenario-guard",
-      state: committedGladiator.state,
-    });
-
-    expect(committedGuard.state.roundEndReview?.participantReviews.guard?.status).toBe(
+    expect(committedGladiator.state.roundEndReview?.participantReviews.guard?.status).toBe(
       "health_roll_pending",
     );
-    expect(committedGuard.state.currentCursor).toEqual({
+    expect(committedGladiator.state.currentCursor).toEqual({
       participantId: "guard",
-      roundNumber: 3,
+      roundNumber: 10,
       step: "SU",
     });
-    expect(getCombatRoundStartNextRoundBlocker(committedGuard.state)).toBe(
+    expect(getCombatRoundStartNextRoundBlocker(committedGladiator.state)).toBe(
       "Health roll pending for City guard.",
     );
 
@@ -7524,21 +7541,41 @@ describe("combat round manager", () => {
       command: {
         createdAt: "2026-01-01T00:12:00.000Z",
       },
+      combatEffects: guardEffects,
       participantId: "guard",
       roll: {
         dieResult: 10,
         openEndedD10s: [],
         rollD20: 10,
       },
-      state: committedGuard.state,
+      state: committedGladiator.state,
     });
 
-    expect(rolled.roundEndReview?.participantReviews.guard?.status).toBe("complete");
-    expect(rolled.currentCursor).toEqual({
-      roundNumber: 3,
+    expect(rolled.state.roundEndReview?.participantReviews.guard?.status).toBe("review_ready");
+    expect(rolled.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 10,
       step: "SU",
     });
-    expect(getCombatRoundStartNextRoundBlocker(rolled)).toBeUndefined();
+    expect(getCombatRoundStartNextRoundBlocker(rolled.state)).toBe(
+      "Round-end review incomplete for City guard.",
+    );
+
+    const completedGuard = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:13:00.000Z",
+      },
+      combatEffects: rolled.combatEffects,
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: rolled.state,
+    });
+
+    expect(completedGuard.state.currentCursor).toEqual({
+      roundNumber: 10,
+      step: "SU",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(completedGuard.state)).toBeUndefined();
   });
 
   it("builds SU duration proposals for active round-based effects", () => {
@@ -7588,7 +7625,396 @@ describe("combat round manager", () => {
     });
   });
 
-  it("commits SU bleed damage, queues health checks, and restores effect rows on undo", () => {
+  it("accumulates bleed 1 as tenths without HP damage until the 10th round", () => {
+    const roundNineState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 9 }) }),
+      "round_summary",
+    );
+    const roundNineEffects = combatEffectsWith([
+      {
+        bleedState: {
+          accumulatedTenths: 8,
+          initializedRound: 1,
+        },
+        effectGroup: "bleed",
+        id: "bleed-1",
+        modifierValue: 1,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const roundNineReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: roundNineEffects,
+        },
+      },
+      state: roundNineState,
+    });
+    const roundNineProposal =
+      roundNineReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0];
+
+    expect(roundNineProposal).toMatchObject({
+      accumulatedTenths: 9,
+      amount: 0,
+      previousAccumulatedTenths: 8,
+      remainingAccumulatedTenths: 9,
+      roundsUntilHealthCheck: 1,
+    });
+    expect(roundNineReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls).toEqual(
+      [],
+    );
+
+    const roundTenState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const roundTenEffects = combatEffectsWith([
+      {
+        bleedState: {
+          accumulatedTenths: 9,
+          initializedRound: 1,
+        },
+        effectGroup: "bleed",
+        id: "bleed-1",
+        modifierValue: 1,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const roundTenReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: roundTenEffects,
+          healthStat: 0,
+        },
+      },
+      state: roundTenState,
+    });
+    const roundTenReview = roundTenReviewed.roundEndReview?.participantReviews.gladiator;
+
+    expect(roundTenReview?.proposedDamage[0]).toMatchObject({
+      accumulatedTenths: 10,
+      amount: 1,
+      healthCheckDue: true,
+      remainingAccumulatedTenths: 0,
+    });
+    expect(roundTenReview?.proposedHealthRolls[0]).toMatchObject({
+      difficulty: 21,
+      previousBleedRate: 1,
+      status: "pending",
+    });
+  });
+
+  it("accumulates bleed 3 using tenths and remainder", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const threeRoundEffects = combatEffectsWith([
+      {
+        bleedState: {
+          accumulatedTenths: 6,
+          initializedRound: 3,
+        },
+        effectGroup: "bleed",
+        id: "bleed-3",
+        modifierValue: 3,
+        type: "bleed",
+      },
+    ]);
+    const threeRoundReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: threeRoundEffects,
+        },
+      },
+      state: roundSummaryState,
+    });
+
+    expect(threeRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0]).toMatchObject({
+      accumulatedTenths: 9,
+      amount: 0,
+      remainingAccumulatedTenths: 9,
+    });
+
+    const fourRoundEffects = combatEffectsWith([
+      {
+        bleedState: {
+          accumulatedTenths: 9,
+          initializedRound: 3,
+        },
+        effectGroup: "bleed",
+        id: "bleed-3",
+        modifierValue: 3,
+        type: "bleed",
+      },
+    ]);
+    const fourRoundReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: fourRoundEffects,
+        },
+      },
+      state: roundSummaryState,
+    });
+
+    expect(fourRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0]).toMatchObject({
+      accumulatedTenths: 12,
+      amount: 1,
+      remainingAccumulatedTenths: 2,
+    });
+  });
+
+  it("does not create a general damage row when accumulated bleed is below 10 tenths", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        bleedState: {
+          accumulatedTenths: 5,
+          initializedRound: 3,
+        },
+        effectGroup: "bleed",
+        id: "bleed-1",
+        modifierValue: 1,
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const committed = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      combatEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+
+    expect(
+      committed.combatEffects.effects.some((effect) => effect.type === "general_damage"),
+    ).toBe(false);
+    expect(
+      committed.combatEffects.effects.find((effect) => effect.id === "bleed-1")?.bleedState
+        ?.accumulatedTenths,
+    ).toBe(6);
+  });
+
+  it("proposes health rolls only at the 10-round bleed interval", () => {
+    const roundTwoState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 2 }) }),
+      "round_summary",
+    );
+    const roundTenState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        effectGroup: "bleed",
+        id: "bleed-interval",
+        modifierValue: 2,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const roundTwoReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 5,
+        },
+      },
+      state: roundTwoState,
+    });
+    const roundTenReviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 5,
+        },
+      },
+      state: roundTenState,
+    });
+
+    expect(roundTwoReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls).toEqual(
+      [],
+    );
+    expect(roundTenReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0]).toMatchObject({
+      difficulty: 21,
+      status: "pending",
+    });
+  });
+
+  it("reduces external bleed on successful health roll and restores it on undo", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        effectGroup: "bleed",
+        id: "external-bleed",
+        modifierValue: 3,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 0,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const rolled = rollCombatRoundEndHealthCheck({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      combatEffects,
+      participantId: "gladiator",
+      roll: {
+        dieResult: 21,
+        openEndedD10s: [1],
+        rollD20: 20,
+      },
+      state: reviewed,
+    });
+    const reducedEffect = rolled.combatEffects.effects.find(
+      (effect) => effect.id === "external-bleed",
+    );
+    const restoredState = clearCombatRoundStep({
+      state: rolled.state,
+      step: "round_summary",
+    });
+    const restoredEffects = removeCombatRoundEndHealthCheckEffects({
+      combatEffects: rolled.combatEffects,
+      command: rolled.command,
+    });
+
+    expect(reducedEffect?.modifierValue).toBe(2);
+    expect(reducedEffect?.bleedState?.lastHealthCheckRound).toBe(10);
+    expect(
+      rolled.state.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0],
+    ).toMatchObject({
+      nextBleedRate: 2,
+      previousBleedRate: 3,
+      status: "rolled",
+    });
+    expect(restoredState.roundEndReview?.participantReviews.gladiator?.status).toBe(
+      "health_roll_pending",
+    );
+    expect(
+      restoredEffects.effects.find((effect) => effect.id === "external-bleed")?.modifierValue,
+    ).toBe(3);
+  });
+
+  it("does not reduce bleed on failed health roll", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        effectGroup: "bleed",
+        id: "failed-bleed",
+        modifierValue: 3,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 0,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const rolled = rollCombatRoundEndHealthCheck({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      combatEffects,
+      participantId: "gladiator",
+      roll: {
+        dieResult: 5,
+        openEndedD10s: [],
+        rollD20: 5,
+      },
+      state: reviewed,
+    });
+    const bleedEffect = rolled.combatEffects.effects.find((effect) => effect.id === "failed-bleed");
+
+    expect(bleedEffect?.modifierValue).toBe(3);
+    expect(bleedEffect?.bleedState?.lastHealthCheckRound).toBe(10);
+    expect(
+      rolled.state.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0]?.result,
+    ).toMatchObject({
+      success: false,
+    });
+  });
+
+  it("expires bleed when a successful health roll reduces the rate to 0", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        effectGroup: "bleed",
+        id: "nearly-stopped-bleed",
+        modifierValue: 1,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 0,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const rolled = rollCombatRoundEndHealthCheck({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      combatEffects,
+      participantId: "gladiator",
+      roll: {
+        dieResult: 21,
+        openEndedD10s: [1],
+        rollD20: 20,
+      },
+      state: reviewed,
+    });
+    const bleedEffect = rolled.combatEffects.effects.find(
+      (effect) => effect.id === "nearly-stopped-bleed",
+    );
+
+    expect(bleedEffect).toMatchObject({
+      modifierValue: 0,
+      status: "expired",
+    });
+  });
+
+  it("commits SU bleed accumulation damage and restores effect rows on undo", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
       "round_summary",
@@ -7596,6 +8022,10 @@ describe("combat round manager", () => {
     const combatEffects = combatEffectsWith([
       {
         description: "Bleeding wound",
+        bleedState: {
+          accumulatedTenths: 8,
+          initializedRound: 3,
+        },
         duration: "2 rounds",
         effectGroup: "bleed",
         id: "bleed-1",
@@ -7618,14 +8048,13 @@ describe("combat round manager", () => {
     const review = reviewed.roundEndReview?.participantReviews.gladiator;
 
     expect(review?.proposedDamage[0]).toMatchObject({
-      amount: 2,
+      accumulatedTenths: 10,
+      amount: 1,
       bleedType: "external",
+      previousAccumulatedTenths: 8,
+      remainingAccumulatedTenths: 0,
     });
-    expect(review?.proposedHealthRolls[0]).toMatchObject({
-      difficulty: 21,
-      healthStat: 9,
-      status: "pending",
-    });
+    expect(review?.proposedHealthRolls).toEqual([]);
 
     const committed = commitCombatRoundEndParticipantReview({
       command: {
@@ -7638,20 +8067,14 @@ describe("combat round manager", () => {
     });
     const bleedEffect = committed.combatEffects.effects.find((effect) => effect.id === "bleed-1");
     const bleedDamage = committed.combatEffects.effects.find(
-      (effect) => effect.type === "general_damage" && effect.generalDamage === 2,
+      (effect) => effect.type === "general_damage" && effect.generalDamage === 1,
     );
 
     expect(bleedEffect?.duration).toBe("1 round");
+    expect(bleedEffect?.bleedState?.accumulatedTenths).toBe(0);
     expect(bleedDamage).toBeDefined();
     expect(committed.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
-      "health_roll_pending",
-    );
-    expect(committed.state.currentCursor).toMatchObject({
-      participantId: "gladiator",
-      step: "SU",
-    });
-    expect(getCombatRoundStartNextRoundBlocker(committed.state)).toBe(
-      "Health roll pending for The Gladiator.",
+      "complete",
     );
 
     const restoredEffects = removeCombatRoundEndParticipantReviewEffects({
@@ -7663,15 +8086,19 @@ describe("combat round manager", () => {
       "2 rounds",
     );
     expect(
+      restoredEffects.effects.find((effect) => effect.id === "bleed-1")?.bleedState
+        ?.accumulatedTenths,
+    ).toBe(8);
+    expect(
       restoredEffects.effects.some(
-        (effect) => effect.type === "general_damage" && effect.generalDamage === 2,
+        (effect) => effect.type === "general_damage" && effect.generalDamage === 1,
       ),
     ).toBe(false);
   });
 
   it("rolls SU health checks with open-ended d20 plus health stat", () => {
     const roundSummaryState = advanceToStep(
-      initializeCombatRoundState({ encounter: encounter() }),
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
       "round_summary",
     );
     const combatEffects = combatEffectsWith([
@@ -7680,6 +8107,7 @@ describe("combat round manager", () => {
         effectGroup: "bleed",
         id: "internal-bleed-1",
         modifierValue: 4,
+        roundNumber: 1,
         type: "internal_bleed",
       },
     ]);
@@ -7692,29 +8120,24 @@ describe("combat round manager", () => {
       },
       state: roundSummaryState,
     });
-    const committed = commitCombatRoundEndParticipantReview({
-      command: {
-        createdAt: "2026-01-01T00:10:00.000Z",
-      },
-      combatEffects,
-      participantId: "gladiator",
-      scenarioParticipantId: "scenario-gladiator",
-      state: reviewed,
-    });
     const rolled = rollCombatRoundEndHealthCheck({
       command: {
         createdAt: "2026-01-01T00:11:00.000Z",
       },
+      combatEffects,
       participantId: "gladiator",
       roll: {
         dieResult: 20,
         openEndedD10s: [5],
         rollD20: 15,
       },
-      state: committed.state,
+      state: reviewed,
     });
     const result =
-      rolled.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0]?.result;
+      rolled.state.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0]?.result;
+    const internalBleed = rolled.combatEffects.effects.find(
+      (effect) => effect.id === "internal-bleed-1",
+    );
 
     expect(result).toMatchObject({
       difficulty: 26,
@@ -7723,7 +8146,11 @@ describe("combat round manager", () => {
       rollTotal: 20,
       success: true,
     });
-    expect(rolled.roundEndReview?.participantReviews.gladiator?.status).toBe("complete");
+    expect(internalBleed?.modifierValue).toBe(3);
+    expect(internalBleed?.bleedState?.lastHealthCheckRound).toBe(10);
+    expect(rolled.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
+      "review_ready",
+    );
   });
 
   it("advances SU review participant-by-participant and enables next round after completion", () => {

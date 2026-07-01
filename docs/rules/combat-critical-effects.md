@@ -120,15 +120,24 @@ was raised to the critical minimum `5`.
 ## Round-end review
 
 Critical-derived bleed, internal bleed, and round-duration rows are not silently advanced when a
-round ends. SU builds GM-reviewable round-end proposals before the next round can start.
+round ends. When the active cursor reaches SU, the app automatically prepares the first
+participant's GM-reviewable round-end proposals before the next round can start.
 
 At SU:
 
 - Active round-duration effects propose a one-round duration decrease; effects that reach zero
   propose removal or deactivation.
-- External bleed that is due proposes general damage and a Health check at difficulty `21`.
-- Internal bleed that is due proposes general damage and a Health check at difficulty `26`.
+- Bleed values are tenths of HP per round. Bleed `1` means `1/10` HP per round, and bleed `10`
+  means `1` HP per round.
+- Each active bleed row accumulates its bleed value in tenths at SU. Only whole accumulated HP is
+  proposed as General damage; any fractional remainder is stored on that bleed row for later rounds.
+- External bleed health checks default to difficulty `21`; internal bleed health checks default to
+  difficulty `26`.
+- Health checks are proposed only every 10 rounds of ongoing bleed, or after first aid. First-aid
+  action mechanics are deferred.
 - Health checks use open-ended `1d20 + Health`; the GM can edit the difficulty before rolling.
+- A successful Health check reduces the relevant bleed row by `1`. If that reduces the bleed value
+  to `0`, the bleed row is expired. A failed check does not reduce bleed automatically.
 
 Start next round remains blocked until participant SU reviews and accepted health checks are
 complete. Undoing SU review commands restores previous durations/statuses and removes only the
@@ -174,7 +183,7 @@ Ambiguous numeric or prose-heavy rows become special notes and keep their source
 instead of being guessed as a mechanical modifier. The full critical text is kept as reference for the
 review event/reference, not copied into every effect row. The physical damage row keeps a compact
 damage/armor/critical reference, while each effect row keeps one short actionable detail such as
-"No combat action possible.", "Action limited to parry.", or "Internal bleed: 1 HP per 2 rounds until
+"No combat action possible.", "Action limited to parry.", or "Internal bleed: 5/10 HP per round until
 treated." Duration and modifier fields are mechanical fields: round durations are stored as numeric
 round counts when known, modifier rows store numeric modifiers only, and non-round conditions such as
 "until treated" remain in the details/status text. Automatic permanent injury and long-term

@@ -18,6 +18,7 @@ import {
 } from "./combatDeclarationValidation";
 import {
   combatEffectEventSchema,
+  combatEffectBleedStateSchema,
   combatEffectsStateSchema,
   combatEffectSchema,
   type CombatEffect,
@@ -48,6 +49,9 @@ import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
 const COMBAT_ROUND_STRENGTH_GM_MAX_DAMAGE_NOTE = "max damage: 17 + GM STR when relevant";
+const COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS = 10;
+const COMBAT_ROUND_EXTERNAL_BLEED_HEALTH_DIFFICULTY = 21;
+const COMBAT_ROUND_INTERNAL_BLEED_HEALTH_DIFFICULTY = 26;
 
 export const combatRoundStepSchema = z.enum([
   "select_actions",
@@ -255,11 +259,19 @@ export type CombatRoundEndEffectProposal = z.infer<typeof combatRoundEndEffectPr
 export const combatRoundEndDamageProposalSchema = z.object({
   accepted: z.boolean().default(true),
   amount: z.number().int().nonnegative(),
+  accumulatedTenths: z.number().int().nonnegative().default(0),
   bleedType: combatRoundEndBleedTypeSchema,
+  bleedRate: z.number().int().nonnegative().default(0),
+  healthCheckDue: z.boolean().default(false),
   id: idSchema,
+  initializedRound: z.number().int().positive().optional(),
   label: z.string().min(1),
+  lastHealthCheckRound: z.number().int().positive().optional(),
   notes: z.string().min(1).optional(),
   participantId: idSchema,
+  previousAccumulatedTenths: z.number().int().nonnegative().default(0),
+  remainingAccumulatedTenths: z.number().int().min(0).max(9).default(0),
+  roundsUntilHealthCheck: z.number().int().nonnegative().optional(),
   sourceEffectId: idSchema,
 });
 export type CombatRoundEndDamageProposal = z.infer<typeof combatRoundEndDamageProposalSchema>;
@@ -294,12 +306,15 @@ export type CombatRoundEndHealthRollResult = z.infer<typeof combatRoundEndHealth
 export const combatRoundEndHealthRollProposalSchema = z.object({
   accepted: z.boolean().default(true),
   bleedType: combatRoundEndBleedTypeSchema,
+  bleedReduction: z.number().int().nonnegative().optional(),
   damageProposalId: idSchema.optional(),
   difficulty: z.number().int().positive(),
   healthStat: z.number().int().default(0),
   id: idSchema,
   label: z.string().min(1),
+  nextBleedRate: z.number().int().nonnegative().optional(),
   participantId: idSchema,
+  previousBleedRate: z.number().int().nonnegative().optional(),
   result: combatRoundEndHealthRollResultSchema.optional(),
   sourceEffectId: idSchema,
   status: z.enum(["pending", "rolled", "not_required"]).default("pending"),
@@ -5372,15 +5387,7 @@ function formatCombatRoundDamageReviewRateSentence(value: number | undefined): s
     return undefined;
   }
 
-  if (value > 0 && value < 1) {
-    const rounds = 1 / value;
-
-    if (Number.isInteger(rounds)) {
-      return `1 HP per ${rounds} round${rounds === 1 ? "" : "s"}`;
-    }
-  }
-
-  return `${value} HP per round`;
+  return `${value}/10 HP per round`;
 }
 
 function formatCombatRoundDamageReviewEffectStatusDetail(
@@ -5501,15 +5508,7 @@ function formatCombatRoundDamageReviewEffectDuration(
 }
 
 function formatCombatRoundDamageReviewRateValue(value: number): string {
-  if (value > 0 && value < 1) {
-    const rounds = 1 / value;
-
-    if (Number.isInteger(rounds)) {
-      return `1 HP / ${rounds} round${rounds === 1 ? "" : "s"}`;
-    }
-  }
-
-  return `${value} HP / round`;
+  return `${value}/10 HP / round`;
 }
 
 export function getCombatRoundDamageReviewEffectRowPreview(
@@ -6166,9 +6165,137 @@ function getCombatRoundEffectBleedAmount(effect: CombatEffect): number {
   );
 }
 
+function setCombatRoundEffectBleedAmount(input: {
+  effect: CombatEffect;
+  nextAmount: number;
+  updatedAt: string;
+}): CombatEffect {
+  const nextAmount = Math.max(0, Math.trunc(input.nextAmount));
+  const nextEffect = {
+    ...input.effect,
+    status: nextAmount <= 0 ? ("expired" as const) : input.effect.status,
+    updatedAt: input.updatedAt,
+  };
+
+  if (input.effect.modifierValue !== undefined) {
+    return combatEffectSchema.parse({
+      ...nextEffect,
+      modifierValue: nextAmount,
+    });
+  }
+
+  if (input.effect.generalDamage > 0) {
+    return combatEffectSchema.parse({
+      ...nextEffect,
+      generalDamage: nextAmount,
+    });
+  }
+
+  if (input.effect.damage > 0) {
+    return combatEffectSchema.parse({
+      ...nextEffect,
+      damage: nextAmount,
+    });
+  }
+
+  return combatEffectSchema.parse({
+    ...nextEffect,
+    modifierValue: nextAmount,
+  });
+}
+
+function getCombatRoundEffectBleedSourceRound(input: {
+  combatEffects: CombatEffectsState;
+  effect: CombatEffect;
+}): number | undefined {
+  if (input.effect.bleedState?.initializedRound !== undefined) {
+    return input.effect.bleedState.initializedRound;
+  }
+
+  if (input.effect.roundNumber !== undefined) {
+    return input.effect.roundNumber;
+  }
+
+  const sourceEvent = input.combatEffects.events.find(
+    (event) => event.id === input.effect.sourceEventId,
+  );
+
+  return sourceEvent?.roundNumber;
+}
+
+function getCombatRoundBleedHealthCheckCadence(input: {
+  combatEffects: CombatEffectsState;
+  effect: CombatEffect;
+  roundNumber: number;
+}): {
+  due: boolean;
+  initializedRound: number;
+  lastHealthCheckRound?: number;
+  roundsUntilHealthCheck: number;
+  warning?: string;
+} {
+  const lastHealthCheckRound = input.effect.bleedState?.lastHealthCheckRound;
+
+  if (lastHealthCheckRound !== undefined) {
+    const roundsSinceCheck = Math.max(0, input.roundNumber - lastHealthCheckRound);
+    const roundsUntilHealthCheck = Math.max(
+      0,
+      COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS - roundsSinceCheck,
+    );
+
+    return {
+      due: roundsSinceCheck >= COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS,
+      initializedRound:
+        input.effect.bleedState?.initializedRound ??
+        getCombatRoundEffectBleedSourceRound(input) ??
+        input.roundNumber,
+      lastHealthCheckRound,
+      roundsUntilHealthCheck,
+    };
+  }
+
+  const sourceRound = getCombatRoundEffectBleedSourceRound(input);
+  const initializedRound = sourceRound ?? input.roundNumber;
+  const roundsElapsed = Math.max(1, input.roundNumber - initializedRound + 1);
+  const roundsUntilHealthCheck = Math.max(
+    0,
+    COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS - roundsElapsed,
+  );
+
+  return {
+    due: roundsElapsed >= COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS,
+    initializedRound,
+    roundsUntilHealthCheck,
+    warning:
+      sourceRound === undefined
+        ? "Bleed creation round is unavailable; health-check cadence starts from this SU."
+        : undefined,
+  };
+}
+
+function buildCombatRoundBleedAccumulationNotes(input: {
+  amount: number;
+  accumulatedTenths: number;
+  remainingAccumulatedTenths: number;
+}): string {
+  if (input.amount > 0) {
+    return `Bleed accumulation: ${input.accumulatedTenths}/10 tenths, ${input.amount} general damage. Remainder ${input.remainingAccumulatedTenths}/10 tenths.`;
+  }
+
+  return `Bleed accumulation: ${input.accumulatedTenths}/10 tenths, no damage this round.`;
+}
+
 function getCombatRoundEndReviewParticipantStatus(
-  _review: Omit<RoundEndParticipantReview, "status">,
+  review: Omit<RoundEndParticipantReview, "status">,
 ): CombatRoundEndParticipantReviewStatus {
+  if (
+    review.proposedHealthRolls.some(
+      (proposal) => proposal.accepted && proposal.status === "pending",
+    )
+  ) {
+    return "health_roll_pending";
+  }
+
   return "review_ready";
 }
 
@@ -6250,47 +6377,81 @@ function buildCombatRoundEndParticipantReview(input: {
     }
 
     const bleedType = getCombatRoundEffectBleedType(effect);
-    const bleedAmount = bleedType ? getCombatRoundEffectBleedAmount(effect) : 0;
+    const bleedRate = bleedType ? getCombatRoundEffectBleedAmount(effect) : 0;
 
-    if (bleedType && bleedAmount > 0) {
-      const difficulty = bleedType === "internal" ? 26 : 21;
+    if (bleedType && bleedRate > 0) {
+      const previousAccumulatedTenths = Math.max(
+        0,
+        Math.trunc(effect.bleedState?.accumulatedTenths ?? 0),
+      );
+      const accumulatedTenths = previousAccumulatedTenths + bleedRate;
+      const bleedDamage = Math.floor(accumulatedTenths / 10);
+      const remainingAccumulatedTenths = accumulatedTenths % 10;
+      const cadence = getCombatRoundBleedHealthCheckCadence({
+        combatEffects,
+        effect,
+        roundNumber: input.roundNumber,
+      });
+      const difficulty =
+        bleedType === "internal"
+          ? COMBAT_ROUND_INTERNAL_BLEED_HEALTH_DIFFICULTY
+          : COMBAT_ROUND_EXTERNAL_BLEED_HEALTH_DIFFICULTY;
       const damageProposalId = `round-end:${input.roundNumber}:${input.participantId}:${bleedType}-bleed:${effect.id}`;
       const healthRollWarnings =
         input.healthStat === undefined
           ? ["Health stat not available; using +0 until a character health stat is supplied."]
           : [];
+      const cadenceWarnings = cadence.warning ? [cadence.warning] : [];
 
       proposedDamage.push(
         combatRoundEndDamageProposalSchema.parse({
-          amount: bleedAmount,
+          accumulatedTenths,
+          amount: bleedDamage,
           bleedType,
+          bleedRate,
+          healthCheckDue: cadence.due,
           id: damageProposalId,
+          initializedRound: cadence.initializedRound,
           label:
             bleedType === "internal"
-              ? `Internal bleed damage ${bleedAmount}`
-              : `Bleed damage ${bleedAmount}`,
-          notes: "Per-round bleed damage due at SU.",
+              ? `Internal bleed ${bleedRate}/10 HP per round`
+              : `Bleed ${bleedRate}/10 HP per round`,
+          lastHealthCheckRound: cadence.lastHealthCheckRound,
+          notes: buildCombatRoundBleedAccumulationNotes({
+            accumulatedTenths,
+            amount: bleedDamage,
+            remainingAccumulatedTenths,
+          }),
           participantId: input.participantId,
+          previousAccumulatedTenths,
+          remainingAccumulatedTenths,
+          roundsUntilHealthCheck: cadence.roundsUntilHealthCheck,
           sourceEffectId: effect.id,
         }),
       );
-      proposedHealthRolls.push(
-        combatRoundEndHealthRollProposalSchema.parse({
-          bleedType,
-          damageProposalId,
-          difficulty,
-          healthStat: input.healthStat ?? 0,
-          id: `${damageProposalId}:health`,
-          label:
-            bleedType === "internal"
-              ? `Health check vs internal bleed ${difficulty}`
-              : `Health check vs bleed ${difficulty}`,
-          participantId: input.participantId,
-          sourceEffectId: effect.id,
-          warnings: healthRollWarnings,
-        }),
-      );
-      warnings.push(...healthRollWarnings);
+
+      if (cadence.due) {
+        proposedHealthRolls.push(
+          combatRoundEndHealthRollProposalSchema.parse({
+            bleedType,
+            damageProposalId,
+            difficulty,
+            healthStat: input.healthStat ?? 0,
+            id: `${damageProposalId}:health`,
+            label:
+              bleedType === "internal"
+                ? `Health check vs internal bleed ${difficulty}`
+                : `Health check vs bleed ${difficulty}`,
+            participantId: input.participantId,
+            previousBleedRate: bleedRate,
+            sourceEffectId: effect.id,
+            warnings: healthRollWarnings,
+          }),
+        );
+        warnings.push(...healthRollWarnings);
+      }
+
+      warnings.push(...cadenceWarnings);
     }
   }
 
@@ -6440,6 +6601,32 @@ export function prepareCombatRoundEndReview(input: {
   });
 }
 
+export function ensureCombatRoundEndReviewPrepared(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  participantInputs?: Record<string, { combatEffects?: CombatEffectsState; healthStat?: number }>;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (normalized.currentStep !== "round_summary") {
+    return normalized;
+  }
+
+  if (normalized.roundEndReview?.roundNumber === normalized.roundNumber) {
+    return normalized;
+  }
+
+  return prepareCombatRoundEndReview({
+    command: input.command,
+    participantInputs: input.participantInputs,
+    state: normalized,
+  });
+}
+
 type CombatRoundEndUpdatedEffectFact = {
   effectId: string;
   nextEffect?: unknown;
@@ -6506,6 +6693,9 @@ function applyCombatRoundEndReviewEffects(input: {
   const acceptedDamage = input.participantReview.proposedDamage.filter(
     (proposal) => proposal.accepted && proposal.amount > 0,
   );
+  const acceptedBleedProposals = input.participantReview.proposedDamage.filter(
+    (proposal) => proposal.accepted,
+  );
   const updatedEffects: CombatRoundEndUpdatedEffectFact[] = [];
   const updatedEffectIds = new Set<string>();
   const nextEffects = currentCombatEffects.effects.map((effect) => {
@@ -6515,43 +6705,51 @@ function applyCombatRoundEndReviewEffects(input: {
     const removal = input.participantReview.proposedRemovals.find(
       (proposal) => proposal.accepted && proposal.effectId === effect.id,
     );
+    const bleedProposal = acceptedBleedProposals.find(
+      (proposal) => proposal.sourceEffectId === effect.id,
+    );
+    let nextEffect = effect;
 
     if (durationUpdate) {
-      const nextEffect = combatEffectSchema.parse({
-        ...effect,
+      nextEffect = combatEffectSchema.parse({
+        ...nextEffect,
         duration: durationUpdate.nextDuration ?? effect.duration,
         expiresAtRound: durationUpdate.nextExpiresAtRound,
         updatedAt: input.command.createdAt,
       });
-
-      updatedEffectIds.add(effect.id);
-      updatedEffects.push({
-        effectId: effect.id,
-        nextEffect,
-        previousEffect: effect,
-      });
-
-      return nextEffect;
     }
 
     if (removal) {
-      const nextEffect = combatEffectSchema.parse({
-        ...effect,
+      nextEffect = combatEffectSchema.parse({
+        ...nextEffect,
         status: "expired",
         updatedAt: input.command.createdAt,
       });
+    }
 
+    if (bleedProposal) {
+      nextEffect = combatEffectSchema.parse({
+        ...nextEffect,
+        bleedState: combatEffectBleedStateSchema.parse({
+          ...nextEffect.bleedState,
+          accumulatedTenths: bleedProposal.remainingAccumulatedTenths,
+          initializedRound:
+            nextEffect.bleedState?.initializedRound ?? bleedProposal.initializedRound,
+        }),
+        updatedAt: input.command.createdAt,
+      });
+    }
+
+    if (nextEffect !== effect) {
       updatedEffectIds.add(effect.id);
       updatedEffects.push({
         effectId: effect.id,
         nextEffect,
         previousEffect: effect,
       });
-
-      return nextEffect;
     }
 
-    return effect;
+    return nextEffect;
   });
 
   const createdCombatEffectIds = buildCombatRoundEndParticipantReviewEffectIds({
@@ -6677,11 +6875,18 @@ export function commitCombatRoundEndParticipantReview(input: {
     throw new RangeError("Round-end participant review is not ready to commit.");
   }
 
-  const acceptedHealthRolls = participantReview.proposedHealthRolls.filter(
-    (proposal) => proposal.accepted,
+  const pendingHealthRolls = participantReview.proposedHealthRolls.filter(
+    (proposal) => proposal.accepted && proposal.status === "pending",
   );
-  const nextStatus: CombatRoundEndParticipantReviewStatus =
-    acceptedHealthRolls.length > 0 ? "health_roll_pending" : "complete";
+
+  if (pendingHealthRolls.length > 0) {
+    throw new RangeError("Round-end health rolls must be resolved before committing review.");
+  }
+
+  const rolledHealthRolls = participantReview.proposedHealthRolls.filter(
+    (proposal) => proposal.accepted && proposal.status === "rolled",
+  );
+  const nextStatus: CombatRoundEndParticipantReviewStatus = "complete";
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
     state: normalized,
@@ -6718,14 +6923,6 @@ export function commitCombatRoundEndParticipantReview(input: {
     ...participantReview,
     committedAt: input.command.createdAt,
     committedByUserId: input.command.createdByUserId,
-    proposedHealthRolls: participantReview.proposedHealthRolls.map((proposal) =>
-      proposal.accepted
-        ? {
-            ...proposal,
-            status: "pending" as const,
-          }
-        : proposal,
-    ),
     status: nextStatus,
   });
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
@@ -6735,14 +6932,11 @@ export function commitCombatRoundEndParticipantReview(input: {
       [input.participantId]: committedReview,
     },
   });
-  const nextParticipantId =
-    nextStatus === "health_roll_pending"
-      ? input.participantId
-      : getNextRoundEndReviewParticipantId({
-          participantId: input.participantId,
-          roundEndReview: nextRoundEndReview,
-          state: normalized,
-        });
+  const nextParticipantId = getNextRoundEndReviewParticipantId({
+    participantId: input.participantId,
+    roundEndReview: nextRoundEndReview,
+    state: normalized,
+  });
   const afterCursor = getCombatRoundEndReviewCursor({
     boundary: !nextParticipantId,
     participantId: nextParticipantId,
@@ -6753,12 +6947,12 @@ export function commitCombatRoundEndParticipantReview(input: {
     afterCursor,
     facts: {
       acceptedDamageProposalIds: participantReview.proposedDamage
-        .filter((proposal) => proposal.accepted)
+        .filter((proposal) => proposal.accepted && proposal.amount > 0)
         .map((proposal) => proposal.id),
       acceptedDurationProposalIds: participantReview.proposedEffects
         .filter((proposal) => proposal.accepted)
         .map((proposal) => proposal.id),
-      acceptedHealthRollIds: acceptedHealthRolls.map((proposal) => proposal.id),
+      acceptedHealthRollIds: rolledHealthRolls.map((proposal) => proposal.id),
       acceptedRemovalProposalIds: participantReview.proposedRemovals
         .filter((proposal) => proposal.accepted)
         .map((proposal) => proposal.id),
@@ -6846,14 +7040,20 @@ export function rollCombatRoundEndHealthCheck(input: {
     createdAt: string;
     createdByUserId?: string;
   };
+  combatEffects?: CombatEffectsState;
   difficulty?: number;
   healthRollId?: string;
   participantId: string;
   roll?: OpenEndedD20Roll;
   rng?: () => number;
   state: CombatRoundState;
-}): CombatRoundState {
+}): {
+  combatEffects: CombatEffectsState;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
   const roundEndReview = normalized.roundEndReview;
   const participantReview = roundEndReview?.participantReviews[input.participantId];
 
@@ -6890,11 +7090,68 @@ export function rollCombatRoundEndHealthCheck(input: {
     rollTotal: roll.dieResult,
     success: finalTotal >= difficulty,
   });
+  const sourceBleedEffect = currentCombatEffects.effects.find(
+    (effect) => effect.id === healthRoll.sourceEffectId,
+  );
+  const previousBleedRate = sourceBleedEffect
+    ? getCombatRoundEffectBleedAmount(sourceBleedEffect)
+    : healthRoll.previousBleedRate;
+  const nextBleedRate =
+    result.success && previousBleedRate !== undefined
+      ? Math.max(0, previousBleedRate - 1)
+      : previousBleedRate;
+  const updatedBleedEffect =
+    sourceBleedEffect && nextBleedRate !== undefined
+      ? combatEffectSchema.parse({
+          ...setCombatRoundEffectBleedAmount({
+            effect: sourceBleedEffect,
+            nextAmount: result.success ? nextBleedRate : previousBleedRate ?? 0,
+            updatedAt: input.command.createdAt,
+          }),
+          bleedState: combatEffectBleedStateSchema.parse({
+            ...sourceBleedEffect.bleedState,
+            accumulatedTenths: sourceBleedEffect.bleedState?.accumulatedTenths ?? 0,
+            initializedRound:
+              sourceBleedEffect.bleedState?.initializedRound ??
+              getCombatRoundEffectBleedSourceRound({
+                combatEffects: currentCombatEffects,
+                effect: sourceBleedEffect,
+              }) ??
+              normalized.roundNumber,
+            lastHealthCheckRound: normalized.roundNumber,
+          }),
+        })
+      : undefined;
+  const updatedEffects: CombatRoundEndUpdatedEffectFact[] =
+    sourceBleedEffect && updatedBleedEffect
+      ? [
+          {
+            effectId: sourceBleedEffect.id,
+            nextEffect: updatedBleedEffect,
+            previousEffect: sourceBleedEffect,
+          },
+        ]
+      : [];
+  const nextCombatEffects =
+    sourceBleedEffect && updatedBleedEffect
+      ? combatEffectsStateSchema.parse({
+          ...currentCombatEffects,
+          effects: currentCombatEffects.effects.map((effect) =>
+            effect.id === sourceBleedEffect.id ? updatedBleedEffect : effect,
+          ),
+        })
+      : currentCombatEffects;
   const updatedHealthRolls = participantReview.proposedHealthRolls.map((proposal) =>
     proposal.id === healthRoll.id
       ? combatRoundEndHealthRollProposalSchema.parse({
           ...proposal,
+          bleedReduction:
+            result.success && previousBleedRate !== undefined && nextBleedRate !== undefined
+              ? previousBleedRate - nextBleedRate
+              : undefined,
           difficulty,
+          nextBleedRate: result.success ? nextBleedRate : undefined,
+          previousBleedRate,
           result,
           status: "rolled",
         })
@@ -6905,7 +7162,7 @@ export function rollCombatRoundEndHealthCheck(input: {
   );
   const nextStatus: CombatRoundEndParticipantReviewStatus = hasPendingAcceptedHealthRoll
     ? "health_roll_pending"
-    : "complete";
+    : "review_ready";
   const updatedParticipantReview = combatRoundEndParticipantReviewSchema.parse({
     ...participantReview,
     proposedHealthRolls: updatedHealthRolls,
@@ -6918,14 +7175,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       [input.participantId]: updatedParticipantReview,
     },
   });
-  const nextParticipantId =
-    nextStatus === "health_roll_pending"
-      ? input.participantId
-      : getNextRoundEndReviewParticipantId({
-          participantId: input.participantId,
-          roundEndReview: nextRoundEndReview,
-          state: normalized,
-        });
+  const nextParticipantId = input.participantId;
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
     state: normalized,
@@ -6943,14 +7193,23 @@ export function rollCombatRoundEndHealthCheck(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       bleedType: healthRoll.bleedType,
+      bleedReduced:
+        result.success &&
+        previousBleedRate !== undefined &&
+        nextBleedRate !== undefined &&
+        nextBleedRate < previousBleedRate,
       difficulty,
       finalTotal,
       healthRollId: healthRoll.id,
       healthStat: healthRoll.healthStat,
+      nextBleedRate: result.success ? nextBleedRate : undefined,
       openEndedD10s: roll.openEndedD10s,
+      previousBleedRate,
       rollD20: roll.rollD20,
       rollTotal: roll.dieResult,
+      sourceEffectId: healthRoll.sourceEffectId,
       success: result.success,
+      updatedEffects,
     },
     id:
       input.command.commandId ??
@@ -6966,25 +7225,58 @@ export function rollCombatRoundEndHealthCheck(input: {
     type: commandType,
   });
 
-  return combatRoundStateSchema.parse({
-    ...normalized,
-    commands: [...normalized.commands, command],
-    currentCursor: afterCursor,
-    currentStep: "round_summary",
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === input.participantId
-        ? {
-            ...participant,
-            stepStatuses: {
-              ...participant.stepStatuses,
-              round_summary: nextStatus === "complete" ? "complete" : "ready",
-            },
-          }
-        : participant,
-    ),
-    roundEndReview: nextRoundEndReview,
-    selectedParticipantId: afterCursor.participantId,
-    selectedStep: "round_summary",
+  return {
+    combatEffects: nextCombatEffects,
+    command,
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      currentCursor: afterCursor,
+      currentStep: "round_summary",
+      participants: normalized.participants.map((participant) =>
+        participant.participantId === input.participantId
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                round_summary: "ready",
+              },
+            }
+          : participant,
+      ),
+      roundEndReview: nextRoundEndReview,
+      selectedParticipantId: afterCursor.participantId,
+      selectedStep: "round_summary",
+    }),
+  };
+}
+
+export function removeCombatRoundEndHealthCheckEffects(input: {
+  combatEffects?: CombatEffectsState;
+  command: CombatRoundCommand;
+}): CombatEffectsState {
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const updatedEffects = Array.isArray(input.command.facts.updatedEffects)
+    ? input.command.facts.updatedEffects.filter(isCombatRoundEndUpdatedEffectFact)
+    : [];
+  const restoredById = new Map(
+    updatedEffects
+      .map((entry) => {
+        const parsed = combatEffectSchema.safeParse(entry.previousEffect);
+        return parsed.success ? ([entry.effectId, parsed.data] as const) : undefined;
+      })
+      .filter((entry): entry is readonly [string, CombatEffect] => entry !== undefined),
+  );
+  const restoredExisting = currentCombatEffects.effects.map(
+    (effect) => restoredById.get(effect.id) ?? effect,
+  );
+  const missingRestored = [...restoredById.values()].filter(
+    (effect) => !restoredExisting.some((existingEffect) => existingEffect.id === effect.id),
+  );
+
+  return combatEffectsStateSchema.parse({
+    ...currentCombatEffects,
+    effects: [...restoredExisting, ...missingRestored],
   });
 }
 
@@ -10646,11 +10938,6 @@ function undoCombatRoundEndParticipantReviewCommitCommandAtIndex(input: {
     ...participantReview,
     committedAt: undefined,
     committedByUserId: undefined,
-    proposedHealthRolls: participantReview.proposedHealthRolls.map((proposal) => ({
-      ...proposal,
-      result: undefined,
-      status: "pending" as const,
-    })),
     status: "review_ready",
   });
 
@@ -10710,6 +10997,8 @@ function undoCombatRoundEndHealthCheckCommandAtIndex(input: {
     proposal.id === healthRollId
       ? combatRoundEndHealthRollProposalSchema.parse({
           ...proposal,
+          bleedReduction: undefined,
+          nextBleedRate: undefined,
           result: undefined,
           status: "pending",
         })
@@ -11730,16 +12019,26 @@ function getCombatRoundLatestEventForCommand(input: {
     const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
     const difficulty = getCombatRoundLatestEventFactNumber(facts, "difficulty");
     const success = getCombatRoundLatestEventFactBoolean(facts, "success");
+    const bleedType = getCombatRoundLatestEventFactString(facts, "bleedType");
+    const previousBleedRate = getCombatRoundLatestEventFactNumber(facts, "previousBleedRate");
+    const nextBleedRate = getCombatRoundLatestEventFactNumber(facts, "nextBleedRate");
+    const bleedLabel = bleedType === "internal" ? "internal bleed" : "bleed";
+    const bleedResult =
+      success && previousBleedRate !== undefined && nextBleedRate !== undefined
+        ? `; ${bleedLabel} reduced from ${previousBleedRate} to ${nextBleedRate}.`
+        : success === false && previousBleedRate !== undefined
+          ? `; ${bleedLabel} remains ${previousBleedRate}.`
+          : ".";
 
     return {
       commandId: command.id,
       roundNumber: command.roundNumber,
       shortTitle: success ? "Health roll succeeded" : "Health roll failed",
       step: command.step,
-      summaryText: `Round ${command.roundNumber}, SU: ${actorLabel} rolled health ${
+      summaryText: `Round ${command.roundNumber}, SU: ${actorLabel} health roll ${
         finalTotal ?? "?"
       }${difficulty !== undefined ? ` vs ${difficulty}` : ""}${
-        success === undefined ? "" : success ? " and succeeded." : " and failed."
+        success === undefined ? "." : success ? ` succeeded${bleedResult}` : ` failed${bleedResult}`
       }`,
     };
   }

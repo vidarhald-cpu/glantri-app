@@ -5229,6 +5229,10 @@ describe("scenarios route contract", () => {
           createdAt: "2026-01-01T00:00:00.000Z",
           damage: 0,
           description: "Bleeding wound",
+          bleedState: {
+            accumulatedTenths: 8,
+            initializedRound: 1,
+          },
           duration: "2 rounds",
           effectGroup: "bleed",
           generalDamage: 0,
@@ -5325,9 +5329,14 @@ describe("scenarios route contract", () => {
       }),
     );
     expect(
+      updatedParticipantState.combatEffects.effects.find(
+        (effect: { id?: string }) => effect.id === "bleed-1",
+      )?.bleedState?.accumulatedTenths,
+    ).toBe(8);
+    expect(
       updatedParticipantState.combatEffects.effects.some(
         (effect: { generalDamage?: number; type?: string }) =>
-          effect.type === "general_damage" && effect.generalDamage === 2,
+          effect.type === "general_damage" && effect.generalDamage === 1,
       ),
     ).toBe(false);
   });

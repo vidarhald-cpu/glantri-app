@@ -245,7 +245,7 @@ function buildEffectNotes(input: {
     const bleedLabel = input.effect.type === "Internal bleed" ? "Internal bleed" : "Bleed";
     const rate =
       rateReport !== undefined
-        ? `${rateReport.total} HP / round`
+        ? `${rateReport.total}/10 HP / round`
         : normalizeEffectText(input.effect.rateRaw);
 
     details.push(rate ? `${bleedLabel}: ${rate}` : bleedLabel);

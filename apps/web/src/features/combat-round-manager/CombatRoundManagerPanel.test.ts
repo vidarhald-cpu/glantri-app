@@ -414,12 +414,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("roundEndStartNextRoundBlocker");
     expect(source).toContain("getCombatRoundStartNextRoundBlocker");
     expect(source).toContain("isCombatRoundEndReviewComplete");
-    expect(source).toContain("Build/Review round-end effects");
+    expect(source).not.toContain("Build/Review round-end effects");
+    expect(source).toContain("Preparing round-end review");
+    expect(source).toContain("Round-end review is preparing automatically.");
     expect(source).toContain("Commit participant SU review");
     expect(source).toContain("Mark SU review complete");
     expect(source).toContain("Roll health check");
     expect(source).toContain("CombatRoundEndReviewPanel");
-    expect(source).toContain("prepareCombatRoundEndReview");
+    expect(source).toContain("ensureCombatRoundEndReviewPrepared");
     expect(source).toContain("commitCombatRoundEndParticipantReview");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("const commandParticipantId =");
@@ -475,8 +477,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
     expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("attackResult");
-    expect(source).toContain("combatRoundState: nextRoundState");
-    expect(source).toContain("currentRound: nextRoundState.roundNumber");
+    expect(source).toContain("autoPrepareRoundEndReviewState(nextRoundState)");
+    expect(source).toContain("combatRoundState: stateToPersist");
+    expect(source).toContain("currentRound: stateToPersist.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("updateScenarioParticipantStateOnServer");

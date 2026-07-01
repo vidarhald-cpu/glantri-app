@@ -42,6 +42,7 @@ import {
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
+  ensureCombatRoundEndReviewPrepared,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundDamageSubstate,
@@ -69,7 +70,6 @@ import {
   initializeCombatRoundState,
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
-  prepareCombatRoundEndReview,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
@@ -1582,17 +1582,8 @@ function getCombatDamageReviewDraftEffectTarget(
 
 function formatCombatDamageReviewRateValue(value: string): string {
   const trimmed = value.trim();
-  const numeric = Number(trimmed);
 
-  if (Number.isFinite(numeric) && numeric > 0 && numeric < 1) {
-    const rounds = 1 / numeric;
-
-    if (Number.isInteger(rounds)) {
-      return `1 HP / ${rounds} round${rounds === 1 ? "" : "s"}`;
-    }
-  }
-
-  return `${trimmed} HP / round`;
+  return `${trimmed}/10 HP / round`;
 }
 
 function getCombatDamageReviewDraftEffectValue(
@@ -2871,7 +2862,9 @@ function CombatRoundEndReviewPanel(input: {
     <section style={playerCombatPanelCardStyle}>
       <strong>Round-end review</strong>
       {!review ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No SU proposals built yet.</div>
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          Preparing round-end review...
+        </div>
       ) : (
         <>
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
@@ -2901,10 +2894,42 @@ function CombatRoundEndReviewPanel(input: {
           ) : null}
           {review.proposedDamage.length > 0 ? (
             <section style={{ display: "grid", gap: "0.25rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Bleed damage</strong>
+              <strong style={{ fontSize: "0.9rem" }}>Active bleed</strong>
               {review.proposedDamage.map((proposal) => (
-                <div key={proposal.id} style={{ fontSize: "0.88rem" }}>
-                  {proposal.label} · general damage {proposal.amount}
+                <div
+                  key={proposal.id}
+                  style={{
+                    borderTop: "1px solid #ddd3bf",
+                    display: "grid",
+                    gap: "0.15rem",
+                    paddingTop: "0.35rem",
+                  }}
+                >
+                  <div style={{ fontSize: "0.88rem", fontWeight: 700 }}>{proposal.label}</div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                    Rate {proposal.bleedRate}/10 HP/round · accumulated{" "}
+                    {proposal.previousAccumulatedTenths}/10 + {proposal.bleedRate}/10 ={" "}
+                    {proposal.accumulatedTenths}/10
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                    Damage due {proposal.amount} · remainder{" "}
+                    {proposal.remainingAccumulatedTenths}/10
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                    Health roll{" "}
+                    {proposal.healthCheckDue
+                      ? "due now"
+                      : proposal.roundsUntilHealthCheck !== undefined
+                        ? `due in ${proposal.roundsUntilHealthCheck} round${
+                            proposal.roundsUntilHealthCheck === 1 ? "" : "s"
+                          }`
+                        : "not due"}
+                  </div>
+                  {proposal.notes ? (
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      {proposal.notes}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </section>
@@ -2951,6 +2976,13 @@ function CombatRoundEndReviewPanel(input: {
                           })} = ${result.rollTotal}; final ${result.finalTotal} (${result.success ? "success" : "failure"})`
                         : " · pending"}
                     </div>
+                    {result && proposal.previousBleedRate !== undefined ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        {result.success && proposal.nextBleedRate !== undefined
+                          ? `Bleed reduced ${proposal.previousBleedRate} -> ${proposal.nextBleedRate}`
+                          : `Bleed remains ${proposal.previousBleedRate}`}
+                      </div>
+                    ) : null}
                     {proposal.warnings.map((warning) => (
                       <div key={warning} style={{ color: "#8a3b1f", fontSize: "0.82rem" }}>
                         {warning}
@@ -3034,6 +3066,7 @@ export default function CombatRoundManagerPanel({
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
+  const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
@@ -3123,12 +3156,14 @@ export default function CombatRoundManagerPanel({
           inspector.participant.participantId
         ]
       : undefined;
-  const buildRoundEndParticipantInputs = (): Record<
+  const buildRoundEndParticipantInputs = (
+    stateForReview: typeof roundState = roundState,
+  ): Record<
     string,
     { combatEffects?: CombatEffectsState; healthStat?: number }
   > =>
     Object.fromEntries(
-      roundState.participants.map((participant) => {
+      stateForReview.participants.map((participant) => {
         const encounterParticipant = encounter.participants.find(
           (entry) => entry.id === participant.participantId,
         );
@@ -3156,6 +3191,51 @@ export default function CombatRoundManagerPanel({
         ];
       }),
     );
+  function autoPrepareRoundEndReviewState(stateForReview: typeof roundState): typeof roundState {
+    if (
+      stateForReview.currentStep !== "round_summary" ||
+      stateForReview.roundEndReview?.roundNumber === stateForReview.roundNumber
+    ) {
+      return stateForReview;
+    }
+
+    return ensureCombatRoundEndReviewPrepared({
+      command: {
+        createdAt: new Date().toISOString(),
+      },
+      participantInputs: buildRoundEndParticipantInputs(stateForReview),
+      state: stateForReview,
+    });
+  }
+
+  useEffect(() => {
+    if (
+      saving ||
+      !selectedRoundIsActive ||
+      roundState.currentStep !== "round_summary" ||
+      roundState.roundEndReview?.roundNumber === roundState.roundNumber
+    ) {
+      return;
+    }
+
+    const attemptKey = `${encounter.id}:${roundState.roundNumber}`;
+
+    if (roundEndAutoPrepareAttemptRef.current === attemptKey) {
+      return;
+    }
+
+    roundEndAutoPrepareAttemptRef.current = attemptKey;
+
+    try {
+      void persistRoundState(autoPrepareRoundEndReviewState(roundState));
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to prepare round-end review automatically.",
+      );
+    }
+  }, [encounter.id, roundState, saving, selectedRoundIsActive]);
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
     inspector.participant?.declaration,
   )
@@ -3623,11 +3703,12 @@ export default function CombatRoundManagerPanel({
   const inspectorDamageReviewCommitReadiness =
     inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
   const inspectorRoundEndActionValidationMessage =
-    inspector.step === "round_summary" &&
-    selectedRoundIsActive &&
-    selectedTimelineRoundState.roundEndReview &&
-    inspectorRoundEndReview?.status === "complete"
-      ? "Round-end review complete for this participant."
+    inspector.step === "round_summary" && selectedRoundIsActive
+      ? !selectedTimelineRoundState.roundEndReview
+        ? "Round-end review is preparing automatically."
+        : inspectorRoundEndReview?.status === "complete"
+          ? "Round-end review complete for this participant."
+          : undefined
       : undefined;
   const inspectorRoundEndReviewHasProposals = Boolean(
     inspectorRoundEndReview &&
@@ -3673,11 +3754,11 @@ export default function CombatRoundManagerPanel({
       )?.label
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
-    ? "Attack already rolled"
-    : inspectorIsInspectionOnly
-      ? "Inspecting step - use Current task to resume"
+      ? "Attack already rolled"
+      : inspectorIsInspectionOnly
+        ? "Inspecting step - use Current task to resume"
       : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-        ? "Build/Review round-end effects"
+        ? "Preparing round-end review"
         : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
           ? inspectorRoundEndReviewHasProposals
             ? "Commit participant SU review"
@@ -4329,8 +4410,20 @@ export default function CombatRoundManagerPanel({
   }
 
   async function persistRoundState(nextRoundState: typeof roundState) {
-    setRoundState(nextRoundState);
-    setSelectedRoundNumber(nextRoundState.roundNumber);
+    let stateToPersist: typeof roundState;
+
+    try {
+      stateToPersist = autoPrepareRoundEndReviewState(nextRoundState);
+    } catch (caughtError) {
+      throw new Error(
+        caughtError instanceof Error
+          ? `Unable to prepare round-end review automatically: ${caughtError.message}`
+          : "Unable to prepare round-end review automatically.",
+      );
+    }
+
+    setRoundState(stateToPersist);
+    setSelectedRoundNumber(stateToPersist.roundNumber);
     setSaving(true);
 
     try {
@@ -4338,13 +4431,13 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         session: {
           ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
+          combatRoundState: stateToPersist,
+          currentRound: stateToPersist.roundNumber,
         },
       });
 
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      focusRoundTable({ scrollToCurrent: true, state: stateToPersist });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -5073,16 +5166,7 @@ export default function CombatRoundManagerPanel({
       const updatedAt = new Date().toISOString();
 
       if (!roundState.roundEndReview) {
-        await persistRoundState(
-          prepareCombatRoundEndReview({
-            command: {
-              createdAt: updatedAt,
-            },
-            participantInputs: buildRoundEndParticipantInputs(),
-            state: roundState,
-          }),
-        );
-        setSaveError(undefined);
+        setSaveError("Round-end review is preparing automatically.");
         return;
       }
 
@@ -5136,6 +5220,11 @@ export default function CombatRoundManagerPanel({
       }
 
       if (participantReview.status === "health_roll_pending") {
+        if (!encounter.scenarioId || !selectedScenarioParticipant) {
+          setSaveError("Scenario participant state is required to roll SU health.");
+          return;
+        }
+
         const pendingHealthRoll = participantReview.proposedHealthRolls.find(
           (proposal) => proposal.accepted && proposal.status === "pending",
         );
@@ -5151,17 +5240,31 @@ export default function CombatRoundManagerPanel({
             ? parseCombatInteger(difficultyDraft, "Health difficulty")
             : pendingHealthRoll.difficulty;
 
-        await persistRoundState(
-          rollCombatRoundEndHealthCheck({
-            command: {
-              createdAt: updatedAt,
-            },
-            difficulty,
-            healthRollId: pendingHealthRoll.id,
-            participantId: inspector.participant.participantId,
-            state: roundState,
-          }),
-        );
+        const rolled = rollCombatRoundEndHealthCheck({
+          command: {
+            createdAt: updatedAt,
+          },
+          combatEffects: selectedScenarioParticipant.state.combatEffects,
+          difficulty,
+          healthRollId: pendingHealthRoll.id,
+          participantId: inspector.participant.participantId,
+          state: roundState,
+        });
+        const updatedParticipant = await updateScenarioParticipantStateOnServer({
+          participantId: selectedScenarioParticipant.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...selectedScenarioParticipant.state,
+            combatEffects: rolled.combatEffects,
+          },
+        });
+
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          [updatedParticipant.id]: updatedParticipant,
+        }));
+        onScenarioParticipantsUpdated?.([updatedParticipant]);
+        await persistRoundState(rolled.state);
         setSaveError(undefined);
         return;
       }
