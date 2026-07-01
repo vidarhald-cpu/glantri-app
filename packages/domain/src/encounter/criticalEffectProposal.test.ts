@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCriticalEffectProposalFromDamageResult } from "./criticalEffectProposal";
+import {
+  buildCriticalEffectProposalFromDamageResult,
+  getCriticalEffectStoredDurationRounds,
+} from "./criticalEffectProposal";
+import type { CriticalEffectTemplate } from "./criticalEffectsTable";
 
 describe("critical effect proposal generation", () => {
   it("builds a known critical result summary with title and body text", () => {
@@ -109,6 +113,54 @@ describe("critical effect proposal generation", () => {
       proposal.proposedEffects.find((effect) => effect.sourceEffectKey === "sharp|arm|04|02")
         ?.durationRounds,
     ).toBe(1);
+  });
+
+  it("stores next-round no-action effects with one extra SU countdown tick", () => {
+    const proposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 2,
+      finalCriticalRoll: 6,
+      selectedHitLocation: "chest",
+      weaponDamageClass: "edged",
+    });
+
+    expect(proposal.criticalResult?.critKey).toBe("sharp|chest|06");
+    expect(proposal.proposedEffects).toContainEqual(
+      expect.objectContaining({
+        durationRounds: 2,
+        rowCategory: "no_combat_action",
+        sourceEffectKey: "sharp|chest|06|02",
+      }),
+    );
+  });
+
+  it("stores next-round rolled durations with one extra SU countdown tick", () => {
+    const effect: CriticalEffectTemplate = {
+      critKey: "test|head|01",
+      durationMode: "roll",
+      durationRaw: "no actions for the next D6 rounds",
+      durationRoll: "d6",
+      effectKey: "test|head|01|01",
+      effectOrder: 1,
+      group: "Stun/Action",
+      rateMode: "none",
+      subtype: "shock_or_action_lock",
+      target: "general_action",
+      type: "Stun",
+      urgency: 1,
+    };
+
+    expect(
+      getCriticalEffectStoredDurationRounds(effect, [
+        {
+          effectKey: effect.effectKey,
+          formula: "d6",
+          purpose: "duration",
+          rolls: [3],
+          sourceField: "durationRoll",
+          total: 3,
+        },
+      ]),
+    ).toBe(4);
   });
 
   it("stores physical minimum damage floors on the proposal instead of duplicate effect rows", () => {

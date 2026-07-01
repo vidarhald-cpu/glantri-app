@@ -319,25 +319,48 @@ function buildEffectNotes(input: {
   return details.join(" ");
 }
 
-function getDraftDurationRounds(
+function criticalEffectDurationBeginsNextRound(effect: CriticalEffectTemplate): boolean {
+  const text = [
+    effect.durationRaw,
+    effect.sourceValue,
+    effect.implementationNote,
+    effect.treatmentGate,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(" ")
+    .toLowerCase();
+
+  if (/\b(this|current)\s+round\b/.test(text) || /until end of (?:the )?current round/.test(text)) {
+    return false;
+  }
+
+  return /\bnext\s+(?:round|d\d+\s+rounds?|\d+\s+rounds?)\b/.test(text);
+}
+
+export function getCriticalEffectStoredDurationRounds(
   effect: CriticalEffectTemplate,
   rollReports: readonly CriticalEffectProposalRollReport[],
 ): number | undefined {
   const durationReport = rollReports.find((report) => report.purpose === "duration");
+  let durationRounds: number | undefined;
 
   if (durationReport) {
-    return durationReport.total;
-  }
-
-  if (
+    durationRounds = durationReport.total;
+  } else if (
     effect.durationMode === "fixed" &&
     effect.durationValue !== undefined &&
     effect.durationUnit?.toLowerCase().includes("round")
   ) {
-    return effect.durationValue;
+    durationRounds = effect.durationValue;
+  } else if (criticalEffectDurationBeginsNextRound(effect)) {
+    durationRounds = 1;
   }
 
-  return undefined;
+  if (durationRounds === undefined) {
+    return undefined;
+  }
+
+  return criticalEffectDurationBeginsNextRound(effect) ? durationRounds + 1 : durationRounds;
 }
 
 function getCriticalEffectLabel(effect: CriticalEffectTemplate): string {
@@ -432,7 +455,7 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
   const modifierValue = normalizePenalty(input.effect.penaltyPct);
   const common = {
     accepted: true,
-    durationRounds: getDraftDurationRounds(input.effect, input.rollReports),
+    durationRounds: getCriticalEffectStoredDurationRounds(input.effect, input.rollReports),
     effectOrder: input.effect.effectOrder,
     id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
     label: getCriticalEffectLabel(input.effect),

@@ -2114,24 +2114,15 @@ function CombatDamageReviewPanel(input: {
   const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
   const commitStatus = input.commitReadiness
     ? input.commitReadiness.ready
-      ? input.commitReadiness.warnings.length > 0
-        ? `Ready to commit with warnings: ${input.commitReadiness.warnings.join(" ")}`
-        : "Ready to commit"
+      ? "Ready to commit"
       : (input.commitReadiness.reason ?? "Cannot commit: phase damage is not ready.")
     : undefined;
-  const criticalDraftEffectCount = input.draft.additionalEffects.filter((effect) =>
-    Boolean(
-      effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey,
-    ),
-  ).length;
   const criticalEffectStatus = criticalEffectProposal
     ? criticalEffectProposal.criticalIndexStatus === "no_effect"
       ? "No critical effect."
       : criticalEffectProposal.warnings.length > 0
         ? `Critical effects unavailable: ${criticalEffectProposal.warnings.join(" ")}`
-        : `Critical-derived rows: ${criticalDraftEffectCount} row${
-            criticalDraftEffectCount === 1 ? "" : "s"
-          }.`
+        : undefined
     : effectiveDamage.effectiveCriticalGrade
       ? "Critical effects not accepted/committed yet."
       : undefined;
@@ -2145,6 +2136,7 @@ function CombatDamageReviewPanel(input: {
     damageResult: input.damageResult,
     draft: input.draft,
   });
+  const effectById = new Map(input.draft.additionalEffects.map((effect) => [effect.id, effect]));
   const acceptedEffectLabels = Array.from(
     new Set(
       proposedRows
@@ -2254,29 +2246,142 @@ function CombatDamageReviewPanel(input: {
                 </tr>
               </thead>
               <tbody>
-                {proposedRows.map((row, index) => (
-                  <tr key={`${row.rowType}-${index}`}>
-                    <td style={combatReviewRowCellStyle}>
-                      <input
-                        checked={row.accepted}
-                        disabled={disabled || !row.effectId}
-                        onChange={(event) =>
-                          row.effectId
-                            ? updateAdditionalEffect(row.effectId, {
-                                accepted: event.target.checked,
+                {proposedRows.map((row, index) => {
+                  const effect = row.effectId ? effectById.get(row.effectId) : undefined;
+                  const isMechanical = effect?.kind === "modifier" || effect?.kind === "fatigue";
+                  const isBleed =
+                    effect?.rowCategory === "bleed" || effect?.rowCategory === "internal_bleed";
+
+                  return (
+                    <tr key={`${row.rowType}-${index}`}>
+                      <td style={combatReviewRowCellStyle}>
+                        <input
+                          checked={row.accepted}
+                          disabled={disabled || !row.effectId}
+                          onChange={(event) =>
+                            row.effectId
+                              ? updateAdditionalEffect(row.effectId, {
+                                  accepted: event.target.checked,
+                                })
+                              : undefined
+                          }
+                          type="checkbox"
+                        />
+                      </td>
+                      <td style={combatReviewRowCellStyle}>
+                        {effect ? (
+                          <input
+                            disabled={disabled}
+                            onChange={(event) =>
+                              updateAdditionalEffect(effect.id, { label: event.target.value })
+                            }
+                            style={{ width: "100%" }}
+                            type="text"
+                            value={effect.label}
+                          />
+                        ) : (
+                          row.rowType
+                        )}
+                      </td>
+                      <td style={combatReviewRowCellStyle}>
+                        {effect?.kind === "modifier" ? (
+                          <select
+                            disabled={disabled}
+                            onChange={(event) =>
+                              updateAdditionalEffect(effect.id, {
+                                modifierBucket: event.target.value,
+                                rowCategory:
+                                  event.target.value === "obSkill"
+                                    ? "ob_skill_modifier"
+                                    : event.target.value === "db"
+                                      ? "db_parry_modifier"
+                                      : "general_modifier",
                               })
-                            : undefined
-                        }
-                        type="checkbox"
-                      />
-                    </td>
-                    <td style={combatReviewRowCellStyle}>{row.rowType}</td>
-                    <td style={combatReviewRowCellStyle}>{row.target}</td>
-                    <td style={combatReviewRowCellStyle}>{row.value || "—"}</td>
-                    <td style={combatReviewRowCellStyle}>{row.duration || "—"}</td>
-                    <td style={combatReviewRowCellStyle}>{row.details}</td>
-                  </tr>
-                ))}
+                            }
+                            value={effect.modifierBucket}
+                          >
+                            {COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.map((bucket) => (
+                              <option key={bucket.value} value={bucket.value}>
+                                {bucket.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          row.target
+                        )}
+                      </td>
+                      <td style={combatReviewRowCellStyle}>
+                        {effect && (isMechanical || isBleed) ? (
+                          <input
+                            disabled={disabled}
+                            inputMode="numeric"
+                            onChange={(event) =>
+                              updateAdditionalEffect(effect.id, {
+                                [isBleed ? "rateValuePerRound" : "modifierValue"]:
+                                  event.target.value,
+                              })
+                            }
+                            style={{ width: "5rem" }}
+                            type="text"
+                            value={isBleed ? effect.rateValuePerRound : effect.modifierValue}
+                          />
+                        ) : (
+                          row.value || "—"
+                        )}
+                      </td>
+                      <td style={combatReviewRowCellStyle}>
+                        {effect ? (
+                          <input
+                            disabled={disabled}
+                            inputMode="numeric"
+                            onChange={(event) =>
+                              updateAdditionalEffect(effect.id, {
+                                durationRounds: event.target.value,
+                              })
+                            }
+                            placeholder="rounds"
+                            style={{ width: "5rem" }}
+                            type="text"
+                            value={effect.durationRounds}
+                          />
+                        ) : (
+                          row.duration || "—"
+                        )}
+                      </td>
+                      <td style={combatReviewRowCellStyle}>
+                        {effect ? (
+                          <div
+                            style={{
+                              alignItems: "center",
+                              display: "grid",
+                              gap: "0.35rem",
+                              gridTemplateColumns: "minmax(10rem, 1fr) auto",
+                            }}
+                          >
+                            <input
+                              disabled={disabled}
+                              onChange={(event) =>
+                                updateAdditionalEffect(effect.id, { notes: event.target.value })
+                              }
+                              style={{ width: "100%" }}
+                              type="text"
+                              value={effect.notes}
+                            />
+                            <button
+                              disabled={disabled}
+                              onClick={() => removeAdditionalEffect(effect.id)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          row.details
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2409,9 +2514,6 @@ function CombatDamageReviewPanel(input: {
       {criticalEffectStatus ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
       ) : null}
-      {criticalMinimumStatus ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalMinimumStatus}</div>
-      ) : null}
       <details
         style={{
           borderTop: "1px solid #e6e0d2",
@@ -2421,6 +2523,16 @@ function CombatDamageReviewPanel(input: {
         }}
       >
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>Calculation details</summary>
+        {criticalMinimumStatus ? (
+          <div style={{ color: "#5e5a50", marginTop: "0.5rem" }}>{criticalMinimumStatus}</div>
+        ) : null}
+        {input.commitReadiness?.warnings.length ? (
+          <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", marginTop: "0.5rem" }}>
+            {input.commitReadiness.warnings.map((warning) => (
+              <div key={warning}>{warning}</div>
+            ))}
+          </div>
+        ) : null}
         <div
           style={{
             display: "grid",
@@ -2549,52 +2661,28 @@ function CombatDamageReviewPanel(input: {
             Operational consequences: {input.draft.operationalConsequences.length}
           </strong>
           {input.draft.operationalConsequences.map((consequence) => (
-            <div
+            <label
               key={consequence.id}
               style={{
-                borderTop: "1px solid #ddd3bf",
-                display: "grid",
-                gap: "0.35rem",
-                paddingTop: "0.5rem",
+                alignItems: "center",
+                display: "flex",
+                gap: "0.45rem",
+                fontSize: "0.9rem",
               }}
+              title={consequence.reason}
             >
-              <label
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  gap: "0.45rem",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <input
-                  checked={consequence.accepted}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    updateOperationalConsequence(consequence.id, {
-                      accepted: event.target.checked,
-                    })
-                  }
-                  type="checkbox"
-                />
-                <span>{consequence.label}</span>
-              </label>
-              <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>{consequence.reason}</div>
-              <label style={{ display: "grid", gap: "0.2rem" }}>
-                <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                  Consequence notes
-                </span>
-                <input
-                  disabled={disabled}
-                  onChange={(event) =>
-                    updateOperationalConsequence(consequence.id, {
-                      notes: event.target.value,
-                    })
-                  }
-                  type="text"
-                  value={consequence.notes}
-                />
-              </label>
-            </div>
+              <input
+                checked={consequence.accepted}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateOperationalConsequence(consequence.id, {
+                    accepted: event.target.checked,
+                  })
+                }
+                type="checkbox"
+              />
+              <span>{consequence.label}</span>
+            </label>
           ))}
         </section>
       ) : null}
@@ -2611,7 +2699,7 @@ function CombatDamageReviewPanel(input: {
       ) : null}
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          <strong style={{ fontSize: "0.9rem" }}>Edit character-sheet rows</strong>
+          <strong style={{ fontSize: "0.9rem" }}>Add manual row</strong>
           <button
             disabled={disabled}
             onClick={() =>
@@ -2643,204 +2731,6 @@ function CombatDamageReviewPanel(input: {
             Add note row
           </button>
         </div>
-        {input.draft.additionalEffects.length === 0 ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            No additional character-sheet rows.
-          </div>
-        ) : null}
-        {input.draft.additionalEffects.map((effect) => {
-          const isMechanical = effect.kind === "modifier" || effect.kind === "fatigue";
-
-          return (
-            <div
-              key={effect.id}
-              style={{
-                borderTop: "1px solid #ddd3bf",
-                display: "grid",
-                gap: "0.45rem",
-                paddingTop: "0.5rem",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gap: "0.45rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(7rem, 1fr))",
-                }}
-              >
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Accept
-                  </span>
-                  <input
-                    checked={effect.accepted}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateAdditionalEffect(effect.id, { accepted: event.target.checked })
-                    }
-                    type="checkbox"
-                  />
-                </label>
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Kind
-                  </span>
-                  <select
-                    disabled={disabled}
-                    onChange={(event) => {
-                      const nextKind = event.target
-                        .value as CombatDamageReviewAdditionalEffectDraft["kind"];
-
-                      updateAdditionalEffect(effect.id, {
-                        kind: nextKind,
-                        modifierBucket: nextKind === "modifier" ? effect.modifierBucket : "general",
-                        modifierValue:
-                          nextKind === "modifier" || nextKind === "fatigue"
-                            ? effect.modifierValue || "-1"
-                            : "",
-                        rowCategory:
-                          nextKind === "modifier"
-                            ? "general_modifier"
-                            : nextKind === "fatigue"
-                              ? "fatigue"
-                              : "special_note",
-                      });
-                    }}
-                    value={effect.kind}
-                  >
-                    <option value="modifier">Modifier</option>
-                    <option value="fatigue">Fatigue</option>
-                    <option value="special">Special</option>
-                    <option value="note">Note</option>
-                  </select>
-                </label>
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Label
-                  </span>
-                  <input
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateAdditionalEffect(effect.id, { label: event.target.value })
-                    }
-                    type="text"
-                    value={effect.label}
-                  />
-                </label>
-                {effect.kind === "modifier" ? (
-                  <label style={{ display: "grid", gap: "0.2rem" }}>
-                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                      Bucket
-                    </span>
-                    <select
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateAdditionalEffect(effect.id, {
-                          modifierBucket: event.target.value,
-                          rowCategory:
-                            event.target.value === "obSkill"
-                              ? "ob_skill_modifier"
-                              : event.target.value === "db"
-                                ? "db_parry_modifier"
-                                : "general_modifier",
-                        })
-                      }
-                      value={effect.modifierBucket}
-                    >
-                      {COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.map((bucket) => (
-                        <option key={bucket.value} value={bucket.value}>
-                          {bucket.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                {isMechanical ? (
-                  <label style={{ display: "grid", gap: "0.2rem" }}>
-                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                      Value
-                    </span>
-                    <input
-                      disabled={disabled}
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        updateAdditionalEffect(effect.id, {
-                          modifierValue: event.target.value,
-                        })
-                      }
-                      type="text"
-                      value={effect.modifierValue}
-                    />
-                  </label>
-                ) : null}
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Duration
-                  </span>
-                  <input
-                    disabled={disabled}
-                    inputMode="numeric"
-                    onChange={(event) =>
-                      updateAdditionalEffect(effect.id, {
-                        durationRounds: event.target.value,
-                      })
-                    }
-                    placeholder="rounds"
-                    type="text"
-                    value={effect.durationRounds}
-                  />
-                </label>
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Phase
-                  </span>
-                  <select
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateAdditionalEffect(effect.id, { phase: event.target.value })
-                    }
-                    value={effect.phase}
-                  >
-                    {COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.map((phase) => (
-                      <option key={phase.value || "none"} value={phase.value}>
-                        {phase.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div
-                style={{
-                  alignItems: "end",
-                  display: "grid",
-                  gap: "0.45rem",
-                  gridTemplateColumns: "minmax(10rem, 1fr) auto",
-                }}
-              >
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                    Effect notes
-                  </span>
-                  <input
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateAdditionalEffect(effect.id, { notes: event.target.value })
-                    }
-                    type="text"
-                    value={effect.notes}
-                  />
-                </label>
-                <button
-                  disabled={disabled}
-                  onClick={() => removeAdditionalEffect(effect.id)}
-                  type="button"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          );
-        })}
       </section>
       <button disabled={disabled} onClick={input.onSaveReview} type="button">
         {input.saving ? "Saving..." : "Save review"}

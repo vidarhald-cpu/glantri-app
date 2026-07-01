@@ -5440,16 +5440,17 @@ function formatCombatRoundDamageReviewEffectCommittedDescription(
   effect: CombatRoundDamageReviewAdditionalEffect,
 ): string {
   const text = buildCombatRoundReviewEffectText(effect);
+  const isNextRound = /\bnext round\b/i.test(text);
 
   if (
     effect.rowCategory === "no_combat_action" &&
     combatRoundTextIncludesAny(text, ["parry only", "limited to parry"])
   ) {
-    return "Action limited to parry.";
+    return isNextRound ? "Action limited to parry next round." : "Action limited to parry.";
   }
 
   if (effect.rowCategory === "no_combat_action") {
-    return "No combat action possible.";
+    return isNextRound ? "No combat action possible next round." : "No combat action possible.";
   }
 
   if (effect.rowCategory === "loss_of_use") {
@@ -5592,6 +5593,109 @@ function isCombatRoundOperationalConsequenceCommittedAsEffect(
   consequence: CombatRoundDamageReviewOperationalConsequence,
 ): boolean {
   return consequence.kind === "drop_item" || consequence.kind === "note";
+}
+
+function normalizeCombatRoundDedupeText(value?: string): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function combatRoundReviewEffectActionCategory(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): "dropped_item" | "loss_of_use" | "no_combat_action" | "parry_only" | undefined {
+  const text = normalizeCombatRoundDedupeText(
+    [effect.label, effect.notes, effect.sourceText, effect.rowCategory].filter(Boolean).join(" "),
+  );
+
+  if (effect.rowCategory === "dropped_item" || text.includes("dropped item")) {
+    return "dropped_item";
+  }
+
+  if (effect.rowCategory === "loss_of_use" || text.includes("loss of use")) {
+    return "loss_of_use";
+  }
+
+  if (
+    effect.rowCategory === "no_combat_action" &&
+    (text.includes("parry only") || text.includes("limited to parry"))
+  ) {
+    return "parry_only";
+  }
+
+  if (
+    effect.rowCategory === "no_combat_action" ||
+    text.includes("no combat action") ||
+    text.includes("no action possible") ||
+    text.includes("may do nothing") ||
+    text.includes("unconscious")
+  ) {
+    return "no_combat_action";
+  }
+
+  return undefined;
+}
+
+function combatRoundOperationalConsequenceActionCategory(
+  consequence: CombatRoundDamageReviewOperationalConsequence,
+): "dropped_item" | "loss_of_use" | "no_combat_action" | "parry_only" | undefined {
+  const text = normalizeCombatRoundDedupeText(
+    [consequence.label, consequence.notes, consequence.reason, consequence.sourceText]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  if (consequence.kind === "drop_item" || text.includes("drop item")) {
+    return "dropped_item";
+  }
+
+  if (text.includes("loss of use")) {
+    return "loss_of_use";
+  }
+
+  if (text.includes("parry only") || text.includes("limited to parry")) {
+    return "parry_only";
+  }
+
+  if (
+    text.includes("no combat action") ||
+    text.includes("no action possible") ||
+    text.includes("may do nothing") ||
+    text.includes("unconscious")
+  ) {
+    return "no_combat_action";
+  }
+
+  return undefined;
+}
+
+function combatRoundOperationalConsequenceMatchesReviewEffect(input: {
+  consequence: CombatRoundDamageReviewOperationalConsequence;
+  effect: CombatRoundDamageReviewAdditionalEffect;
+}): boolean {
+  const consequenceCategory = combatRoundOperationalConsequenceActionCategory(input.consequence);
+  const effectCategory = combatRoundReviewEffectActionCategory(input.effect);
+
+  if (!consequenceCategory || !effectCategory || consequenceCategory !== effectCategory) {
+    return false;
+  }
+
+  return true;
+}
+
+function getCombatRoundOperationalConsequencesCommittedAsEffects(input: {
+  additionalEffects: readonly CombatRoundDamageReviewAdditionalEffect[];
+  operationalConsequences: readonly CombatRoundDamageReviewOperationalConsequence[];
+}): CombatRoundDamageReviewOperationalConsequence[] {
+  return input.operationalConsequences
+    .filter(isCombatRoundOperationalConsequenceCommittedAsEffect)
+    .filter(
+      (consequence) =>
+        !input.additionalEffects.some((effect) =>
+          combatRoundOperationalConsequenceMatchesReviewEffect({ consequence, effect }),
+        ),
+    );
 }
 
 function formatCombatRoundOperationalConsequenceDescription(
@@ -5945,9 +6049,10 @@ function buildCombatRoundDamageCommitRows(input: {
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
-  const operationalEffectConsequences = reviewOperationalConsequences.filter(
-    isCombatRoundOperationalConsequenceCommittedAsEffect,
-  );
+  const operationalEffectConsequences = getCombatRoundOperationalConsequencesCommittedAsEffects({
+    additionalEffects: reviewAdditionalEffects,
+    operationalConsequences: reviewOperationalConsequences,
+  });
   const damageLocation = getCombatRoundCommittedDamageLocation(
     effectiveDamage.effectiveSelectedHitLocation,
   );
@@ -7553,14 +7658,19 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
         kind: `additional-${effect.id}`,
       }),
     );
-  const createdOperationalCombatEffectIds = acceptedOperationalConsequences
-    .filter(isCombatRoundOperationalConsequenceCommittedAsEffect)
-    .map((consequence) =>
-      buildCombatRoundDamageCommitEffectId({
-        ...idInput,
-        kind: `operational-${consequence.id}`,
-      }),
-    );
+  const acceptedAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
+    (effect) => effect.accepted !== false,
+  );
+  const operationalEffectConsequences = getCombatRoundOperationalConsequencesCommittedAsEffects({
+    additionalEffects: acceptedAdditionalEffects,
+    operationalConsequences: acceptedOperationalConsequences,
+  });
+  const createdOperationalCombatEffectIds = operationalEffectConsequences.map((consequence) =>
+    buildCombatRoundDamageCommitEffectId({
+      ...idInput,
+      kind: `operational-${consequence.id}`,
+    }),
+  );
   const createdCombatEffectIds = [
     ...createdDamageEffectIds,
     ...createdAdditionalCombatEffectIds,

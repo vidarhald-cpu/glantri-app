@@ -4863,6 +4863,20 @@ describe("combat round manager", () => {
       preCriticalEffectiveDamage: 2,
       totalDamage: 5,
     });
+    expect(committed.command.facts).toMatchObject({
+      createdOperationalCombatEffectIds: [
+        expect.stringContaining("operational-critical-operational-sharp-arm-13-05-drop"),
+      ],
+      operationalConsequences: expect.arrayContaining([
+        expect.objectContaining({ kind: "cancel_pending_action" }),
+        expect.objectContaining({ kind: "note", label: "No combat action possible" }),
+      ]),
+    });
+    expect(
+      (committed.command.facts.createdOperationalCombatEffectIds as string[]).some((effectId) =>
+        effectId.split("combat-effect:")[1]?.includes("no-action"),
+      ),
+    ).toBe(false);
     expect(committed.combatEffects.effects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -4879,6 +4893,13 @@ describe("combat round manager", () => {
         }),
       ]),
     );
+    expect(
+      committed.combatEffects.effects.filter(
+        (effect) =>
+          effect.type === "special" &&
+          /No combat action possible/.test(effect.description ?? ""),
+      ),
+    ).toHaveLength(1);
     expect(committed.combatEffects.events[0]?.description).toContain(criticalBodyText);
     for (const effect of committed.combatEffects.effects) {
       expect(effect.description).not.toContain(criticalBodyText);
@@ -4906,6 +4927,172 @@ describe("combat round manager", () => {
         step: "phase_2_actions",
       }),
     ).toBe("pending");
+  });
+
+  it("creates one visible no-action row when only the operational consequence provides it", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterReview = reviewCombatRoundDamageResult({
+      attackResultId: "3:phase1:gladiator:guard",
+      reviewedAt: "2026-01-01T00:05:15.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        operationalConsequences: [
+          {
+            accepted: true,
+            id: "manual-operational-no-action",
+            kind: "note",
+            label: "No combat action possible",
+            participantId: "guard",
+            reason: "GM accepted a clear operational no-action consequence.",
+          },
+        ],
+      },
+      state: afterDamage,
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-operational-no-action-only",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: { effects: [], events: [] },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterReview,
+    });
+
+    expect(committed.command.facts).toMatchObject({
+      createdAdditionalCombatEffectIds: [],
+      createdOperationalCombatEffectIds: [
+        expect.stringContaining("operational-manual-operational-no-action"),
+      ],
+      operationalConsequences: [
+        expect.objectContaining({ kind: "note", label: "No combat action possible" }),
+      ],
+    });
+    expect(
+      committed.combatEffects.effects.filter(
+        (effect) =>
+          effect.type === "special" && effect.description === "No combat action possible.",
+      ),
+    ).toHaveLength(1);
+
+    const restoredState = clearCombatRoundStep({
+      state: committed.state,
+      step: "phase_1_damage",
+    });
+    const restoredEffects = removeCombatRoundCommittedDamageEffects({
+      combatEffects: committed.combatEffects,
+      command: committed.command,
+    });
+
+    expect(restoredEffects.effects).toEqual([]);
+    expect(restoredState.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences).toEqual(
+      afterReview.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences,
+    );
+  });
+
+  it("commits a chest no-action critical as one next-round special row", () => {
+    const pending = prepareFailedParryPendingDamage({
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [5, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const damageResult = afterCritical.phaseResolutionResults[0]?.damageResult;
+
+    expect(damageResult?.review?.criticalEffectProposal).toMatchObject({
+      critKey: "sharp|chest|06",
+    });
+    expect(damageResult?.review?.additionalEffects).toContainEqual(
+      expect.objectContaining({
+        durationRounds: 2,
+        rowCategory: "no_combat_action",
+      }),
+    );
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-chest-no-action",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: { effects: [], events: [] },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const noActionRows = committed.combatEffects.effects.filter(
+      (effect) =>
+        effect.type === "special" && /No combat action possible/.test(effect.description ?? ""),
+    );
+
+    expect(committed.command.facts).toMatchObject({
+      createdOperationalCombatEffectIds: [],
+    });
+    expect(noActionRows).toHaveLength(1);
+    expect(noActionRows[0]).toMatchObject({
+      description: "No combat action possible next round.",
+      duration: "2",
+      effectGroup: "special",
+      status: "active",
+      targetParticipantId: "scenario-guard",
+    });
   });
 
   it("uses a second table lookup for normal hit damage", () => {
@@ -6665,7 +6852,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: "Action limited to parry.",
+        description: "Action limited to parry next round.",
         duration: "1",
         effectGroup: "special",
         id: expectedParryOnlyEffectId,
@@ -7622,6 +7809,89 @@ describe("combat round manager", () => {
       effectId: "effect-decay",
       kind: "duration_update",
       nextDuration: "1 round",
+    });
+  });
+
+  it("keeps next-round no-action effects active through the next round", () => {
+    const roundThreeState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 3 }) }),
+      "round_summary",
+    );
+    const initialEffects = combatEffectsWith([
+      {
+        description: "No combat action possible next round.",
+        duration: "2 rounds",
+        effectGroup: "special",
+        id: "next-round-no-action",
+        type: "special",
+      },
+    ]);
+    const reviewedRoundThree = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: initialEffects,
+        },
+      },
+      state: roundThreeState,
+    });
+
+    expect(reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0]).toMatchObject({
+      effectId: "next-round-no-action",
+      nextDuration: "1 round",
+    });
+
+    const committedRoundThree = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      combatEffects: initialEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewedRoundThree,
+    });
+    const activeNextRoundEffect = committedRoundThree.combatEffects.effects.find(
+      (effect) => effect.id === "next-round-no-action",
+    );
+
+    expect(activeNextRoundEffect).toMatchObject({
+      duration: "1 round",
+      status: "active",
+    });
+
+    const roundFourState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 4 }) }),
+      "round_summary",
+    );
+    const reviewedRoundFour = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: committedRoundThree.combatEffects,
+        },
+      },
+      state: roundFourState,
+    });
+
+    expect(reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0]).toMatchObject({
+      effectId: "next-round-no-action",
+      kind: "duration_expire",
+    });
+
+    const committedRoundFour = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:30.000Z",
+      },
+      combatEffects: committedRoundThree.combatEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewedRoundFour,
+    });
+
+    expect(
+      committedRoundFour.combatEffects.effects.find(
+        (effect) => effect.id === "next-round-no-action",
+      ),
+    ).toMatchObject({
+      status: "expired",
     });
   });
 

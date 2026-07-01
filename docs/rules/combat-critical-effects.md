@@ -63,9 +63,10 @@ to act. When the table provides clear drop-item, loss-of-use, or no-action signa
 identify a matching pending same-round attack, D1/D2 review proposes operational consequence rows for
 GM approval.
 
-Operational consequences are shown separately from character-sheet rows. A consequence may still
-create a visible combat/session effect when accepted, such as a dropped-item special row, but it is
-not mixed into the ordinary physical damage, bleed, modifier, fatigue, or special-effect row list.
+Operational consequences are shown separately from character-sheet rows. They primarily affect the
+round sequence and command facts, such as cancelling a pending action. A consequence may still create
+a visible combat/session effect when accepted, such as a dropped-item special row, but only when no
+equivalent proposed character-sheet row already exists.
 
 Current supported proposals are:
 
@@ -74,9 +75,11 @@ Current supported proposals are:
 - Cancel pending action: marks an unrolled pending A1/A2 attack in the same round as cancelled or
   skipped by the committed damage command. The original declaration and generated phase modifiers
   remain, because the combatant already committed to the risky action.
-- No combat action possible: creates a visible special combat effect row for clear incapacitating or
-  no-action results. The row is active immediately, but broad next-round incapacitation gating remains
-  future work.
+- No combat action possible: records the operational no-action consequence. If the critical proposal
+  already has an equivalent no-action, loss-of-use, or parry-only character-sheet row, commit writes
+  that row once and does not create a second operational special row. If no equivalent row exists,
+  the accepted consequence may create one visible special row. Broad future-round action gating
+  remains future work.
 - Note: used when the critical is clear but the app cannot safely identify the held item or pending
   attack.
 
@@ -84,6 +87,11 @@ These consequences are review drafts. The GM may uncheck or edit them before com
 damage. Undoing the commit removes the created special rows and cancellation marker, restoring the
 pending attack; undoing the critical roll removes the generated consequence drafts with the rest of
 the critical proposal.
+
+No-action deduplication is per D1/D2 commit event. "No combat action possible," "Action limited to
+parry," and loss-of-use rows should appear once unless the critical table explicitly proposes
+distinct visible effects. Covered critical minimum damage floors are audit details that can raise the
+physical damage row; they do not create separate character-sheet rows.
 
 ## Rolls inside critical effects
 
@@ -95,6 +103,8 @@ proposal for audit.
 Examples:
 
 - A duration roll such as `d4` or `d6` is rolled by the app and can populate an editable duration.
+  Effects whose source says they begin next round are stored with one extra countdown tick before SU:
+  "next round" stores as `2`, and a next-round `D6` result of `3` stores as `4`.
 - A rate roll such as `1d4` is rolled by the app once and stored in the proposal notes/roll report.
 - Unsupported formulas are shown as proposal warnings rather than guessed.
 
@@ -176,15 +186,19 @@ critical proposal rows while leaving the original dice and computed final roll a
 
 GM review remains required before any critical-derived effect rows are committed. The review is
 outcome-focused: it shows proposed physical damage, modifier, bleed, internal bleed, fatigue,
-no-action/loss-of-use, and special-note rows before commit. Bleed and internal bleed use the existing
-typed combatEffect rows when a safe rate is available. Clear no-action, collapse, and unconscious
-results become special rows such as "No combat action possible" rather than arbitrary DB modifiers.
+no-action/loss-of-use, and special-note rows before commit. Operational consequences are shown as a
+separate compact checklist, not as duplicate proposed character-sheet rows. Bleed and internal bleed
+use the existing typed combatEffect rows when a safe rate is available. Clear no-action, collapse,
+and unconscious results become special rows such as "No combat action possible" rather than arbitrary
+DB modifiers.
 Ambiguous numeric or prose-heavy rows become special notes and keep their source text for GM review
 instead of being guessed as a mechanical modifier. The full critical text is kept as reference for the
 review event/reference, not copied into every effect row. The physical damage row keeps a compact
 damage/armor/critical reference, while each effect row keeps one short actionable detail such as
-"No combat action possible.", "Action limited to parry.", or "Internal bleed: 5/10 HP per round until
-treated." Duration and modifier fields are mechanical fields: round durations are stored as numeric
-round counts when known, modifier rows store numeric modifiers only, and non-round conditions such as
-"until treated" remain in the details/status text. Automatic permanent injury and long-term
-incapacitation automation remain future table-driven work.
+"No combat action possible.", "No combat action possible next round.", "Action limited to parry.",
+or "Internal bleed: 5/10 HP per round until treated." Duration and modifier fields are mechanical
+fields: round durations are stored as numeric round counts when known, modifier rows store numeric
+modifiers only, and non-round conditions such as "until treated" remain in the details/status text.
+After the SU tick, a next-round row stored as `2` displays as duration `1` for the next round, then
+expires at the following SU. Automatic permanent injury and long-term incapacitation automation
+remain future table-driven work.

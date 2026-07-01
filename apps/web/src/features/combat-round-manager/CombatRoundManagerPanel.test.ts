@@ -201,7 +201,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("No character-sheet rows proposed.");
     expect(source).toContain("criticalEffectProposal");
     expect(source).toContain("Critical table mapping unavailable");
-    expect(source).toContain("Critical-derived rows:");
+    expect(source).not.toContain("Critical-derived rows:");
     expect(source).toContain("Critical effects unavailable:");
     expect(source).toContain("No critical effect.");
     expect(source).toContain('criticalIndexStatus === "no_effect"');
@@ -216,13 +216,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("App-side rolls:");
     expect(source).toContain("Operational consequences");
     expect(source).toContain("operationalConsequences");
-    expect(source).toContain("Consequence notes");
+    expect(source).toContain("title={consequence.reason}");
+    expect(source).not.toContain("Consequence notes");
     expect(source).toContain("Critical minimum raises damage from");
     expect(source).toContain("Calculation details");
     expect(source).toContain("Skip current action");
     expect(source).toContain("skipCombatRoundCurrentPhaseAction");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
-    expect(source).toContain("Edit character-sheet rows");
+    expect(source).not.toContain("Edit character-sheet rows");
+    expect(source).toContain("Add manual row");
     expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
     expect(source).toContain("getCombatDamageReviewDraftEffectTarget");
     expect(source).toContain("Add modifier row");
