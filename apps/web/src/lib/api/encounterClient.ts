@@ -94,7 +94,6 @@ export async function submitCombatDeclarationOnServer(input: {
 }
 
 export async function rollCombatExperienceOnServer(input: {
-  difficulty?: number;
   encounterId: string;
   scenarioParticipantId: string;
 }): Promise<{
@@ -108,7 +107,6 @@ export async function rollCombatExperienceOnServer(input: {
     participant: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/roll-combat-experience`, {
     body: JSON.stringify({
-      difficulty: input.difficulty,
       scenarioParticipantId: input.scenarioParticipantId,
     }),
     method: "POST",

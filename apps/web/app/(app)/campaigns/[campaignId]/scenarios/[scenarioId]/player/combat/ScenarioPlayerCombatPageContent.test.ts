@@ -45,6 +45,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("targetValidation");
     expect(source).toContain("declarationTargetValidationMessage");
     expect(source).toContain(
+      "combatExperienceValidationMessage ??\n                  declarationTargetValidationMessage ??\n                  currentAttackSourceValidationMessage",
+    );
+    expect(source).not.toContain(
       "declarationTargetValidationMessage ?? currentAttackSourceValidationMessage",
     );
     expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
@@ -212,6 +215,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("isCombatStartExperienceRollRequired");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
+    expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("buildCharacterSheetSummary");
     expect(source).toContain("formatCombatExperienceStatus");
@@ -222,6 +226,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Result: Active - no roll required");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain("selectedCombatExperienceResult");
+    expect(source).toContain("selectedCombatExperienceWindowOpen");
     expect(source).toContain("selectedCombatExperienceSkillTotal");
     expect(source).toContain("selectedCombatExperienceDifficulty");
     expect(source).toContain("selectedCombatExperienceNoRollAvailable");
@@ -229,6 +234,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCombatExperienceActionAvailable");
     expect(source).toContain('"Roll Combat Experience"');
     expect(source).toContain('"Confirm Combat Experience"');
+    expect(source).toContain('"Waiting for GM"');
+    expect(source).toContain("Waiting for GM to start Combat Experience rolls.");
+    expect(source).toContain("combatExperienceStatusText");
+    expect(source).toContain("combatExperienceValidationMessage");
     expect(source).toContain("rollCombatExperience()");
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");

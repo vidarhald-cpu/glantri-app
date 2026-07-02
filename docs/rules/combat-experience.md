@@ -10,6 +10,7 @@ initiative: players may resolve their own CE in any order, and the GM may resolv
 participant.
 
 - Default difficulty: `26`
+- GM open step: the GM sets/accepts the shared difficulty with Start Combat Experience rolls before players can roll or confirm
 - Roll: open-ended `1d20 + Combat Experience`, unless the displayed Combat Experience total already meets the difficulty
 - Skill total source: the displayed effective `Combat Experience` skill total from the participant character sheet/combat panel. The canonical combat value is `effectiveSkillNumber`; `totalSkill`/`totalSkillLevel` is used only as a fallback with an explicit warning.
 - Missing skill fallback: `0`, with an explicit warning/status so a spelling, casing, or serialization mismatch is visible
@@ -27,10 +28,15 @@ For example, `Combat Experience 19 + roll 8 = 27 vs 36` has `effectiveTableTotal
 resolves as Active with General `-2` for `2` rounds.
 
 The GM's active CE difficulty is stored on the combat round state, so GM and player views use the
-same number. If the Combat Experience skill total is equal to or higher than the current difficulty,
-no die roll is required. The controlling player or the GM confirms the result, the participant is
-Active with no modifier, and no General modifier row is created. The confirmation is still stored as
-a `roll_combat_experience` command, so Clear current step can undo it and return DE to the CE-needed
+same number. An absent stored difficulty means the CE roll window is still closed; Player Combat
+shows Waiting for GM until the GM starts CE rolls. The GM may update the shared difficulty before
+any CE result is recorded. After the first CE roll or no-roll confirmation, the difficulty is locked;
+changing it requires clearing the CE result state first.
+
+If the Combat Experience skill total is equal to or higher than the current difficulty, no die roll
+is required. The controlling player or the GM confirms the result, the participant is Active with no
+modifier, and no General modifier row is created. The confirmation is still stored as a
+`roll_combat_experience` command, so Clear current step can undo it and return DE to the CE-needed
 state.
 
 Participants can resolve CE and declarations non-sequentially during DE. A participant cannot

@@ -29,6 +29,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
+  isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
   type EncounterSession,
@@ -774,6 +775,9 @@ export default function ScenarioPlayerCombatPageContent({
         })
       : false;
   const selectedCombatExperienceResult = selectedRoundParticipant?.combatExperience;
+  const selectedCombatExperienceWindowOpen = combatRoundState
+    ? isCombatRoundCombatExperienceWindowOpen(combatRoundState)
+    : false;
   const selectedCombatExperienceDifficulty = combatRoundState
     ? getCombatRoundCombatExperienceDifficulty(combatRoundState)
     : 26;
@@ -975,6 +979,7 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedCombatExperienceSkillTotal = selectedCombatExperienceSkillLookup.skillTotal;
   const selectedCombatExperienceNoRollAvailable =
     selectedCombatExperienceRequired &&
+    selectedCombatExperienceWindowOpen &&
     selectedCombatExperienceSkillTotal >= selectedCombatExperienceDifficulty;
 
   const controlledEquipmentState = useMemo(() => {
@@ -1784,7 +1789,10 @@ export default function ScenarioPlayerCombatPageContent({
   const declarationControlsDisabled =
     controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
   const selectedCombatExperienceActionAvailable =
-    selectedCombatExperienceRequired && Boolean(selectedParticipant) && Boolean(encounterId);
+    selectedCombatExperienceRequired &&
+    selectedCombatExperienceWindowOpen &&
+    Boolean(selectedParticipant) &&
+    Boolean(encounterId);
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
@@ -1806,9 +1814,11 @@ export default function ScenarioPlayerCombatPageContent({
           isGameMaster,
         });
   const playerActionButtonLabel = selectedCombatExperienceRequired
-    ? selectedCombatExperienceNoRollAvailable
-      ? "Confirm Combat Experience"
-      : "Roll Combat Experience"
+    ? !selectedCombatExperienceWindowOpen
+      ? "Waiting for GM"
+      : selectedCombatExperienceNoRollAvailable
+        ? "Confirm Combat Experience"
+        : "Roll Combat Experience"
     : (attackerPrivilegedAction?.label ??
       currentParryAction?.label ??
       currentAttackAction?.label ??
@@ -1848,12 +1858,15 @@ export default function ScenarioPlayerCombatPageContent({
         : selectedParticipantHasDeclared
           ? " Declared."
           : "";
-  const declarationStatusText = isGameMaster
-    ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
-    : selectedCombatExperienceRequired
-      ? selectedCombatExperienceNoRollAvailable
-        ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
-        : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`
+  const combatExperienceStatusText = !selectedCombatExperienceWindowOpen
+    ? `Current step: ${currentCombatStepLabel}. Waiting for GM to start Combat Experience rolls.`
+    : selectedCombatExperienceNoRollAvailable
+      ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
+      : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
+  const declarationStatusText = selectedCombatExperienceRequired
+    ? combatExperienceStatusText
+    : isGameMaster
+      ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
       : currentInitiativePhase
         ? selectedParticipantRolledCurrentInitiative
           ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
@@ -1871,8 +1884,12 @@ export default function ScenarioPlayerCombatPageContent({
                 : selectedParticipantHasDeclared
                   ? `Current step: ${currentCombatStepLabel}. Declared.`
                   : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-                    ? `Current step: ${currentCombatStepLabel}.`
-                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+                  ? `Current step: ${currentCombatStepLabel}.`
+                  : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+  const combatExperienceValidationMessage =
+    selectedCombatExperienceRequired && !selectedCombatExperienceWindowOpen
+      ? "Waiting for GM to start Combat Experience rolls."
+      : undefined;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -2115,7 +2132,9 @@ export default function ScenarioPlayerCombatPageContent({
                 disabled={playerActionButtonDisabled}
                 onDeclareAction={() =>
                   void (selectedCombatExperienceRequired
-                    ? rollCombatExperience()
+                    ? selectedCombatExperienceWindowOpen
+                      ? rollCombatExperience()
+                      : undefined
                     : attackerPrivilegedAction?.kind
                       ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
                       : currentParryAction
@@ -2129,7 +2148,9 @@ export default function ScenarioPlayerCombatPageContent({
                 saving={savingCombatContext}
                 statusText={declarationStatusText}
                 validationMessage={
-                  declarationTargetValidationMessage ?? currentAttackSourceValidationMessage
+                  combatExperienceValidationMessage ??
+                  declarationTargetValidationMessage ??
+                  currentAttackSourceValidationMessage
                 }
               />
             </div>

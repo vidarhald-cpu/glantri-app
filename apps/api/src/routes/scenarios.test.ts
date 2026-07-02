@@ -393,7 +393,9 @@ function makeCombatEncounterWithResolvedCombatExperience(
 
 function setupCombatDeclarationRoute(
   input: {
+    combatExperienceDifficulty?: number;
     combatExperienceResolved?: boolean;
+    combatExperienceWindowOpen?: boolean;
     encounter?: Record<string, unknown>;
     participant?: Record<string, unknown>;
     participants?: Array<Record<string, unknown>>;
@@ -401,9 +403,19 @@ function setupCombatDeclarationRoute(
   } = {},
 ) {
   const baseEncounter = makeCombatEncounter(input.encounter);
+  const unresolvedEncounter =
+    input.combatExperienceResolved === false && input.combatExperienceWindowOpen
+      ? {
+          ...baseEncounter,
+          combatRoundState: setCombatRoundCombatExperienceDifficulty({
+            difficulty: input.combatExperienceDifficulty ?? 26,
+            state: initializeCombatRoundState({ encounter: baseEncounter as EncounterSession }),
+          }),
+        }
+      : baseEncounter;
   const encounter =
     input.combatExperienceResolved === false
-      ? baseEncounter
+      ? unresolvedEncounter
       : withResolvedCombatStartExperience(baseEncounter);
   const participant = makeCombatScenarioParticipant(input.participant);
   const participants = input.participants
@@ -2036,6 +2048,7 @@ describe("scenarios route contract", () => {
   it("allows a GM to roll combat-start Combat Experience and creates a General modifier row", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       participant: {
         snapshot: {
           displayName: "The Gladiator",
@@ -2120,7 +2133,9 @@ describe("scenarios route contract", () => {
 
   it("applies a GM-set Combat Experience difficulty to the outcome", async () => {
     setupCombatDeclarationRoute({
+      combatExperienceDifficulty: 36,
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       participant: {
         snapshot: {
           displayName: "The Gladiator",
@@ -2145,7 +2160,6 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        difficulty: 36,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-combat-experience",
@@ -2204,6 +2218,7 @@ describe("scenarios route contract", () => {
   it("lets a player roll their own combat-start Combat Experience", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       participant: {
         snapshot: {
           displayName: "The Gladiator",
@@ -2251,6 +2266,46 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("rejects player Combat Experience rolls before the GM opens CE rolls", async () => {
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      participant: {
+        snapshot: {
+          displayName: "The Gladiator",
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 10,
+                  name: "Combat Experience",
+                  skillId: "combat_experience",
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("rejects player Combat Experience rolls for another participant", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],
@@ -2263,6 +2318,7 @@ describe("scenarios route contract", () => {
     ];
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       encounter: {
         participants: encounterParticipants,
       },
@@ -2307,6 +2363,7 @@ describe("scenarios route contract", () => {
   it("lets a player confirm no-roll Combat Experience when skill meets difficulty", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       participant: {
         snapshot: {
           displayName: "The Gladiator",
@@ -2425,13 +2482,57 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().difficulty).toBe(36);
+    expect(response.json().windowOpen).toBe(true);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.combatExperienceDifficulty).toBe(36);
+  });
+
+  it("rejects GM Combat Experience difficulty changes after a CE result exists", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const openedRoundState = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      skillTotal: 26,
+      state: openedRoundState,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        combatRoundState: rolled.state,
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        difficulty: 36,
+      },
+      url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error:
+        "Combat Experience difficulty cannot be changed after rolls have been recorded. Clear Combat Experience results first.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("uses the live character sheet effective Combat Experience total when the participant snapshot omits skill data", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
+      combatExperienceWindowOpen: true,
       participant: {
         characterId: "character-1",
         snapshot: {
@@ -4617,7 +4718,10 @@ describe("scenarios route contract", () => {
 
   it("clears a combat-start Combat Experience roll and removes only its created effect row", async () => {
     const combatEncounter = makeCombatEncounter() as EncounterSession;
-    const baseState = initializeCombatRoundState({ encounter: combatEncounter });
+    const baseState = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+    });
     const existingEffect = {
       createdAt: "2026-01-01T00:00:00.000Z",
       damage: 0,

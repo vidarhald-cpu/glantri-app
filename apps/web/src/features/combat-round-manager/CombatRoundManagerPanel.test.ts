@@ -562,6 +562,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("isCombatStartExperienceRollRequired");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
+    expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
+    expect(source).toContain("hasCombatRoundCombatExperienceRoll");
     expect(source).toContain("setCombatExperienceDifficultyOnServer");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
@@ -570,13 +572,18 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Effective CE table result");
     expect(source).toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
+    expect(source).toContain("const inspectorCombatExperienceWindowOpen =");
+    expect(source).toContain("const combatExperienceRollRecorded =");
     expect(source).toContain("const activeCombatExperienceDifficulty =");
     expect(source).toContain("const inspectorCombatExperienceDifficulty =");
     expect(source).toContain('${roundState.roundNumber}:combat-experience');
     expect(source).toContain("const inspectorCombatExperienceNoRollAvailable =");
-    expect(source).toContain(
-      "inspectorCombatExperienceSkillTotal >= inspectorCombatExperienceDifficultyValue",
-    );
+    expect(source).toContain("inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty");
+    expect(source).toContain("const combatExperienceDifficultyControlsDisabled =");
+    expect(source).toContain("Set CE difficulty first");
+    expect(source).toContain("Start Combat Experience rolls");
+    expect(source).toContain("Update CE difficulty");
+    expect(source).toContain("Difficulty locked after the first CE result.");
     expect(source).toContain("Confirm Combat Experience");
     expect(source).toContain("Roll Combat Experience");
     expect(source).toContain("Roll Combat Experience before declaring an action.");
@@ -585,7 +592,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("value={inspectorCombatExperienceDifficulty}");
     expect(source).toContain("setCombatExperienceDifficultyDrafts");
     expect(source).toContain("saveCombatExperienceDifficultyDraft");
-    expect(source).toContain("onBlur={(event) =>");
+    expect(source).not.toContain("onBlur={(event) =>");
     expect(source).toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
     expect(source).toContain('inspector.step === "select_actions" &&');
@@ -593,5 +600,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollInspectorCombatExperience()");
     expect(source).toContain("Combat Experience");
     expect(source).toContain("Latest combat event");
+  });
+
+  it("uses stable unique keys for repeated warning rows", () => {
+    const source = readSource();
+
+    expect(source).not.toContain("key={warning}");
+    expect(source).not.toContain("warnings.map((warning) =>");
+    expect(source).toContain("critical-effect-proposal-warning");
+    expect(source).toContain("damage-commit-readiness-warning");
+    expect(source).toContain("end-review-health-roll-warning");
+    expect(source).toContain("end-review-warning");
   });
 });

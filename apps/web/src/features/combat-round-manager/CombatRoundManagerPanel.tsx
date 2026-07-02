@@ -72,6 +72,8 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
+  isCombatRoundCombatExperienceWindowOpen,
+  hasCombatRoundCombatExperienceRoll,
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
   recordCombatRoundCriticalRoll,
@@ -237,6 +239,15 @@ const inspectorNavStyle = {
 const compactFieldLabelStyle = {
   display: "grid",
   gap: "0.2rem",
+} as const;
+
+const compactSecondaryButtonStyle = {
+  background: "#efe7d3",
+  border: "1px solid #cbbd9f",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: 700,
+  padding: "0.45rem 0.7rem",
 } as const;
 
 interface CombatInspectorDeclarationDraft {
@@ -2561,8 +2572,8 @@ function CombatDamageReviewPanel(input: {
           ) : null}
           {criticalEffectProposal.warnings.length > 0 ? (
             <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", fontSize: "0.85rem" }}>
-              {criticalEffectProposal.warnings.map((warning) => (
-                <div key={warning}>{warning}</div>
+              {criticalEffectProposal.warnings.map((warning, index) => (
+                <div key={`critical-effect-proposal-warning:${index}:${warning}`}>{warning}</div>
               ))}
             </div>
           ) : null}
@@ -2585,8 +2596,8 @@ function CombatDamageReviewPanel(input: {
         ) : null}
         {input.commitReadiness?.warnings.length ? (
           <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", marginTop: "0.5rem" }}>
-            {input.commitReadiness.warnings.map((warning) => (
-              <div key={warning}>{warning}</div>
+            {input.commitReadiness.warnings.map((warning, index) => (
+              <div key={`damage-commit-readiness-warning:${index}:${warning}`}>{warning}</div>
             ))}
           </div>
         ) : null}
@@ -2926,8 +2937,11 @@ function CombatRoundEndReviewPanel(input: {
                           : `Bleed remains ${proposal.previousBleedRate}`}
                       </div>
                     ) : null}
-                    {proposal.warnings.map((warning) => (
-                      <div key={warning} style={{ color: "#8a3b1f", fontSize: "0.82rem" }}>
+                    {proposal.warnings.map((warning, warningIndex) => (
+                      <div
+                        key={`end-review-health-roll-warning:${proposal.id}:${warningIndex}:${warning}`}
+                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
+                      >
                         {warning}
                       </div>
                     ))}
@@ -2936,8 +2950,11 @@ function CombatRoundEndReviewPanel(input: {
               })}
             </section>
           ) : null}
-          {review.warnings.map((warning) => (
-            <div key={warning} style={{ color: "#8a3b1f", fontSize: "0.85rem" }}>
+          {review.warnings.map((warning, index) => (
+            <div
+              key={`end-review-warning:${index}:${warning}`}
+              style={{ color: "#8a3b1f", fontSize: "0.85rem" }}
+            >
               {warning}
             </div>
           ))}
@@ -3098,6 +3115,9 @@ export default function CombatRoundManagerPanel({
         })
       : false;
   const inspectorCombatExperienceResult = inspector.participant?.combatExperience;
+  const inspectorCombatExperienceWindowOpen =
+    isCombatRoundCombatExperienceWindowOpen(roundState);
+  const combatExperienceRollRecorded = hasCombatRoundCombatExperienceRoll(roundState);
   const activeCombatExperienceDifficulty = getCombatRoundCombatExperienceDifficulty(roundState);
   const inspectorCombatExperienceDifficultyKey = `${roundState.roundNumber}:combat-experience`;
   const inspectorCombatExperienceDifficulty =
@@ -3350,14 +3370,19 @@ export default function CombatRoundManagerPanel({
     [inspectorSheetSummary, selectedScenarioParticipant],
   );
   const inspectorCombatExperienceSkillTotal = inspectorCombatExperienceSkillLookup.skillTotal;
-  const inspectorCombatExperienceDifficultyValue = Number.parseInt(
+  const inspectorCombatExperienceDraftDifficultyValue = Number.parseInt(
     inspectorCombatExperienceDifficulty,
     10,
   );
   const inspectorCombatExperienceNoRollAvailable =
     inspectorCombatExperienceRequired &&
-    Number.isInteger(inspectorCombatExperienceDifficultyValue) &&
-    inspectorCombatExperienceSkillTotal >= inspectorCombatExperienceDifficultyValue;
+    inspectorCombatExperienceWindowOpen &&
+    inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
+  const combatExperienceDifficultyControlsDisabled =
+    saving ||
+    combatExperienceRollRecorded ||
+    (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
+    Boolean(inspectorSnapshot);
   const inspectorEquipmentState = useMemo(() => {
     const candidate =
       resolvedInspectorCharacterState?.equipmentState ??
@@ -3704,7 +3729,14 @@ export default function CombatRoundManagerPanel({
       inspectorRoundEndReview.proposedDamage.length > 0 ||
       inspectorRoundEndReview.proposedHealthRolls.length > 0),
   );
+  const inspectorCombatExperienceWindowValidationMessage =
+    inspector.step === "select_actions" &&
+    inspectorCombatExperienceRequired &&
+    !inspectorCombatExperienceWindowOpen
+      ? "Start Combat Experience rolls before rolling."
+      : undefined;
   const inspectorActionValidationMessage =
+    inspectorCombatExperienceWindowValidationMessage ??
     inspectorTargetValidationMessage ??
     inspectorAttackSourceValidationMessage ??
     inspectorDamageCommitValidationMessage ??
@@ -3743,9 +3775,11 @@ export default function CombatRoundManagerPanel({
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
     : inspector.step === "select_actions" && inspectorCombatExperienceRequired
-      ? inspectorCombatExperienceNoRollAvailable
-        ? "Confirm Combat Experience"
-        : "Roll Combat Experience"
+      ? !inspectorCombatExperienceWindowOpen
+        ? "Set CE difficulty first"
+        : inspectorCombatExperienceNoRollAvailable
+          ? "Confirm Combat Experience"
+          : "Roll Combat Experience"
       : inspectorIsInspectionOnly && inspector.step !== "select_actions"
       ? "Inspecting step - use Current task to resume"
       : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
@@ -3843,6 +3877,10 @@ export default function CombatRoundManagerPanel({
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
+    : inspector.step === "select_actions" &&
+        inspectorCombatExperienceRequired &&
+        !inspectorCombatExperienceWindowOpen
+      ? " Start Combat Experience rolls before rolling or declaring."
     : inspectorPhaseResolutionCursor
       ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel(
           {
@@ -4769,10 +4807,8 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    const difficulty = Number.parseInt(inspectorCombatExperienceDifficulty, 10);
-
-    if (!Number.isInteger(difficulty) || difficulty <= 0) {
-      setSaveError("Combat Experience difficulty must be a positive integer.");
+    if (!inspectorCombatExperienceWindowOpen) {
+      setSaveError("Set Combat Experience difficulty before rolling.");
       return;
     }
 
@@ -4780,7 +4816,6 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { encounter: nextEncounter, participant } = await rollCombatExperienceOnServer({
-        difficulty,
         encounterId: encounter.id,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
@@ -4816,7 +4851,7 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    if (difficulty === activeCombatExperienceDifficulty) {
+    if (difficulty === activeCombatExperienceDifficulty && inspectorCombatExperienceWindowOpen) {
       return;
     }
 
@@ -4834,6 +4869,12 @@ export default function CombatRoundManagerPanel({
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
+      setCombatExperienceDifficultyDrafts((current) => ({
+        ...current,
+        [inspectorCombatExperienceDifficultyKey]: String(
+          getCombatRoundCombatExperienceDifficulty(nextRoundState),
+        ),
+      }));
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -6157,14 +6198,7 @@ export default function CombatRoundManagerPanel({
                           <label style={compactFieldLabelStyle}>
                             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Difficulty</span>
                             <input
-                              disabled={
-                                saving ||
-                                (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
-                                Boolean(inspectorSnapshot)
-                              }
-                              onBlur={(event) =>
-                                void saveCombatExperienceDifficultyDraft(event.target.value)
-                              }
+                              disabled={combatExperienceDifficultyControlsDisabled}
                               onChange={(event) => {
                                 setCombatExperienceDifficultyDrafts((current) => ({
                                   ...current,
@@ -6176,12 +6210,38 @@ export default function CombatRoundManagerPanel({
                                   return;
                                 }
 
-                                event.currentTarget.blur();
+                                void saveCombatExperienceDifficultyDraft(event.currentTarget.value);
                               }}
                               type="number"
                               value={inspectorCombatExperienceDifficulty}
                             />
                           </label>
+                        ) : null}
+                        {inspectorCombatExperienceRequired ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                            <button
+                              disabled={
+                                combatExperienceDifficultyControlsDisabled ||
+                                !Number.isInteger(inspectorCombatExperienceDraftDifficultyValue) ||
+                                inspectorCombatExperienceDraftDifficultyValue <= 0
+                              }
+                              onClick={() => void saveCombatExperienceDifficultyDraft()}
+                              style={compactSecondaryButtonStyle}
+                              type="button"
+                            >
+                              {inspectorCombatExperienceWindowOpen
+                                ? "Update CE difficulty"
+                                : "Start Combat Experience rolls"}
+                            </button>
+                            <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                              {inspectorCombatExperienceWindowOpen
+                                ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
+                                : "Waiting for GM to start CE rolls."}
+                              {combatExperienceRollRecorded
+                                ? " Difficulty locked after the first CE result."
+                                : ""}
+                            </span>
+                          </div>
                         ) : null}
                       </section>
                     ) : null}

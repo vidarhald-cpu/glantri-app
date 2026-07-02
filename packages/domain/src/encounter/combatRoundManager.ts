@@ -2204,6 +2204,22 @@ export function getCombatRoundCombatExperienceDifficulty(state: CombatRoundState
   return normalized.combatExperienceDifficulty ?? COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
 }
 
+export function isCombatRoundCombatExperienceWindowOpen(state: CombatRoundState): boolean {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return normalized.combatExperienceDifficulty !== undefined;
+}
+
+export function hasCombatRoundCombatExperienceRoll(state: CombatRoundState): boolean {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return normalized.participants.some(
+    (participant) =>
+      participant.combatExperience?.trigger === "combat_start" &&
+      participant.combatExperience.roundNumber === normalized.roundNumber,
+  );
+}
+
 export function setCombatRoundCombatExperienceDifficulty(input: {
   difficulty: number;
   state: CombatRoundState;
@@ -2217,6 +2233,12 @@ export function setCombatRoundCombatExperienceDifficulty(input: {
 
   if (normalized.currentStep !== "select_actions") {
     throw new RangeError("Combat Experience difficulty can only be changed during declaration.");
+  }
+
+  if (hasCombatRoundCombatExperienceRoll(normalized)) {
+    throw new RangeError(
+      "Combat Experience difficulty cannot be changed after rolls have been recorded. Clear Combat Experience results first.",
+    );
   }
 
   return combatRoundStateSchema.parse({
@@ -2335,6 +2357,12 @@ export function rollCombatRoundCombatExperience(input: {
 
   if (normalized.currentStep !== "select_actions") {
     throw new RangeError("Combat Experience can only be rolled during declaration.");
+  }
+
+  if (trigger === "combat_start" && !isCombatRoundCombatExperienceWindowOpen(normalized)) {
+    throw new RangeError(
+      "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
+    );
   }
 
   if (

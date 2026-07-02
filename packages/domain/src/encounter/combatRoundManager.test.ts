@@ -54,6 +54,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
+  isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundEndReviewComplete,
   mapHitLocationAndDirectionToArmorRegion,
   parseCombatRoundArmorCoverageLabel,
@@ -78,6 +79,7 @@ import {
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
   rollCombatRoundCombatExperience,
+  hasCombatRoundCombatExperienceRoll,
   rollCombatRoundEndHealthCheck,
   removeCombatRoundCommittedDamageEffects,
   rollOpenEndedD6,
@@ -168,6 +170,16 @@ function advanceToStep(
   }
 
   return current;
+}
+
+function openCombatExperienceWindow(
+  state: ReturnType<typeof initializeCombatRoundState>,
+  difficulty = COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY,
+): ReturnType<typeof initializeCombatRoundState> {
+  return setCombatRoundCombatExperienceDifficulty({
+    difficulty,
+    state,
+  });
 }
 
 function prepareCleanRoundEndReview(
@@ -763,8 +775,34 @@ describe("combat round manager", () => {
     });
   });
 
-  it("rolls Combat Experience with default difficulty and creates a shifted passive row", () => {
+  it("keeps Combat Experience rolls closed until the GM opens the shared difficulty", () => {
     const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+
+    expect(isCombatRoundCombatExperienceWindowOpen(state)).toBe(false);
+    expect(getCombatRoundCombatExperienceDifficulty(state)).toBe(26);
+    expect(() =>
+      rollCombatRoundCombatExperience({
+        command: {
+          createdAt: "2026-01-01T00:01:00.000Z",
+        },
+        participantId: "gladiator",
+        rng: () => 0.2,
+        skillTotal: 10,
+        state,
+      }),
+    ).toThrow("Combat Experience rolls are not open. Set Combat Experience difficulty first.");
+
+    const opened = openCombatExperienceWindow(state);
+
+    expect(isCombatRoundCombatExperienceWindowOpen(opened)).toBe(true);
+    expect(getCombatRoundCombatExperienceDifficulty(opened)).toBe(26);
+    expect(hasCombatRoundCombatExperienceRoll(opened)).toBe(false);
+  });
+
+  it("rolls Combat Experience with default difficulty and creates a shifted passive row", () => {
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -815,7 +853,9 @@ describe("combat round manager", () => {
   });
 
   it("uses Combat Experience skill total 21 when rolling instead of falling back to zero", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const lookup = getParticipantCombatExperienceSkillTotalLookup({
       sheetSummary: {
         draftView: {
@@ -863,7 +903,9 @@ describe("combat round manager", () => {
   });
 
   it("confirms Combat Experience without rolling when skill total meets difficulty", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     let rngCalls = 0;
     const confirmed = rollCombatRoundCombatExperience({
       command: {
@@ -945,14 +987,42 @@ describe("combat round manager", () => {
     expect(rolled.state.combatExperienceDifficulty).toBe(36);
   });
 
+  it("locks the shared Combat Experience difficulty after the first CE result", () => {
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      36,
+    );
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.36,
+      skillTotal: 19,
+      state,
+    });
+
+    expect(hasCombatRoundCombatExperienceRoll(rolled.state)).toBe(true);
+    expect(() =>
+      setCombatRoundCombatExperienceDifficulty({
+        difficulty: 26,
+        state: rolled.state,
+      }),
+    ).toThrow(
+      "Combat Experience difficulty cannot be changed after rolls have been recorded. Clear Combat Experience results first.",
+    );
+  });
+
   it("requires a Combat Experience roll when the GM raises difficulty above skill total", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      36,
+    );
     let rngCalls = 0;
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
       },
-      difficulty: 36,
       participantId: "gladiator",
       rng: () => {
         rngCalls += 1;
@@ -978,12 +1048,14 @@ describe("combat round manager", () => {
   });
 
   it("applies a GM-raised Combat Experience difficulty to the created modifier row", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      36,
+    );
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
       },
-      difficulty: 36,
       participantId: "gladiator",
       rng: () => 0.36,
       scenarioParticipantId: "scenario-gladiator",
@@ -1025,7 +1097,9 @@ describe("combat round manager", () => {
   });
 
   it("uses the shifted default difficulty table result for final total 20", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -1047,13 +1121,15 @@ describe("combat round manager", () => {
   });
 
   it("confirms no-roll Combat Experience when skill meets an edited difficulty", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      36,
+    );
     let rngCalls = 0;
     const confirmed = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
       },
-      difficulty: 36,
       participantId: "gladiator",
       rng: () => {
         rngCalls += 1;
@@ -1078,7 +1154,9 @@ describe("combat round manager", () => {
   });
 
   it("rolls panic duration as 1d6 + 4 and stores 5-10 rounds", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const rolls = [0.2, 0.95];
     const rolled = rollCombatRoundCombatExperience({
       command: {
@@ -1100,7 +1178,9 @@ describe("combat round manager", () => {
   });
 
   it("creates active -1 duration 1 and no row for active 21+", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const activePenalty = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -1141,7 +1221,9 @@ describe("combat round manager", () => {
   });
 
   it("resolves combat-start Combat Experience in non-top-to-bottom order", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const rolledGuard = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -1192,6 +1274,7 @@ describe("combat round manager", () => {
     ).toThrow("Roll Combat Experience before declaring an action.");
     expect(canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state })).toBe(false);
 
+    const opened = openCombatExperienceWindow(state);
     const rolledGladiator = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -1199,7 +1282,7 @@ describe("combat round manager", () => {
       participantId: "gladiator",
       rng: () => 0.6,
       skillTotal: 20,
-      state,
+      state: opened,
     });
     const declaredGladiator = recordCombatRoundDeclaration({
       declaration: {
@@ -1221,7 +1304,9 @@ describe("combat round manager", () => {
   });
 
   it("keeps command-backed DE until every combat-start CE and declaration is complete", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const blocked = advanceCombatRoundStep(state, {
       command: {
         createdAt: "2026-01-01T00:00:30.000Z",
@@ -1319,7 +1404,9 @@ describe("combat round manager", () => {
   });
 
   it("rejects duplicate Combat Experience rolls for the same participant", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -1344,7 +1431,9 @@ describe("combat round manager", () => {
   });
 
   it("clears Combat Experience roll state and removes only created CE effects", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const existingEffects = combatEffectsWith([
       {
         description: "Existing modifier",
@@ -1380,7 +1469,9 @@ describe("combat round manager", () => {
   });
 
   it("clears no-roll Combat Experience confirmation without removing unrelated effects", () => {
-    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
     const existingEffects = combatEffectsWith([
       {
         description: "Existing modifier",

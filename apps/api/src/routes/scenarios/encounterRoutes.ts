@@ -24,6 +24,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
+  isCombatRoundCombatExperienceWindowOpen,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
   rollCombatRoundCombatExperience,
@@ -1166,6 +1167,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return {
           difficulty: getCombatRoundCombatExperienceDifficulty(nextRoundState),
           encounter: savedEncounter,
+          windowOpen: isCombatRoundCombatExperienceWindowOpen(nextRoundState),
         };
       } catch (error) {
         return reply.code(400).send({
@@ -1248,6 +1250,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (!isCombatRoundCombatExperienceWindowOpen(roundState)) {
+        return reply.code(409).send({
+          error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
+        });
+      }
+
       if (!gmAuthorizedOperation) {
         if (
           scenarioParticipant.controlledByUserId !== user.id ||
@@ -1283,7 +1291,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt: submittedAt,
           createdByUserId: user.id,
         },
-        difficulty: gmAuthorizedOperation ? body.difficulty : undefined,
         encounterId: encounter.id,
         participantId: encounterParticipant.id,
         scenarioId,
