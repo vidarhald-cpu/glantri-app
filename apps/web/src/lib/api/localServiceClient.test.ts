@@ -489,6 +489,50 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("rolls Combat Experience through the encounter command endpoint", async () => {
+    const combatExperience = {
+      difficulty: 26,
+      durationRounds: 1,
+      finalTotal: 19,
+      label: "Active",
+      modifierValue: -1,
+      needsEffectRow: true,
+      note: "combat exp active -1",
+      resultBand: "active_penalty",
+      rollD20: 5,
+      rollTotal: 5,
+      roundNumber: 1,
+      skillTotal: 14,
+      trigger: "combat_start",
+    };
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participant = {
+      id: "participant-1",
+    };
+    const fetchMock = stubFetch({ combatExperience, encounter, participant });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatExperienceOnServer({
+        difficulty: 28,
+        encounterId: "encounter-1",
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ combatExperience, encounter, participant });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        difficulty: 28,
+        scenarioParticipantId: "participant-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+  });
+
   it("passes selected combat round cell details when clearing a specific step", async () => {
     const encounter = {
       id: "encounter-1",

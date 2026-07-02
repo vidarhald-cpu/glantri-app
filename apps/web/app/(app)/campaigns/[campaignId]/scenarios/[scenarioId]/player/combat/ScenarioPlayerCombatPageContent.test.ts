@@ -197,4 +197,25 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
   });
+
+  it("shows Combat Experience status while GM-only rolls are pending", () => {
+    const source = readSource();
+
+    expect(source).toContain("isCombatStartExperienceRollRequired");
+    expect(source).toContain("formatCombatExperienceStatus");
+    expect(source).toContain("formatCombatExperienceResultLine");
+    expect(source).toContain("selectedCombatExperienceRequired");
+    expect(source).toContain("selectedCombatExperienceResult");
+    expect(source).toContain("selectedCombatExperienceResultPanel");
+    expect(source).toContain("Waiting for GM to roll Combat Experience.");
+    expect(source).toContain("selectedCombatExperienceRequired");
+    expect(source).toContain("? \"Waiting for GM\"");
+    expect(source).toContain(
+      "controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired",
+    );
+    expect(source).toContain("const playerActionButtonDisabled =");
+    expect(source).toContain(": selectedCombatExperienceRequired || declareActionDisabled");
+    expect(source).toContain("Combat Experience");
+    expect(source).not.toContain("rollCombatExperienceOnServer");
+  });
 });

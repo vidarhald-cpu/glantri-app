@@ -75,6 +75,7 @@ export {
   loadScenarioEncounters,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
+  rollCombatExperienceOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,

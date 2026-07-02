@@ -84,6 +84,15 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 40,
     section: "Combat",
     title: "Glantri Critical Effects"
+  },
+  {
+    audience: "GM reviewers",
+    description: "Manual reference for combat-start Combat Experience rolls, result bands, modifiers, durations, and current implementation boundaries.",
+    fileName: "combat-experience.md",
+    id: "combat-experience",
+    order: 45,
+    section: "Combat",
+    title: "Combat Experience"
   }
 ];
 

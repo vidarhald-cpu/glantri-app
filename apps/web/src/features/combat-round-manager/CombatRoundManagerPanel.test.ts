@@ -555,4 +555,29 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("if (existingAttackResult) {");
     expect(source).toContain("return;");
   });
+
+  it("requires Combat Experience before ordinary DE declaration", () => {
+    const source = readSource();
+
+    expect(source).toContain("COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY");
+    expect(source).toContain("isCombatStartExperienceRollRequired");
+    expect(source).toContain("rollCombatExperienceOnServer");
+    expect(source).toContain("getCombatExperienceSkillTotalFromSnapshot");
+    expect(source).toContain("formatCombatExperienceStatus");
+    expect(source).toContain("formatCombatExperienceCalculation");
+    expect(source).toContain("formatCombatExperienceEffectLine");
+    expect(source).toContain("const inspectorCombatExperienceRequired =");
+    expect(source).toContain("const inspectorCombatExperienceDifficulty =");
+    expect(source).toContain("Roll Combat Experience");
+    expect(source).toContain("Roll Combat Experience before declaring an action.");
+    expect(source).toContain("Boolean(inspectorSnapshot) ||");
+    expect(source).toContain("inspectorCombatExperienceRequired");
+    expect(source).toContain("value={inspectorCombatExperienceDifficulty}");
+    expect(source).toContain("setCombatExperienceDifficultyDrafts");
+    expect(source).toContain('inspector.step === "select_actions" &&');
+    expect(source).toContain("inspectorCombatExperienceRequired");
+    expect(source).toContain("rollInspectorCombatExperience()");
+    expect(source).toContain("Combat Experience");
+    expect(source).toContain("Latest combat event");
+  });
 });

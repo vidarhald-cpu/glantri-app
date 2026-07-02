@@ -7,6 +7,7 @@ import {
   commitCombatRoundPhaseDamage,
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
+  rollCombatRoundCombatExperience,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
@@ -1918,6 +1919,85 @@ describe("scenarios route contract", () => {
     });
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
+  });
+
+  it("allows a GM to roll combat-start Combat Experience and creates a General modifier row", async () => {
+    setupCombatDeclarationRoute({
+      participant: {
+        snapshot: {
+          displayName: "The Gladiator",
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 10,
+                  skillId: "combat_experience",
+                },
+              ],
+            },
+          },
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().combatExperience).toMatchObject({
+      difficulty: 26,
+      durationRounds: 2,
+      finalTotal: 15,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+      rollD20: 5,
+      skillTotal: 10,
+      trigger: "combat_start",
+    });
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].combatExperience).toMatchObject({
+      durationRounds: 2,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        difficulty: 26,
+        modifierValue: -2,
+        skillTotal: 10,
+      }),
+      participantId: "encounter-participant-1",
+      type: "roll_combat_experience",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combatEffects: expect.objectContaining({
+            effects: [
+              expect.objectContaining({
+                description: "combat exp active -2",
+                duration: "2 rounds",
+                effectGroup: "general",
+                modifierValue: -2,
+                type: "general_modifier",
+              }),
+            ],
+          }),
+        }),
+      }),
     );
   });
 
@@ -4032,6 +4112,93 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalled();
+  });
+
+  it("clears a combat-start Combat Experience roll and removes only its created effect row", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: combatEncounter });
+    const existingEffect = {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      damage: 0,
+      description: "Existing modifier",
+      effectGroup: "general" as const,
+      generalDamage: 0,
+      id: "existing-modifier",
+      modifierValue: -1,
+      sourceEventId: "existing-event",
+      status: "active" as const,
+      targetParticipantId: "participant-1",
+      type: "general_modifier" as const,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const rolled = rollCombatRoundCombatExperience({
+      combatEffects: {
+        effects: [existingEffect],
+        events: [
+          {
+            createdAt: "2026-01-01T00:00:00.000Z",
+            description: "Existing modifier",
+            id: "existing-event",
+            sourceLabel: "Manual",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+        ],
+      },
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      rng: () => 0.2,
+      scenarioParticipantId: "participant-1",
+      skillTotal: 10,
+      state: baseState,
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: rolled.state,
+      },
+      participant: {
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: rolled.combatEffects,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "select_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.participants[0].combatExperience).toBeUndefined();
+
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+    expect(updatedParticipantState.combatEffects.effects).toEqual([
+      expect.objectContaining({
+        id: "existing-modifier",
+      }),
+    ]);
+    expect(
+      updatedParticipantState.combatEffects.effects.some(
+        (effect: { description?: string }) => effect.description === "combat exp active -2",
+      ),
+    ).toBe(false);
   });
 
   it("repairs unsupported A1 persisted state even when Clear has nothing to undo", async () => {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
   type CombatRoundInitiativeRank,
@@ -25,6 +26,7 @@ import {
   getPlayerCombatCurrentRollAction,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
+  isCombatStartExperienceRollRequired,
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
   type EncounterSession,
@@ -156,6 +158,28 @@ function formatCombatAttackResultLine(input: {
   return input.participantId === input.result.defenderParticipantId
     ? `Defense: DB ${input.result.defenderDb} vs ${attackText} = ${lookupText}`
     : `Main: ${input.result.weaponName} OB ${input.result.ob} - DB ${input.result.defenderDb} + roll ${rollText} = ${lookupText}`;
+}
+
+function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult): string {
+  if (!result) {
+    return "Not rolled";
+  }
+
+  if (!result.needsEffectRow || result.modifierValue === 0) {
+    return "Active, no modifier";
+  }
+
+  return `${result.label} ${result.modifierValue}, duration ${result.durationRounds}`;
+}
+
+function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceResult): string {
+  if (!result.needsEffectRow || result.modifierValue === 0) {
+    return "Result: Active, no modifier";
+  }
+
+  return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
+    result.durationRounds === 1 ? "" : "s"
+  }`;
 }
 
 function formatResolutionStatusLabel(value: string): string {
@@ -722,6 +746,14 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined,
     [combatRoundState, selectedEncounterParticipant],
   );
+  const selectedCombatExperienceRequired =
+    combatRoundState && selectedRoundParticipant
+      ? isCombatStartExperienceRollRequired({
+          participantId: selectedRoundParticipant.participantId,
+          state: combatRoundState,
+        })
+      : false;
+  const selectedCombatExperienceResult = selectedRoundParticipant?.combatExperience;
   const selectedDeclarationStepStatus =
     selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
@@ -1576,6 +1608,13 @@ export default function ScenarioPlayerCombatPageContent({
         ],
       }
     : null;
+  const selectedCombatExperienceResultPanel = selectedCombatExperienceResult
+    ? {
+        interpretedResult: `Combat Experience ${selectedCombatExperienceResult.skillTotal} + roll ${selectedCombatExperienceResult.rollTotal} = ${selectedCombatExperienceResult.finalTotal} vs ${selectedCombatExperienceResult.difficulty}`,
+        rankLabel: "Combat Experience",
+        resultLabel: formatCombatExperienceResultLine(selectedCombatExperienceResult),
+      }
+    : null;
   const initiativeStepStatus =
     currentCombatStep === "initiative_phase_1"
       ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
@@ -1658,7 +1697,8 @@ export default function ScenarioPlayerCombatPageContent({
   const playerDeclarationLocked =
     !isGameMaster &&
     (!declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete);
-  const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
+  const declarationControlsDisabled =
+    controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete
       ? targetValidation.message
@@ -1682,17 +1722,28 @@ export default function ScenarioPlayerCombatPageContent({
           isGameMaster,
         });
   const playerActionButtonLabel =
-    attackerPrivilegedAction?.label ??
+    selectedCombatExperienceRequired
+      ? "Waiting for GM"
+      : attackerPrivilegedAction?.label ??
     currentParryAction?.label ??
     currentAttackAction?.label ??
     declarationButtonLabel;
   const playerActionButtonDisabled = attackerPrivilegedAction
-    ? controlsDisabled || savingCombatContext || attackerPrivilegedAction.disabled
+    ? selectedCombatExperienceRequired ||
+      controlsDisabled ||
+      savingCombatContext ||
+      attackerPrivilegedAction.disabled
     : currentParryAction
-      ? controlsDisabled || savingCombatContext || currentParryAction.disabled
+      ? selectedCombatExperienceRequired ||
+        controlsDisabled ||
+        savingCombatContext ||
+        currentParryAction.disabled
     : currentAttackAction
-      ? controlsDisabled || savingCombatContext || currentAttackAction.disabled
-    : declareActionDisabled;
+      ? selectedCombatExperienceRequired ||
+        controlsDisabled ||
+        savingCombatContext ||
+        currentAttackAction.disabled
+      : selectedCombatExperienceRequired || declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -1712,6 +1763,8 @@ export default function ScenarioPlayerCombatPageContent({
           : "";
   const declarationStatusText = isGameMaster
     ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
+    : selectedCombatExperienceRequired
+      ? `Current step: ${currentCombatStepLabel}. Waiting for GM to roll Combat Experience.`
     : currentInitiativePhase
       ? selectedParticipantRolledCurrentInitiative
         ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
@@ -1956,32 +2009,39 @@ export default function ScenarioPlayerCombatPageContent({
               readOnly={!isGameMaster}
               rows={modifierRows}
             />
-            <PlayerCombatActionButtonPanel
-              buttonLabel={playerActionButtonLabel}
-              disabled={playerActionButtonDisabled}
-              onDeclareAction={() =>
-                void (attackerPrivilegedAction?.kind
-                  ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                  : currentParryAction
-                    ? rollCurrentParry()
-                  : currentAttackAction
-                    ? rollPhaseAttack()
-                  : currentInitiativePhase
-                    ? rollInitiative()
-                    : saveCombatContext())
-              }
-              saving={savingCombatContext}
-              statusText={declarationStatusText}
-              validationMessage={
-                declarationTargetValidationMessage ?? currentAttackSourceValidationMessage
-              }
-            />
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              <section style={panelStyle}>
+                <strong>Combat Experience</strong>
+                <div>{formatCombatExperienceStatus(selectedCombatExperienceResult)}</div>
+              </section>
+              <PlayerCombatActionButtonPanel
+                buttonLabel={playerActionButtonLabel}
+                disabled={playerActionButtonDisabled}
+                onDeclareAction={() =>
+                  void (attackerPrivilegedAction?.kind
+                    ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                    : currentParryAction
+                      ? rollCurrentParry()
+                    : currentAttackAction
+                      ? rollPhaseAttack()
+                    : currentInitiativePhase
+                      ? rollInitiative()
+                      : saveCombatContext())
+                }
+                saving={savingCombatContext}
+                statusText={declarationStatusText}
+                validationMessage={
+                  declarationTargetValidationMessage ?? currentAttackSourceValidationMessage
+                }
+              />
+            </div>
             <PlayerCombatActionResultPanel
               result={
                 selectedCurrentPhaseResolutionResultPanel ??
                 selectedAttackerPrivilegedResultPanel ??
                 selectedCurrentAttackResultPanel ??
                 selectedRelevantInitiativeResultPanel ??
+                selectedCombatExperienceResultPanel ??
                 actionRollResult
               }
             />

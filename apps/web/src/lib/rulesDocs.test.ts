@@ -52,6 +52,12 @@ describe("rules documentation registry", () => {
           id: "combat-critical-effects",
           section: "Combat",
           title: "Glantri Critical Effects"
+        }),
+        expect.objectContaining({
+          fileName: "combat-experience.md",
+          id: "combat-experience",
+          section: "Combat",
+          title: "Combat Experience"
         })
       ])
     );
@@ -72,7 +78,8 @@ describe("rules documentation registry", () => {
       "Equipment & Encumbrance Calculations",
       "Equip Items Calculations",
       "Glantri Combat To Hit / Damage",
-      "Glantri Critical Effects"
+      "Glantri Critical Effects",
+      "Combat Experience"
     ]);
   });
 
@@ -127,6 +134,18 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).not.toContain("Standard value");
     expect(model.selectedDocument.markdown).toContain("Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)");
     expect(model.selectedDocument.markdown).toContain("Skill group cost = floor(0.6 * total individual cost of active group skills)");
+  });
+
+  it("loads the Combat Experience document with current result bands", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-experience"
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat Experience");
+    expect(model.selectedDocument.markdown).toContain("# Combat Experience");
+    expect(model.selectedDocument.markdown).toContain("Default difficulty: `26`");
+    expect(model.selectedDocument.markdown).toContain("`<= 5` | Panic | `-4`");
+    expect(model.selectedDocument.markdown).toContain("does not restrict player action dropdowns");
   });
 
   it("loads the equipment encumbrance document with location and formula content", async () => {

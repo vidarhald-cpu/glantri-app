@@ -19,9 +19,11 @@ import {
   getCombatRoundAttackResultById,
   getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatExperienceSkillTotalFromSnapshot,
   initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
+  rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
   recordCombatRoundHitLocationRoll,
@@ -29,6 +31,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
+  removeCombatRoundCombatExperienceEffects,
   removeCombatRoundCommittedDamageEffects,
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
@@ -210,6 +213,27 @@ function parseCombatInitiativeBody(body: unknown): {
     initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
     initiativeModifierAdjustment:
       typeof initiativeModifierAdjustment === "number" ? initiativeModifierAdjustment : undefined,
+  };
+}
+
+function parseCombatExperienceBody(body: unknown): {
+  difficulty?: number;
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Combat Experience payload");
+  const parsed = parseParticipantCommandBody(value, "Combat Experience payload");
+  const difficulty = value.difficulty;
+
+  if (
+    difficulty !== undefined &&
+    (typeof difficulty !== "number" || !Number.isInteger(difficulty) || difficulty <= 0)
+  ) {
+    throw new Error("difficulty must be a positive integer.");
+  }
+
+  return {
+    ...parsed,
+    difficulty: typeof difficulty === "number" ? difficulty : undefined,
   };
 }
 
@@ -1025,6 +1049,123 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/encounters/:encounterId/combat-round/roll-combat-experience", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          error: "Only GM users can roll Combat Experience in this slice.",
+        });
+      }
+
+      const body = parseCombatExperienceBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+
+      if (roundState.currentStep !== "select_actions") {
+        return reply.code(409).send({
+          error: "Combat Experience is only open during declaration.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const rolled = rollCombatRoundCombatExperience({
+        combatEffects: scenarioParticipant.state.combatEffects,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        difficulty: body.difficulty,
+        encounterId: encounter.id,
+        participantId: encounterParticipant.id,
+        scenarioId,
+        scenarioParticipantId: scenarioParticipant.id,
+        skillTotal: getCombatExperienceSkillTotalFromSnapshot(scenarioParticipant.snapshot),
+        state: roundState,
+        trigger: "combat_start",
+      });
+      const savedParticipant = await encounterService.updateScenarioParticipantState({
+        participantId: scenarioParticipant.id,
+        scenarioId,
+        state: {
+          ...scenarioParticipant.state,
+          combatEffects: rolled.combatEffects,
+        },
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: rolled.state,
+          currentRound: rolled.state.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return {
+        combatExperience: rolled.result,
+        encounter: savedEncounter,
+        participant: savedParticipant,
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll Combat Experience.",
+      });
+    }
+  });
+
   app.post("/encounters/:encounterId/combat-round/roll-attack", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -1836,6 +1977,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "commit_phase_damage" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedCombatExperienceCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "roll_combat_experience" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedRoundEndParticipantReviewCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -1878,6 +2025,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const updatedParticipants =
         declarationClearEncounterParticipantIds.size > 0 ||
+        removedCombatExperienceCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
         removedRoundEndParticipantReviewCommands.length > 0 ||
         removedRoundEndHealthCheckCommands.length > 0
@@ -1899,6 +2047,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                       ...participant,
                       state: nextState,
                     });
+                  }
+
+                  for (const command of removedCombatExperienceCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combatEffects: removeCombatRoundCombatExperienceEffects({
+                        combatEffects: nextState.combatEffects,
+                        command,
+                      }),
+                    };
                   }
 
                   for (const command of removedCommittedDamageCommands) {
