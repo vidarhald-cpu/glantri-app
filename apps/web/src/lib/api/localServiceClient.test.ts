@@ -517,7 +517,6 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.rollCombatExperienceOnServer({
-        difficulty: 28,
         encounterId: "encounter-1",
         scenarioParticipantId: "participant-1",
       }),
@@ -525,7 +524,6 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
-        difficulty: 28,
         scenarioParticipantId: "participant-1",
       },
       method: "POST",
