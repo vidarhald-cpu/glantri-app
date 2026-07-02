@@ -559,9 +559,10 @@ describe("CombatRoundManagerPanel", () => {
   it("requires Combat Experience before ordinary DE declaration", () => {
     const source = readSource();
 
-    expect(source).toContain("COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY");
     expect(source).toContain("isCombatStartExperienceRollRequired");
     expect(source).toContain("rollCombatExperienceOnServer");
+    expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
+    expect(source).toContain("setCombatExperienceDifficultyOnServer");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceCalculation");
@@ -569,7 +570,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Effective CE table result");
     expect(source).toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
+    expect(source).toContain("const activeCombatExperienceDifficulty =");
     expect(source).toContain("const inspectorCombatExperienceDifficulty =");
+    expect(source).toContain('${roundState.roundNumber}:combat-experience');
     expect(source).toContain("const inspectorCombatExperienceNoRollAvailable =");
     expect(source).toContain(
       "inspectorCombatExperienceSkillTotal >= inspectorCombatExperienceDifficultyValue",
@@ -581,6 +584,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("value={inspectorCombatExperienceDifficulty}");
     expect(source).toContain("setCombatExperienceDifficultyDrafts");
+    expect(source).toContain("saveCombatExperienceDifficultyDraft");
+    expect(source).toContain("onBlur={(event) =>");
+    expect(source).toContain('event.key !== "Enter"');
+    expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
     expect(source).toContain('inspector.step === "select_actions" &&');
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");

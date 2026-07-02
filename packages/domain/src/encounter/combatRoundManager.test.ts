@@ -46,6 +46,9 @@ import {
   getLatestCombatEventSummary,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundDamageSubstate,
+  getCombatRoundCombatExperienceDifficulty,
+  getFirstCombatStartExperienceRequiredParticipantId,
+  getFirstCombatRoundDeclarationRequiredParticipantId,
   getCombatRoundStartNextRoundBlocker,
   getCombatExperienceSkillTotalFromSnapshot,
   getParticipantCombatExperienceSkillTotalLookup,
@@ -78,6 +81,7 @@ import {
   rollCombatRoundEndHealthCheck,
   removeCombatRoundCommittedDamageEffects,
   rollOpenEndedD6,
+  setCombatRoundCombatExperienceDifficulty,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
   setCombatRoundParticipantStepStatus,
@@ -691,7 +695,7 @@ describe("combat round manager", () => {
     });
   });
 
-  it("reads displayed Combat Experience skill total from participant sheet summary", () => {
+  it("reads displayed effective Combat Experience skill total from participant sheet summary", () => {
     const lookup = getParticipantCombatExperienceSkillTotalLookup({
       snapshot: {
         sheetSummary: {
@@ -699,10 +703,10 @@ describe("combat round manager", () => {
             skills: [
               { effectiveSkillNumber: 5, name: "Perception", skillId: "perception" },
               {
-                effectiveSkillNumber: 14,
+                effectiveSkillNumber: 21,
                 name: "Combat Experience",
                 skillId: "combat_experience",
-                totalSkill: 21,
+                totalSkill: 14,
               },
             ],
           },
@@ -713,7 +717,7 @@ describe("combat round manager", () => {
     expect(lookup).toMatchObject({
       matchedIdentifier: "combat_experience",
       skillTotal: 21,
-      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
+      source: "participant.snapshot.sheetSummary.draftView.skills.effectiveSkillNumber",
     });
     expect(
       getCombatExperienceSkillTotalFromSnapshot({
@@ -721,10 +725,10 @@ describe("combat round manager", () => {
           draftView: {
             skills: [
               {
-                effectiveSkillNumber: 14,
+                effectiveSkillNumber: 21,
                 name: "Combat Experience",
                 skillId: "combat_experience",
-                totalSkill: 21,
+                totalSkill: 14,
               },
             ],
           },
@@ -734,7 +738,7 @@ describe("combat round manager", () => {
     expect(getCombatExperienceSkillTotalFromSnapshot({ sheetSummary: {} })).toBe(0);
   });
 
-  it("falls back to effective Combat Experience XP with an explicit warning", () => {
+  it("falls back to total Combat Experience skill with an explicit warning", () => {
     expect(
       getParticipantCombatExperienceSkillTotalLookup({
         snapshot: {
@@ -742,9 +746,9 @@ describe("combat round manager", () => {
             draftView: {
               skills: [
                 {
-                  effectiveSkillNumber: 14,
                   name: "combatExperience",
                   skillId: "combatExperience",
+                  totalSkill: 14,
                 },
               ],
             },
@@ -754,9 +758,8 @@ describe("combat round manager", () => {
     ).toMatchObject({
       matchedIdentifier: "combatExperience",
       skillTotal: 14,
-      source: "participant.snapshot.sheetSummary.draftView.skills.effectiveSkillNumber",
-      warning:
-        "Combat Experience final total was unavailable; using effectiveSkillNumber without linked stats.",
+      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
+      warning: "Combat Experience effectiveSkillNumber was unavailable; using totalSkill fallback.",
     });
   });
 
@@ -818,11 +821,11 @@ describe("combat round manager", () => {
         draftView: {
           skills: [
             {
-              effectiveSkillNumber: 7,
+              effectiveSkillNumber: 21,
               linkedStatAverage: 14,
               name: "Combat Experience",
               skillId: "combat_experience",
-              totalSkill: 21,
+              totalSkill: 7,
             },
           ],
         },
@@ -846,7 +849,7 @@ describe("combat round manager", () => {
       rollD20: 5,
       rollTotal: 5,
       skillTotal: 21,
-      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+      skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
     });
     expect(rolled.state.commands.at(-1)?.facts).toMatchObject({
       difficulty: 26,
@@ -855,7 +858,7 @@ describe("combat round manager", () => {
       finalTotal: 26,
       rollTotal: 5,
       skillTotal: 21,
-      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+      skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
     });
   });
 
@@ -905,6 +908,41 @@ describe("combat round manager", () => {
       },
       type: "roll_combat_experience",
     });
+  });
+
+  it("stores a shared Combat Experience difficulty and uses it for later rolls", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const edited = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 36,
+      state,
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.36,
+      skillTotal: 19,
+      state: edited,
+    });
+
+    expect(getCombatRoundCombatExperienceDifficulty(edited)).toBe(36);
+    expect(
+      getCombatRoundCombatExperienceDifficulty(
+        initializeCombatRoundState({
+          encounter: {
+            ...encounter({ combatRoundState: edited, currentRound: 1 }),
+          },
+        }),
+      ),
+    ).toBe(36);
+    expect(rolled.result).toMatchObject({
+      difficulty: 36,
+      effectiveTableTotal: 12,
+      finalTotal: 27,
+      modifierValue: -2,
+    });
+    expect(rolled.state.combatExperienceDifficulty).toBe(36);
   });
 
   it("requires a Combat Experience roll when the GM raises difficulty above skill total", () => {
@@ -1102,7 +1140,87 @@ describe("combat round manager", () => {
     expect(activeNoPenalty.combatEffects.effects).toHaveLength(1);
   });
 
-  it("keeps command-backed DE on Combat Experience until every combat-start roll is complete", () => {
+  it("resolves combat-start Combat Experience in non-top-to-bottom order", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const rolledGuard = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "player-guard",
+      },
+      participantId: "guard",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state,
+    });
+    const rolledGladiator = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "player-gladiator",
+      },
+      participantId: "gladiator",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state: rolledGuard.state,
+    });
+
+    expect(rolledGuard.state.participants[1]?.combatExperience).toBeDefined();
+    expect(rolledGuard.state.participants[0]?.combatExperience).toBeUndefined();
+    expect(rolledGladiator.state.commands.map((command) => command.participantId)).toEqual([
+      "guard",
+      "gladiator",
+    ]);
+    expect(getFirstCombatStartExperienceRequiredParticipantId(rolledGladiator.state)).toBeUndefined();
+  });
+
+  it("blocks declaration until CE is resolved and allows it before others complete CE", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+
+    expect(() =>
+      recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "attack_parry",
+          phaseContexts: {
+            phase1: testPhaseContext("guard"),
+            phase2: testPhaseContext("guard"),
+          },
+          roundNumber: 1,
+        },
+        participantId: "gladiator",
+        state,
+        submittedBy: "player",
+      }),
+    ).toThrow("Roll Combat Experience before declaring an action.");
+    expect(canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state })).toBe(false);
+
+    const rolledGladiator = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state,
+    });
+    const declaredGladiator = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("guard"),
+          phase2: testPhaseContext("guard"),
+        },
+        roundNumber: 1,
+      },
+      participantId: "gladiator",
+      state: rolledGladiator.state,
+      submittedBy: "player",
+    });
+
+    expect(getFirstCombatStartExperienceRequiredParticipantId(declaredGladiator)).toBe("guard");
+    expect(declaredGladiator.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(declaredGladiator.participants[1]?.combatExperience).toBeUndefined();
+  });
+
+  it("keeps command-backed DE until every combat-start CE and declaration is complete", () => {
     const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
     const blocked = advanceCombatRoundStep(state, {
       command: {
@@ -1150,7 +1268,79 @@ describe("combat round manager", () => {
       },
     });
 
-    expect(advanced.currentStep).toBe("review_action_modifiers");
+    expect(getFirstCombatRoundDeclarationRequiredParticipantId(rolledGuard.state)).toBe(
+      "gladiator",
+    );
+    expect(advanced.currentStep).toBe("select_actions");
+    expect(advanced.currentCursor?.participantId).toBe("gladiator");
+
+    const declaredGladiator = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("guard"),
+          phase2: testPhaseContext("guard"),
+        },
+        roundNumber: 1,
+      },
+      participantId: "gladiator",
+      state: rolledGuard.state,
+      submittedBy: "player",
+    });
+    const declarationBlocked = advanceCombatRoundStep(declaredGladiator, {
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+      },
+    });
+
+    expect(declarationBlocked.currentStep).toBe("select_actions");
+    expect(declarationBlocked.currentCursor?.participantId).toBe("guard");
+
+    const declaredGuard = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("gladiator"),
+          phase2: testPhaseContext("gladiator"),
+        },
+        roundNumber: 1,
+      },
+      participantId: "guard",
+      state: declaredGladiator,
+      submittedBy: "player",
+    });
+    const fullyAdvanced = advanceCombatRoundStep(declaredGuard, {
+      command: {
+        createdAt: "2026-01-01T00:03:30.000Z",
+      },
+    });
+
+    expect(fullyAdvanced.currentStep).toBe("review_action_modifiers");
+  });
+
+  it("rejects duplicate Combat Experience rolls for the same participant", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state,
+    });
+
+    expect(() =>
+      rollCombatRoundCombatExperience({
+        command: {
+          createdAt: "2026-01-01T00:02:00.000Z",
+        },
+        participantId: "gladiator",
+        rng: () => 0.6,
+        skillTotal: 20,
+        state: rolled.state,
+      }),
+    ).toThrow("Combat Experience already rolled for this participant.");
   });
 
   it("clears Combat Experience roll state and removes only created CE effects", () => {
@@ -2546,7 +2736,7 @@ describe("combat round manager", () => {
     expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("pending");
   });
 
-  it("unwinds top-advance DE skip commands in reverse participant order", () => {
+  it("blocks command-backed DE top advance until declarations are complete", () => {
     const initial = initializeCombatRoundState({ encounter: encounter() });
     const advanced = advanceCombatRoundStep(initial, {
       command: {
@@ -2554,50 +2744,16 @@ describe("combat round manager", () => {
         createdByUserId: "gm-1",
       },
     });
-    const cleared = clearCombatRoundStep({
-      state: {
-        ...advanced,
-        selectedParticipantId: "gladiator",
-        selectedStep: "review_action_modifiers",
-      },
-      step: "review_action_modifiers",
-    });
-    const clearedAgain = clearCombatRoundStep({
-      state: cleared,
-      step: "select_actions",
-    });
 
-    expect(advanced.currentStep).toBe("review_action_modifiers");
-    expect(advanced.commands.map((command) => command.participantId)).toEqual([
-      "gladiator",
-      "guard",
-    ]);
-    expect(advanced.commands.map((command) => command.type)).toEqual([
-      "declare_action",
-      "declare_action",
-    ]);
-    expect(advanced.participants[0]?.stepStatuses.select_actions).toBe("locked");
-    expect(advanced.participants[1]?.stepStatuses.select_actions).toBe("locked");
-    expect(cleared.commands).toHaveLength(1);
-    expect(cleared.currentCursor).toEqual({
-      participantId: "guard",
-      roundNumber: 3,
-      step: "DE",
-    });
-    expect(cleared.selectedParticipantId).toBe("guard");
-    expect(cleared.selectedStep).toBe("select_actions");
-    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("locked");
-    expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("pending");
-    expect(clearedAgain.commands).toEqual([]);
-    expect(clearedAgain.currentCursor).toEqual({
+    expect(advanced.currentStep).toBe("select_actions");
+    expect(advanced.commands).toEqual([]);
+    expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
       step: "DE",
     });
-    expect(clearedAgain.selectedParticipantId).toBe("gladiator");
-    expect(clearedAgain.selectedStep).toBe("select_actions");
-    expect(clearedAgain.participants[0]?.stepStatuses.select_actions).toBe("pending");
-    expect(clearedAgain.participants[1]?.stepStatuses.select_actions).toBe("pending");
+    expect(advanced.selectedParticipantId).toBe("gladiator");
+    expect(advanced.selectedStep).toBe("select_actions");
   });
 
   it("maps initiative and action review steps to their initiative phase", () => {

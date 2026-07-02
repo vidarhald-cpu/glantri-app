@@ -4,11 +4,14 @@ Combat Experience is a combat-start readiness roll in the current round manager 
 
 ## Combat-Start Roll
 
-At the start of combat, each active participant must resolve Combat Experience before ordinary declaration in DE proceeds.
+At the start of combat, each active participant must resolve Combat Experience before that
+participant can make an ordinary DE declaration. CE is an open declaration-window roll, similar to
+initiative: players may resolve their own CE in any order, and the GM may resolve CE for any active
+participant.
 
 - Default difficulty: `26`
 - Roll: open-ended `1d20 + Combat Experience`, unless the displayed Combat Experience total already meets the difficulty
-- Skill total source: the displayed `Combat Experience` skill total from the participant character sheet/combat panel. The lookup prefers the sheet summary `totalSkill`/`totalSkillLevel`; if that final total is unavailable it reconstructs `effectiveSkillNumber + linkedStatAverage`; it falls back to bare `effectiveSkillNumber` only with an explicit warning.
+- Skill total source: the displayed effective `Combat Experience` skill total from the participant character sheet/combat panel. The canonical combat value is `effectiveSkillNumber`; `totalSkill`/`totalSkillLevel` is used only as a fallback with an explicit warning.
 - Missing skill fallback: `0`, with an explicit warning/status so a spelling, casing, or serialization mismatch is visible
 - Current trigger: `combat_start`
 
@@ -23,10 +26,18 @@ The existing table bands are read from `effectiveTableTotal`, not directly from 
 For example, `Combat Experience 19 + roll 8 = 27 vs 36` has `effectiveTableTotal = 12`, so it
 resolves as Active with General `-2` for `2` rounds.
 
-If the Combat Experience skill total is equal to or higher than the current difficulty, no die roll
-is required. The GM confirms the result, the participant is Active with no modifier, and no General
-modifier row is created. The confirmation is still stored as a `roll_combat_experience` command, so
-Clear current step can undo it and return DE to the CE-needed state.
+The GM's active CE difficulty is stored on the combat round state, so GM and player views use the
+same number. If the Combat Experience skill total is equal to or higher than the current difficulty,
+no die roll is required. The controlling player or the GM confirms the result, the participant is
+Active with no modifier, and no General modifier row is created. The confirmation is still stored as
+a `roll_combat_experience` command, so Clear current step can undo it and return DE to the CE-needed
+state.
+
+Participants can resolve CE and declarations non-sequentially during DE. A participant cannot
+declare until their CE is resolved, but they may declare after their own CE is resolved even if other
+participants still need CE. Advancing to M1 remains blocked until all active participants have
+resolved required CE and submitted valid declarations, unless an explicit GM override workflow is
+added separately.
 
 ## Result Table
 
@@ -58,4 +69,4 @@ command-created CE modifier row, while clearing a no-roll confirmation removes n
 
 ## Current Boundary
 
-This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the CE roll before declaration. Player-originated CE rolls, critical-triggered CE rerolls, simultaneous-attack CE rolls, and ordinary non-combat CE skill-roll behavior are follow-up work.
+This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the CE roll before declaration. Critical-triggered CE rerolls, simultaneous-attack CE rolls, and ordinary non-combat CE skill-roll behavior are follow-up work.

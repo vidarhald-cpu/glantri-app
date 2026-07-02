@@ -33,7 +33,6 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
-  COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   buildCombatRoundPhaseResolutionResult,
@@ -48,6 +47,7 @@ import {
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
   getParticipantCombatExperienceSkillTotalLookup,
+  getCombatRoundCombatExperienceDifficulty,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
@@ -102,6 +102,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
+  setCombatExperienceDifficultyOnServer,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
 import {
@@ -3097,14 +3098,13 @@ export default function CombatRoundManagerPanel({
         })
       : false;
   const inspectorCombatExperienceResult = inspector.participant?.combatExperience;
-  const inspectorCombatExperienceDifficultyKey = inspector.participant
-    ? `${roundState.roundNumber}:${inspector.participant.participantId}:combat-experience`
-    : undefined;
+  const activeCombatExperienceDifficulty = getCombatRoundCombatExperienceDifficulty(roundState);
+  const inspectorCombatExperienceDifficultyKey = `${roundState.roundNumber}:combat-experience`;
   const inspectorCombatExperienceDifficulty =
     inspectorCombatExperienceDifficultyKey &&
     combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey] !== undefined
       ? combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey]
-      : String(COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY);
+      : String(activeCombatExperienceDifficulty);
   const roundEndReviewComplete =
     roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState);
   const roundEndStartNextRoundBlocker =
@@ -3742,14 +3742,14 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
-    : inspectorIsInspectionOnly
+    : inspector.step === "select_actions" && inspectorCombatExperienceRequired
+      ? inspectorCombatExperienceNoRollAvailable
+        ? "Confirm Combat Experience"
+        : "Roll Combat Experience"
+      : inspectorIsInspectionOnly && inspector.step !== "select_actions"
       ? "Inspecting step - use Current task to resume"
-      : inspector.step === "select_actions" && inspectorCombatExperienceRequired
-        ? inspectorCombatExperienceNoRollAvailable
-          ? "Confirm Combat Experience"
-          : "Roll Combat Experience"
-        : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-          ? "Preparing round-end review"
+      : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+        ? "Preparing round-end review"
           : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
             ? inspectorRoundEndReviewHasProposals
               ? "Commit participant SU review"
@@ -4802,6 +4802,44 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll Combat Experience.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCombatExperienceDifficultyDraft(value = inspectorCombatExperienceDifficulty) {
+    const difficulty = Number.parseInt(value, 10);
+
+    if (!Number.isInteger(difficulty) || difficulty <= 0) {
+      setSaveError("Combat Experience difficulty must be a positive integer.");
+      return;
+    }
+
+    if (difficulty === activeCombatExperienceDifficulty) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter } = await setCombatExperienceDifficultyOnServer({
+        difficulty,
+        encounterId: encounter.id,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      });
+
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to set Combat Experience difficulty.",
       );
     } finally {
       setSaving(false);
@@ -6120,17 +6158,25 @@ export default function CombatRoundManagerPanel({
                             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Difficulty</span>
                             <input
                               disabled={
-                                saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
+                                saving ||
+                                (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
+                                Boolean(inspectorSnapshot)
+                              }
+                              onBlur={(event) =>
+                                void saveCombatExperienceDifficultyDraft(event.target.value)
                               }
                               onChange={(event) => {
-                                if (!inspectorCombatExperienceDifficultyKey) {
-                                  return;
-                                }
-
                                 setCombatExperienceDifficultyDrafts((current) => ({
                                   ...current,
                                   [inspectorCombatExperienceDifficultyKey]: event.target.value,
                                 }));
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") {
+                                  return;
+                                }
+
+                                event.currentTarget.blur();
                               }}
                               type="number"
                               value={inspectorCombatExperienceDifficulty}
@@ -6212,7 +6258,7 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorActionButtonLabel}
                       disabled={
                         saving ||
-                        inspectorIsInspectionOnly ||
+                        (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
                         Boolean(inspectorActionValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
                         inspectorDamageCommitted ||

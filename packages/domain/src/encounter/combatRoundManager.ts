@@ -1484,6 +1484,7 @@ export const combatRoundStepSnapshotSchema = z.object({
 
 export const completedCombatRoundSchema = z.object({
   activeParticipantId: idSchema.optional(),
+  combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
   completedAt: z.string().datetime().optional(),
   completedByUserId: idSchema.optional(),
@@ -1503,6 +1504,7 @@ export const completedCombatRoundSchema = z.object({
 
 export const combatRoundStateSchema = z.object({
   activeParticipantId: idSchema.optional(),
+  combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
@@ -1749,34 +1751,25 @@ export function getParticipantCombatExperienceSkillTotalLookup(
         continue;
       }
 
+      const effectiveSkillNumber = readCombatRoundNumber(skill.effectiveSkillNumber);
       const totalSkill =
         readCombatRoundNumber(skill.totalSkill) ?? readCombatRoundNumber(skill.totalSkillLevel);
-      const effectiveSkillNumber = readCombatRoundNumber(skill.effectiveSkillNumber);
-      const linkedStatAverage = readCombatRoundNumber(skill.linkedStatAverage);
-
-      if (totalSkill !== undefined) {
-        return {
-          matchedIdentifier,
-          skillTotal: totalSkill,
-          source: `${skillList.label}.totalSkill`,
-        };
-      }
-
-      if (effectiveSkillNumber !== undefined && linkedStatAverage !== undefined) {
-        return {
-          matchedIdentifier,
-          skillTotal: effectiveSkillNumber + linkedStatAverage,
-          source: `${skillList.label}.effectiveSkillNumber+linkedStatAverage`,
-        };
-      }
 
       if (effectiveSkillNumber !== undefined) {
         return {
           matchedIdentifier,
           skillTotal: effectiveSkillNumber,
           source: `${skillList.label}.effectiveSkillNumber`,
+        };
+      }
+
+      if (totalSkill !== undefined) {
+        return {
+          matchedIdentifier,
+          skillTotal: totalSkill,
+          source: `${skillList.label}.totalSkill`,
           warning:
-            "Combat Experience final total was unavailable; using effectiveSkillNumber without linked stats.",
+            "Combat Experience effectiveSkillNumber was unavailable; using totalSkill fallback.",
         };
       }
 
@@ -2205,6 +2198,33 @@ export function isCombatStartExperienceRollRequired(input: {
   );
 }
 
+export function getCombatRoundCombatExperienceDifficulty(state: CombatRoundState): number {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return normalized.combatExperienceDifficulty ?? COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
+}
+
+export function setCombatRoundCombatExperienceDifficulty(input: {
+  difficulty: number;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const difficulty = Math.trunc(input.difficulty);
+
+  if (!Number.isInteger(difficulty) || difficulty <= 0) {
+    throw new RangeError("Combat Experience difficulty must be a positive integer.");
+  }
+
+  if (normalized.currentStep !== "select_actions") {
+    throw new RangeError("Combat Experience difficulty can only be changed during declaration.");
+  }
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    combatExperienceDifficulty: difficulty,
+  });
+}
+
 export function getFirstCombatStartExperienceRequiredParticipantId(
   state: CombatRoundState,
 ): string | undefined {
@@ -2215,6 +2235,39 @@ export function getFirstCombatStartExperienceRequiredParticipantId(
       participantId: participant.participantId,
       state: normalized,
     }),
+  )?.participantId;
+}
+
+function isCombatRoundDeclarationComplete(participant: CombatRoundParticipantState): boolean {
+  const declarationStatus = participant.stepStatuses.select_actions ?? "pending";
+  const declarationTargetValidation = participant.declaration
+    ? validateCombatDeclarationTargets({
+        actionId: participant.declaration.actionId,
+        phaseContexts: participant.declaration.phaseContexts,
+        secondaryActionId: participant.declaration.secondaryActionId,
+      })
+    : undefined;
+  const hasCompleteStatus =
+    declarationStatus === "submitted" ||
+    declarationStatus === "gmEdited" ||
+    declarationStatus === "locked" ||
+    declarationStatus === "complete" ||
+    declarationStatus === "skipped";
+
+  if (participant.declaration && !declarationTargetValidation?.valid) {
+    return false;
+  }
+
+  return hasCompleteStatus || Boolean(participant.declaration && declarationTargetValidation?.valid);
+}
+
+export function getFirstCombatRoundDeclarationRequiredParticipantId(
+  state: CombatRoundState,
+): string | undefined {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return normalized.participants.find(
+    (participant) => !isCombatRoundDeclarationComplete(participant),
   )?.participantId;
 }
 
@@ -2292,7 +2345,7 @@ export function rollCombatRoundCombatExperience(input: {
   }
 
   const rng = input.rng ?? Math.random;
-  const difficulty = input.difficulty ?? COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
+  const difficulty = input.difficulty ?? getCombatRoundCombatExperienceDifficulty(normalized);
   const skillTotal = Math.trunc(input.skillTotal ?? 0);
   const noRollRequired = skillTotal >= difficulty;
   const roll = noRollRequired ? undefined : rollOpenEndedD20(rng);
@@ -2439,6 +2492,7 @@ export function rollCombatRoundCombatExperience(input: {
     state: combatRoundStateSchema.parse({
       ...normalized,
       commands: [...normalized.commands, command],
+      combatExperienceDifficulty: difficulty,
       currentCursor: afterCursor,
       currentStep: "select_actions",
       participants: normalized.participants.map((entry) =>
@@ -9623,6 +9677,7 @@ export function initializeCombatRoundState(input: {
 
   return {
     activeParticipantId,
+    combatExperienceDifficulty: existing?.combatExperienceDifficulty,
     commands,
     currentCursor: fallbackCursor
       ? fallbackCursor
@@ -9792,6 +9847,22 @@ export function advanceCombatRoundStep(
         selectedStep: "select_actions",
       });
     }
+
+    const declarationParticipantId = getFirstCombatRoundDeclarationRequiredParticipantId(normalized);
+
+    if (declarationParticipantId) {
+      return combatRoundStateSchema.parse({
+        ...normalized,
+        currentCursor: getDefaultCombatRoundCursor({
+          participantId: declarationParticipantId,
+          roundNumber: normalized.roundNumber,
+          step: "select_actions",
+        }),
+        currentStep: "select_actions",
+        selectedParticipantId: declarationParticipantId,
+        selectedStep: "select_actions",
+      });
+    }
   }
 
   if (startsNextRound) {
@@ -9903,6 +9974,7 @@ export function advanceCombatRoundStep(
     return combatRoundStateSchema.parse({
       ...completedRoundState,
       activeParticipantId: undefined,
+      combatExperienceDifficulty: undefined,
       commands: [],
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
@@ -9995,9 +10067,21 @@ export function recordCombatRoundDeclaration(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
+  const normalizedInput = combatRoundStateSchema.parse(input.state);
+
+  if (
+    normalizedInput.currentStep === "select_actions" &&
+    isCombatStartExperienceRollRequired({
+      participantId: input.participantId,
+      state: normalizedInput,
+    })
+  ) {
+    throw new RangeError("Roll Combat Experience before declaring an action.");
+  }
+
   const withoutStaleResolution = clearCombatRoundParticipantOutgoingResolutionState({
     participantId: input.participantId,
-    state: input.state,
+    state: normalizedInput,
   });
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
@@ -12127,9 +12211,14 @@ export function canPlayerSubmitCombatDeclaration(input: {
     declarationStatus === "locked" ||
     declarationStatus === "complete" ||
     declarationStatus === "skipped";
+  const combatExperienceRequired = isCombatStartExperienceRollRequired({
+    participantId: input.participantId,
+    state: normalized,
+  });
 
   return (
     normalized.currentStep === "select_actions" &&
+    !combatExperienceRequired &&
     !declarationStatusIsHardClosed &&
     (declarationStatus === "pending" || existingDeclarationIsIncomplete)
   );

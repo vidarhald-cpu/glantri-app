@@ -18,10 +18,12 @@ import {
   encounterSessionSchema,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
+  getCombatRoundCombatExperienceDifficulty,
   getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
+  isCombatStartExperienceRollRequired,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
   rollCombatRoundCombatExperience,
@@ -43,6 +45,7 @@ import {
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
+  setCombatRoundCombatExperienceDifficulty,
   setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -263,6 +266,19 @@ function parseCombatExperienceBody(body: unknown): {
     ...parsed,
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
   };
+}
+
+function parseCombatExperienceDifficultyBody(body: unknown): {
+  difficulty: number;
+} {
+  const value = parseBodyObject(body, "Combat Experience difficulty payload");
+  const difficulty = value.difficulty;
+
+  if (typeof difficulty !== "number" || !Number.isInteger(difficulty) || difficulty <= 0) {
+    throw new Error("difficulty must be a positive integer.");
+  }
+
+  return { difficulty };
 }
 
 function parseOptionalInteger(value: unknown, label: string): number | undefined {
@@ -784,6 +800,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const gmAuthorizedOperation = access.mode === "gm";
       const roundState = initializeCombatRoundState({ encounter });
+
+      if (
+        roundState.currentStep === "select_actions" &&
+        isCombatStartExperienceRollRequired({
+          participantId: encounterParticipant.id,
+          state: roundState,
+        })
+      ) {
+        return reply.code(409).send({
+          error: "Roll Combat Experience before declaring an action.",
+        });
+      }
+
       const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
@@ -1077,6 +1106,78 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post(
+    "/encounters/:encounterId/combat-round/combat-experience-difficulty",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can set Combat Experience difficulty.",
+          });
+        }
+
+        const body = parseCombatExperienceDifficultyBody(request.body);
+        const roundState = initializeCombatRoundState({ encounter });
+        const nextRoundState = setCombatRoundCombatExperienceDifficulty({
+          difficulty: body.difficulty,
+          state: roundState,
+        });
+        const submittedAt = new Date().toISOString();
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          difficulty: getCombatRoundCombatExperienceDifficulty(nextRoundState),
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to set Combat Experience difficulty.",
+        });
+      }
+    },
+  );
+
   app.post("/encounters/:encounterId/combat-round/roll-combat-experience", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -1107,9 +1208,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       );
 
-      if (!access || access.mode !== "gm") {
-        return reply.code(403).send({
-          error: "Only GM users can roll Combat Experience in this slice.",
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
         });
       }
 
@@ -1138,11 +1239,38 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const gmAuthorizedOperation = access.mode === "gm";
       const roundState = initializeCombatRoundState({ encounter });
 
       if (roundState.currentStep !== "select_actions") {
         return reply.code(409).send({
           error: "Combat Experience is only open during declaration.",
+        });
+      }
+
+      if (!gmAuthorizedOperation) {
+        if (
+          scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+      }
+
+      if (
+        !isCombatStartExperienceRollRequired({
+          participantId: encounterParticipant.id,
+          state: roundState,
+        })
+      ) {
+        return reply.code(409).send({
+          error: "Combat Experience already rolled for this participant.",
         });
       }
 
@@ -1155,7 +1283,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt: submittedAt,
           createdByUserId: user.id,
         },
-        difficulty: body.difficulty,
+        difficulty: gmAuthorizedOperation ? body.difficulty : undefined,
         encounterId: encounter.id,
         participantId: encounterParticipant.id,
         scenarioId,

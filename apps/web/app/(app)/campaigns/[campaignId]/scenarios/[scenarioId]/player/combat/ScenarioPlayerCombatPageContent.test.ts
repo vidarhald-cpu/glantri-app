@@ -206,10 +206,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("will expand into this area");
   });
 
-  it("shows Combat Experience status while GM-only rolls are pending", () => {
+  it("lets players roll or confirm their own Combat Experience before declaring", () => {
     const source = readSource();
 
     expect(source).toContain("isCombatStartExperienceRollRequired");
+    expect(source).toContain("rollCombatExperienceOnServer");
+    expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
+    expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
+    expect(source).toContain("buildCharacterSheetSummary");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceResultLine");
     expect(source).toContain("formatCombatExperienceEffectiveTableLine");
@@ -218,16 +222,22 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Result: Active - no roll required");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain("selectedCombatExperienceResult");
+    expect(source).toContain("selectedCombatExperienceSkillTotal");
+    expect(source).toContain("selectedCombatExperienceDifficulty");
+    expect(source).toContain("selectedCombatExperienceNoRollAvailable");
     expect(source).toContain("selectedCombatExperienceResultPanel");
-    expect(source).toContain("Waiting for GM to roll Combat Experience.");
+    expect(source).toContain("selectedCombatExperienceActionAvailable");
+    expect(source).toContain('"Roll Combat Experience"');
+    expect(source).toContain('"Confirm Combat Experience"');
+    expect(source).toContain("rollCombatExperience()");
+    expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
+    expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
     expect(source).toContain("selectedCombatExperienceRequired");
-    expect(source).toContain('? "Waiting for GM"');
     expect(source).toContain(
       "controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired",
     );
     expect(source).toContain("const playerActionButtonDisabled =");
-    expect(source).toContain(": selectedCombatExperienceRequired || declareActionDisabled");
     expect(source).toContain("Combat Experience");
-    expect(source).not.toContain("rollCombatExperienceOnServer");
+    expect(source).not.toContain("Waiting for GM to roll Combat Experience.");
   });
 });

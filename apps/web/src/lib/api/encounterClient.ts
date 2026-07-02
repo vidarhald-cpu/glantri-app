@@ -117,6 +117,26 @@ export async function rollCombatExperienceOnServer(input: {
   return payload;
 }
 
+export async function setCombatExperienceDifficultyOnServer(input: {
+  difficulty: number;
+  encounterId: string;
+}): Promise<{
+  difficulty: number;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    difficulty: number;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/combat-experience-difficulty`, {
+    body: JSON.stringify({
+      difficulty: input.difficulty,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;

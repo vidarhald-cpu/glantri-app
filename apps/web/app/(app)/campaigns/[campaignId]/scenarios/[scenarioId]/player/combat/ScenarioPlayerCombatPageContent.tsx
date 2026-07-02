@@ -17,6 +17,7 @@ import {
   getCombatRoundAttackResultById,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundCombatExperienceDifficulty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundInitiativeRanks,
@@ -24,6 +25,7 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getPlayerCombatCurrentRollAction,
+  getParticipantCombatExperienceSkillTotalLookup,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
@@ -70,7 +72,7 @@ import {
 } from "@/features/player-combat/playerCombatPhaseModel";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import type { CombatAllocationState } from "@glantri/rules-engine";
+import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
@@ -91,6 +93,7 @@ import {
   loadServerCharacterById,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
+  rollCombatExperienceOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
@@ -771,6 +774,9 @@ export default function ScenarioPlayerCombatPageContent({
         })
       : false;
   const selectedCombatExperienceResult = selectedRoundParticipant?.combatExperience;
+  const selectedCombatExperienceDifficulty = combatRoundState
+    ? getCombatRoundCombatExperienceDifficulty(combatRoundState)
+    : 26;
   const selectedDeclarationStepStatus =
     selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
@@ -946,6 +952,30 @@ export default function ScenarioPlayerCombatPageContent({
     const result = characterBuildSchema.safeParse(displayedParticipant?.build);
     return result.success ? result.data : null;
   }, [displayedParticipant]);
+  const selectedSheetSummary = useMemo(
+    () =>
+      content && controlledBuild
+        ? buildCharacterSheetSummary({
+            build: controlledBuild,
+            content,
+          })
+        : undefined,
+    [content, controlledBuild],
+  );
+  const selectedCombatExperienceSkillLookup = useMemo(
+    () =>
+      selectedParticipant
+        ? getParticipantCombatExperienceSkillTotalLookup({
+            ...selectedParticipant,
+            sheetSummary: selectedSheetSummary,
+          })
+        : { skillTotal: 0 },
+    [selectedParticipant, selectedSheetSummary],
+  );
+  const selectedCombatExperienceSkillTotal = selectedCombatExperienceSkillLookup.skillTotal;
+  const selectedCombatExperienceNoRollAvailable =
+    selectedCombatExperienceRequired &&
+    selectedCombatExperienceSkillTotal >= selectedCombatExperienceDifficulty;
 
   const controlledEquipmentState = useMemo(() => {
     const candidate = displayedParticipant?.equipmentState;
@@ -1171,6 +1201,37 @@ export default function ScenarioPlayerCombatPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll combat initiative.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function rollCombatExperience() {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (!selectedParticipant || !encounterId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter, participant } = await rollCombatExperienceOnServer({
+        encounterId,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll Combat Experience.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -1722,6 +1783,8 @@ export default function ScenarioPlayerCombatPageContent({
     (!declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete);
   const declarationControlsDisabled =
     controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
+  const selectedCombatExperienceActionAvailable =
+    selectedCombatExperienceRequired && Boolean(selectedParticipant) && Boolean(encounterId);
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
@@ -1743,7 +1806,9 @@ export default function ScenarioPlayerCombatPageContent({
           isGameMaster,
         });
   const playerActionButtonLabel = selectedCombatExperienceRequired
-    ? "Waiting for GM"
+    ? selectedCombatExperienceNoRollAvailable
+      ? "Confirm Combat Experience"
+      : "Roll Combat Experience"
     : (attackerPrivilegedAction?.label ??
       currentParryAction?.label ??
       currentAttackAction?.label ??
@@ -1763,7 +1828,9 @@ export default function ScenarioPlayerCombatPageContent({
           controlsDisabled ||
           savingCombatContext ||
           currentAttackAction.disabled
-        : selectedCombatExperienceRequired || declareActionDisabled;
+        : selectedCombatExperienceRequired
+          ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
+          : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -1784,7 +1851,9 @@ export default function ScenarioPlayerCombatPageContent({
   const declarationStatusText = isGameMaster
     ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
     : selectedCombatExperienceRequired
-      ? `Current step: ${currentCombatStepLabel}. Waiting for GM to roll Combat Experience.`
+      ? selectedCombatExperienceNoRollAvailable
+        ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
+        : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`
       : currentInitiativePhase
         ? selectedParticipantRolledCurrentInitiative
           ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
@@ -2033,20 +2102,29 @@ export default function ScenarioPlayerCombatPageContent({
               <section style={panelStyle}>
                 <strong>Combat Experience</strong>
                 <div>{formatCombatExperienceStatus(selectedCombatExperienceResult)}</div>
+                <div>Skill total {selectedCombatExperienceSkillTotal}</div>
+                <div>Difficulty {selectedCombatExperienceDifficulty}</div>
+                {selectedCombatExperienceSkillLookup.warning ? (
+                  <div style={{ color: "#7c2d12" }}>
+                    {selectedCombatExperienceSkillLookup.warning}
+                  </div>
+                ) : null}
               </section>
               <PlayerCombatActionButtonPanel
                 buttonLabel={playerActionButtonLabel}
                 disabled={playerActionButtonDisabled}
                 onDeclareAction={() =>
-                  void (attackerPrivilegedAction?.kind
-                    ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                    : currentParryAction
-                      ? rollCurrentParry()
-                      : currentAttackAction
-                        ? rollPhaseAttack()
-                        : currentInitiativePhase
-                          ? rollInitiative()
-                          : saveCombatContext())
+                  void (selectedCombatExperienceRequired
+                    ? rollCombatExperience()
+                    : attackerPrivilegedAction?.kind
+                      ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                      : currentParryAction
+                        ? rollCurrentParry()
+                        : currentAttackAction
+                          ? rollPhaseAttack()
+                          : currentInitiativePhase
+                            ? rollInitiative()
+                            : saveCombatContext())
                 }
                 saving={savingCombatContext}
                 statusText={declarationStatusText}
