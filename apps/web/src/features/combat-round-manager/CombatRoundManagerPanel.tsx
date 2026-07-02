@@ -414,6 +414,14 @@ function formatCombatExperienceCalculation(result: CombatRoundCombatExperienceRe
   return `Combat Experience ${result.skillTotal} + roll ${result.rollTotal} = ${result.finalTotal} vs ${result.difficulty}`;
 }
 
+function formatCombatExperienceEffectiveTableLine(
+  result: CombatRoundCombatExperienceResult,
+): string | undefined {
+  return result.effectiveTableTotal === undefined
+    ? undefined
+    : `Effective CE table result: ${result.effectiveTableTotal}`;
+}
+
 function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceResult): string {
   if (result.noRollRequired) {
     return "Result: Active - no roll required";
@@ -2800,9 +2808,7 @@ function CombatRoundEndReviewPanel(input: {
     <section style={playerCombatPanelCardStyle}>
       <strong>Round-end review</strong>
       {!review ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-          Preparing round-end review...
-        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
       ) : (
         <>
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
@@ -2850,8 +2856,8 @@ function CombatRoundEndReviewPanel(input: {
                     {proposal.accumulatedTenths}/10
                   </div>
                   <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                    Damage due {proposal.amount} · remainder{" "}
-                    {proposal.remainingAccumulatedTenths}/10
+                    Damage due {proposal.amount} · remainder {proposal.remainingAccumulatedTenths}
+                    /10
                   </div>
                   <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
                     Health roll{" "}
@@ -2864,9 +2870,7 @@ function CombatRoundEndReviewPanel(input: {
                         : "not due"}
                   </div>
                   {proposal.notes ? (
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      {proposal.notes}
-                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>{proposal.notes}</div>
                   ) : null}
                 </div>
               ))}
@@ -3086,8 +3090,7 @@ export default function CombatRoundManagerPanel({
       })
     : undefined;
   const inspectorCombatExperienceRequired =
-    selectedRoundIsActive &&
-    inspector.participant?.participantId
+    selectedRoundIsActive && inspector.participant?.participantId
       ? isCombatStartExperienceRollRequired({
           participantId: inspector.participant.participantId,
           state: roundState,
@@ -3116,10 +3119,7 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const buildRoundEndParticipantInputs = (
     stateForReview: typeof roundState = roundState,
-  ): Record<
-    string,
-    { combatEffects?: CombatEffectsState; healthStat?: number }
-  > =>
+  ): Record<string, { combatEffects?: CombatEffectsState; healthStat?: number }> =>
     Object.fromEntries(
       stateForReview.participants.map((participant) => {
         const encounterParticipant = encounter.participants.find(
@@ -3741,47 +3741,47 @@ export default function CombatRoundManagerPanel({
       )?.label
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
-      ? "Attack already rolled"
-      : inspectorIsInspectionOnly
-        ? "Inspecting step - use Current task to resume"
+    ? "Attack already rolled"
+    : inspectorIsInspectionOnly
+      ? "Inspecting step - use Current task to resume"
       : inspector.step === "select_actions" && inspectorCombatExperienceRequired
         ? inspectorCombatExperienceNoRollAvailable
           ? "Confirm Combat Experience"
           : "Roll Combat Experience"
-      : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-        ? "Preparing round-end review"
-        : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
-          ? inspectorRoundEndReviewHasProposals
-            ? "Commit participant SU review"
-            : "Mark SU review complete"
-          : inspector.step === "round_summary" &&
-              inspectorRoundEndReview?.status === "health_roll_pending"
-            ? "Roll health check"
-            : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
-              ? "Round-end review complete"
-              : inspectorDamageCommitted
-                ? "Phase damage committed"
-                : inspectorDamageSubstate === "critical_pending"
-                  ? "Roll critical"
-                  : inspectorDamageSubstate === "location_pending"
-                    ? "Roll hit location"
-                    : inspectorDamageSubstate === "location_rolled"
-                      ? "Prepare damage review"
-                      : inspectorDamageProposalReady
-                        ? "Commit phase damage"
-                        : inspectorCanRollParry
-                          ? "Roll parry"
-                          : inspectorAttackSourceValidationMessage
-                            ? inspectorAttackSourceValidationMessage
-                            : inspectorCurrentResolutionPhase &&
-                                inspectorActionPhaseHasAttack === false
-                              ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-                              : getCombatResolutionButtonLabel({
-                                  hasPhaseAttack: inspectorActionPhaseHasAttack,
-                                  phase: inspectorCurrentResolutionPhase,
-                                  step: inspector.step,
-                                  substep: inspectorActionPhaseResolutionStatus?.substep,
-                                });
+        : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+          ? "Preparing round-end review"
+          : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
+            ? inspectorRoundEndReviewHasProposals
+              ? "Commit participant SU review"
+              : "Mark SU review complete"
+            : inspector.step === "round_summary" &&
+                inspectorRoundEndReview?.status === "health_roll_pending"
+              ? "Roll health check"
+              : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
+                ? "Round-end review complete"
+                : inspectorDamageCommitted
+                  ? "Phase damage committed"
+                  : inspectorDamageSubstate === "critical_pending"
+                    ? "Roll critical"
+                    : inspectorDamageSubstate === "location_pending"
+                      ? "Roll hit location"
+                      : inspectorDamageSubstate === "location_rolled"
+                        ? "Prepare damage review"
+                        : inspectorDamageProposalReady
+                          ? "Commit phase damage"
+                          : inspectorCanRollParry
+                            ? "Roll parry"
+                            : inspectorAttackSourceValidationMessage
+                              ? inspectorAttackSourceValidationMessage
+                              : inspectorCurrentResolutionPhase &&
+                                  inspectorActionPhaseHasAttack === false
+                                ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                                : getCombatResolutionButtonLabel({
+                                    hasPhaseAttack: inspectorActionPhaseHasAttack,
+                                    phase: inspectorCurrentResolutionPhase,
+                                    step: inspector.step,
+                                    substep: inspectorActionPhaseResolutionStatus?.substep,
+                                  });
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -3829,13 +3829,16 @@ export default function CombatRoundManagerPanel({
               }
             : inspectorCombatExperienceResult
               ? {
+                  detailLines: [
+                    formatCombatExperienceEffectiveTableLine(inspectorCombatExperienceResult),
+                  ].filter((line): line is string => Boolean(line)),
                   interpretedResult: formatCombatExperienceCalculation(
                     inspectorCombatExperienceResult,
                   ),
                   rankLabel: "Combat Experience",
                   resultLabel: formatCombatExperienceEffectLine(inspectorCombatExperienceResult),
                 }
-            : null;
+              : null;
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
@@ -6114,11 +6117,11 @@ export default function CombatRoundManagerPanel({
                         ) : null}
                         {inspectorCombatExperienceRequired ? (
                           <label style={compactFieldLabelStyle}>
-                            <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
-                              Difficulty
-                            </span>
+                            <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Difficulty</span>
                             <input
-                              disabled={saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)}
+                              disabled={
+                                saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
+                              }
                               onChange={(event) => {
                                 if (!inspectorCombatExperienceDifficultyKey) {
                                   return;
@@ -6220,24 +6223,26 @@ export default function CombatRoundManagerPanel({
                         inspectorCombatExperienceRequired
                           ? rollInspectorCombatExperience()
                           : inspector.step === "round_summary"
-                          ? advanceInspectorRoundEndReview()
-                          : inspectorCurrentStepIsInitiative
-                            ? rollInspectorInitiative()
-                            : inspectorCanRollParry
-                              ? rollInspectorParry()
-                              : inspectorCurrentResolutionPhase &&
-                                  (inspectorActionPhaseHasAttack === false ||
-                                    inspectorActionPhaseResolutionStatus?.substep === "effects")
-                                ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                            ? advanceInspectorRoundEndReview()
+                            : inspectorCurrentStepIsInitiative
+                              ? rollInspectorInitiative()
+                              : inspectorCanRollParry
+                                ? rollInspectorParry()
                                 : inspectorCurrentResolutionPhase &&
-                                    (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
-                                      inspectorActionPhaseResolutionStatus?.substep === "damage")
-                                  ? advanceInspectorPhaseResolutionSubstep(
+                                    (inspectorActionPhaseHasAttack === false ||
+                                      inspectorActionPhaseResolutionStatus?.substep === "effects")
+                                  ? completeInspectorPhaseResolution(
                                       inspectorCurrentResolutionPhase,
                                     )
-                                  : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                                    ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                    : saveInspectorDeclaration())
+                                  : inspectorCurrentResolutionPhase &&
+                                      (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
+                                        inspectorActionPhaseResolutionStatus?.substep === "damage")
+                                    ? advanceInspectorPhaseResolutionSubstep(
+                                        inspectorCurrentResolutionPhase,
+                                      )
+                                    : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                      ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                      : saveInspectorDeclaration())
                       }
                       onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
                       saving={saving}

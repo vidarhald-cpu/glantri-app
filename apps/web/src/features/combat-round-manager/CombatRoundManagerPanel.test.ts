@@ -565,10 +565,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceCalculation");
+    expect(source).toContain("formatCombatExperienceEffectiveTableLine");
+    expect(source).toContain("Effective CE table result");
     expect(source).toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
     expect(source).toContain("const inspectorCombatExperienceDifficulty =");
     expect(source).toContain("const inspectorCombatExperienceNoRollAvailable =");
+    expect(source).toContain(
+      "inspectorCombatExperienceSkillTotal >= inspectorCombatExperienceDifficultyValue",
+    );
     expect(source).toContain("Confirm Combat Experience");
     expect(source).toContain("Roll Combat Experience");
     expect(source).toContain("Roll Combat Experience before declaring an action.");

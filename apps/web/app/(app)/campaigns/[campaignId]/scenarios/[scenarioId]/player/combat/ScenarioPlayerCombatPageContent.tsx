@@ -190,6 +190,14 @@ function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceRes
   }`;
 }
 
+function formatCombatExperienceEffectiveTableLine(
+  result: CombatRoundCombatExperienceResult,
+): string | undefined {
+  return result.effectiveTableTotal === undefined
+    ? undefined
+    : `Effective CE table result: ${result.effectiveTableTotal}`;
+}
+
 function formatResolutionStatusLabel(value: string): string {
   return value
     .split("_")
@@ -347,7 +355,8 @@ function buildPlayerCombatDeclarationDraft(input: {
       : isPlayerEncounterActionId(scopedCombat?.lastDeclaredActionId)
         ? scopedCombat.lastDeclaredActionId
         : "",
-    additionalActionNotes: declaration?.additionalActionNotes ?? scopedCombat?.lastDeclarationNotes ?? "",
+    additionalActionNotes:
+      declaration?.additionalActionNotes ?? scopedCombat?.lastDeclarationNotes ?? "",
     combatContext: mergeCombatContextWithCurrentModifierBuckets({
       baseContext:
         declaration?.combatContext ??
@@ -800,7 +809,8 @@ export default function ScenarioPlayerCombatPageContent({
         })
       : undefined;
   const selectedStoredDeclarationComplete = Boolean(
-    selectedParticipantStoredDeclarationThisRound && selectedStoredDeclarationTargetValidation?.valid,
+    selectedParticipantStoredDeclarationThisRound &&
+    selectedStoredDeclarationTargetValidation?.valid,
   );
   const declarationStepOpen =
     !combatRoundState || combatRoundState.currentStep === "select_actions";
@@ -1172,8 +1182,7 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    const phaseContext =
-      currentAttackPhaseContext ?? phaseCombatContextDrafts[currentAttackPhase];
+    const phaseContext = currentAttackPhaseContext ?? phaseCombatContextDrafts[currentAttackPhase];
     const phaseAttackStats = phaseCombatLoadoutSummaries[currentAttackPhase].attackStats;
     const defenderScenarioParticipantId = phaseContext.targetParticipantId;
 
@@ -1216,7 +1225,9 @@ export default function ScenarioPlayerCombatPageContent({
       setEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.");
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.",
+      );
     } finally {
       setSavingCombatContext(false);
     }
@@ -1464,7 +1475,7 @@ export default function ScenarioPlayerCombatPageContent({
       : undefined;
   const selectedCurrentPhaseResolutionResult =
     combatRoundState && selectedCurrentResolutionAttackResult
-      ? getCombatRoundPhaseResolutionResultForAttack({
+      ? (getCombatRoundPhaseResolutionResultForAttack({
           attackResult: selectedCurrentResolutionAttackResult,
           state: combatRoundState,
         }) ??
@@ -1472,7 +1483,7 @@ export default function ScenarioPlayerCombatPageContent({
           attackResult: selectedCurrentResolutionAttackResult,
           roundNumber: combatRoundState.roundNumber,
           updatedAt: selectedCurrentResolutionAttackResult.rolledAt,
-        })
+        }))
       : undefined;
   const selectedCurrentPhaseResolutionLines =
     selectedCurrentResolutionAttackResult && selectedCurrentPhaseResolutionResult
@@ -1536,36 +1547,35 @@ export default function ScenarioPlayerCombatPageContent({
         resultLabel: selectedAttackerPrivilegedResolutionLines.proposalLine,
       }
     : null;
-  const attackerPrivilegedAction =
-    selectedAttackerPrivilegedAttackResult
-      ? currentRollAction?.kind === "hit_location" &&
-        selectedAttackerPrivilegedDamageSubstate === "location_pending"
+  const attackerPrivilegedAction = selectedAttackerPrivilegedAttackResult
+    ? currentRollAction?.kind === "hit_location" &&
+      selectedAttackerPrivilegedDamageSubstate === "location_pending"
+      ? {
+          disabled: false,
+          kind: "hitLocation" as const,
+          label: "Roll hit location",
+        }
+      : currentRollAction?.kind === "critical" &&
+          selectedAttackerPrivilegedDamageSubstate === "critical_pending"
         ? {
             disabled: false,
-            kind: "hitLocation" as const,
-            label: "Roll hit location",
+            kind: "critical" as const,
+            label: "Roll critical",
           }
-        : currentRollAction?.kind === "critical" &&
-            selectedAttackerPrivilegedDamageSubstate === "critical_pending"
+        : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
           ? {
-              disabled: false,
-              kind: "critical" as const,
-              label: "Roll critical",
+              disabled: true,
+              kind: undefined,
+              label: "Hit location rolled",
             }
-          : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
+          : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
             ? {
                 disabled: true,
                 kind: undefined,
-                label: "Hit location rolled",
+                label: "Critical rolled",
               }
-            : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
-              ? {
-                  disabled: true,
-                  kind: undefined,
-                  label: "Critical rolled",
-                }
-              : undefined
-      : undefined;
+            : undefined
+    : undefined;
   const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
@@ -1582,11 +1592,11 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const phase1InitiativeComplete = Boolean(
     combatRoundState &&
-      isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: combatRoundState }),
+    isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: combatRoundState }),
   );
   const phase2InitiativeComplete = Boolean(
     combatRoundState &&
-      isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: combatRoundState }),
+    isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: combatRoundState }),
   );
   const currentResultPhase = currentModifierPhase ?? currentInitiativePhase;
   const selectedRelevantInitiative = currentResultPhase
@@ -1596,12 +1606,12 @@ export default function ScenarioPlayerCombatPageContent({
     currentResultPhase === "phase2" ? phase2InitiativeComplete : phase1InitiativeComplete;
   const selectedRelevantInitiativeRankLabel =
     currentResultPhase && selectedRelevantInitiativeComplete
-    ? formatPlayerCombatInitiativeRank({
-        participantId: selectedRoundParticipant?.participantId,
-        ranks: currentResultPhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
-        value: getCombatRoundInitiativeTotal(selectedRelevantInitiative),
-      })
-    : undefined;
+      ? formatPlayerCombatInitiativeRank({
+          participantId: selectedRoundParticipant?.participantId,
+          ranks: currentResultPhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
+          value: getCombatRoundInitiativeTotal(selectedRelevantInitiative),
+        })
+      : undefined;
   const selectedRelevantInitiativeResultPanel = selectedRelevantInitiative
     ? {
         interpretedResult: formatCombatInitiativeFormula(selectedRelevantInitiative),
@@ -1618,6 +1628,9 @@ export default function ScenarioPlayerCombatPageContent({
     : null;
   const selectedCombatExperienceResultPanel = selectedCombatExperienceResult
     ? {
+        detailLines: [
+          formatCombatExperienceEffectiveTableLine(selectedCombatExperienceResult),
+        ].filter((line): line is string => Boolean(line)),
         interpretedResult: selectedCombatExperienceResult.noRollRequired
           ? `Combat Experience ${selectedCombatExperienceResult.skillTotal} vs difficulty ${selectedCombatExperienceResult.difficulty}`
           : `Combat Experience ${selectedCombatExperienceResult.skillTotal} + roll ${selectedCombatExperienceResult.rollTotal} = ${selectedCombatExperienceResult.finalTotal} vs ${selectedCombatExperienceResult.difficulty}`,
@@ -1710,9 +1723,7 @@ export default function ScenarioPlayerCombatPageContent({
   const declarationControlsDisabled =
     controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
   const declarationTargetValidationMessage =
-    !currentInitiativePhase && declarationIncomplete
-      ? targetValidation.message
-      : undefined;
+    !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
     controlsDisabled ||
     savingCombatContext ||
@@ -1731,13 +1742,12 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: declareActionDisabled,
           isGameMaster,
         });
-  const playerActionButtonLabel =
-    selectedCombatExperienceRequired
-      ? "Waiting for GM"
-      : attackerPrivilegedAction?.label ??
-    currentParryAction?.label ??
-    currentAttackAction?.label ??
-    declarationButtonLabel;
+  const playerActionButtonLabel = selectedCombatExperienceRequired
+    ? "Waiting for GM"
+    : (attackerPrivilegedAction?.label ??
+      currentParryAction?.label ??
+      currentAttackAction?.label ??
+      declarationButtonLabel);
   const playerActionButtonDisabled = attackerPrivilegedAction
     ? selectedCombatExperienceRequired ||
       controlsDisabled ||
@@ -1748,12 +1758,12 @@ export default function ScenarioPlayerCombatPageContent({
         controlsDisabled ||
         savingCombatContext ||
         currentParryAction.disabled
-    : currentAttackAction
-      ? selectedCombatExperienceRequired ||
-        controlsDisabled ||
-        savingCombatContext ||
-        currentAttackAction.disabled
-      : selectedCombatExperienceRequired || declareActionDisabled;
+      : currentAttackAction
+        ? selectedCombatExperienceRequired ||
+          controlsDisabled ||
+          savingCombatContext ||
+          currentAttackAction.disabled
+        : selectedCombatExperienceRequired || declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -1775,25 +1785,25 @@ export default function ScenarioPlayerCombatPageContent({
     ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
     : selectedCombatExperienceRequired
       ? `Current step: ${currentCombatStepLabel}. Waiting for GM to roll Combat Experience.`
-    : currentInitiativePhase
-      ? selectedParticipantRolledCurrentInitiative
-        ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
-        : initiativeStepStatus === "pending"
-          ? `Current step: ${currentCombatStepLabel}.`
-          : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
-      : currentParryAction
-        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-      : currentAttackAction
-        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-      : currentAttackSourceValidationMessage
-        ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
-      : declarationIncomplete
-        ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-      : selectedParticipantHasDeclared
-        ? `Current step: ${currentCombatStepLabel}. Declared.`
-        : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-          ? `Current step: ${currentCombatStepLabel}.`
-          : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+      : currentInitiativePhase
+        ? selectedParticipantRolledCurrentInitiative
+          ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
+          : initiativeStepStatus === "pending"
+            ? `Current step: ${currentCombatStepLabel}.`
+            : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+        : currentParryAction
+          ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+          : currentAttackAction
+            ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+            : currentAttackSourceValidationMessage
+              ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
+              : declarationIncomplete
+                ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
+                : selectedParticipantHasDeclared
+                  ? `Current step: ${currentCombatStepLabel}. Declared.`
+                  : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+                    ? `Current step: ${currentCombatStepLabel}.`
+                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -2032,11 +2042,11 @@ export default function ScenarioPlayerCombatPageContent({
                     ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
                     : currentParryAction
                       ? rollCurrentParry()
-                    : currentAttackAction
-                      ? rollPhaseAttack()
-                    : currentInitiativePhase
-                      ? rollInitiative()
-                      : saveCombatContext())
+                      : currentAttackAction
+                        ? rollPhaseAttack()
+                        : currentInitiativePhase
+                          ? rollInitiative()
+                          : saveCombatContext())
                 }
                 saving={savingCombatContext}
                 statusText={declarationStatusText}

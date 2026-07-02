@@ -600,6 +600,7 @@ describe("combat round manager", () => {
   it("maps Combat Experience result bands", () => {
     expect(evaluateCombatExperienceResult(5, { panicDurationRounds: 8 })).toMatchObject({
       durationRounds: 8,
+      effectiveTableTotal: 5,
       label: "Panic",
       modifierValue: -4,
       needsEffectRow: true,
@@ -607,28 +608,86 @@ describe("combat round manager", () => {
     });
     expect(evaluateCombatExperienceResult(10)).toMatchObject({
       durationRounds: 4,
+      effectiveTableTotal: 10,
       label: "Passive",
       modifierValue: -2,
       resultBand: "passive",
     });
     expect(evaluateCombatExperienceResult(15)).toMatchObject({
       durationRounds: 2,
+      effectiveTableTotal: 15,
       label: "Active",
       modifierValue: -2,
       resultBand: "active_penalty",
     });
     expect(evaluateCombatExperienceResult(20)).toMatchObject({
       durationRounds: 1,
+      effectiveTableTotal: 20,
       label: "Active",
       modifierValue: -1,
       resultBand: "active_penalty",
     });
     expect(evaluateCombatExperienceResult(21)).toMatchObject({
       durationRounds: 0,
+      effectiveTableTotal: 21,
       label: "Active",
       modifierValue: 0,
       needsEffectRow: false,
       resultBand: "active",
+    });
+  });
+
+  it("maps Combat Experience through the difficulty-adjusted table total", () => {
+    expect(evaluateCombatExperienceResult(21, { difficulty: 21 })).toMatchObject({
+      difficultyShift: 0,
+      effectiveTableTotal: 21,
+      modifierValue: 0,
+      resultBand: "active",
+    });
+    expect(evaluateCombatExperienceResult(26, { difficulty: 26 })).toMatchObject({
+      difficultyShift: 5,
+      effectiveTableTotal: 21,
+      modifierValue: 0,
+      resultBand: "active",
+    });
+    expect(evaluateCombatExperienceResult(27, { difficulty: 36 })).toMatchObject({
+      difficultyShift: 15,
+      durationRounds: 2,
+      effectiveTableTotal: 12,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+    });
+    expect(evaluateCombatExperienceResult(36, { difficulty: 36 })).toMatchObject({
+      difficultyShift: 15,
+      effectiveTableTotal: 21,
+      modifierValue: 0,
+      resultBand: "active",
+    });
+    expect(evaluateCombatExperienceResult(20, { difficulty: 26 })).toMatchObject({
+      difficultyShift: 5,
+      durationRounds: 2,
+      effectiveTableTotal: 15,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+    });
+  });
+
+  it("shifts Combat Experience panic and passive thresholds with high difficulty", () => {
+    expect(
+      evaluateCombatExperienceResult(20, { difficulty: 36, panicDurationRounds: 7 }),
+    ).toMatchObject({
+      difficultyShift: 15,
+      durationRounds: 7,
+      effectiveTableTotal: 5,
+      modifierValue: -4,
+      resultBand: "panic",
+    });
+    expect(evaluateCombatExperienceResult(25, { difficulty: 36 })).toMatchObject({
+      difficultyShift: 15,
+      durationRounds: 4,
+      effectiveTableTotal: 10,
+      modifierValue: -2,
+      resultBand: "passive",
     });
   });
 
@@ -701,7 +760,7 @@ describe("combat round manager", () => {
     });
   });
 
-  it("rolls Combat Experience with default difficulty and creates active -2 duration 2", () => {
+  it("rolls Combat Experience with default difficulty and creates a shifted passive row", () => {
     const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
     const rolled = rollCombatRoundCombatExperience({
       command: {
@@ -716,11 +775,13 @@ describe("combat round manager", () => {
 
     expect(rolled.result).toMatchObject({
       difficulty: COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY,
-      durationRounds: 2,
+      difficultyShift: 5,
+      durationRounds: 4,
+      effectiveTableTotal: 10,
       finalTotal: 15,
-      label: "Active",
+      label: "Passive",
       modifierValue: -2,
-      resultBand: "active_penalty",
+      resultBand: "passive",
       rollD20: 5,
       rollTotal: 5,
       skillTotal: 10,
@@ -732,14 +793,16 @@ describe("combat round manager", () => {
           expect.stringContaining("combat-experience"),
         ]),
         difficulty: 26,
+        difficultyShift: 5,
+        effectiveTableTotal: 10,
         modifierValue: -2,
       },
       type: "roll_combat_experience",
     });
     expect(rolled.combatEffects.effects).toHaveLength(1);
     expect(rolled.combatEffects.effects[0]).toMatchObject({
-      description: "combat exp active -2",
-      duration: "2 rounds",
+      description: "combat exp passive",
+      duration: "4 rounds",
       effectGroup: "general",
       modifierValue: -2,
       status: "active",
@@ -777,6 +840,8 @@ describe("combat round manager", () => {
     });
 
     expect(rolled.result).toMatchObject({
+      difficultyShift: 5,
+      effectiveTableTotal: 21,
       finalTotal: 26,
       rollD20: 5,
       rollTotal: 5,
@@ -784,6 +849,9 @@ describe("combat round manager", () => {
       skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
     });
     expect(rolled.state.commands.at(-1)?.facts).toMatchObject({
+      difficulty: 26,
+      difficultyShift: 5,
+      effectiveTableTotal: 21,
       finalTotal: 26,
       rollTotal: 5,
       skillTotal: 21,
@@ -810,6 +878,8 @@ describe("combat round manager", () => {
     expect(rngCalls).toBe(0);
     expect(confirmed.result).toMatchObject({
       difficulty: 26,
+      difficultyShift: 5,
+      effectiveTableTotal: 21,
       finalTotal: 26,
       label: "Active",
       modifierValue: 0,
@@ -826,6 +896,8 @@ describe("combat round manager", () => {
       facts: {
         createdCombatEffectIds: [],
         difficulty: 26,
+        difficultyShift: 5,
+        effectiveTableTotal: 21,
         finalTotal: 26,
         modifierValue: 0,
         noRollRequired: true,
@@ -842,7 +914,7 @@ describe("combat round manager", () => {
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
       },
-      difficulty: 27,
+      difficulty: 36,
       participantId: "gladiator",
       rng: () => {
         rngCalls += 1;
@@ -854,13 +926,117 @@ describe("combat round manager", () => {
 
     expect(rngCalls).toBe(1);
     expect(rolled.result).toMatchObject({
-      difficulty: 27,
+      difficulty: 36,
+      difficultyShift: 15,
+      durationRounds: 1,
+      effectiveTableTotal: 16,
       finalTotal: 31,
       noRollRequired: false,
+      resultBand: "active_penalty",
       rollD20: 5,
       rollTotal: 5,
       skillTotal: 26,
     });
+  });
+
+  it("applies a GM-raised Combat Experience difficulty to the created modifier row", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      difficulty: 36,
+      participantId: "gladiator",
+      rng: () => 0.36,
+      scenarioParticipantId: "scenario-gladiator",
+      skillTotal: 19,
+      state,
+    });
+
+    expect(rolled.result).toMatchObject({
+      difficulty: 36,
+      difficultyShift: 15,
+      durationRounds: 2,
+      effectiveTableTotal: 12,
+      finalTotal: 27,
+      label: "Active",
+      modifierValue: -2,
+      resultBand: "active_penalty",
+      rollD20: 8,
+      rollTotal: 8,
+      skillTotal: 19,
+    });
+    expect(rolled.state.commands.at(-1)?.facts).toMatchObject({
+      difficulty: 36,
+      difficultyShift: 15,
+      durationRounds: 2,
+      effectiveTableTotal: 12,
+      finalTotal: 27,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+    });
+    expect(rolled.combatEffects.effects[0]).toMatchObject({
+      description: "combat exp active -2",
+      duration: "2 rounds",
+      modifierValue: -2,
+      type: "general_modifier",
+    });
+    expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
+      "Round 1, DE: The Gladiator Combat Experience 19 + roll 8 = 27 vs 36. Effective CE table result: 12. Result: Active. General -2 for 2 rounds.",
+    );
+  });
+
+  it("uses the shifted default difficulty table result for final total 20", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.2,
+      skillTotal: 15,
+      state,
+    });
+
+    expect(rolled.result).toMatchObject({
+      difficulty: 26,
+      durationRounds: 2,
+      effectiveTableTotal: 15,
+      finalTotal: 20,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+    });
+  });
+
+  it("confirms no-roll Combat Experience when skill meets an edited difficulty", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    let rngCalls = 0;
+    const confirmed = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      difficulty: 36,
+      participantId: "gladiator",
+      rng: () => {
+        rngCalls += 1;
+        return 0.36;
+      },
+      skillTotal: 36,
+      state,
+    });
+
+    expect(rngCalls).toBe(0);
+    expect(confirmed.result).toMatchObject({
+      difficulty: 36,
+      difficultyShift: 15,
+      effectiveTableTotal: 21,
+      finalTotal: 36,
+      modifierValue: 0,
+      needsEffectRow: false,
+      noRollRequired: true,
+      resultBand: "active",
+    });
+    expect(confirmed.combatEffects.effects).toEqual([]);
   });
 
   it("rolls panic duration as 1d6 + 4 and stores 5-10 rounds", () => {
@@ -893,7 +1069,7 @@ describe("combat round manager", () => {
       },
       participantId: "gladiator",
       rng: () => 0.2,
-      skillTotal: 12,
+      skillTotal: 16,
       state,
     });
     const activeNoPenalty = rollCombatRoundCombatExperience({
@@ -903,13 +1079,13 @@ describe("combat round manager", () => {
       combatEffects: activePenalty.combatEffects,
       participantId: "guard",
       rng: () => 0.5,
-      skillTotal: 11,
+      skillTotal: 15,
       state: activePenalty.state,
     });
 
     expect(activePenalty.result).toMatchObject({
       durationRounds: 1,
-      finalTotal: 17,
+      finalTotal: 21,
       modifierValue: -1,
     });
     expect(activePenalty.combatEffects.effects[0]).toMatchObject({
@@ -918,7 +1094,7 @@ describe("combat round manager", () => {
     });
     expect(activeNoPenalty.result).toMatchObject({
       durationRounds: 0,
-      finalTotal: 22,
+      finalTotal: 26,
       modifierValue: 0,
       needsEffectRow: false,
       resultBand: "active",
@@ -1043,7 +1219,9 @@ describe("combat round manager", () => {
       : confirmed.combatEffects;
 
     expect(confirmed.result.noRollRequired).toBe(true);
-    expect(confirmed.combatEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
+    expect(confirmed.combatEffects.effects.map((effect) => effect.id)).toEqual([
+      "existing-modifier",
+    ]);
     expect(clearedState.participants[0]?.combatExperience).toBeUndefined();
     expect(clearedState.commands).toHaveLength(0);
     expect(clearedEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
@@ -1073,7 +1251,9 @@ describe("combat round manager", () => {
       state: roundSummaryState,
     });
 
-    expect(reviewed.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0]).toMatchObject({
+    expect(
+      reviewed.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0],
+    ).toMatchObject({
       effectId: "ce-active-1",
       kind: "duration_expire",
     });
@@ -5384,8 +5564,7 @@ describe("combat round manager", () => {
     expect(
       committed.combatEffects.effects.filter(
         (effect) =>
-          effect.type === "special" &&
-          /No combat action possible/.test(effect.description ?? ""),
+          effect.type === "special" && /No combat action possible/.test(effect.description ?? ""),
       ),
     ).toHaveLength(1);
     expect(committed.combatEffects.events[0]?.description).toContain(criticalBodyText);
@@ -5498,9 +5677,9 @@ describe("combat round manager", () => {
     });
 
     expect(restoredEffects.effects).toEqual([]);
-    expect(restoredState.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences).toEqual(
-      afterReview.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences,
-    );
+    expect(
+      restoredState.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences,
+    ).toEqual(afterReview.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences);
   });
 
   it("commits a parry-only critical as one specific row without generic no-action overlap", () => {
@@ -8546,7 +8725,9 @@ describe("combat round manager", () => {
       state: roundThreeState,
     });
 
-    expect(reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0]).toMatchObject({
+    expect(
+      reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0],
+    ).toMatchObject({
       effectId: "next-round-no-action",
       nextDuration: "1 round",
     });
@@ -8582,7 +8763,9 @@ describe("combat round manager", () => {
       state: roundFourState,
     });
 
-    expect(reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0]).toMatchObject({
+    expect(
+      reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0],
+    ).toMatchObject({
       effectId: "next-round-no-action",
       kind: "duration_expire",
     });
@@ -8629,7 +8812,9 @@ describe("combat round manager", () => {
       state: roundThreeState,
     });
 
-    expect(reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0]).toMatchObject({
+    expect(
+      reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0],
+    ).toMatchObject({
       effectId: "next-round-parry-only",
       nextDuration: "1 round",
     });
@@ -8665,7 +8850,9 @@ describe("combat round manager", () => {
       state: roundFourState,
     });
 
-    expect(reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0]).toMatchObject({
+    expect(
+      reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0],
+    ).toMatchObject({
       effectId: "next-round-parry-only",
       kind: "duration_expire",
     });
@@ -8707,9 +8894,9 @@ describe("combat round manager", () => {
       remainingAccumulatedTenths: 9,
       roundsUntilHealthCheck: 1,
     });
-    expect(roundNineReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls).toEqual(
-      [],
-    );
+    expect(
+      roundNineReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls,
+    ).toEqual([]);
 
     const roundTenState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
@@ -8778,7 +8965,9 @@ describe("combat round manager", () => {
       state: roundSummaryState,
     });
 
-    expect(threeRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0]).toMatchObject({
+    expect(
+      threeRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0],
+    ).toMatchObject({
       accumulatedTenths: 9,
       amount: 0,
       remainingAccumulatedTenths: 9,
@@ -8805,7 +8994,9 @@ describe("combat round manager", () => {
       state: roundSummaryState,
     });
 
-    expect(fourRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0]).toMatchObject({
+    expect(
+      fourRoundReviewed.roundEndReview?.participantReviews.gladiator?.proposedDamage[0],
+    ).toMatchObject({
       accumulatedTenths: 12,
       amount: 1,
       remainingAccumulatedTenths: 2,
@@ -8847,9 +9038,9 @@ describe("combat round manager", () => {
       state: reviewed,
     });
 
-    expect(
-      committed.combatEffects.effects.some((effect) => effect.type === "general_damage"),
-    ).toBe(false);
+    expect(committed.combatEffects.effects.some((effect) => effect.type === "general_damage")).toBe(
+      false,
+    );
     expect(
       committed.combatEffects.effects.find((effect) => effect.id === "bleed-1")?.bleedState
         ?.accumulatedTenths,
@@ -8893,10 +9084,12 @@ describe("combat round manager", () => {
       state: roundTenState,
     });
 
-    expect(roundTwoReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls).toEqual(
-      [],
-    );
-    expect(roundTenReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0]).toMatchObject({
+    expect(
+      roundTwoReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls,
+    ).toEqual([]);
+    expect(
+      roundTenReviewed.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0],
+    ).toMatchObject({
       difficulty: 21,
       status: "pending",
     });
@@ -9119,9 +9312,7 @@ describe("combat round manager", () => {
     expect(bleedEffect?.duration).toBe("1 round");
     expect(bleedEffect?.bleedState?.accumulatedTenths).toBe(0);
     expect(bleedDamage).toBeDefined();
-    expect(committed.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
-      "complete",
-    );
+    expect(committed.state.roundEndReview?.participantReviews.gladiator?.status).toBe("complete");
 
     const restoredEffects = removeCombatRoundEndParticipantReviewEffects({
       combatEffects: committed.combatEffects,
@@ -9194,9 +9385,7 @@ describe("combat round manager", () => {
     });
     expect(internalBleed?.modifierValue).toBe(3);
     expect(internalBleed?.bleedState?.lastHealthCheckRound).toBe(10);
-    expect(rolled.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
-      "review_ready",
-    );
+    expect(rolled.state.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
   });
 
   it("advances SU review participant-by-participant and enables next round after completion", () => {

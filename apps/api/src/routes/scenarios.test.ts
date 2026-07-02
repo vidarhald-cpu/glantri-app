@@ -2017,25 +2017,112 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().combatExperience).toMatchObject({
       difficulty: 26,
-      durationRounds: 2,
+      difficultyShift: 5,
+      durationRounds: 4,
+      effectiveTableTotal: 10,
       finalTotal: 15,
       modifierValue: -2,
-      resultBand: "active_penalty",
+      resultBand: "passive",
       rollD20: 5,
       skillTotal: 10,
       trigger: "combat_start",
     });
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].combatExperience).toMatchObject({
-      durationRounds: 2,
+      durationRounds: 4,
+      effectiveTableTotal: 10,
       modifierValue: -2,
-      resultBand: "active_penalty",
+      resultBand: "passive",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
         difficulty: 26,
+        difficultyShift: 5,
+        effectiveTableTotal: 10,
         modifierValue: -2,
         skillTotal: 10,
+      }),
+      participantId: "encounter-participant-1",
+      type: "roll_combat_experience",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combatEffects: expect.objectContaining({
+            effects: [
+              expect.objectContaining({
+                description: "combat exp passive",
+                duration: "4 rounds",
+                effectGroup: "general",
+                modifierValue: -2,
+                type: "general_modifier",
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("applies a GM-set Combat Experience difficulty to the outcome", async () => {
+    setupCombatDeclarationRoute({
+      participant: {
+        snapshot: {
+          displayName: "The Gladiator",
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 19,
+                  name: "Combat Experience",
+                  skillId: "combat_experience",
+                },
+              ],
+            },
+          },
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.36);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        difficulty: 36,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().combatExperience).toMatchObject({
+      difficulty: 36,
+      difficultyShift: 15,
+      durationRounds: 2,
+      effectiveTableTotal: 12,
+      finalTotal: 27,
+      modifierValue: -2,
+      resultBand: "active_penalty",
+      rollD20: 8,
+      rollTotal: 8,
+      skillTotal: 19,
+      trigger: "combat_start",
+    });
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        difficulty: 36,
+        difficultyShift: 15,
+        effectiveTableTotal: 12,
+        finalTotal: 27,
+        modifierValue: -2,
+        resultBand: "active_penalty",
       }),
       participantId: "encounter-participant-1",
       type: "roll_combat_experience",
@@ -2092,6 +2179,8 @@ describe("scenarios route contract", () => {
     expect(mocks.characterService.getCharacterById).toHaveBeenCalledWith("character-1");
     expect(response.json().combatExperience).toMatchObject({
       difficulty: 26,
+      difficultyShift: 5,
+      effectiveTableTotal: 21,
       finalTotal: 26,
       modifierValue: 0,
       noRollRequired: false,
@@ -2105,6 +2194,9 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
+        difficulty: 26,
+        difficultyShift: 5,
+        effectiveTableTotal: 21,
         finalTotal: 26,
         rollTotal: 5,
         skillTotal: 21,
@@ -3310,8 +3402,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    const attackResult =
-      updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
+    const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
     expect(attackResult).toMatchObject({
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 11,
@@ -3494,8 +3585,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    const attackResult =
-      updatedEncounter.combatRoundState.participants[0].attackResults.phase2;
+    const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase2;
     expect(attackResult).toMatchObject({
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 11,
@@ -3793,9 +3883,9 @@ describe("scenarios route contract", () => {
       participantId: "encounter-participant-2",
       type: "roll_hit_location",
     });
-    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.hitLocationRoll.status).toBe(
-      "rolled",
-    );
+    expect(
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.hitLocationRoll.status,
+    ).toBe("rolled");
   });
 
   it("drafts damage from player hit-location roll when combat snapshots are available", async () => {
@@ -3929,10 +4019,12 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageProposal.status).toBe(
       "drafted",
     );
-    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toMatchObject({
-      defenderDm: 0,
-      dmb: 8,
-    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toMatchObject(
+      {
+        defenderDm: 0,
+        dmb: 8,
+      },
+    );
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.criticalRoll.status).toBe(
       "pending",
     );

@@ -12,7 +12,16 @@ At the start of combat, each active participant must resolve Combat Experience b
 - Missing skill fallback: `0`, with an explicit warning/status so a spelling, casing, or serialization mismatch is visible
 - Current trigger: `combat_start`
 
-The old source table assumed an earlier CE calculation model. The current app uses the normal skill-roll difficulty default of `26`.
+The CE result table is anchored at difficulty `21`. The current app default difficulty is `26`,
+and the GM may edit it before resolving CE. The command shifts the final roll total before reading
+the table:
+
+- `difficultyShift = difficulty - 21`
+- `effectiveTableTotal = finalTotal - difficultyShift`
+
+The existing table bands are read from `effectiveTableTotal`, not directly from the raw final total.
+For example, `Combat Experience 19 + roll 8 = 27 vs 36` has `effectiveTableTotal = 12`, so it
+resolves as Active with General `-2` for `2` rounds.
 
 If the Combat Experience skill total is equal to or higher than the current difficulty, no die roll
 is required. The GM confirms the result, the participant is Active with no modifier, and no General
@@ -21,13 +30,13 @@ Clear current step can undo it and return DE to the CE-needed state.
 
 ## Result Table
 
-| Final total | Result | Modifier | Duration | Effect row |
-| --- | --- | ---: | ---: | --- |
-| `<= 5` | Panic | `-4` | `1d6 + 4` rounds | Yes |
-| `6-10` | Passive | `-2` | `4` rounds | Yes |
-| `11-15` | Active | `-2` | `2` rounds | Yes |
-| `16-20` | Active | `-1` | `1` round | Yes |
-| `21+` | Active | `0` | `0` | No |
+| Effective table total | Result  | Modifier |         Duration | Effect row |
+| --------------------- | ------- | -------: | ---------------: | ---------- |
+| `<= 5`                | Panic   |     `-4` | `1d6 + 4` rounds | Yes        |
+| `6-10`                | Passive |     `-2` |       `4` rounds | Yes        |
+| `11-15`               | Active  |     `-2` |       `2` rounds | Yes        |
+| `16-20`               | Active  |     `-1` |        `1` round | Yes        |
+| `21+`                 | Active  |      `0` |              `0` | No         |
 
 Panic duration is rolled at the time of the CE command and stored on the result/effect.
 

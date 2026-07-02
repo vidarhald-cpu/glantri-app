@@ -52,6 +52,7 @@ const COMBAT_ROUND_STRENGTH_GM_MAX_DAMAGE_NOTE = "max damage: 17 + GM STR when r
 const COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS = 10;
 const COMBAT_ROUND_EXTERNAL_BLEED_HEALTH_DIFFICULTY = 21;
 const COMBAT_ROUND_INTERNAL_BLEED_HEALTH_DIFFICULTY = 26;
+export const COMBAT_EXPERIENCE_TABLE_DIFFICULTY = 21;
 export const COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY = 26;
 
 export const combatRoundStepSchema = z.enum([
@@ -386,7 +387,9 @@ export const combatExperienceResultBandSchema = z.enum([
 export type CombatExperienceResultBand = z.infer<typeof combatExperienceResultBandSchema>;
 
 export const combatExperienceEvaluationSchema = z.object({
+  difficultyShift: z.number().int().optional(),
   durationRounds: z.number().int().nonnegative(),
+  effectiveTableTotal: z.number().int().optional(),
   label: z.string().min(1),
   modifierValue: z.number().int(),
   needsEffectRow: z.boolean(),
@@ -1548,12 +1551,39 @@ export interface CombatRoundInitiativeRank {
   tiedCount: number;
 }
 
+function getCombatExperienceEffectiveTableTotal(input: {
+  difficulty?: number;
+  finalTotal: number;
+}): {
+  difficultyShift: number;
+  effectiveTableTotal: number;
+} {
+  const finalTotal = Math.trunc(input.finalTotal);
+  const difficulty = Math.trunc(input.difficulty ?? COMBAT_EXPERIENCE_TABLE_DIFFICULTY);
+  const difficultyShift = difficulty - COMBAT_EXPERIENCE_TABLE_DIFFICULTY;
+
+  return {
+    difficultyShift,
+    effectiveTableTotal: finalTotal - difficultyShift,
+  };
+}
+
 export function evaluateCombatExperienceResult(
   finalTotal: number,
-  input: { panicDurationRounds?: number } = {},
+  input: { difficulty?: number; panicDurationRounds?: number } = {},
 ): CombatExperienceEvaluation {
-  if (finalTotal <= 5) {
+  const { difficultyShift, effectiveTableTotal } = getCombatExperienceEffectiveTableTotal({
+    difficulty: input.difficulty,
+    finalTotal,
+  });
+  const baseEvaluation = {
+    difficultyShift,
+    effectiveTableTotal,
+  };
+
+  if (effectiveTableTotal <= 5) {
     return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
       durationRounds: input.panicDurationRounds ?? 5,
       label: "Panic",
       modifierValue: -4,
@@ -1563,8 +1593,9 @@ export function evaluateCombatExperienceResult(
     });
   }
 
-  if (finalTotal <= 10) {
+  if (effectiveTableTotal <= 10) {
     return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
       durationRounds: 4,
       label: "Passive",
       modifierValue: -2,
@@ -1574,8 +1605,9 @@ export function evaluateCombatExperienceResult(
     });
   }
 
-  if (finalTotal <= 15) {
+  if (effectiveTableTotal <= 15) {
     return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
       durationRounds: 2,
       label: "Active",
       modifierValue: -2,
@@ -1585,8 +1617,9 @@ export function evaluateCombatExperienceResult(
     });
   }
 
-  if (finalTotal <= 20) {
+  if (effectiveTableTotal <= 20) {
     return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
       durationRounds: 1,
       label: "Active",
       modifierValue: -1,
@@ -1597,6 +1630,7 @@ export function evaluateCombatExperienceResult(
   }
 
   return combatExperienceEvaluationSchema.parse({
+    ...baseEvaluation,
     durationRounds: 0,
     label: "Active",
     modifierValue: 0,
@@ -1615,7 +1649,10 @@ function readCombatRoundNumber(value: unknown): number | undefined {
 }
 
 function normalizeCombatExperienceSkillKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function compactCombatExperienceSkillKey(value: string): string {
@@ -1661,7 +1698,10 @@ function getCombatExperienceSkillTotalSkillLists(participant: unknown): Array<{
     addSkills("participant.draftView.skills", participant.draftView);
 
     if (isCombatRoundRecord(participant.snapshot)) {
-      addSkills("participant.snapshot.sheetSummary.draftView.skills", participant.snapshot.sheetSummary);
+      addSkills(
+        "participant.snapshot.sheetSummary.draftView.skills",
+        participant.snapshot.sheetSummary,
+      );
       addSkills("participant.snapshot.draftView.skills", participant.snapshot.draftView);
     }
   }
@@ -1696,9 +1736,13 @@ export function getParticipantCombatExperienceSkillTotalLookup(
         continue;
       }
 
-      const identifiers = [skill.skillId, skill.skillKey, skill.id, skill.name, skill.skillName].filter(
-        (entry): entry is string => typeof entry === "string",
-      );
+      const identifiers = [
+        skill.skillId,
+        skill.skillKey,
+        skill.id,
+        skill.name,
+        skill.skillName,
+      ].filter((entry): entry is string => typeof entry === "string");
       const matchedIdentifier = identifiers.find(isCombatExperienceSkillIdentifier);
 
       if (!matchedIdentifier) {
@@ -2253,9 +2297,16 @@ export function rollCombatRoundCombatExperience(input: {
   const noRollRequired = skillTotal >= difficulty;
   const roll = noRollRequired ? undefined : rollOpenEndedD20(rng);
   const finalTotal = noRollRequired ? skillTotal : skillTotal + (roll?.dieResult ?? 0);
+  const { difficultyShift, effectiveTableTotal } = getCombatExperienceEffectiveTableTotal({
+    difficulty,
+    finalTotal,
+  });
   const panicDurationRounds =
-    finalTotal <= 5 ? rollCombatExperiencePanicDuration(rng) : undefined;
-  const evaluation = evaluateCombatExperienceResult(finalTotal, { panicDurationRounds });
+    effectiveTableTotal <= 5 ? rollCombatExperiencePanicDuration(rng) : undefined;
+  const evaluation = evaluateCombatExperienceResult(finalTotal, {
+    difficulty,
+    panicDurationRounds,
+  });
   const result = combatRoundCombatExperienceResultSchema.parse({
     ...evaluation,
     difficulty,
@@ -2312,7 +2363,9 @@ export function rollCombatRoundCombatExperience(input: {
       createdCombatEffectEventId,
       createdCombatEffectIds,
       difficulty,
+      difficultyShift,
       durationRounds: result.durationRounds,
+      effectiveTableTotal,
       evaluatedResult: evaluation,
       finalTotal,
       modifierValue: result.modifierValue,
@@ -2421,10 +2474,10 @@ export function removeCombatRoundCombatExperienceEffects(input: {
 
   return combatEffectsStateSchema.parse({
     ...currentCombatEffects,
-    effects: currentCombatEffects.effects.filter((effect) => !createdCombatEffectIds.has(effect.id)),
-    events: currentCombatEffects.events.filter(
-      (event) => event.id !== createdCombatEffectEventId,
+    effects: currentCombatEffects.effects.filter(
+      (effect) => !createdCombatEffectIds.has(effect.id),
     ),
+    events: currentCombatEffects.events.filter((event) => event.id !== createdCombatEffectEventId),
   });
 }
 
@@ -6198,10 +6251,7 @@ function combatRoundReviewEffectActionCategory(
     return "loss_of_use";
   }
 
-  if (
-    effect.rowCategory === "no_combat_action" &&
-    combatRoundTextIndicatesParryOnly(text)
-  ) {
+  if (effect.rowCategory === "no_combat_action" && combatRoundTextIndicatesParryOnly(text)) {
     return "parry_only";
   }
 
@@ -7796,7 +7846,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       ? combatEffectSchema.parse({
           ...setCombatRoundEffectBleedAmount({
             effect: sourceBleedEffect,
-            nextAmount: result.success ? nextBleedRate : previousBleedRate ?? 0,
+            nextAmount: result.success ? nextBleedRate : (previousBleedRate ?? 0),
             updatedAt: input.command.createdAt,
           }),
           bleedState: combatEffectBleedStateSchema.parse({
@@ -12782,6 +12832,7 @@ function getCombatRoundLatestEventForCommand(input: {
     const rollTotal = getCombatRoundLatestEventFactNumber(facts, "rollTotal");
     const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
     const noRollRequired = getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
+    const effectiveTableTotal = getCombatRoundLatestEventFactNumber(facts, "effectiveTableTotal");
     const difficulty =
       getCombatRoundLatestEventFactNumber(facts, "difficulty") ??
       COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
@@ -12790,10 +12841,12 @@ function getCombatRoundLatestEventForCommand(input: {
     const durationRounds = getCombatRoundLatestEventFactNumber(facts, "durationRounds") ?? 0;
     const effectText =
       modifierValue !== 0 && durationRounds > 0
-        ? ` General ${modifierValue} for ${durationRounds} round${
-            durationRounds === 1 ? "" : "s"
-          }.`
+        ? ` General ${modifierValue} for ${durationRounds} round${durationRounds === 1 ? "" : "s"}.`
         : " No modifier.";
+    const effectiveTableText =
+      effectiveTableTotal !== undefined
+        ? ` Effective CE table result: ${effectiveTableTotal}.`
+        : "";
 
     return {
       commandId: command.id,
@@ -12801,10 +12854,10 @@ function getCombatRoundLatestEventForCommand(input: {
       shortTitle: "Combat Experience",
       step: command.step,
       summaryText: noRollRequired
-        ? `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}. Result: ${resultLabel}, no roll required.${effectText}`
+        ? `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}, no roll required.${effectText}`
         : `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} + roll ${
             rollTotal ?? "?"
-          } = ${finalTotal ?? "?"} vs ${difficulty}. Result: ${resultLabel}.${effectText}`,
+          } = ${finalTotal ?? "?"} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}.${effectText}`,
     };
   }
 
