@@ -1,6 +1,6 @@
 # Combat Experience
 
-Combat Experience is a combat-start readiness roll in the current round manager slice.
+Combat Experience is a combat-start and phase-attack readiness roll in the current round manager slice.
 
 ## Combat-Start Roll
 
@@ -14,7 +14,7 @@ participant.
 - Roll: open-ended `1d20 + Combat Experience`, unless the displayed Combat Experience total already meets the difficulty
 - Skill total source: the displayed effective `Combat Experience` skill total from the participant character sheet/combat panel. The lookup prefers the displayed total field such as `totalSkill`/`totalSkillLevel`; if that field is absent, it derives the same displayed total from linked stats plus XP, such as `linkedStatAverage + effectiveSkillNumber`. XP-only fields such as `effectiveSkillNumber` are used only as an explicit fallback with a warning.
 - Missing skill fallback: `0`, with an explicit warning/status so a spelling, casing, or serialization mismatch is visible
-- Current trigger: `combat_start`
+- Current triggers: `combat_start`, `phase1_attack`, `phase2_attack`
 
 The CE result table is anchored at difficulty `21`. The current app default difficulty is `26`,
 and the GM may edit it before resolving CE. The command shifts the final roll total before reading
@@ -44,6 +44,20 @@ declare until their CE is resolved, but they may declare after their own CE is r
 participants still need CE. Advancing to M1 remains blocked until all active participants have
 resolved required CE and submitted valid declarations, unless an explicit GM override workflow is
 added separately.
+
+## Phase Attack Rolls
+
+After `i1` is complete and before A1 attacks, the sequencer checks every participant who both has an
+executable phase 1 attack and is attacked in phase 1 by an aware/seen opponent. Those participants
+must resolve Combat Experience before A1 attack resolution opens. After `i2`, the same check runs
+for phase 2 before A2 attacks.
+
+Phase CE uses the same displayed effective skill total, difficulty-shifted result table, no-roll
+rule, command-backed undo, and General modifier rows as combat-start CE. Phase CE does not require a
+new GM "start rolls" button; reaching the A1/A2 pre-attack gate opens the phase CE window. If the
+encounter visibility map explicitly marks the attacker as unseen by the defending participant, that
+incoming attack does not trigger phase CE for the defender. Missing visibility data is treated as
+seen so older encounters do not silently skip required CE.
 
 ## Result Table
 
@@ -75,4 +89,4 @@ command-created CE modifier row, while clearing a no-roll confirmation removes n
 
 ## Current Boundary
 
-This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the CE roll before declaration. Critical-triggered CE rerolls, simultaneous-attack CE rolls, and ordinary non-combat CE skill-roll behavior are follow-up work.
+This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the relevant CE roll before declaration or phase attack resolution. Critical-triggered CE rerolls and ordinary non-combat CE skill-roll behavior are follow-up work.

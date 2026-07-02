@@ -47,7 +47,9 @@ import {
   getCombatRoundEffectiveDamageResult,
   getCombatRoundDamageSubstate,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundRequiredCombatExperienceTrigger,
   getFirstCombatStartExperienceRequiredParticipantId,
+  getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
   getFirstCombatRoundDeclarationRequiredParticipantId,
   getCombatRoundStartNextRoundBlocker,
   getCombatExperienceSkillTotalFromSnapshot,
@@ -56,6 +58,7 @@ import {
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundEndReviewComplete,
+  isCombatRoundPhaseCombatExperienceRollRequired,
   mapHitLocationAndDirectionToArmorRegion,
   parseCombatRoundArmorCoverageLabel,
   ensureCombatRoundPhaseResolutionResultsForPhase,
@@ -371,6 +374,37 @@ function preparePhaseResolutionState(input: {
         updatedAt: "2026-01-01T00:02:30.000Z",
       })
     : withCursor;
+}
+
+function preparePhaseInitiativeCompleteState(input: {
+  actionId: string;
+  phase: "phase1" | "phase2";
+}): ReturnType<typeof initializeCombatRoundState> {
+  const withDeclarations = declareRoundAction({
+    actionId: input.actionId,
+    participantId: "guard",
+    state: declareRoundAction({
+      actionId: input.actionId,
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    }),
+  });
+  const atInitiativeStep = advanceToStep(
+    withDeclarations,
+    input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+  );
+
+  return setCombatRoundParticipantInitiative({
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+    participantId: "guard",
+    phase: input.phase,
+    state: setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase: input.phase,
+      state: atInitiativeStep,
+    }),
+  });
 }
 
 function prepareFailedParryPendingDamage(input: {
@@ -1527,6 +1561,240 @@ describe("combat round manager", () => {
         state: rolled.state,
       }),
     ).toThrow("Combat Experience already rolled for this participant.");
+  });
+
+  it("gates A1 behind CE for participants who attack and are attacked by aware opponents", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("gladiator");
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "guard",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+      }),
+    ).toBe(false);
+  });
+
+  it("opens A1 after all required phase-1 CE rolls are resolved in any order", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const gate = advanceCombatRoundStep(state, { visibility });
+    const rolledGuard = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "player-guard",
+      },
+      participantId: "guard",
+      skillTotal: 26,
+      state: gate,
+      visibility,
+    });
+    const rolledGladiator = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:03:30.000Z",
+        createdByUserId: "player-gladiator",
+      },
+      participantId: "gladiator",
+      skillTotal: 26,
+      state: rolledGuard.state,
+      visibility,
+    });
+
+    expect(rolledGuard.result).toMatchObject({
+      noRollRequired: true,
+      trigger: "phase1_attack",
+    });
+    expect(rolledGuard.command).toMatchObject({
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A1",
+      },
+      phase: "phase1",
+      step: "A1",
+    });
+    expect(rolledGuard.state.currentCursor?.participantId).toBe("gladiator");
+    expect(rolledGladiator.state.currentStep).toBe("phase_1_actions");
+    expect(rolledGladiator.state.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(rolledGladiator.state.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: rolledGladiator.state,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: rolledGladiator.state,
+      }),
+    ).toBe(true);
+    expect(rolledGladiator.state.commands.at(-1)).toMatchObject({
+      facts: {
+        trigger: "phase1_attack",
+      },
+      phase: "phase1",
+      step: "A1",
+      type: "roll_combat_experience",
+    });
+  });
+
+  it("does not gate phase CE for attacks from explicitly unseen opponents", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: false },
+      guard: { gladiator: false },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(
+      getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(advanced.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+  });
+
+  it("gates A2 behind the same phase CE check after i2", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "parry_attack",
+      phase: "phase2",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(advanced.currentStep).toBe("phase_2_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A2",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("phase2_attack");
+  });
+
+  it("clears a phase CE result back to the pre-attack CE gate and removes created effects", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const gate = advanceCombatRoundStep(state, { visibility });
+    const rolled = rollCombatRoundCombatExperience({
+      combatEffects: { effects: [], events: [] },
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.2,
+      scenarioParticipantId: "scenario-gladiator",
+      skillTotal: 10,
+      state: gate,
+      visibility,
+    });
+    const command = rolled.state.commands.at(-1);
+    const clearedState = clearCombatRoundStep({ state: rolled.state, step: "phase_1_actions" });
+    const clearedEffects = command
+      ? removeCombatRoundCombatExperienceEffects({
+          combatEffects: rolled.combatEffects,
+          command,
+        })
+      : rolled.combatEffects;
+
+    expect(rolled.result).toMatchObject({
+      needsEffectRow: true,
+      trigger: "phase1_attack",
+    });
+    expect(rolled.combatEffects.effects).toHaveLength(1);
+    expect(clearedState.currentStep).toBe("phase_1_actions");
+    expect(clearedState.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(clearedState.phaseResolutionCursor).toBeUndefined();
+    expect(clearedState.participants[0]?.combatExperience).toBeUndefined();
+    expect(clearedEffects.effects).toEqual([]);
   });
 
   it("clears Combat Experience roll state and removes only created CE effects", () => {

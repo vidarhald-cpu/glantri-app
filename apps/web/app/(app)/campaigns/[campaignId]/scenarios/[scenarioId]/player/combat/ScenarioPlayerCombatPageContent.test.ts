@@ -212,7 +212,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
   it("lets players roll or confirm their own Combat Experience before declaring", () => {
     const source = readSource();
 
-    expect(source).toContain("isCombatStartExperienceRollRequired");
+    expect(source).toContain("getCombatRoundRequiredCombatExperienceTrigger");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
     expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
@@ -225,6 +225,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Active, no roll required");
     expect(source).toContain("Result: Active - no roll required");
     expect(source).toContain("selectedCombatExperienceRequired");
+    expect(source).toContain("selectedCombatExperienceTrigger");
+    expect(source).toContain("visibility: encounterSession?.roleplayState?.visibility");
     expect(source).toContain("selectedCombatExperienceResult");
     expect(source).toContain("selectedCombatExperienceWindowOpen");
     expect(source).toContain("const selectedCombatExperienceSkillLookup = useMemo(");

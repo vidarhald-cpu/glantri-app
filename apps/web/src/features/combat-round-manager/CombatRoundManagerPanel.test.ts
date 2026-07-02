@@ -427,7 +427,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitCombatRoundEndParticipantReview");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("const commandParticipantId =");
-    expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
+    expect(source).toContain("advanceCombatRoundStep(stateForCommit, {");
+    expect(source).toContain("visibility: encounter.roleplayState?.visibility");
     expect(source).toContain("command: {");
     expect(source).toContain("participantId: commandParticipantId");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
@@ -476,7 +477,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("const stateForCommit = resolutionPhase");
-    expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
+    expect(source).toContain("advanceCombatRoundStep(stateForCommit, {");
+    expect(source).toContain("visibility: encounter.roleplayState?.visibility");
     expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("attackResult");
     expect(source).toContain("autoPrepareRoundEndReviewState(nextRoundState)");
@@ -559,7 +561,7 @@ describe("CombatRoundManagerPanel", () => {
   it("requires Combat Experience before ordinary DE declaration", () => {
     const source = readSource();
 
-    expect(source).toContain("isCombatStartExperienceRollRequired");
+    expect(source).toContain("getCombatRoundRequiredCombatExperienceTrigger");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
     expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
@@ -572,6 +574,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Effective CE table result");
     expect(source).toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
+    expect(source).toContain("const inspectorCombatExperienceIsCombatStart =");
+    expect(source).toContain("visibility: encounter.roleplayState?.visibility");
     expect(source).toContain("const inspectorCombatExperienceWindowOpen =");
     expect(source).toContain("const combatExperienceRollRecorded =");
     expect(source).toContain("const activeCombatExperienceDifficulty =");
@@ -602,7 +606,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("onBlur={(event) =>");
     expect(source).toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
-    expect(source).toContain('inspector.step === "select_actions" &&');
+    expect(source).toContain('inspector.step === "select_actions" || inspectorCombatExperienceRequired');
+    expect(source).toContain("Phase Combat Experience uses difficulty");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");
     expect(source).toContain("Combat Experience");

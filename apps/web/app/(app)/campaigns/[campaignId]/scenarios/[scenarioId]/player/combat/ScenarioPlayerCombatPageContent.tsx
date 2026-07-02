@@ -20,6 +20,7 @@ import {
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseResolutionResultForAttack,
+  getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -28,7 +29,6 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
-  isCombatStartExperienceRollRequired,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
@@ -767,16 +767,20 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined,
     [combatRoundState, selectedEncounterParticipant],
   );
-  const selectedCombatExperienceRequired =
+  const selectedCombatExperienceTrigger =
     combatRoundState && selectedRoundParticipant
-      ? isCombatStartExperienceRollRequired({
+      ? getCombatRoundRequiredCombatExperienceTrigger({
           participantId: selectedRoundParticipant.participantId,
           state: combatRoundState,
+          visibility: encounterSession?.roleplayState?.visibility,
         })
-      : false;
+      : undefined;
+  const selectedCombatExperienceRequired = Boolean(selectedCombatExperienceTrigger);
   const selectedCombatExperienceResult = selectedRoundParticipant?.combatExperience;
   const selectedCombatExperienceWindowOpen = combatRoundState
-    ? isCombatRoundCombatExperienceWindowOpen(combatRoundState)
+    ? selectedCombatExperienceTrigger === "combat_start"
+      ? isCombatRoundCombatExperienceWindowOpen(combatRoundState)
+      : selectedCombatExperienceRequired
     : false;
   const selectedCombatExperienceDifficulty = combatRoundState
     ? getCombatRoundCombatExperienceDifficulty(combatRoundState)

@@ -48,6 +48,7 @@ import {
   formatOpenEndedD20RollBreakdown,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
@@ -71,7 +72,6 @@ import {
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
-  isCombatStartExperienceRollRequired,
   isCombatRoundCombatExperienceWindowOpen,
   hasCombatRoundCombatExperienceRoll,
   isCombatRoundEndReviewComplete,
@@ -3107,16 +3107,22 @@ export default function CombatRoundManagerPanel({
         scenarioParticipants: effectiveScenarioParticipants,
       })
     : undefined;
-  const inspectorCombatExperienceRequired =
+  const inspectorCombatExperienceTrigger =
     selectedRoundIsActive && inspector.participant?.participantId
-      ? isCombatStartExperienceRollRequired({
+      ? getCombatRoundRequiredCombatExperienceTrigger({
           participantId: inspector.participant.participantId,
           state: roundState,
+          visibility: encounter.roleplayState?.visibility,
         })
-      : false;
+      : undefined;
+  const inspectorCombatExperienceRequired = Boolean(inspectorCombatExperienceTrigger);
+  const inspectorCombatExperienceIsCombatStart =
+    inspectorCombatExperienceTrigger === "combat_start";
   const inspectorCombatExperienceResult = inspector.participant?.combatExperience;
   const inspectorCombatExperienceWindowOpen =
-    isCombatRoundCombatExperienceWindowOpen(roundState);
+    inspectorCombatExperienceTrigger === "combat_start"
+      ? isCombatRoundCombatExperienceWindowOpen(roundState)
+      : inspectorCombatExperienceRequired;
   const combatExperienceRollRecorded = hasCombatRoundCombatExperienceRoll(roundState);
   const activeCombatExperienceDifficulty = getCombatRoundCombatExperienceDifficulty(roundState);
   const inspectorCombatExperienceDifficultyKey = `${roundState.roundNumber}:combat-experience`;
@@ -3380,6 +3386,7 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
   const combatExperienceDifficultyControlsDisabled =
     saving ||
+    !inspectorCombatExperienceIsCombatStart ||
     combatExperienceRollRecorded ||
     (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
     Boolean(inspectorSnapshot);
@@ -3730,7 +3737,7 @@ export default function CombatRoundManagerPanel({
       inspectorRoundEndReview.proposedHealthRolls.length > 0),
   );
   const inspectorCombatExperienceWindowValidationMessage =
-    inspector.step === "select_actions" &&
+    inspectorCombatExperienceIsCombatStart &&
     inspectorCombatExperienceRequired &&
     !inspectorCombatExperienceWindowOpen
       ? "Start Combat Experience rolls before rolling."
@@ -3774,7 +3781,7 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
-    : inspector.step === "select_actions" && inspectorCombatExperienceRequired
+    : inspectorCombatExperienceRequired
       ? !inspectorCombatExperienceWindowOpen
         ? "Set CE difficulty first"
         : inspectorCombatExperienceNoRollAvailable
@@ -3877,7 +3884,7 @@ export default function CombatRoundManagerPanel({
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
-    : inspector.step === "select_actions" &&
+    : inspectorCombatExperienceIsCombatStart &&
         inspectorCombatExperienceRequired &&
         !inspectorCombatExperienceWindowOpen
       ? " Start Combat Experience rolls before rolling or declaring."
@@ -4440,7 +4447,12 @@ export default function CombatRoundManagerPanel({
       : { stepSnapshots };
 
     try {
-      await persistRoundState(advanceCombatRoundStep(stateForCommit, advanceInput));
+      await persistRoundState(
+        advanceCombatRoundStep(stateForCommit, {
+          ...advanceInput,
+          visibility: encounter.roleplayState?.visibility,
+        }),
+      );
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -6182,7 +6194,7 @@ export default function CombatRoundManagerPanel({
                     rows={inspectorDisplayModifierRows}
                   />
                   <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {inspector.step === "select_actions" ? (
+                    {inspector.step === "select_actions" || inspectorCombatExperienceRequired ? (
                       <section style={playerCombatPanelCardStyle}>
                         <strong>Combat Experience</strong>
                         <div>{formatCombatExperienceStatus(inspectorCombatExperienceResult)}</div>
@@ -6194,7 +6206,8 @@ export default function CombatRoundManagerPanel({
                             {inspectorCombatExperienceSkillLookup.warning}
                           </div>
                         ) : null}
-                        {inspectorCombatExperienceRequired ? (
+                        {inspectorCombatExperienceRequired &&
+                        inspectorCombatExperienceIsCombatStart ? (
                           <label style={compactFieldLabelStyle}>
                             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Difficulty</span>
                             <input
@@ -6217,7 +6230,8 @@ export default function CombatRoundManagerPanel({
                             />
                           </label>
                         ) : null}
-                        {inspectorCombatExperienceRequired ? (
+                        {inspectorCombatExperienceRequired &&
+                        inspectorCombatExperienceIsCombatStart ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                             <button
                               disabled={
@@ -6241,6 +6255,13 @@ export default function CombatRoundManagerPanel({
                                 ? " Difficulty locked after the first CE result."
                                 : ""}
                             </span>
+                          </div>
+                        ) : null}
+                        {inspectorCombatExperienceRequired &&
+                        !inspectorCombatExperienceIsCombatStart ? (
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            Phase Combat Experience uses difficulty{" "}
+                            {activeCombatExperienceDifficulty}.
                           </div>
                         ) : null}
                       </section>
@@ -6318,15 +6339,16 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorActionButtonLabel}
                       disabled={
                         saving ||
-                        (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
+                        (inspectorIsInspectionOnly &&
+                          inspector.step !== "select_actions" &&
+                          !inspectorCombatExperienceRequired) ||
                         Boolean(inspectorActionValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
                         inspectorDamageCommitted ||
                         Boolean(inspectorSnapshot)
                       }
                       onDeclareAction={() =>
-                        void (inspector.step === "select_actions" &&
-                        inspectorCombatExperienceRequired
+                        void (inspectorCombatExperienceRequired
                           ? rollInspectorCombatExperience()
                           : inspector.step === "round_summary"
                             ? advanceInspectorRoundEndReview()

@@ -19,6 +19,7 @@ import {
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundRequiredCombatExperienceTrigger,
   getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getParticipantCombatExperienceSkillTotalLookup,
@@ -1244,18 +1245,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const gmAuthorizedOperation = access.mode === "gm";
       const roundState = initializeCombatRoundState({ encounter });
 
-      if (roundState.currentStep !== "select_actions") {
-        return reply.code(409).send({
-          error: "Combat Experience is only open during declaration.",
-        });
-      }
-
-      if (!isCombatRoundCombatExperienceWindowOpen(roundState)) {
-        return reply.code(409).send({
-          error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
-        });
-      }
-
       if (!gmAuthorizedOperation) {
         if (
           scenarioParticipant.controlledByUserId !== user.id ||
@@ -1271,14 +1260,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      const combatExperienceTrigger = getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: encounterParticipant.id,
+        state: roundState,
+        visibility: encounter.roleplayState?.visibility,
+      });
+
+      if (!combatExperienceTrigger) {
+        return reply.code(409).send({
+          error: "Combat Experience already rolled or is not required for this participant.",
+        });
+      }
+
       if (
-        !isCombatStartExperienceRollRequired({
-          participantId: encounterParticipant.id,
-          state: roundState,
-        })
+        combatExperienceTrigger === "combat_start" &&
+        !isCombatRoundCombatExperienceWindowOpen(roundState)
       ) {
         return reply.code(409).send({
-          error: "Combat Experience already rolled for this participant.",
+          error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
         });
       }
 
@@ -1299,7 +1298,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         skillTotalSource: combatExperienceSkillLookup.source,
         skillTotalWarning: combatExperienceSkillLookup.warning,
         state: roundState,
-        trigger: "combat_start",
+        trigger: combatExperienceTrigger,
+        visibility: encounter.roleplayState?.visibility,
       });
       const savedParticipant = await encounterService.updateScenarioParticipantState({
         participantId: scenarioParticipant.id,
