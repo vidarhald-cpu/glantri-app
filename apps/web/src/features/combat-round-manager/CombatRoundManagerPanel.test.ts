@@ -576,6 +576,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("const combatExperienceRollRecorded =");
     expect(source).toContain("const activeCombatExperienceDifficulty =");
     expect(source).toContain("const inspectorCombatExperienceDifficulty =");
+    expect(source).toContain("const inspectorCombatExperienceSkillLookup = useMemo(");
+    expect(source).toContain("sheetSummary: inspectorSheetSummary");
+    expect(source).toContain(
+      "const inspectorCombatExperienceSkillTotal = inspectorCombatExperienceSkillLookup.skillTotal",
+    );
     expect(source).toContain('${roundState.roundNumber}:combat-experience');
     expect(source).toContain("const inspectorCombatExperienceNoRollAvailable =");
     expect(source).toContain("inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty");
@@ -590,6 +595,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Boolean(inspectorSnapshot) ||");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("value={inspectorCombatExperienceDifficulty}");
+    expect(source).toContain("Skill total {inspectorCombatExperienceSkillTotal}");
+    expect(source).toContain("inspectorCombatExperienceSkillLookup.warning");
     expect(source).toContain("setCombatExperienceDifficultyDrafts");
     expect(source).toContain("saveCombatExperienceDifficultyDraft");
     expect(source).not.toContain("onBlur={(event) =>");

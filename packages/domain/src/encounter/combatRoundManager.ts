@@ -1720,6 +1720,81 @@ export interface ParticipantCombatExperienceSkillTotalLookup {
   warning?: string;
 }
 
+function getCombatExperienceDisplayedSkillTotal(input: {
+  label: string;
+  skill: Record<string, unknown>;
+}): ParticipantCombatExperienceSkillTotalLookup | undefined {
+  const displayedTotalFields = [
+    "totalSkill",
+    "totalSkillLevel",
+    "skillLevel",
+    "total",
+    "displayedTotal",
+    "effectiveTotal",
+    "effectiveSkillTotal",
+  ] as const;
+  const statAverageFields = [
+    "linkedStatAverage",
+    "linkedStatsAverage",
+    "statAverage",
+    "statsContribution",
+    "stats",
+    "avgStats",
+  ] as const;
+  const skillXpFields = [
+    "effectiveSkillNumber",
+    "totalXp",
+    "skillXp",
+    "xp",
+  ] as const;
+
+  for (const field of displayedTotalFields) {
+    const displayedTotal = readCombatRoundNumber(input.skill[field]);
+
+    if (displayedTotal !== undefined) {
+      return {
+        skillTotal: displayedTotal,
+        source: `${input.label}.${field}`,
+      };
+    }
+  }
+
+  const statAverageEntry = statAverageFields
+    .map((field) => ({
+      field,
+      value: readCombatRoundNumber(input.skill[field]),
+    }))
+    .find((entry): entry is { field: (typeof statAverageFields)[number]; value: number } =>
+      entry.value !== undefined,
+    );
+  const skillXpEntry = skillXpFields
+    .map((field) => ({
+      field,
+      value: readCombatRoundNumber(input.skill[field]),
+    }))
+    .find((entry): entry is { field: (typeof skillXpFields)[number]; value: number } =>
+      entry.value !== undefined,
+    );
+
+  if (statAverageEntry && skillXpEntry) {
+    return {
+      skillTotal: statAverageEntry.value + skillXpEntry.value,
+      source: `${input.label}.${statAverageEntry.field}+${skillXpEntry.field}`,
+    };
+  }
+
+  if (skillXpEntry) {
+    return {
+      skillTotal: skillXpEntry.value,
+      source: `${input.label}.${skillXpEntry.field}`,
+      warning:
+        "Combat Experience displayed total was unavailable; using XP-only fallback.",
+    };
+  }
+
+  return undefined;
+}
+
 export function getParticipantCombatExperienceSkillTotalLookup(
   participant: unknown,
 ): ParticipantCombatExperienceSkillTotalLookup {
@@ -1751,25 +1826,15 @@ export function getParticipantCombatExperienceSkillTotalLookup(
         continue;
       }
 
-      const effectiveSkillNumber = readCombatRoundNumber(skill.effectiveSkillNumber);
-      const totalSkill =
-        readCombatRoundNumber(skill.totalSkill) ?? readCombatRoundNumber(skill.totalSkillLevel);
+      const displayedTotal = getCombatExperienceDisplayedSkillTotal({
+        label: skillList.label,
+        skill,
+      });
 
-      if (effectiveSkillNumber !== undefined) {
+      if (displayedTotal) {
         return {
+          ...displayedTotal,
           matchedIdentifier,
-          skillTotal: effectiveSkillNumber,
-          source: `${skillList.label}.effectiveSkillNumber`,
-        };
-      }
-
-      if (totalSkill !== undefined) {
-        return {
-          matchedIdentifier,
-          skillTotal: totalSkill,
-          source: `${skillList.label}.totalSkill`,
-          warning:
-            "Combat Experience effectiveSkillNumber was unavailable; using totalSkill fallback.",
         };
       }
 

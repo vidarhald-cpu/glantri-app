@@ -715,10 +715,11 @@ describe("combat round manager", () => {
             skills: [
               { effectiveSkillNumber: 5, name: "Perception", skillId: "perception" },
               {
-                effectiveSkillNumber: 21,
+                effectiveSkillNumber: 7,
+                linkedStatAverage: 14,
                 name: "Combat Experience",
                 skillId: "combat_experience",
-                totalSkill: 14,
+                totalSkill: 21,
               },
             ],
           },
@@ -729,7 +730,7 @@ describe("combat round manager", () => {
     expect(lookup).toMatchObject({
       matchedIdentifier: "combat_experience",
       skillTotal: 21,
-      source: "participant.snapshot.sheetSummary.draftView.skills.effectiveSkillNumber",
+      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
     });
     expect(
       getCombatExperienceSkillTotalFromSnapshot({
@@ -737,10 +738,11 @@ describe("combat round manager", () => {
           draftView: {
             skills: [
               {
-                effectiveSkillNumber: 21,
+                effectiveSkillNumber: 7,
+                linkedStatAverage: 14,
                 name: "Combat Experience",
                 skillId: "combat_experience",
-                totalSkill: 14,
+                totalSkill: 21,
               },
             ],
           },
@@ -750,7 +752,33 @@ describe("combat round manager", () => {
     expect(getCombatExperienceSkillTotalFromSnapshot({ sheetSummary: {} })).toBe(0);
   });
 
-  it("falls back to total Combat Experience skill with an explicit warning", () => {
+  it("computes displayed Combat Experience total from stats and XP when total is absent", () => {
+    expect(
+      getParticipantCombatExperienceSkillTotalLookup({
+        snapshot: {
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 7,
+                  linkedStatAverage: 14,
+                  name: "Combat Experience",
+                  skillId: "combat_experience",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      matchedIdentifier: "combat_experience",
+      skillTotal: 21,
+      source:
+        "participant.snapshot.sheetSummary.draftView.skills.linkedStatAverage+effectiveSkillNumber",
+    });
+  });
+
+  it("supports normalized Combat Experience names and displayed total fields", () => {
     expect(
       getParticipantCombatExperienceSkillTotalLookup({
         snapshot: {
@@ -760,7 +788,7 @@ describe("combat round manager", () => {
                 {
                   name: "combatExperience",
                   skillId: "combatExperience",
-                  totalSkill: 14,
+                  totalSkillLevel: 21,
                 },
               ],
             },
@@ -769,9 +797,34 @@ describe("combat round manager", () => {
       }),
     ).toMatchObject({
       matchedIdentifier: "combatExperience",
-      skillTotal: 14,
-      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
-      warning: "Combat Experience effectiveSkillNumber was unavailable; using totalSkill fallback.",
+      skillTotal: 21,
+      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkillLevel",
+    });
+  });
+
+  it("uses XP-only Combat Experience only as an explicit fallback", () => {
+    expect(
+      getParticipantCombatExperienceSkillTotalLookup({
+        snapshot: {
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 7,
+                  name: "Combat Experience",
+                  skillId: "combat_experience",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      matchedIdentifier: "combat_experience",
+      skillTotal: 7,
+      source: "participant.snapshot.sheetSummary.draftView.skills.effectiveSkillNumber",
+      warning:
+        "Combat Experience displayed total was unavailable; using XP-only fallback.",
     });
   });
 
@@ -861,11 +914,11 @@ describe("combat round manager", () => {
         draftView: {
           skills: [
             {
-              effectiveSkillNumber: 21,
+              effectiveSkillNumber: 7,
               linkedStatAverage: 14,
               name: "Combat Experience",
               skillId: "combat_experience",
-              totalSkill: 7,
+              totalSkill: 21,
             },
           ],
         },
@@ -889,7 +942,7 @@ describe("combat round manager", () => {
       rollD20: 5,
       rollTotal: 5,
       skillTotal: 21,
-      skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
     });
     expect(rolled.state.commands.at(-1)?.facts).toMatchObject({
       difficulty: 26,
@@ -898,7 +951,53 @@ describe("combat round manager", () => {
       finalTotal: 26,
       rollTotal: 5,
       skillTotal: 21,
-      skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+    });
+  });
+
+  it("confirms no-roll Combat Experience using displayed total instead of XP-only", () => {
+    const state = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      21,
+    );
+    let rngCalls = 0;
+    const lookup = getParticipantCombatExperienceSkillTotalLookup({
+      sheetSummary: {
+        draftView: {
+          skills: [
+            {
+              effectiveSkillNumber: 7,
+              linkedStatAverage: 14,
+              name: "Combat Experience",
+              skillId: "combat_experience",
+              totalSkill: 21,
+            },
+          ],
+        },
+      },
+    });
+    const confirmed = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => {
+        rngCalls += 1;
+        return 0.2;
+      },
+      skillTotal: lookup.skillTotal,
+      skillTotalSource: lookup.source,
+      state,
+    });
+
+    expect(rngCalls).toBe(0);
+    expect(confirmed.result).toMatchObject({
+      difficulty: 21,
+      effectiveTableTotal: 21,
+      finalTotal: 21,
+      noRollRequired: true,
+      skillTotal: 21,
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
     });
   });
 

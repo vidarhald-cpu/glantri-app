@@ -2057,7 +2057,9 @@ describe("scenarios route contract", () => {
               skills: [
                 {
                   effectiveSkillNumber: 10,
+                  linkedStatAverage: 0,
                   skillId: "combat_experience",
+                  totalSkill: 10,
                 },
               ],
             },
@@ -2144,8 +2146,10 @@ describe("scenarios route contract", () => {
               skills: [
                 {
                   effectiveSkillNumber: 19,
+                  linkedStatAverage: 0,
                   name: "Combat Experience",
                   skillId: "combat_experience",
+                  totalSkill: 19,
                 },
               ],
             },
@@ -2215,7 +2219,7 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("lets a player roll their own combat-start Combat Experience", async () => {
+  it("lets a player roll their own combat-start Combat Experience using the displayed total", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       combatExperienceWindowOpen: true,
@@ -2226,9 +2230,11 @@ describe("scenarios route contract", () => {
             draftView: {
               skills: [
                 {
-                  effectiveSkillNumber: 10,
+                  effectiveSkillNumber: 7,
+                  linkedStatAverage: 14,
                   name: "Combat Experience",
                   skillId: "combat_experience",
+                  totalSkill: 21,
                 },
               ],
             },
@@ -2253,10 +2259,11 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().combatExperience).toMatchObject({
       difficulty: 26,
-      effectiveTableTotal: 10,
-      finalTotal: 15,
+      effectiveTableTotal: 21,
+      finalTotal: 26,
       rollD20: 5,
-      skillTotal: 10,
+      skillTotal: 21,
+      skillTotalSource: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
     });
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
@@ -2277,8 +2284,10 @@ describe("scenarios route contract", () => {
               skills: [
                 {
                   effectiveSkillNumber: 10,
+                  linkedStatAverage: 0,
                   name: "Combat Experience",
                   skillId: "combat_experience",
+                  totalSkill: 10,
                 },
               ],
             },
@@ -2334,7 +2343,9 @@ describe("scenarios route contract", () => {
                 skills: [
                   {
                     effectiveSkillNumber: 10,
+                    linkedStatAverage: 0,
                     skillId: "combat_experience",
+                    totalSkill: 10,
                   },
                 ],
               },
@@ -2360,7 +2371,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
-  it("lets a player confirm no-roll Combat Experience when skill meets difficulty", async () => {
+  it("lets a player confirm no-roll Combat Experience when displayed skill total meets difficulty", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       combatExperienceWindowOpen: true,
@@ -2371,9 +2382,11 @@ describe("scenarios route contract", () => {
             draftView: {
               skills: [
                 {
-                  effectiveSkillNumber: 26,
+                  effectiveSkillNumber: 7,
+                  linkedStatAverage: 19,
                   name: "Combat Experience",
                   skillId: "combat_experience",
+                  totalSkill: 26,
                 },
               ],
             },
@@ -2401,6 +2414,7 @@ describe("scenarios route contract", () => {
       modifierValue: 0,
       noRollRequired: true,
       skillTotal: 26,
+      skillTotalSource: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
     });
     expect(response.json().combatExperience.rollD20).toBeUndefined();
     expect(response.json().combatExperience.rollTotal).toBeUndefined();
@@ -2428,9 +2442,11 @@ describe("scenarios route contract", () => {
             draftView: {
               skills: [
                 {
-                  effectiveSkillNumber: 26,
+                  effectiveSkillNumber: 7,
+                  linkedStatAverage: 19,
                   name: "Combat Experience",
                   skillId: "combat_experience",
+                  totalSkill: 26,
                 },
               ],
             },
@@ -2529,7 +2545,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("uses the live character sheet effective Combat Experience total when the participant snapshot omits skill data", async () => {
+  it("uses the live character sheet displayed Combat Experience total when the participant snapshot omits skill data", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       combatExperienceWindowOpen: true,
@@ -2564,16 +2580,16 @@ describe("scenarios route contract", () => {
     expect(response.json().combatExperience).toMatchObject({
       difficulty: 26,
       difficultyShift: 5,
-      durationRounds: 2,
-      effectiveTableTotal: 11,
-      finalTotal: 16,
-      modifierValue: -2,
+      durationRounds: 0,
+      effectiveTableTotal: 21,
+      finalTotal: 26,
+      modifierValue: 0,
       noRollRequired: false,
-      resultBand: "active_penalty",
+      resultBand: "active",
       rollD20: 5,
       rollTotal: 5,
-      skillTotal: 11,
-      skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
+      skillTotal: 21,
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
       trigger: "combat_start",
     });
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
@@ -2581,11 +2597,11 @@ describe("scenarios route contract", () => {
       facts: expect.objectContaining({
         difficulty: 26,
         difficultyShift: 5,
-        effectiveTableTotal: 11,
-        finalTotal: 16,
+        effectiveTableTotal: 21,
+        finalTotal: 26,
         rollTotal: 5,
-        skillTotal: 11,
-        skillTotalSource: "participant.sheetSummary.draftView.skills.effectiveSkillNumber",
+        skillTotal: 21,
+        skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
       }),
       participantId: "encounter-participant-1",
       type: "roll_combat_experience",
@@ -2593,14 +2609,7 @@ describe("scenarios route contract", () => {
     expect(
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combatEffects
         .effects,
-    ).toEqual([
-      expect.objectContaining({
-        description: "combat exp active -2",
-        duration: "2 rounds",
-        modifierValue: -2,
-        type: "general_modifier",
-      }),
-    ]);
+    ).toEqual([]);
   });
 
   it("rejects attack declarations without the required phase target", async () => {

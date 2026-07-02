@@ -12,7 +12,7 @@ participant.
 - Default difficulty: `26`
 - GM open step: the GM sets/accepts the shared difficulty with Start Combat Experience rolls before players can roll or confirm
 - Roll: open-ended `1d20 + Combat Experience`, unless the displayed Combat Experience total already meets the difficulty
-- Skill total source: the displayed effective `Combat Experience` skill total from the participant character sheet/combat panel. The canonical combat value is `effectiveSkillNumber`; `totalSkill`/`totalSkillLevel` is used only as a fallback with an explicit warning.
+- Skill total source: the displayed effective `Combat Experience` skill total from the participant character sheet/combat panel. The lookup prefers the displayed total field such as `totalSkill`/`totalSkillLevel`; if that field is absent, it derives the same displayed total from linked stats plus XP, such as `linkedStatAverage + effectiveSkillNumber`. XP-only fields such as `effectiveSkillNumber` are used only as an explicit fallback with a warning.
 - Missing skill fallback: `0`, with an explicit warning/status so a spelling, casing, or serialization mismatch is visible
 - Current trigger: `combat_start`
 

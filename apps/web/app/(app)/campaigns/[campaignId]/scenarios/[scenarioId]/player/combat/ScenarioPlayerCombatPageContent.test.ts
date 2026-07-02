@@ -227,7 +227,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain("selectedCombatExperienceResult");
     expect(source).toContain("selectedCombatExperienceWindowOpen");
+    expect(source).toContain("const selectedCombatExperienceSkillLookup = useMemo(");
+    expect(source).toContain("sheetSummary: selectedSheetSummary");
     expect(source).toContain("selectedCombatExperienceSkillTotal");
+    expect(source).toContain(
+      "const selectedCombatExperienceSkillTotal = selectedCombatExperienceSkillLookup.skillTotal",
+    );
     expect(source).toContain("selectedCombatExperienceDifficulty");
     expect(source).toContain("selectedCombatExperienceNoRollAvailable");
     expect(source).toContain("selectedCombatExperienceResultPanel");
@@ -241,6 +246,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollCombatExperience()");
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
+    expect(source).toContain("selectedCombatExperienceSkillLookup.warning");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain(
       "controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired",
