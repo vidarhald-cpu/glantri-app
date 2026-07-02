@@ -401,6 +401,30 @@ export interface CombatRoundPhaseCombatExperienceRequirement {
   trigger: CombatExperienceTrigger;
 }
 
+export interface CombatRoundPhaseCombatExperienceDetectionIncomingAttackerReport {
+  actionId?: string;
+  aware: boolean;
+  initiativeTotal?: number;
+  participantId: string;
+  phaseAttackCapable: boolean;
+  targetId?: string;
+  targetMatchesParticipant: boolean;
+}
+
+export interface CombatRoundPhaseCombatExperienceDetectionParticipantReport {
+  actionId?: string;
+  detectedIncomingAttackers: CombatRoundPhaseCombatExperienceDetectionIncomingAttackerReport[];
+  hasA1A2AlreadyResolved: boolean;
+  initiativeTotal?: number;
+  label: string;
+  participantId: string;
+  phaseAttackCapable: boolean;
+  phaseTargetActiveInEncounter: boolean;
+  phaseTargetId?: string;
+  reasonIfNo?: string;
+  required: boolean;
+}
+
 export const combatExperienceResultBandSchema = z.enum([
   "panic",
   "passive",
@@ -1428,11 +1452,13 @@ const combatRoundStepStatusesSchema = z.record(combatRoundStepSchema, combatRoun
 
 export const combatRoundParticipantStateSchema = z.object({
   attackResults: combatRoundAttackResultsSchema.default({}),
+  characterId: idSchema.optional(),
   combatExperience: combatRoundCombatExperienceResultSchema.optional(),
   declaration: combatRoundDeclarationSchema.optional(),
   initiatives: combatRoundInitiativesSchema.default({}),
   label: z.string().min(1),
   participantId: idSchema,
+  scenarioParticipantId: idSchema.optional(),
   stepStatuses: combatRoundStepStatusesSchema.default(
     Object.fromEntries(COMBAT_ROUND_STEPS.map((step) => [step, "pending"])),
   ),
@@ -2452,18 +2478,87 @@ function participantHasCombatExperienceForTrigger(input: {
   );
 }
 
-function isCombatRoundParticipantAwareOfPhaseAttacker(input: {
-  attackerParticipantId: string;
-  participantId: string;
-  visibility?: CombatRoundVisibility;
-}): boolean {
-  const participantVisibility = input.visibility?.[input.participantId];
+function getCombatRoundParticipantTargetAliases(
+  participant: Pick<
+    CombatRoundParticipantState,
+    "characterId" | "participantId" | "scenarioParticipantId"
+  >,
+): string[] {
+  return [
+    participant.participantId,
+    participant.scenarioParticipantId,
+    participant.characterId,
+  ].filter(
+    (entry, index, aliases): entry is string =>
+      typeof entry === "string" && entry.length > 0 && aliases.indexOf(entry) === index,
+  );
+}
 
-  if (!participantVisibility) {
-    return true;
+function combatRoundTargetMatchesParticipant(input: {
+  participant: Pick<
+    CombatRoundParticipantState,
+    "characterId" | "participantId" | "scenarioParticipantId"
+  >;
+  targetParticipantId?: string;
+}): boolean {
+  return Boolean(
+    input.targetParticipantId &&
+    getCombatRoundParticipantTargetAliases(input.participant).includes(input.targetParticipantId),
+  );
+}
+
+function getCombatRoundParticipantByTargetId(input: {
+  state: CombatRoundState;
+  targetParticipantId?: string;
+}): CombatRoundParticipantState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (!input.targetParticipantId) {
+    return undefined;
   }
 
-  const attackerIsVisible = participantVisibility[input.attackerParticipantId];
+  return normalized.participants.find((participant) =>
+    combatRoundTargetMatchesParticipant({
+      participant,
+      targetParticipantId: input.targetParticipantId,
+    }),
+  );
+}
+
+function getCombatRoundVisibilityValue(input: {
+  seenAliases: string[];
+  viewerAliases: string[];
+  visibility?: CombatRoundVisibility;
+}): boolean | undefined {
+  for (const viewerAlias of input.viewerAliases) {
+    const participantVisibility = input.visibility?.[viewerAlias];
+
+    if (!participantVisibility) {
+      continue;
+    }
+
+    for (const seenAlias of input.seenAliases) {
+      const value = participantVisibility[seenAlias];
+
+      if (value !== undefined) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isCombatRoundParticipantAwareOfPhaseAttacker(input: {
+  attacker: CombatRoundParticipantState;
+  participant: CombatRoundParticipantState;
+  visibility?: CombatRoundVisibility;
+}): boolean {
+  const attackerIsVisible = getCombatRoundVisibilityValue({
+    seenAliases: getCombatRoundParticipantTargetAliases(input.attacker),
+    viewerAliases: getCombatRoundParticipantTargetAliases(input.participant),
+    visibility: input.visibility,
+  });
 
   return attackerIsVisible !== false;
 }
@@ -2580,17 +2675,22 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
       return [];
     }
 
+    const attackerTargetId =
+      attacker.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+
     if (
-      attacker.declaration?.phaseContexts?.[input.phase]?.targetParticipantId !==
-      input.participantId
+      !combatRoundTargetMatchesParticipant({
+        participant,
+        targetParticipantId: attackerTargetId,
+      })
     ) {
       return [];
     }
 
     if (
       !isCombatRoundParticipantAwareOfPhaseAttacker({
-        attackerParticipantId: attacker.participantId,
-        participantId: input.participantId,
+        attacker,
+        participant,
         visibility: input.visibility,
       })
     ) {
@@ -2634,6 +2734,106 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
     threats,
     trigger,
   };
+}
+
+export function getCombatRoundPhaseCombatExperienceDetectionReport(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  visibility?: CombatRoundVisibility;
+}): CombatRoundPhaseCombatExperienceDetectionParticipantReport[] {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return normalized.participants.map((participant) => {
+    const phaseTargetId =
+      participant.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+    const phaseAttackCapable = combatRoundParticipantHasPhaseAttack({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const phaseTargetActiveInEncounter = Boolean(
+      getCombatRoundParticipantByTargetId({
+        state: normalized,
+        targetParticipantId: phaseTargetId,
+      }),
+    );
+    const hasA1A2AlreadyResolved = combatRoundParticipantPhaseActionHasCompletionEvidence({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const initiativeTotal = getCombatRoundInitiativeTotal(participant.initiatives[input.phase]);
+    const requirement = getCombatRoundPhaseCombatExperienceRequirement({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+      visibility: input.visibility,
+    });
+    const detectedIncomingAttackers = normalized.participants
+      .filter((attacker) => attacker.participantId !== participant.participantId)
+      .map((attacker) => {
+        const targetId = attacker.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+
+        return {
+          actionId: attacker.declaration?.actionId,
+          aware: isCombatRoundParticipantAwareOfPhaseAttacker({
+            attacker,
+            participant,
+            visibility: input.visibility,
+          }),
+          initiativeTotal: getCombatRoundInitiativeTotal(attacker.initiatives[input.phase]),
+          participantId: attacker.participantId,
+          phaseAttackCapable: combatRoundParticipantHasPhaseAttack({
+            participantId: attacker.participantId,
+            phase: input.phase,
+            state: normalized,
+          }),
+          targetId,
+          targetMatchesParticipant: combatRoundTargetMatchesParticipant({
+            participant,
+            targetParticipantId: targetId,
+          }),
+        };
+      });
+    const actionableIncomingAttackers = detectedIncomingAttackers.filter(
+      (attacker) => attacker.phaseAttackCapable && attacker.targetMatchesParticipant,
+    );
+    let reasonIfNo: string | undefined;
+
+    if (!requirement) {
+      if (!phaseAttackCapable) {
+        reasonIfNo = "participant has no attack in this phase";
+      } else if (!phaseTargetId) {
+        reasonIfNo = "participant phase target is missing";
+      } else if (!phaseTargetActiveInEncounter) {
+        reasonIfNo = "participant phase target is not active in the encounter";
+      } else if (hasA1A2AlreadyResolved) {
+        reasonIfNo = "participant phase attack is already rolled, skipped, or cancelled";
+      } else if (initiativeTotal === undefined) {
+        reasonIfNo = "participant initiative is missing";
+      } else if (actionableIncomingAttackers.length === 0) {
+        reasonIfNo = "no incoming phase attack targets this participant";
+      } else if (actionableIncomingAttackers.every((attacker) => !attacker.aware)) {
+        reasonIfNo = "incoming phase attacker is not visible or known to this participant";
+      } else {
+        reasonIfNo = "initiative comparison does not require this participant";
+      }
+    }
+
+    return {
+      actionId: participant.declaration?.actionId,
+      detectedIncomingAttackers,
+      hasA1A2AlreadyResolved,
+      initiativeTotal,
+      label: participant.label,
+      participantId: participant.participantId,
+      phaseAttackCapable,
+      phaseTargetActiveInEncounter,
+      phaseTargetId,
+      reasonIfNo,
+      required: Boolean(requirement),
+    };
+  });
 }
 
 export function isCombatRoundPhaseCombatExperienceRollRequired(input: {
@@ -3544,11 +3744,13 @@ function participantStateFromEncounterParticipant(input: {
 }): CombatRoundParticipantState {
   return {
     attackResults: input.existing?.attackResults ?? {},
+    characterId: input.participant.characterId,
     combatExperience: input.existing?.combatExperience,
     declaration: input.existing?.declaration,
     initiatives: input.existing?.initiatives ?? {},
     label: input.participant.label,
     participantId: input.participant.id,
+    scenarioParticipantId: input.participant.scenarioParticipantId,
     stepStatuses: mergeStepStatuses(input.existing?.stepStatuses),
   };
 }
@@ -3853,7 +4055,12 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       participantId: input.participantId,
       phase: input.phase,
       state: normalized,
-    }) && targetParticipantId,
+    }) &&
+    targetParticipantId &&
+    getCombatRoundParticipantByTargetId({
+      state: normalized,
+      targetParticipantId,
+    }),
   );
 }
 

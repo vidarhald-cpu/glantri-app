@@ -65,6 +65,11 @@ participant's phase initiative with the incoming attacker's phase initiative:
 - An incoming attack from an explicitly unseen attacker does not trigger the opportunity. Missing
   visibility data is treated as seen for backward-compatible encounters.
 
+Example: if two participants both make valid A1 attacks against each other, both see each other, and
+their i1 totals are `5` and `5`, both must resolve phase CE before either A1 attack roll opens. If
+one participant declared Parry - Attack, that participant has no A1 attack, so their declaration
+cannot create a phase-1 attacked-while-attacking CE check.
+
 Phase CE uses the same displayed effective skill total, difficulty-shifted table lookup, no-roll
 rule, and command-backed undo as combat-start CE. Phase CE does not require a new GM "start rolls"
 button; reaching the A1/A2 pre-attack gate opens the phase CE window.

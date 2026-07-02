@@ -49,6 +49,7 @@ import {
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundPhaseCombatExperienceRequirement,
+  getCombatRoundPhaseCombatExperienceDetectionReport,
   getFirstCombatStartExperienceRequiredParticipantId,
   getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
   getFirstCombatRoundDeclarationRequiredParticipantId,
@@ -445,11 +446,88 @@ function declareTestRoundAction(input: {
         phase1: testPhaseContext(input.phase1Target ?? "guard"),
         phase2: testPhaseContext(input.phase2Target ?? "guard"),
       },
-      roundNumber: 3,
+      roundNumber: input.state.roundNumber,
     },
     participantId: input.participantId,
     state: input.state,
     submittedBy: "gm",
+  });
+}
+
+function prepareScenarioTargetPhaseInitiativeCompleteState(input: {
+  gladiatorActionId?: string;
+  gladiatorInitiative?: number;
+  phase: "phase1" | "phase2";
+  scyrianActionId?: string;
+  scyrianInitiative?: number;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const encounterParticipants = [
+    participant({ id: "gladiator", label: "The Gladiator" }),
+    participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+  ];
+  const combatExperienceOpen = openCombatExperienceWindow(
+    initializeCombatRoundState({
+      encounter: encounter({ currentRound: 1, participants: encounterParticipants }),
+    }),
+  );
+  const gladiatorCombatExperienceResolved = rollCombatRoundCombatExperience({
+    command: {
+      createdAt: "2026-01-01T00:01:00.000Z",
+      createdByUserId: "player-gladiator",
+    },
+    participantId: "gladiator",
+    skillTotal: 26,
+    state: combatExperienceOpen,
+  }).state;
+  const scyrianCombatExperienceResolved = rollCombatRoundCombatExperience({
+    command: {
+      createdAt: "2026-01-01T00:01:10.000Z",
+      createdByUserId: "player-scyrian",
+    },
+    participantId: "scyrian",
+    skillTotal: 26,
+    state: gladiatorCombatExperienceResolved,
+  }).state;
+  const withDeclarations = declareTestRoundAction({
+    actionId: input.scyrianActionId ?? "attack_parry",
+    participantId: "scyrian",
+    phase1Target: "scenario-gladiator",
+    phase2Target: "scenario-gladiator",
+    state: declareTestRoundAction({
+      actionId: input.gladiatorActionId ?? "attack_parry",
+      participantId: "gladiator",
+      phase1Target: "scenario-scyrian",
+      phase2Target: "scenario-scyrian",
+      state: scyrianCombatExperienceResolved,
+    }),
+  });
+  const atInitiativeStep = advanceToStep(
+    withDeclarations,
+    input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+  );
+
+  return setCombatRoundParticipantInitiative({
+    initiative: {
+      baseInitiative: 0,
+      modifierAdjustment: 0,
+      rolls: [Math.min(6, input.scyrianInitiative ?? 5)],
+      rollTotal: input.scyrianInitiative ?? 5,
+      total: input.scyrianInitiative ?? 5,
+    },
+    participantId: "scyrian",
+    phase: input.phase,
+    state: setCombatRoundParticipantInitiative({
+      initiative: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [Math.min(6, input.gladiatorInitiative ?? 5)],
+        rollTotal: input.gladiatorInitiative ?? 5,
+        total: input.gladiatorInitiative ?? 5,
+      },
+      participantId: "gladiator",
+      phase: input.phase,
+      state: atInitiativeStep,
+    }),
   });
 }
 
@@ -1681,6 +1759,219 @@ describe("combat round manager", () => {
     ).toBe(false);
   });
 
+  it("detects the round-1 reciprocal A1 scenario-target case before opening attack rolls", () => {
+    const state = prepareScenarioTargetPhaseInitiativeCompleteState({
+      gladiatorInitiative: 5,
+      phase: "phase1",
+      scyrianInitiative: 5,
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+    const report = getCombatRoundPhaseCombatExperienceDetectionReport({
+      phase: "phase1",
+      state: advanced,
+      visibility,
+    });
+    const gladiatorReport = report.find((entry) => entry.participantId === "gladiator");
+    const scyrianReport = report.find((entry) => entry.participantId === "scyrian");
+
+    expect(gladiatorReport).toMatchObject({
+      actionId: "attack_parry",
+      hasA1A2AlreadyResolved: false,
+      initiativeTotal: 5,
+      phaseAttackCapable: true,
+      phaseTargetActiveInEncounter: true,
+      phaseTargetId: "scenario-scyrian",
+      required: true,
+    });
+    expect(gladiatorReport?.detectedIncomingAttackers).toEqual([
+      expect.objectContaining({
+        actionId: "attack_parry",
+        aware: true,
+        initiativeTotal: 5,
+        participantId: "scyrian",
+        phaseAttackCapable: true,
+        targetId: "scenario-gladiator",
+        targetMatchesParticipant: true,
+      }),
+    ]);
+    expect(scyrianReport).toMatchObject({
+      actionId: "attack_parry",
+      hasA1A2AlreadyResolved: false,
+      initiativeTotal: 5,
+      phaseAttackCapable: true,
+      phaseTargetActiveInEncounter: true,
+      phaseTargetId: "scenario-gladiator",
+      required: true,
+    });
+    expect(scyrianReport?.detectedIncomingAttackers).toEqual([
+      expect.objectContaining({
+        actionId: "attack_parry",
+        aware: true,
+        initiativeTotal: 5,
+        participantId: "gladiator",
+        phaseAttackCapable: true,
+        targetId: "scenario-scyrian",
+        targetMatchesParticipant: true,
+      }),
+    ]);
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 1,
+      step: "A1",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "scyrian",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+      }),
+    ).toBe(false);
+  });
+
+  it("opens the phase CE gate rather than direct A1 attack after equal reciprocal i1", () => {
+    const state = prepareScenarioTargetPhaseInitiativeCompleteState({
+      gladiatorInitiative: 5,
+      phase: "phase1",
+      scyrianInitiative: 5,
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 1,
+      step: "A1",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+  });
+
+  it("opens A1 for a participant after their only required phase CE check is resolved", () => {
+    const encounterParticipants = [
+      participant({ id: "gladiator", label: "The Gladiator" }),
+      participant({ id: "guard", label: "City guard" }),
+      participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+    ];
+    const declared = declareTestRoundAction({
+      actionId: "attack_parry",
+      participantId: "scyrian",
+      phase1Target: "scenario-gladiator",
+      phase2Target: "scenario-gladiator",
+      state: declareTestRoundAction({
+        actionId: "parry_attack",
+        participantId: "guard",
+        phase1Target: "scenario-gladiator",
+        phase2Target: "scenario-gladiator",
+        state: declareTestRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          phase1Target: "scenario-guard",
+          phase2Target: "scenario-guard",
+          state: initializeCombatRoundState({
+            encounter: encounter({ participants: encounterParticipants }),
+          }),
+        }),
+      }),
+    });
+    const atInitiative = advanceToStep(declared, "initiative_phase_1");
+    const state = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [1], rollTotal: 1, total: 1 },
+      participantId: "guard",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [4],
+          rollTotal: 4,
+          total: 4,
+        },
+        participantId: "scyrian",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [6],
+            rollTotal: 6,
+            total: 6,
+          },
+          participantId: "gladiator",
+          phase: "phase1",
+          state: atInitiative,
+        }),
+      }),
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+    };
+    const gate = advanceCombatRoundStep(state, { visibility });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "player-gladiator",
+      },
+      participantId: "gladiator",
+      skillTotal: 26,
+      state: gate,
+      visibility,
+    });
+
+    expect(gate.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(gate.phaseResolutionCursor).toBeUndefined();
+    expect(rolled.result).toMatchObject({
+      noRollRequired: true,
+      trigger: "phase1_attack",
+    });
+    expect(rolled.state.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: rolled.state,
+      }),
+    ).toBe(true);
+  });
+
   it("requires phase1 CE only for the lower-initiative reciprocal attacker when difference is greater than 3", () => {
     const state = preparePhaseInitiativeCompleteState({
       actionId: "attack_parry",
@@ -1942,6 +2233,143 @@ describe("combat round manager", () => {
         visibility,
       }),
     ).toBeUndefined();
+  });
+
+  it("requires phase2 CE for both reciprocal scenario-target attackers at equal initiative", () => {
+    const state = prepareScenarioTargetPhaseInitiativeCompleteState({
+      gladiatorActionId: "parry_attack",
+      gladiatorInitiative: 5,
+      phase: "phase2",
+      scyrianActionId: "parry_attack",
+      scyrianInitiative: 5,
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(advanced.currentStep).toBe("phase_2_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 1,
+      step: "A2",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "scyrian",
+        phase: "phase2",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not create phase1 CE from a Parry-Attack declaration without a phase1 attack", () => {
+    const state = prepareScenarioTargetPhaseInitiativeCompleteState({
+      gladiatorActionId: "attack_parry",
+      gladiatorInitiative: 5,
+      phase: "phase1",
+      scyrianActionId: "parry_attack",
+      scyrianInitiative: 5,
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "scyrian",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(advanced.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not require scenario-target phase CE from unseen reciprocal attackers", () => {
+    const state = prepareScenarioTargetPhaseInitiativeCompleteState({
+      gladiatorInitiative: 5,
+      phase: "phase1",
+      scyrianInitiative: 5,
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": false },
+      "scenario-scyrian": { "scenario-gladiator": false },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+    const report = getCombatRoundPhaseCombatExperienceDetectionReport({
+      phase: "phase1",
+      state: advanced,
+      visibility,
+    });
+
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "scyrian",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(report).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          participantId: "gladiator",
+          reasonIfNo: "incoming phase attacker is not visible or known to this participant",
+          required: false,
+        }),
+        expect.objectContaining({
+          participantId: "scyrian",
+          reasonIfNo: "incoming phase attacker is not visible or known to this participant",
+          required: false,
+        }),
+      ]),
+    );
+    expect(advanced.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
   });
 
   it("opens A1 after all required phase-1 CE rolls are resolved in any order", () => {
