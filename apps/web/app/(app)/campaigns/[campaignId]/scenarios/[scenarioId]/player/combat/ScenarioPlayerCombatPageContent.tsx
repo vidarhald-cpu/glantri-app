@@ -165,6 +165,10 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
     return "Not rolled";
   }
 
+  if (result.noRollRequired) {
+    return "Active, no roll required";
+  }
+
   if (!result.needsEffectRow || result.modifierValue === 0) {
     return "Active, no modifier";
   }
@@ -173,6 +177,10 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
 }
 
 function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceResult): string {
+  if (result.noRollRequired) {
+    return "Result: Active - no roll required";
+  }
+
   if (!result.needsEffectRow || result.modifierValue === 0) {
     return "Result: Active, no modifier";
   }
@@ -1610,7 +1618,9 @@ export default function ScenarioPlayerCombatPageContent({
     : null;
   const selectedCombatExperienceResultPanel = selectedCombatExperienceResult
     ? {
-        interpretedResult: `Combat Experience ${selectedCombatExperienceResult.skillTotal} + roll ${selectedCombatExperienceResult.rollTotal} = ${selectedCombatExperienceResult.finalTotal} vs ${selectedCombatExperienceResult.difficulty}`,
+        interpretedResult: selectedCombatExperienceResult.noRollRequired
+          ? `Combat Experience ${selectedCombatExperienceResult.skillTotal} vs difficulty ${selectedCombatExperienceResult.difficulty}`
+          : `Combat Experience ${selectedCombatExperienceResult.skillTotal} + roll ${selectedCombatExperienceResult.rollTotal} = ${selectedCombatExperienceResult.finalTotal} vs ${selectedCombatExperienceResult.difficulty}`,
         rankLabel: "Combat Experience",
         resultLabel: formatCombatExperienceResultLine(selectedCombatExperienceResult),
       }

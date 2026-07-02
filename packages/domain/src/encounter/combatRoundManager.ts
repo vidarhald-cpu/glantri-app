@@ -398,13 +398,16 @@ export type CombatExperienceEvaluation = z.infer<typeof combatExperienceEvaluati
 export const combatRoundCombatExperienceResultSchema = combatExperienceEvaluationSchema.extend({
   difficulty: z.number().int().positive(),
   finalTotal: z.number().int(),
+  noRollRequired: z.boolean().default(false),
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   rolledAt: z.string().datetime(),
   rolledByUserId: idSchema.optional(),
-  rollD20: z.number().int().min(1).max(20),
-  rollTotal: z.number().int(),
+  rollD20: z.number().int().min(1).max(20).optional(),
+  rollTotal: z.number().int().optional(),
   roundNumber: z.number().int().positive(),
   skillTotal: z.number().int(),
+  skillTotalSource: z.string().min(1).optional(),
+  skillTotalWarning: z.string().min(1).optional(),
   trigger: combatExperienceTriggerSchema,
 });
 export type CombatRoundCombatExperienceResult = z.infer<
@@ -1187,6 +1190,20 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   }
 
   if (actionBlockingEffect) {
+    const actionBlockingText = normalizeCombatRoundDedupeText(
+      [
+        actionBlockingEffect.actionState,
+        actionBlockingEffect.durationRaw,
+        actionBlockingEffect.sourceValue,
+        sourceText,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    const isParryOnlyActionLock =
+      actionBlockingEffect.actionState === "parry_only" ||
+      combatRoundTextIndicatesParryOnly(actionBlockingText);
+
     addConsequence({
       accepted: true,
       hand,
@@ -1194,11 +1211,14 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
         actionBlockingEffect.effectKey,
       )}-no-action`,
       kind: "note",
-      label: "No combat action possible",
-      notes:
-        "Committed as a visible special combat/session row. Full next-round action gating remains GM-managed for now.",
+      label: isParryOnlyActionLock ? "Action limited to parry" : "No combat action possible",
+      notes: isParryOnlyActionLock
+        ? "Committed as a visible specific action-limited row. Full next-round action gating remains GM-managed for now."
+        : "Committed as a visible special combat/session row. Full next-round action gating remains GM-managed for now.",
       participantId,
-      reason: "Critical effect clearly prevents combat action.",
+      reason: isParryOnlyActionLock
+        ? "Critical effect clearly limits combat action to parry."
+        : "Critical effect clearly prevents combat action.",
       sourceCritKey: criticalResult.critKey,
       sourceEffectKey: actionBlockingEffect.effectKey,
       sourceText,
@@ -1598,40 +1618,145 @@ function normalizeCombatExperienceSkillKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function compactCombatExperienceSkillKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function isCombatExperienceSkillIdentifier(identifier: string): boolean {
+  const normalized = normalizeCombatExperienceSkillKey(identifier);
+  const compact = compactCombatExperienceSkillKey(identifier);
+
+  return (
+    normalized === "combat_experience" ||
+    normalized === "combat_experience_skill" ||
+    compact === "combatexperience" ||
+    compact === "combatexperienceskill"
+  );
+}
+
+function getCombatExperienceSkillTotalSkillLists(participant: unknown): Array<{
+  label: string;
+  skills: unknown[];
+}> {
+  const lists: Array<{ label: string; skills: unknown[] }> = [];
+  const addSkills = (label: string, owner: unknown) => {
+    if (!isCombatRoundRecord(owner)) {
+      return;
+    }
+
+    const draftView = isCombatRoundRecord(owner.draftView) ? owner.draftView : undefined;
+    const skills = Array.isArray(draftView?.skills)
+      ? draftView.skills
+      : Array.isArray(owner.skills)
+        ? owner.skills
+        : [];
+
+    if (skills.length > 0) {
+      lists.push({ label, skills });
+    }
+  };
+
+  if (isCombatRoundRecord(participant)) {
+    addSkills("participant.sheetSummary.draftView.skills", participant.sheetSummary);
+    addSkills("participant.draftView.skills", participant.draftView);
+
+    if (isCombatRoundRecord(participant.snapshot)) {
+      addSkills("participant.snapshot.sheetSummary.draftView.skills", participant.snapshot.sheetSummary);
+      addSkills("participant.snapshot.draftView.skills", participant.snapshot.draftView);
+    }
+  }
+
+  addSkills("snapshot.sheetSummary.draftView.skills", participant);
+
+  return lists;
+}
+
+export interface ParticipantCombatExperienceSkillTotalLookup {
+  matchedIdentifier?: string;
+  skillTotal: number;
+  source?: string;
+  warning?: string;
+}
+
+export function getParticipantCombatExperienceSkillTotalLookup(
+  participant: unknown,
+): ParticipantCombatExperienceSkillTotalLookup {
+  const skillLists = getCombatExperienceSkillTotalSkillLists(participant);
+
+  if (skillLists.length === 0) {
+    return {
+      skillTotal: 0,
+      warning: "Combat Experience skill data is missing from participant sheet summary.",
+    };
+  }
+
+  for (const skillList of skillLists) {
+    for (const skill of skillList.skills) {
+      if (!isCombatRoundRecord(skill)) {
+        continue;
+      }
+
+      const identifiers = [skill.skillId, skill.skillKey, skill.id, skill.name, skill.skillName].filter(
+        (entry): entry is string => typeof entry === "string",
+      );
+      const matchedIdentifier = identifiers.find(isCombatExperienceSkillIdentifier);
+
+      if (!matchedIdentifier) {
+        continue;
+      }
+
+      const totalSkill =
+        readCombatRoundNumber(skill.totalSkill) ?? readCombatRoundNumber(skill.totalSkillLevel);
+      const effectiveSkillNumber = readCombatRoundNumber(skill.effectiveSkillNumber);
+      const linkedStatAverage = readCombatRoundNumber(skill.linkedStatAverage);
+
+      if (totalSkill !== undefined) {
+        return {
+          matchedIdentifier,
+          skillTotal: totalSkill,
+          source: `${skillList.label}.totalSkill`,
+        };
+      }
+
+      if (effectiveSkillNumber !== undefined && linkedStatAverage !== undefined) {
+        return {
+          matchedIdentifier,
+          skillTotal: effectiveSkillNumber + linkedStatAverage,
+          source: `${skillList.label}.effectiveSkillNumber+linkedStatAverage`,
+        };
+      }
+
+      if (effectiveSkillNumber !== undefined) {
+        return {
+          matchedIdentifier,
+          skillTotal: effectiveSkillNumber,
+          source: `${skillList.label}.effectiveSkillNumber`,
+          warning:
+            "Combat Experience final total was unavailable; using effectiveSkillNumber without linked stats.",
+        };
+      }
+
+      return {
+        matchedIdentifier,
+        skillTotal: 0,
+        source: skillList.label,
+        warning: "Combat Experience skill exists, but no numeric total was available.",
+      };
+    }
+  }
+
+  return {
+    skillTotal: 0,
+    warning: "Combat Experience skill was not found in participant sheet summary skills.",
+  };
+}
+
+export function getParticipantCombatExperienceSkillTotal(participant: unknown): number {
+  return getParticipantCombatExperienceSkillTotalLookup(participant).skillTotal;
+}
+
 export function getCombatExperienceSkillTotalFromSnapshot(snapshot: unknown): number {
-  if (!isCombatRoundRecord(snapshot) || !isCombatRoundRecord(snapshot.sheetSummary)) {
-    return 0;
-  }
-
-  const sheetSummary = snapshot.sheetSummary;
-  const draftView = isCombatRoundRecord(sheetSummary.draftView) ? sheetSummary.draftView : undefined;
-  const skills = Array.isArray(draftView?.skills) ? draftView.skills : [];
-
-  for (const skill of skills) {
-    if (!isCombatRoundRecord(skill)) {
-      continue;
-    }
-
-    const identifiers = [skill.skillId, skill.skillKey, skill.id, skill.name].filter(
-      (entry): entry is string => typeof entry === "string",
-    );
-    const isCombatExperience = identifiers.some((identifier) => {
-      const normalized = normalizeCombatExperienceSkillKey(identifier);
-      return normalized === "combat_experience" || normalized === "combat_experience_skill";
-    });
-
-    if (!isCombatExperience) {
-      continue;
-    }
-
-    return (
-      readCombatRoundNumber(skill.effectiveSkillNumber) ??
-      readCombatRoundNumber(skill.totalSkill) ??
-      0
-    );
-  }
-
-  return 0;
+  return getParticipantCombatExperienceSkillTotalLookup({ snapshot }).skillTotal;
 }
 
 function rollCombatExperiencePanicDuration(randomFn: () => number): number {
@@ -2091,6 +2216,8 @@ export function rollCombatRoundCombatExperience(input: {
   scenarioId?: string;
   scenarioParticipantId?: string;
   skillTotal?: number;
+  skillTotalSource?: string;
+  skillTotalWarning?: string;
   state: CombatRoundState;
   trigger?: CombatExperienceTrigger;
 }): {
@@ -2123,8 +2250,9 @@ export function rollCombatRoundCombatExperience(input: {
   const rng = input.rng ?? Math.random;
   const difficulty = input.difficulty ?? COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
   const skillTotal = Math.trunc(input.skillTotal ?? 0);
-  const roll = rollOpenEndedD20(rng);
-  const finalTotal = skillTotal + roll.dieResult;
+  const noRollRequired = skillTotal >= difficulty;
+  const roll = noRollRequired ? undefined : rollOpenEndedD20(rng);
+  const finalTotal = noRollRequired ? skillTotal : skillTotal + (roll?.dieResult ?? 0);
   const panicDurationRounds =
     finalTotal <= 5 ? rollCombatExperiencePanicDuration(rng) : undefined;
   const evaluation = evaluateCombatExperienceResult(finalTotal, { panicDurationRounds });
@@ -2132,13 +2260,16 @@ export function rollCombatRoundCombatExperience(input: {
     ...evaluation,
     difficulty,
     finalTotal,
-    openEndedD10s: roll.openEndedD10s,
+    noRollRequired,
+    openEndedD10s: roll?.openEndedD10s ?? [],
     rolledAt: input.command.createdAt,
     rolledByUserId: input.command.createdByUserId,
-    rollD20: roll.rollD20,
-    rollTotal: roll.dieResult,
+    rollD20: roll?.rollD20,
+    rollTotal: roll?.dieResult,
     roundNumber: normalized.roundNumber,
     skillTotal,
+    skillTotalSource: input.skillTotalSource,
+    skillTotalWarning: input.skillTotalWarning,
     trigger,
   });
   const commandId =
@@ -2185,12 +2316,15 @@ export function rollCombatRoundCombatExperience(input: {
       evaluatedResult: evaluation,
       finalTotal,
       modifierValue: result.modifierValue,
-      openEndedD10s: roll.openEndedD10s,
+      noRollRequired,
+      openEndedD10s: roll?.openEndedD10s ?? [],
       previousCombatExperience: participant.combatExperience,
       resultBand: result.resultBand,
       resultLabel: result.label,
-      rollD20: roll.rollD20,
-      rollTotal: roll.dieResult,
+      rollD20: roll?.rollD20,
+      rollTotal: roll?.dieResult,
+      skillTotalSource: input.skillTotalSource,
+      skillTotalWarning: input.skillTotalWarning,
       scenarioParticipantId: targetParticipantId,
       skillTotal,
       trigger,
@@ -6039,6 +6173,16 @@ function normalizeCombatRoundDedupeText(value?: string): string {
     .trim();
 }
 
+function combatRoundTextIndicatesParryOnly(text: string): boolean {
+  return (
+    text.includes("parry only") ||
+    text.includes("limited to parry") ||
+    text.includes("only parry") ||
+    text.includes("except parry") ||
+    text.includes("nothing but parry")
+  );
+}
+
 function combatRoundReviewEffectActionCategory(
   effect: CombatRoundDamageReviewAdditionalEffect,
 ): "dropped_item" | "loss_of_use" | "no_combat_action" | "parry_only" | undefined {
@@ -6056,7 +6200,7 @@ function combatRoundReviewEffectActionCategory(
 
   if (
     effect.rowCategory === "no_combat_action" &&
-    (text.includes("parry only") || text.includes("limited to parry"))
+    combatRoundTextIndicatesParryOnly(text)
   ) {
     return "parry_only";
   }
@@ -6091,7 +6235,7 @@ function combatRoundOperationalConsequenceActionCategory(
     return "loss_of_use";
   }
 
-  if (text.includes("parry only") || text.includes("limited to parry")) {
+  if (combatRoundTextIndicatesParryOnly(text)) {
     return "parry_only";
   }
 
@@ -6139,9 +6283,14 @@ function formatCombatRoundOperationalConsequenceDescription(
   consequence: CombatRoundDamageReviewOperationalConsequence,
 ): string {
   const notes = consequence.notes?.trim();
+  const category = combatRoundOperationalConsequenceActionCategory(consequence);
 
   if (consequence.kind === "drop_item") {
     return consequence.itemLabel ? `Dropped ${consequence.itemLabel}.` : "Dropped item.";
+  }
+
+  if (category === "parry_only") {
+    return "Action limited to parry.";
   }
 
   if (consequence.kind === "note" && /no combat action/i.test(consequence.label)) {
@@ -12632,6 +12781,7 @@ function getCombatRoundLatestEventForCommand(input: {
     const skillTotal = getCombatRoundLatestEventFactNumber(facts, "skillTotal") ?? 0;
     const rollTotal = getCombatRoundLatestEventFactNumber(facts, "rollTotal");
     const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
+    const noRollRequired = getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
     const difficulty =
       getCombatRoundLatestEventFactNumber(facts, "difficulty") ??
       COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
@@ -12650,9 +12800,11 @@ function getCombatRoundLatestEventForCommand(input: {
       roundNumber: command.roundNumber,
       shortTitle: "Combat Experience",
       step: command.step,
-      summaryText: `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} + roll ${
-        rollTotal ?? "?"
-      } = ${finalTotal ?? "?"} vs ${difficulty}. Result: ${resultLabel}.${effectText}`,
+      summaryText: noRollRequired
+        ? `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}. Result: ${resultLabel}, no roll required.${effectText}`
+        : `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} + roll ${
+            rollTotal ?? "?"
+          } = ${finalTotal ?? "?"} vs ${difficulty}. Result: ${resultLabel}.${effectText}`,
     };
   }
 

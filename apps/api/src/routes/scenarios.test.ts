@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => {
     removeCampaignRosterEntryBySource: vi.fn(),
   };
   const characterService = {
+    getCharacterById: vi.fn(),
     getOwnedCharacter: vi.fn(),
   };
   const encounterService = {
@@ -243,6 +244,64 @@ function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) 
       modifiers: [],
       resources: {},
     },
+    ...overrides,
+  };
+}
+
+function makeCombatExperienceCharacterBuild(overrides: Record<string, unknown> = {}) {
+  return {
+    equipment: {
+      items: [],
+    },
+    id: "character-1",
+    name: "The Gladiator",
+    profile: {
+      distractionLevel: 3,
+      id: "profile-1",
+      label: "The Gladiator",
+      rolledStats: {
+        cha: 10,
+        com: 10,
+        con: 10,
+        dex: 10,
+        health: 10,
+        int: 10,
+        lck: 10,
+        pow: 10,
+        siz: 10,
+        str: 10,
+        will: 10,
+      },
+      societyLevel: 0,
+    },
+    progression: {
+      chargenMode: "standard",
+      educationPoints: 0,
+      flexiblePointFactor: 1,
+      level: 1,
+      primaryPoolSpent: 0,
+      primaryPoolTotal: 60,
+      secondaryPoolSpent: 11,
+      secondaryPoolTotal: 20,
+      skillGroups: [],
+      skills: [
+        {
+          category: "secondary",
+          categoryId: "military",
+          groupId: "veteran_soldiering",
+          secondaryRanks: 11,
+          skillId: "combat_experience",
+        },
+      ],
+      specializations: [],
+    },
+    progressionState: {
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: [],
+    },
+    statModifiers: {},
     ...overrides,
   };
 }
@@ -1999,6 +2058,65 @@ describe("scenarios route contract", () => {
         }),
       }),
     );
+  });
+
+  it("uses the live character sheet Combat Experience total when the participant snapshot omits skill data", async () => {
+    setupCombatDeclarationRoute({
+      participant: {
+        characterId: "character-1",
+        snapshot: {
+          displayName: "The Gladiator",
+        },
+      },
+      user: mocks.adminUser,
+    });
+    mocks.characterService.getCharacterById.mockResolvedValue({
+      build: makeCombatExperienceCharacterBuild(),
+      id: "character-1",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.characterService.getCharacterById).toHaveBeenCalledWith("character-1");
+    expect(response.json().combatExperience).toMatchObject({
+      difficulty: 26,
+      finalTotal: 26,
+      modifierValue: 0,
+      noRollRequired: false,
+      resultBand: "active",
+      rollD20: 5,
+      rollTotal: 5,
+      skillTotal: 21,
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+      trigger: "combat_start",
+    });
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        finalTotal: 26,
+        rollTotal: 5,
+        skillTotal: 21,
+        skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+      }),
+      participantId: "encounter-participant-1",
+      type: "roll_combat_experience",
+    });
+    expect(
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combatEffects
+        .effects,
+    ).toEqual([]);
   });
 
   it("rejects attack declarations without the required phase target", async () => {

@@ -48,6 +48,7 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundStartNextRoundBlocker,
   getCombatExperienceSkillTotalFromSnapshot,
+  getParticipantCombatExperienceSkillTotalLookup,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   isCombatRoundEndReviewComplete,
@@ -631,9 +632,9 @@ describe("combat round manager", () => {
     });
   });
 
-  it("reads Combat Experience effective skill total from participant snapshot", () => {
-    expect(
-      getCombatExperienceSkillTotalFromSnapshot({
+  it("reads displayed Combat Experience skill total from participant sheet summary", () => {
+    const lookup = getParticipantCombatExperienceSkillTotalLookup({
+      snapshot: {
         sheetSummary: {
           draftView: {
             skills: [
@@ -642,14 +643,62 @@ describe("combat round manager", () => {
                 effectiveSkillNumber: 14,
                 name: "Combat Experience",
                 skillId: "combat_experience",
-                totalSkill: 22,
+                totalSkill: 21,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(lookup).toMatchObject({
+      matchedIdentifier: "combat_experience",
+      skillTotal: 21,
+      source: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
+    });
+    expect(
+      getCombatExperienceSkillTotalFromSnapshot({
+        sheetSummary: {
+          draftView: {
+            skills: [
+              {
+                effectiveSkillNumber: 14,
+                name: "Combat Experience",
+                skillId: "combat_experience",
+                totalSkill: 21,
               },
             ],
           },
         },
       }),
-    ).toBe(14);
+    ).toBe(21);
     expect(getCombatExperienceSkillTotalFromSnapshot({ sheetSummary: {} })).toBe(0);
+  });
+
+  it("falls back to effective Combat Experience XP with an explicit warning", () => {
+    expect(
+      getParticipantCombatExperienceSkillTotalLookup({
+        snapshot: {
+          sheetSummary: {
+            draftView: {
+              skills: [
+                {
+                  effectiveSkillNumber: 14,
+                  name: "combatExperience",
+                  skillId: "combatExperience",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      matchedIdentifier: "combatExperience",
+      skillTotal: 14,
+      source: "participant.snapshot.sheetSummary.draftView.skills.effectiveSkillNumber",
+      warning:
+        "Combat Experience final total was unavailable; using effectiveSkillNumber without linked stats.",
+    });
   });
 
   it("rolls Combat Experience with default difficulty and creates active -2 duration 2", () => {
@@ -696,6 +745,121 @@ describe("combat round manager", () => {
       status: "active",
       targetParticipantId: "scenario-gladiator",
       type: "general_modifier",
+    });
+  });
+
+  it("uses Combat Experience skill total 21 when rolling instead of falling back to zero", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const lookup = getParticipantCombatExperienceSkillTotalLookup({
+      sheetSummary: {
+        draftView: {
+          skills: [
+            {
+              effectiveSkillNumber: 7,
+              linkedStatAverage: 14,
+              name: "Combat Experience",
+              skillId: "combat_experience",
+              totalSkill: 21,
+            },
+          ],
+        },
+      },
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => 0.2,
+      skillTotal: lookup.skillTotal,
+      skillTotalSource: lookup.source,
+      state,
+    });
+
+    expect(rolled.result).toMatchObject({
+      finalTotal: 26,
+      rollD20: 5,
+      rollTotal: 5,
+      skillTotal: 21,
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+    });
+    expect(rolled.state.commands.at(-1)?.facts).toMatchObject({
+      finalTotal: 26,
+      rollTotal: 5,
+      skillTotal: 21,
+      skillTotalSource: "participant.sheetSummary.draftView.skills.totalSkill",
+    });
+  });
+
+  it("confirms Combat Experience without rolling when skill total meets difficulty", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    let rngCalls = 0;
+    const confirmed = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      participantId: "gladiator",
+      rng: () => {
+        rngCalls += 1;
+        return 0.2;
+      },
+      skillTotal: 26,
+      state,
+    });
+
+    expect(rngCalls).toBe(0);
+    expect(confirmed.result).toMatchObject({
+      difficulty: 26,
+      finalTotal: 26,
+      label: "Active",
+      modifierValue: 0,
+      needsEffectRow: false,
+      noRollRequired: true,
+      resultBand: "active",
+      skillTotal: 26,
+    });
+    expect(confirmed.result.rollD20).toBeUndefined();
+    expect(confirmed.result.rollTotal).toBeUndefined();
+    expect(confirmed.combatEffects.effects).toEqual([]);
+    expect(confirmed.state.participants[0]?.combatExperience).toEqual(confirmed.result);
+    expect(confirmed.state.commands.at(-1)).toMatchObject({
+      facts: {
+        createdCombatEffectIds: [],
+        difficulty: 26,
+        finalTotal: 26,
+        modifierValue: 0,
+        noRollRequired: true,
+        skillTotal: 26,
+      },
+      type: "roll_combat_experience",
+    });
+  });
+
+  it("requires a Combat Experience roll when the GM raises difficulty above skill total", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    let rngCalls = 0;
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      difficulty: 27,
+      participantId: "gladiator",
+      rng: () => {
+        rngCalls += 1;
+        return 0.2;
+      },
+      skillTotal: 26,
+      state,
+    });
+
+    expect(rngCalls).toBe(1);
+    expect(rolled.result).toMatchObject({
+      difficulty: 27,
+      finalTotal: 31,
+      noRollRequired: false,
+      rollD20: 5,
+      rollTotal: 5,
+      skillTotal: 26,
     });
   });
 
@@ -845,6 +1009,42 @@ describe("combat round manager", () => {
 
     expect(clearedState.participants[0]?.combatExperience).toBeUndefined();
     expect(clearedState.currentStep).toBe("select_actions");
+    expect(clearedState.commands).toHaveLength(0);
+    expect(clearedEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
+  });
+
+  it("clears no-roll Combat Experience confirmation without removing unrelated effects", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    const existingEffects = combatEffectsWith([
+      {
+        description: "Existing modifier",
+        effectGroup: "general",
+        id: "existing-modifier",
+        modifierValue: -1,
+        type: "general_modifier",
+      },
+    ]);
+    const confirmed = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      combatEffects: existingEffects,
+      participantId: "gladiator",
+      skillTotal: 26,
+      state,
+    });
+    const command = confirmed.state.commands.at(-1);
+    const clearedState = clearCombatRoundStep({ state: confirmed.state, step: "select_actions" });
+    const clearedEffects = command
+      ? removeCombatRoundCombatExperienceEffects({
+          combatEffects: confirmed.combatEffects,
+          command,
+        })
+      : confirmed.combatEffects;
+
+    expect(confirmed.result.noRollRequired).toBe(true);
+    expect(confirmed.combatEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
+    expect(clearedState.participants[0]?.combatExperience).toBeUndefined();
     expect(clearedState.commands).toHaveLength(0);
     expect(clearedEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
   });
@@ -5303,6 +5503,229 @@ describe("combat round manager", () => {
     );
   });
 
+  it("commits a parry-only critical as one specific row without generic no-action overlap", () => {
+    const declared = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "guard",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+    const withSnapshot = combatRoundStateSchema.parse({
+      ...declared,
+      stepSnapshots: [
+        stepSnapshot({
+          attackSummary: {
+            attackMode: "Slash",
+            dmb: "8",
+            initiative: "2",
+            maxCrits: "FS",
+            ob: "12",
+            weaponName: "Broad sword",
+          },
+          participantId: "guard",
+          phase: "phase2",
+          step: "phase_2_actions",
+        }),
+      ],
+    });
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6],
+          rollTotal: 6,
+          total: 6,
+        },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withSnapshot,
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
+      weaponName: "Long sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result: attackResult,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [19],
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterReview = reviewCombatRoundDamageResult({
+      attackResultId: "3:phase1:gladiator:guard",
+      reviewedAt: "2026-01-01T00:05:15.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        criticalGradeOverride: "b",
+        operationalConsequences: [],
+      },
+      state: afterDamage,
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [3, 3],
+      rolledByParticipantId: "gladiator",
+      state: afterReview,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const damageResult = afterCritical.phaseResolutionResults[0]?.damageResult;
+
+    expect(damageResult?.review?.criticalEffectProposal).toMatchObject({
+      critKey: "sharp|head|02",
+    });
+    expect(damageResult?.review?.additionalEffects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          durationRounds: 2,
+          label: "Action limited to parry",
+          rowCategory: "no_combat_action",
+          sourceEffectKey: "sharp|head|02|01",
+        }),
+      ]),
+    );
+    expect(damageResult?.review?.operationalConsequences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "cancel_pending_action",
+          phase: "phase2",
+          sourceEffectKey: "sharp|head|02|01",
+          step: "A2",
+        }),
+        expect.objectContaining({
+          kind: "note",
+          label: "Action limited to parry",
+          sourceEffectKey: "sharp|head|02|01",
+        }),
+      ]),
+    );
+    expect(damageResult?.review?.operationalConsequences).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "note",
+          label: "No combat action possible",
+          sourceEffectKey: "sharp|head|02|01",
+        }),
+      ]),
+    );
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-head-parry-only",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: { effects: [], events: [] },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const parryRows = committed.combatEffects.effects.filter(
+      (effect) =>
+        effect.type === "special" && /Action limited to parry/.test(effect.description ?? ""),
+    );
+    const noActionRows = committed.combatEffects.effects.filter(
+      (effect) =>
+        effect.type === "special" && /No combat action possible/.test(effect.description ?? ""),
+    );
+
+    expect(committed.command.facts).toMatchObject({
+      cancelledActions: [
+        expect.objectContaining({
+          participantId: "guard",
+          phase: "phase2",
+          previousStepStatus: "pending",
+          sourceEffectKey: "sharp|head|02|01",
+          step: "A2",
+        }),
+      ],
+      createdOperationalCombatEffectIds: [],
+      operationalConsequences: expect.arrayContaining([
+        expect.objectContaining({ kind: "cancel_pending_action" }),
+        expect.objectContaining({ kind: "note", label: "Action limited to parry" }),
+      ]),
+    });
+    expect(parryRows).toHaveLength(1);
+    expect(parryRows[0]).toMatchObject({
+      description: "Action limited to parry next round.",
+      duration: "2",
+      effectGroup: "special",
+      status: "active",
+      targetParticipantId: "scenario-guard",
+    });
+    expect(noActionRows).toHaveLength(0);
+  });
+
   it("commits a chest no-action critical as one next-round special row", () => {
     const pending = prepareFailedParryPendingDamage({
       weaponCriticalCode: "FS",
@@ -8180,6 +8603,71 @@ describe("combat round manager", () => {
       ),
     ).toMatchObject({
       status: "expired",
+    });
+  });
+
+  it("keeps next-round parry-only effects active through the next round", () => {
+    const roundThreeState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 3 }) }),
+      "round_summary",
+    );
+    const initialEffects = combatEffectsWith([
+      {
+        description: "Action limited to parry next round.",
+        duration: "2 rounds",
+        effectGroup: "special",
+        id: "next-round-parry-only",
+        type: "special",
+      },
+    ]);
+    const reviewedRoundThree = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: initialEffects,
+        },
+      },
+      state: roundThreeState,
+    });
+
+    expect(reviewedRoundThree.roundEndReview?.participantReviews.gladiator?.proposedEffects[0]).toMatchObject({
+      effectId: "next-round-parry-only",
+      nextDuration: "1 round",
+    });
+
+    const committedRoundThree = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      combatEffects: initialEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewedRoundThree,
+    });
+    const activeNextRoundEffect = committedRoundThree.combatEffects.effects.find(
+      (effect) => effect.id === "next-round-parry-only",
+    );
+
+    expect(activeNextRoundEffect).toMatchObject({
+      duration: "1 round",
+      status: "active",
+    });
+
+    const roundFourState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 4 }) }),
+      "round_summary",
+    );
+    const reviewedRoundFour = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: committedRoundThree.combatEffects,
+        },
+      },
+      state: roundFourState,
+    });
+
+    expect(reviewedRoundFour.roundEndReview?.participantReviews.gladiator?.proposedRemovals[0]).toMatchObject({
+      effectId: "next-round-parry-only",
+      kind: "duration_expire",
     });
   });
 

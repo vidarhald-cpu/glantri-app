@@ -47,7 +47,7 @@ import {
   ensureCombatRoundEndReviewPrepared,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
-  getCombatExperienceSkillTotalFromSnapshot,
+  getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
@@ -395,6 +395,10 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
     return "Not rolled";
   }
 
+  if (result.noRollRequired) {
+    return "Active, no roll required";
+  }
+
   if (!result.needsEffectRow || result.modifierValue === 0) {
     return "Active, no modifier";
   }
@@ -403,10 +407,18 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
 }
 
 function formatCombatExperienceCalculation(result: CombatRoundCombatExperienceResult): string {
+  if (result.noRollRequired) {
+    return `Combat Experience ${result.skillTotal} vs difficulty ${result.difficulty}`;
+  }
+
   return `Combat Experience ${result.skillTotal} + roll ${result.rollTotal} = ${result.finalTotal} vs ${result.difficulty}`;
 }
 
 function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceResult): string {
+  if (result.noRollRequired) {
+    return "Result: Active - no roll required";
+  }
+
   if (!result.needsEffectRow || result.modifierValue === 0) {
     return "Result: Active, no modifier";
   }
@@ -3090,9 +3102,6 @@ export default function CombatRoundManagerPanel({
     combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey] !== undefined
       ? combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey]
       : String(COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY);
-  const inspectorCombatExperienceSkillTotal = selectedScenarioParticipant
-    ? getCombatExperienceSkillTotalFromSnapshot(selectedScenarioParticipant.snapshot)
-    : 0;
   const roundEndReviewComplete =
     roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState);
   const roundEndStartNextRoundBlocker =
@@ -3320,6 +3329,35 @@ export default function CombatRoundManagerPanel({
     resolvedInspectorCharacterState?.serverRecord.build,
     selectedScenarioParticipant?.snapshot.build,
   ]);
+  const inspectorSheetSummary = useMemo(
+    () =>
+      content && inspectorBuild
+        ? buildCharacterSheetSummary({
+            build: inspectorBuild,
+            content,
+          })
+        : undefined,
+    [content, inspectorBuild],
+  );
+  const inspectorCombatExperienceSkillLookup = useMemo(
+    () =>
+      selectedScenarioParticipant
+        ? getParticipantCombatExperienceSkillTotalLookup({
+            ...selectedScenarioParticipant,
+            sheetSummary: inspectorSheetSummary,
+          })
+        : { skillTotal: 0 },
+    [inspectorSheetSummary, selectedScenarioParticipant],
+  );
+  const inspectorCombatExperienceSkillTotal = inspectorCombatExperienceSkillLookup.skillTotal;
+  const inspectorCombatExperienceDifficultyValue = Number.parseInt(
+    inspectorCombatExperienceDifficulty,
+    10,
+  );
+  const inspectorCombatExperienceNoRollAvailable =
+    inspectorCombatExperienceRequired &&
+    Number.isInteger(inspectorCombatExperienceDifficultyValue) &&
+    inspectorCombatExperienceSkillTotal >= inspectorCombatExperienceDifficultyValue;
   const inspectorEquipmentState = useMemo(() => {
     const candidate =
       resolvedInspectorCharacterState?.equipmentState ??
@@ -3707,7 +3745,9 @@ export default function CombatRoundManagerPanel({
       : inspectorIsInspectionOnly
         ? "Inspecting step - use Current task to resume"
       : inspector.step === "select_actions" && inspectorCombatExperienceRequired
-        ? "Roll Combat Experience"
+        ? inspectorCombatExperienceNoRollAvailable
+          ? "Confirm Combat Experience"
+          : "Roll Combat Experience"
       : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
         ? "Preparing round-end review"
         : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
@@ -6067,6 +6107,11 @@ export default function CombatRoundManagerPanel({
                         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
                           Skill total {inspectorCombatExperienceSkillTotal}
                         </div>
+                        {inspectorCombatExperienceSkillLookup.warning ? (
+                          <div style={{ color: "#8a4f21", fontSize: "0.85rem" }}>
+                            {inspectorCombatExperienceSkillLookup.warning}
+                          </div>
+                        ) : null}
                         {inspectorCombatExperienceRequired ? (
                           <label style={compactFieldLabelStyle}>
                             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>

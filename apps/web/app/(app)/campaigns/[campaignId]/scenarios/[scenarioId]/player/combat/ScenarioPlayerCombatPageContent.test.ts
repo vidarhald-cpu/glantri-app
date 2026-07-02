@@ -204,6 +204,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("isCombatStartExperienceRollRequired");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceResultLine");
+    expect(source).toContain("Active, no roll required");
+    expect(source).toContain("Result: Active - no roll required");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain("selectedCombatExperienceResult");
     expect(source).toContain("selectedCombatExperienceResultPanel");

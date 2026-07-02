@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
+import { defaultCanonicalContent } from "@glantri/content";
+import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
@@ -19,7 +20,7 @@ import {
   getCombatRoundAttackResultById,
   getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
-  getCombatExperienceSkillTotalFromSnapshot,
+  getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
@@ -47,6 +48,7 @@ import {
 } from "@glantri/domain";
 import type { CombatRoundState, ScenarioParticipant } from "@glantri/domain";
 import {
+  buildCharacterSheetSummary,
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
   resolveRoleplaySkillRollModifiers,
@@ -57,6 +59,7 @@ import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 
 const campaignService = new CampaignService();
+const characterService = new CharacterService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
@@ -82,6 +85,31 @@ function computeDieResult(rollD20: number, openEndedD10s: number[]): number {
   if (openEndedD10s.length === 0) return rollD20;
   const direction = rollD20 === 20 ? 1 : rollD20 === 1 ? -1 : 0;
   return rollD20 + direction * openEndedD10s.reduce((sum, d10) => sum + d10, 0);
+}
+
+async function getCombatExperienceSkillLookupForScenarioParticipant(
+  participant: ScenarioParticipant,
+) {
+  if (!participant.characterId) {
+    return getParticipantCombatExperienceSkillTotalLookup(participant);
+  }
+
+  const character = await characterService.getCharacterById(participant.characterId);
+  const sheetSummary = character
+    ? buildCharacterSheetSummary({
+        build: character.build,
+        content: defaultCanonicalContent,
+      })
+    : undefined;
+
+  if (!sheetSummary) {
+    return getParticipantCombatExperienceSkillTotalLookup(participant);
+  }
+
+  return getParticipantCombatExperienceSkillTotalLookup({
+    ...participant,
+    sheetSummary,
+  });
 }
 
 function parseRollFields(
@@ -1119,6 +1147,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
+      const combatExperienceSkillLookup =
+        await getCombatExperienceSkillLookupForScenarioParticipant(scenarioParticipant);
       const rolled = rollCombatRoundCombatExperience({
         combatEffects: scenarioParticipant.state.combatEffects,
         command: {
@@ -1130,7 +1160,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         participantId: encounterParticipant.id,
         scenarioId,
         scenarioParticipantId: scenarioParticipant.id,
-        skillTotal: getCombatExperienceSkillTotalFromSnapshot(scenarioParticipant.snapshot),
+        skillTotal: combatExperienceSkillLookup.skillTotal,
+        skillTotalSource: combatExperienceSkillLookup.source,
+        skillTotalWarning: combatExperienceSkillLookup.warning,
         state: roundState,
         trigger: "combat_start",
       });

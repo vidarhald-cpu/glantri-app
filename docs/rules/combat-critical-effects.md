@@ -90,8 +90,13 @@ the critical proposal.
 
 No-action deduplication is per D1/D2 commit event. "No combat action possible," "Action limited to
 parry," and loss-of-use rows should appear once unless the critical table explicitly proposes
-distinct visible effects. Covered critical minimum damage floors are audit details that can raise the
-physical damage row; they do not create separate character-sheet rows.
+distinct visible effects. If a critical says the target is limited to parry next round, that specific
+row is the visible action-state row; a generic operational "No combat action possible" row is not
+also created for the same event unless the table separately states full no-action, unconsciousness,
+or collapse. Operational pending-attack cancellation affects same-round sequencing, but does not by
+itself create a generic no-action row when a more specific action-limited row exists. Covered
+critical minimum damage floors are audit details that can raise the physical damage row; they do not
+create separate character-sheet rows.
 
 ## Rolls inside critical effects
 
