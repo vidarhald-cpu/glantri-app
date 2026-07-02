@@ -4,6 +4,8 @@ import {
   scenarioCombatModifierBucketSchema,
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
+  type ScenarioCombatModifierEntry,
+  type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import { rollOpenEndedD20, type OpenEndedD20Roll } from "../dice/openEndedD20";
 import {
@@ -382,6 +384,22 @@ export const combatExperienceTriggerSchema = z.enum([
 ]);
 export type CombatExperienceTrigger = z.infer<typeof combatExperienceTriggerSchema>;
 export type CombatRoundVisibility = Record<string, Record<string, boolean>>;
+
+export interface CombatRoundPhaseCombatExperienceThreat {
+  attackerInitiative: number;
+  attackerParticipantId: string;
+  initiativeDifference: number;
+  participantInitiative: number;
+  reason: "close_initiative" | "lower_initiative";
+}
+
+export interface CombatRoundPhaseCombatExperienceRequirement {
+  participantId: string;
+  phase: CombatRoundPhase;
+  reason: "attacked_while_attacking";
+  threats: CombatRoundPhaseCombatExperienceThreat[];
+  trigger: CombatExperienceTrigger;
+}
 
 export const combatExperienceResultBandSchema = z.enum([
   "panic",
@@ -1647,6 +1665,78 @@ export function evaluateCombatExperienceResult(
   });
 }
 
+export function evaluatePhaseCombatExperienceResult(
+  finalTotal: number,
+  input: { difficulty?: number } = {},
+): CombatExperienceEvaluation {
+  const { difficultyShift, effectiveTableTotal } = getCombatExperienceEffectiveTableTotal({
+    difficulty: input.difficulty,
+    finalTotal,
+  });
+  const baseEvaluation = {
+    difficultyShift,
+    effectiveTableTotal,
+  };
+
+  if (effectiveTableTotal <= 5) {
+    return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
+      durationRounds: 0,
+      label: "No attack",
+      modifierValue: 0,
+      needsEffectRow: false,
+      note: "combat exp attack cancelled",
+      resultBand: "panic",
+    });
+  }
+
+  if (effectiveTableTotal <= 10) {
+    return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
+      durationRounds: 0,
+      label: "Attack continues",
+      modifierValue: -4,
+      needsEffectRow: false,
+      note: "combat exp phase attack OB -4",
+      resultBand: "passive",
+    });
+  }
+
+  if (effectiveTableTotal <= 15) {
+    return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
+      durationRounds: 0,
+      label: "Attack continues",
+      modifierValue: -3,
+      needsEffectRow: false,
+      note: "combat exp phase attack OB -3",
+      resultBand: "active_penalty",
+    });
+  }
+
+  if (effectiveTableTotal <= 20) {
+    return combatExperienceEvaluationSchema.parse({
+      ...baseEvaluation,
+      durationRounds: 0,
+      label: "Attack continues",
+      modifierValue: -2,
+      needsEffectRow: false,
+      note: "combat exp phase attack OB -2",
+      resultBand: "active_penalty",
+    });
+  }
+
+  return combatExperienceEvaluationSchema.parse({
+    ...baseEvaluation,
+    durationRounds: 0,
+    label: "Attack continues",
+    modifierValue: 0,
+    needsEffectRow: false,
+    note: "combat exp phase attack continues",
+    resultBand: "active",
+  });
+}
+
 function isCombatRoundRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1746,12 +1836,7 @@ function getCombatExperienceDisplayedSkillTotal(input: {
     "stats",
     "avgStats",
   ] as const;
-  const skillXpFields = [
-    "effectiveSkillNumber",
-    "totalXp",
-    "skillXp",
-    "xp",
-  ] as const;
+  const skillXpFields = ["effectiveSkillNumber", "totalXp", "skillXp", "xp"] as const;
 
   for (const field of displayedTotalFields) {
     const displayedTotal = readCombatRoundNumber(input.skill[field]);
@@ -1769,16 +1854,18 @@ function getCombatExperienceDisplayedSkillTotal(input: {
       field,
       value: readCombatRoundNumber(input.skill[field]),
     }))
-    .find((entry): entry is { field: (typeof statAverageFields)[number]; value: number } =>
-      entry.value !== undefined,
+    .find(
+      (entry): entry is { field: (typeof statAverageFields)[number]; value: number } =>
+        entry.value !== undefined,
     );
   const skillXpEntry = skillXpFields
     .map((field) => ({
       field,
       value: readCombatRoundNumber(input.skill[field]),
     }))
-    .find((entry): entry is { field: (typeof skillXpFields)[number]; value: number } =>
-      entry.value !== undefined,
+    .find(
+      (entry): entry is { field: (typeof skillXpFields)[number]; value: number } =>
+        entry.value !== undefined,
     );
 
   if (statAverageEntry && skillXpEntry) {
@@ -1792,8 +1879,7 @@ function getCombatExperienceDisplayedSkillTotal(input: {
     return {
       skillTotal: skillXpEntry.value,
       source: `${input.label}.${skillXpEntry.field}`,
-      warning:
-        "Combat Experience displayed total was unavailable; using XP-only fallback.",
+      warning: "Combat Experience displayed total was unavailable; using XP-only fallback.",
     };
   }
 
@@ -2382,50 +2468,60 @@ function isCombatRoundParticipantAwareOfPhaseAttacker(input: {
   return attackerIsVisible !== false;
 }
 
-function isCombatRoundPhaseParticipantAttackedByAwareOpponent(input: {
+function combatRoundParticipantHasPendingExecutablePhaseAttack(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
-  visibility?: CombatRoundVisibility;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const status = getEffectiveCombatRoundPhaseResolutionStatus({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
 
-  return normalized.participants.some((attacker) => {
-    if (attacker.participantId === input.participantId) {
-      return false;
-    }
+  if (!participant) {
+    return false;
+  }
 
-    if (
-      !combatRoundParticipantHasExecutablePhaseAttack({
-        participantId: attacker.participantId,
-        phase: input.phase,
-        state: normalized,
-      })
-    ) {
-      return false;
-    }
+  if (status.substep === "done") {
+    return false;
+  }
 
-    if (
-      attacker.declaration?.phaseContexts?.[input.phase]?.targetParticipantId !==
-      input.participantId
-    ) {
-      return false;
-    }
+  if (
+    participant.stepStatuses[actionStep] === "skipped" ||
+    participant.stepStatuses[actionStep] === "complete"
+  ) {
+    return false;
+  }
 
-    return isCombatRoundParticipantAwareOfPhaseAttacker({
-      attackerParticipantId: attacker.participantId,
+  if (
+    combatRoundParticipantPhaseActionHasCompletionEvidence({
       participantId: input.participantId,
-      visibility: input.visibility,
-    });
+      phase: input.phase,
+      state: normalized,
+    })
+  ) {
+    return false;
+  }
+
+  return combatRoundParticipantHasExecutablePhaseAttack({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
   });
 }
 
-export function isCombatRoundPhaseCombatExperienceRollRequired(input: {
+export function getCombatRoundPhaseCombatExperienceRequirement(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
-}): boolean {
+}): CombatRoundPhaseCombatExperienceRequirement | undefined {
   const normalized = combatRoundStateSchema.parse(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
@@ -2433,14 +2529,14 @@ export function isCombatRoundPhaseCombatExperienceRollRequired(input: {
   const trigger = getCombatExperienceTriggerForPhase(input.phase);
 
   if (!participant) {
-    return false;
+    return undefined;
   }
 
   if (
     normalized.currentStep === getCombatRoundPhaseActionStepForPhase(input.phase) &&
     normalized.phaseResolutionCursor?.phase === input.phase
   ) {
-    return false;
+    return undefined;
   }
 
   if (
@@ -2450,25 +2546,103 @@ export function isCombatRoundPhaseCombatExperienceRollRequired(input: {
       trigger,
     })
   ) {
-    return false;
+    return undefined;
   }
 
   if (
-    !combatRoundParticipantHasExecutablePhaseAttack({
+    !combatRoundParticipantHasPendingExecutablePhaseAttack({
       participantId: input.participantId,
       phase: input.phase,
       state: normalized,
     })
   ) {
-    return false;
+    return undefined;
   }
 
-  return isCombatRoundPhaseParticipantAttackedByAwareOpponent({
+  const participantInitiative = getCombatRoundInitiativeTotal(participant.initiatives[input.phase]);
+
+  if (participantInitiative === undefined) {
+    return undefined;
+  }
+
+  const threats = normalized.participants.flatMap((attacker) => {
+    if (attacker.participantId === input.participantId) {
+      return [];
+    }
+
+    if (
+      !combatRoundParticipantHasPendingExecutablePhaseAttack({
+        participantId: attacker.participantId,
+        phase: input.phase,
+        state: normalized,
+      })
+    ) {
+      return [];
+    }
+
+    if (
+      attacker.declaration?.phaseContexts?.[input.phase]?.targetParticipantId !==
+      input.participantId
+    ) {
+      return [];
+    }
+
+    if (
+      !isCombatRoundParticipantAwareOfPhaseAttacker({
+        attackerParticipantId: attacker.participantId,
+        participantId: input.participantId,
+        visibility: input.visibility,
+      })
+    ) {
+      return [];
+    }
+
+    const attackerInitiative = getCombatRoundInitiativeTotal(attacker.initiatives[input.phase]);
+
+    if (attackerInitiative === undefined) {
+      return [];
+    }
+
+    const initiativeDifference = Math.abs(participantInitiative - attackerInitiative);
+    const participantMustRoll =
+      initiativeDifference <= 3 || participantInitiative < attackerInitiative;
+
+    if (!participantMustRoll) {
+      return [];
+    }
+
+    return [
+      {
+        attackerInitiative,
+        attackerParticipantId: attacker.participantId,
+        initiativeDifference,
+        participantInitiative,
+        reason:
+          initiativeDifference <= 3 ? ("close_initiative" as const) : ("lower_initiative" as const),
+      },
+    ];
+  });
+
+  if (threats.length === 0) {
+    return undefined;
+  }
+
+  return {
     participantId: input.participantId,
     phase: input.phase,
-    state: normalized,
-    visibility: input.visibility,
-  });
+    reason: "attacked_while_attacking",
+    threats,
+    trigger,
+  };
+}
+
+export function isCombatRoundPhaseCombatExperienceRollRequired(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  visibility?: CombatRoundVisibility;
+}): boolean {
+  return Boolean(getCombatRoundPhaseCombatExperienceRequirement(input));
 }
 
 export function getCombatRoundPhaseCombatExperienceRequiredParticipantIds(input: {
@@ -2577,7 +2751,9 @@ function isCombatRoundDeclarationComplete(participant: CombatRoundParticipantSta
     return false;
   }
 
-  return hasCompleteStatus || Boolean(participant.declaration && declarationTargetValidation?.valid);
+  return (
+    hasCompleteStatus || Boolean(participant.declaration && declarationTargetValidation?.valid)
+  );
 }
 
 export function getFirstCombatRoundDeclarationRequiredParticipantId(
@@ -2618,7 +2794,107 @@ function buildCombatExperienceEffectId(input: {
   ].join(":");
 }
 
+function buildCombatExperiencePhaseModifierId(input: {
+  commandId: string;
+  participantId: string;
+  phase: CombatRoundPhase;
+  roundNumber: number;
+}): string {
+  return [
+    "combat-modifier",
+    "combat-experience",
+    input.roundNumber,
+    input.phase,
+    input.participantId,
+    input.commandId,
+  ].join(":");
+}
+
+function addCombatRoundPhaseCombatExperienceModifier(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  commandId: string;
+  participant: CombatRoundParticipantState;
+  participantId: string;
+  phase: CombatRoundPhase;
+  result: CombatRoundCombatExperienceResult;
+}): {
+  combatContext: ScenarioParticipantCombatContext;
+  modifierIds: string[];
+} {
+  const currentContext = scenarioParticipantCombatContextSchema.parse(input.combatContext ?? {});
+
+  if (input.result.modifierValue >= 0) {
+    return {
+      combatContext: currentContext,
+      modifierIds: [],
+    };
+  }
+
+  const modifierId = buildCombatExperiencePhaseModifierId({
+    commandId: input.commandId,
+    participantId: input.participantId,
+    phase: input.phase,
+    roundNumber: input.result.roundNumber,
+  });
+  const modifier = scenarioCombatModifierEntrySchema.parse({
+    durationRounds: 1,
+    generated: true,
+    id: modifierId,
+    notes: "combat experience attacked while attacking",
+    scope: "until",
+    sourceActionId: input.participant.declaration?.actionId,
+    sourcePhase: input.phase,
+    sourceRule: `combat-experience-${input.phase}-attacked-while-attacking`,
+    value: input.result.modifierValue,
+  } satisfies ScenarioCombatModifierEntry);
+
+  return {
+    combatContext: scenarioParticipantCombatContextSchema.parse({
+      ...currentContext,
+      modifierBuckets: {
+        ...currentContext.modifierBuckets,
+        situationObSkill: [
+          ...currentContext.modifierBuckets.situationObSkill.filter(
+            (entry) => entry.id !== modifierId,
+          ),
+          modifier,
+        ],
+      },
+    }),
+    modifierIds: [modifierId],
+  };
+}
+
+export function removeCombatRoundCombatExperienceCombatContextModifiers(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  command: CombatRoundCommand;
+}): ScenarioParticipantCombatContext {
+  const currentContext = scenarioParticipantCombatContextSchema.parse(input.combatContext ?? {});
+  const createdModifierIds = new Set(
+    Array.isArray(input.command.facts.createdCombatModifierIds)
+      ? input.command.facts.createdCombatModifierIds.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [],
+  );
+
+  if (createdModifierIds.size === 0) {
+    return currentContext;
+  }
+
+  return scenarioParticipantCombatContextSchema.parse({
+    ...currentContext,
+    modifierBuckets: Object.fromEntries(
+      Object.entries(currentContext.modifierBuckets).map(([bucketKey, entries]) => [
+        bucketKey,
+        entries.filter((entry) => !createdModifierIds.has(entry.id)),
+      ]),
+    ),
+  });
+}
+
 export function rollCombatRoundCombatExperience(input: {
+  combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
   command: {
     commandId?: string;
@@ -2638,6 +2914,7 @@ export function rollCombatRoundCombatExperience(input: {
   trigger?: CombatExperienceTrigger;
   visibility?: CombatRoundVisibility;
 }): {
+  combatContext: ScenarioParticipantCombatContext;
   combatEffects: CombatEffectsState;
   command: CombatRoundCommand;
   result: CombatRoundCombatExperienceResult;
@@ -2656,6 +2933,14 @@ export function rollCombatRoundCombatExperience(input: {
     }) ??
     "combat_start";
   const phase = getCombatExperiencePhaseForTrigger(trigger);
+  const phaseRequirement = phase
+    ? getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: input.participantId,
+        phase,
+        state: normalized,
+        visibility: input.visibility,
+      })
+    : undefined;
 
   if (!participant) {
     throw new RangeError("Combat Experience participant is not in the active round.");
@@ -2678,14 +2963,7 @@ export function rollCombatRoundCombatExperience(input: {
       throw new RangeError("Combat Experience can only be rolled before phase attacks.");
     }
 
-    if (
-      !isCombatRoundPhaseCombatExperienceRollRequired({
-        participantId: input.participantId,
-        phase,
-        state: normalized,
-        visibility: input.visibility,
-      })
-    ) {
+    if (!phaseRequirement) {
       throw new RangeError("Combat Experience is not required for this participant.");
     }
   }
@@ -2708,11 +2986,15 @@ export function rollCombatRoundCombatExperience(input: {
     finalTotal,
   });
   const panicDurationRounds =
-    effectiveTableTotal <= 5 ? rollCombatExperiencePanicDuration(rng) : undefined;
-  const evaluation = evaluateCombatExperienceResult(finalTotal, {
-    difficulty,
-    panicDurationRounds,
-  });
+    !phase && effectiveTableTotal <= 5 ? rollCombatExperiencePanicDuration(rng) : undefined;
+  const evaluation = phase
+    ? evaluatePhaseCombatExperienceResult(finalTotal, {
+        difficulty,
+      })
+    : evaluateCombatExperienceResult(finalTotal, {
+        difficulty,
+        panicDurationRounds,
+      });
   const result = combatRoundCombatExperienceResultSchema.parse({
     ...evaluation,
     difficulty,
@@ -2737,6 +3019,13 @@ export function rollCombatRoundCombatExperience(input: {
       state: normalized,
       type: "roll_combat_experience",
     });
+  const phaseActionStep = phase ? getCombatRoundPhaseActionStepForPhase(phase) : undefined;
+  const previousPhaseActionStepStatus = phaseActionStep
+    ? participant.stepStatuses[phaseActionStep]
+    : undefined;
+  const previousPhaseResolutionStatus = phase
+    ? normalized.phaseResolutionStatuses[input.participantId]?.[phase]
+    : undefined;
   const defaultBeforeCursor = getDefaultCombatRoundCursor({
     participantId: input.participantId,
     roundNumber: normalized.roundNumber,
@@ -2765,6 +3054,20 @@ export function rollCombatRoundCombatExperience(input: {
         }),
       ]
     : [];
+  const phaseCombatModifier = phase
+    ? addCombatRoundPhaseCombatExperienceModifier({
+        combatContext: input.combatContext,
+        commandId,
+        participant,
+        participantId: targetParticipantId,
+        phase,
+        result,
+      })
+    : {
+        combatContext: scenarioParticipantCombatContextSchema.parse(input.combatContext ?? {}),
+        modifierIds: [],
+      };
+  const phaseAttackCancelled = phaseCombatExperienceCancelsAttack(result);
   const stateAfterResult = moveCombatRoundAfterCombatExperienceResult({
     createdAt: input.command.createdAt,
     participantId: input.participantId,
@@ -2784,6 +3087,7 @@ export function rollCombatRoundCombatExperience(input: {
     facts: {
       createdCombatEffectEventId,
       createdCombatEffectIds,
+      createdCombatModifierIds: phaseCombatModifier.modifierIds,
       difficulty,
       difficultyShift,
       durationRounds: result.durationRounds,
@@ -2793,7 +3097,24 @@ export function rollCombatRoundCombatExperience(input: {
       modifierValue: result.modifierValue,
       noRollRequired,
       openEndedD10s: roll?.openEndedD10s ?? [],
+      phaseAttackCancelled,
+      ...(phaseRequirement
+        ? {
+            phaseCombatExperienceReason: phaseRequirement.reason,
+            phaseCombatExperienceThreats: phaseRequirement.threats,
+          }
+        : {}),
       previousCombatExperience: participant.combatExperience,
+      ...(previousPhaseActionStepStatus
+        ? {
+            previousPhaseActionStepStatus,
+          }
+        : {}),
+      ...(previousPhaseResolutionStatus
+        ? {
+            previousPhaseResolutionStatus,
+          }
+        : {}),
       resultBand: result.resultBand,
       resultLabel: result.label,
       rollD20: roll?.rollD20,
@@ -2857,6 +3178,7 @@ export function rollCombatRoundCombatExperience(input: {
       : currentCombatEffects;
 
   return {
+    combatContext: phaseCombatModifier.combatContext,
     combatEffects: nextCombatEffects,
     command,
     result,
@@ -3600,6 +3922,9 @@ function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
   state: CombatRoundState;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
 
   if (
     getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -3607,6 +3932,14 @@ function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
       phase: input.phase,
       state: normalized,
     })
+  ) {
+    return true;
+  }
+
+  if (
+    participant?.combatExperience?.roundNumber === normalized.roundNumber &&
+    getCombatExperiencePhaseForTrigger(participant.combatExperience.trigger) === input.phase &&
+    phaseCombatExperienceCancelsAttack(participant.combatExperience)
   ) {
     return true;
   }
@@ -3919,6 +4252,40 @@ function moveCombatRoundToPhaseCombatExperienceGate(input: {
   });
 }
 
+function phaseCombatExperienceCancelsAttack(result: CombatRoundCombatExperienceResult): boolean {
+  return (
+    getCombatExperiencePhaseForTrigger(result.trigger) !== undefined &&
+    result.noRollRequired !== true &&
+    result.effectiveTableTotal !== undefined &&
+    result.effectiveTableTotal <= 5
+  );
+}
+
+function applyPhaseCombatExperienceAttackCancellation(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatRoundState {
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const withDoneStatus = setCombatRoundPhaseResolutionStatus({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: input.state,
+    status: {
+      substep: "done",
+      updatedAt: input.updatedAt,
+    },
+  });
+
+  return setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: withDoneStatus,
+    status: "skipped",
+    step: actionStep,
+  });
+}
+
 function moveCombatRoundAfterCombatExperienceResult(input: {
   createdAt: string;
   participantId: string;
@@ -3953,9 +4320,17 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
     });
   }
 
+  const withPhaseOutcome = phaseCombatExperienceCancelsAttack(input.result)
+    ? applyPhaseCombatExperienceAttackCancellation({
+        participantId: input.participantId,
+        phase,
+        state: withParticipantResult,
+        updatedAt: input.createdAt,
+      })
+    : withParticipantResult;
   const nextParticipantId = getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
     phase,
-    state: withParticipantResult,
+    state: withPhaseOutcome,
     visibility: input.visibility,
   });
 
@@ -3963,13 +4338,13 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
     return moveCombatRoundToPhaseCombatExperienceGate({
       participantId: nextParticipantId,
       phase,
-      state: withParticipantResult,
+      state: withPhaseOutcome,
     });
   }
 
   return initializeCombatRoundPhaseResolutionCursor({
     phase,
-    state: withParticipantResult,
+    state: withPhaseOutcome,
     updatedAt: input.createdAt,
   });
 }
@@ -10285,7 +10660,8 @@ export function advanceCombatRoundStep(
       });
     }
 
-    const declarationParticipantId = getFirstCombatRoundDeclarationRequiredParticipantId(normalized);
+    const declarationParticipantId =
+      getFirstCombatRoundDeclarationRequiredParticipantId(normalized);
 
     if (declarationParticipantId) {
       return combatRoundStateSchema.parse({
@@ -11508,6 +11884,25 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
     command.facts.previousCombatExperience,
   );
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+  const phase = command.phase;
+  const previousPhaseResolutionStatus = combatRoundPhaseResolutionParticipantStatusSchema.safeParse(
+    command.facts.previousPhaseResolutionStatus,
+  );
+  const previousPhaseActionStepStatus = combatRoundStepStatusSchema.safeParse(
+    command.facts.previousPhaseActionStepStatus,
+  );
+  const phaseResolutionStatusesAfterUndo: CombatRoundPhaseResolutionStatuses =
+    command.facts.phaseAttackCancelled === true && phase
+      ? {
+          ...normalized.phaseResolutionStatuses,
+          [command.participantId]: {
+            ...normalized.phaseResolutionStatuses[command.participantId],
+            [phase]: previousPhaseResolutionStatus.success
+              ? previousPhaseResolutionStatus.data
+              : undefined,
+          },
+        }
+      : normalized.phaseResolutionStatuses;
 
   return combatRoundStateSchema.parse({
     ...normalized,
@@ -11518,6 +11913,7 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
       command.beforeCursor.step === "A1" || command.beforeCursor.step === "A2"
         ? undefined
         : normalized.phaseResolutionCursor,
+    phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
     participants: normalized.participants.map((participant) =>
       participant.participantId === command.participantId
         ? {
@@ -11525,6 +11921,16 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
             combatExperience: previousCombatExperience.success
               ? previousCombatExperience.data
               : undefined,
+            stepStatuses:
+              command.facts.phaseAttackCancelled === true && phase
+                ? {
+                    ...participant.stepStatuses,
+                    [getCombatRoundPhaseActionStepForPhase(phase)]:
+                      previousPhaseActionStepStatus.success
+                        ? previousPhaseActionStepStatus.data
+                        : "pending",
+                  }
+                : participant.stepStatuses,
           }
         : participant,
     ),
@@ -13388,14 +13794,21 @@ function getCombatRoundLatestEventForCommand(input: {
     const resultLabel = getCombatRoundLatestEventFactString(facts, "resultLabel") ?? "Active";
     const modifierValue = getCombatRoundLatestEventFactNumber(facts, "modifierValue") ?? 0;
     const durationRounds = getCombatRoundLatestEventFactNumber(facts, "durationRounds") ?? 0;
-    const effectText =
-      modifierValue !== 0 && durationRounds > 0
-        ? ` General ${modifierValue} for ${durationRounds} round${durationRounds === 1 ? "" : "s"}.`
-        : " No modifier.";
+    const phaseAttackCancelled =
+      getCombatRoundLatestEventFactBoolean(facts, "phaseAttackCancelled") ?? false;
+    const isPhaseCombatExperience = command.step === "A1" || command.step === "A2";
+    const effectText = phaseAttackCancelled
+      ? " No attack made."
+      : isPhaseCombatExperience && modifierValue < 0
+        ? ` Phase attack OB ${modifierValue}.`
+        : modifierValue !== 0 && durationRounds > 0
+          ? ` General ${modifierValue} for ${durationRounds} round${durationRounds === 1 ? "" : "s"}.`
+          : " No modifier.";
     const effectiveTableText =
       effectiveTableTotal !== undefined
         ? ` Effective CE table result: ${effectiveTableTotal}.`
         : "";
+    const stepLabel = command.step ?? "DE";
 
     return {
       commandId: command.id,
@@ -13403,8 +13816,8 @@ function getCombatRoundLatestEventForCommand(input: {
       shortTitle: "Combat Experience",
       step: command.step,
       summaryText: noRollRequired
-        ? `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}, no roll required.${effectText}`
-        : `Round ${command.roundNumber}, DE: ${actorLabel} Combat Experience ${skillTotal} + roll ${
+        ? `Round ${command.roundNumber}, ${stepLabel}: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}, no roll required.${effectText}`
+        : `Round ${command.roundNumber}, ${stepLabel}: ${actorLabel} Combat Experience ${skillTotal} + roll ${
             rollTotal ?? "?"
           } = ${finalTotal ?? "?"} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}.${effectText}`,
     };

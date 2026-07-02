@@ -76,6 +76,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("focusRoundTable");
   });
 
+  it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
+    const source = readSource();
+
+    expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
+    expect(source).toContain("phaseCombatExperienceMarkerRequired");
+    expect(source).toContain("Combat Experience check required before attack.");
+    expect(source).toContain('? "?"');
+    expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
+    expect(source).toContain("Combat Experience required");
+    expect(source).toContain("Reason: attacked while attacking");
+    expect(source).toContain("Incoming attacker(s):");
+    expect(source).toContain("threat.initiativeDifference");
+  });
+
   it("renders inspector details for the selected participant and step", () => {
     const source = readSource();
 
@@ -585,9 +599,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const inspectorCombatExperienceSkillTotal = inspectorCombatExperienceSkillLookup.skillTotal",
     );
-    expect(source).toContain('${roundState.roundNumber}:combat-experience');
+    expect(source).toContain("${roundState.roundNumber}:combat-experience");
     expect(source).toContain("const inspectorCombatExperienceNoRollAvailable =");
-    expect(source).toContain("inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty");
+    expect(source).toContain(
+      "inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty",
+    );
     expect(source).toContain("const combatExperienceDifficultyControlsDisabled =");
     expect(source).toContain("Set CE difficulty first");
     expect(source).toContain("Start Combat Experience rolls");
@@ -606,7 +622,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("onBlur={(event) =>");
     expect(source).toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
-    expect(source).toContain('inspector.step === "select_actions" || inspectorCombatExperienceRequired');
+    expect(source).toContain(
+      'inspector.step === "select_actions" || inspectorCombatExperienceRequired',
+    );
     expect(source).toContain("Phase Combat Experience uses difficulty");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");

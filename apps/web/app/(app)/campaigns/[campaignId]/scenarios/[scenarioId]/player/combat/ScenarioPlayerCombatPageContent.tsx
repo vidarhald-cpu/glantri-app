@@ -19,6 +19,7 @@ import {
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundInitiativeRanks,
@@ -169,24 +170,54 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
     return "Not rolled";
   }
 
+  const isPhaseResult = result.trigger !== "combat_start";
+
   if (result.noRollRequired) {
-    return "Active, no roll required";
+    return isPhaseResult ? "Attack continues, no roll required" : "Active, no roll required";
+  }
+
+  if (
+    isPhaseResult &&
+    result.effectiveTableTotal !== undefined &&
+    result.effectiveTableTotal <= 5
+  ) {
+    return "No attack made";
+  }
+
+  if (isPhaseResult && result.modifierValue < 0) {
+    return `Attack continues, OB ${result.modifierValue}`;
   }
 
   if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Active, no modifier";
+    return isPhaseResult ? "Attack continues, no modifier" : "Active, no modifier";
   }
 
   return `${result.label} ${result.modifierValue}, duration ${result.durationRounds}`;
 }
 
 function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceResult): string {
+  const isPhaseResult = result.trigger !== "combat_start";
+
   if (result.noRollRequired) {
-    return "Result: Active - no roll required";
+    return isPhaseResult
+      ? "Result: Attack continues - no roll required"
+      : "Result: Active - no roll required";
+  }
+
+  if (
+    isPhaseResult &&
+    result.effectiveTableTotal !== undefined &&
+    result.effectiveTableTotal <= 5
+  ) {
+    return "Result: No attack made";
+  }
+
+  if (isPhaseResult && result.modifierValue < 0) {
+    return `Result: Attack continues, phase attack OB ${result.modifierValue}`;
   }
 
   if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Result: Active, no modifier";
+    return isPhaseResult ? "Result: Attack continues, no modifier" : "Result: Active, no modifier";
   }
 
   return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
@@ -1504,6 +1535,15 @@ export default function ScenarioPlayerCombatPageContent({
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
   const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
+  const selectedPhaseCombatExperienceRequirement =
+    combatRoundState && selectedRoundParticipant && currentAttackPhase
+      ? getCombatRoundPhaseCombatExperienceRequirement({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentAttackPhase,
+          state: combatRoundState,
+          visibility: encounterSession?.roleplayState?.visibility,
+        })
+      : undefined;
   const currentAttackPhaseContext = currentAttackPhase
     ? (selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase] ??
       phaseCombatContextDrafts[currentAttackPhase])
@@ -1888,8 +1928,8 @@ export default function ScenarioPlayerCombatPageContent({
                 : selectedParticipantHasDeclared
                   ? `Current step: ${currentCombatStepLabel}. Declared.`
                   : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-                  ? `Current step: ${currentCombatStepLabel}.`
-                  : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+                    ? `Current step: ${currentCombatStepLabel}.`
+                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
   const combatExperienceValidationMessage =
     selectedCombatExperienceRequired && !selectedCombatExperienceWindowOpen
       ? "Waiting for GM to start Combat Experience rolls."
@@ -2125,6 +2165,33 @@ export default function ScenarioPlayerCombatPageContent({
                 <div>{formatCombatExperienceStatus(selectedCombatExperienceResult)}</div>
                 <div>Skill total {selectedCombatExperienceSkillTotal}</div>
                 <div>Difficulty {selectedCombatExperienceDifficulty}</div>
+                {selectedPhaseCombatExperienceRequirement ? (
+                  <div style={{ color: "#4f5f57", display: "grid", gap: "0.2rem" }}>
+                    <div>Combat Experience required</div>
+                    <div>Reason: attacked while attacking</div>
+                    <div>
+                      Incoming attacker(s):{" "}
+                      {selectedPhaseCombatExperienceRequirement.threats
+                        .map((threat) => {
+                          const attacker = combatRoundState?.participants.find(
+                            (participant) =>
+                              participant.participantId === threat.attackerParticipantId,
+                          );
+
+                          return attacker?.label ?? threat.attackerParticipantId;
+                        })
+                        .join(", ")}
+                    </div>
+                    {selectedPhaseCombatExperienceRequirement.threats.map((threat) => (
+                      <div
+                        key={`player-phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
+                      >
+                        Initiative: {threat.participantInitiative} vs {threat.attackerInitiative}.
+                        Difference: {threat.initiativeDifference}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {selectedCombatExperienceSkillLookup.warning ? (
                   <div style={{ color: "#7c2d12" }}>
                     {selectedCombatExperienceSkillLookup.warning}

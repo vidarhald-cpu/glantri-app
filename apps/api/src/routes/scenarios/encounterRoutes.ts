@@ -1,7 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { defaultCanonicalContent } from "@glantri/content";
-import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
+import {
+  CampaignService,
+  CharacterService,
+  EncounterService,
+  ScenarioService,
+} from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
@@ -36,6 +41,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
+  removeCombatRoundCombatExperienceCombatContextModifiers,
   removeCombatRoundCombatExperienceEffects,
   removeCombatRoundCommittedDamageEffects,
   removeCombatRoundEndHealthCheckEffects,
@@ -359,7 +365,9 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
   return value;
 }
 
-function parseCombatParryModifierBreakdown(value: unknown): Array<{ label: string; value: number }> {
+function parseCombatParryModifierBreakdown(
+  value: unknown,
+): Array<{ label: string; value: number }> {
   if (value === undefined) {
     return [];
   }
@@ -636,7 +644,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const roundState = initializeCombatRoundState({ encounter });
       const normalizedEncounter =
-        encounter.combatRoundState && combatRoundStatesDiffer(roundState, encounter.combatRoundState)
+        encounter.combatRoundState &&
+        combatRoundStatesDiffer(roundState, encounter.combatRoundState)
           ? await encounterService.updateEncounter({
               campaignId: access.campaignId,
               encounterId,
@@ -1173,165 +1182,171 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error:
-            error instanceof Error
-              ? error.message
-              : "Unable to set Combat Experience difficulty.",
+            error instanceof Error ? error.message : "Unable to set Combat Experience difficulty.",
         });
       }
     },
   );
 
-  app.post("/encounters/:encounterId/combat-round/roll-combat-experience", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-combat-experience",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
 
-    if (!user) {
-      return;
-    }
-
-    try {
-      const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const encounter = await encounterService.getEncounterById(encounterId);
-
-      if (!encounter?.scenarioId) {
-        return reply.code(404).send({
-          error: "Encounter not found.",
-        });
+      if (!user) {
+        return;
       }
 
-      const scenarioId = encounter.scenarioId;
-      const access = await resolveScenarioWorkspaceAccess(
-        {
-          campaignService,
-          scenarioService,
-        },
-        {
-          scenarioId,
-          userId: user.id,
-          userRoles: user.roles,
-        },
-      );
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
 
-      if (!access) {
-        return reply.code(404).send({
-          error: "Encounter not found.",
-        });
-      }
-
-      const body = parseCombatExperienceBody(request.body);
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
-        encounter,
-        scenarioParticipants,
-      });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
-
-      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
-        return reply.code(403).send({
-          error: "Participant is not assigned to this encounter.",
-        });
-      }
-
-      const gmAuthorizedOperation = access.mode === "gm";
-      const roundState = initializeCombatRoundState({ encounter });
-
-      if (!gmAuthorizedOperation) {
-        if (
-          scenarioParticipant.controlledByUserId !== user.id ||
-          !isUserAssignedToEncounterMembership({
-            encounter,
-            scenarioParticipants,
-            userId: user.id,
-          })
-        ) {
-          return reply.code(403).send({
-            error: "Player is not assigned to this encounter participant.",
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
           });
         }
-      }
 
-      const combatExperienceTrigger = getCombatRoundRequiredCombatExperienceTrigger({
-        participantId: encounterParticipant.id,
-        state: roundState,
-        visibility: encounter.roleplayState?.visibility,
-      });
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
 
-      if (!combatExperienceTrigger) {
-        return reply.code(409).send({
-          error: "Combat Experience already rolled or is not required for this participant.",
+        if (!access) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const body = parseCombatExperienceBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const scenarioParticipant = scenarioParticipants.find(
+          (participant) => participant.id === body.scenarioParticipantId,
+        );
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const encounterParticipant = scenarioParticipant
+          ? membership.participants.find(
+              (participant) =>
+                participant.scenarioParticipantId === scenarioParticipant.id ||
+                participant.id === scenarioParticipant.id ||
+                (scenarioParticipant.characterId &&
+                  participant.characterId === scenarioParticipant.characterId),
+            )
+          : undefined;
+
+        if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+
+        const gmAuthorizedOperation = access.mode === "gm";
+        const roundState = initializeCombatRoundState({ encounter });
+
+        if (!gmAuthorizedOperation) {
+          if (
+            scenarioParticipant.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            })
+          ) {
+            return reply.code(403).send({
+              error: "Player is not assigned to this encounter participant.",
+            });
+          }
+        }
+
+        const combatExperienceTrigger = getCombatRoundRequiredCombatExperienceTrigger({
+          participantId: encounterParticipant.id,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        });
+
+        if (!combatExperienceTrigger) {
+          return reply.code(409).send({
+            error: "Combat Experience already rolled or is not required for this participant.",
+          });
+        }
+
+        if (
+          combatExperienceTrigger === "combat_start" &&
+          !isCombatRoundCombatExperienceWindowOpen(roundState)
+        ) {
+          return reply.code(409).send({
+            error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const combatExperienceSkillLookup =
+          await getCombatExperienceSkillLookupForScenarioParticipant(scenarioParticipant);
+        const rolled = rollCombatRoundCombatExperience({
+          combatContext: scenarioParticipant.state.combat.combatContext,
+          combatEffects: scenarioParticipant.state.combatEffects,
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          encounterId: encounter.id,
+          participantId: encounterParticipant.id,
+          scenarioId,
+          scenarioParticipantId: scenarioParticipant.id,
+          skillTotal: combatExperienceSkillLookup.skillTotal,
+          skillTotalSource: combatExperienceSkillLookup.source,
+          skillTotalWarning: combatExperienceSkillLookup.warning,
+          state: roundState,
+          trigger: combatExperienceTrigger,
+          visibility: encounter.roleplayState?.visibility,
+        });
+        const savedParticipant = await encounterService.updateScenarioParticipantState({
+          participantId: scenarioParticipant.id,
+          scenarioId,
+          state: {
+            ...scenarioParticipant.state,
+            combat: {
+              ...scenarioParticipant.state.combat,
+              combatContext: rolled.combatContext,
+            },
+            combatEffects: rolled.combatEffects,
+          },
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          combatExperience: rolled.result,
+          encounter: savedEncounter,
+          participant: savedParticipant,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to roll Combat Experience.",
         });
       }
-
-      if (
-        combatExperienceTrigger === "combat_start" &&
-        !isCombatRoundCombatExperienceWindowOpen(roundState)
-      ) {
-        return reply.code(409).send({
-          error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
-        });
-      }
-
-      const submittedAt = new Date().toISOString();
-      const combatExperienceSkillLookup =
-        await getCombatExperienceSkillLookupForScenarioParticipant(scenarioParticipant);
-      const rolled = rollCombatRoundCombatExperience({
-        combatEffects: scenarioParticipant.state.combatEffects,
-        command: {
-          createdAt: submittedAt,
-          createdByUserId: user.id,
-        },
-        encounterId: encounter.id,
-        participantId: encounterParticipant.id,
-        scenarioId,
-        scenarioParticipantId: scenarioParticipant.id,
-        skillTotal: combatExperienceSkillLookup.skillTotal,
-        skillTotalSource: combatExperienceSkillLookup.source,
-        skillTotalWarning: combatExperienceSkillLookup.warning,
-        state: roundState,
-        trigger: combatExperienceTrigger,
-        visibility: encounter.roleplayState?.visibility,
-      });
-      const savedParticipant = await encounterService.updateScenarioParticipantState({
-        participantId: scenarioParticipant.id,
-        scenarioId,
-        state: {
-          ...scenarioParticipant.state,
-          combatEffects: rolled.combatEffects,
-        },
-      });
-      const savedEncounter = await encounterService.updateEncounter({
-        campaignId: access.campaignId,
-        encounterId,
-        scenarioId,
-        session: {
-          ...encounter,
-          combatRoundState: rolled.state,
-          currentRound: rolled.state.roundNumber,
-          updatedAt: submittedAt,
-        },
-      });
-
-      return {
-        combatExperience: rolled.result,
-        encounter: savedEncounter,
-        participant: savedParticipant,
-      };
-    } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to roll Combat Experience.",
-      });
-    }
-  });
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-round/roll-attack", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -2223,6 +2238,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
                     nextState = {
                       ...nextState,
+                      combat: {
+                        ...nextState.combat,
+                        combatContext: removeCombatRoundCombatExperienceCombatContextModifiers({
+                          combatContext: nextState.combat.combatContext,
+                          command,
+                        }),
+                      },
                       combatEffects: removeCombatRoundCombatExperienceEffects({
                         combatEffects: nextState.combatEffects,
                         command,

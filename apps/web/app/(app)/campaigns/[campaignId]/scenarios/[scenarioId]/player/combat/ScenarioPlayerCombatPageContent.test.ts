@@ -213,6 +213,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundRequiredCombatExperienceTrigger");
+    expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
     expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
@@ -223,7 +224,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatCombatExperienceEffectiveTableLine");
     expect(source).toContain("Effective CE table result");
     expect(source).toContain("Active, no roll required");
+    expect(source).toContain("Attack continues, no roll required");
+    expect(source).toContain("No attack made");
+    expect(source).toContain("phase attack OB");
     expect(source).toContain("Result: Active - no roll required");
+    expect(source).toContain("Result: Attack continues - no roll required");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain("selectedCombatExperienceTrigger");
     expect(source).toContain("visibility: encounterSession?.roleplayState?.visibility");
@@ -237,6 +242,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     );
     expect(source).toContain("selectedCombatExperienceDifficulty");
     expect(source).toContain("selectedCombatExperienceNoRollAvailable");
+    expect(source).toContain("selectedPhaseCombatExperienceRequirement");
     expect(source).toContain("selectedCombatExperienceResultPanel");
     expect(source).toContain("selectedCombatExperienceActionAvailable");
     expect(source).toContain('"Roll Combat Experience"');
@@ -248,6 +254,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollCombatExperience()");
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
+    expect(source).toContain("Reason: attacked while attacking");
+    expect(source).toContain("Incoming attacker(s):");
     expect(source).toContain("selectedCombatExperienceSkillLookup.warning");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain(

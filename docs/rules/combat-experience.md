@@ -48,16 +48,42 @@ added separately.
 ## Phase Attack Rolls
 
 After `i1` is complete and before A1 attacks, the sequencer checks every participant who both has an
-executable phase 1 attack and is attacked in phase 1 by an aware/seen opponent. Those participants
-must resolve Combat Experience before A1 attack resolution opens. After `i2`, the same check runs
-for phase 2 before A2 attacks.
+executable phase 1 attack and is attacked in phase 1 by an aware/seen opponent. After `i2`, the same
+check runs for phase 2 before A2 attacks. Required checks are resolved before the A1/A2
+phase-resolution cursor opens. The GM grid marks an unresolved A1/A2 phase CE check with `?`; the
+inspector and Player Combat panel describe the reason as "attacked while attacking" and list the
+incoming attacker initiative comparison.
 
-Phase CE uses the same displayed effective skill total, difficulty-shifted result table, no-roll
-rule, command-backed undo, and General modifier rows as combat-start CE. Phase CE does not require a
-new GM "start rolls" button; reaching the A1/A2 pre-attack gate opens the phase CE window. If the
-encounter visibility map explicitly marks the attacker as unseen by the defending participant, that
-incoming attack does not trigger phase CE for the defender. Missing visibility data is treated as
-seen so older encounters do not silently skip required CE.
+Initiative is highest first. For each same-phase attack relationship, compare the attacking
+participant's phase initiative with the incoming attacker's phase initiative:
+
+- Initiative difference `<= 3`: both involved attacking participants roll CE when each is also
+  attacked by and aware of the other participant.
+- Initiative difference `> 3`: only the lower-initiative participant rolls CE, provided that lower
+  participant is attacking in the phase and sees the incoming attacker.
+- A participant who is not attacking in that phase does not roll phase CE.
+- An incoming attack from an explicitly unseen attacker does not trigger the opportunity. Missing
+  visibility data is treated as seen for backward-compatible encounters.
+
+Phase CE uses the same displayed effective skill total, difficulty-shifted table lookup, no-roll
+rule, and command-backed undo as combat-start CE. Phase CE does not require a new GM "start rolls"
+button; reaching the A1/A2 pre-attack gate opens the phase CE window.
+
+Phase CE uses a phase-attack outcome table:
+
+| Effective table total | Phase attack result      |
+| --------------------- | ------------------------ |
+| `<= 5`                | No attack made           |
+| `6-10`                | Phase attack OB `-4`     |
+| `11-15`               | Phase attack OB `-3`     |
+| `16-20`               | Phase attack OB `-2`     |
+| `21+`                 | Attack continues, no mod |
+
+Phase OB penalties are stored in the participant combat context as phase-scoped Skill/OB modifiers
+for only that A1/A2 attack, not as round-duration General modifier rows. A `<= 5` result cancels the
+pending phase attack in the same CE command. Clear current step removes the CE command/result, any
+created phase OB modifier or cancellation, and restores the participant to the unresolved `?` CE
+gate.
 
 ## Result Table
 
@@ -73,7 +99,7 @@ Panic duration is rolled at the time of the CE command and stored on the result/
 
 ## Effect Storage
 
-Panic, Passive, and Active penalties are represented as normal combat effect rows:
+Combat-start Panic, Passive, and Active penalties are represented as normal combat effect rows:
 
 - type: `general_modifier`
 - group: `general`
@@ -84,8 +110,10 @@ Panic, Passive, and Active penalties are represented as normal combat effect row
 The existing live modifier model applies the row, and the existing SU duration countdown decrements or expires it. Active `21+` creates no effect row.
 
 No-roll Active confirmations also create no effect row. Rolled CE results and no-roll CE
-confirmations are both command-backed and undoable; clearing a rolled CE removes only the
-command-created CE modifier row, while clearing a no-roll confirmation removes no combatEffect rows.
+confirmations are both command-backed and undoable; clearing a rolled combat-start CE removes only
+the command-created CE modifier row, while clearing a no-roll confirmation removes no combatEffect
+rows. Clearing a phase CE roll removes phase-scoped combat-context modifiers or the pending-attack
+cancellation recorded by that CE command.
 
 ## Current Boundary
 

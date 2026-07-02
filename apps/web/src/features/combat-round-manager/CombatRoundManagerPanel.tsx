@@ -48,6 +48,7 @@ import {
   formatOpenEndedD20RollBreakdown,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
@@ -407,12 +408,26 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
     return "Not rolled";
   }
 
+  const isPhaseResult = result.trigger !== "combat_start";
+
   if (result.noRollRequired) {
-    return "Active, no roll required";
+    return isPhaseResult ? "Attack continues, no roll required" : "Active, no roll required";
+  }
+
+  if (
+    isPhaseResult &&
+    result.effectiveTableTotal !== undefined &&
+    result.effectiveTableTotal <= 5
+  ) {
+    return "No attack made";
+  }
+
+  if (isPhaseResult && result.modifierValue < 0) {
+    return `Attack continues, OB ${result.modifierValue}`;
   }
 
   if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Active, no modifier";
+    return isPhaseResult ? "Attack continues, no modifier" : "Active, no modifier";
   }
 
   return `${result.label} ${result.modifierValue}, duration ${result.durationRounds}`;
@@ -435,12 +450,28 @@ function formatCombatExperienceEffectiveTableLine(
 }
 
 function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceResult): string {
+  const isPhaseResult = result.trigger !== "combat_start";
+
   if (result.noRollRequired) {
-    return "Result: Active - no roll required";
+    return isPhaseResult
+      ? "Result: Attack continues - no roll required"
+      : "Result: Active - no roll required";
+  }
+
+  if (
+    isPhaseResult &&
+    result.effectiveTableTotal !== undefined &&
+    result.effectiveTableTotal <= 5
+  ) {
+    return "Result: No attack made";
+  }
+
+  if (isPhaseResult && result.modifierValue < 0) {
+    return `Result: Attack continues, phase attack OB ${result.modifierValue}`;
   }
 
   if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Result: Active, no modifier";
+    return isPhaseResult ? "Result: Attack continues, no modifier" : "Result: Active, no modifier";
   }
 
   return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
@@ -3311,6 +3342,15 @@ export default function CombatRoundManagerPanel({
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
   const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
+  const inspectorPhaseCombatExperienceRequirement =
+    inspector.participant?.participantId && inspectorCurrentAttackPhase && selectedRoundIsActive
+      ? getCombatRoundPhaseCombatExperienceRequirement({
+          participantId: inspector.participant.participantId,
+          phase: inspectorCurrentAttackPhase,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        })
+      : undefined;
   const inspectorPhaseResolutionCursor =
     inspectorSelectedStepIsSequential &&
     selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
@@ -3788,9 +3828,9 @@ export default function CombatRoundManagerPanel({
           ? "Confirm Combat Experience"
           : "Roll Combat Experience"
       : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-      ? "Inspecting step - use Current task to resume"
-      : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-        ? "Preparing round-end review"
+        ? "Inspecting step - use Current task to resume"
+        : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+          ? "Preparing round-end review"
           : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
             ? inspectorRoundEndReviewHasProposals
               ? "Commit participant SU review"
@@ -3888,37 +3928,37 @@ export default function CombatRoundManagerPanel({
         inspectorCombatExperienceRequired &&
         !inspectorCombatExperienceWindowOpen
       ? " Start Combat Experience rolls before rolling or declaring."
-    : inspectorPhaseResolutionCursor
-      ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel(
-          {
-            hasPhaseAttack: combatRoundParticipantHasPhaseAttack({
-              participantId:
-                inspectorCursorIncomingAttackResult?.attackerParticipantId ??
-                inspectorPhaseResolutionCursor.participantId,
+      : inspectorPhaseResolutionCursor
+        ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel(
+            {
+              hasPhaseAttack: combatRoundParticipantHasPhaseAttack({
+                participantId:
+                  inspectorCursorIncomingAttackResult?.attackerParticipantId ??
+                  inspectorPhaseResolutionCursor.participantId,
+                phase: inspectorPhaseResolutionCursor.phase,
+                state: selectedTimelineRoundState,
+              }),
               phase: inspectorPhaseResolutionCursor.phase,
-              state: selectedTimelineRoundState,
-            }),
-            phase: inspectorPhaseResolutionCursor.phase,
-            substep: inspectorPhaseResolutionCursor.substep,
-          },
-        )}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
-      : inspectorDisplayPhaseResolutionResult
-        ? " Resolution review pending."
-        : inspectorDisplayAttackResult
-          ? " Attack rolled."
-          : inspectorCurrentInitiative
-            ? " Initiative rolled."
-            : inspector.step === "review_action_modifiers" &&
-                (inspectorCurrentStepStatus === "complete" ||
-                  inspectorCurrentStepStatus === "gmEdited")
-              ? " Modifiers declared."
-              : inspector.step === "review_phase_2_modifiers" &&
+              substep: inspectorPhaseResolutionCursor.substep,
+            },
+          )}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
+        : inspectorDisplayPhaseResolutionResult
+          ? " Resolution review pending."
+          : inspectorDisplayAttackResult
+            ? " Attack rolled."
+            : inspectorCurrentInitiative
+              ? " Initiative rolled."
+              : inspector.step === "review_action_modifiers" &&
                   (inspectorCurrentStepStatus === "complete" ||
                     inspectorCurrentStepStatus === "gmEdited")
-                ? " Phase 2 modifiers declared."
-                : inspectorParticipantHasDeclared
-                  ? " Declared."
-                  : "";
+                ? " Modifiers declared."
+                : inspector.step === "review_phase_2_modifiers" &&
+                    (inspectorCurrentStepStatus === "complete" ||
+                      inspectorCurrentStepStatus === "gmEdited")
+                  ? " Phase 2 modifiers declared."
+                  : inspectorParticipantHasDeclared
+                    ? " Declared."
+                    : "";
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
       return [];
@@ -5876,6 +5916,18 @@ export default function CombatRoundManagerPanel({
                         status: roundParticipant.stepStatuses[step] ?? "pending",
                         step,
                       });
+                      const phaseCombatExperienceMarkerRequired =
+                        selectedRoundIsActive &&
+                        roundNumber === roundState.roundNumber &&
+                        Boolean(
+                          getCombatAttackPhaseForStep(step) &&
+                          getCombatRoundPhaseCombatExperienceRequirement({
+                            participantId: participant.participantId,
+                            phase: getCombatAttackPhaseForStep(step) ?? "phase1",
+                            state: roundState,
+                            visibility: encounter.roleplayState?.visibility,
+                          }),
+                        );
                       const marker = getStatusMarker({
                         current: currentStepCell,
                         status: stepStatus,
@@ -5888,6 +5940,9 @@ export default function CombatRoundManagerPanel({
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
+                      const buttonTitle = phaseCombatExperienceMarkerRequired
+                        ? `${title}. Combat Experience check required before attack.`
+                        : title;
                       const cellKey = getCombatRoundTimelineCellKey({
                         participantId: participant.participantId,
                         roundNumber,
@@ -5917,7 +5972,7 @@ export default function CombatRoundManagerPanel({
                           }}
                         >
                           <button
-                            aria-label={title}
+                            aria-label={buttonTitle}
                             onClick={() =>
                               selectInspector(participant.participantId, step, roundNumber)
                             }
@@ -5945,8 +6000,8 @@ export default function CombatRoundManagerPanel({
                             }}
                             title={
                               initiativeTotal !== undefined
-                                ? `${title}, initiative ${initiativeTotal}`
-                                : title
+                                ? `${buttonTitle}, initiative ${initiativeTotal}`
+                                : buttonTitle
                             }
                             type="button"
                           >
@@ -5957,7 +6012,9 @@ export default function CombatRoundManagerPanel({
                                 fontWeight: initiativeTotal !== undefined ? 800 : undefined,
                               }}
                             >
-                              {initiativeTotal ?? marker}
+                              {phaseCombatExperienceMarkerRequired
+                                ? "?"
+                                : (initiativeTotal ?? marker)}
                             </span>
                           </button>
                         </td>
@@ -6262,6 +6319,41 @@ export default function CombatRoundManagerPanel({
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                             Phase Combat Experience uses difficulty{" "}
                             {activeCombatExperienceDifficulty}.
+                          </div>
+                        ) : null}
+                        {inspectorPhaseCombatExperienceRequirement ? (
+                          <div
+                            style={{
+                              color: "#5e5a50",
+                              display: "grid",
+                              fontSize: "0.85rem",
+                              gap: "0.2rem",
+                            }}
+                          >
+                            <div>Combat Experience required</div>
+                            <div>Reason: attacked while attacking</div>
+                            <div>
+                              Incoming attacker(s):{" "}
+                              {inspectorPhaseCombatExperienceRequirement.threats
+                                .map((threat) => {
+                                  const attacker = roundState.participants.find(
+                                    (participant) =>
+                                      participant.participantId === threat.attackerParticipantId,
+                                  );
+
+                                  return attacker?.label ?? threat.attackerParticipantId;
+                                })
+                                .join(", ")}
+                            </div>
+                            {inspectorPhaseCombatExperienceRequirement.threats.map((threat) => (
+                              <div
+                                key={`phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
+                              >
+                                Initiative: {threat.participantInitiative} vs{" "}
+                                {threat.attackerInitiative}. Difference:{" "}
+                                {threat.initiativeDifference}
+                              </div>
+                            ))}
                           </div>
                         ) : null}
                       </section>
