@@ -203,6 +203,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorGeneratedCombatContext");
     expect(source).toContain("combatContext: inspectorGeneratedCombatContext");
     expect(source).toContain("resolvedEquipmentState: inspectorEquipmentState ?? undefined");
+    expect(source).toContain("phaseWeaponNames: {");
+    expect(source).toContain("phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName");
+    expect(source).toContain("phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName");
     expect(source).toContain("participants ?? []");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain(
@@ -577,6 +580,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("combatRoundState: stateToPersist");
     expect(source).toContain("currentRound: stateToPersist.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
+    expect(source).toContain("phaseWeaponNames: {");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");

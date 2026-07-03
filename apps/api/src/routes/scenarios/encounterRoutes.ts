@@ -203,12 +203,27 @@ function parseOptionalDeclarationString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
+function parseCombatDeclarationPhaseWeaponNames(
+  value: unknown,
+): Partial<Record<"phase1" | "phase2", string | undefined>> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const phase1 = parseOptionalDeclarationString(record.phase1);
+  const phase2 = parseOptionalDeclarationString(record.phase2);
+
+  return phase1 || phase2 ? { phase1, phase2 } : undefined;
+}
+
 function parseCombatDeclarationBody(body: unknown): {
   actionId?: string;
   additionalActionNotes?: string;
   combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
   movementId?: string;
   phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
+  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
 } {
@@ -229,6 +244,7 @@ function parseCombatDeclarationBody(body: unknown): {
       value.phaseContexts === undefined
         ? undefined
         : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
+    phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
     scenarioParticipantId,
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
   };
@@ -824,11 +840,19 @@ function buildDistanceModifierDetailFromExistingEntry(
   };
 }
 
+function getDistanceModifierValueFromSnapshot(input: {
+  phase: "phase1" | "phase2";
+  snapshot: CombatRoundState["stepSnapshots"][number] | undefined;
+}): number {
+  return findExistingDistanceModifierEntryFromSnapshot(input)?.value ?? 0;
+}
+
 function applyGeneratedCombatActionModifiersForDeclaration(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterParticipant: EncounterSession["participants"][number];
   phaseContexts?: CombatRoundPhaseContexts;
+  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
@@ -840,6 +864,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
       actionId: input.actionId,
       encounterParticipant: input.encounterParticipant,
       phaseContexts: input.phaseContexts,
+      phaseWeaponNames: input.phaseWeaponNames,
       roundState: input.roundState,
       scenarioParticipant: input.scenarioParticipant,
       secondaryActionId: input.secondaryActionId,
@@ -1418,6 +1443,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         combatContext: baseSubmittedCombatContext,
         encounterParticipant,
         phaseContexts: submittedPhaseContexts,
+        phaseWeaponNames: body.phaseWeaponNames,
         roundState,
         scenarioParticipant,
         secondaryActionId: body.secondaryActionId,
@@ -2552,7 +2578,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.defenseSummary,
         );
-      const ob =
+      const snapshotOb =
         parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.ob, "Attacker OB") ??
         body.ob;
       const weaponName = latestAttackerSnapshot?.attackSummary?.weaponName ?? body.weaponName;
@@ -2560,7 +2586,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
         body.defenderDb;
 
-      if (ob === undefined || !weaponName || defenderDb === undefined) {
+      if (snapshotOb === undefined || !weaponName || defenderDb === undefined) {
         return reply.code(409).send({
           error: "Attack or defender combat summary is not available.",
         });
@@ -2582,6 +2608,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot: latestAttackerSnapshot,
           }),
       );
+      const persistedDistanceModifierValue = distanceModifierDetail?.value ?? 0;
+      const snapshotDistanceModifierValue = latestAttackerSnapshot
+        ? getDistanceModifierValueFromSnapshot({
+            phase: body.phase,
+            snapshot: latestAttackerSnapshot,
+          })
+        : persistedDistanceModifierValue;
+      const ob = snapshotOb + persistedDistanceModifierValue - snapshotDistanceModifierValue;
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,

@@ -428,6 +428,12 @@ describe("combat action generated modifiers", () => {
       ],
     });
 
+    expect(context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
+        value: -4,
+      }),
+    ]);
     expect(context.modifierBuckets.situationObSkill).toEqual([
       expect.objectContaining({
         durationRounds: 1,
@@ -440,6 +446,9 @@ describe("combat action generated modifiers", () => {
         value: -2,
       }),
     ]);
+    expect(
+      context.modifierBuckets.situationObSkill.reduce((sum, entry) => sum + entry.value, 0),
+    ).toBe(-2);
   });
 
   it("does not create a distance row inside preferred range", () => {

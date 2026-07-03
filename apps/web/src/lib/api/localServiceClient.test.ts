@@ -341,6 +341,9 @@ describe("localServiceClient wire contract", () => {
             },
           },
         },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
+        },
         scenarioParticipantId: "participant-1",
       }),
     ).resolves.toEqual({ encounter, participant });
@@ -385,6 +388,9 @@ describe("localServiceClient wire contract", () => {
               situationObSkill: [],
             },
           },
+        },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
         },
         scenarioParticipantId: "participant-1",
         secondaryActionId: undefined,

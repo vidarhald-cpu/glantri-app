@@ -112,6 +112,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatDistanceModifierSection");
     expect(source).toContain("distanceModifierDetail");
     expect(source).toContain("detail.notes && detail.actualDistance === undefined");
+    expect(source).toContain("phaseWeaponNames: {");
+    expect(source).toContain("phase1: phaseCombatLoadoutSummaries.phase1.attackStats?.weaponName");
+    expect(source).toContain("phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName");
     expect(source).toContain('title: "Distance"');
     expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");

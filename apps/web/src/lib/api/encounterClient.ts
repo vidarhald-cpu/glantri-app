@@ -72,6 +72,7 @@ export async function submitCombatDeclarationOnServer(input: {
   encounterId: string;
   movementId?: string;
   phaseContexts?: CombatRoundPhaseContexts;
+  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
@@ -84,6 +85,7 @@ export async function submitCombatDeclarationOnServer(input: {
         combatContext: input.combatContext,
         movementId: input.movementId,
         phaseContexts: input.phaseContexts,
+        phaseWeaponNames: input.phaseWeaponNames,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
       }),

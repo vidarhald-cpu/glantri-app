@@ -746,7 +746,15 @@ function formatCombatDistanceModifierDetailLine(
   }
 
   if (detail.notes && detail.actualDistance === undefined) {
-    return detail.notes;
+    const normalizedNotes = detail.notes.replace(/^distance:\s*/i, "");
+    const skillMarker = " · Skill/OB ";
+
+    if (normalizedNotes.includes(skillMarker)) {
+      const [context, value] = normalizedNotes.split(skillMarker);
+      return `${context.replace(/\s· nearest \d+$/, "")} -> Skill/OB ${value}`;
+    }
+
+    return normalizedNotes;
   }
 
   const weaponName = detail.weaponName ?? "Weapon";
@@ -5361,6 +5369,10 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         movementId: inspectorDraft.movementId || undefined,
         phaseContexts: inspectorDraft.phaseContexts,
+        phaseWeaponNames: {
+          phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
+          phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
+        },
         scenarioParticipantId: selectedScenarioParticipant.id,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });

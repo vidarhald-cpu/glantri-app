@@ -40,13 +40,14 @@ creates a generated Skill/OB modifier for the relevant A1/A2 attack:
 - preferred `[1, 2]`, actual `4` gives `-4`
 - preferred `[3, 4]`, actual `1` gives `-4`
 
-The generated row is a phase-scoped combat action modifier in the Skill/OB bucket, visible to GM
-and player review before the attack is declared or rolled. The attack roll consumes the visible
-Skill/OB row through the existing OB total; the late attack-roll route must not create a second
-hidden distance modifier. Clear/undo of the attack does not remove the declaration-time row unless
-an older command explicitly recorded that it created the row. Distance modifiers apply to attack
-rolls only; they do not affect DB/Parry, damage lookup, initiative, critical rolls, armor, or base
-weapon OB.
+The generated row is a phase-scoped combat action modifier in the Skill/OB bucket. It is created
+when the action declaration or modifier review is committed, using the committed phase target,
+phase weapon, and current pair distance, then shown to GM and player review before the attack roll.
+The attack roll consumes the visible Skill/OB row through the existing OB total; the late
+attack-roll route must not create a second hidden distance modifier. Clear/undo of the attack does
+not remove the declaration-time row unless an older command explicitly recorded that it created the
+row. Distance modifiers apply to attack rolls only; they do not affect DB/Parry, damage lookup,
+initiative, critical rolls, armor, or base weapon OB.
 
 Examples:
 
