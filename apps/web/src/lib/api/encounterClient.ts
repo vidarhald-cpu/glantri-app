@@ -208,10 +208,12 @@ export async function setPairDistanceOnServer(input: {
 }): Promise<{
   edge?: CombatDistanceEdge;
   encounter: EncounterSession;
+  participants?: ScenarioParticipant[];
 }> {
   const payload = await sendJson<{
     edge?: CombatDistanceEdge;
     encounter: EncounterSession;
+    participants?: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/pair-distance`, {
     body: JSON.stringify({
       distance: input.distance,

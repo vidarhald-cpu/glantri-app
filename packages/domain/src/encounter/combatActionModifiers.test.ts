@@ -13,6 +13,7 @@ import {
   applyCombatActionGeneratedModifiers,
   isAdjustRangeAttackGeneratedDbParryModifier,
   isAttackParryGeneratedDbParryModifier,
+  isDistanceGeneratedObSkillModifier,
   isDoubleAttackGeneratedDbParryModifier,
   isDoubleAttackGeneratedObSkillModifier,
   isParryAttackGeneratedDbParryModifier,
@@ -411,5 +412,168 @@ describe("combat action generated modifiers", () => {
         value: 2,
       }),
     ]);
+  });
+
+  it("creates a generated distance Skill/OB modifier during action generation", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        durationRounds: 1,
+        generated: true,
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("Broad sword preferred 2"),
+        sourceActionId: "attack_parry",
+        sourcePhase: "phase1",
+        sourceRule: "distance-ob-skill-phase1",
+        value: -2,
+      }),
+    ]);
+  });
+
+  it("does not create a distance row inside preferred range", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [3],
+          weaponName: "Long sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toEqual([]);
+  });
+
+  it("creates distance penalties from the nearest preferred distance", () => {
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "attack_parry",
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        distanceModifiers: [
+          {
+            actualDistance: 5,
+            phase: "phase1",
+            preferredDistances: [3],
+            weaponName: "Long sword",
+          },
+        ],
+      }).modifierBuckets.situationObSkill[0],
+    ).toMatchObject({ value: -4 });
+
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "attack_parry",
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        distanceModifiers: [
+          {
+            actualDistance: 4,
+            phase: "phase1",
+            preferredDistances: [1, 2],
+            weaponName: "Spear",
+          },
+        ],
+      }).modifierBuckets.situationObSkill[0],
+    ).toMatchObject({ value: -4 });
+  });
+
+  it("removes stale distance rows when action generation no longer has distance input", () => {
+    const withDistance = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+    const withoutDistance = applyCombatActionGeneratedModifiers({
+      actionId: "observe_opponent",
+      combatContext: withDistance,
+    });
+
+    expect(
+      withoutDistance.modifierBuckets.situationObSkill.filter(isDistanceGeneratedObSkillModifier),
+    ).toHaveLength(0);
+  });
+
+  it("updates distance rows deterministically without duplication", () => {
+    const firstSave = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+    const secondSave = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: firstSave,
+      distanceModifiers: [
+        {
+          actualDistance: 4,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(
+      secondSave.modifierBuckets.situationObSkill.filter(isDistanceGeneratedObSkillModifier),
+    ).toHaveLength(1);
+    expect(secondSave.modifierBuckets.situationObSkill[0]).toMatchObject({
+      id: "generated:distance:phase1:ob-skill",
+      value: -4,
+    });
+  });
+
+  it("keeps phase 1 and phase 2 distance rows separate", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+        {
+          actualDistance: 5,
+          phase: "phase2",
+          preferredDistances: [3],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 }),
+        expect.objectContaining({ id: "generated:distance:phase2:ob-skill", value: -4 }),
+      ]),
+    );
   });
 });
