@@ -90,17 +90,34 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("threat.initiativeDifference");
   });
 
-  it("renders GM pairwise distance controls", () => {
+  it("renders compact GM distance matrix controls below the inspector", () => {
     const source = readSource();
 
-    expect(source).toContain("Distance / spatial relations");
+    expect(source).toContain("Distance matrix");
+    expect(source).not.toContain("Participant A");
+    expect(source).not.toContain("Participant B");
+    expect(source.indexOf('aria-label="Distance matrix"')).toBeGreaterThan(
+      source.indexOf('aria-label="Combat round inspector"'),
+    );
+    expect(source.indexOf('aria-label="Distance matrix"')).toBeGreaterThan(
+      source.indexOf('aria-label="Combat round timeline grid"'),
+    );
     expect(source).toContain("buildCombatDistanceTableRows");
+    expect(source).toContain("getCombatDistanceTableRowForParticipants");
     expect(source).toContain("ensureDistanceEdgesForParticipantPairs");
     expect(source).toContain("setPairDistanceOnServer");
     expect(source).toContain("Combat distance must be an integer from 0 to 8.");
-    expect(source).toContain("formatCombatDistanceSource(row.edge.source)");
-    expect(source).toContain("row.preferredDistanceLabel");
-    expect(source).toContain("saveCombatDistanceDraft(row)");
+    expect(source).toContain("dirtyCombatDistanceRows");
+    expect(source).toContain("unsaved distance");
+    expect(source).toContain("Save distance changes");
+    expect(source).toContain("Reset changes");
+    expect(source).toContain("saveCombatDistanceChanges()");
+    expect(source).toContain("rowParticipant.participantId === columnParticipant.participantId");
+    expect(source).toContain("rowIndex < columnIndex");
+    expect(source).toContain("[distanceRow.edge.pairKey]: event.target.value");
+    expect(source).toContain("formatCombatDistanceSource(distanceRow.edge.source)");
+    expect(source).toContain("distanceRow.preferredDistanceLabel");
+    expect(source).toContain("Distance: {phaseDistanceRow?.edge.distance ?? \"—\"}");
   });
 
   it("renders inspector details for the selected participant and step", () => {

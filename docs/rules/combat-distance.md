@@ -14,6 +14,15 @@ weapon distance metadata is available, the app falls back to distance `2` and re
 
 The GM can set pair distance manually. A GM-set edge overrides the weapon default and is command
 backed, so Clear restores the previous edge or removes the GM-set edge if no previous edge existed.
+In the GM Combat screen, distance editing is presented as a compact participant-by-participant
+matrix below the Combat inspector. Editing one mirrored pair updates the shared draft value, and
+Save distance changes commits each changed pair through the existing command-backed distance
+update. Source/default notes may be available as secondary tooltip/debug context, but they are not
+shown as noisy primary combat rows.
+
+Normal Phase 1 and Phase 2 panels show the current distance to the selected target as compact
+read-only text. Player Combat shows the same read-only distance for the player's selected visible
+target and does not expose the full matrix or editing controls in this slice.
 
 Using a weapon outside its preferred distance creates an OB/Skill penalty:
 

@@ -2234,10 +2234,9 @@ export default function ScenarioPlayerCombatPageContent({
                         }}
                         targetOptions={targetOptions}
                       />
-                      {distanceEdge ? (
+                      {targetRoundParticipant ? (
                         <div style={{ color: "#4f5f57", fontSize: "0.9rem" }}>
-                          Distance to {targetRoundParticipant?.label ?? "target"}:{" "}
-                          {distanceEdge.distance}
+                          Distance: {distanceEdge?.distance ?? "—"}
                         </div>
                       ) : null}
                       <PlayerCombatAttackLocationSelector

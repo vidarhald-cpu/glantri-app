@@ -2168,6 +2168,24 @@ function buildCombatDistanceTableRows(input: {
     );
 }
 
+function getCombatDistanceTableRowForParticipants(input: {
+  participantAId: string | undefined;
+  participantBId: string | undefined;
+  rows: CombatDistanceTableRow[];
+}): CombatDistanceTableRow | undefined {
+  if (!input.participantAId || !input.participantBId) {
+    return undefined;
+  }
+
+  return input.rows.find(
+    (row) =>
+      (row.edge.participantAId === input.participantAId &&
+        row.edge.participantBId === input.participantBId) ||
+      (row.edge.participantAId === input.participantBId &&
+        row.edge.participantBId === input.participantAId),
+  );
+}
+
 function getScenarioParticipantHealthStat(participant?: ScenarioParticipant): number | undefined {
   const buildResult = characterBuildSchema.safeParse(participant?.snapshot.build);
 
@@ -3255,6 +3273,15 @@ export default function CombatRoundManagerPanel({
         scenarioParticipants: effectiveScenarioParticipants,
       }),
     [effectiveScenarioParticipants, encounter, roundState],
+  );
+  const dirtyCombatDistanceRows = useMemo(
+    () =>
+      combatDistanceRows.filter((row) => {
+        const draftValue = distanceDrafts[row.edge.pairKey];
+
+        return draftValue !== undefined && draftValue !== String(row.edge.distance);
+      }),
+    [combatDistanceRows, distanceDrafts],
   );
   const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
   const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
@@ -5298,39 +5325,54 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function saveCombatDistanceDraft(row: CombatDistanceTableRow) {
-    const value = distanceDrafts[row.edge.pairKey] ?? String(row.edge.distance);
-    const distance = Number.parseInt(value, 10);
-
-    if (!Number.isInteger(distance) || distance < 0 || distance > 8) {
-      setSaveError("Combat distance must be an integer from 0 to 8.");
+  async function saveCombatDistanceChanges() {
+    if (dirtyCombatDistanceRows.length === 0) {
       return;
     }
 
-    if (distance === row.edge.distance && row.edge.source === "gm_set") {
+    const changes = dirtyCombatDistanceRows.map((row) => {
+      const value = distanceDrafts[row.edge.pairKey] ?? String(row.edge.distance);
+      const distance = Number.parseInt(value, 10);
+
+      return { distance, row, value };
+    });
+    const invalidChange = changes.find(
+      (change) =>
+        change.value.trim() !== String(change.distance) ||
+        !Number.isInteger(change.distance) ||
+        change.distance < 0 ||
+        change.distance > 8,
+    );
+
+    if (invalidChange) {
+      setSaveError("Combat distance must be an integer from 0 to 8.");
       return;
     }
 
     setSaving(true);
 
     try {
-      const { encounter: nextEncounter } = await setPairDistanceOnServer({
-        distance,
-        encounterId: encounter.id,
-        participantAId: row.edge.participantAId,
-        participantBId: row.edge.participantBId,
-      });
+      let latestEncounter = encounter;
+
+      for (const change of changes) {
+        const { encounter: nextEncounter } = await setPairDistanceOnServer({
+          distance: change.distance,
+          encounterId: encounter.id,
+          participantAId: change.row.edge.participantAId,
+          participantBId: change.row.edge.participantBId,
+        });
+
+        latestEncounter = nextEncounter;
+      }
+
       const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+        state: initializeCombatRoundState({ encounter: latestEncounter }),
       });
 
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
-      onEncounterUpdated?.(nextEncounter);
-      setDistanceDrafts((current) => ({
-        ...current,
-        [row.edge.pairKey]: String(distance),
-      }));
+      onEncounterUpdated?.(latestEncounter);
+      setDistanceDrafts({});
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -6202,104 +6244,6 @@ export default function CombatRoundManagerPanel({
         )}
       </section>
 
-      <section
-        aria-label="Distance and spatial relations"
-        style={{
-          border: "1px solid #e3e1dc",
-          borderRadius: 8,
-          display: "grid",
-          gap: "0.5rem",
-          padding: "0.65rem 0.75rem",
-        }}
-      >
-        <strong>Distance / spatial relations</strong>
-        {combatDistanceRows.length > 0 ? (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                borderCollapse: "collapse",
-                fontSize: "0.88rem",
-                minWidth: 620,
-                width: "100%",
-              }}
-            >
-              <thead>
-                <tr>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Participant A</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Participant B</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Distance</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Preferred</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Source</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Notes</th>
-                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {combatDistanceRows.map((row) => {
-                  const draftValue = distanceDrafts[row.edge.pairKey] ?? String(row.edge.distance);
-
-                  return (
-                    <tr key={row.edge.pairKey}>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        {row.participantALabel}
-                      </td>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        {row.participantBLabel}
-                      </td>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        <input
-                          aria-label={`Distance between ${row.participantALabel} and ${row.participantBLabel}`}
-                          disabled={saving || !selectedRoundIsActive}
-                          max={8}
-                          min={0}
-                          onChange={(event) =>
-                            setDistanceDrafts((current) => ({
-                              ...current,
-                              [row.edge.pairKey]: event.target.value,
-                            }))
-                          }
-                          style={{ maxWidth: 70 }}
-                          type="number"
-                          value={draftValue}
-                        />
-                      </td>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        {row.preferredDistanceLabel}
-                      </td>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        {formatCombatDistanceSource(row.edge.source)}
-                      </td>
-                      <td
-                        style={{
-                          borderTop: "1px solid #e3e1dc",
-                          color: "#5e5a50",
-                          padding: "0.35rem",
-                        }}
-                      >
-                        {row.edge.notes ?? "—"}
-                      </td>
-                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
-                        <button
-                          disabled={saving || !selectedRoundIsActive}
-                          onClick={() => void saveCombatDistanceDraft(row)}
-                          type="button"
-                        >
-                          Set
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-            Add at least two active participants to review pairwise distance.
-          </div>
-        )}
-      </section>
-
       <div
         aria-label="Combat round timeline grid"
         onKeyDown={handleTimelineKeyDown}
@@ -6607,6 +6551,21 @@ export default function CombatRoundManagerPanel({
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey];
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                    const phaseTargetScenarioParticipant = effectiveScenarioParticipants.find(
+                      (participant) => participant.id === phaseCombatContext.targetParticipantId,
+                    );
+                    const phaseTargetEncounterParticipant = phaseCombatContext.targetParticipantId
+                      ? findEncounterParticipantForScenarioParticipant({
+                          encounterParticipants: encounter.participants,
+                          scenarioParticipant: phaseTargetScenarioParticipant,
+                          scenarioParticipantId: phaseCombatContext.targetParticipantId,
+                        })
+                      : undefined;
+                    const phaseDistanceRow = getCombatDistanceTableRowForParticipants({
+                      participantAId: inspector.participant?.participantId,
+                      participantBId: phaseTargetEncounterParticipant?.id,
+                      rows: combatDistanceRows,
+                    });
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
                     const phaseDefenseStats = buildPlayerCombatDefenseStats({
@@ -6687,6 +6646,11 @@ export default function CombatRoundManagerPanel({
                               }
                               targetOptions={inspectorTargetOptions}
                             />
+                            {phaseTargetEncounterParticipant ? (
+                              <div style={{ color: "#4f5f57", fontSize: "0.9rem" }}>
+                                Distance: {phaseDistanceRow?.edge.distance ?? "—"}
+                              </div>
+                            ) : null}
                             <PlayerCombatAttackLocationSelector
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
@@ -7064,6 +7028,178 @@ export default function CombatRoundManagerPanel({
           </>
         ) : (
           <div>Select a participant step to inspect combat details.</div>
+        )}
+      </section>
+
+      <section
+        aria-label="Distance matrix"
+        style={{
+          border: "1px solid #e3e1dc",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.5rem",
+          padding: "0.65rem 0.75rem",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+          }}
+        >
+          <strong>Distance matrix</strong>
+          <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            {dirtyCombatDistanceRows.length === 0
+              ? "No unsaved distance changes."
+              : `${dirtyCombatDistanceRows.length} unsaved distance ${
+                  dirtyCombatDistanceRows.length === 1 ? "change" : "changes"
+                }.`}
+          </span>
+        </div>
+        {displayParticipants.length > 1 ? (
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  width: "max-content",
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={{ padding: "0.25rem 0.35rem", textAlign: "left" }} />
+                    {displayParticipants.map((participant) => (
+                      <th
+                        key={`distance-column:${participant.participantId}`}
+                        style={{
+                          maxWidth: 110,
+                          padding: "0.25rem 0.35rem",
+                          textAlign: "center",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={participant.label}
+                      >
+                        {participant.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayParticipants.map((rowParticipant, rowIndex) => (
+                    <tr key={`distance-row:${rowParticipant.participantId}`}>
+                      <th
+                        style={{
+                          borderTop: "1px solid #e3e1dc",
+                          maxWidth: 130,
+                          padding: "0.25rem 0.35rem",
+                          textAlign: "left",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={rowParticipant.label}
+                      >
+                        {rowParticipant.label}
+                      </th>
+                      {displayParticipants.map((columnParticipant, columnIndex) => {
+                        if (rowParticipant.participantId === columnParticipant.participantId) {
+                          return (
+                            <td
+                              key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
+                              style={{
+                                borderTop: "1px solid #e3e1dc",
+                                color: "#8c8578",
+                                padding: "0.25rem 0.35rem",
+                                textAlign: "center",
+                              }}
+                            >
+                              —
+                            </td>
+                          );
+                        }
+
+                        const distanceRow = getCombatDistanceTableRowForParticipants({
+                          participantAId: rowParticipant.participantId,
+                          participantBId: columnParticipant.participantId,
+                          rows: combatDistanceRows,
+                        });
+                        const draftValue = distanceRow
+                          ? (distanceDrafts[distanceRow.edge.pairKey] ??
+                            String(distanceRow.edge.distance))
+                          : "";
+                        const editable = rowIndex < columnIndex && Boolean(distanceRow);
+                        const title = distanceRow
+                          ? [
+                              `Source: ${formatCombatDistanceSource(distanceRow.edge.source)}`,
+                              `Preferred: ${distanceRow.preferredDistanceLabel}`,
+                              distanceRow.edge.notes ? `Notes: ${distanceRow.edge.notes}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join(". ")
+                          : "Distance unavailable.";
+
+                        return (
+                          <td
+                            key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
+                            style={{
+                              borderTop: "1px solid #e3e1dc",
+                              padding: "0.25rem 0.35rem",
+                              textAlign: "center",
+                            }}
+                            title={title}
+                          >
+                            {editable && distanceRow ? (
+                              <input
+                                aria-label={`Distance between ${rowParticipant.label} and ${columnParticipant.label}`}
+                                disabled={saving || !selectedRoundIsActive}
+                                max={8}
+                                min={0}
+                                onChange={(event) =>
+                                  setDistanceDrafts((current) => ({
+                                    ...current,
+                                    [distanceRow.edge.pairKey]: event.target.value,
+                                  }))
+                                }
+                                style={{ textAlign: "center", width: "3.5rem" }}
+                                type="number"
+                                value={draftValue}
+                              />
+                            ) : (
+                              <span>{draftValue || "—"}</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <button
+                disabled={
+                  saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0
+                }
+                onClick={() => void saveCombatDistanceChanges()}
+                type="button"
+              >
+                Save distance changes
+              </button>
+              <button
+                disabled={saving || dirtyCombatDistanceRows.length === 0}
+                onClick={() => setDistanceDrafts({})}
+                type="button"
+              >
+                Reset changes
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            Add at least two active participants to review pairwise distance.
+          </div>
         )}
       </section>
     </section>
