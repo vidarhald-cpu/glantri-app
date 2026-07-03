@@ -285,6 +285,7 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   dmb2: z.number().nullable().optional(),
   parry: z.number().nullable().optional(),
   initiative: z.number().nullable().optional(),
+  preferredDistances: z.array(z.number().int().min(0).max(8)).nullable().optional(),
   range: z.string().nullable().optional(),
   armorMod1: z.string().nullable().optional(),
   armorMod2: z.string().nullable().optional(),

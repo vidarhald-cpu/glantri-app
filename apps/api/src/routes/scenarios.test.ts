@@ -577,6 +577,22 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
     makeCombatScenarioParticipant({
       controlledByUserId: "other-player",
       id: "participant-2",
+      snapshot: {
+        displayName: "City guard",
+        sheetSummary: {
+          draftView: {
+            skills: [
+              {
+                effectiveSkillNumber: 7,
+                linkedStatAverage: 19,
+                name: "Combat Experience",
+                skillId: "combat_experience",
+                totalSkill: 26,
+              },
+            ],
+          },
+        },
+      },
     }),
   ];
 
@@ -3069,6 +3085,87 @@ describe("scenarios route contract", () => {
     expect(response.json().windowOpen).toBe(true);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.combatExperienceDifficulty).toBe(36);
+  });
+
+  it("lets the GM set a shared pairwise combat distance", async () => {
+    const baseEncounter = makeCombatEncounter();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        participants: [
+          baseEncounter.participants[0],
+          {
+            ...baseEncounter.participants[0],
+            id: "encounter-participant-2",
+            label: "City guard",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distance: 4,
+        participantAId: "encounter-participant-2",
+        participantBId: "encounter-participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/pair-distance",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().edge).toMatchObject({
+      distance: 4,
+      participantAId: "encounter-participant-1",
+      participantBId: "encounter-participant-2",
+      source: "gm_set",
+    });
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.distanceState.edges).toMatchObject({
+      "encounter-participant-1::encounter-participant-2": expect.objectContaining({
+        distance: 4,
+      }),
+    });
+  });
+
+  it("rejects player attempts to set pairwise combat distance", async () => {
+    const baseEncounter = makeCombatEncounter();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        participants: [
+          baseEncounter.participants[0],
+          {
+            ...baseEncounter.participants[0],
+            id: "encounter-participant-2",
+            label: "City guard",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+      },
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distance: 4,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/pair-distance",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("rejects GM Combat Experience difficulty changes after a CE result exists", async () => {

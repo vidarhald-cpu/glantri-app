@@ -264,6 +264,7 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   dmb2?: number | null;
   parry?: number | null;
   initiative?: number | null;
+  preferredDistances?: number[] | null;
   range?: string | null;
   armorMod1?: string | null;
   armorMod2?: string | null;

@@ -25,6 +25,7 @@ import {
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
+  getDistanceEdgeBetween,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -2184,6 +2185,21 @@ export default function ScenarioPlayerCombatPageContent({
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
               const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
               const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
+              const targetRoundParticipant = phaseCombatContext.targetParticipantId
+                ? combatRoundState?.participants.find(
+                    (participant) =>
+                      participant.scenarioParticipantId === phaseCombatContext.targetParticipantId ||
+                      participant.participantId === phaseCombatContext.targetParticipantId,
+                  )
+                : undefined;
+              const distanceEdge =
+                combatRoundState && selectedRoundParticipant && targetRoundParticipant
+                  ? getDistanceEdgeBetween(
+                      combatRoundState.distanceState,
+                      selectedRoundParticipant.participantId,
+                      targetRoundParticipant.participantId,
+                    )
+                  : undefined;
               const phaseModel = buildPlayerCombatPhasePanelModel({
                 actionId: selectedActionId,
                 attackStats: phaseLoadoutSummary.attackStats,
@@ -2218,6 +2234,12 @@ export default function ScenarioPlayerCombatPageContent({
                         }}
                         targetOptions={targetOptions}
                       />
+                      {distanceEdge ? (
+                        <div style={{ color: "#4f5f57", fontSize: "0.9rem" }}>
+                          Distance to {targetRoundParticipant?.label ?? "target"}:{" "}
+                          {distanceEdge.distance}
+                        </div>
+                      ) : null}
                       <PlayerCombatAttackLocationSelector
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}

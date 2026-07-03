@@ -1,6 +1,7 @@
 import type {
   CombatRoundAttackRollResult,
   CombatRoundCombatExperienceResult,
+  CombatDistanceEdge,
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
@@ -192,6 +193,30 @@ export async function setCombatExperienceDifficultyOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/combat-experience-difficulty`, {
     body: JSON.stringify({
       difficulty: input.difficulty,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function setPairDistanceOnServer(input: {
+  distance: number;
+  encounterId: string;
+  participantAId: string;
+  participantBId: string;
+}): Promise<{
+  edge?: CombatDistanceEdge;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    edge?: CombatDistanceEdge;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/pair-distance`, {
+    body: JSON.stringify({
+      distance: input.distance,
+      participantAId: input.participantAId,
+      participantBId: input.participantBId,
     }),
     method: "POST",
   });

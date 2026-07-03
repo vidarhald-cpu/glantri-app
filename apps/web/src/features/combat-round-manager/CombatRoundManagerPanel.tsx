@@ -22,12 +22,14 @@ import type {
   CombatRoundInitiativeRank,
   CombatRoundStepSnapshot,
   CombatEffectsState,
+  CombatDistanceEdge,
   EncounterSession,
   RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
+  WeaponTemplate,
 } from "@glantri/domain";
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
@@ -46,6 +48,7 @@ import {
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundEndReviewPrepared,
   ensureCombatRoundPhaseResolutionResultsForPhase,
+  ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
@@ -81,6 +84,7 @@ import {
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundPhaseInitiativeResolutionOpen,
   hasCombatRoundCombatExperienceRoll,
+  getWeaponPreferredDistances,
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
   recordCombatRoundCriticalRoll,
@@ -115,6 +119,7 @@ import {
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   setCombatExperienceDifficultyOnServer,
+  setPairDistanceOnServer,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
 import {
@@ -2041,6 +2046,128 @@ function findEncounterParticipantForScenarioParticipant(input: {
   );
 }
 
+interface CombatDistanceTableRow {
+  edge: CombatDistanceEdge;
+  participantALabel: string;
+  participantBLabel: string;
+  preferredDistanceLabel: string;
+}
+
+function getActiveWeaponTemplatesForScenarioParticipant(
+  participant: ScenarioParticipant | undefined,
+): WeaponTemplate[] {
+  const equipmentStateCandidate = participant?.snapshot.equipmentState;
+
+  if (!participant || !isEquipmentFeatureState(equipmentStateCandidate)) {
+    return [];
+  }
+
+  const characterId =
+    participant.characterId ?? Object.keys(equipmentStateCandidate.activeLoadoutByCharacterId)[0];
+  const loadout = characterId
+    ? equipmentStateCandidate.activeLoadoutByCharacterId[characterId]
+    : undefined;
+  const activeWeaponItemIds = [
+    loadout?.activePrimaryWeaponItemId,
+    loadout?.activeSecondaryWeaponItemId,
+    loadout?.activeMissileWeaponItemId,
+  ].filter((itemId): itemId is string => Boolean(itemId));
+
+  return activeWeaponItemIds
+    .map((itemId) => {
+      const item = equipmentStateCandidate.itemsById[itemId];
+      const template = item
+        ? equipmentStateCandidate.templates.templatesById[item.templateId]
+        : undefined;
+
+      return template?.category === "weapon" ? template : undefined;
+    })
+    .filter((template): template is WeaponTemplate => Boolean(template));
+}
+
+function formatCombatDistanceSource(source: CombatDistanceEdge["source"]): string {
+  switch (source) {
+    case "gm_set":
+      return "GM set";
+    case "round_end_review":
+      return "Round-end review";
+    case "maneuver":
+      return "Maneuver";
+    case "default_weapon_reach":
+    default:
+      return "Default weapon reach";
+  }
+}
+
+function formatPreferredDistanceLabel(weapons: WeaponTemplate[]): string {
+  const distances = [
+    ...new Set(weapons.flatMap((weapon) => getWeaponPreferredDistances(weapon))),
+  ].sort((left, right) => left - right);
+
+  return distances.length > 0 ? distances.join(", ") : "Fallback 2";
+}
+
+function buildCombatDistanceTableRows(input: {
+  encounter: EncounterSession;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}): CombatDistanceTableRow[] {
+  const encounterParticipantById = new Map(
+    input.encounter.participants.map((participant) => [participant.id, participant]),
+  );
+  const scenarioParticipantByEncounterId = new Map(
+    input.encounter.participants.map((encounterParticipant) => [
+      encounterParticipant.id,
+      findScenarioParticipantForEncounterParticipant({
+        encounterParticipant,
+        scenarioParticipants: input.scenarioParticipants,
+      }),
+    ]),
+  );
+  const weaponsByParticipantId = Object.fromEntries(
+    input.roundState.participants.map((participant) => [
+      participant.participantId,
+      getActiveWeaponTemplatesForScenarioParticipant(
+        scenarioParticipantByEncounterId.get(participant.participantId),
+      ),
+    ]),
+  );
+  const distanceState = ensureDistanceEdgesForParticipantPairs({
+    lastChangedRound: input.roundState.roundNumber,
+    participantIds: input.roundState.participants.map((participant) => participant.participantId),
+    state: input.roundState.distanceState,
+    weaponsByParticipantId,
+  });
+
+  return Object.values(distanceState.edges)
+    .map((edge) => {
+      const participantA =
+        input.roundState.participants.find(
+          (participant) => participant.participantId === edge.participantAId,
+        ) ?? encounterParticipantById.get(edge.participantAId);
+      const participantB =
+        input.roundState.participants.find(
+          (participant) => participant.participantId === edge.participantBId,
+        ) ?? encounterParticipantById.get(edge.participantBId);
+      const preferredWeapons = [
+        ...(weaponsByParticipantId[edge.participantAId] ?? []),
+        ...(weaponsByParticipantId[edge.participantBId] ?? []),
+      ];
+
+      return {
+        edge,
+        participantALabel: participantA?.label ?? edge.participantAId,
+        participantBLabel: participantB?.label ?? edge.participantBId,
+        preferredDistanceLabel: formatPreferredDistanceLabel(preferredWeapons),
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.participantALabel.localeCompare(right.participantALabel) ||
+        left.participantBLabel.localeCompare(right.participantBLabel),
+    );
+}
+
 function getScenarioParticipantHealthStat(participant?: ScenarioParticipant): number | undefined {
   const buildResult = characterBuildSchema.safeParse(participant?.snapshot.build);
 
@@ -3049,6 +3176,7 @@ export default function CombatRoundManagerPanel({
   const [combatExperienceDifficultyDrafts, setCombatExperienceDifficultyDrafts] = useState<
     Record<string, string>
   >({});
+  const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
   const [roundEndHealthDifficultyDrafts, setRoundEndHealthDifficultyDrafts] = useState<
     Record<string, string>
   >({});
@@ -3119,6 +3247,15 @@ export default function CombatRoundManagerPanel({
         })
       : roundState.participants;
   }, [initiativeSortPhase, roundState]);
+  const combatDistanceRows = useMemo(
+    () =>
+      buildCombatDistanceTableRows({
+        encounter,
+        roundState,
+        scenarioParticipants: effectiveScenarioParticipants,
+      }),
+    [effectiveScenarioParticipants, encounter, roundState],
+  );
   const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
   const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
   const inspector = buildCombatRoundInspector({
@@ -5161,6 +5298,49 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function saveCombatDistanceDraft(row: CombatDistanceTableRow) {
+    const value = distanceDrafts[row.edge.pairKey] ?? String(row.edge.distance);
+    const distance = Number.parseInt(value, 10);
+
+    if (!Number.isInteger(distance) || distance < 0 || distance > 8) {
+      setSaveError("Combat distance must be an integer from 0 to 8.");
+      return;
+    }
+
+    if (distance === row.edge.distance && row.edge.source === "gm_set") {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter } = await setPairDistanceOnServer({
+        distance,
+        encounterId: encounter.id,
+        participantAId: row.edge.participantAId,
+        participantBId: row.edge.participantBId,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      });
+
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setDistanceDrafts((current) => ({
+        ...current,
+        [row.edge.pairKey]: String(distance),
+      }));
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to set combat distance.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function rollInspectorInitiative() {
     if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
       return;
@@ -6019,6 +6199,104 @@ export default function CombatRoundManagerPanel({
           </>
         ) : (
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No resolved combat event yet.</div>
+        )}
+      </section>
+
+      <section
+        aria-label="Distance and spatial relations"
+        style={{
+          border: "1px solid #e3e1dc",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.5rem",
+          padding: "0.65rem 0.75rem",
+        }}
+      >
+        <strong>Distance / spatial relations</strong>
+        {combatDistanceRows.length > 0 ? (
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                borderCollapse: "collapse",
+                fontSize: "0.88rem",
+                minWidth: 620,
+                width: "100%",
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Participant A</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Participant B</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Distance</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Preferred</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Source</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Notes</th>
+                  <th style={{ padding: "0.35rem", textAlign: "left" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {combatDistanceRows.map((row) => {
+                  const draftValue = distanceDrafts[row.edge.pairKey] ?? String(row.edge.distance);
+
+                  return (
+                    <tr key={row.edge.pairKey}>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        {row.participantALabel}
+                      </td>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        {row.participantBLabel}
+                      </td>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        <input
+                          aria-label={`Distance between ${row.participantALabel} and ${row.participantBLabel}`}
+                          disabled={saving || !selectedRoundIsActive}
+                          max={8}
+                          min={0}
+                          onChange={(event) =>
+                            setDistanceDrafts((current) => ({
+                              ...current,
+                              [row.edge.pairKey]: event.target.value,
+                            }))
+                          }
+                          style={{ maxWidth: 70 }}
+                          type="number"
+                          value={draftValue}
+                        />
+                      </td>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        {row.preferredDistanceLabel}
+                      </td>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        {formatCombatDistanceSource(row.edge.source)}
+                      </td>
+                      <td
+                        style={{
+                          borderTop: "1px solid #e3e1dc",
+                          color: "#5e5a50",
+                          padding: "0.35rem",
+                        }}
+                      >
+                        {row.edge.notes ?? "—"}
+                      </td>
+                      <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.35rem" }}>
+                        <button
+                          disabled={saving || !selectedRoundIsActive}
+                          onClick={() => void saveCombatDistanceDraft(row)}
+                          type="button"
+                        >
+                          Set
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            Add at least two active participants to review pairwise distance.
+          </div>
         )}
       </section>
 

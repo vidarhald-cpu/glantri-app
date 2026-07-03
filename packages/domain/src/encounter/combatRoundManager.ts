@@ -19,6 +19,18 @@ import {
   softenCombatActionGeneratedBackOutModifier,
 } from "./combatActionModifiers";
 import {
+  combatDistanceEdgeSchema,
+  combatDistanceSchema,
+  combatDistanceStateSchema,
+  getDistanceEdgeBetween,
+  makeDistancePairKey,
+  setDistanceBetween,
+  type CombatDistance,
+  type CombatDistanceEdge,
+  type CombatDistanceState,
+  type CombatDistanceSource,
+} from "./combatDistance";
+import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
@@ -207,6 +219,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "resolve_damage",
   "commit_phase_damage",
   "roll_combat_experience",
+  "set_pair_distance",
   "prepare_round_end_review",
   "commit_round_end_participant_review",
   "roll_round_end_health_check",
@@ -1584,6 +1597,7 @@ export const completedCombatRoundSchema = z.object({
   completedByUserId: idSchema.optional(),
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("round_summary"),
+  distanceState: combatDistanceStateSchema.optional(),
   encounterId: idSchema.optional(),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -1602,6 +1616,7 @@ export const combatRoundStateSchema = z.object({
   commands: z.array(combatRoundCommandSchema).default([]),
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
+  distanceState: combatDistanceStateSchema.default({ edges: {} }),
   encounterId: idSchema.optional(),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -2471,6 +2486,117 @@ export function setCombatRoundCombatExperienceDifficulty(input: {
   return combatRoundStateSchema.parse({
     ...normalized,
     combatExperienceDifficulty: difficulty,
+  });
+}
+
+export function getCombatRoundDistanceEdge(input: {
+  participantAId: string;
+  participantBId: string;
+  state: CombatRoundState;
+}): CombatDistanceEdge | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return getDistanceEdgeBetween(
+    normalized.distanceState,
+    input.participantAId,
+    input.participantBId,
+  );
+}
+
+export function setCombatRoundPairDistance(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  distance: CombatDistance | number | string;
+  participantAId: string;
+  participantBId: string;
+  source?: CombatDistanceSource;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participantIds = new Set(
+    normalized.participants.map((participant) => participant.participantId),
+  );
+
+  if (!participantIds.has(input.participantAId) || !participantIds.has(input.participantBId)) {
+    throw new RangeError("Pair distance can only be set for active combat participants.");
+  }
+
+  const previousEdge = getDistanceEdgeBetween(
+    normalized.distanceState,
+    input.participantAId,
+    input.participantBId,
+  );
+  const distance = combatDistanceSchema.parse(
+    typeof input.distance === "string" ? Number(input.distance) : input.distance,
+  );
+  const nextDistanceState = setDistanceBetween({
+    distance,
+    lastChangedRound: normalized.roundNumber,
+    participantAId: input.participantAId,
+    participantBId: input.participantBId,
+    source: input.source ?? "gm_set",
+    state: normalized.distanceState,
+  });
+  const nextEdge = getDistanceEdgeBetween(
+    nextDistanceState,
+    input.participantAId,
+    input.participantBId,
+  );
+  const stateWithDistance = combatRoundStateSchema.parse({
+    ...normalized,
+    distanceState: nextDistanceState,
+  });
+
+  if (!input.command) {
+    return stateWithDistance;
+  }
+
+  const beforeCursor =
+    normalized.currentCursor ??
+    getDefaultCombatRoundCursor({
+      participantId: normalized.selectedParticipantId ?? input.participantAId,
+      roundNumber: normalized.roundNumber,
+      step: normalized.currentStep,
+    });
+  const commandType = "set_pair_distance" satisfies CombatRoundCommandType;
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.participantAId,
+      state: normalized,
+      type: commandType,
+    });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      newDistance: distance,
+      nextEdge,
+      pairKey: makeDistancePairKey(input.participantAId, input.participantBId),
+      participantAId: input.participantAId,
+      participantBId: input.participantBId,
+      previousEdge,
+      source: input.source ?? "gm_set",
+    },
+    id: commandId,
+    participantId: input.participantAId,
+    roundNumber: normalized.roundNumber,
+    type: commandType,
+  });
+
+  return combatRoundStateSchema.parse({
+    ...stateWithDistance,
+    commands: [...stateWithDistance.commands, command],
+    currentCursor: command.afterCursor,
+    currentStep: getCombatRoundStepForCursorStep(command.afterCursor.step),
+    selectedParticipantId: command.afterCursor.participantId ?? input.participantAId,
+    selectedStep: getCombatRoundStepForCursorStep(command.afterCursor.step),
   });
 }
 
@@ -3857,6 +3983,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "submit_phase_initiative_choice" ||
     type === "commit_phase_initiative_resolution" ||
     type === "roll_combat_experience" ||
+    type === "set_pair_distance" ||
     type === "complete_damage_review_phase1" ||
     type === "complete_damage_review_phase2" ||
     type === "resolve_damage" ||
@@ -11445,6 +11572,10 @@ function normalizeCompletedCombatRounds(input: {
         activeParticipantId,
         commands,
         currentCursor,
+        distanceState: filterCombatDistanceStateForParticipantIds({
+          participantIds: input.participantIds,
+          state: round.distanceState,
+        }),
         phaseResolutionCursor,
         phaseResolutionResults,
         phaseResolutionStatuses,
@@ -11455,6 +11586,37 @@ function normalizeCompletedCombatRounds(input: {
       });
     })
     .sort((left, right) => left.roundNumber - right.roundNumber);
+}
+
+function filterCombatDistanceStateForParticipantIds(input: {
+  participantIds: Set<string>;
+  state?: CombatDistanceState;
+}): CombatDistanceState {
+  const parsed = combatDistanceStateSchema.parse(input.state ?? {});
+  const edges = Object.fromEntries(
+    Object.values(parsed.edges)
+      .filter(
+        (edge) =>
+          input.participantIds.has(edge.participantAId) &&
+          input.participantIds.has(edge.participantBId),
+      )
+      .map((edge) => {
+        const pairKey = makeDistancePairKey(edge.participantAId, edge.participantBId);
+        const [participantAId, participantBId] = pairKey.split("::");
+
+        return [
+          pairKey,
+          combatDistanceEdgeSchema.parse({
+            ...edge,
+            pairKey,
+            participantAId,
+            participantBId,
+          }),
+        ] as const;
+      }),
+  );
+
+  return combatDistanceStateSchema.parse({ edges });
 }
 
 function buildCompletedCombatRound(input: {
@@ -11471,6 +11633,7 @@ function buildCompletedCombatRound(input: {
     completedByUserId: input.completedByUserId,
     currentCursor: normalized.currentCursor,
     currentStep: normalized.currentStep,
+    distanceState: normalized.distanceState,
     encounterId: normalized.encounterId,
     phaseResolutionCursor: normalized.phaseResolutionCursor,
     phaseResolutionResults: normalized.phaseResolutionResults,
@@ -11648,6 +11811,10 @@ export function initializeCombatRoundState(input: {
     participantIds,
     rounds: existing?.rounds,
   });
+  const distanceState = filterCombatDistanceStateForParticipantIds({
+    participantIds,
+    state: existing?.distanceState,
+  });
   const commands = (existing?.commands ?? []).filter(
     (command) =>
       command.roundNumber === roundNumber &&
@@ -11818,6 +11985,7 @@ export function initializeCombatRoundState(input: {
             phaseResolutionResults: phaseResolutionResultsForState,
             phaseResolutionStatuses: phaseResolutionStatusesForState,
             participants: participantsForState,
+            distanceState,
             roundEndReview,
             roundNumber,
             rounds: completedRounds,
@@ -11858,13 +12026,14 @@ export function initializeCombatRoundState(input: {
         ? existing.currentCursor
         : canUseRecoveredPhaseResolutionCursor
           ? recoveredPhaseResolutionCursor
-          : isGlobalCombatRoundStep(currentStep)
+        : isGlobalCombatRoundStep(currentStep)
             ? getDefaultCombatRoundCursor({
                 participantId: selectedParticipantId,
                 roundNumber,
                 step: currentStep,
               })
             : undefined,
+    distanceState,
     encounterId: input.encounter.id,
     currentStep,
     phaseResolutionCursor: fallbackPhaseResolutionCursor
@@ -12157,6 +12326,7 @@ export function advanceCombatRoundStep(
         step: "select_actions",
       }),
       currentStep: "select_actions",
+      distanceState: completedRoundState.distanceState,
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
       phaseResolutionStatuses: {},
@@ -13353,6 +13523,55 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
   });
 }
 
+function undoCombatRoundPairDistanceCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "set_pair_distance"
+  ) {
+    return undefined;
+  }
+
+  const participantAId =
+    typeof command.facts.participantAId === "string" ? command.facts.participantAId : undefined;
+  const participantBId =
+    typeof command.facts.participantBId === "string" ? command.facts.participantBId : undefined;
+  const previousEdge = combatDistanceEdgeSchema.safeParse(command.facts.previousEdge);
+
+  if (!participantAId || !participantBId) {
+    return undefined;
+  }
+
+  const pairKey = makeDistancePairKey(participantAId, participantBId);
+  const distanceEdges = { ...normalized.distanceState.edges };
+
+  if (previousEdge.success) {
+    distanceEdges[pairKey] = previousEdge.data;
+  } else {
+    delete distanceEdges[pairKey];
+  }
+
+  const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: selectedStep,
+    distanceState: {
+      edges: distanceEdges,
+    },
+    selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
+    selectedStep,
+  });
+}
+
 function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -14427,6 +14646,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_combat_experience") {
     return undoCombatRoundCombatExperienceCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "set_pair_distance") {
+    return undoCombatRoundPairDistanceCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

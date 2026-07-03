@@ -90,6 +90,19 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("threat.initiativeDifference");
   });
 
+  it("renders GM pairwise distance controls", () => {
+    const source = readSource();
+
+    expect(source).toContain("Distance / spatial relations");
+    expect(source).toContain("buildCombatDistanceTableRows");
+    expect(source).toContain("ensureDistanceEdgesForParticipantPairs");
+    expect(source).toContain("setPairDistanceOnServer");
+    expect(source).toContain("Combat distance must be an integer from 0 to 8.");
+    expect(source).toContain("formatCombatDistanceSource(row.edge.source)");
+    expect(source).toContain("row.preferredDistanceLabel");
+    expect(source).toContain("saveCombatDistanceDraft(row)");
+  });
+
   it("renders inspector details for the selected participant and step", () => {
     const source = readSource();
 

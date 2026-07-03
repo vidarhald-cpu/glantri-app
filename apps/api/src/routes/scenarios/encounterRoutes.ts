@@ -27,6 +27,7 @@ import {
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundDistanceEdge,
   getCombatRoundRequiredCombatExperienceTrigger,
   getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -59,6 +60,7 @@ import {
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
   setCombatRoundCombatExperienceDifficulty,
+  setCombatRoundPairDistance,
   setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -297,6 +299,23 @@ function parseCombatExperienceDifficultyBody(body: unknown): {
   }
 
   return { difficulty };
+}
+
+function parsePairDistanceBody(body: unknown): {
+  distance: number;
+  participantAId: string;
+  participantBId: string;
+} {
+  const value = parseBodyObject(body, "Pair distance payload");
+  const participantAId = parseNonEmptyString(value.participantAId, "participantAId");
+  const participantBId = parseNonEmptyString(value.participantBId, "participantBId");
+  const distance = parseIntegerInRange(value.distance, "distance", 0, 8);
+
+  return {
+    distance,
+    participantAId,
+    participantBId,
+  };
 }
 
 function parsePhaseAttackBackOutBody(body: unknown): {
@@ -543,6 +562,13 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
   }
 
   const controlledEncounterParticipantIds = getEncounterParticipantIdsControlledByUser(input);
+  const safeDistanceEdges = Object.fromEntries(
+    Object.entries(roundState.distanceState?.edges ?? {}).filter(
+      ([, edge]) =>
+        controlledEncounterParticipantIds.has(edge.participantAId) ||
+        controlledEncounterParticipantIds.has(edge.participantBId),
+    ),
+  );
 
   return {
     ...roundState,
@@ -551,6 +577,9 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         command.type !== "submit_phase_initiative_choice" ||
         controlledEncounterParticipantIds.has(command.participantId),
     ),
+    distanceState: {
+      edges: safeDistanceEdges,
+    },
   };
 }
 
@@ -1271,6 +1300,82 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/pair-distance", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          error: "Only GM users can set combat distance.",
+        });
+      }
+
+      const body = parsePairDistanceBody(request.body);
+      const roundState = initializeCombatRoundState({ encounter });
+      const submittedAt = new Date().toISOString();
+      const nextRoundState = setCombatRoundPairDistance({
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        distance: body.distance,
+        participantAId: body.participantAId,
+        participantBId: body.participantBId,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return {
+        encounter: savedEncounter,
+        edge: getCombatRoundDistanceEdge({
+          participantAId: body.participantAId,
+          participantBId: body.participantBId,
+          state: nextRoundState,
+        }),
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to set combat distance.",
+      });
+    }
+  });
 
   app.post(
     "/encounters/:encounterId/combat-round/roll-combat-experience",
