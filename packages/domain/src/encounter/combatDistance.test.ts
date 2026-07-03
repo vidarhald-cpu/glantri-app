@@ -10,6 +10,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   getDefaultCombatDistanceForWeapons,
   getDistanceBetween,
+  getDistanceEdgeBetweenParticipantAliases,
   getWeaponPreferredDistances,
   makeDistancePairKey,
   setDistanceBetween,
@@ -59,20 +60,36 @@ describe("combat distance", () => {
     expect(result).toEqual({ distance: 4 });
   });
 
-  it("falls back safely when weapon distance metadata is missing", () => {
-    const result = getDefaultCombatDistanceForWeapons({
+  it("falls back safely when weapon distance metadata is missing or invalid", () => {
+    const missingResult = getDefaultCombatDistanceForWeapons({
       participantAWeapons: [{}],
       participantBWeapons: [{}],
     });
+    const invalidResult = getDefaultCombatDistanceForWeapons({
+      participantAWeapons: [{ range: "2.5" }],
+      participantBWeapons: [{}],
+    });
 
-    expect(result.distance).toBe(2);
-    expect(result.notes).toContain("metadata was missing");
+    expect(missingResult.distance).toBe(2);
+    expect(missingResult.notes).toContain("metadata was missing or invalid");
+    expect(invalidResult.distance).toBe(2);
+    expect(invalidResult.notes).toContain("metadata was missing or invalid");
   });
 
   it("parses existing weapon range strings into preferred distances", () => {
     expect(getWeaponPreferredDistances({ range: "2&3" })).toEqual([2, 3]);
     expect(getWeaponPreferredDistances({ range: "1/0*" })).toEqual([0, 1]);
     expect(getWeaponPreferredDistances({ range: "4.0" })).toEqual([4]);
+  });
+
+  it("parses whole-number weapon distance values without rounding fractions", () => {
+    expect(getWeaponPreferredDistances({ range: "3.0" })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ range: "3" })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ range: 3 })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ preferredDistances: ["3.0"] })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ preferredDistances: ["3"] })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ preferredDistances: [3] })).toEqual([3]);
+    expect(getWeaponPreferredDistances({ range: "2.5" })).toEqual([]);
   });
 
   it("calculates out-of-preferred OB penalties", () => {
@@ -151,6 +168,61 @@ describe("combat distance", () => {
 
     expect(Object.keys(state.edges)).toHaveLength(3);
     expect(getDistanceBetween(state, "participant-a", "participant-c")).toBe(3);
+  });
+
+  it("defaults the Gladiator and Scyrian cavalry pair from Long sword range metadata", () => {
+    const state = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["encounter-gladiator", "encounter-scyrian"],
+      weaponsByParticipantId: {
+        "encounter-gladiator": [{ range: "3.0" }],
+        "encounter-scyrian": [{}],
+      },
+    });
+    const pairKey = makeDistancePairKey("encounter-gladiator", "encounter-scyrian");
+
+    expect(state.edges[pairKey]).toMatchObject({
+      distance: 3,
+      source: "default_weapon_reach",
+    });
+    expect(state.edges[pairKey]?.notes).toBeUndefined();
+    expect(getDistanceBetween(state, "encounter-gladiator", "encounter-scyrian")).toBe(3);
+  });
+
+  it("resolves distance edges through participant, scenario participant, and character aliases", () => {
+    const state = setDistanceBetween({
+      distance: 3,
+      participantAId: "encounter-gladiator",
+      participantBId: "encounter-scyrian",
+      source: "gm_set",
+    });
+
+    expect(
+      getDistanceEdgeBetweenParticipantAliases({
+        participantA: {
+          characterId: "character-gladiator",
+          participantId: "encounter-gladiator",
+          scenarioParticipantId: "scenario-gladiator",
+        },
+        participantB: {
+          characterId: "character-scyrian",
+          participantId: "encounter-scyrian",
+          scenarioParticipantId: "scenario-scyrian",
+        },
+        state,
+      })?.distance,
+    ).toBe(3);
+    expect(
+      getDistanceEdgeBetweenParticipantAliases({
+        participantA: { characterId: "character-gladiator" },
+        participantB: { characterId: "character-scyrian" },
+        state: setDistanceBetween({
+          distance: 4,
+          participantAId: "character-gladiator",
+          participantBId: "character-scyrian",
+          source: "gm_set",
+        }),
+      })?.distance,
+    ).toBe(4);
   });
 
   it("GM-set distance overrides a default edge and Clear restores the default", () => {

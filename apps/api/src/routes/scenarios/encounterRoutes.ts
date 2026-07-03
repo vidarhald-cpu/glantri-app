@@ -27,6 +27,7 @@ import {
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatDistanceParticipantAliases,
   getCombatRoundDistanceEdge,
   getCombatRoundRequiredCombatExperienceTrigger,
   getPlayerCombatCurrentRollAction,
@@ -523,31 +524,54 @@ function combatRoundStatesDiffer(
   return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 }
 
-function getEncounterParticipantIdsControlledByUser(input: {
+function getEncounterParticipantsControlledByUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
-}): Set<string> {
+}): EncounterSession["participants"] {
   const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
   });
 
-  return new Set(
-    membership.participants
-      .filter((encounterParticipant) => {
-        const scenarioParticipant = input.scenarioParticipants.find(
-          (participant) =>
-            participant.id === encounterParticipant.scenarioParticipantId ||
-            participant.id === encounterParticipant.id ||
-            (encounterParticipant.characterId &&
-              participant.characterId === encounterParticipant.characterId),
-        );
+  return membership.participants.filter((encounterParticipant) => {
+    const scenarioParticipant = input.scenarioParticipants.find(
+      (participant) =>
+        participant.id === encounterParticipant.scenarioParticipantId ||
+        participant.id === encounterParticipant.id ||
+        (encounterParticipant.characterId &&
+          participant.characterId === encounterParticipant.characterId),
+    );
 
-        return scenarioParticipant?.controlledByUserId === input.userId;
-      })
-      .map((participant) => participant.id),
+    return scenarioParticipant?.controlledByUserId === input.userId;
+  });
+}
+
+function getEncounterParticipantIdsControlledByUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): Set<string> {
+  return new Set(
+    getEncounterParticipantsControlledByUser(input).flatMap((participant) =>
+      getCombatDistanceParticipantAliases(participant),
+    ),
   );
+}
+
+function hasCombatDistanceVisibility(input: {
+  target: EncounterSession["participants"][number];
+  viewer: EncounterSession["participants"][number];
+  visibility?: NonNullable<EncounterSession["roleplayState"]>["visibility"];
+}): boolean {
+  const targetAliases = getCombatDistanceParticipantAliases(input.target);
+  const viewerAliases = getCombatDistanceParticipantAliases(input.viewer);
+
+  return viewerAliases.some((viewerAlias) => {
+    const row = input.visibility?.[viewerAlias];
+
+    return targetAliases.some((targetAlias) => Boolean(row?.[targetAlias]));
+  });
 }
 
 function buildPlayerSafeCombatRoundStateForUser(input: {
@@ -561,12 +585,37 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     return undefined;
   }
 
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  const controlledEncounterParticipants = getEncounterParticipantsControlledByUser(input);
   const controlledEncounterParticipantIds = getEncounterParticipantIdsControlledByUser(input);
+  const visibility = input.encounter.roleplayState?.visibility;
+  const hasVisibilityRows = Object.keys(visibility ?? {}).length > 0;
+  const visibleParticipantIds = new Set(
+    membership.participants
+      .filter(
+        (participant) =>
+          controlledEncounterParticipants.some((controlled) => controlled.id === participant.id) ||
+          !hasVisibilityRows ||
+          controlledEncounterParticipants.some((viewer) =>
+            hasCombatDistanceVisibility({
+              target: participant,
+              viewer,
+              visibility,
+            }),
+          ),
+      )
+      .flatMap((participant) => getCombatDistanceParticipantAliases(participant)),
+  );
   const safeDistanceEdges = Object.fromEntries(
     Object.entries(roundState.distanceState?.edges ?? {}).filter(
       ([, edge]) =>
-        controlledEncounterParticipantIds.has(edge.participantAId) ||
-        controlledEncounterParticipantIds.has(edge.participantBId),
+        (controlledEncounterParticipantIds.has(edge.participantAId) &&
+          visibleParticipantIds.has(edge.participantBId)) ||
+        (controlledEncounterParticipantIds.has(edge.participantBId) &&
+          visibleParticipantIds.has(edge.participantAId)),
     ),
   );
 
@@ -626,17 +675,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (access.mode === "player") {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
-	        return {
-	          encounters: encounters.map((enc) => ({
-	            ...enc,
-	            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
-	              encounter: enc,
-	              scenarioParticipants,
-	              userId: user.id,
-	            }),
-	            roleplayState: enc.roleplayState
-	              ? buildPlayerSafeRoleplayStateForUser({
-	                  encounter: enc,
+        return {
+          encounters: encounters.map((enc) => ({
+            ...enc,
+            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
+              encounter: enc,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+            roleplayState: enc.roleplayState
+              ? buildPlayerSafeRoleplayStateForUser({
+                  encounter: enc,
                   scenarioParticipants,
                   userId: user.id,
                 })
@@ -770,16 +819,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
         return {
-	          encounter: {
-	            ...normalizedEncounter,
-	            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
-	              encounter: normalizedEncounter,
-	              scenarioParticipants,
-	              userId: user.id,
-	            }),
-	            roleplayState: normalizedEncounter.roleplayState
-	              ? buildPlayerSafeRoleplayStateForUser({
-	                  encounter: normalizedEncounter,
+          encounter: {
+            ...normalizedEncounter,
+            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
+              encounter: normalizedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+            roleplayState: normalizedEncounter.roleplayState
+              ? buildPlayerSafeRoleplayStateForUser({
+                  encounter: normalizedEncounter,
                   scenarioParticipants,
                   userId: user.id,
                 })
@@ -1772,8 +1821,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         };
       } catch (error) {
         return reply.code(400).send({
-          error:
-            error instanceof Error ? error.message : "Unable to continue phase attack.",
+          error: error instanceof Error ? error.message : "Unable to continue phase attack.",
         });
       }
     },
@@ -1825,10 +1873,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           scenarioParticipants,
         });
         const roundState = initializeCombatRoundState({ encounter });
-        const participantInputs: Record<
-          string,
-          CombatRoundPhaseInitiativeCommitParticipantInput
-        > = {};
+        const participantInputs: Record<string, CombatRoundPhaseInitiativeCommitParticipantInput> =
+          {};
 
         for (const encounterParticipant of membership.participants) {
           const scenarioParticipant = scenarioParticipants.find(

@@ -20,6 +20,7 @@ import {
   type CombatRoundState,
   type CombatEffectsState,
   type EncounterSession,
+  setDistanceBetween,
   setCombatRoundCombatExperienceDifficulty,
 } from "@glantri/domain";
 
@@ -2911,9 +2912,9 @@ describe("scenarios route contract", () => {
       .encounter.combatRoundState.commands.filter(
         (command: { type: string }) => command.type === "submit_phase_initiative_choice",
       );
-    expect(phaseChoiceCommands.map((command: { participantId: string }) => command.participantId)).toEqual([
-      "encounter-participant-1",
-    ]);
+    expect(
+      phaseChoiceCommands.map((command: { participantId: string }) => command.participantId),
+    ).toEqual(["encounter-participant-1"]);
   });
 
   it("keeps all pending phase initiative choices in GM encounter state", async () => {
@@ -2967,10 +2968,9 @@ describe("scenarios route contract", () => {
       .encounter.combatRoundState.commands.filter(
         (command: { type: string }) => command.type === "submit_phase_initiative_choice",
       );
-    expect(phaseChoiceCommands.map((command: { participantId: string }) => command.participantId)).toEqual([
-      "encounter-participant-1",
-      "encounter-participant-2",
-    ]);
+    expect(
+      phaseChoiceCommands.map((command: { participantId: string }) => command.participantId),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
   });
 
   it("clears a committed phase initiative back-out and restores the generated DB/Parry modifier", async () => {
@@ -3131,6 +3131,104 @@ describe("scenarios route contract", () => {
         distance: 4,
       }),
     });
+  });
+
+  it("returns player-safe visible pair distances without unrelated hidden pairs", async () => {
+    const baseEncounter = makeCombatEncounter();
+    const combatEncounter = makeCombatEncounter({
+      participants: [
+        baseEncounter.participants[0],
+        {
+          ...baseEncounter.participants[0],
+          id: "encounter-participant-2",
+          label: "Scyrian cavalry guy",
+          scenarioParticipantId: "participant-2",
+        },
+        {
+          ...baseEncounter.participants[0],
+          id: "encounter-participant-3",
+          label: "Hidden scout",
+          scenarioParticipantId: "participant-3",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        participantDescriptions: {},
+        pendingSkillRolls: [],
+        visibility: {
+          "encounter-participant-1": {
+            "encounter-participant-2": true,
+          },
+        },
+      },
+    }) as EncounterSession;
+    const roundState = initializeCombatRoundState({ encounter: combatEncounter });
+    const visibleDistanceState = setDistanceBetween({
+      distance: 3,
+      participantAId: "encounter-participant-1",
+      participantBId: "encounter-participant-2",
+      source: "gm_set",
+      state: roundState.distanceState,
+    });
+    const distanceState = setDistanceBetween({
+      distance: 4,
+      participantAId: "encounter-participant-1",
+      participantBId: "encounter-participant-3",
+      source: "gm_set",
+      state: visibleDistanceState,
+    });
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...combatEncounter,
+        combatRoundState: {
+          ...roundState,
+          distanceState,
+        },
+      },
+      participants: [
+        makeCombatScenarioParticipant({
+          id: "participant-1",
+          snapshot: { displayName: "The Gladiator" },
+        }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: undefined,
+          id: "participant-2",
+          role: "npc",
+          snapshot: { displayName: "Scyrian cavalry guy" },
+          sourceType: "entity",
+        }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: undefined,
+          id: "participant-3",
+          role: "npc",
+          snapshot: { displayName: "Hidden scout" },
+          sourceType: "entity",
+        }),
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.combatRoundState.distanceState.edges).toMatchObject({
+      "encounter-participant-1::encounter-participant-2": expect.objectContaining({
+        distance: 3,
+      }),
+    });
+    expect(
+      response.json().encounter.combatRoundState.distanceState.edges[
+        "encounter-participant-1::encounter-participant-3"
+      ],
+    ).toBeUndefined();
   });
 
   it("rejects player attempts to set pairwise combat distance", async () => {

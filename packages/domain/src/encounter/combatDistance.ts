@@ -47,6 +47,13 @@ export interface CombatDistanceWeaponLike {
   range?: unknown;
 }
 
+export interface CombatDistanceParticipantAliasLike {
+  characterId?: string | null;
+  id?: string | null;
+  participantId?: string | null;
+  scenarioParticipantId?: string | null;
+}
+
 export interface CombatDistanceDefaultResult {
   distance: CombatDistance;
   notes?: string;
@@ -83,10 +90,11 @@ export function makeDistancePairKey(participantAId: string, participantBId: stri
   return [participantA, participantB].sort((left, right) => left.localeCompare(right)).join("::");
 }
 
-function normalizeDistancePair(input: {
+function normalizeDistancePair(input: { participantAId: string; participantBId: string }): {
+  pairKey: string;
   participantAId: string;
   participantBId: string;
-}): { pairKey: string; participantAId: string; participantBId: string } {
+} {
   const pairKey = makeDistancePairKey(input.participantAId, input.participantBId);
   const [participantAId, participantBId] = pairKey.split("::");
 
@@ -115,6 +123,50 @@ export function getDistanceEdgeBetween(
   const pairKey = makeDistancePairKey(participantAId, participantBId);
 
   return combatDistanceStateSchema.parse(state ?? {}).edges[pairKey];
+}
+
+export function getCombatDistanceParticipantAliases(
+  participant: CombatDistanceParticipantAliasLike | undefined | null,
+): string[] {
+  return [
+    participant?.participantId,
+    participant?.id,
+    participant?.scenarioParticipantId,
+    participant?.scenarioParticipantId
+      ? `scenario-${participant.scenarioParticipantId}`
+      : undefined,
+    participant?.characterId,
+  ].filter(
+    (entry, index, aliases): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0 && aliases.indexOf(entry) === index,
+  );
+}
+
+export function getDistanceEdgeBetweenParticipantAliases(input: {
+  participantA: CombatDistanceParticipantAliasLike | undefined | null;
+  participantB: CombatDistanceParticipantAliasLike | undefined | null;
+  state: CombatDistanceState | undefined;
+}): CombatDistanceEdge | undefined {
+  const current = combatDistanceStateSchema.parse(input.state ?? {});
+  const participantAAliases = getCombatDistanceParticipantAliases(input.participantA);
+  const participantBAliases = getCombatDistanceParticipantAliases(input.participantB);
+
+  for (const participantAId of participantAAliases) {
+    for (const participantBId of participantBAliases) {
+      if (participantAId === participantBId) {
+        continue;
+      }
+
+      const pairKey = makeDistancePairKey(participantAId, participantBId);
+      const edge = current.edges[pairKey];
+
+      if (edge) {
+        return edge;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export function setDistanceBetween(input: {
@@ -176,12 +228,7 @@ function normalizePreferredDistanceValues(values: readonly unknown[]): CombatDis
 function parseRangeStringPreferredDistances(range: string): CombatDistance[] {
   const values = range.match(/\d+(?:\.\d+)?/g) ?? [];
 
-  return normalizePreferredDistanceValues(
-    values.map((value) => {
-      const numeric = Number(value);
-      return Number.isInteger(numeric) ? numeric : Math.round(numeric);
-    }),
-  );
+  return normalizePreferredDistanceValues(values);
 }
 
 export function getWeaponPreferredDistances(
@@ -199,7 +246,15 @@ export function getWeaponPreferredDistances(
     }
   }
 
-  return typeof weapon.range === "string" ? parseRangeStringPreferredDistances(weapon.range) : [];
+  if (typeof weapon.range === "string") {
+    return parseRangeStringPreferredDistances(weapon.range);
+  }
+
+  if (typeof weapon.range === "number") {
+    return normalizePreferredDistanceValues([weapon.range]);
+  }
+
+  return [];
 }
 
 export function getLongestPreferredDistance(
@@ -269,7 +324,8 @@ export function getDefaultCombatDistanceForWeapons(input: {
 
   return {
     distance: 2,
-    notes: "Weapon preferred distance metadata was missing; defaulted to melee distance 2.",
+    notes:
+      "Weapon preferred distance metadata was missing or invalid; defaulted to melee distance 2.",
   };
 }
 
@@ -304,7 +360,11 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
   let nextState = combatDistanceStateSchema.parse(input.state ?? {});
 
   for (let leftIndex = 0; leftIndex < input.participantIds.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < input.participantIds.length; rightIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < input.participantIds.length;
+      rightIndex += 1
+    ) {
       const participantAId = input.participantIds[leftIndex];
       const participantBId = input.participantIds[rightIndex];
 

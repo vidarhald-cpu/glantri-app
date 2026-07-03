@@ -128,6 +128,7 @@ interface PlayerCombatAttackLocationSelectorProps {
 interface PlayerCombatAttackTargetSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
+  distanceLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
   targetOptions: readonly PlayerEncounterOpponentOption[];
 }
@@ -849,12 +850,13 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
 export function PlayerCombatAttackTargetSelector({
   combatContext,
   controlsDisabled = false,
+  distanceLabel,
   onCombatContextChange,
   targetOptions,
 }: PlayerCombatAttackTargetSelectorProps) {
   const selectedTargetUnavailable = Boolean(
     combatContext.targetParticipantId &&
-      !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
+    !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
   );
 
   return (
@@ -890,6 +892,18 @@ export function PlayerCombatAttackTargetSelector({
           </option>
         ))}
       </select>
+      {distanceLabel ? (
+        <span
+          style={{
+            color: "#4f5f57",
+            fontSize: "0.82rem",
+            justifySelf: "start",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {distanceLabel}
+        </span>
+      ) : null}
     </label>
   );
 }

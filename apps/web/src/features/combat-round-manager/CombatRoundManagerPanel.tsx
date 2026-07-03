@@ -50,6 +50,7 @@ import {
   ensureCombatRoundPhaseResolutionResultsForPhase,
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
+  getCombatDistanceParticipantAliases,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
@@ -212,6 +213,49 @@ const tableWrapStyle = {
   border: "1px solid #e3e1dc",
   borderRadius: 10,
   overflowX: "auto",
+} as const;
+
+const distanceMatrixCellBorder = "1px solid #d8d6cf";
+
+const distanceMatrixCellStyle = {
+  border: distanceMatrixCellBorder,
+  boxSizing: "border-box",
+  minWidth: "2.75rem",
+  padding: "0.18rem 0.25rem",
+  textAlign: "center",
+} as const;
+
+const distanceMatrixRowHeaderStyle = {
+  border: distanceMatrixCellBorder,
+  boxSizing: "border-box",
+  maxWidth: "8.5rem",
+  minWidth: "8.5rem",
+  overflow: "hidden",
+  padding: "0.22rem 0.35rem",
+  textAlign: "left",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
+
+const distanceMatrixColumnHeaderStyle = {
+  border: distanceMatrixCellBorder,
+  boxSizing: "border-box",
+  height: "5.75rem",
+  minWidth: "2.75rem",
+  padding: "0 0.2rem 0.25rem",
+  textAlign: "left",
+  verticalAlign: "bottom",
+  width: "2.75rem",
+} as const;
+
+const distanceMatrixColumnHeaderTextStyle = {
+  display: "inline-block",
+  maxWidth: "7rem",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  transform: "translateX(0.2rem) rotate(-45deg)",
+  transformOrigin: "bottom left",
+  whiteSpace: "nowrap",
 } as const;
 
 const stickyParticipantCellStyle = {
@@ -2030,6 +2074,38 @@ function findScenarioParticipantForEncounterParticipant(input: {
   );
 }
 
+function aliasesOverlap(left: readonly string[], right: readonly string[]): boolean {
+  const rightAliases = new Set(right);
+
+  return left.some((alias) => rightAliases.has(alias));
+}
+
+function findScenarioParticipantForCombatRoundParticipant(input: {
+  encounterParticipants: EncounterSession["participants"];
+  roundParticipant: CombatRoundState["participants"][number];
+  scenarioParticipants: ScenarioParticipant[];
+}): ScenarioParticipant | undefined {
+  const roundAliases = getCombatDistanceParticipantAliases(input.roundParticipant);
+  const encounterParticipant = input.encounterParticipants.find((participant) =>
+    aliasesOverlap(roundAliases, getCombatDistanceParticipantAliases(participant)),
+  );
+
+  if (encounterParticipant) {
+    const scenarioParticipant = findScenarioParticipantForEncounterParticipant({
+      encounterParticipant,
+      scenarioParticipants: input.scenarioParticipants,
+    });
+
+    if (scenarioParticipant) {
+      return scenarioParticipant;
+    }
+  }
+
+  return input.scenarioParticipants.find((participant) =>
+    aliasesOverlap(roundAliases, getCombatDistanceParticipantAliases(participant)),
+  );
+}
+
 function findEncounterParticipantForScenarioParticipant(input: {
   encounterParticipants: EncounterSession["participants"];
   scenarioParticipant?: ScenarioParticipant;
@@ -2055,15 +2131,16 @@ interface CombatDistanceTableRow {
 
 function getActiveWeaponTemplatesForScenarioParticipant(
   participant: ScenarioParticipant | undefined,
+  resolvedEquipmentState?: EquipmentFeatureState,
 ): WeaponTemplate[] {
-  const equipmentStateCandidate = participant?.snapshot.equipmentState;
+  const equipmentStateCandidate = resolvedEquipmentState ?? participant?.snapshot.equipmentState;
 
-  if (!participant || !isEquipmentFeatureState(equipmentStateCandidate)) {
+  if (!isEquipmentFeatureState(equipmentStateCandidate)) {
     return [];
   }
 
   const characterId =
-    participant.characterId ?? Object.keys(equipmentStateCandidate.activeLoadoutByCharacterId)[0];
+    participant?.characterId ?? Object.keys(equipmentStateCandidate.activeLoadoutByCharacterId)[0];
   const loadout = characterId
     ? equipmentStateCandidate.activeLoadoutByCharacterId[characterId]
     : undefined;
@@ -2109,17 +2186,19 @@ function formatPreferredDistanceLabel(weapons: WeaponTemplate[]): string {
 
 function buildCombatDistanceTableRows(input: {
   encounter: EncounterSession;
+  resolvedEquipmentStateByScenarioParticipantId?: Record<string, EquipmentFeatureState | undefined>;
   roundState: CombatRoundState;
   scenarioParticipants: ScenarioParticipant[];
 }): CombatDistanceTableRow[] {
   const encounterParticipantById = new Map(
     input.encounter.participants.map((participant) => [participant.id, participant]),
   );
-  const scenarioParticipantByEncounterId = new Map(
-    input.encounter.participants.map((encounterParticipant) => [
-      encounterParticipant.id,
-      findScenarioParticipantForEncounterParticipant({
-        encounterParticipant,
+  const scenarioParticipantByRoundParticipantId = new Map(
+    input.roundState.participants.map((roundParticipant) => [
+      roundParticipant.participantId,
+      findScenarioParticipantForCombatRoundParticipant({
+        encounterParticipants: input.encounter.participants,
+        roundParticipant,
         scenarioParticipants: input.scenarioParticipants,
       }),
     ]),
@@ -2127,9 +2206,18 @@ function buildCombatDistanceTableRows(input: {
   const weaponsByParticipantId = Object.fromEntries(
     input.roundState.participants.map((participant) => [
       participant.participantId,
-      getActiveWeaponTemplatesForScenarioParticipant(
-        scenarioParticipantByEncounterId.get(participant.participantId),
-      ),
+      (() => {
+        const scenarioParticipant = scenarioParticipantByRoundParticipantId.get(
+          participant.participantId,
+        );
+
+        return getActiveWeaponTemplatesForScenarioParticipant(
+          scenarioParticipant,
+          scenarioParticipant
+            ? input.resolvedEquipmentStateByScenarioParticipantId?.[scenarioParticipant.id]
+            : undefined,
+        );
+      })(),
     ]),
   );
   const distanceState = ensureDistanceEdgesForParticipantPairs({
@@ -2170,19 +2258,28 @@ function buildCombatDistanceTableRows(input: {
 
 function getCombatDistanceTableRowForParticipants(input: {
   participantAId: string | undefined;
+  participantAAliases?: readonly string[];
   participantBId: string | undefined;
+  participantBAliases?: readonly string[];
   rows: CombatDistanceTableRow[];
 }): CombatDistanceTableRow | undefined {
-  if (!input.participantAId || !input.participantBId) {
+  const participantAAliases = [input.participantAId, ...(input.participantAAliases ?? [])].filter(
+    (alias, index, aliases): alias is string => Boolean(alias) && aliases.indexOf(alias) === index,
+  );
+  const participantBAliases = [input.participantBId, ...(input.participantBAliases ?? [])].filter(
+    (alias, index, aliases): alias is string => Boolean(alias) && aliases.indexOf(alias) === index,
+  );
+
+  if (participantAAliases.length === 0 || participantBAliases.length === 0) {
     return undefined;
   }
 
   return input.rows.find(
     (row) =>
-      (row.edge.participantAId === input.participantAId &&
-        row.edge.participantBId === input.participantBId) ||
-      (row.edge.participantAId === input.participantBId &&
-        row.edge.participantBId === input.participantAId),
+      (participantAAliases.includes(row.edge.participantAId) &&
+        participantBAliases.includes(row.edge.participantBId)) ||
+      (participantAAliases.includes(row.edge.participantBId) &&
+        participantBAliases.includes(row.edge.participantAId)),
   );
 }
 
@@ -3269,10 +3366,16 @@ export default function CombatRoundManagerPanel({
     () =>
       buildCombatDistanceTableRows({
         encounter,
+        resolvedEquipmentStateByScenarioParticipantId: Object.fromEntries(
+          Object.entries(resolvedCharacterStateByParticipantId).map(([participantId, state]) => [
+            participantId,
+            state.equipmentState,
+          ]),
+        ),
         roundState,
         scenarioParticipants: effectiveScenarioParticipants,
       }),
-    [effectiveScenarioParticipants, encounter, roundState],
+    [effectiveScenarioParticipants, encounter, resolvedCharacterStateByParticipantId, roundState],
   );
   const dirtyCombatDistanceRows = useMemo(
     () =>
@@ -3341,8 +3444,9 @@ export default function CombatRoundManagerPanel({
     roundState.currentStep === "round_summary" && !roundEndReviewComplete
       ? getCombatRoundStartNextRoundBlocker(roundState)
       : undefined;
-  const topPhaseInitiativeResolutionPhase =
-    getCombatRoundInitiativePhaseForStep(roundState.currentStep);
+  const topPhaseInitiativeResolutionPhase = getCombatRoundInitiativePhaseForStep(
+    roundState.currentStep,
+  );
   const topPhaseInitiativeResolutionOpen =
     topPhaseInitiativeResolutionPhase && selectedRoundIsActive
       ? isCombatRoundPhaseInitiativeResolutionOpen({
@@ -3648,13 +3752,13 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
   const inspectorCanContinuePhaseAttack = Boolean(
     inspectorPhaseAttackBackOutOpportunity &&
-      !inspectorPhaseAttackBackOutOpportunity.ceRequired &&
-      !inspectorPhaseInitiativeChoice &&
-      inspectorPhaseInitiativeResolutionOpen &&
-      selectedScenarioParticipant &&
-      selectedEncounterParticipant &&
-      selectedRoundIsActive &&
-      !inspectorSnapshot,
+    !inspectorPhaseAttackBackOutOpportunity.ceRequired &&
+    !inspectorPhaseInitiativeChoice &&
+    inspectorPhaseInitiativeResolutionOpen &&
+    selectedScenarioParticipant &&
+    selectedEncounterParticipant &&
+    selectedRoundIsActive &&
+    !inspectorSnapshot,
   );
   const inspectorPhaseInitiativeChoiceSubmitted = Boolean(inspectorPhaseInitiativeChoice);
   const inspectorCanBackOutPhaseAttack = Boolean(
@@ -4074,48 +4178,50 @@ export default function CombatRoundManagerPanel({
       ? "Phase choice submitted"
       : inspectorCanContinuePhaseAttack
         ? "Continue attack"
-    : inspectorCombatExperienceRequired
-      ? !inspectorCombatExperienceWindowOpen
-        ? "Set CE difficulty first"
-        : inspectorCombatExperienceNoRollAvailable
-          ? "Confirm Combat Experience"
-          : "Roll Combat Experience"
-      : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-        ? "Inspecting step - use Current task to resume"
-        : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-          ? "Preparing round-end review"
-          : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
-            ? inspectorRoundEndReviewHasProposals
-              ? "Commit participant SU review"
-              : "Mark SU review complete"
-            : inspector.step === "round_summary" &&
-                inspectorRoundEndReview?.status === "health_roll_pending"
-              ? "Roll health check"
-              : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
-                ? "Round-end review complete"
-                : inspectorDamageCommitted
-                  ? "Phase damage committed"
-                  : inspectorDamageSubstate === "critical_pending"
-                    ? "Roll critical"
-                    : inspectorDamageSubstate === "location_pending"
-                      ? "Roll hit location"
-                      : inspectorDamageSubstate === "location_rolled"
-                        ? "Prepare damage review"
-                        : inspectorDamageProposalReady
-                          ? "Commit phase damage"
-                          : inspectorCanRollParry
-                            ? "Roll parry"
-                            : inspectorAttackSourceValidationMessage
-                              ? inspectorAttackSourceValidationMessage
-                              : inspectorCurrentResolutionPhase &&
-                                  inspectorActionPhaseHasAttack === false
-                                ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-                                : getCombatResolutionButtonLabel({
-                                    hasPhaseAttack: inspectorActionPhaseHasAttack,
-                                    phase: inspectorCurrentResolutionPhase,
-                                    step: inspector.step,
-                                    substep: inspectorActionPhaseResolutionStatus?.substep,
-                                  });
+        : inspectorCombatExperienceRequired
+          ? !inspectorCombatExperienceWindowOpen
+            ? "Set CE difficulty first"
+            : inspectorCombatExperienceNoRollAvailable
+              ? "Confirm Combat Experience"
+              : "Roll Combat Experience"
+          : inspectorIsInspectionOnly && inspector.step !== "select_actions"
+            ? "Inspecting step - use Current task to resume"
+            : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+              ? "Preparing round-end review"
+              : inspector.step === "round_summary" &&
+                  inspectorRoundEndReview?.status === "review_ready"
+                ? inspectorRoundEndReviewHasProposals
+                  ? "Commit participant SU review"
+                  : "Mark SU review complete"
+                : inspector.step === "round_summary" &&
+                    inspectorRoundEndReview?.status === "health_roll_pending"
+                  ? "Roll health check"
+                  : inspector.step === "round_summary" &&
+                      inspectorRoundEndReview?.status === "complete"
+                    ? "Round-end review complete"
+                    : inspectorDamageCommitted
+                      ? "Phase damage committed"
+                      : inspectorDamageSubstate === "critical_pending"
+                        ? "Roll critical"
+                        : inspectorDamageSubstate === "location_pending"
+                          ? "Roll hit location"
+                          : inspectorDamageSubstate === "location_rolled"
+                            ? "Prepare damage review"
+                            : inspectorDamageProposalReady
+                              ? "Commit phase damage"
+                              : inspectorCanRollParry
+                                ? "Roll parry"
+                                : inspectorAttackSourceValidationMessage
+                                  ? inspectorAttackSourceValidationMessage
+                                  : inspectorCurrentResolutionPhase &&
+                                      inspectorActionPhaseHasAttack === false
+                                    ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                                    : getCombatResolutionButtonLabel({
+                                        hasPhaseAttack: inspectorActionPhaseHasAttack,
+                                        phase: inspectorCurrentResolutionPhase,
+                                        step: inspector.step,
+                                        substep: inspectorActionPhaseResolutionStatus?.substep,
+                                      });
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -4164,13 +4270,17 @@ export default function CombatRoundManagerPanel({
             : inspectorVisibleCombatExperienceResult
               ? {
                   detailLines: [
-                    formatCombatExperienceEffectiveTableLine(inspectorVisibleCombatExperienceResult),
+                    formatCombatExperienceEffectiveTableLine(
+                      inspectorVisibleCombatExperienceResult,
+                    ),
                   ].filter((line): line is string => Boolean(line)),
                   interpretedResult: formatCombatExperienceCalculation(
                     inspectorVisibleCombatExperienceResult,
                   ),
                   rankLabel: "Combat Experience",
-                  resultLabel: formatCombatExperienceEffectLine(inspectorVisibleCombatExperienceResult),
+                  resultLabel: formatCombatExperienceEffectLine(
+                    inspectorVisibleCombatExperienceResult,
+                  ),
                 }
               : null;
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
@@ -4715,8 +4825,9 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    const phaseInitiativeResolutionPhase =
-      getCombatRoundInitiativePhaseForStep(roundState.currentStep);
+    const phaseInitiativeResolutionPhase = getCombatRoundInitiativePhaseForStep(
+      roundState.currentStep,
+    );
 
     if (
       phaseInitiativeResolutionPhase &&
@@ -6563,7 +6674,14 @@ export default function CombatRoundManagerPanel({
                       : undefined;
                     const phaseDistanceRow = getCombatDistanceTableRowForParticipants({
                       participantAId: inspector.participant?.participantId,
+                      participantAAliases: getCombatDistanceParticipantAliases(
+                        inspector.participant,
+                      ),
                       participantBId: phaseTargetEncounterParticipant?.id,
+                      participantBAliases: [
+                        ...getCombatDistanceParticipantAliases(phaseTargetEncounterParticipant),
+                        ...getCombatDistanceParticipantAliases(phaseTargetScenarioParticipant),
+                      ],
                       rows: combatDistanceRows,
                     });
                     const snapshotForPhase =
@@ -6636,6 +6754,11 @@ export default function CombatRoundManagerPanel({
                             <PlayerCombatAttackTargetSelector
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                              distanceLabel={
+                                phaseTargetEncounterParticipant
+                                  ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
+                                  : undefined
+                              }
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
@@ -6646,11 +6769,6 @@ export default function CombatRoundManagerPanel({
                               }
                               targetOptions={inspectorTargetOptions}
                             />
-                            {phaseTargetEncounterParticipant ? (
-                              <div style={{ color: "#4f5f57", fontSize: "0.9rem" }}>
-                                Distance: {phaseDistanceRow?.edge.distance ?? "—"}
-                              </div>
-                            ) : null}
                             <PlayerCombatAttackLocationSelector
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
@@ -6971,27 +7089,29 @@ export default function CombatRoundManagerPanel({
                           ? rollInspectorCombatExperience()
                           : inspectorCanContinuePhaseAttack
                             ? continueInspectorPhaseAttack()
-                          : inspector.step === "round_summary"
-                            ? advanceInspectorRoundEndReview()
-                            : inspectorCurrentStepIsInitiative
-                              ? rollInspectorInitiative()
-                              : inspectorCanRollParry
-                                ? rollInspectorParry()
-                                : inspectorCurrentResolutionPhase &&
-                                    (inspectorActionPhaseHasAttack === false ||
-                                      inspectorActionPhaseResolutionStatus?.substep === "effects")
-                                  ? completeInspectorPhaseResolution(
-                                      inspectorCurrentResolutionPhase,
-                                    )
+                            : inspector.step === "round_summary"
+                              ? advanceInspectorRoundEndReview()
+                              : inspectorCurrentStepIsInitiative
+                                ? rollInspectorInitiative()
+                                : inspectorCanRollParry
+                                  ? rollInspectorParry()
                                   : inspectorCurrentResolutionPhase &&
-                                      (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
-                                        inspectorActionPhaseResolutionStatus?.substep === "damage")
-                                    ? advanceInspectorPhaseResolutionSubstep(
+                                      (inspectorActionPhaseHasAttack === false ||
+                                        inspectorActionPhaseResolutionStatus?.substep === "effects")
+                                    ? completeInspectorPhaseResolution(
                                         inspectorCurrentResolutionPhase,
                                       )
-                                    : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                                      ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                      : saveInspectorDeclaration())
+                                    : inspectorCurrentResolutionPhase &&
+                                        (inspectorActionPhaseResolutionStatus?.substep ===
+                                          "parry" ||
+                                          inspectorActionPhaseResolutionStatus?.substep ===
+                                            "damage")
+                                      ? advanceInspectorPhaseResolutionSubstep(
+                                          inspectorCurrentResolutionPhase,
+                                        )
+                                      : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                        ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                        : saveInspectorDeclaration())
                       }
                       onSecondaryAction={() =>
                         void (inspectorCanBackOutPhaseAttack
@@ -7066,24 +7186,25 @@ export default function CombatRoundManagerPanel({
                 style={{
                   borderCollapse: "collapse",
                   fontSize: "0.82rem",
+                  tableLayout: "fixed",
                   width: "max-content",
                 }}
               >
                 <thead>
                   <tr>
-                    <th style={{ padding: "0.25rem 0.35rem", textAlign: "left" }} />
+                    <th
+                      style={{
+                        ...distanceMatrixRowHeaderStyle,
+                        height: distanceMatrixColumnHeaderStyle.height,
+                      }}
+                    />
                     {displayParticipants.map((participant) => (
                       <th
                         key={`distance-column:${participant.participantId}`}
-                        style={{
-                          maxWidth: 110,
-                          padding: "0.25rem 0.35rem",
-                          textAlign: "center",
-                          whiteSpace: "nowrap",
-                        }}
+                        style={distanceMatrixColumnHeaderStyle}
                         title={participant.label}
                       >
-                        {participant.label}
+                        <span style={distanceMatrixColumnHeaderTextStyle}>{participant.label}</span>
                       </th>
                     ))}
                   </tr>
@@ -7091,16 +7212,7 @@ export default function CombatRoundManagerPanel({
                 <tbody>
                   {displayParticipants.map((rowParticipant, rowIndex) => (
                     <tr key={`distance-row:${rowParticipant.participantId}`}>
-                      <th
-                        style={{
-                          borderTop: "1px solid #e3e1dc",
-                          maxWidth: 130,
-                          padding: "0.25rem 0.35rem",
-                          textAlign: "left",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={rowParticipant.label}
-                      >
+                      <th style={distanceMatrixRowHeaderStyle} title={rowParticipant.label}>
                         {rowParticipant.label}
                       </th>
                       {displayParticipants.map((columnParticipant, columnIndex) => {
@@ -7109,10 +7221,8 @@ export default function CombatRoundManagerPanel({
                             <td
                               key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
                               style={{
-                                borderTop: "1px solid #e3e1dc",
+                                ...distanceMatrixCellStyle,
                                 color: "#8c8578",
-                                padding: "0.25rem 0.35rem",
-                                textAlign: "center",
                               }}
                             >
                               —
@@ -7143,11 +7253,7 @@ export default function CombatRoundManagerPanel({
                         return (
                           <td
                             key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
-                            style={{
-                              borderTop: "1px solid #e3e1dc",
-                              padding: "0.25rem 0.35rem",
-                              textAlign: "center",
-                            }}
+                            style={distanceMatrixCellStyle}
                             title={title}
                           >
                             {editable && distanceRow ? (
@@ -7162,7 +7268,7 @@ export default function CombatRoundManagerPanel({
                                     [distanceRow.edge.pairKey]: event.target.value,
                                   }))
                                 }
-                                style={{ textAlign: "center", width: "3.5rem" }}
+                                style={{ textAlign: "center", width: "2.75rem" }}
                                 type="number"
                                 value={draftValue}
                               />
@@ -7179,9 +7285,7 @@ export default function CombatRoundManagerPanel({
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
               <button
-                disabled={
-                  saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0
-                }
+                disabled={saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0}
                 onClick={() => void saveCombatDistanceChanges()}
                 type="button"
               >

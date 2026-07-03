@@ -189,8 +189,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("phaseModel.showAttackStats");
     expect(source).toContain("phaseModel.showAttackLocationSelector");
     expect(source).toContain("targetOptions={targetOptions}");
-    expect(source).toContain("getDistanceEdgeBetween");
-    expect(source).toContain("Distance: {distanceEdge?.distance ?? \"—\"}");
+    expect(source).toContain("getDistanceEdgeBetweenParticipantAliases");
+    expect(source).toContain("participant.characterId === phaseCombatContext.targetParticipantId");
+    expect(source).toContain("distanceLabel={");
+    expect(source).toContain('Distance: ${distanceEdge?.distance ?? "—"}');
     expect(source).not.toContain("Distance matrix");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");

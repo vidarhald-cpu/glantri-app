@@ -25,7 +25,7 @@ import {
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
-  getDistanceEdgeBetween,
+  getDistanceEdgeBetweenParticipantAliases,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -1353,9 +1353,7 @@ export default function ScenarioPlayerCombatPageContent({
       });
       setError(undefined);
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to continue attack.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to continue attack.");
     } finally {
       setSavingCombatContext(false);
     }
@@ -1957,11 +1955,11 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const selectedPhaseContinueAvailable = Boolean(
     selectedPhaseAttackBackOutOpportunity &&
-      !selectedPhaseAttackBackOutOpportunity.ceRequired &&
-      !selectedPhaseInitiativeChoice &&
-      selectedParticipant &&
-      encounterId &&
-      !readOnlyInspection,
+    !selectedPhaseAttackBackOutOpportunity.ceRequired &&
+    !selectedPhaseInitiativeChoice &&
+    selectedParticipant &&
+    encounterId &&
+    !readOnlyInspection,
   );
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
@@ -1993,10 +1991,10 @@ export default function ScenarioPlayerCombatPageContent({
       ? "Phase choice submitted"
       : selectedPhaseContinueAvailable
         ? "Continue attack"
-    : (attackerPrivilegedAction?.label ??
-      currentParryAction?.label ??
-      currentAttackAction?.label ??
-      declarationButtonLabel);
+        : (attackerPrivilegedAction?.label ??
+          currentParryAction?.label ??
+          currentAttackAction?.label ??
+          declarationButtonLabel);
   const playerActionButtonDisabled = attackerPrivilegedAction
     ? selectedCombatExperienceRequired ||
       controlsDisabled ||
@@ -2012,13 +2010,13 @@ export default function ScenarioPlayerCombatPageContent({
           controlsDisabled ||
           savingCombatContext ||
           currentAttackAction.disabled
-          : selectedCombatExperienceRequired
-            ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
-            : selectedPhaseInitiativeChoice
-              ? true
-              : selectedPhaseContinueAvailable
-                ? controlsDisabled || savingCombatContext
-                : declareActionDisabled;
+        : selectedCombatExperienceRequired
+          ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
+          : selectedPhaseInitiativeChoice
+            ? true
+            : selectedPhaseContinueAvailable
+              ? controlsDisabled || savingCombatContext
+              : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -2188,17 +2186,19 @@ export default function ScenarioPlayerCombatPageContent({
               const targetRoundParticipant = phaseCombatContext.targetParticipantId
                 ? combatRoundState?.participants.find(
                     (participant) =>
-                      participant.scenarioParticipantId === phaseCombatContext.targetParticipantId ||
-                      participant.participantId === phaseCombatContext.targetParticipantId,
+                      participant.scenarioParticipantId ===
+                        phaseCombatContext.targetParticipantId ||
+                      participant.participantId === phaseCombatContext.targetParticipantId ||
+                      participant.characterId === phaseCombatContext.targetParticipantId,
                   )
                 : undefined;
               const distanceEdge =
                 combatRoundState && selectedRoundParticipant && targetRoundParticipant
-                  ? getDistanceEdgeBetween(
-                      combatRoundState.distanceState,
-                      selectedRoundParticipant.participantId,
-                      targetRoundParticipant.participantId,
-                    )
+                  ? getDistanceEdgeBetweenParticipantAliases({
+                      participantA: selectedRoundParticipant,
+                      participantB: targetRoundParticipant,
+                      state: combatRoundState.distanceState,
+                    })
                   : undefined;
               const phaseModel = buildPlayerCombatPhasePanelModel({
                 actionId: selectedActionId,
@@ -2225,6 +2225,11 @@ export default function ScenarioPlayerCombatPageContent({
                       <PlayerCombatAttackTargetSelector
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
+                        distanceLabel={
+                          targetRoundParticipant
+                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                            : undefined
+                        }
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({
@@ -2234,11 +2239,6 @@ export default function ScenarioPlayerCombatPageContent({
                         }}
                         targetOptions={targetOptions}
                       />
-                      {targetRoundParticipant ? (
-                        <div style={{ color: "#4f5f57", fontSize: "0.9rem" }}>
-                          Distance: {distanceEdge?.distance ?? "—"}
-                        </div>
-                      ) : null}
                       <PlayerCombatAttackLocationSelector
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
@@ -2380,15 +2380,15 @@ export default function ScenarioPlayerCombatPageContent({
                       : undefined
                     : selectedPhaseContinueAvailable
                       ? continuePhaseAttack()
-                    : attackerPrivilegedAction?.kind
-                      ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                      : currentParryAction
-                        ? rollCurrentParry()
-                        : currentAttackAction
-                          ? rollPhaseAttack()
-                          : currentInitiativePhase
-                            ? rollInitiative()
-                            : saveCombatContext())
+                      : attackerPrivilegedAction?.kind
+                        ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                        : currentParryAction
+                          ? rollCurrentParry()
+                          : currentAttackAction
+                            ? rollPhaseAttack()
+                            : currentInitiativePhase
+                              ? rollInitiative()
+                              : saveCombatContext())
                 }
                 onSecondaryAction={() => void backOutPhaseAttack()}
                 saving={savingCombatContext}

@@ -189,6 +189,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source).toContain("distanceLabel?: string");
+    expect(source).toContain("distanceLabel");
     expect(source.indexOf("export function PlayerCombatAttackTargetSelector")).toBeLessThan(
       source.indexOf("export function PlayerCombatAttackLocationSelector"),
     );
@@ -200,12 +202,16 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("selectedTargetUnavailable");
     expect(source).toContain('value={combatContext.targetParticipantId ?? ""}');
     expect(source).toContain("targetParticipantId: event.target.value || undefined");
+    expect(source).toContain("{distanceLabel}");
+    expect(source).toContain('whiteSpace: "nowrap"');
     expect(source).toContain("Attack location");
     expect(source).toContain("No target");
     expect(source).toContain("HIT_LOCATIONS.map");
     expect(source).toContain("getHitLocationFullLabel(location)");
     expect(source).toContain('value={combatContext.targetLocation ?? "none"}');
-    expect(source).toContain('targetLocation: targetLocation === "none" ? undefined : targetLocation');
+    expect(source).toContain(
+      'targetLocation: targetLocation === "none" ? undefined : targetLocation',
+    );
     expect(source).toContain("compactPhaseContextSelectorColumns");
     expect(source).toContain('const compactPhaseContextSelectorColumns = "6.5rem 7rem auto"');
     expect(source).toContain("style={compactPhaseContextSelectStyle}");

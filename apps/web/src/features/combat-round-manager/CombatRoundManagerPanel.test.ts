@@ -105,6 +105,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatDistanceTableRows");
     expect(source).toContain("getCombatDistanceTableRowForParticipants");
     expect(source).toContain("ensureDistanceEdgesForParticipantPairs");
+    expect(source).toContain("getCombatDistanceParticipantAliases");
+    expect(source).toContain("resolvedEquipmentStateByScenarioParticipantId");
     expect(source).toContain("setPairDistanceOnServer");
     expect(source).toContain("Combat distance must be an integer from 0 to 8.");
     expect(source).toContain("dirtyCombatDistanceRows");
@@ -117,7 +119,17 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("[distanceRow.edge.pairKey]: event.target.value");
     expect(source).toContain("formatCombatDistanceSource(distanceRow.edge.source)");
     expect(source).toContain("distanceRow.preferredDistanceLabel");
-    expect(source).toContain("Distance: {phaseDistanceRow?.edge.distance ?? \"—\"}");
+    expect(source).toContain("distanceMatrixCellBorder");
+    expect(source).toContain("distanceMatrixCellStyle");
+    expect(source).toContain("distanceMatrixRowHeaderStyle");
+    expect(source).toContain("distanceMatrixColumnHeaderStyle");
+    expect(source).toContain("distanceMatrixColumnHeaderTextStyle");
+    expect(source).toContain('transform: "translateX(0.2rem) rotate(-45deg)"');
+    expect(source).toContain('textOverflow: "ellipsis"');
+    expect(source).toContain("title={participant.label}");
+    expect(source).toContain("title={rowParticipant.label}");
+    expect(source).toContain("distanceLabel={");
+    expect(source).toContain('Distance: ${phaseDistanceRow?.edge.distance ?? "—"}');
   });
 
   it("renders inspector details for the selected participant and step", () => {
