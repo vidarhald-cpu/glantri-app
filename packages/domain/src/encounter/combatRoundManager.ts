@@ -6380,6 +6380,74 @@ export function getCombatRoundAttackResultById(input: {
   return undefined;
 }
 
+export interface CombatRoundAttackDistanceModifierDetail {
+  actualDistance?: number;
+  createdCombatModifierIds: string[];
+  modifierId?: string;
+  nearestPreferredDistance?: number;
+  preferredDistances: number[];
+  value: number;
+  warning?: string;
+  weaponName?: string;
+}
+
+function parseCombatRoundAttackDistanceModifierDetail(
+  value: unknown,
+): CombatRoundAttackDistanceModifierDetail | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const preferredDistances = Array.isArray(record.preferredDistances)
+    ? record.preferredDistances.filter((entry): entry is number => Number.isInteger(entry))
+    : [];
+  const createdCombatModifierIds = Array.isArray(record.createdCombatModifierIds)
+    ? record.createdCombatModifierIds.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const valueNumber =
+    typeof record.value === "number" && Number.isInteger(record.value) ? record.value : 0;
+
+  return {
+    actualDistance:
+      typeof record.actualDistance === "number" && Number.isInteger(record.actualDistance)
+        ? record.actualDistance
+        : undefined,
+    createdCombatModifierIds,
+    modifierId: typeof record.modifierId === "string" ? record.modifierId : undefined,
+    nearestPreferredDistance:
+      typeof record.nearestPreferredDistance === "number" &&
+      Number.isInteger(record.nearestPreferredDistance)
+        ? record.nearestPreferredDistance
+        : undefined,
+    preferredDistances,
+    value: valueNumber,
+    warning: typeof record.warning === "string" ? record.warning : undefined,
+    weaponName: typeof record.weaponName === "string" ? record.weaponName : undefined,
+  };
+}
+
+export function getCombatRoundAttackDistanceModifierDetail(input: {
+  result: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): CombatRoundAttackDistanceModifierDetail | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.result,
+    roundNumber: normalized.roundNumber,
+  });
+  const command = [...normalized.commands]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.type === "roll_attack" &&
+        entry.roundNumber === normalized.roundNumber &&
+        entry.facts.attackResultId === attackResultId,
+    );
+
+  return parseCombatRoundAttackDistanceModifierDetail(command?.facts.distanceModifier);
+}
+
 export function buildCombatRoundPhaseResolutionResult(input: {
   attackResult: CombatRoundAttackRollResult;
   roundNumber: number;
@@ -12668,6 +12736,7 @@ function recordCombatRoundAttackCommand(input: {
     commandId?: string;
     createdAt: string;
     createdByUserId?: string;
+    facts?: Record<string, unknown>;
   };
   participantId: string;
   result: CombatRoundAttackRollResult;
@@ -12690,6 +12759,7 @@ function recordCombatRoundAttackCommand(input: {
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
     facts: {
+      ...(input.command.facts ?? {}),
       attackResultId: getCombatRoundAttackResultId({
         result: input.result,
         roundNumber: normalized.roundNumber,
@@ -12738,6 +12808,7 @@ export function recordCombatRoundAttackResult(input: {
     commandId?: string;
     createdAt: string;
     createdByUserId?: string;
+    facts?: Record<string, unknown>;
   };
   participantId: string;
   result: CombatRoundAttackRollResult;

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { defaultCanonicalContent } from "@glantri/content";
+import { defaultCanonicalContent, weaponTemplates } from "@glantri/content";
 import {
   CampaignService,
   CharacterService,
@@ -9,9 +9,11 @@ import {
 } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  applyDistanceGeneratedObSkillModifier,
   applyCombatActionGeneratedModifiers,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildDistanceGeneratedObSkillModifier,
   buildCombatRoundInitiativeResult,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
@@ -59,6 +61,12 @@ import {
   rollOpenEndedD20,
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
+  clearDistanceGeneratedObSkillModifierForPhase,
+  getDistanceEdgeBetweenParticipantAliases,
+  getNearestPreferredDistance,
+  getWeaponPreferredDistances,
+  isDistanceGeneratedObSkillModifier,
+  removeDistanceGeneratedObSkillModifiers,
   scenarioParticipantCombatContextSchema,
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundPairDistance,
@@ -67,9 +75,13 @@ import {
 } from "@glantri/domain";
 import type {
   CombatRoundPhaseInitiativeCommitParticipantInput,
+  CombatRoundAttackDistanceModifierDetail,
   CombatRoundState,
   EncounterSession,
+  ScenarioCombatModifierEntry,
+  ScenarioParticipantCombatContext,
   ScenarioParticipant,
+  WeaponTemplate,
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
@@ -522,6 +534,242 @@ function combatRoundStatesDiffer(
   right: CombatRoundState | undefined,
 ): boolean {
   return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+}
+
+function combatContextsDiffer(
+  left: ScenarioParticipantCombatContext,
+  right: ScenarioParticipantCombatContext,
+): boolean {
+  return JSON.stringify(left) !== JSON.stringify(right);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeWeaponName(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : undefined;
+}
+
+function getSnapshotWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
+  const snapshot = isRecord(participant.snapshot) ? participant.snapshot : undefined;
+  const equipmentStateValue = snapshot?.["equipmentState"];
+  const equipmentState = isRecord(equipmentStateValue) ? equipmentStateValue : undefined;
+  const templatesValue = equipmentState?.["templates"];
+  const templates = isRecord(templatesValue) ? templatesValue : undefined;
+  const templatesByIdValue = templates?.["templatesById"];
+  const templatesById = isRecord(templatesByIdValue) ? templatesByIdValue : undefined;
+
+  if (!templatesById) {
+    return [];
+  }
+
+  return Object.values(templatesById).filter(
+    (template): template is WeaponTemplate =>
+      isRecord(template) &&
+      template.category === "weapon" &&
+      typeof template.name === "string" &&
+      template.name.trim().length > 0,
+  );
+}
+
+function findAttackWeaponTemplate(input: {
+  participant: ScenarioParticipant;
+  weaponName: string;
+}): WeaponTemplate | undefined {
+  const weaponName = normalizeWeaponName(input.weaponName);
+
+  if (!weaponName) {
+    return undefined;
+  }
+
+  const candidates = [...getSnapshotWeaponTemplates(input.participant), ...weaponTemplates];
+  const exactMatch = candidates.find(
+    (template) => normalizeWeaponName(template.name) === weaponName,
+  );
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return candidates.find((template) => {
+    const templateName = normalizeWeaponName(template.name);
+
+    return (
+      Boolean(templateName) &&
+      (weaponName.startsWith(`${templateName} `) || weaponName.startsWith(`${templateName}+`))
+    );
+  });
+}
+
+function distanceModifierEntryMatchesPhase(
+  entry: ScenarioCombatModifierEntry,
+  phase: "phase1" | "phase2",
+): boolean {
+  return (
+    isDistanceGeneratedObSkillModifier(entry) &&
+    (entry.sourcePhase === phase || entry.id === `generated:distance:${phase}:ob-skill`)
+  );
+}
+
+function getDistanceModifierValueFromEntries(
+  entries: readonly ScenarioCombatModifierEntry[],
+  phase: "phase1" | "phase2",
+): number {
+  return entries
+    .filter((entry) => distanceModifierEntryMatchesPhase(entry, phase))
+    .reduce((sum, entry) => sum + entry.value, 0);
+}
+
+function getDistanceModifierValueFromSnapshot(
+  snapshot: CombatRoundState["stepSnapshots"][number] | undefined,
+  phase: "phase1" | "phase2",
+): number | undefined {
+  if (!snapshot?.modifierSummary) {
+    return undefined;
+  }
+
+  return snapshot.modifierSummary.rows.reduce(
+    (sum, row) => sum + getDistanceModifierValueFromEntries(row.entries, phase),
+    0,
+  );
+}
+
+function getDistanceModifierValueFromCombatContext(
+  combatContext: ScenarioParticipantCombatContext,
+  phase: "phase1" | "phase2",
+): number {
+  return getDistanceModifierValueFromEntries(combatContext.modifierBuckets.situationObSkill, phase);
+}
+
+function buildDistanceUnavailableModifierResult(input: {
+  combatContext: ScenarioParticipantCombatContext;
+  phase: "phase1" | "phase2";
+  preferredDistances: number[];
+  warning: string;
+  weaponName: string;
+}): {
+  combatContext: ScenarioParticipantCombatContext;
+  detail: CombatRoundAttackDistanceModifierDetail;
+} {
+  return {
+    combatContext: clearDistanceGeneratedObSkillModifierForPhase({
+      combatContext: input.combatContext,
+      phase: input.phase,
+    }),
+    detail: {
+      createdCombatModifierIds: [],
+      preferredDistances: input.preferredDistances,
+      value: 0,
+      warning: input.warning,
+      weaponName: input.weaponName,
+    },
+  };
+}
+
+function resolveAttackDistanceModifier(input: {
+  actionId: string;
+  attackerEncounterParticipant: EncounterSession["participants"][number];
+  attackerScenarioParticipant: ScenarioParticipant;
+  baseCombatContext: ScenarioParticipantCombatContext;
+  defenderEncounterParticipant: EncounterSession["participants"][number];
+  defenderScenarioParticipant: ScenarioParticipant;
+  phase: "phase1" | "phase2";
+  roundState: CombatRoundState;
+  snapshotDistanceModifierValue?: number;
+  weaponName: string;
+}): {
+  combatContext: ScenarioParticipantCombatContext;
+  detail: CombatRoundAttackDistanceModifierDetail;
+  existingDistanceModifierValue: number;
+} {
+  const existingDistanceModifierValue =
+    input.snapshotDistanceModifierValue ??
+    getDistanceModifierValueFromCombatContext(input.baseCombatContext, input.phase);
+  const weaponTemplate = findAttackWeaponTemplate({
+    participant: input.attackerScenarioParticipant,
+    weaponName: input.weaponName,
+  });
+  const preferredDistances = getWeaponPreferredDistances(weaponTemplate ?? {});
+
+  if (preferredDistances.length === 0) {
+    const result = buildDistanceUnavailableModifierResult({
+      combatContext: input.baseCombatContext,
+      phase: input.phase,
+      preferredDistances,
+      warning: "Weapon preferred distance unavailable.",
+      weaponName: input.weaponName,
+    });
+
+    return { ...result, existingDistanceModifierValue };
+  }
+
+  const distanceEdge = getDistanceEdgeBetweenParticipantAliases({
+    participantA: {
+      characterId:
+        input.attackerScenarioParticipant.characterId ??
+        input.attackerEncounterParticipant.characterId,
+      id: input.attackerEncounterParticipant.id,
+      participantId: input.attackerEncounterParticipant.id,
+      scenarioParticipantId: input.attackerScenarioParticipant.id,
+    },
+    participantB: {
+      characterId:
+        input.defenderScenarioParticipant.characterId ??
+        input.defenderEncounterParticipant.characterId,
+      id: input.defenderEncounterParticipant.id,
+      participantId: input.defenderEncounterParticipant.id,
+      scenarioParticipantId: input.defenderScenarioParticipant.id,
+    },
+    state: input.roundState.distanceState,
+  });
+
+  if (!distanceEdge) {
+    const result = buildDistanceUnavailableModifierResult({
+      combatContext: input.baseCombatContext,
+      phase: input.phase,
+      preferredDistances,
+      warning: "Distance unavailable.",
+      weaponName: input.weaponName,
+    });
+
+    return { ...result, existingDistanceModifierValue };
+  }
+
+  const modifier = buildDistanceGeneratedObSkillModifier({
+    actualDistance: distanceEdge.distance,
+    phase: input.phase,
+    preferredDistances,
+    sourceActionId: input.actionId,
+    weaponName: input.weaponName,
+  });
+  const nearestPreferredDistance = getNearestPreferredDistance(
+    distanceEdge.distance,
+    preferredDistances,
+  );
+
+  return {
+    combatContext: applyDistanceGeneratedObSkillModifier({
+      actualDistance: distanceEdge.distance,
+      combatContext: input.baseCombatContext,
+      phase: input.phase,
+      preferredDistances,
+      sourceActionId: input.actionId,
+      weaponName: input.weaponName,
+    }),
+    detail: {
+      actualDistance: distanceEdge.distance,
+      createdCombatModifierIds: modifier ? [modifier.id] : [],
+      modifierId: modifier?.id,
+      nearestPreferredDistance,
+      preferredDistances,
+      value: modifier?.value ?? 0,
+      weaponName: input.weaponName,
+    },
+    existingDistanceModifierValue,
+  };
 }
 
 function getEncounterParticipantsControlledByUser(input: {
@@ -2143,16 +2391,35 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
+      const actionId =
+        body.actionId ?? attackerRoundParticipant?.declaration?.actionId ?? `${body.phase}_attack`;
+      const attackerCombatContext = scenarioParticipantCombatContextSchema.parse(
+        scenarioParticipant.state.combat.combatContext ?? {},
+      );
+      const distanceModifier = resolveAttackDistanceModifier({
+        actionId,
+        attackerEncounterParticipant: encounterParticipant,
+        attackerScenarioParticipant: scenarioParticipant,
+        baseCombatContext: attackerCombatContext,
+        defenderEncounterParticipant,
+        defenderScenarioParticipant,
+        phase: body.phase,
+        roundState,
+        snapshotDistanceModifierValue: getDistanceModifierValueFromSnapshot(
+          latestAttackerSnapshot,
+          body.phase,
+        ),
+        weaponName,
+      });
+      const finalOb =
+        ob - distanceModifier.existingDistanceModifierValue + distanceModifier.detail.value;
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
-        actionId:
-          body.actionId ??
-          attackerRoundParticipant?.declaration?.actionId ??
-          `${body.phase}_attack`,
+        actionId,
         attackerParticipantId: encounterParticipant.id,
         defenderDb,
         defenderParticipantId: defenderEncounterParticipant.id,
-        ob,
+        ob: finalOb,
         openEndedD10s: roll.openEndedD10s,
         phase: body.phase,
         rollD20: roll.rollD20,
@@ -2167,12 +2434,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         command: {
           createdAt: submittedAt,
           createdByUserId: user.id,
+          facts: {
+            createdCombatModifierIds: distanceModifier.detail.createdCombatModifierIds,
+            distanceModifier: distanceModifier.detail,
+          },
         },
         participantId: encounterParticipant.id,
         result: attackResult,
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",
       });
+      const savedParticipant = combatContextsDiffer(
+        attackerCombatContext,
+        distanceModifier.combatContext,
+      )
+        ? await encounterService.updateScenarioParticipantState({
+            participantId: scenarioParticipant.id,
+            scenarioId,
+            state: {
+              ...scenarioParticipant.state,
+              combat: {
+                ...scenarioParticipant.state.combat,
+                combatContext: distanceModifier.combatContext,
+              },
+            },
+          })
+        : undefined;
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -2185,7 +2472,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { attackResult, encounter: savedEncounter };
+      return { attackResult, encounter: savedEncounter, participant: savedParticipant };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat attack.",
@@ -2799,6 +3086,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "back_out_phase_attack" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedAttackCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "roll_attack" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedPhaseInitiativeResolutionCommitCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -2849,6 +3142,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         declarationClearEncounterParticipantIds.size > 0 ||
         removedCombatExperienceCommands.length > 0 ||
         removedBackOutPhaseAttackCommands.length > 0 ||
+        removedAttackCommands.length > 0 ||
         removedPhaseInitiativeResolutionCommitCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
         removedRoundEndParticipantReviewCommands.length > 0 ||
@@ -2904,6 +3198,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                       combat: {
                         ...nextState.combat,
                         combatContext: restoreCombatRoundBackOutCombatContextModifiers({
+                          combatContext: nextState.combat.combatContext,
+                          command,
+                        }),
+                      },
+                    };
+                  }
+
+                  for (const command of removedAttackCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combat: {
+                        ...nextState.combat,
+                        combatContext: removeDistanceGeneratedObSkillModifiers({
                           combatContext: nextState.combat.combatContext,
                           command,
                         }),

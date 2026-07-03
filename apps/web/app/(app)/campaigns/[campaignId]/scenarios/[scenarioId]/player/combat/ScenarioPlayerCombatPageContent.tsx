@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatRoundAttackDistanceModifierDetail,
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
@@ -15,6 +16,7 @@ import {
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
+  getCombatRoundAttackDistanceModifierDetail,
   getCombatRoundAttackResultById,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
@@ -171,6 +173,78 @@ function formatCombatAttackResultLine(input: {
     : `Main: ${input.result.weaponName} OB ${input.result.ob} - DB ${input.result.defenderDb} + roll ${rollText} = ${lookupText}`;
 }
 
+function formatSignedCombatNumber(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value}`;
+}
+
+function formatPreferredDistanceLabel(distances: readonly number[]): string {
+  const normalized = [...new Set(distances)].sort((left, right) => left - right);
+
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+
+  const contiguous = normalized.every((distance, index) =>
+    index === 0 ? true : distance === normalized[index - 1] + 1,
+  );
+
+  return contiguous && normalized.length > 1
+    ? `${normalized[0]}-${normalized[normalized.length - 1]}`
+    : normalized.join(", ");
+}
+
+function formatCombatDistanceModifierDetailLine(
+  detail: CombatRoundAttackDistanceModifierDetail | undefined,
+): string | undefined {
+  if (!detail) {
+    return undefined;
+  }
+
+  const weaponName = detail.weaponName ?? "Weapon";
+  const preferredLabel = formatPreferredDistanceLabel(detail.preferredDistances);
+
+  if (detail.warning) {
+    return `${weaponName} preferred ${preferredLabel} -> ${detail.warning}`;
+  }
+
+  if (detail.actualDistance === undefined) {
+    return undefined;
+  }
+
+  const baseLine = `${weaponName} preferred ${preferredLabel} · actual ${detail.actualDistance}`;
+
+  return detail.value < 0
+    ? `${baseLine} -> Skill/OB ${formatSignedCombatNumber(detail.value)}`
+    : `${baseLine} -> no modifier`;
+}
+
+function buildPlayerCombatDistanceModifierSection(
+  detail: CombatRoundAttackDistanceModifierDetail | undefined,
+):
+  | {
+      calculationLines: readonly string[];
+      resultLine?: string;
+      title: string;
+    }
+  | undefined {
+  const distanceLine = formatCombatDistanceModifierDetailLine(detail);
+
+  if (!distanceLine) {
+    return undefined;
+  }
+
+  return {
+    calculationLines: [distanceLine],
+    resultLine:
+      detail?.value && detail.value < 0
+        ? `Result: Skill/OB ${formatSignedCombatNumber(detail.value)}`
+        : detail?.warning
+          ? `Result: ${detail.warning}`
+          : "Result: no distance modifier",
+    title: "Distance",
+  };
+}
+
 function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult): string {
   if (!result) {
     return "Not rolled";
@@ -277,11 +351,17 @@ function formatCombatParryCalculationLine(
 
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
+  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
 }): {
   attackLine: string;
   proposalLine: string;
+  sections: readonly {
+    calculationLines: readonly string[];
+    resultLine?: string;
+    title: string;
+  }[];
   statusLine: string;
 } {
   const parry = input.resolution.parryResolution;
@@ -296,12 +376,36 @@ function formatCombatPhaseResolutionResultLines(input: {
   const parryResultLine =
     parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
 
+  const attackLine = `${formatCombatAttackResultLine({
+    participantId: input.participantId,
+    result: input.attackResult,
+  })} · Result: ${input.attackResult.tableResult}`;
+  const sections = [
+    {
+      calculationLines: [
+        formatCombatAttackResultLine({
+          participantId: input.participantId,
+          result: input.attackResult,
+        }),
+      ],
+      resultLine: `Result: ${input.attackResult.tableResult}`,
+      title: "To hit",
+    },
+    buildPlayerCombatDistanceModifierSection(input.distanceModifierDetail),
+  ].filter(
+    (
+      section,
+    ): section is {
+      calculationLines: readonly string[];
+      resultLine?: string;
+      title: string;
+    } => Boolean(section),
+  );
+
   return {
-    attackLine: `${formatCombatAttackResultLine({
-      participantId: input.participantId,
-      result: input.attackResult,
-    })} · Result: ${input.attackResult.tableResult}`,
+    attackLine,
     proposalLine: parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`,
+    sections,
     statusLine: parryResultLine
       ? parryLine
       : `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`,
@@ -1392,7 +1496,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
 
     try {
-      const { encounter } = await rollCombatAttackOnServer({
+      const { encounter, participant } = await rollCombatAttackOnServer({
         actionId: selectedActionId || `${currentAttackPhase}_attack`,
         defenderScenarioParticipantId,
         encounterId,
@@ -1403,6 +1507,12 @@ export default function ScenarioPlayerCombatPageContent({
         weaponDamageClass: phaseAttackStats.weaponDamageClass,
         weaponName: phaseAttackStats.weaponName,
       });
+
+      if (participant) {
+        setSelectableParticipants((current) =>
+          current.map((entry) => (entry.id === participant.id ? participant : entry)),
+        );
+      }
 
       setEncounterSession(encounter);
       setError(undefined);
@@ -1658,6 +1768,13 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
+  const selectedCurrentAttackDistanceModifierDetail =
+    combatRoundState && selectedCurrentAttackResult
+      ? getCombatRoundAttackDistanceModifierDetail({
+          result: selectedCurrentAttackResult,
+          state: combatRoundState,
+        })
+      : undefined;
   const selectedCurrentAttackResultPanel = selectedCurrentAttackResult
     ? {
         interpretedResult: selectedCurrentAttackResult.tableResult,
@@ -1672,7 +1789,16 @@ export default function ScenarioPlayerCombatPageContent({
             resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`,
             title: "To hit",
           },
-        ],
+          buildPlayerCombatDistanceModifierSection(selectedCurrentAttackDistanceModifierDetail),
+        ].filter(
+          (
+            section,
+          ): section is {
+            calculationLines: readonly string[];
+            resultLine?: string;
+            title: string;
+          } => Boolean(section),
+        ),
       }
     : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
@@ -1700,6 +1826,13 @@ export default function ScenarioPlayerCombatPageContent({
     selectedCurrentResolutionAttackResult && selectedCurrentPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
           attackResult: selectedCurrentResolutionAttackResult,
+          distanceModifierDetail:
+            combatRoundState && selectedCurrentResolutionAttackResult
+              ? getCombatRoundAttackDistanceModifierDetail({
+                  result: selectedCurrentResolutionAttackResult,
+                  state: combatRoundState,
+                })
+              : undefined,
           participantId: selectedRoundParticipant?.participantId,
           resolution: selectedCurrentPhaseResolutionResult,
         })
@@ -1709,6 +1842,7 @@ export default function ScenarioPlayerCombatPageContent({
         interpretedResult: selectedCurrentPhaseResolutionLines.statusLine,
         rankLabel: selectedCurrentPhaseResolutionLines.attackLine,
         resultLabel: selectedCurrentPhaseResolutionLines.proposalLine,
+        sections: selectedCurrentPhaseResolutionLines.sections,
       }
     : null;
   const currentParryDefenseStats = currentResolutionPhase

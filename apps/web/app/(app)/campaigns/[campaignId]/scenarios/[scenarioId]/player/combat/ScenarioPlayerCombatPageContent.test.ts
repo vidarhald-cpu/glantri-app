@@ -75,6 +75,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatAttackOnServer");
+    expect(source).toContain("const { encounter, participant } = await rollCombatAttackOnServer");
+    expect(source).toContain("entry.id === participant.id ? participant : entry");
     expect(source).toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
     expect(source).toContain("rollCombatParryOnServer");
@@ -101,6 +103,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedRelevantInitiativeRankLabel");
     expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
     expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundAttackDistanceModifierDetail");
+    expect(source).toContain("formatCombatDistanceModifierDetailLine");
+    expect(source).toContain("buildPlayerCombatDistanceModifierSection");
+    expect(source).toContain("distanceModifierDetail");
+    expect(source).toContain('title: "Distance"');
+    expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
     expect(source).toContain("selectedCurrentAttackResult");

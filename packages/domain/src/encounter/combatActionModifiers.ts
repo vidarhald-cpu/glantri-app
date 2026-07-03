@@ -1,11 +1,13 @@
 import {
   scenarioCombatModifierEntrySchema,
+  scenarioParticipantCombatContextSchema,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import {
   calculateDistanceObPenalty,
   combatDistanceSchema,
+  getNearestPreferredDistance,
   type CombatDistance,
 } from "./combatDistance";
 
@@ -34,12 +36,14 @@ export function buildDistanceGeneratedObSkillModifier(input: {
   phase: "phase1" | "phase2";
   preferredDistances: readonly (CombatDistance | number)[];
   sourceActionId?: string;
+  weaponName?: string;
 }): ScenarioCombatModifierEntry | undefined {
   const actualDistance = combatDistanceSchema.parse(input.actualDistance);
   const preferredDistances = input.preferredDistances.map((distance) =>
     combatDistanceSchema.parse(distance),
   );
   const value = calculateDistanceObPenalty(actualDistance, preferredDistances);
+  const nearestPreferredDistance = getNearestPreferredDistance(actualDistance, preferredDistances);
 
   if (value >= 0) {
     return undefined;
@@ -54,7 +58,7 @@ export function buildDistanceGeneratedObSkillModifier(input: {
     durationRounds: 1,
     generated: true,
     id: `generated:distance:${input.phase}:ob-skill`,
-    notes: `Distance ${actualDistance} outside preferred ${preferredLabel}`,
+    notes: `${input.weaponName ? `${input.weaponName} ` : ""}preferred ${preferredLabel} · actual ${actualDistance} · nearest ${nearestPreferredDistance} · Skill/OB ${value}`,
     scope: "until",
     sourceActionId: input.sourceActionId,
     sourcePhase: input.phase,
@@ -138,6 +142,7 @@ export function applyDistanceGeneratedObSkillModifier(input: {
   phase: "phase1" | "phase2";
   preferredDistances: readonly (CombatDistance | number)[];
   sourceActionId?: string;
+  weaponName?: string;
 }): ScenarioParticipantCombatContext {
   const modifier = buildDistanceGeneratedObSkillModifier(input);
   const situationObSkillWithoutDistanceModifier =
@@ -152,6 +157,52 @@ export function applyDistanceGeneratedObSkillModifier(input: {
       situationObSkill: modifier
         ? [...situationObSkillWithoutDistanceModifier, modifier]
         : situationObSkillWithoutDistanceModifier,
+    },
+  };
+}
+
+export function clearDistanceGeneratedObSkillModifierForPhase(input: {
+  combatContext: ScenarioParticipantCombatContext;
+  phase: "phase1" | "phase2";
+}): ScenarioParticipantCombatContext {
+  return {
+    ...input.combatContext,
+    modifierBuckets: {
+      ...input.combatContext.modifierBuckets,
+      situationObSkill: input.combatContext.modifierBuckets.situationObSkill.filter(
+        (entry) =>
+          !(isDistanceGeneratedObSkillModifier(entry) && entry.sourcePhase === input.phase),
+      ),
+    },
+  };
+}
+
+export function removeDistanceGeneratedObSkillModifiers(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  command?: { facts?: Record<string, unknown> };
+  modifierIds?: readonly unknown[];
+}): ScenarioParticipantCombatContext {
+  const currentContext = scenarioParticipantCombatContextSchema.parse(input.combatContext ?? {});
+  const modifierIds = new Set(
+    (
+      input.modifierIds ??
+      (Array.isArray(input.command?.facts?.createdCombatModifierIds)
+        ? input.command.facts.createdCombatModifierIds
+        : [])
+    ).filter((entry): entry is string => typeof entry === "string" && entry.length > 0),
+  );
+
+  if (modifierIds.size === 0) {
+    return currentContext;
+  }
+
+  return {
+    ...currentContext,
+    modifierBuckets: {
+      ...currentContext.modifierBuckets,
+      situationObSkill: currentContext.modifierBuckets.situationObSkill.filter(
+        (entry) => !(modifierIds.has(entry.id) && isDistanceGeneratedObSkillModifier(entry)),
+      ),
     },
   };
 }

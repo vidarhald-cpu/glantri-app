@@ -4,6 +4,8 @@ import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
 import {
   applyDistanceGeneratedObSkillModifier,
   buildDistanceGeneratedObSkillModifier,
+  clearDistanceGeneratedObSkillModifierForPhase,
+  removeDistanceGeneratedObSkillModifiers,
 } from "./combatActionModifiers";
 import {
   calculateDistanceObPenalty,
@@ -16,8 +18,11 @@ import {
   setDistanceBetween,
 } from "./combatDistance";
 import {
+  buildCombatRoundAttackRollResult,
   clearCombatRoundStep,
   combatRoundStateSchema,
+  getCombatRoundAttackDistanceModifierDetail,
+  recordCombatRoundAttackResult,
   setCombatRoundPairDistance,
 } from "./combatRoundManager";
 
@@ -93,9 +98,9 @@ describe("combat distance", () => {
   });
 
   it("calculates out-of-preferred OB penalties", () => {
-    expect(calculateDistanceObPenalty(2, [2])).toBe(0);
-    expect(calculateDistanceObPenalty(4, [2])).toBe(-4);
-    expect(calculateDistanceObPenalty(1, [2])).toBe(-2);
+    expect(calculateDistanceObPenalty(3, [3])).toBe(0);
+    expect(calculateDistanceObPenalty(4, [3])).toBe(-2);
+    expect(calculateDistanceObPenalty(1, [3])).toBe(-4);
     expect(calculateDistanceObPenalty(4, [1, 2])).toBe(-4);
     expect(calculateDistanceObPenalty(1, [3, 4])).toBe(-4);
   });
@@ -104,8 +109,9 @@ describe("combat distance", () => {
     const modifier = buildDistanceGeneratedObSkillModifier({
       actualDistance: 4,
       phase: "phase1",
-      preferredDistances: [2],
+      preferredDistances: [3],
       sourceActionId: "attack_parry",
+      weaponName: "Long sword",
     });
 
     expect(modifier).toMatchObject({
@@ -113,8 +119,11 @@ describe("combat distance", () => {
       id: "generated:distance:phase1:ob-skill",
       sourceActionId: "attack_parry",
       sourcePhase: "phase1",
-      value: -4,
+      value: -2,
     });
+    expect(modifier?.notes).toContain("Long sword preferred 3");
+    expect(modifier?.notes).toContain("actual 4");
+    expect(modifier?.notes).toContain("Skill/OB -2");
   });
 
   it("does not create a generated modifier inside preferred range", () => {
@@ -154,6 +163,88 @@ describe("combat distance", () => {
 
     expect(nextContext.modifierBuckets.situationObSkill).toHaveLength(1);
     expect(nextContext.modifierBuckets.situationObSkill[0]?.value).toBe(-4);
+  });
+
+  it("clears generated distance modifiers by phase or attack command facts", () => {
+    const context = applyDistanceGeneratedObSkillModifier({
+      actualDistance: 5,
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      phase: "phase1",
+      preferredDistances: [3],
+      sourceActionId: "attack_parry",
+      weaponName: "Long sword",
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toHaveLength(1);
+    expect(
+      clearDistanceGeneratedObSkillModifierForPhase({
+        combatContext: context,
+        phase: "phase1",
+      }).modifierBuckets.situationObSkill,
+    ).toEqual([]);
+    expect(
+      removeDistanceGeneratedObSkillModifiers({
+        combatContext: context,
+        command: {
+          facts: {
+            createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
+          },
+        },
+      }).modifierBuckets.situationObSkill,
+    ).toEqual([]);
+  });
+
+  it("stores and reads command-backed distance modifier details for attack results", () => {
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "attacker",
+      defenderDb: 8,
+      defenderParticipantId: "defender",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:00:00.000Z",
+      weaponName: "Long sword",
+    });
+    const state = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+        facts: {
+          createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
+          distanceModifier: {
+            actualDistance: 5,
+            createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
+            modifierId: "generated:distance:phase1:ob-skill",
+            nearestPreferredDistance: 3,
+            preferredDistances: [3],
+            value: -4,
+            weaponName: "Long sword",
+          },
+        },
+      },
+      participantId: "attacker",
+      result: attackResult,
+      state: combatRoundStateSchema.parse({
+        currentStep: "phase_1_actions",
+        participants: [
+          { label: "Attacker", participantId: "attacker" },
+          { label: "Defender", participantId: "defender" },
+        ],
+        roundNumber: 1,
+      }),
+      submittedBy: "gm",
+    });
+
+    expect(getCombatRoundAttackDistanceModifierDetail({ result: attackResult, state })).toEqual({
+      actualDistance: 5,
+      createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
+      modifierId: "generated:distance:phase1:ob-skill",
+      nearestPreferredDistance: 3,
+      preferredDistances: [3],
+      value: -4,
+      weaponName: "Long sword",
+    });
   });
 
   it("lazily creates one default edge for each active participant pair", () => {

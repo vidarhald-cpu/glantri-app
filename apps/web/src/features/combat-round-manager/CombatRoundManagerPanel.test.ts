@@ -179,6 +179,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source).toContain("getCombatRoundAttackDistanceModifierDetail");
+    expect(source).toContain("formatCombatDistanceModifierDetailLine");
+    expect(source).toContain("buildCombatDistanceModifierSection");
+    expect(source).toContain("distanceModifierDetail");
+    expect(source).toContain('title: "Distance"');
+    expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
@@ -373,6 +379,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("Effects: ${damageResult.review.additionalEffects");
     expect(source).toContain("rollCombatAttackOnServer({");
+    expect(source).toContain("const { encounter: nextEncounter, participant }");
+    expect(source).toContain("[participant.id]: participant");
+    expect(source).toContain("onScenarioParticipantsUpdated?.([participant])");
     expect(source).toContain("defenderScenarioParticipantId: targetScenarioParticipant.id");
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");

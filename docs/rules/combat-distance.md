@@ -30,13 +30,18 @@ read-only text in a small right-side Target-row meta area. Player Combat shows t
 distance for the player's selected visible target and does not expose the full matrix or editing
 controls in this slice.
 
-Using a weapon outside its preferred distance creates an OB/Skill penalty:
+During live A1/A2 attack resolution, using a weapon outside its preferred distance creates a
+generated Skill/OB modifier for that attack:
 
 - penalty is `-2` per range step outside the nearest preferred distance
-- preferred `[2]`, actual `4` gives `-4`
-- preferred `[2]`, actual `1` gives `-2`
+- preferred `[3]`, actual `3` gives no modifier
+- preferred `[3]`, actual `4` gives `-2`
+- preferred `[3]`, actual `1` gives `-4`
 - preferred `[1, 2]`, actual `4` gives `-4`
+- preferred `[3, 4]`, actual `1` gives `-4`
 
-Penalties are represented as generated combat modifier rows, not by mutating base OB. Full
-coordinates, facing, pathing, movement conflict resolution, and automatic round-end distance
-changes are future work.
+The generated row is a phase-scoped combat action modifier in the Skill/OB bucket. It is included
+once in the attack OB total and is command-backed so Clear/undo removes it with the attack command.
+Distance modifiers apply to attack rolls only; they do not affect DB/Parry, damage lookup,
+initiative, critical rolls, armor, or base weapon OB. Full coordinates, facing, pathing, movement
+conflict resolution, and automatic round-end distance changes are future work.

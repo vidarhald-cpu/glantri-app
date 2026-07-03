@@ -256,10 +256,15 @@ export async function rollCombatAttackOnServer(input: {
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
   weaponName?: string;
-}): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
+}): Promise<{
+  attackResult: CombatRoundAttackRollResult;
+  encounter: EncounterSession;
+  participant?: ScenarioParticipant;
+}> {
   const payload = await sendJson<{
     attackResult: CombatRoundAttackRollResult;
     encounter: EncounterSession;
+    participant?: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
     body: JSON.stringify({
       actionId: input.actionId,

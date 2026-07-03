@@ -5,6 +5,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackDirection,
+  CombatRoundAttackDistanceModifierDetail,
   CombatRoundAttackRollResult,
   CombatRoundCombatExperienceResult,
   CombatRoundDamageArmorCoverage,
@@ -51,6 +52,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
+  getCombatRoundAttackDistanceModifierDetail,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
@@ -719,6 +721,68 @@ function formatSignedCombatNumber(value: number): string {
   return `${value >= 0 ? "+" : ""}${value}`;
 }
 
+function formatAttackDistancePreferenceLabel(distances: readonly number[]): string {
+  const normalized = [...new Set(distances)].sort((left, right) => left - right);
+
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+
+  const contiguous = normalized.every((distance, index) =>
+    index === 0 ? true : distance === normalized[index - 1] + 1,
+  );
+
+  return contiguous && normalized.length > 1
+    ? `${normalized[0]}-${normalized[normalized.length - 1]}`
+    : normalized.join(", ");
+}
+
+function formatCombatDistanceModifierDetailLine(
+  detail: CombatRoundAttackDistanceModifierDetail | undefined,
+): string | undefined {
+  if (!detail) {
+    return undefined;
+  }
+
+  const weaponName = detail.weaponName ?? "Weapon";
+  const preferredLabel = formatAttackDistancePreferenceLabel(detail.preferredDistances);
+
+  if (detail.warning) {
+    return `${weaponName} preferred ${preferredLabel} -> ${detail.warning}`;
+  }
+
+  if (detail.actualDistance === undefined) {
+    return undefined;
+  }
+
+  const baseLine = `${weaponName} preferred ${preferredLabel} · actual ${detail.actualDistance}`;
+
+  return detail.value < 0
+    ? `${baseLine} -> Skill/OB ${formatSignedCombatNumber(detail.value)}`
+    : `${baseLine} -> no modifier`;
+}
+
+function buildCombatDistanceModifierSection(
+  detail: CombatRoundAttackDistanceModifierDetail | undefined,
+): CombatActionResultSection | undefined {
+  const distanceLine = formatCombatDistanceModifierDetailLine(detail);
+
+  if (!distanceLine) {
+    return undefined;
+  }
+
+  return {
+    calculationLines: [distanceLine],
+    resultLine:
+      detail?.value && detail.value < 0
+        ? `Result: Skill/OB ${formatSignedCombatNumber(detail.value)}`
+        : detail?.warning
+          ? `Result: ${detail.warning}`
+          : "Result: no distance modifier",
+    title: "Distance",
+  };
+}
+
 function formatCombatParryModifierBreakdown(input: {
   fallbackAdjustment: number;
   modifiers?: readonly CombatRoundParryModifierBreakdownEntry[];
@@ -1013,6 +1077,7 @@ function formatCombatCriticalResultLine(
 
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
+  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
 }): {
@@ -1100,6 +1165,11 @@ function formatCombatPhaseResolutionResultLines(input: {
       title: "Damage",
     },
   ];
+  const distanceSection = buildCombatDistanceModifierSection(input.distanceModifierDetail);
+
+  if (distanceSection) {
+    sections.splice(1, 0, distanceSection);
+  }
 
   if (criticalCalculationLine || criticalResultLine) {
     sections.push({
@@ -3924,6 +3994,12 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined);
+  const inspectorDisplayAttackDistanceModifierDetail = inspectorDisplayAttackResult
+    ? getCombatRoundAttackDistanceModifierDetail({
+        result: inspectorDisplayAttackResult,
+        state: selectedTimelineRoundState,
+      })
+    : undefined;
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
@@ -3933,6 +4009,12 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined);
+  const inspectorResolutionAttackDistanceModifierDetail = inspectorResolutionAttackResult
+    ? getCombatRoundAttackDistanceModifierDetail({
+        result: inspectorResolutionAttackResult,
+        state: selectedTimelineRoundState,
+      })
+    : undefined;
   const inspectorDisplayPhaseResolutionResult =
     inspectorSnapshot?.phaseResolutionResult ??
     (inspectorResolutionAttackResult
@@ -4246,6 +4328,7 @@ export default function CombatRoundManagerPanel({
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
           attackResult: inspectorResolutionAttackResult,
+          distanceModifierDetail: inspectorResolutionAttackDistanceModifierDetail,
           participantId: inspector.participant?.participantId,
           resolution: inspectorDisplayPhaseResolutionResult,
         })
@@ -4271,6 +4354,16 @@ export default function CombatRoundManagerPanel({
               result: inspectorDisplayAttackResult,
             }),
             resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
+            sections: [
+              {
+                calculationLines: [formatCombatToHitCalculationLine(inspectorDisplayAttackResult)],
+                resultLine: `Result: ${formatCombatAttackTableResultLabel(
+                  inspectorDisplayAttackResult.tableResult,
+                )}`,
+                title: "To hit",
+              },
+              buildCombatDistanceModifierSection(inspectorDisplayAttackDistanceModifierDetail),
+            ].filter((section): section is CombatActionResultSection => Boolean(section)),
           }
         : inspectorNoPhaseAttack
           ? {
@@ -5664,7 +5757,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const { encounter: nextEncounter } = await rollCombatAttackOnServer({
+      const { encounter: nextEncounter, participant } = await rollCombatAttackOnServer({
         actionId: inspectorDraft.actionId || `${phase}_attack`,
         defenderDb,
         defenderScenarioParticipantId: targetScenarioParticipant.id,
@@ -5679,6 +5772,14 @@ export default function CombatRoundManagerPanel({
       const nextRoundState = normalizeCombatRoundManagerSelection({
         state: initializeCombatRoundState({ encounter: nextEncounter }),
       });
+
+      if (participant) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          [participant.id]: participant,
+        }));
+        onScenarioParticipantsUpdated?.([participant]);
+      }
 
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
