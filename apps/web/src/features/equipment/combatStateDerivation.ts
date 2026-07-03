@@ -53,6 +53,9 @@ export interface DerivedCombatWeaponRow {
   slotLabel: string;
   modeLabel: string;
   currentItemLabel: string;
+  damageClass1?: string | null;
+  damageClass2?: string | null;
+  damageClass3?: string | null;
   initiative: DerivedCombatValue;
   ob1: DerivedCombatValue;
   dmb1: DerivedCombatValue;
@@ -389,6 +392,7 @@ function buildThrowingWeaponRow(input: {
     slotLabel: "Throwing weapon",
     modeLabel: "Thrown",
     currentItemLabel: getItemLabel(input.state, input.item),
+    damageClass1: mode.damageClass,
     initiative: getDerivedInitiativeValue({
       characterInputs: input.characterInputs,
       template: input.template,
@@ -462,6 +466,9 @@ function buildWeaponRow(input: {
         : input.template
           ? getItemLabel(input.state, input.item)
           : "None",
+    damageClass1: mode1?.damageClass,
+    damageClass2: mode2?.damageClass,
+    damageClass3: mode3?.damageClass,
     initiative: getDerivedInitiativeValue({
       characterInputs: input.characterInputs,
       template: input.template,
@@ -562,6 +569,7 @@ function buildBrawlingSummaryRow(input: {
     slotLabel: "Brawling",
     modeLabel: "Unarmed",
     currentItemLabel: "Brawling",
+    damageClass1: mode1?.damageClass,
     initiative: "—",
     attack1: "—",
     ob1: getDerivedObValue({
@@ -618,6 +626,7 @@ function buildShieldRow(input: {
     slotLabel: "Shield",
     modeLabel: "Shield",
     currentItemLabel: getItemLabel(input.state, input.item),
+    damageClass1: mode1?.damageClass,
     initiative: input.shieldTemplate.initiative ?? "—",
     attack1: getAttackLabel(mode1),
     ob1: mode1?.ob ?? "—",

@@ -1,5 +1,6 @@
 import type {
   CombatRoundAttackRollResult,
+  CombatRoundCombatExperienceResult,
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
@@ -92,6 +93,48 @@ export async function submitCombatDeclarationOnServer(input: {
   return payload;
 }
 
+export async function rollCombatExperienceOnServer(input: {
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  combatExperience: CombatRoundCombatExperienceResult;
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    combatExperience: CombatRoundCombatExperienceResult;
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-combat-experience`, {
+    body: JSON.stringify({
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function setCombatExperienceDifficultyOnServer(input: {
+  difficulty: number;
+  encounterId: string;
+}): Promise<{
+  difficulty: number;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    difficulty: number;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/combat-experience-difficulty`, {
+    body: JSON.stringify({
+      difficulty: input.difficulty,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;
@@ -121,6 +164,8 @@ export async function rollCombatAttackOnServer(input: {
   ob?: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
   weaponName?: string;
 }): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
   const payload = await sendJson<{
@@ -134,6 +179,8 @@ export async function rollCombatAttackOnServer(input: {
       ob: input.ob,
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
+      weaponCriticalCode: input.weaponCriticalCode,
+      weaponDamageClass: input.weaponDamageClass,
       weaponName: input.weaponName,
     }),
     method: "POST",

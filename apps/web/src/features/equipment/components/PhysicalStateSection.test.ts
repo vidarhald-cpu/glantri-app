@@ -27,7 +27,9 @@ describe("PhysicalStateSection", () => {
 
     expect(source).toContain("physicalStatePanelStyle");
     expect(source).toContain('background: "#fbfaf5"');
-    expect(source).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))"');
+    expect(source).toContain(
+      'gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))"',
+    );
     expect(source).toContain('alignItems: "start"');
   });
 
@@ -67,8 +69,11 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("sourceEventId: draft.sourceEventId ?? createLocalId");
     expect(source).toContain("entry.eventNumber");
     expect(source).toContain('gridTemplateColumns: "4rem minmax(14rem, 1fr) auto"');
-    expect(source).toContain('gridTemplateColumns:');
-    expect(source).toContain("position: \"sticky\"");
+    expect(source).toContain("gridTemplateColumns:");
+    expect(source).toContain('position: "sticky"');
+    expect(source).toContain("parseRoundDurationValue");
+    expect(source).toContain("duration: parseRoundDurationValue(entry.duration)");
+    expect(source).toContain("duration: parseRoundDurationValue(event.target.value)");
     expect(source).not.toContain("Add combat effect event");
     expect(source).not.toContain("Add effect row");
     expect(source).not.toContain("Source/Event label");

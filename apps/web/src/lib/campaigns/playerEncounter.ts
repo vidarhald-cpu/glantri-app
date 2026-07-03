@@ -56,6 +56,7 @@ export interface PlayerEncounterParryLegalityResult {
 }
 
 export interface PlayerEncounterParticipantAccessInput {
+  allowedParticipantIds?: readonly string[];
   currentUserId?: string;
   isGameMaster: boolean;
   participants: ScenarioParticipant[];
@@ -353,13 +354,18 @@ export function getPlayerEncounterAccessibleParticipants(
 export function getPlayerEncounterOpponentParticipants(
   input: PlayerEncounterParticipantAccessInput,
 ): PlayerEncounterOpponentOption[] {
+  const allowedParticipantIds = input.allowedParticipantIds
+    ? new Set(input.allowedParticipantIds)
+    : undefined;
+
   if (!input.isGameMaster) {
     return (input.projectionVisibleParticipants ?? [])
       .filter(
         (participant) =>
           participant.isActive &&
           participant.id !== input.selectedParticipantId &&
-          !participant.isControlledByPlayer,
+          !participant.isControlledByPlayer &&
+          (!allowedParticipantIds || allowedParticipantIds.has(participant.id)),
       )
       .map((participant) => ({
         displayName: participant.displayName,
@@ -373,7 +379,7 @@ export function getPlayerEncounterOpponentParticipants(
         return false;
       }
 
-      return true;
+      return !allowedParticipantIds || allowedParticipantIds.has(participant.id);
     })
     .map((participant) => ({
       displayName: participant.snapshot.displayName,

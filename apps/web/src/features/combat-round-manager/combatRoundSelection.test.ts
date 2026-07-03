@@ -6,6 +6,7 @@ import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/dom
 import {
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
+  isSelectedCombatRoundStepExecutable,
   normalizeCombatRoundManagerSelection,
 } from "./combatRoundSelection";
 
@@ -73,6 +74,36 @@ describe("combat round manager selection", () => {
     });
   });
 
+  it("treats non-current inspected phase cells as inspection-only", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "bottom",
+      selectedStep: "phase_2_actions" as const,
+    };
+
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "middle",
+        state,
+        step: "phase_1_actions",
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "bottom",
+        state,
+        step: "phase_2_actions",
+      }),
+    ).toBe(false);
+  });
+
   it("keeps current task enabled for parry and damage cursors", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
 
@@ -111,6 +142,28 @@ describe("combat round manager selection", () => {
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [
+          {
+            afterCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            beforeCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            createdAt: "2026-01-01T00:01:00.000Z",
+            facts: {},
+            id: "command-middle-a1",
+            participantId: "middle",
+            phase: "phase1",
+            roundNumber: existing.roundNumber,
+            step: "A1",
+            type: "skip_phase_action",
+          },
+        ],
         currentCursor: undefined,
         currentStep: "phase_1_actions",
         phaseResolutionCursor: {
@@ -132,6 +185,41 @@ describe("combat round manager selection", () => {
     expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
       participantId: "middle",
       step: "phase_1_actions",
+    });
+  });
+
+  it("ignores a bare stale phase cursor in a fresh no-command encounter state", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedEncounter = encounter({
+      combatRoundState: {
+        ...existing,
+        commands: [],
+        currentCursor: undefined,
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "middle",
+          phase: "phase1",
+          substep: "attack",
+        },
+        phaseResolutionResults: [],
+        phaseResolutionStatuses: {},
+        selectedParticipantId: "middle",
+        selectedStep: "phase_1_actions",
+        stepSnapshots: [],
+      },
+    });
+    const state = initializeCombatRoundState({ encounter: refreshedEncounter });
+
+    expect(state.currentStep).toBe("select_actions");
+    expect(state.currentCursor).toEqual({
+      participantId: "top",
+      roundNumber: existing.roundNumber,
+      step: "DE",
+    });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
+      participantId: "top",
+      step: "select_actions",
     });
   });
 
@@ -321,6 +409,45 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedStep).toBe("initiative_phase_1");
   });
 
+  it("uses the SU current cursor after refresh instead of stale manual inspection", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedState = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "SU" as const,
+      },
+      currentStep: "round_summary" as const,
+      selectedParticipantId: "top",
+      selectedStep: "round_summary" as const,
+    };
+    const normalized = normalizeCombatRoundManagerSelection({
+      manualSelection: {
+        participantId: "top",
+        step: "round_summary",
+      },
+      state: refreshedState,
+    });
+
+    expect(normalized.selectedParticipantId).toBe("middle");
+    expect(normalized.selectedStep).toBe("round_summary");
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "middle",
+        state: normalized,
+        step: "round_summary",
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "top",
+        state: normalized,
+        step: "round_summary",
+      }),
+    ).toBe(false);
+  });
+
   it("uses fallback-undo currentCursor after clearing an empty A1 cell", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedState = {
@@ -350,19 +477,24 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedStep).toBe("initiative_phase_1");
   });
 
-  it("keeps command-undo A1 selection after refresh despite stale manual inspection", () => {
+  it("repairs unsupported A1 selection after refresh despite stale manual inspection", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [],
         currentCursor: {
           participantId: "middle",
           roundNumber: existing.roundNumber,
           step: "A1" as const,
         },
         currentStep: "phase_1_actions" as const,
+        phaseResolutionCursor: undefined,
+        phaseResolutionResults: [],
+        phaseResolutionStatuses: {},
         selectedParticipantId: "bottom",
         selectedStep: "initiative_phase_1" as const,
+        stepSnapshots: [],
       },
     });
     const refreshedState = initializeCombatRoundState({ encounter: refreshedEncounter });
@@ -378,8 +510,9 @@ describe("combat round manager selection", () => {
       state: refreshedState,
     });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("phase_1_actions");
+    expect(normalized.currentCursor).toMatchObject({ participantId: "top", step: "DE" });
+    expect(normalized.selectedParticipantId).toBe("top");
+    expect(normalized.selectedStep).toBe("select_actions");
   });
 
   it("keeps command-undo P1 selection after refresh despite stale manual inspection", () => {
@@ -387,6 +520,28 @@ describe("combat round manager selection", () => {
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [
+          {
+            afterCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "P1",
+            },
+            beforeCursor: {
+              participantId: "top",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            createdAt: "2026-01-01T00:01:00.000Z",
+            facts: {},
+            id: "command-top-attack",
+            participantId: "top",
+            phase: "phase1",
+            roundNumber: existing.roundNumber,
+            step: "A1",
+            type: "roll_attack",
+          },
+        ],
         currentCursor: {
           participantId: "middle",
           roundNumber: existing.roundNumber,

@@ -75,6 +75,24 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 35,
     section: "Combat",
     title: "Glantri Combat To Hit / Damage"
+  },
+  {
+    audience: "GM reviewers",
+    description: "Manual reference for table-driven critical results, effect templates, roll requirements, and future D1/D2 integration.",
+    fileName: "combat-critical-effects.md",
+    id: "combat-critical-effects",
+    order: 40,
+    section: "Combat",
+    title: "Glantri Critical Effects"
+  },
+  {
+    audience: "GM reviewers",
+    description: "Manual reference for combat-start Combat Experience rolls, result bands, modifiers, durations, and current implementation boundaries.",
+    fileName: "combat-experience.md",
+    id: "combat-experience",
+    order: 45,
+    section: "Combat",
+    title: "Combat Experience"
   }
 ];
 

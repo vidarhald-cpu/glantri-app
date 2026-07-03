@@ -75,9 +75,11 @@ export {
   loadScenarioEncounters,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
+  rollCombatExperienceOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  setCombatExperienceDifficultyOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer

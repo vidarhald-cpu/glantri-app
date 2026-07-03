@@ -398,4 +398,65 @@ describe("playerEncounter", () => {
       }).map((participant) => participant.id),
     ).toEqual(["npc-1"]);
   });
+
+  it("limits GM target options to active encounter participants when provided", () => {
+    const participants = [
+      createScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "pc-1",
+        role: "player_character",
+        sourceType: "character",
+      }),
+      createScenarioParticipant({
+        id: "npc-1",
+        role: "npc",
+        sourceType: "entity",
+      }),
+      createScenarioParticipant({
+        id: "stale-scyrian",
+        role: "npc",
+        sourceType: "entity",
+      }),
+    ];
+
+    expect(
+      getPlayerEncounterOpponentParticipants({
+        allowedParticipantIds: ["pc-1", "npc-1"],
+        currentUserId: "gm-1",
+        isGameMaster: true,
+        participants,
+        selectedParticipantId: "pc-1",
+      }).map((participant) => participant.id),
+    ).toEqual(["npc-1"]);
+  });
+
+  it("limits player target options to visible active encounter participants when provided", () => {
+    expect(
+      getPlayerEncounterOpponentParticipants({
+        allowedParticipantIds: ["pc-1", "npc-1"],
+        currentUserId: "player-1",
+        isGameMaster: false,
+        participants: [],
+        projectionVisibleParticipants: [
+          {
+            displayName: "NPC 1",
+            id: "npc-1",
+            isActive: true,
+            isControlledByPlayer: false,
+            role: "npc",
+            sourceType: "entity",
+          },
+          {
+            displayName: "Stale Scyrian",
+            id: "stale-scyrian",
+            isActive: true,
+            isControlledByPlayer: false,
+            role: "npc",
+            sourceType: "entity",
+          },
+        ],
+        selectedParticipantId: "pc-1",
+      }).map((participant) => participant.id),
+    ).toEqual(["npc-1"]);
+  });
 });

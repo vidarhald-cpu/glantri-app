@@ -31,7 +31,7 @@ export const COMBAT_ARMOR_MODIFIER_RULE_TABLE = {
   id: "combat-armor-modifier",
   notes: [
     "Lookup armor damage modifier by weapon armor class and defender armor class.",
-    "The modifier participates in the damage lookup total.",
+    "The modifier is applied after table damage is read and also adjusts minimum damage.",
   ],
   rows: [
     {

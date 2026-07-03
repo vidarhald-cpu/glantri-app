@@ -27,11 +27,11 @@ const combatToHitHumanNotes = [
   "10 or lower misses.",
   "11 is a grazing hit.",
   "12 or higher hits.",
-  "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM + armor modifier.",
-  "The damage lookup row gives final table damage, critical grade, and minimum damage.",
-  "Grazing damage rolls 1d of the table damage from lookup 12 plus the same DMB, DM, and armor modifier.",
+  "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM.",
+  "The damage lookup row gives table damage, critical grade, and minimum damage before armor.",
+  "Grazing damage rolls 1d of the armor-adjusted table damage from lookup 12 plus the same DMB and DM.",
   "D1/D2 damage proposals resolve hit location with a closed 1d20 before damage is committed.",
-  "Armor modifier participates in the damage lookup when a safe armor source is available.",
+  "Armor coverage is applied after table damage using reviewed hit location and front/back direction.",
 ];
 
 export default function TablesAdminPage() {
@@ -206,7 +206,7 @@ function CombatArmorModifierRuleTablePanel(props: {
   return (
     <AdminPanel
       title={props.table.title}
-      subtitle="Damage lookup modifier by weapon armor class and defender armor class."
+      subtitle="Post-table damage modifier by weapon armor class and defender armor class."
     >
       <div style={{ display: "grid", gap: "0.85rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
