@@ -121,6 +121,52 @@ describe("PlayerCombatPanels", () => {
     expect(phase2ObRow?.total).toBe(1);
   });
 
+  it("shows generated distance modifiers in the phase Skill/OB bucket", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [
+          {
+            generated: true,
+            id: "generated:distance:phase1:ob-skill",
+            notes: "distance: Broad sword preferred 2 · actual 3 · nearest 2 · Skill/OB -2",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            sourceRule: "distance-ob-skill-phase1",
+            value: -2,
+          },
+        ],
+      },
+    };
+
+    const phase1Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase1",
+    });
+    const phase2Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase2",
+    });
+    const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
+
+    expect(phase1ObRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          id: "generated:distance:phase1:ob-skill",
+          notes: expect.stringContaining("Broad sword preferred 2"),
+          value: -2,
+        }),
+      ],
+      label: "Skill/OB",
+      total: -2,
+    });
+    expect(phase2ObRow?.entries).toEqual([]);
+    expect(phase2ObRow?.total).toBe(0);
+  });
+
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
     const source = readSource();
 

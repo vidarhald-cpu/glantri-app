@@ -165,6 +165,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildInspectorDraftKey");
     expect(source).toContain("buildInspectorPhaseContexts");
     expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
+    expect(source).toContain(
+      "currentContext: declaration\n      ? (declaration.combatContext ?? scopedCombat?.combatContext)",
+    );
+    expect(source).toContain(
+      "currentContext: declaration\n        ? (declaration.combatContext ?? scopedCombat?.combatContext)",
+    );
     expect(source).toContain("applyDefaultPlayerCombatPhaseContext");
     expect(source).toContain(
       "buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration,",

@@ -2376,6 +2376,137 @@ describe("scenarios route contract", () => {
     ).toEqual([expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 })]);
   });
 
+  it("generates Scyrian's Broad sword distance row when the browser submits a scenario target id", async () => {
+    const encounterParticipants = [
+      {
+        ...makeCombatEncounter().participants[0],
+        characterId: "character-gladiator",
+        id: "gladiator",
+        label: "The Gladiator",
+        scenarioParticipantId: "scenario-gladiator",
+      },
+      {
+        ...makeCombatEncounter().participants[0],
+        characterId: "character-scyrian",
+        id: "scyrian",
+        label: "Scyrian cavalry guy",
+        scenarioParticipantId: "scenario-scyrian",
+      },
+    ];
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const roundState = {
+      ...initializeCombatRoundState({ encounter: baseEncounter }),
+      distanceState: setDistanceBetween({
+        distance: 3,
+        participantAId: "gladiator",
+        participantBId: "scyrian",
+        source: "gm_set",
+      }),
+    };
+    const scyrianParticipant = makeCombatScenarioParticipant({
+      characterId: "character-scyrian",
+      controlledByUserId: "other-player",
+      id: "scenario-scyrian",
+      role: "non_player_character",
+      snapshot: {
+        displayName: "Scyrian cavalry guy",
+        equipmentState: makeWeaponEquipmentState({
+          characterId: "character-scyrian",
+          name: "Broad sword",
+          range: "2.0",
+        }),
+      },
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participant: scyrianParticipant,
+      participants: [
+        makeCombatScenarioParticipant({
+          characterId: "character-gladiator",
+          id: "scenario-gladiator",
+          snapshot: {
+            displayName: "The Gladiator",
+          },
+        }),
+        scyrianParticipant,
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "scenario-gladiator",
+          },
+        },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
+        },
+        scenarioParticipantId: "scenario-scyrian",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updateStateCall =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const persistedCombatContext = updateStateCall.state.combat.combatContext;
+    const persistedDeclaration =
+      updatedEncounter.combatRoundState.participants[1].declaration;
+
+    expect(updateStateCall).toMatchObject({
+      participantId: "scenario-scyrian",
+    });
+    expect(persistedDeclaration.phaseContexts.phase1.targetParticipantId).toBe(
+      "scenario-gladiator",
+    );
+    expect(persistedCombatContext.modifierBuckets.situationDb).toEqual([
+      attackParryDbParryModifier,
+    ]);
+    expect(persistedCombatContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        generated: true,
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining(
+          "distance: Broad sword preferred 2 · actual 3 · nearest 2 · Skill/OB -2",
+        ),
+        sourcePhase: "phase1",
+        sourceRule: "distance-ob-skill-phase1",
+        value: -2,
+      }),
+    ]);
+    expect(persistedDeclaration.combatContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 }),
+    ]);
+  });
+
   it("allows a player to complete an incomplete submitted combat declaration during DE", async () => {
     setupCombatDeclarationRoute({
       encounter: {

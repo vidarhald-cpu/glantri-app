@@ -440,7 +440,7 @@ function buildInspectorPhaseContexts(
   const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
     baseContext: declaration?.combatContext ?? scopedCombat?.combatContext,
     currentContext: declaration
-      ? (scopedCombat?.combatContext ?? declaration.combatContext)
+      ? (declaration.combatContext ?? scopedCombat?.combatContext)
       : scopedCombat?.combatContext,
   });
 
@@ -593,7 +593,7 @@ function buildDeclarationDraft(
     combatContext: mergeCombatContextWithCurrentModifierBuckets({
       baseContext: declaration?.combatContext ?? scopedCombat?.combatContext,
       currentContext: declaration
-        ? (scopedCombat?.combatContext ?? declaration.combatContext)
+        ? (declaration.combatContext ?? scopedCombat?.combatContext)
         : scopedCombat?.combatContext,
     }),
     movementId: (declaration?.movementId ??
