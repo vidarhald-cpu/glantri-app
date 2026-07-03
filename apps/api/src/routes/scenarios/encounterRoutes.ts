@@ -10,6 +10,7 @@ import {
 import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
+  backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInitiativeResult,
   canClearCombatRoundStep,
@@ -43,6 +44,7 @@ import {
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
   removeCombatRoundCombatExperienceEffects,
+  restoreCombatRoundBackOutCombatContextModifiers,
   removeCombatRoundCommittedDamageEffects,
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
@@ -287,6 +289,19 @@ function parseCombatExperienceDifficultyBody(body: unknown): {
   }
 
   return { difficulty };
+}
+
+function parsePhaseAttackBackOutBody(body: unknown): {
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Phase attack back-out payload");
+  const parsed = parseParticipantCommandBody(value, "Phase attack back-out payload");
+
+  return {
+    ...parsed,
+    phase: combatRoundPhaseSchema.parse(value.phase),
+  };
 }
 
 function parseOptionalInteger(value: unknown, label: string): number | undefined {
@@ -1349,6 +1364,133 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post(
+    "/encounters/:encounterId/combat-round/back-out-phase-attack",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const body = parsePhaseAttackBackOutBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const scenarioParticipant = scenarioParticipants.find(
+          (participant) => participant.id === body.scenarioParticipantId,
+        );
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const encounterParticipant = scenarioParticipant
+          ? membership.participants.find(
+              (participant) =>
+                participant.scenarioParticipantId === scenarioParticipant.id ||
+                participant.id === scenarioParticipant.id ||
+                (scenarioParticipant.characterId &&
+                  participant.characterId === scenarioParticipant.characterId),
+            )
+          : undefined;
+
+        if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+
+        if (
+          access.mode !== "gm" &&
+          (scenarioParticipant.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const roundState = initializeCombatRoundState({ encounter });
+        const backedOut = backOutCombatRoundPhaseAttack({
+          combatContext: scenarioParticipant.state.combat.combatContext,
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          participantId: encounterParticipant.id,
+          phase: body.phase,
+          state: roundState,
+          updatedAt: submittedAt,
+          visibility: encounter.roleplayState?.visibility,
+        });
+        const savedParticipant = await encounterService.updateScenarioParticipantState({
+          participantId: scenarioParticipant.id,
+          scenarioId,
+          state: {
+            ...scenarioParticipant.state,
+            combat: {
+              ...scenarioParticipant.state.combat,
+              combatContext: backedOut.combatContext,
+            },
+          },
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: backedOut.state,
+            currentRound: backedOut.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          command: backedOut.command,
+          encounter: savedEncounter,
+          participant: savedParticipant,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to back out of phase attack.",
+        });
+      }
+    },
+  );
+
   app.post("/encounters/:encounterId/combat-round/roll-attack", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -2166,6 +2308,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_combat_experience" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedBackOutPhaseAttackCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "back_out_phase_attack" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedRoundEndParticipantReviewCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -2209,6 +2357,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const updatedParticipants =
         declarationClearEncounterParticipantIds.size > 0 ||
         removedCombatExperienceCommands.length > 0 ||
+        removedBackOutPhaseAttackCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
         removedRoundEndParticipantReviewCommands.length > 0 ||
         removedRoundEndHealthCheckCommands.length > 0
@@ -2250,6 +2399,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                         combatEffects: nextState.combatEffects,
                         command,
                       }),
+                    };
+                  }
+
+                  for (const command of removedBackOutPhaseAttackCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combat: {
+                        ...nextState.combat,
+                        combatContext: restoreCombatRoundBackOutCombatContextModifiers({
+                          combatContext: nextState.combat.combatContext,
+                          command,
+                        }),
+                      },
                     };
                   }
 

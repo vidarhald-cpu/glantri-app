@@ -215,6 +215,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getCombatRoundRequiredCombatExperienceTrigger");
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
     expect(source).toContain("rollCombatExperienceOnServer");
+    expect(source).toContain("backOutPhaseAttackOnServer");
+    expect(source).toContain("backOutPhaseAttack()");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
     expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
@@ -245,13 +247,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedPhaseCombatExperienceRequirement");
     expect(source).toContain("selectedCombatExperienceResultPanel");
     expect(source).toContain("selectedCombatExperienceActionAvailable");
+    expect(source).toContain("selectedPhaseCombatExperienceBackOutAvailable");
     expect(source).toContain('"Roll Combat Experience"');
     expect(source).toContain('"Confirm Combat Experience"');
+    expect(source).toContain('"Back out of attack"');
     expect(source).toContain('"Waiting for GM"');
     expect(source).toContain("Waiting for GM to start Combat Experience rolls.");
     expect(source).toContain("combatExperienceStatusText");
     expect(source).toContain("combatExperienceValidationMessage");
     expect(source).toContain("rollCombatExperience()");
+    expect(source).toContain(
+      "Backed out of attack; DB/Parry attack penalty reduced from -4 to -2 for this phase.",
+    );
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
     expect(source).toContain("Reason: attacked while attacking");

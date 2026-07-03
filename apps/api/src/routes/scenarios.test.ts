@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advanceCombatRoundStep,
+  backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
@@ -15,6 +16,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundParryResult,
+  type CombatRoundState,
   type CombatEffectsState,
   type EncounterSession,
   setCombatRoundCombatExperienceDifficulty,
@@ -453,6 +455,122 @@ function setupCombatDeclarationRoute(
   mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
 
   return { encounter, participant, participants };
+}
+
+function preparePhaseCombatExperienceBackOutRouteFixture(): {
+  encounter: EncounterSession;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  roundState: CombatRoundState;
+} {
+  const encounterParticipants = [
+    makeCombatEncounter().participants[0],
+    {
+      ...makeCombatEncounter().participants[0],
+      id: "encounter-participant-2",
+      label: "City guard",
+      scenarioParticipantId: "participant-2",
+    },
+  ];
+  const visibility = {
+    "participant-1": { "participant-2": true },
+    "participant-2": { "participant-1": true },
+  };
+  const baseEncounter = makeCombatEncounter({
+    currentRound: 2,
+    participants: encounterParticipants,
+    roleplayState: {
+      visibility,
+    },
+  }) as EncounterSession;
+  const withGladiatorDeclaration = recordCombatRoundDeclaration({
+    declaration: {
+      actionId: "double_attack",
+      phaseContexts: {
+        phase1: testCombatPhaseContext("participant-2"),
+        phase2: testCombatPhaseContext("participant-2"),
+      },
+      roundNumber: 2,
+    },
+    participantId: "encounter-participant-1",
+    state: initializeCombatRoundState({ encounter: baseEncounter }),
+    submittedBy: "gm",
+  });
+  const withDeclarations = recordCombatRoundDeclaration({
+    declaration: {
+      actionId: "double_attack",
+      phaseContexts: {
+        phase1: testCombatPhaseContext("participant-1"),
+        phase2: testCombatPhaseContext("participant-1"),
+      },
+      roundNumber: 2,
+    },
+    participantId: "encounter-participant-2",
+    state: withGladiatorDeclaration,
+    submittedBy: "gm",
+  });
+  const phase1Initiative = advanceCombatRoundStep(advanceCombatRoundStep(withDeclarations));
+  const afterGladiatorInitiative = recordCombatRoundInitiative({
+    command: {
+      createdAt: "2026-01-01T00:02:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    participantId: "encounter-participant-1",
+    phase: "phase1",
+    state: phase1Initiative,
+    submittedBy: "gm",
+    visibility,
+  });
+  const roundState = recordCombatRoundInitiative({
+    command: {
+      createdAt: "2026-01-01T00:02:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    participantId: "encounter-participant-2",
+    phase: "phase1",
+    state: afterGladiatorInitiative,
+    submittedBy: "gm",
+    visibility,
+  });
+  const participants = [
+    makeCombatScenarioParticipant({
+      id: "participant-1",
+      state: {
+        ...makeCombatScenarioParticipant().state,
+        combat: {
+          combatContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [
+                doubleAttackPhase1DbParryModifierEntry,
+                doubleAttackPhase2DbParryModifierEntry,
+              ],
+              situationInitiative: [],
+              situationObSkill: [
+                doubleAttackPhase1ObSkillModifierEntry,
+                doubleAttackPhase2ObSkillModifierEntry,
+              ],
+            },
+          },
+        },
+      },
+    }),
+    makeCombatScenarioParticipant({
+      controlledByUserId: "other-player",
+      id: "participant-2",
+    }),
+  ];
+
+  return {
+    encounter: {
+      ...baseEncounter,
+      combatRoundState: roundState,
+      currentRound: roundState.roundNumber,
+    },
+    participants,
+    roundState,
+  };
 }
 
 describe("scenarios route contract", () => {
@@ -2477,6 +2595,152 @@ describe("scenarios route contract", () => {
       rollD20: 5,
       skillTotal: 26,
     });
+  });
+
+  it("lets a player back out of their own phase CE gate and softens the phase DB/Parry modifier", async () => {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/back-out-phase-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+    expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: "generated:double-attack:phase1:db-parry",
+        value: -2,
+      }),
+      doubleAttackPhase2DbParryModifier,
+    ]);
+    expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationObSkill).toEqual([
+      doubleAttackPhase1ObSkillModifier,
+      doubleAttackPhase2ObSkillModifier,
+    ]);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        reason: "Backed out while attacked",
+        skippedAttack: true,
+        softenedModifierIds: ["generated:double-attack:phase1:db-parry"],
+        source: "phase_ce_back_out",
+      }),
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      type: "back_out_phase_attack",
+    });
+    expect(
+      updatedEncounter.combatRoundState.commands.some(
+        (command: { type: string }) => command.type === "roll_combat_experience",
+      ),
+    ).toBe(false);
+    expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
+      "skipped",
+    );
+  });
+
+  it("rejects player phase attack back-out for another participant", async () => {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        phase: "phase1",
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/back-out-phase-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("clears a phase attack back-out and restores the generated DB/Parry modifier", async () => {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext: fixture.participants[0]?.state.combat.combatContext,
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "player-1",
+      },
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: fixture.roundState,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility: fixture.encounter.roleplayState?.visibility,
+    });
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: backedOut.state,
+      },
+      participants: [
+        {
+          ...fixture.participants[0],
+          state: {
+            ...fixture.participants[0]?.state,
+            combat: {
+              ...fixture.participants[0]?.state.combat,
+              combatContext: backedOut.combatContext,
+            },
+          },
+        },
+        fixture.participants[1]!,
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        participantId: "encounter-participant-1",
+        step: "phase_1_actions",
+      },
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+    expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationDb).toEqual([
+      doubleAttackPhase1DbParryModifier,
+      doubleAttackPhase2DbParryModifier,
+    ]);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
   });
 
   it("stores GM-edited Combat Experience difficulty on the active round", async () => {

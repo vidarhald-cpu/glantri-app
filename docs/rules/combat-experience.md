@@ -77,7 +77,10 @@ cannot create a phase-1 attacked-while-attacking CE check.
 
 Phase CE uses the same displayed effective skill total, difficulty-shifted table lookup, no-roll
 rule, and command-backed undo as combat-start CE. Phase CE does not require a new GM "start rolls"
-button; reaching the A1/A2 pre-attack gate opens the phase CE window.
+button; reaching the A1/A2 pre-attack gate opens the phase CE window. At an unresolved phase CE gate,
+the participant may either roll/confirm Combat Experience or back out of the pending attack. Backing
+out cancels only that A1/A2 attack, records no CE roll result, keeps declaration-generated modifiers,
+and softens the matching generated phase attack DB/Parry penalty from `-4` to `-2` for that phase.
 
 Phase CE uses a phase-attack outcome table:
 
@@ -93,7 +96,9 @@ Phase OB penalties are stored in the participant combat context as phase-scoped 
 for only that A1/A2 attack, not as round-duration General modifier rows. A `<= 5` result cancels the
 pending phase attack in the same CE command. Clear current step removes the CE command/result, any
 created phase OB modifier or cancellation, and restores the participant to the unresolved `?` CE
-gate.
+gate. Clear after backing out removes the skipped-attack marker, restores the unresolved `?` CE gate,
+and changes the softened generated DB/Parry row back from `-2` to `-4`; other declaration modifiers
+remain in place.
 
 ## Result Table
 

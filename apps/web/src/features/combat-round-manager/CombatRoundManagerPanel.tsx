@@ -100,6 +100,7 @@ import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutMo
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import {
+  backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
@@ -3424,6 +3425,15 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceWindowOpen &&
     inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
+  const inspectorCanBackOutPhaseAttack = Boolean(
+    inspectorPhaseCombatExperienceRequirement &&
+    inspectorCombatExperienceRequired &&
+    !inspectorCombatExperienceIsCombatStart &&
+    selectedScenarioParticipant &&
+    selectedEncounterParticipant &&
+    selectedRoundIsActive &&
+    !inspectorSnapshot,
+  );
   const combatExperienceDifficultyControlsDisabled =
     saving ||
     !inspectorCombatExperienceIsCombatStart ||
@@ -4889,6 +4899,47 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll Combat Experience.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function backOutInspectorPhaseAttack() {
+    if (
+      !selectedScenarioParticipant ||
+      !selectedEncounterParticipant ||
+      !inspectorPhaseCombatExperienceRequirement
+    ) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter, participant } = await backOutPhaseAttackOnServer({
+        encounterId: encounter.id,
+        phase: inspectorPhaseCombatExperienceRequirement.phase,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      });
+
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [participant.id]: participant,
+      }));
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      onScenarioParticipantsUpdated?.([participant]);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to back out of attack.",
       );
     } finally {
       setSaving(false);
@@ -6464,16 +6515,25 @@ export default function CombatRoundManagerPanel({
                                       ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
                                       : saveInspectorDeclaration())
                       }
-                      onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
+                      onSecondaryAction={() =>
+                        void (inspectorCanBackOutPhaseAttack
+                          ? backOutInspectorPhaseAttack()
+                          : skipInspectorCurrentPhaseAction())
+                      }
                       saving={saving}
                       secondaryButtonDisabled={
                         saving ||
-                        inspectorIsInspectionOnly ||
                         Boolean(inspectorSnapshot) ||
-                        !inspectorCanSkipCurrentPhaseAction
+                        (inspectorCanBackOutPhaseAttack
+                          ? false
+                          : inspectorIsInspectionOnly || !inspectorCanSkipCurrentPhaseAction)
                       }
                       secondaryButtonLabel={
-                        inspectorCanSkipCurrentPhaseAction ? "Skip current action" : undefined
+                        inspectorCanBackOutPhaseAttack
+                          ? "Back out of attack"
+                          : inspectorCanSkipCurrentPhaseAction
+                            ? "Skip current action"
+                            : undefined
                       }
                       statusText={`Current step: ${getPlayerCombatStepLabel(
                         inspector.step,

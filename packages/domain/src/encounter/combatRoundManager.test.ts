@@ -8,11 +8,13 @@ import {
   COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
+  backOutCombatRoundPhaseAttack,
   buildCombatRoundDamageResult,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
+  canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
   canPlayerRollCombatAttack,
   canPlayerSubmitCombatDeclaration,
@@ -82,6 +84,7 @@ import {
   commitCombatRoundEndParticipantReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
   removeCombatRoundCombatExperienceEffects,
+  restoreCombatRoundBackOutCombatContextModifiers,
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
   rollCombatRoundCombatExperience,
@@ -96,6 +99,13 @@ import {
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
 } from "./combatRoundManager";
+import {
+  applyCombatActionGeneratedModifiers,
+  DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
+  DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
+  DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
+  PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+} from "./combatActionModifiers";
 import { encounterSessionSchema } from "./session";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
 import type { CombatEffectsState } from "./combatEffects";
@@ -564,6 +574,50 @@ function prepareScenarioTargetPhaseInitiativeStepState(input: {
     withDeclarations,
     input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
   );
+}
+
+function prepareScenarioTargetPhaseCombatExperienceGate(input: {
+  gladiatorActionId?: string;
+  phase: "phase1" | "phase2";
+  scyrianActionId?: string;
+}): {
+  state: ReturnType<typeof initializeCombatRoundState>;
+  visibility: {
+    "scenario-gladiator": { "scenario-scyrian": boolean };
+    "scenario-scyrian": { "scenario-gladiator": boolean };
+  };
+} {
+  const visibility = {
+    "scenario-gladiator": { "scenario-scyrian": true },
+    "scenario-scyrian": { "scenario-gladiator": true },
+  };
+  const atInitiative = prepareScenarioTargetPhaseInitiativeStepState(input);
+  const afterGladiatorRoll = recordCombatRoundInitiative({
+    command: {
+      createdAt: "2026-01-01T00:02:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    participantId: "gladiator",
+    phase: input.phase,
+    state: atInitiative,
+    submittedBy: "gm",
+    visibility,
+  });
+  const state = recordCombatRoundInitiative({
+    command: {
+      createdAt: "2026-01-01T00:02:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    participantId: "scyrian",
+    phase: input.phase,
+    state: afterGladiatorRoll,
+    submittedBy: "gm",
+    visibility,
+  });
+
+  return { state, visibility };
 }
 
 function prepareFailedParryPendingDamage(input: {
@@ -1984,6 +2038,186 @@ describe("combat round manager", () => {
     ).toBe(false);
   });
 
+  it("permits backing out from a phase1 CE gate and softens only that phase attack DB/Parry modifier", () => {
+    const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
+      gladiatorActionId: "double_attack",
+      phase: "phase1",
+      scyrianActionId: "double_attack",
+    });
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: testPhaseContext("scenario-scyrian"),
+    });
+
+    expect(
+      canBackOutCombatRoundPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: gate,
+        visibility,
+      }),
+    ).toBe(true);
+
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext,
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: gate,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility,
+    });
+
+    expect(backedOut.command).toMatchObject({
+      facts: {
+        attackActionId: "double_attack",
+        reason: "Backed out while attacked",
+        skippedAttack: true,
+        softenedModifierIds: [DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID],
+        source: "phase_ce_back_out",
+        trigger: "phase1_attack",
+      },
+      phase: "phase1",
+      step: "A1",
+      type: "back_out_phase_attack",
+    });
+    expect(
+      backedOut.state.commands.some((command) => command.type === "roll_combat_experience"),
+    ).toBe(false);
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.combatExperience,
+    ).toBeUndefined();
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.stepStatuses.phase_1_actions,
+    ).toBe("skipped");
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: backedOut.state,
+      }).substep,
+    ).toBe("done");
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: backedOut.state,
+      }),
+    ).toBe(false);
+    expect(backedOut.state.currentCursor).toEqual({
+      participantId: "scyrian",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(backedOut.state.phaseResolutionCursor).toEqual({
+      participantId: "scyrian",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      backedOut.combatContext.modifierBuckets.situationDb.find(
+        (entry) => entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
+      )?.value,
+    ).toBe(-2);
+    expect(
+      backedOut.combatContext.modifierBuckets.situationDb.find(
+        (entry) => entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
+      )?.value,
+    ).toBe(-4);
+    expect(
+      backedOut.combatContext.modifierBuckets.situationObSkill.find(
+        (entry) => entry.id === DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
+      )?.value,
+    ).toBe(-1);
+  });
+
+  it("clears a phase1 back-out command back to the CE gate and restores DB/Parry -4", () => {
+    const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
+      gladiatorActionId: "double_attack",
+      phase: "phase1",
+      scyrianActionId: "double_attack",
+    });
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: testPhaseContext("scenario-scyrian"),
+    });
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext,
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: gate,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility,
+    });
+    const cleared = clearCombatRoundStep({
+      state: backedOut.state,
+      step: "phase_1_actions",
+    });
+    const restoredContext = restoreCombatRoundBackOutCombatContextModifiers({
+      combatContext: backedOut.combatContext,
+      command: backedOut.command,
+    });
+
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(cleared.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: cleared,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+    expect(
+      cleared.participants.find((participant) => participant.participantId === "gladiator")
+        ?.stepStatuses.phase_1_actions,
+    ).toBe("pending");
+    expect(
+      restoredContext.modifierBuckets.situationDb.find(
+        (entry) => entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
+      )?.value,
+    ).toBe(-4);
+  });
+
+  it("backs out even when no generated DB/Parry modifier can be softened", () => {
+    const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
+      phase: "phase1",
+    });
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext: testPhaseContext("scenario-scyrian"),
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: gate,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility,
+    });
+
+    expect(backedOut.command.facts.modifierSofteningWarning).toBe(
+      "No generated attack DB/Parry -4 modifier was found to soften.",
+    );
+    expect(backedOut.combatContext.modifierBuckets.situationDb).toEqual([]);
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.stepStatuses.phase_1_actions,
+    ).toBe("skipped");
+  });
+
   it("top advance from completed i1 moves to the A1 CE gate without extra i1 commands", () => {
     const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({ phase: "phase1" });
     const state = setCombatRoundParticipantInitiative({
@@ -2542,6 +2776,50 @@ describe("combat round manager", () => {
         visibility,
       }),
     ).toBe("phase2_attack");
+  });
+
+  it("backs out from a phase2 CE gate and softens the phase2 DB/Parry attack modifier", () => {
+    const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+      scyrianActionId: "parry_attack",
+    });
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "parry_attack",
+      combatContext: testPhaseContext("scenario-scyrian"),
+    });
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase2",
+      state: gate,
+      updatedAt: "2026-01-01T00:05:00.000Z",
+      visibility,
+    });
+
+    expect(backedOut.command).toMatchObject({
+      facts: {
+        attackActionId: "parry_attack",
+        softenedModifierIds: [PARRY_ATTACK_DB_PARRY_MODIFIER_ID],
+        trigger: "phase2_attack",
+      },
+      phase: "phase2",
+      step: "A2",
+      type: "back_out_phase_attack",
+    });
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.stepStatuses.phase_2_actions,
+    ).toBe("skipped");
+    expect(
+      backedOut.combatContext.modifierBuckets.situationDb.find(
+        (entry) => entry.id === PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+      )?.value,
+    ).toBe(-2);
   });
 
   it("does not create phase1 CE from a Parry-Attack declaration without a phase1 attack", () => {

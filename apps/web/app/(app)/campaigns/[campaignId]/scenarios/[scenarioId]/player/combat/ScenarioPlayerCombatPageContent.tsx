@@ -87,6 +87,7 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
+  backOutPhaseAttackOnServer,
   loadCharacterEquipmentState,
   loadEncounterById,
   loadScenarioMyParticipant,
@@ -1278,6 +1279,45 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function backOutPhaseAttack() {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (!selectedParticipant || !encounterId || !selectedPhaseCombatExperienceRequirement) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter, participant } = await backOutPhaseAttackOnServer({
+        encounterId,
+        phase: selectedPhaseCombatExperienceRequirement.phase,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setActionRollResult({
+        interpretedResult:
+          "Backed out of attack; DB/Parry attack penalty reduced from -4 to -2 for this phase.",
+        phaseLabel:
+          selectedPhaseCombatExperienceRequirement.phase === "phase1" ? "Phase 1" : "Phase 2",
+        value: -2,
+      });
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to back out of attack.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollPhaseAttack() {
     if (readOnlyInspection || !selectedParticipant || !encounterId || !currentAttackPhase) {
       return;
@@ -1837,6 +1877,11 @@ export default function ScenarioPlayerCombatPageContent({
     selectedCombatExperienceWindowOpen &&
     Boolean(selectedParticipant) &&
     Boolean(encounterId);
+  const selectedPhaseCombatExperienceBackOutAvailable = Boolean(
+    selectedPhaseCombatExperienceRequirement &&
+    selectedCombatExperienceActionAvailable &&
+    !readOnlyInspection,
+  );
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
@@ -2216,7 +2261,14 @@ export default function ScenarioPlayerCombatPageContent({
                             ? rollInitiative()
                             : saveCombatContext())
                 }
+                onSecondaryAction={() => void backOutPhaseAttack()}
                 saving={savingCombatContext}
+                secondaryButtonDisabled={
+                  savingCombatContext || !selectedPhaseCombatExperienceBackOutAvailable
+                }
+                secondaryButtonLabel={
+                  selectedPhaseCombatExperienceBackOutAvailable ? "Back out of attack" : undefined
+                }
                 statusText={declarationStatusText}
                 validationMessage={
                   combatExperienceValidationMessage ??

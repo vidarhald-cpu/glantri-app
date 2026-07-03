@@ -115,6 +115,28 @@ export async function rollCombatExperienceOnServer(input: {
   return payload;
 }
 
+export async function backOutPhaseAttackOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/back-out-phase-attack`, {
+    body: JSON.stringify({
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function setCombatExperienceDifficultyOnServer(input: {
   difficulty: number;
   encounterId: string;

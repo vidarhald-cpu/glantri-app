@@ -531,6 +531,35 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("backs out of a phase attack through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participant = {
+      id: "participant-1",
+    };
+    const fetchMock = stubFetch({ encounter, participant });
+    const client = await loadClient();
+
+    await expect(
+      client.backOutPhaseAttackOnServer({
+        encounterId: "encounter-1",
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, participant });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/back-out-phase-attack",
+    });
+  });
+
   it("passes selected combat round cell details when clearing a specific step", async () => {
     const encounter = {
       id: "encounter-1",
