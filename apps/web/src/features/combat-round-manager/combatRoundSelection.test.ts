@@ -4,6 +4,7 @@ import type { EncounterParticipant, EncounterSession } from "@glantri/domain";
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
+  applyCombatRoundSelectionTarget,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isSelectedCombatRoundStepExecutable,
@@ -65,13 +66,22 @@ describe("combat round manager selection", () => {
       },
       currentStep: "phase_1_actions" as const,
       selectedParticipantId: "top",
-      selectedStep: "select_actions" as const,
+      selectedStep: "initiative_phase_1" as const,
     };
+    const currentTaskSelection = getCurrentCombatRoundTaskSelection(state);
+    const selectedCurrentTask = currentTaskSelection
+      ? applyCombatRoundSelectionTarget({
+          selection: currentTaskSelection,
+          state,
+        })
+      : state;
 
-    expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
+    expect(currentTaskSelection).toEqual({
       participantId: "middle",
       step: "phase_1_actions",
     });
+    expect(selectedCurrentTask.selectedParticipantId).toBe("middle");
+    expect(selectedCurrentTask.selectedStep).toBe("phase_1_actions");
   });
 
   it("treats non-current inspected phase cells as inspection-only", () => {

@@ -4459,6 +4459,39 @@ function moveCombatRoundToPhaseCombatExperienceGate(input: {
   });
 }
 
+function moveCombatRoundAfterCompletedPhaseInitiative(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  visibility?: CombatRoundVisibility;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const baseState = combatRoundStateSchema.parse({
+    ...normalized,
+    currentCursor: undefined,
+    currentStep: actionStep,
+    phaseResolutionCursor: undefined,
+    selectedStep: actionStep,
+  });
+  const combatExperienceParticipantId =
+    getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+      phase: input.phase,
+      state: baseState,
+      visibility: input.visibility,
+    });
+
+  return combatExperienceParticipantId
+    ? moveCombatRoundToPhaseCombatExperienceGate({
+        participantId: combatExperienceParticipantId,
+        phase: input.phase,
+        state: baseState,
+      })
+    : initializeCombatRoundPhaseResolutionCursor({
+        phase: input.phase,
+        state: baseState,
+      });
+}
+
 function phaseCombatExperienceCancelsAttack(result: CombatRoundCombatExperienceResult): boolean {
   return (
     getCombatExperiencePhaseForTrigger(result.trigger) !== undefined &&
@@ -11234,6 +11267,7 @@ export function recordCombatRoundInitiative(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
   submittedBy: "gm" | "player";
+  visibility?: CombatRoundVisibility;
 }): CombatRoundState {
   const initiativeStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
   const withInitiative = setCombatRoundParticipantInitiative({
@@ -11250,19 +11284,70 @@ export function recordCombatRoundInitiative(input: {
     step: initiativeStep,
   });
 
-  return input.command
-    ? recordCombatRoundGlobalParticipantCommand({
-        ...input.command,
-        facts: {
-          phase: input.phase,
-          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
-        },
+  if (!input.command) {
+    return withStatus;
+  }
+
+  if (!isCombatRoundPhaseInitiativeComplete({ phase: input.phase, state: withStatus })) {
+    return recordCombatRoundGlobalParticipantCommand({
+      ...input.command,
+      facts: {
+        phase: input.phase,
+        status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+      },
+      participantId: input.participantId,
+      state: withStatus,
+      step: initiativeStep,
+      type: input.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
+    });
+  }
+
+  const commandType =
+    input.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2";
+  const beforeCursor = getDefaultCombatRoundCursor({
+    participantId: input.participantId,
+    roundNumber: withStatus.roundNumber,
+    step: initiativeStep,
+  });
+  const stateAfterCompletedInitiative = moveCombatRoundAfterCompletedPhaseInitiative({
+    phase: input.phase,
+    state: withStatus,
+    visibility: input.visibility,
+  });
+  const afterCursor = stateAfterCompletedInitiative.currentCursor ?? beforeCursor;
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      phase: input.phase,
+      status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+      step: beforeCursor.step,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
         participantId: input.participantId,
         state: withStatus,
-        step: initiativeStep,
-        type: input.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
-      })
-    : withStatus;
+        type: commandType,
+      }),
+    participantId: input.participantId,
+    roundNumber: withStatus.roundNumber,
+    type: commandType,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+
+  return combatRoundStateSchema.parse({
+    ...stateAfterCompletedInitiative,
+    commands: [...withStatus.commands, command],
+    currentCursor: command.afterCursor,
+    currentStep: selectedStep,
+    selectedParticipantId:
+      command.afterCursor.participantId ?? stateAfterCompletedInitiative.selectedParticipantId,
+    selectedStep,
+  });
 }
 
 function getCombatRoundAttackCommandAfterCursor(input: {

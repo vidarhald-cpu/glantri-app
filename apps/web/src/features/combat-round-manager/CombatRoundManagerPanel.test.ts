@@ -628,6 +628,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Phase Combat Experience uses difficulty");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");
+    expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
+      source.indexOf(": inspectorCurrentStepIsInitiative"),
+    );
+    expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
+      source.indexOf(": inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase"),
+    );
     expect(source).toContain("Combat Experience");
     expect(source).toContain("Latest combat event");
   });

@@ -54,6 +54,11 @@ phase-resolution cursor opens. The GM grid marks an unresolved A1/A2 phase CE ch
 inspector and Player Combat panel describe the reason as "attacked while attacking" and list the
 incoming attacker initiative comparison.
 
+When the final required i1/i2 roll is recorded, any unresolved phase CE gate becomes the current
+task immediately. If the GM uses the top advance button from a completed initiative step instead,
+that advance also moves to the first unresolved phase CE gate before opening normal A1/A2 attack
+resolution.
+
 Initiative is highest first. For each same-phase attack relationship, compare the attacking
 participant's phase initiative with the incoming attacker's phase initiative:
 

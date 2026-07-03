@@ -531,6 +531,41 @@ function prepareScenarioTargetPhaseInitiativeCompleteState(input: {
   });
 }
 
+function prepareScenarioTargetPhaseInitiativeStepState(input: {
+  currentRound?: number;
+  gladiatorActionId?: string;
+  phase: "phase1" | "phase2";
+  scyrianActionId?: string;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const encounterParticipants = [
+    participant({ id: "gladiator", label: "The Gladiator" }),
+    participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+  ];
+  const withDeclarations = declareTestRoundAction({
+    actionId: input.scyrianActionId ?? "attack_parry",
+    participantId: "scyrian",
+    phase1Target: "scenario-gladiator",
+    phase2Target: "scenario-gladiator",
+    state: declareTestRoundAction({
+      actionId: input.gladiatorActionId ?? "attack_parry",
+      participantId: "gladiator",
+      phase1Target: "scenario-scyrian",
+      phase2Target: "scenario-scyrian",
+      state: initializeCombatRoundState({
+        encounter: encounter({
+          currentRound: input.currentRound ?? 2,
+          participants: encounterParticipants,
+        }),
+      }),
+    }),
+  });
+
+  return advanceToStep(
+    withDeclarations,
+    input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+  );
+}
+
 function prepareFailedParryPendingDamage(input: {
   actionId?: string;
   defenderDb?: number;
@@ -1877,6 +1912,174 @@ describe("combat round manager", () => {
     ).toBe("phase1_attack");
   });
 
+  it("moves the final command-backed i1 roll to the first pending A1 CE gate", () => {
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({ phase: "phase1" });
+    const afterGladiatorRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: atInitiative,
+      submittedBy: "gm",
+      visibility,
+    });
+    const afterScyrianRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase1",
+      state: afterGladiatorRoll,
+      submittedBy: "gm",
+      visibility,
+    });
+
+    expect(isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: afterScyrianRoll })).toBe(
+      true,
+    );
+    expect(afterScyrianRoll.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 2,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "scyrian",
+        roundNumber: 2,
+        step: "i1",
+      },
+      type: "roll_initiative_phase1",
+    });
+    expect(afterScyrianRoll.currentStep).toBe("phase_1_actions");
+    expect(afterScyrianRoll.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(afterScyrianRoll.selectedParticipantId).toBe("gladiator");
+    expect(afterScyrianRoll.selectedStep).toBe("phase_1_actions");
+    expect(afterScyrianRoll.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: afterScyrianRoll,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterScyrianRoll,
+      }),
+    ).toBe(false);
+  });
+
+  it("top advance from completed i1 moves to the A1 CE gate without extra i1 commands", () => {
+    const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({ phase: "phase1" });
+    const state = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [5],
+          rollTotal: 5,
+          total: 5,
+        },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: atInitiative,
+      }),
+    });
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const advanced = advanceCombatRoundStep(state, {
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        participantId: "scyrian",
+      },
+      visibility,
+    });
+
+    expect(advanced.commands).toHaveLength(0);
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(advanced.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
+  });
+
+  it("opens normal A1 attack after command-backed i1 when no phase CE is pending", () => {
+    const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({
+      phase: "phase1",
+      scyrianActionId: "parry_attack",
+    });
+    const afterGladiatorRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: atInitiative,
+      submittedBy: "gm",
+    });
+    const afterScyrianRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase1",
+      state: afterGladiatorRoll,
+      submittedBy: "gm",
+    });
+
+    expect(afterScyrianRoll.currentStep).toBe("phase_1_actions");
+    expect(afterScyrianRoll.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(afterScyrianRoll.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterScyrianRoll,
+      }),
+    ).toBe(true);
+  });
+
   it("opens A1 for a participant after their only required phase CE check is resolved", () => {
     const encounterParticipants = [
       participant({ id: "gladiator", label: "The Gladiator" }),
@@ -2274,6 +2477,73 @@ describe("combat round manager", () => {
     ).toBe(true);
   });
 
+  it("moves the final command-backed i2 roll to the first pending A2 CE gate", () => {
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+      scyrianActionId: "parry_attack",
+    });
+    const afterGladiatorRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase2",
+      state: atInitiative,
+      submittedBy: "gm",
+      visibility,
+    });
+    const afterScyrianRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase2",
+      state: afterGladiatorRoll,
+      submittedBy: "gm",
+      visibility,
+    });
+
+    expect(isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: afterScyrianRoll })).toBe(
+      true,
+    );
+    expect(afterScyrianRoll.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 2,
+        step: "A2",
+      },
+      beforeCursor: {
+        participantId: "scyrian",
+        roundNumber: 2,
+        step: "i2",
+      },
+      type: "roll_initiative_phase2",
+    });
+    expect(afterScyrianRoll.currentStep).toBe("phase_2_actions");
+    expect(afterScyrianRoll.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A2",
+    });
+    expect(afterScyrianRoll.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: afterScyrianRoll,
+        visibility,
+      }),
+    ).toBe("phase2_attack");
+  });
+
   it("does not create phase1 CE from a Parry-Attack declaration without a phase1 attack", () => {
     const state = prepareScenarioTargetPhaseInitiativeCompleteState({
       gladiatorActionId: "attack_parry",
@@ -2659,6 +2929,66 @@ describe("combat round manager", () => {
     ).toBeDefined();
     expect(clearedContext.modifierBuckets.situationObSkill).toEqual([]);
     expect(clearedEffects.effects).toEqual([]);
+  });
+
+  it("clears a command-backed phase CE result back to the A1 CE gate after final i1 advanced there", () => {
+    const visibility = {
+      "scenario-gladiator": { "scenario-scyrian": true },
+      "scenario-scyrian": { "scenario-gladiator": true },
+    };
+    const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({ phase: "phase1" });
+    const afterGladiatorRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: atInitiative,
+      submittedBy: "gm",
+      visibility,
+    });
+    const gate = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase1",
+      state: afterGladiatorRoll,
+      submittedBy: "gm",
+      visibility,
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      skillTotal: 26,
+      state: gate,
+      visibility,
+    });
+    const cleared = clearCombatRoundStep({ state: rolled.state, step: "phase_1_actions" });
+
+    expect(cleared.currentStep).toBe("phase_1_actions");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
+    expect(cleared.phaseResolutionCursor).toBeUndefined();
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: cleared,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
   });
 
   it("clears Combat Experience roll state and removes only created CE effects", () => {
@@ -4664,7 +4994,7 @@ describe("combat round manager", () => {
     expect(clearedAgain.participants[1]?.stepStatuses.initiative_phase_1).toBe("pending");
   });
 
-  it("does not add invisible top-advance i1 commands for already rolled rows", () => {
+  it("does not add invisible top-advance i1 commands after the final initiative roll advances", () => {
     const initiativePhase1 = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
       "initiative_phase_1",
@@ -4691,24 +5021,17 @@ describe("combat round manager", () => {
       state: afterGladiatorRoll,
       submittedBy: "gm",
     });
-    const advanced = advanceCombatRoundStep(afterGuardRoll, {
-      command: {
-        createdAt: "2026-01-01T00:03:00.000Z",
-        createdByUserId: "gm-1",
-        participantId: "guard",
-      },
-    });
 
-    expect(advanced.currentStep).toBe("review_phase_2_modifiers");
-    expect(advanced.commands).toHaveLength(2);
-    expect(advanced.commands.map((command) => command.type)).toEqual([
+    expect(afterGuardRoll.currentStep).toBe("review_phase_2_modifiers");
+    expect(afterGuardRoll.commands).toHaveLength(2);
+    expect(afterGuardRoll.commands.map((command) => command.type)).toEqual([
       "roll_initiative_phase1",
       "roll_initiative_phase1",
     ]);
-    expect(advanced.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
-    expect(advanced.participants[1]?.initiatives.phase1).toMatchObject({ total: 12 });
-    expect(advanced.participants[0]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
-    expect(advanced.participants[1]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
+    expect(afterGuardRoll.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+    expect(afterGuardRoll.participants[1]?.initiatives.phase1).toMatchObject({ total: 12 });
+    expect(afterGuardRoll.participants[0]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
+    expect(afterGuardRoll.participants[1]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
   });
 
   it("undoes i2 commands and clears phase 2 downstream state for the participant", () => {

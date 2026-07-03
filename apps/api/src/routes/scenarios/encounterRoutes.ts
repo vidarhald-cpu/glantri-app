@@ -1096,6 +1096,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         phase,
         state: roundState,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
+        visibility: encounter.roleplayState?.visibility,
       });
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
