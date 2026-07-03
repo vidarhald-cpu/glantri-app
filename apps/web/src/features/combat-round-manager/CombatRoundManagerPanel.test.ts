@@ -630,6 +630,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollInspectorCombatExperience()");
     expect(source).toContain("backOutPhaseAttackOnServer");
     expect(source).toContain("backOutInspectorPhaseAttack()");
+    expect(source).toContain("inspectorPhaseAttackBackOutOpportunity");
+    expect(source).toContain("getCombatRoundPhaseAttackBackOutOpportunity");
+    expect(source).toContain("canBackOutCombatRoundPhaseAttack");
     expect(source).toContain("const inspectorCanBackOutPhaseAttack =");
     expect(source).toContain("Back out of attack");
     expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(

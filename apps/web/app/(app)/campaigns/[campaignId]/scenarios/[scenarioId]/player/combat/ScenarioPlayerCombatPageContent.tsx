@@ -13,12 +13,14 @@ import {
   type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
   characterBuildSchema,
+  canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundAttackResultById,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -1284,7 +1286,7 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    if (!selectedParticipant || !encounterId || !selectedPhaseCombatExperienceRequirement) {
+    if (!selectedParticipant || !encounterId || !selectedPhaseAttackBackOutOpportunity) {
       return;
     }
 
@@ -1293,7 +1295,7 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await backOutPhaseAttackOnServer({
         encounterId,
-        phase: selectedPhaseCombatExperienceRequirement.phase,
+        phase: selectedPhaseAttackBackOutOpportunity.phase,
         scenarioParticipantId: selectedParticipant.id,
       });
 
@@ -1305,7 +1307,7 @@ export default function ScenarioPlayerCombatPageContent({
         interpretedResult:
           "Backed out of attack; DB/Parry attack penalty reduced from -4 to -2 for this phase.",
         phaseLabel:
-          selectedPhaseCombatExperienceRequirement.phase === "phase1" ? "Phase 1" : "Phase 2",
+          selectedPhaseAttackBackOutOpportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
         value: -2,
       });
       setError(undefined);
@@ -1578,6 +1580,15 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedPhaseCombatExperienceRequirement =
     combatRoundState && selectedRoundParticipant && currentAttackPhase
       ? getCombatRoundPhaseCombatExperienceRequirement({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentAttackPhase,
+          state: combatRoundState,
+          visibility: encounterSession?.roleplayState?.visibility,
+        })
+      : undefined;
+  const selectedPhaseAttackBackOutOpportunity =
+    combatRoundState && selectedRoundParticipant && currentAttackPhase
+      ? getCombatRoundPhaseAttackBackOutOpportunity({
           participantId: selectedRoundParticipant.participantId,
           phase: currentAttackPhase,
           state: combatRoundState,
@@ -1878,8 +1889,18 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedParticipant) &&
     Boolean(encounterId);
   const selectedPhaseCombatExperienceBackOutAvailable = Boolean(
-    selectedPhaseCombatExperienceRequirement &&
-    selectedCombatExperienceActionAvailable &&
+    selectedPhaseAttackBackOutOpportunity &&
+    combatRoundState &&
+    selectedRoundParticipant &&
+    currentAttackPhase &&
+    canBackOutCombatRoundPhaseAttack({
+      participantId: selectedRoundParticipant.participantId,
+      phase: currentAttackPhase,
+      state: combatRoundState,
+      visibility: encounterSession?.roleplayState?.visibility,
+    }) &&
+    selectedParticipant &&
+    encounterId &&
     !readOnlyInspection,
   );
   const declarationTargetValidationMessage =

@@ -395,10 +395,19 @@ export interface CombatRoundPhaseCombatExperienceThreat {
   attackerParticipantId: string;
   initiativeDifference: number;
   participantInitiative: number;
-  reason: "close_initiative" | "lower_initiative";
+  reason: "close_initiative" | "higher_initiative" | "lower_initiative";
 }
 
 export interface CombatRoundPhaseCombatExperienceRequirement {
+  participantId: string;
+  phase: CombatRoundPhase;
+  reason: "attacked_while_attacking";
+  threats: CombatRoundPhaseCombatExperienceThreat[];
+  trigger: CombatExperienceTrigger;
+}
+
+export interface CombatRoundPhaseAttackBackOutOpportunity {
+  ceRequired: boolean;
   participantId: string;
   phase: CombatRoundPhase;
   reason: "attacked_while_attacking";
@@ -426,6 +435,7 @@ export interface CombatRoundPhaseCombatExperienceDetectionParticipantReport {
   phaseAttackCapable: boolean;
   phaseTargetActiveInEncounter: boolean;
   phaseTargetId?: string;
+  backOutAvailable: boolean;
   reasonIfNo?: string;
   required: boolean;
 }
@@ -2616,12 +2626,18 @@ function combatRoundParticipantHasPendingExecutablePhaseAttack(input: {
   });
 }
 
-export function getCombatRoundPhaseCombatExperienceRequirement(input: {
+function combatRoundPhaseThreatRequiresCombatExperience(
+  threat: Pick<CombatRoundPhaseCombatExperienceThreat, "reason">,
+): boolean {
+  return threat.reason === "close_initiative" || threat.reason === "lower_initiative";
+}
+
+export function getCombatRoundPhaseAttackBackOutOpportunity(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
-}): CombatRoundPhaseCombatExperienceRequirement | undefined {
+}): CombatRoundPhaseAttackBackOutOpportunity | undefined {
   const normalized = combatRoundStateSchema.parse(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
@@ -2629,13 +2645,6 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
   const trigger = getCombatExperienceTriggerForPhase(input.phase);
 
   if (!participant) {
-    return undefined;
-  }
-
-  if (
-    normalized.currentStep === getCombatRoundPhaseActionStepForPhase(input.phase) &&
-    normalized.phaseResolutionCursor?.phase === input.phase
-  ) {
     return undefined;
   }
 
@@ -2709,12 +2718,12 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
     }
 
     const initiativeDifference = Math.abs(participantInitiative - attackerInitiative);
-    const participantMustRoll =
-      initiativeDifference <= 3 || participantInitiative < attackerInitiative;
-
-    if (!participantMustRoll) {
-      return [];
-    }
+    const reason =
+      initiativeDifference <= 3
+        ? ("close_initiative" as const)
+        : participantInitiative < attackerInitiative
+          ? ("lower_initiative" as const)
+          : ("higher_initiative" as const);
 
     return [
       {
@@ -2722,8 +2731,7 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
         attackerParticipantId: attacker.participantId,
         initiativeDifference,
         participantInitiative,
-        reason:
-          initiativeDifference <= 3 ? ("close_initiative" as const) : ("lower_initiative" as const),
+        reason,
       },
     ];
   });
@@ -2732,12 +2740,51 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
     return undefined;
   }
 
+  const ceRequired = threats.some(combatRoundPhaseThreatRequiresCombatExperience);
+
   return {
+    ceRequired,
     participantId: input.participantId,
     phase: input.phase,
     reason: "attacked_while_attacking",
     threats,
     trigger,
+  };
+}
+
+export function getCombatRoundPhaseCombatExperienceRequirement(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  visibility?: CombatRoundVisibility;
+}): CombatRoundPhaseCombatExperienceRequirement | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (
+    normalized.currentStep === getCombatRoundPhaseActionStepForPhase(input.phase) &&
+    normalized.phaseResolutionCursor?.phase === input.phase
+  ) {
+    return undefined;
+  }
+
+  const opportunity = getCombatRoundPhaseAttackBackOutOpportunity({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+    visibility: input.visibility,
+  });
+  const threats = opportunity?.threats.filter(combatRoundPhaseThreatRequiresCombatExperience) ?? [];
+
+  if (!opportunity || threats.length === 0) {
+    return undefined;
+  }
+
+  return {
+    participantId: opportunity.participantId,
+    phase: opportunity.phase,
+    reason: opportunity.reason,
+    threats,
+    trigger: opportunity.trigger,
   };
 }
 
@@ -2769,6 +2816,12 @@ export function getCombatRoundPhaseCombatExperienceDetectionReport(input: {
     });
     const initiativeTotal = getCombatRoundInitiativeTotal(participant.initiatives[input.phase]);
     const requirement = getCombatRoundPhaseCombatExperienceRequirement({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+      visibility: input.visibility,
+    });
+    const backOutOpportunity = getCombatRoundPhaseAttackBackOutOpportunity({
       participantId: participant.participantId,
       phase: input.phase,
       state: normalized,
@@ -2820,6 +2873,8 @@ export function getCombatRoundPhaseCombatExperienceDetectionReport(input: {
         reasonIfNo = "no incoming phase attack targets this participant";
       } else if (actionableIncomingAttackers.every((attacker) => !attacker.aware)) {
         reasonIfNo = "incoming phase attacker is not visible or known to this participant";
+      } else if (backOutOpportunity) {
+        reasonIfNo = "initiative comparison does not require CE; back out remains available";
       } else {
         reasonIfNo = "initiative comparison does not require this participant";
       }
@@ -2835,6 +2890,7 @@ export function getCombatRoundPhaseCombatExperienceDetectionReport(input: {
       phaseAttackCapable,
       phaseTargetActiveInEncounter,
       phaseTargetId,
+      backOutAvailable: Boolean(backOutOpportunity),
       reasonIfNo,
       required: Boolean(requirement),
     };
@@ -2861,7 +2917,7 @@ export function canBackOutCombatRoundPhaseAttack(input: {
 
   return Boolean(
     normalized.currentStep === actionStep &&
-    getCombatRoundPhaseCombatExperienceRequirement({
+    getCombatRoundPhaseAttackBackOutOpportunity({
       participantId: input.participantId,
       phase: input.phase,
       state: normalized,
@@ -5151,6 +5207,12 @@ export function backOutCombatRoundPhaseAttack(input: {
   );
   const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
   const trigger = getCombatExperienceTriggerForPhase(input.phase);
+  const backOutOpportunity = getCombatRoundPhaseAttackBackOutOpportunity({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+    visibility: input.visibility,
+  });
   const phaseRequirement = getCombatRoundPhaseCombatExperienceRequirement({
     participantId: input.participantId,
     phase: input.phase,
@@ -5166,8 +5228,8 @@ export function backOutCombatRoundPhaseAttack(input: {
     throw new RangeError("Back out can only be chosen before phase attacks.");
   }
 
-  if (!phaseRequirement) {
-    throw new RangeError("Back out is only available for a required phase Combat Experience gate.");
+  if (!backOutOpportunity) {
+    throw new RangeError("Back out is only available while attacked and attacking.");
   }
 
   if (
@@ -5193,6 +5255,10 @@ export function backOutCombatRoundPhaseAttack(input: {
   const previousPhaseActionStepStatus = participant.stepStatuses[actionStep];
   const previousPhaseResolutionStatus =
     normalized.phaseResolutionStatuses[input.participantId]?.[input.phase];
+  const previousPhaseResolutionCursor =
+    normalized.phaseResolutionCursor?.phase === input.phase
+      ? normalized.phaseResolutionCursor
+      : undefined;
   const withDoneStatus = setCombatRoundPhaseResolutionStatus({
     participantId: input.participantId,
     phase: input.phase,
@@ -5241,9 +5307,16 @@ export function backOutCombatRoundPhaseAttack(input: {
             modifierSofteningWarning: softenedModifierResult.warning,
           }
         : {}),
+      backOutAvailableReason: backOutOpportunity.reason,
+      ceWasRequired: Boolean(phaseRequirement),
+      initiativeComparison: backOutOpportunity.threats,
       phase: input.phase,
-      phaseCombatExperienceReason: phaseRequirement.reason,
-      phaseCombatExperienceThreats: phaseRequirement.threats,
+      ...(phaseRequirement
+        ? {
+            phaseCombatExperienceReason: phaseRequirement.reason,
+            phaseCombatExperienceThreats: phaseRequirement.threats,
+          }
+        : {}),
       ...(previousPhaseActionStepStatus
         ? {
             previousPhaseActionStepStatus,
@@ -5252,6 +5325,11 @@ export function backOutCombatRoundPhaseAttack(input: {
       ...(previousPhaseResolutionStatus
         ? {
             previousPhaseResolutionStatus,
+          }
+        : {}),
+      ...(previousPhaseResolutionCursor
+        ? {
+            previousPhaseResolutionCursor,
           }
         : {}),
       reason: "Backed out while attacked",
@@ -12602,6 +12680,10 @@ function undoCombatRoundBackOutPhaseAttackCommandAtIndex(input: {
   const previousPhaseActionStepStatus = combatRoundStepStatusSchema.safeParse(
     command.facts.previousPhaseActionStepStatus,
   );
+  const previousPhaseResolutionCursor = combatRoundPhaseResolutionCursorSchema.safeParse(
+    command.facts.previousPhaseResolutionCursor,
+  );
+  const ceWasRequired = command.facts.ceWasRequired !== false;
   const phaseResolutionStatusesAfterUndo: CombatRoundPhaseResolutionStatuses = {
     ...normalized.phaseResolutionStatuses,
     [participantId]: {
@@ -12628,7 +12710,15 @@ function undoCombatRoundBackOutPhaseAttackCommandAtIndex(input: {
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
-    phaseResolutionCursor: undefined,
+    phaseResolutionCursor: ceWasRequired
+      ? undefined
+      : previousPhaseResolutionCursor.success
+        ? previousPhaseResolutionCursor.data
+        : {
+            participantId,
+            phase,
+            substep: "attack",
+          },
     phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
     participants: normalized.participants.map((participant) =>
       participant.participantId === participantId

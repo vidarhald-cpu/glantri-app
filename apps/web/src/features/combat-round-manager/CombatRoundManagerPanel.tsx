@@ -37,6 +37,7 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundInspector,
+  canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
@@ -58,6 +59,7 @@ import {
   getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundStartNextRoundBlocker,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
@@ -3352,6 +3354,15 @@ export default function CombatRoundManagerPanel({
           visibility: encounter.roleplayState?.visibility,
         })
       : undefined;
+  const inspectorPhaseAttackBackOutOpportunity =
+    inspector.participant?.participantId && inspectorCurrentAttackPhase && selectedRoundIsActive
+      ? getCombatRoundPhaseAttackBackOutOpportunity({
+          participantId: inspector.participant.participantId,
+          phase: inspectorCurrentAttackPhase,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        })
+      : undefined;
   const inspectorPhaseResolutionCursor =
     inspectorSelectedStepIsSequential &&
     selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
@@ -3426,8 +3437,15 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceWindowOpen &&
     inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
   const inspectorCanBackOutPhaseAttack = Boolean(
-    inspectorPhaseCombatExperienceRequirement &&
-    inspectorCombatExperienceRequired &&
+    inspectorPhaseAttackBackOutOpportunity &&
+    inspector.participant?.participantId &&
+    inspectorCurrentAttackPhase &&
+    canBackOutCombatRoundPhaseAttack({
+      participantId: inspector.participant.participantId,
+      phase: inspectorCurrentAttackPhase,
+      state: roundState,
+      visibility: encounter.roleplayState?.visibility,
+    }) &&
     !inspectorCombatExperienceIsCombatStart &&
     selectedScenarioParticipant &&
     selectedEncounterParticipant &&
@@ -4909,7 +4927,7 @@ export default function CombatRoundManagerPanel({
     if (
       !selectedScenarioParticipant ||
       !selectedEncounterParticipant ||
-      !inspectorPhaseCombatExperienceRequirement
+      !inspectorPhaseAttackBackOutOpportunity
     ) {
       return;
     }
@@ -4919,7 +4937,7 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter, participant } = await backOutPhaseAttackOnServer({
         encounterId: encounter.id,
-        phase: inspectorPhaseCombatExperienceRequirement.phase,
+        phase: inspectorPhaseAttackBackOutOpportunity.phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = normalizeCombatRoundManagerSelection({

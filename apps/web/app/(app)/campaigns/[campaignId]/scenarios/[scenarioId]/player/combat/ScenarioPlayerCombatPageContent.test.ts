@@ -245,9 +245,13 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCombatExperienceDifficulty");
     expect(source).toContain("selectedCombatExperienceNoRollAvailable");
     expect(source).toContain("selectedPhaseCombatExperienceRequirement");
+    expect(source).toContain("selectedPhaseAttackBackOutOpportunity");
+    expect(source).toContain("getCombatRoundPhaseAttackBackOutOpportunity");
+    expect(source).toContain("canBackOutCombatRoundPhaseAttack");
     expect(source).toContain("selectedCombatExperienceResultPanel");
     expect(source).toContain("selectedCombatExperienceActionAvailable");
     expect(source).toContain("selectedPhaseCombatExperienceBackOutAvailable");
+    expect(source).toContain("selectedPhaseAttackBackOutOpportunity &&");
     expect(source).toContain('"Roll Combat Experience"');
     expect(source).toContain('"Confirm Combat Experience"');
     expect(source).toContain('"Back out of attack"');

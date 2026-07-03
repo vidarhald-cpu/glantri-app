@@ -457,7 +457,12 @@ function setupCombatDeclarationRoute(
   return { encounter, participant, participants };
 }
 
-function preparePhaseCombatExperienceBackOutRouteFixture(): {
+function preparePhaseCombatExperienceBackOutRouteFixture(
+  input: {
+    gladiatorInitiative?: number;
+    guardInitiative?: number;
+  } = {},
+): {
   encounter: EncounterSession;
   participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
   roundState: CombatRoundState;
@@ -514,7 +519,13 @@ function preparePhaseCombatExperienceBackOutRouteFixture(): {
       createdAt: "2026-01-01T00:02:00.000Z",
       createdByUserId: "gm-1",
     },
-    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    initiative: {
+      baseInitiative: 0,
+      modifierAdjustment: 0,
+      rolls: [Math.min(6, input.gladiatorInitiative ?? 5)],
+      rollTotal: input.gladiatorInitiative ?? 5,
+      total: input.gladiatorInitiative ?? 5,
+    },
     participantId: "encounter-participant-1",
     phase: "phase1",
     state: phase1Initiative,
@@ -526,7 +537,13 @@ function preparePhaseCombatExperienceBackOutRouteFixture(): {
       createdAt: "2026-01-01T00:02:30.000Z",
       createdByUserId: "gm-1",
     },
-    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+    initiative: {
+      baseInitiative: 0,
+      modifierAdjustment: 0,
+      rolls: [Math.min(6, input.guardInitiative ?? 5)],
+      rollTotal: input.guardInitiative ?? 5,
+      total: input.guardInitiative ?? 5,
+    },
     participantId: "encounter-participant-2",
     phase: "phase1",
     state: afterGladiatorInitiative,
@@ -2649,6 +2666,69 @@ describe("scenarios route contract", () => {
         (command: { type: string }) => command.type === "roll_combat_experience",
       ),
     ).toBe(false);
+    expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
+      "skipped",
+    );
+  });
+
+  it("lets a higher-initiative player back out of a threatened attack without required CE", async () => {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/back-out-phase-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+    expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: "generated:double-attack:phase1:db-parry",
+        value: -2,
+      }),
+      doubleAttackPhase2DbParryModifier,
+    ]);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        backOutAvailableReason: "attacked_while_attacking",
+        ceWasRequired: false,
+        initiativeComparison: [
+          expect.objectContaining({
+            attackerParticipantId: "encounter-participant-2",
+            initiativeDifference: 5,
+            reason: "higher_initiative",
+          }),
+        ],
+        skippedAttack: true,
+      }),
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      type: "back_out_phase_attack",
+    });
+    expect(
+      updatedEncounter.combatRoundState.commands.some(
+        (command: { type: string }) => command.type === "roll_combat_experience",
+      ),
+    ).toBe(false);
+    expect(updatedEncounter.combatRoundState.participants[0]?.combatExperience).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
       "skipped",
     );

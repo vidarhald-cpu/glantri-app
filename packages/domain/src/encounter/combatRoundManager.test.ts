@@ -50,6 +50,7 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundRequiredCombatExperienceTrigger,
+  getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseCombatExperienceDetectionReport,
   getFirstCombatStartExperienceRequiredParticipantId,
@@ -2453,6 +2454,178 @@ describe("combat round manager", () => {
         },
       ],
     });
+    expect(
+      getCombatRoundPhaseAttackBackOutOpportunity({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toMatchObject({
+      ceRequired: false,
+      reason: "attacked_while_attacking",
+      threats: [
+        {
+          attackerInitiative: 4,
+          attackerParticipantId: "guard",
+          initiativeDifference: 5,
+          participantInitiative: 9,
+          reason: "higher_initiative",
+        },
+      ],
+    });
+    expect(
+      canBackOutCombatRoundPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+    expect(
+      canBackOutCombatRoundPhaseAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBe(true);
+  });
+
+  it("backs out a higher-initiative threatened attacker without recording phase CE", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: testPhaseContext("guard"),
+    });
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext,
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: advanced,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility,
+    });
+
+    expect(backedOut.command).toMatchObject({
+      facts: {
+        backOutAvailableReason: "attacked_while_attacking",
+        ceWasRequired: false,
+        initiativeComparison: [
+          {
+            attackerParticipantId: "guard",
+            initiativeDifference: 5,
+            reason: "higher_initiative",
+          },
+        ],
+        skippedAttack: true,
+        source: "phase_ce_back_out",
+      },
+      type: "back_out_phase_attack",
+    });
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.combatExperience,
+    ).toBeUndefined();
+    expect(
+      backedOut.state.commands.some((command) => command.type === "roll_combat_experience"),
+    ).toBe(false);
+    expect(
+      backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.stepStatuses.phase_1_actions,
+    ).toBe("skipped");
+    expect(
+      backedOut.combatContext.modifierBuckets.situationDb.find(
+        (entry) => entry.sourceActionId === "attack_parry" && entry.sourcePhase === "phase1",
+      )?.value,
+    ).toBe(-2);
+    expect(backedOut.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(backedOut.state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "guard",
+        phase: "phase1",
+        state: backedOut.state,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state: backedOut.state,
+      }),
+    ).toBe(true);
+  });
+
+  it("allows a higher-initiative threatened attacker to continue normally after required CE clears", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+      phase: "phase1",
+    });
+    const visibility = {
+      gladiator: { guard: true },
+      guard: { gladiator: true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+    const guardConfirmed = rollCombatRoundCombatExperience({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      skillTotal: 30,
+      state: advanced,
+      visibility,
+    });
+
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: guardConfirmed.state,
+        visibility,
+      }),
+    ).toBe(false);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: guardConfirmed.state,
+      }),
+    ).toBe(true);
+    expect(
+      canBackOutCombatRoundPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: guardConfirmed.state,
+        visibility,
+      }),
+    ).toBe(true);
   });
 
   it("requires phase CE when attacked by a seen third party while attacking", () => {
@@ -2536,6 +2709,98 @@ describe("combat round manager", () => {
     });
   });
 
+  it("offers third-party back-out without CE when the threatened attacker wins initiative by more than 3", () => {
+    const encounterParticipants = [
+      participant({ id: "gladiator", label: "The Gladiator" }),
+      participant({ id: "guard", label: "City guard" }),
+      participant({ id: "archer", label: "Hidden archer" }),
+    ];
+    const declared = declareTestRoundAction({
+      actionId: "attack_parry",
+      participantId: "archer",
+      phase1Target: "gladiator",
+      phase2Target: "gladiator",
+      state: declareTestRoundAction({
+        participantId: "guard",
+        state: declareTestRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          phase1Target: "guard",
+          phase2Target: "guard",
+          state: initializeCombatRoundState({
+            encounter: encounter({ participants: encounterParticipants }),
+          }),
+        }),
+      }),
+    });
+    const atInitiative = advanceToStep(declared, "initiative_phase_1");
+    const state = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+      participantId: "archer",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6],
+          rollTotal: 9,
+          total: 9,
+        },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [2],
+            rollTotal: 2,
+            total: 2,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: atInitiative,
+        }),
+      }),
+    });
+    const visibility = {
+      gladiator: { archer: true },
+    };
+    const advanced = advanceCombatRoundStep(state, { visibility });
+
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundPhaseAttackBackOutOpportunity({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toMatchObject({
+      ceRequired: false,
+      threats: [
+        {
+          attackerParticipantId: "archer",
+          initiativeDifference: 5,
+          reason: "higher_initiative",
+        },
+      ],
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+      }),
+    ).toBe(true);
+  });
+
   it("does not require phase CE when the incoming third-party attacker is unseen", () => {
     const encounterParticipants = [
       participant({ id: "gladiator", label: "The Gladiator" }),
@@ -2596,6 +2861,14 @@ describe("combat round manager", () => {
 
     expect(
       getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundPhaseAttackBackOutOpportunity({
         participantId: "gladiator",
         phase: "phase1",
         state: advanced,
@@ -2668,6 +2941,13 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: advanced,
         visibility,
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundPhaseAttackBackOutOpportunity({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: advanced,
       }),
     ).toBeUndefined();
   });
