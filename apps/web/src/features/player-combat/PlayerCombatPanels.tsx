@@ -263,6 +263,27 @@ const compactStatsTableStyle = {
 
 const compactPhaseContextSelectorColumns = "6.5rem 7rem auto";
 const compactPhaseContextSelectStyle = { width: "7rem" } as const;
+const compactPhaseTargetRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: "6.5rem minmax(7rem, 1fr) max-content",
+  minWidth: 0,
+  width: "100%",
+} as const;
+const compactPhaseTargetSelectStyle = {
+  ...compactPhaseContextSelectStyle,
+  maxWidth: "13rem",
+} as const;
+const compactPhaseTargetMetaStyle = {
+  color: "#4f5f57",
+  display: "grid",
+  fontSize: "0.82rem",
+  justifyItems: "end",
+  justifySelf: "end",
+  minWidth: "5.5rem",
+  whiteSpace: "nowrap",
+} as const;
 
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
@@ -860,14 +881,7 @@ export function PlayerCombatAttackTargetSelector({
   );
 
   return (
-    <label
-      style={{
-        alignItems: "center",
-        display: "grid",
-        gap: "0.35rem",
-        gridTemplateColumns: compactPhaseContextSelectorColumns,
-      }}
-    >
+    <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
       <select
         disabled={controlsDisabled}
@@ -877,7 +891,7 @@ export function PlayerCombatAttackTargetSelector({
             targetParticipantId: event.target.value || undefined,
           })
         }
-        style={compactPhaseContextSelectStyle}
+        style={compactPhaseTargetSelectStyle}
         value={combatContext.targetParticipantId ?? ""}
       >
         <option value="">No target</option>
@@ -893,14 +907,7 @@ export function PlayerCombatAttackTargetSelector({
         ))}
       </select>
       {distanceLabel ? (
-        <span
-          style={{
-            color: "#4f5f57",
-            fontSize: "0.82rem",
-            justifySelf: "start",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
           {distanceLabel}
         </span>
       ) : null}

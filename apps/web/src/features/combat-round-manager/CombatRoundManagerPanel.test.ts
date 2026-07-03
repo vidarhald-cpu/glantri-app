@@ -114,22 +114,39 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Save distance changes");
     expect(source).toContain("Reset changes");
     expect(source).toContain("saveCombatDistanceChanges()");
+    expect(source).toContain("setPairDistanceOnServer({");
     expect(source).toContain("rowParticipant.participantId === columnParticipant.participantId");
     expect(source).toContain("rowIndex < columnIndex");
+    expect(source).toContain("distanceDrafts[distanceRow.edge.pairKey]");
     expect(source).toContain("[distanceRow.edge.pairKey]: event.target.value");
     expect(source).toContain("formatCombatDistanceSource(distanceRow.edge.source)");
     expect(source).toContain("distanceRow.preferredDistanceLabel");
+    expect(source).toContain('className="distanceMatrix"');
+    expect(source).toContain('className="distanceMatrixHeaderCell"');
+    expect(source).toContain('className="distanceMatrixHeaderLabel"');
+    expect(source).toContain('className="distanceMatrixRowLabel"');
+    expect(source).toContain('className="distanceMatrixCell distanceMatrixNumericCell"');
+    expect(source).toContain("distanceMatrixCellSize");
     expect(source).toContain("distanceMatrixCellBorder");
     expect(source).toContain("distanceMatrixCellStyle");
+    expect(source).toContain("distanceMatrixInputStyle");
     expect(source).toContain("distanceMatrixRowHeaderStyle");
     expect(source).toContain("distanceMatrixColumnHeaderStyle");
     expect(source).toContain("distanceMatrixColumnHeaderTextStyle");
-    expect(source).toContain('transform: "translateX(0.2rem) rotate(-45deg)"');
+    expect(source).toContain('transform: "translateX(-0.3rem) rotate(-45deg)"');
     expect(source).toContain('textOverflow: "ellipsis"');
+    expect(source).toContain('position: "absolute"');
     expect(source).toContain("title={participant.label}");
     expect(source).toContain("title={rowParticipant.label}");
     expect(source).toContain("distanceLabel={");
     expect(source).toContain('Distance: ${phaseDistanceRow?.edge.distance ?? "—"}');
+    expect(source).toContain(
+      'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
+    );
+    expect(source).toContain("PlayerCombatAttackTargetSelector");
+    expect(source).not.toContain("Participant A");
+    expect(source).not.toContain("Participant B");
+    expect(source).not.toContain("Pairwise distance notes");
   });
 
   it("renders inspector details for the selected participant and step", () => {

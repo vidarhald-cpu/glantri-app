@@ -191,6 +191,13 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("distanceLabel?: string");
     expect(source).toContain("distanceLabel");
+    expect(source).toContain("compactPhaseTargetRowStyle");
+    expect(source).toContain("compactPhaseTargetMetaStyle");
+    expect(source).toContain('gridTemplateColumns: "6.5rem minmax(7rem, 1fr) max-content"');
+    expect(source).toContain('className="combatPhaseTargetRow"');
+    expect(source).toContain('className="combatPhaseTargetMeta"');
+    expect(source).toContain('justifySelf: "end"');
+    expect(source).toContain('justifyItems: "end"');
     expect(source.indexOf("export function PlayerCombatAttackTargetSelector")).toBeLessThan(
       source.indexOf("export function PlayerCombatAttackLocationSelector"),
     );

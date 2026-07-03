@@ -193,6 +193,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("participant.characterId === phaseCombatContext.targetParticipantId");
     expect(source).toContain("distanceLabel={");
     expect(source).toContain('Distance: ${distanceEdge?.distance ?? "—"}');
+    expect(source).toContain(
+      'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
+    );
     expect(source).not.toContain("Distance matrix");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");

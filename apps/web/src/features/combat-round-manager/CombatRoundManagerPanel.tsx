@@ -216,20 +216,25 @@ const tableWrapStyle = {
 } as const;
 
 const distanceMatrixCellBorder = "1px solid #d8d6cf";
+const distanceMatrixCellSize = "2.75rem";
 
 const distanceMatrixCellStyle = {
   border: distanceMatrixCellBorder,
   boxSizing: "border-box",
-  minWidth: "2.75rem",
-  padding: "0.18rem 0.25rem",
+  height: "2rem",
+  maxWidth: distanceMatrixCellSize,
+  minWidth: distanceMatrixCellSize,
+  padding: 0,
   textAlign: "center",
+  verticalAlign: "middle",
+  width: distanceMatrixCellSize,
 } as const;
 
 const distanceMatrixRowHeaderStyle = {
   border: distanceMatrixCellBorder,
   boxSizing: "border-box",
-  maxWidth: "8.5rem",
-  minWidth: "8.5rem",
+  maxWidth: "9.5rem",
+  minWidth: "9.5rem",
   overflow: "hidden",
   padding: "0.22rem 0.35rem",
   textAlign: "left",
@@ -238,24 +243,38 @@ const distanceMatrixRowHeaderStyle = {
 } as const;
 
 const distanceMatrixColumnHeaderStyle = {
-  border: distanceMatrixCellBorder,
   boxSizing: "border-box",
-  height: "5.75rem",
-  minWidth: "2.75rem",
-  padding: "0 0.2rem 0.25rem",
-  textAlign: "left",
+  height: "6.75rem",
+  maxWidth: distanceMatrixCellSize,
+  minWidth: distanceMatrixCellSize,
+  padding: 0,
+  position: "relative",
   verticalAlign: "bottom",
-  width: "2.75rem",
+  width: distanceMatrixCellSize,
 } as const;
 
 const distanceMatrixColumnHeaderTextStyle = {
+  bottom: "0.35rem",
   display: "inline-block",
-  maxWidth: "7rem",
+  fontSize: "0.75rem",
+  left: "50%",
+  lineHeight: 1,
+  maxWidth: "7.25rem",
   overflow: "hidden",
+  position: "absolute",
   textOverflow: "ellipsis",
-  transform: "translateX(0.2rem) rotate(-45deg)",
+  transform: "translateX(-0.3rem) rotate(-45deg)",
   transformOrigin: "bottom left",
   whiteSpace: "nowrap",
+  width: "7.25rem",
+} as const;
+
+const distanceMatrixInputStyle = {
+  border: "0",
+  boxSizing: "border-box",
+  height: "1.85rem",
+  textAlign: "center",
+  width: "100%",
 } as const;
 
 const stickyParticipantCellStyle = {
@@ -7183,6 +7202,7 @@ export default function CombatRoundManagerPanel({
           <>
             <div style={{ overflowX: "auto" }}>
               <table
+                className="distanceMatrix"
                 style={{
                   borderCollapse: "collapse",
                   fontSize: "0.82rem",
@@ -7193,18 +7213,26 @@ export default function CombatRoundManagerPanel({
                 <thead>
                   <tr>
                     <th
+                      className="distanceMatrixCornerCell"
                       style={{
                         ...distanceMatrixRowHeaderStyle,
+                        border: 0,
                         height: distanceMatrixColumnHeaderStyle.height,
                       }}
                     />
                     {displayParticipants.map((participant) => (
                       <th
+                        className="distanceMatrixHeaderCell"
                         key={`distance-column:${participant.participantId}`}
                         style={distanceMatrixColumnHeaderStyle}
                         title={participant.label}
                       >
-                        <span style={distanceMatrixColumnHeaderTextStyle}>{participant.label}</span>
+                        <span
+                          className="distanceMatrixHeaderLabel"
+                          style={distanceMatrixColumnHeaderTextStyle}
+                        >
+                          {participant.label}
+                        </span>
                       </th>
                     ))}
                   </tr>
@@ -7212,13 +7240,18 @@ export default function CombatRoundManagerPanel({
                 <tbody>
                   {displayParticipants.map((rowParticipant, rowIndex) => (
                     <tr key={`distance-row:${rowParticipant.participantId}`}>
-                      <th style={distanceMatrixRowHeaderStyle} title={rowParticipant.label}>
+                      <th
+                        className="distanceMatrixRowLabel"
+                        style={distanceMatrixRowHeaderStyle}
+                        title={rowParticipant.label}
+                      >
                         {rowParticipant.label}
                       </th>
                       {displayParticipants.map((columnParticipant, columnIndex) => {
                         if (rowParticipant.participantId === columnParticipant.participantId) {
                           return (
                             <td
+                              className="distanceMatrixCell distanceMatrixNumericCell distanceMatrixDiagonalCell"
                               key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
                               style={{
                                 ...distanceMatrixCellStyle,
@@ -7252,6 +7285,7 @@ export default function CombatRoundManagerPanel({
 
                         return (
                           <td
+                            className="distanceMatrixCell distanceMatrixNumericCell"
                             key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
                             style={distanceMatrixCellStyle}
                             title={title}
@@ -7268,7 +7302,7 @@ export default function CombatRoundManagerPanel({
                                     [distanceRow.edge.pairKey]: event.target.value,
                                   }))
                                 }
-                                style={{ textAlign: "center", width: "2.75rem" }}
+                                style={distanceMatrixInputStyle}
                                 type="number"
                                 value={draftValue}
                               />
