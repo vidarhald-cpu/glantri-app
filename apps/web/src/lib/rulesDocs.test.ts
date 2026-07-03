@@ -255,7 +255,7 @@ describe("rules documentation registry", () => {
       "| 20 | Head | Head | `head` |",
     );
     expect(expandStructuredRuleTableDirectives("{{rule-table:combat-hit-location}}")).toContain(
-      "| 1 | Left leg | L leg | `leftLeg` |",
+      "| 1 | Lower left leg | L lower | `lowerLeftLeg` |",
     );
   });
 });

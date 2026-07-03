@@ -6861,18 +6861,40 @@ export function mapHitLocationAndDirectionToArmorRegion(input: {
             armorRegion: "backArm",
             armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backArm,
           };
+    case "upperLeftLeg":
+    case "upperRightLeg":
+      return direction === "front"
+        ? {
+            armorRegion: "frontThigh",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.frontThigh,
+          }
+        : {
+            armorRegion: "backThigh",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backThigh,
+          };
+    case "lowerLeftLeg":
+    case "lowerRightLeg":
+      return direction === "front"
+        ? {
+            armorRegion: "frontFoot",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.frontFoot,
+          }
+        : {
+            armorRegion: "backFoot",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backFoot,
+          };
     case "leftLeg":
     case "rightLeg":
       return direction === "front"
         ? {
             armorRegion: "frontThigh",
             armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.frontThigh,
-            note: "Whole-leg hit mapped to front thigh until lower-leg/foot hit locations are available.",
+            note: "Legacy whole-leg hit mapped to front thigh; review as upper or lower leg when critical or armor precision matters.",
           }
         : {
             armorRegion: "backThigh",
             armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backThigh,
-            note: "Whole-leg hit mapped to back thigh until lower-leg/foot hit locations are available.",
+            note: "Legacy whole-leg hit mapped to back thigh; review as upper or lower leg when critical or armor precision matters.",
           };
   }
 }
@@ -8704,17 +8726,25 @@ function getCombatRoundCommittedDamageLocation(
       return { id: "chestBack", label: "Chest/back" };
     case "abdomen":
       return { id: "abdomenLowerBack", label: "Abdomen/lower back" };
+    case "upperLeftLeg":
+      return { id: "upperLeftLeg", label: "Upper left leg" };
+    case "lowerLeftLeg":
+      return { id: "lowerLeftLeg", label: "Lower left leg" };
+    case "upperRightLeg":
+      return { id: "upperRightLeg", label: "Upper right leg" };
+    case "lowerRightLeg":
+      return { id: "lowerRightLeg", label: "Lower right leg" };
     case "leftLeg":
       return {
         id: "upperLeftLeg",
         label: "Upper left leg",
-        note: "Whole-leg hit mapped to upper left leg until upper/lower leg review is available.",
+        note: "Legacy whole-leg hit mapped to upper left leg; review as upper or lower leg when needed.",
       };
     case "rightLeg":
       return {
         id: "upperRightLeg",
         label: "Upper right leg",
-        note: "Whole-leg hit mapped to upper right leg until upper/lower leg review is available.",
+        note: "Legacy whole-leg hit mapped to upper right leg; review as upper or lower leg when needed.",
       };
     default:
       return undefined;

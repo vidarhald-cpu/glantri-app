@@ -74,8 +74,10 @@ damage `1`.
 Armor is applied after the table row is read. The reviewed hit location plus front/back direction
 selects the defender's armor coverage region. Armor value reduces table damage, and the armor
 modifier table can further adjust damage and minimum damage. The current direction model defaults to
-front; the GM may review it as back before commit. For now, whole-leg hit locations map to thigh
-armor for the chosen direction until lower-leg/foot hit locations exist.
+front; the GM may review it as back before commit. Upper-leg hit locations use thigh armor for the
+chosen direction. Lower-leg hit locations use the current lower-leg/foot armor bucket (`frontFoot` or
+`backFoot`); if no such coverage is present, the existing missing-coverage warning applies and armor
+defaults to `0A`.
 
 When a damage lookup row has a max-damage cap, the proposal preserves the uncapped table damage for
 audit, but the capped value is the effective damage used for commit. Current capped rows use

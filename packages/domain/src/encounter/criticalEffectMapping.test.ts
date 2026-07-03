@@ -68,8 +68,25 @@ describe("critical effect combat mapping", () => {
       status: "mapped",
       value: "abdomen",
     });
+    expect(mapCombatHitLocationToCriticalLocation("upperRightLeg")).toEqual({
+      status: "mapped",
+      value: "upper_leg",
+    });
+    expect(mapCombatHitLocationToCriticalLocation("upperLeftLeg")).toEqual({
+      status: "mapped",
+      value: "upper_leg",
+    });
+    expect(mapCombatHitLocationToCriticalLocation("lowerRightLeg")).toEqual({
+      status: "mapped",
+      value: "lower_leg",
+    });
+    expect(mapCombatHitLocationToCriticalLocation("lowerLeftLeg")).toEqual({
+      status: "mapped",
+      value: "lower_leg",
+    });
     expect(mapCombatHitLocationToCriticalLocation("rightLeg")).toMatchObject({
       status: "ambiguous",
+      reason: expect.stringContaining("legacy whole leg"),
     });
   });
 

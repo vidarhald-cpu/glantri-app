@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EncounterParticipant, EncounterSession } from "./session";
+import type { HitLocationTarget } from "./hitLocation";
 
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
@@ -321,15 +322,7 @@ function recordTestHitLocation(input: {
   hitLocationRolls?: number[];
   rolledByParticipantId?: string;
   state: ReturnType<typeof initializeCombatRoundState>;
-  targetLocation?:
-    | "none"
-    | "head"
-    | "rightArm"
-    | "leftArm"
-    | "chest"
-    | "abdomen"
-    | "rightLeg"
-    | "leftLeg";
+  targetLocation?: HitLocationTarget;
   updatedAt?: string;
 }): ReturnType<typeof initializeCombatRoundState> {
   const updatedAt = input.updatedAt ?? input.command?.createdAt ?? "2026-01-01T00:04:30.000Z";
@@ -8613,16 +8606,36 @@ describe("combat round manager", () => {
       mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "rightArm" }),
     ).toMatchObject({ armorRegion: "backArm" });
     expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "upperLeftLeg" }),
+    ).toMatchObject({
+      armorRegion: "frontThigh",
+    });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "upperRightLeg" }),
+    ).toMatchObject({
+      armorRegion: "backThigh",
+    });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "lowerLeftLeg" }),
+    ).toMatchObject({
+      armorRegion: "frontFoot",
+    });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "lowerRightLeg" }),
+    ).toMatchObject({
+      armorRegion: "backFoot",
+    });
+    expect(
       mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "leftLeg" }),
     ).toMatchObject({
       armorRegion: "frontThigh",
-      note: "Whole-leg hit mapped to front thigh until lower-leg/foot hit locations are available.",
+      note: "Legacy whole-leg hit mapped to front thigh; review as upper or lower leg when critical or armor precision matters.",
     });
     expect(
       mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "rightLeg" }),
     ).toMatchObject({
       armorRegion: "backThigh",
-      note: "Whole-leg hit mapped to back thigh until lower-leg/foot hit locations are available.",
+      note: "Legacy whole-leg hit mapped to back thigh; review as upper or lower leg when critical or armor precision matters.",
     });
   });
 
@@ -8681,6 +8694,43 @@ describe("combat round manager", () => {
       totalDamage: 8,
       weaponArmorClass: "C",
     });
+
+    const lowerLegDamageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        frontThigh: {
+          armorClass: "C",
+          coverageLabel: "5C",
+          label: "Front Thigh",
+          value: 5,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: {
+        hitLocationRolls: [1],
+        hitLocationSelectionReason: "single_roll",
+        selectedHitLocation: "lowerLeftLeg",
+        selectedHitLocationRoll: 1,
+      },
+      roundNumber: 3,
+      weaponArmorClass: "C",
+    });
+
+    expect(lowerLegDamageResult).toMatchObject({
+      armorCoverageLabel: "0A",
+      armorModifierSource: {
+        reason: "Front Foot armor coverage was not available; using 0A.",
+        status: "not_applied",
+      },
+      armorRegion: "frontFoot",
+      armorRegionLabel: "Front Foot",
+      armorValue: 0,
+    });
+    expect(lowerLegDamageResult.armorWarnings).toContain(
+      "Front Foot armor coverage was not available; using 0A.",
+    );
   });
 
   it("derives effective D1 damage values from GM review overrides without replacing computed values", () => {
@@ -8904,8 +8954,10 @@ describe("combat round manager", () => {
     { effectLocation: "rightArm", roll: 18 },
     { effectLocation: "leftArm", roll: 16 },
     { effectLocation: "chestBack", roll: 12 },
-    { effectLocation: "upperRightLeg", roll: 4 },
-    { effectLocation: "upperLeftLeg", roll: 1 },
+    { effectLocation: "upperRightLeg", roll: 5 },
+    { effectLocation: "lowerRightLeg", roll: 4 },
+    { effectLocation: "upperLeftLeg", roll: 2 },
+    { effectLocation: "lowerLeftLeg", roll: 1 },
   ])("commits hit location roll $roll to physical damage location $effectLocation", (caseInput) => {
     const { attackResult, state } = prepareFailedParryPendingDamage({});
     const afterLocation = recordTestHitLocation({
@@ -9064,7 +9116,7 @@ describe("combat round manager", () => {
       hitLocationRolls: [1],
       hitLocationSelectionReason: "single_roll",
       hitLookupTotal: 11,
-      selectedHitLocation: "leftLeg",
+      selectedHitLocation: "lowerLeftLeg",
       selectedHitLocationRoll: 1,
       tableDamage: 7,
       totalDamage: 1,

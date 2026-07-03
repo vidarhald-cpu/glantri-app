@@ -14,6 +14,16 @@ Clear control.
 The canonical structured hit-location table lives in Admin -> Tables. That table is the source used
 by hit-location helpers; this page only explains how the rule is intended to be read.
 
+Leg results are split before damage and critical lookup:
+
+- roll `1` selects lower left leg
+- rolls `2-3` select upper left leg
+- roll `4` selects lower right leg
+- rolls `5-6` select upper right leg
+
+The side remains part of the combat hit location for display and damage rows. Critical-effect lookup
+uses upper leg or lower leg from that selected sublocation.
+
 ## Aimed location
 
 If the attacking character declares an aimed location for that phase, roll `1d20` twice and use the

@@ -46,12 +46,12 @@ describe("hit location helpers", () => {
       [9, "abdomen"],
       [8, "abdomen"],
       [7, "abdomen"],
-      [6, "rightLeg"],
-      [5, "rightLeg"],
-      [4, "rightLeg"],
-      [3, "leftLeg"],
-      [2, "leftLeg"],
-      [1, "leftLeg"],
+      [6, "upperRightLeg"],
+      [5, "upperRightLeg"],
+      [4, "lowerRightLeg"],
+      [3, "upperLeftLeg"],
+      [2, "upperLeftLeg"],
+      [1, "lowerLeftLeg"],
     ]);
   });
 
@@ -78,24 +78,28 @@ describe("hit location helpers", () => {
       { fullLabel: "Abdomen", key: "abdomen", roll: 9, shortLabel: "Abd" },
       { fullLabel: "Abdomen", key: "abdomen", roll: 8, shortLabel: "Abd" },
       { fullLabel: "Abdomen", key: "abdomen", roll: 7, shortLabel: "Abd" },
-      { fullLabel: "Right leg", key: "rightLeg", roll: 6, shortLabel: "R leg" },
-      { fullLabel: "Right leg", key: "rightLeg", roll: 5, shortLabel: "R leg" },
-      { fullLabel: "Right leg", key: "rightLeg", roll: 4, shortLabel: "R leg" },
-      { fullLabel: "Left leg", key: "leftLeg", roll: 3, shortLabel: "L leg" },
-      { fullLabel: "Left leg", key: "leftLeg", roll: 2, shortLabel: "L leg" },
-      { fullLabel: "Left leg", key: "leftLeg", roll: 1, shortLabel: "L leg" },
+      { fullLabel: "Upper right leg", key: "upperRightLeg", roll: 6, shortLabel: "R upper" },
+      { fullLabel: "Upper right leg", key: "upperRightLeg", roll: 5, shortLabel: "R upper" },
+      { fullLabel: "Lower right leg", key: "lowerRightLeg", roll: 4, shortLabel: "R lower" },
+      { fullLabel: "Upper left leg", key: "upperLeftLeg", roll: 3, shortLabel: "L upper" },
+      { fullLabel: "Upper left leg", key: "upperLeftLeg", roll: 2, shortLabel: "L upper" },
+      { fullLabel: "Lower left leg", key: "lowerLeftLeg", roll: 1, shortLabel: "L lower" },
     ]);
   });
 
   it("labels hit locations for compact and full display", () => {
     expect(getHitLocationShortLabel("rightArm")).toBe("R arm");
     expect(getHitLocationFullLabel("rightArm")).toBe("Right arm");
+    expect(getHitLocationShortLabel("lowerRightLeg")).toBe("R lower");
+    expect(getHitLocationFullLabel("lowerRightLeg")).toBe("Lower right leg");
   });
 
   it("exposes stable table order for targeted selection", () => {
     expect(getHitLocationOrderIndex("head")).toBe(0);
     expect(getHitLocationOrderIndex("rightArm")).toBe(1);
-    expect(getHitLocationOrderIndex("leftLeg")).toBe(6);
+    expect(getHitLocationOrderIndex("lowerRightLeg")).toBe(6);
+    expect(getHitLocationOrderIndex("lowerLeftLeg")).toBe(8);
+    expect(getHitLocationOrderIndex("leftLeg")).toBe(7);
   });
 
   it("chooses the targeted roll closest to the aimed location", () => {
