@@ -71,6 +71,8 @@ export {
 export {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
+  commitPhaseInitiativeResolutionOnServer,
+  continuePhaseAttackOnServer,
   createEncounterOnServer,
   loadEncounterById,
   loadScenarioEncounters,

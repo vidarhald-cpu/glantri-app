@@ -49,6 +49,9 @@ import {
   formatOpenEndedD20RollBreakdown,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundInitiativePhaseForStep,
+  getCombatRoundPhaseInitiativeChoice,
+  getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
@@ -76,6 +79,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
+  isCombatRoundPhaseInitiativeResolutionOpen,
   hasCombatRoundCombatExperienceRoll,
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
@@ -104,6 +108,8 @@ import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient
 import {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
+  commitPhaseInitiativeResolutionOnServer,
+  continuePhaseAttackOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -3171,6 +3177,16 @@ export default function CombatRoundManagerPanel({
     roundState.currentStep === "round_summary" && !roundEndReviewComplete
       ? getCombatRoundStartNextRoundBlocker(roundState)
       : undefined;
+  const topPhaseInitiativeResolutionPhase =
+    getCombatRoundInitiativePhaseForStep(roundState.currentStep);
+  const topPhaseInitiativeResolutionOpen =
+    topPhaseInitiativeResolutionPhase && selectedRoundIsActive
+      ? isCombatRoundPhaseInitiativeResolutionOpen({
+          phase: topPhaseInitiativeResolutionPhase,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        })
+      : false;
   const inspectorRoundEndReview =
     inspector.step === "round_summary" && inspector.participant?.participantId
       ? selectedTimelineRoundState.roundEndReview?.participantReviews[
@@ -3338,31 +3354,61 @@ export default function CombatRoundManagerPanel({
   const inspectorSelectedStepIsSequential = isSequentialResolutionStep(inspector.step);
   const inspectorCurrentStepIsInitiative =
     inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2";
+  const inspectorInitiativeResolutionPhase = inspectorCurrentStepIsInitiative
+    ? getCombatRoundInitiativePhaseForStep(inspector.step)
+    : undefined;
+  const inspectorPhaseInitiativeResolutionOpen =
+    inspectorInitiativeResolutionPhase && selectedRoundIsActive
+      ? isCombatRoundPhaseInitiativeResolutionOpen({
+          phase: inspectorInitiativeResolutionPhase,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        })
+      : false;
   const inspectorCanExecuteSelectedStep =
     selectedRoundIsActive &&
     (inspectorSelectionIsCurrentTask ||
       (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
+  const inspectorPhaseChoicePhase = inspectorInitiativeResolutionPhase;
   const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseCombatExperienceRequirement =
-    inspector.participant?.participantId && inspectorCurrentAttackPhase && selectedRoundIsActive
+    inspector.participant?.participantId && inspectorPhaseChoicePhase && selectedRoundIsActive
       ? getCombatRoundPhaseCombatExperienceRequirement({
           participantId: inspector.participant.participantId,
-          phase: inspectorCurrentAttackPhase,
+          phase: inspectorPhaseChoicePhase,
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         })
       : undefined;
   const inspectorPhaseAttackBackOutOpportunity =
-    inspector.participant?.participantId && inspectorCurrentAttackPhase && selectedRoundIsActive
+    inspector.participant?.participantId && inspectorPhaseChoicePhase && selectedRoundIsActive
       ? getCombatRoundPhaseAttackBackOutOpportunity({
           participantId: inspector.participant.participantId,
-          phase: inspectorCurrentAttackPhase,
+          phase: inspectorPhaseChoicePhase,
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         })
       : undefined;
+  const inspectorPhaseInitiativeChoice =
+    inspector.participant?.participantId && inspectorPhaseChoicePhase && selectedRoundIsActive
+      ? getCombatRoundPhaseInitiativeChoice({
+          participantId: inspector.participant.participantId,
+          phase: inspectorPhaseChoicePhase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorPhaseInitiativeChoiceStatuses =
+    inspectorInitiativeResolutionPhase && selectedRoundIsActive
+      ? getCombatRoundPhaseInitiativeChoiceStatuses({
+          phase: inspectorInitiativeResolutionPhase,
+          state: roundState,
+          visibility: encounter.roleplayState?.visibility,
+        })
+      : [];
+  const inspectorVisibleCombatExperienceResult =
+    inspectorPhaseInitiativeChoice?.combatExperience ?? inspectorCombatExperienceResult;
   const inspectorPhaseResolutionCursor =
     inspectorSelectedStepIsSequential &&
     selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
@@ -3436,13 +3482,24 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceWindowOpen &&
     inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty;
+  const inspectorCanContinuePhaseAttack = Boolean(
+    inspectorPhaseAttackBackOutOpportunity &&
+      !inspectorPhaseAttackBackOutOpportunity.ceRequired &&
+      !inspectorPhaseInitiativeChoice &&
+      inspectorPhaseInitiativeResolutionOpen &&
+      selectedScenarioParticipant &&
+      selectedEncounterParticipant &&
+      selectedRoundIsActive &&
+      !inspectorSnapshot,
+  );
+  const inspectorPhaseInitiativeChoiceSubmitted = Boolean(inspectorPhaseInitiativeChoice);
   const inspectorCanBackOutPhaseAttack = Boolean(
     inspectorPhaseAttackBackOutOpportunity &&
     inspector.participant?.participantId &&
-    inspectorCurrentAttackPhase &&
+    inspectorPhaseChoicePhase &&
     canBackOutCombatRoundPhaseAttack({
       participantId: inspector.participant.participantId,
-      phase: inspectorCurrentAttackPhase,
+      phase: inspectorPhaseChoicePhase,
       state: roundState,
       visibility: encounter.roleplayState?.visibility,
     }) &&
@@ -3849,6 +3906,10 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
+    : inspectorPhaseInitiativeChoiceSubmitted
+      ? "Phase choice submitted"
+      : inspectorCanContinuePhaseAttack
+        ? "Continue attack"
     : inspectorCombatExperienceRequired
       ? !inspectorCombatExperienceWindowOpen
         ? "Set CE difficulty first"
@@ -3936,16 +3997,16 @@ export default function CombatRoundManagerPanel({
                     value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
                   }),
               }
-            : inspectorCombatExperienceResult
+            : inspectorVisibleCombatExperienceResult
               ? {
                   detailLines: [
-                    formatCombatExperienceEffectiveTableLine(inspectorCombatExperienceResult),
+                    formatCombatExperienceEffectiveTableLine(inspectorVisibleCombatExperienceResult),
                   ].filter((line): line is string => Boolean(line)),
                   interpretedResult: formatCombatExperienceCalculation(
-                    inspectorCombatExperienceResult,
+                    inspectorVisibleCombatExperienceResult,
                   ),
                   rankLabel: "Combat Experience",
-                  resultLabel: formatCombatExperienceEffectLine(inspectorCombatExperienceResult),
+                  resultLabel: formatCombatExperienceEffectLine(inspectorVisibleCombatExperienceResult),
                 }
               : null;
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
@@ -4490,6 +4551,57 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    const phaseInitiativeResolutionPhase =
+      getCombatRoundInitiativePhaseForStep(roundState.currentStep);
+
+    if (
+      phaseInitiativeResolutionPhase &&
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: phaseInitiativeResolutionPhase,
+        state: roundState,
+        visibility: encounter.roleplayState?.visibility,
+      })
+    ) {
+      setSaving(true);
+
+      try {
+        const { encounter: nextEncounter, participants } =
+          await commitPhaseInitiativeResolutionOnServer({
+            encounterId: encounter.id,
+            phase: phaseInitiativeResolutionPhase,
+          });
+        const nextRoundState = normalizeCombatRoundManagerSelection({
+          state: initializeCombatRoundState({ encounter: nextEncounter }),
+        });
+
+        if (participants.length > 0) {
+          setScenarioParticipantOverrides((current) => ({
+            ...current,
+            ...Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+          }));
+          onScenarioParticipantsUpdated?.(participants);
+        }
+
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+        setRoundState(nextRoundState);
+        setSelectedRoundNumber(nextRoundState.roundNumber);
+        onEncounterUpdated?.(nextEncounter);
+        focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+        setSaveError(undefined);
+      } catch (caughtError) {
+        setSaveError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to commit phase initiative resolution.",
+        );
+      } finally {
+        setSaving(false);
+      }
+
+      return;
+    }
+
     const committedAt = new Date().toISOString();
     const resolutionPhase = getCombatRoundResolutionPhaseForStep(roundState.currentStep);
     const stateForCommit = resolutionPhase
@@ -4958,6 +5070,47 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to back out of attack.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function continueInspectorPhaseAttack() {
+    if (
+      !selectedScenarioParticipant ||
+      !selectedEncounterParticipant ||
+      !inspectorPhaseAttackBackOutOpportunity
+    ) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter, participant } = await continuePhaseAttackOnServer({
+        encounterId: encounter.id,
+        phase: inspectorPhaseAttackBackOutOpportunity.phase,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      });
+
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [participant.id]: participant,
+      }));
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      onScenarioParticipantsUpdated?.([participant]);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to continue attack.",
       );
     } finally {
       setSaving(false);
@@ -5805,7 +5958,11 @@ export default function CombatRoundManagerPanel({
             type="button"
             title={roundEndStartNextRoundBlocker}
           >
-            {saving ? "Saving..." : getAdvanceButtonLabel(inspector.step)}
+            {saving
+              ? "Saving..."
+              : topPhaseInitiativeResolutionOpen && topPhaseInitiativeResolutionPhase
+                ? `Commit ${formatCombatPhaseLabel(topPhaseInitiativeResolutionPhase)} initiative resolution`
+                : getAdvanceButtonLabel(inspector.step)}
           </button>
           <button
             disabled={saving || !currentTaskSelection}
@@ -6320,10 +6477,15 @@ export default function CombatRoundManagerPanel({
                     rows={inspectorDisplayModifierRows}
                   />
                   <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {inspector.step === "select_actions" || inspectorCombatExperienceRequired ? (
+                    {inspector.step === "select_actions" ||
+                    inspectorCombatExperienceRequired ||
+                    inspectorPhaseAttackBackOutOpportunity ||
+                    inspectorPhaseInitiativeChoiceStatuses.length > 0 ? (
                       <section style={playerCombatPanelCardStyle}>
                         <strong>Combat Experience</strong>
-                        <div>{formatCombatExperienceStatus(inspectorCombatExperienceResult)}</div>
+                        <div>
+                          {formatCombatExperienceStatus(inspectorVisibleCombatExperienceResult)}
+                        </div>
                         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
                           Skill total {inspectorCombatExperienceSkillTotal}
                         </div>
@@ -6425,6 +6587,59 @@ export default function CombatRoundManagerPanel({
                             ))}
                           </div>
                         ) : null}
+                        {inspectorPhaseAttackBackOutOpportunity &&
+                        !inspectorPhaseCombatExperienceRequirement ? (
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            Threatened while attacking. Combat Experience is not required; choose
+                            Continue attack or Back out before GM commits initiative resolution.
+                          </div>
+                        ) : null}
+                        {inspectorPhaseInitiativeChoice ? (
+                          <div style={{ color: "#3f5f46", fontSize: "0.85rem" }}>
+                            Submitted:{" "}
+                            {inspectorPhaseInitiativeChoice.choice === "roll_ce_result"
+                              ? "Combat Experience rolled"
+                              : inspectorPhaseInitiativeChoice.choice === "back_out"
+                                ? "Back out of attack"
+                                : "Continue attack"}
+                            .
+                          </div>
+                        ) : null}
+                        {inspectorPhaseInitiativeChoiceStatuses.length > 0 ? (
+                          <div
+                            style={{
+                              borderTop: "1px solid #e5ded0",
+                              color: "#5e5a50",
+                              display: "grid",
+                              fontSize: "0.85rem",
+                              gap: "0.2rem",
+                              paddingTop: "0.5rem",
+                            }}
+                          >
+                            <strong>Phase initiative choices</strong>
+                            {inspectorPhaseInitiativeChoiceStatuses.map((status) => {
+                              const participantLabel =
+                                roundState.participants.find(
+                                  (participant) =>
+                                    participant.participantId === status.participantId,
+                                )?.label ?? status.participantId;
+                              const choiceLabel = status.choice
+                                ? status.choice.choice === "roll_ce_result"
+                                  ? "CE rolled"
+                                  : status.choice.choice === "back_out"
+                                    ? "Back out"
+                                    : "Continue"
+                                : "Unsubmitted";
+
+                              return (
+                                <div key={`phase-choice:${status.phase}:${status.participantId}`}>
+                                  {participantLabel}: {status.ceRequired ? "CE required" : "No CE"}{" "}
+                                  - {choiceLabel}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </section>
                     ) : null}
                     {inspectorResolutionStepKind === "parry" &&
@@ -6503,6 +6718,7 @@ export default function CombatRoundManagerPanel({
                         (inspectorIsInspectionOnly &&
                           inspector.step !== "select_actions" &&
                           !inspectorCombatExperienceRequired) ||
+                        inspectorPhaseInitiativeChoiceSubmitted ||
                         Boolean(inspectorActionValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
                         inspectorDamageCommitted ||
@@ -6511,6 +6727,8 @@ export default function CombatRoundManagerPanel({
                       onDeclareAction={() =>
                         void (inspectorCombatExperienceRequired
                           ? rollInspectorCombatExperience()
+                          : inspectorCanContinuePhaseAttack
+                            ? continueInspectorPhaseAttack()
                           : inspector.step === "round_summary"
                             ? advanceInspectorRoundEndReview()
                             : inspectorCurrentStepIsInitiative

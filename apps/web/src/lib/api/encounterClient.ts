@@ -137,6 +137,48 @@ export async function backOutPhaseAttackOnServer(input: {
   return payload;
 }
 
+export async function continuePhaseAttackOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/continue-phase-attack`, {
+    body: JSON.stringify({
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function commitPhaseInitiativeResolutionOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+}): Promise<{
+  encounter: EncounterSession;
+  participants: ScenarioParticipant[];
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participants: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/commit-phase-initiative-resolution`, {
+    body: JSON.stringify({
+      phase: input.phase,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function setCombatExperienceDifficultyOnServer(input: {
   difficulty: number;
   encounterId: string;

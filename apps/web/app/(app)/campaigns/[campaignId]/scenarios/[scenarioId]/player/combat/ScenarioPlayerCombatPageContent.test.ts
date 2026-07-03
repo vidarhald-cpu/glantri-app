@@ -261,8 +261,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("combatExperienceValidationMessage");
     expect(source).toContain("rollCombatExperience()");
     expect(source).toContain(
-      "Backed out of attack; DB/Parry attack penalty reduced from -4 to -2 for this phase.",
+      "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
     );
+    expect(source).toContain("continuePhaseAttackOnServer");
+    expect(source).toContain('"Continue attack"');
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
     expect(source).toContain("Reason: attacked while attacking");

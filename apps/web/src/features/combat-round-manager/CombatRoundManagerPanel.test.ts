@@ -622,14 +622,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("onBlur={(event) =>");
     expect(source).toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
-    expect(source).toContain(
-      'inspector.step === "select_actions" || inspectorCombatExperienceRequired',
-    );
+    expect(source).toContain("inspectorPhaseInitiativeChoiceStatuses.length > 0");
     expect(source).toContain("Phase Combat Experience uses difficulty");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");
     expect(source).toContain("backOutPhaseAttackOnServer");
     expect(source).toContain("backOutInspectorPhaseAttack()");
+    expect(source).toContain("continuePhaseAttackOnServer");
+    expect(source).toContain("commitPhaseInitiativeResolutionOnServer");
     expect(source).toContain("inspectorPhaseAttackBackOutOpportunity");
     expect(source).toContain("getCombatRoundPhaseAttackBackOutOpportunity");
     expect(source).toContain("canBackOutCombatRoundPhaseAttack");

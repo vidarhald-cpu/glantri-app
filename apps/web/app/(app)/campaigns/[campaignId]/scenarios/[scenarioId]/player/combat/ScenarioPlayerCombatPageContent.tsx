@@ -19,6 +19,7 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundPhaseInitiativeChoice,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
@@ -90,6 +91,7 @@ import {
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   backOutPhaseAttackOnServer,
+  continuePhaseAttackOnServer,
   loadCharacterEquipmentState,
   loadEncounterById,
   loadScenarioMyParticipant,
@@ -1305,15 +1307,53 @@ export default function ScenarioPlayerCombatPageContent({
       setEncounterSession(encounter);
       setActionRollResult({
         interpretedResult:
-          "Backed out of attack; DB/Parry attack penalty reduced from -4 to -2 for this phase.",
+          "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
         phaseLabel:
           selectedPhaseAttackBackOutOpportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
-        value: -2,
+        value: 0,
       });
       setError(undefined);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to back out of attack.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function continuePhaseAttack() {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (!selectedParticipant || !encounterId || !selectedPhaseAttackBackOutOpportunity) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter, participant } = await continuePhaseAttackOnServer({
+        encounterId,
+        phase: selectedPhaseAttackBackOutOpportunity.phase,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setActionRollResult({
+        interpretedResult: "Continue attack submitted; waiting for GM to commit initiative.",
+        phaseLabel:
+          selectedPhaseAttackBackOutOpportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
+        value: 0,
+      });
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to continue attack.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -1577,24 +1617,35 @@ export default function ScenarioPlayerCombatPageContent({
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
   const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
+  const currentPhaseChoicePhase = currentInitiativePhase;
   const selectedPhaseCombatExperienceRequirement =
-    combatRoundState && selectedRoundParticipant && currentAttackPhase
+    combatRoundState && selectedRoundParticipant && currentPhaseChoicePhase
       ? getCombatRoundPhaseCombatExperienceRequirement({
           participantId: selectedRoundParticipant.participantId,
-          phase: currentAttackPhase,
+          phase: currentPhaseChoicePhase,
           state: combatRoundState,
           visibility: encounterSession?.roleplayState?.visibility,
         })
       : undefined;
   const selectedPhaseAttackBackOutOpportunity =
-    combatRoundState && selectedRoundParticipant && currentAttackPhase
+    combatRoundState && selectedRoundParticipant && currentPhaseChoicePhase
       ? getCombatRoundPhaseAttackBackOutOpportunity({
           participantId: selectedRoundParticipant.participantId,
-          phase: currentAttackPhase,
+          phase: currentPhaseChoicePhase,
           state: combatRoundState,
           visibility: encounterSession?.roleplayState?.visibility,
         })
       : undefined;
+  const selectedPhaseInitiativeChoice =
+    combatRoundState && selectedRoundParticipant && currentPhaseChoicePhase
+      ? getCombatRoundPhaseInitiativeChoice({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentPhaseChoicePhase,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedVisibleCombatExperienceResult =
+    selectedPhaseInitiativeChoice?.combatExperience ?? selectedCombatExperienceResult;
   const currentAttackPhaseContext = currentAttackPhase
     ? (selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase] ??
       phaseCombatContextDrafts[currentAttackPhase])
@@ -1787,16 +1838,16 @@ export default function ScenarioPlayerCombatPageContent({
         ],
       }
     : null;
-  const selectedCombatExperienceResultPanel = selectedCombatExperienceResult
+  const selectedCombatExperienceResultPanel = selectedVisibleCombatExperienceResult
     ? {
         detailLines: [
-          formatCombatExperienceEffectiveTableLine(selectedCombatExperienceResult),
+          formatCombatExperienceEffectiveTableLine(selectedVisibleCombatExperienceResult),
         ].filter((line): line is string => Boolean(line)),
-        interpretedResult: selectedCombatExperienceResult.noRollRequired
-          ? `Combat Experience ${selectedCombatExperienceResult.skillTotal} vs difficulty ${selectedCombatExperienceResult.difficulty}`
-          : `Combat Experience ${selectedCombatExperienceResult.skillTotal} + roll ${selectedCombatExperienceResult.rollTotal} = ${selectedCombatExperienceResult.finalTotal} vs ${selectedCombatExperienceResult.difficulty}`,
+        interpretedResult: selectedVisibleCombatExperienceResult.noRollRequired
+          ? `Combat Experience ${selectedVisibleCombatExperienceResult.skillTotal} vs difficulty ${selectedVisibleCombatExperienceResult.difficulty}`
+          : `Combat Experience ${selectedVisibleCombatExperienceResult.skillTotal} + roll ${selectedVisibleCombatExperienceResult.rollTotal} = ${selectedVisibleCombatExperienceResult.finalTotal} vs ${selectedVisibleCombatExperienceResult.difficulty}`,
         rankLabel: "Combat Experience",
-        resultLabel: formatCombatExperienceResultLine(selectedCombatExperienceResult),
+        resultLabel: formatCombatExperienceResultLine(selectedVisibleCombatExperienceResult),
       }
     : null;
   const initiativeStepStatus =
@@ -1892,16 +1943,24 @@ export default function ScenarioPlayerCombatPageContent({
     selectedPhaseAttackBackOutOpportunity &&
     combatRoundState &&
     selectedRoundParticipant &&
-    currentAttackPhase &&
+    currentPhaseChoicePhase &&
     canBackOutCombatRoundPhaseAttack({
       participantId: selectedRoundParticipant.participantId,
-      phase: currentAttackPhase,
+      phase: currentPhaseChoicePhase,
       state: combatRoundState,
       visibility: encounterSession?.roleplayState?.visibility,
     }) &&
     selectedParticipant &&
     encounterId &&
     !readOnlyInspection,
+  );
+  const selectedPhaseContinueAvailable = Boolean(
+    selectedPhaseAttackBackOutOpportunity &&
+      !selectedPhaseAttackBackOutOpportunity.ceRequired &&
+      !selectedPhaseInitiativeChoice &&
+      selectedParticipant &&
+      encounterId &&
+      !readOnlyInspection,
   );
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
@@ -1929,6 +1988,10 @@ export default function ScenarioPlayerCombatPageContent({
       : selectedCombatExperienceNoRollAvailable
         ? "Confirm Combat Experience"
         : "Roll Combat Experience"
+    : selectedPhaseInitiativeChoice
+      ? "Phase choice submitted"
+      : selectedPhaseContinueAvailable
+        ? "Continue attack"
     : (attackerPrivilegedAction?.label ??
       currentParryAction?.label ??
       currentAttackAction?.label ??
@@ -1948,9 +2011,13 @@ export default function ScenarioPlayerCombatPageContent({
           controlsDisabled ||
           savingCombatContext ||
           currentAttackAction.disabled
-        : selectedCombatExperienceRequired
-          ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
-          : declareActionDisabled;
+          : selectedCombatExperienceRequired
+            ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
+            : selectedPhaseInitiativeChoice
+              ? true
+              : selectedPhaseContinueAvailable
+                ? controlsDisabled || savingCombatContext
+                : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -2228,7 +2295,7 @@ export default function ScenarioPlayerCombatPageContent({
             <div style={{ display: "grid", gap: "0.75rem" }}>
               <section style={panelStyle}>
                 <strong>Combat Experience</strong>
-                <div>{formatCombatExperienceStatus(selectedCombatExperienceResult)}</div>
+                <div>{formatCombatExperienceStatus(selectedVisibleCombatExperienceResult)}</div>
                 <div>Skill total {selectedCombatExperienceSkillTotal}</div>
                 <div>Difficulty {selectedCombatExperienceDifficulty}</div>
                 {selectedPhaseCombatExperienceRequirement ? (
@@ -2258,6 +2325,24 @@ export default function ScenarioPlayerCombatPageContent({
                     ))}
                   </div>
                 ) : null}
+                {selectedPhaseAttackBackOutOpportunity &&
+                !selectedPhaseCombatExperienceRequirement ? (
+                  <div style={{ color: "#4f5f57" }}>
+                    Threatened while attacking. Combat Experience is not required; choose Continue
+                    attack or Back out.
+                  </div>
+                ) : null}
+                {selectedPhaseInitiativeChoice ? (
+                  <div style={{ color: "#3f5f46" }}>
+                    Submitted:{" "}
+                    {selectedPhaseInitiativeChoice.choice === "roll_ce_result"
+                      ? "Combat Experience rolled"
+                      : selectedPhaseInitiativeChoice.choice === "back_out"
+                        ? "Back out of attack"
+                        : "Continue attack"}
+                    .
+                  </div>
+                ) : null}
                 {selectedCombatExperienceSkillLookup.warning ? (
                   <div style={{ color: "#7c2d12" }}>
                     {selectedCombatExperienceSkillLookup.warning}
@@ -2272,6 +2357,8 @@ export default function ScenarioPlayerCombatPageContent({
                     ? selectedCombatExperienceWindowOpen
                       ? rollCombatExperience()
                       : undefined
+                    : selectedPhaseContinueAvailable
+                      ? continuePhaseAttack()
                     : attackerPrivilegedAction?.kind
                       ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
                       : currentParryAction
