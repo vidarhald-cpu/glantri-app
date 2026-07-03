@@ -182,6 +182,7 @@ import {
   normalizeCombatRoundManagerSelection,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
+import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 import {
   getAdjacentCombatRoundTimelineParticipantSelection,
@@ -742,6 +743,10 @@ function formatCombatDistanceModifierDetailLine(
 ): string | undefined {
   if (!detail) {
     return undefined;
+  }
+
+  if (detail.notes && detail.actualDistance === undefined) {
+    return detail.notes;
   }
 
   const weaponName = detail.weaponName ?? "Weapon";
@@ -3677,23 +3682,56 @@ export default function CombatRoundManagerPanel({
       }
     : inspectorDraft;
   const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
+  const inspectorEquipmentState = useMemo(() => {
+    const candidate =
+      resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]?.equipmentState ??
+      selectedScenarioParticipant?.snapshot.equipmentState;
+    return isEquipmentFeatureState(candidate) ? candidate : null;
+  }, [
+    resolvedCharacterStateByParticipantId,
+    selectedScenarioParticipant?.id,
+    selectedScenarioParticipant?.snapshot.equipmentState,
+  ]);
+  const inspectorGeneratedCombatContext = useMemo(
+    () =>
+      projectCombatActionGeneratedModifiers({
+        actionId: inspectorDraft.actionId || undefined,
+        combatContext: inspectorDraft.combatContext,
+        encounterParticipant: selectedEncounterParticipant,
+        phaseContexts: inspectorDraft.phaseContexts,
+        resolvedEquipmentState: inspectorEquipmentState ?? undefined,
+        roundState: selectedTimelineRoundState,
+        scenarioParticipant: selectedScenarioParticipant,
+        secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+      }),
+    [
+      inspectorDraft.actionId,
+      inspectorDraft.combatContext,
+      inspectorDraft.phaseContexts,
+      inspectorDraft.secondaryActionId,
+      inspectorEquipmentState,
+      selectedEncounterParticipant,
+      selectedScenarioParticipant,
+      selectedTimelineRoundState,
+    ],
+  );
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
-        combatContext: inspectorDraft.combatContext,
+        combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
         phaseKey: inspectorModifierPhase,
       }),
-    [inspectorDraft.combatContext, inspectorModifierPhase, selectedScenarioParticipant],
+    [inspectorGeneratedCombatContext, inspectorModifierPhase, selectedScenarioParticipant],
   );
   const inspectorModifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
-        combatContext: inspectorDraft.combatContext,
+        combatContext: inspectorGeneratedCombatContext,
         liveModifiers: inspectorLiveModifiers,
         phaseKey: inspectorModifierPhase,
       }),
-    [inspectorDraft.combatContext, inspectorLiveModifiers, inspectorModifierPhase],
+    [inspectorGeneratedCombatContext, inspectorLiveModifiers, inspectorModifierPhase],
   );
   const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
     inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows;
@@ -3873,15 +3911,6 @@ export default function CombatRoundManagerPanel({
     combatExperienceRollRecorded ||
     (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
     Boolean(inspectorSnapshot);
-  const inspectorEquipmentState = useMemo(() => {
-    const candidate =
-      resolvedInspectorCharacterState?.equipmentState ??
-      selectedScenarioParticipant?.snapshot.equipmentState;
-    return isEquipmentFeatureState(candidate) ? candidate : null;
-  }, [
-    resolvedInspectorCharacterState?.equipmentState,
-    selectedScenarioParticipant?.snapshot.equipmentState,
-  ]);
   const inspectorLoadoutModel = useMemo(
     () =>
       buildEquipmentLoadoutModuleModel({
@@ -3933,7 +3962,7 @@ export default function CombatRoundManagerPanel({
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
-        combatContext: inspectorDraft.combatContext,
+        combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
         phaseKey,
       });
@@ -3968,7 +3997,7 @@ export default function CombatRoundManagerPanel({
     content,
     inspectorBuild,
     inspectorDraft.actionId,
-    inspectorDraft.combatContext,
+    inspectorGeneratedCombatContext,
     inspectorDraft.secondaryActionId,
     inspectorEquipmentState,
     selectedScenarioParticipant?.characterId,
@@ -5328,7 +5357,7 @@ export default function CombatRoundManagerPanel({
       const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
         additionalActionNotes: inspectorDraft.additionalActionNotes,
-        combatContext: inspectorDraft.combatContext,
+        combatContext: inspectorGeneratedCombatContext,
         encounterId: encounter.id,
         movementId: inspectorDraft.movementId || undefined,
         phaseContexts: inspectorDraft.phaseContexts,
@@ -5577,9 +5606,10 @@ export default function CombatRoundManagerPanel({
 
     try {
       let latestEncounter = encounter;
+      const participantOverrides: Record<string, ScenarioParticipant> = {};
 
       for (const change of changes) {
-        const { encounter: nextEncounter } = await setPairDistanceOnServer({
+        const { encounter: nextEncounter, participants } = await setPairDistanceOnServer({
           distance: change.distance,
           encounterId: encounter.id,
           participantAId: change.row.edge.participantAId,
@@ -5587,6 +5617,9 @@ export default function CombatRoundManagerPanel({
         });
 
         latestEncounter = nextEncounter;
+        for (const participant of participants ?? []) {
+          participantOverrides[participant.id] = participant;
+        }
       }
 
       const nextRoundState = normalizeCombatRoundManagerSelection({
@@ -5595,6 +5628,12 @@ export default function CombatRoundManagerPanel({
 
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
+      if (Object.keys(participantOverrides).length > 0) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          ...participantOverrides,
+        }));
+      }
       onEncounterUpdated?.(latestEncounter);
       setDistanceDrafts({});
       setSaveError(undefined);
@@ -6834,11 +6873,11 @@ export default function CombatRoundManagerPanel({
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
                       attackStats: phaseLoadoutSummary.attackStats,
-                      liveModifiers:
-                        phaseKey === inspectorResolutionPhase
-                          ? inspectorParryDefenderPhaseSummary?.liveModifiers
-                          : buildEncounterLiveCombatModifierSummary({
-                              combatContext: inspectorDraft.combatContext,
+                        liveModifiers:
+                          phaseKey === inspectorResolutionPhase
+                            ? inspectorParryDefenderPhaseSummary?.liveModifiers
+                            : buildEncounterLiveCombatModifierSummary({
+                              combatContext: inspectorGeneratedCombatContext,
                               combatEffects: selectedScenarioParticipant?.state.combatEffects,
                               phaseKey,
                             }),

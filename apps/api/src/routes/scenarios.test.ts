@@ -434,6 +434,62 @@ function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) 
   };
 }
 
+function makeWeaponEquipmentState(input: {
+  characterId?: string;
+  name: string;
+  range: string;
+  templateId?: string;
+}) {
+  const characterId = input.characterId ?? "character-1";
+  const templateId = input.templateId ?? `template-${input.name.toLowerCase().replace(/\s+/g, "-")}`;
+  const itemId = `item-${templateId}`;
+
+  return {
+    activeLoadoutByCharacterId: {
+      [characterId]: {
+        activePrimaryWeaponItemId: itemId,
+      },
+    },
+    itemsById: {
+      [itemId]: {
+        id: itemId,
+        templateId,
+      },
+    },
+    locationsById: {},
+    templates: {
+      templatesById: {
+        [templateId]: {
+          category: "weapon",
+          id: templateId,
+          name: input.name,
+          range: input.range,
+        },
+      },
+    },
+  };
+}
+
+function makeCombatScenarioParticipantWithWeapon(
+  overrides: Record<string, unknown> & { weaponName?: string; weaponRange?: string } = {},
+) {
+  const characterId = (overrides.characterId as string | undefined) ?? "character-1";
+
+  return makeCombatScenarioParticipant({
+    ...overrides,
+    characterId,
+    snapshot: {
+      displayName: "The Gladiator",
+      equipmentState: makeWeaponEquipmentState({
+        characterId,
+        name: overrides.weaponName ?? "Long sword",
+        range: overrides.weaponRange ?? "3.0",
+      }),
+      ...((overrides.snapshot as Record<string, unknown> | undefined) ?? {}),
+    },
+  });
+}
+
 function makeCombatExperienceCharacterBuild(overrides: Record<string, unknown> = {}) {
   return {
     equipment: {
@@ -2229,6 +2285,93 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("generates a declaration-time distance Skill/OB row for an out-of-range attack", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const roundState = {
+      ...initializeCombatRoundState({ encounter: baseEncounter }),
+      distanceState: setDistanceBetween({
+        distance: 3,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+      }),
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participants: [
+        makeCombatScenarioParticipantWithWeapon({
+          id: "participant-1",
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-2",
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updateStateCall =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
+    const distanceRows =
+      updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill;
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+
+    expect(distanceRows).toEqual([
+      expect.objectContaining({
+        generated: true,
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("distance: Broad sword preferred 2"),
+        sourcePhase: "phase1",
+        sourceRule: "distance-ob-skill-phase1",
+        value: -2,
+      }),
+    ]);
+    expect(
+      updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
+        .situationObSkill,
+    ).toEqual([expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 })]);
+  });
+
   it("allows a player to complete an incomplete submitted combat declaration during DE", async () => {
     setupCombatDeclarationRoute({
       encounter: {
@@ -3312,6 +3455,91 @@ describe("scenarios route contract", () => {
         distance: 4,
       }),
     });
+  });
+
+  it("recomputes visible declaration distance modifiers after a GM distance edit", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const roundState = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-2",
+          },
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-1",
+      state: initializeCombatRoundState({ encounter: baseEncounter }),
+      submittedBy: "player",
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participants: [
+        makeCombatScenarioParticipantWithWeapon({
+          id: "participant-1",
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distance: 3,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/pair-distance",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updateStateCall =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+
+    expect(updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("distance: Broad sword preferred 2"),
+        value: -2,
+      }),
+    ]);
+    expect(
+      updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
+        .situationObSkill,
+    ).toEqual([expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 })]);
+    expect(response.json().participants).toHaveLength(1);
   });
 
   it("returns player-safe visible pair distances without unrelated hidden pairs", async () => {
@@ -4761,25 +4989,34 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
-        createdCombatModifierIds: [],
-        distanceModifier: {
-          preferredDistances: [3],
-          value: 0,
-          warning: "Distance unavailable.",
-          weaponName: "Long sword",
-        },
       },
       participantId: "encounter-participant-1",
       type: "roll_attack",
     });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toBeUndefined();
   });
 
-  it("applies a generated distance Skill/OB penalty to the current player phase 1 attack", async () => {
+  it("uses the existing generated distance Skill/OB row for the current player phase 1 attack", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const distanceModifierEntry = {
+      durationRounds: 1,
+      generated: true,
+      id: "generated:distance:phase1:ob-skill",
+      notes: "distance: Long sword preferred 3 · actual 5 · nearest 3 · Skill/OB -4",
+      scope: "until",
+      sourceActionId: "attack_parry",
+      sourcePhase: "phase1",
+      sourceRule: "distance-ob-skill-phase1",
+      value: -4,
+    };
 
     setupCombatDeclarationRoute({
       encounter: {
-        combatRoundState: makeOpenPhase1AttackRoundState({ distance: 5 }),
+        combatRoundState: makeOpenPhase1AttackRoundState({
+          distance: 5,
+          modifierEntries: [distanceModifierEntry],
+          snapshotOb: "6",
+        }),
         participants: encounterParticipants,
       },
       participants: [
@@ -4807,41 +5044,28 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
-    const updateStateCall =
-      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
-    const distanceRows =
-      updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill;
 
     expect(attackResult).toMatchObject({
       ob: 6,
       phase: "phase1",
       weaponName: "Long sword",
     });
-    expect(distanceRows).toHaveLength(1);
-    expect(distanceRows[0]).toMatchObject({
-      generated: true,
-      id: "generated:distance:phase1:ob-skill",
-      sourcePhase: "phase1",
-      sourceRule: "distance-ob-skill-phase1",
-      value: -4,
-    });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
-        createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
         distanceModifier: {
-          actualDistance: 5,
-          createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
-          nearestPreferredDistance: 3,
-          preferredDistances: [3],
+          createdCombatModifierIds: [],
+          modifierId: "generated:distance:phase1:ob-skill",
+          notes: "distance: Long sword preferred 3 · actual 5 · nearest 3 · Skill/OB -4",
+          preferredDistances: [],
           value: -4,
-          weaponName: "Long sword",
         },
       },
       type: "roll_attack",
     });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
-  it("replaces stale distance rows before applying the current phase 1 penalty once", async () => {
+  it("does not replace or duplicate generated distance rows in the attack route", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const staleDistanceModifier = {
       durationRounds: 1,
@@ -4919,17 +5143,14 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
-    const updateStateCall =
-      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
-    const distanceRows =
-      updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill;
 
-    expect(attackResult.ob).toBe(6);
-    expect(distanceRows).toHaveLength(1);
-    expect(distanceRows[0]).toMatchObject({
-      id: "generated:distance:phase1:ob-skill",
-      value: -4,
+    expect(attackResult.ob).toBe(8);
+    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject({
+      createdCombatModifierIds: [],
+      modifierId: "generated:distance:phase1:ob-skill",
+      value: -2,
     });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
   it("allows the current attacking player to roll the open phase 2 attack once", async () => {
@@ -5764,7 +5985,7 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("clears generated distance Skill/OB modifiers when undoing a phase attack", async () => {
+  it("keeps declaration-time distance Skill/OB modifiers when undoing a phase attack", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const distanceModifierEntry = {
       durationRounds: 1,
@@ -5796,15 +6017,12 @@ describe("scenarios route contract", () => {
       command: {
         createdAt: attackResult.rolledAt,
         facts: {
-          createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
           distanceModifier: {
-            actualDistance: 5,
-            createdCombatModifierIds: ["generated:distance:phase1:ob-skill"],
+            createdCombatModifierIds: [],
             modifierId: "generated:distance:phase1:ob-skill",
-            nearestPreferredDistance: 3,
-            preferredDistances: [3],
+            notes: "distance: Long sword preferred 3 · actual 5 · nearest 3 · Skill/OB -4",
+            preferredDistances: [],
             value: -4,
-            weaponName: "Long sword",
           },
         },
       },
@@ -5866,7 +6084,9 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updateStateCall =
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
-    expect(updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill).toEqual([]);
+    expect(updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill).toEqual([
+      distanceModifierEntry,
+    ]);
   });
 
   it("clears a command-backed DE cell by restoring the command before cursor", async () => {

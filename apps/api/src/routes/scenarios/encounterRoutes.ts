@@ -9,11 +9,9 @@ import {
 } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
-  applyDistanceGeneratedObSkillModifier,
   applyCombatActionGeneratedModifiers,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
-  buildDistanceGeneratedObSkillModifier,
   buildCombatRoundInitiativeResult,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
@@ -30,6 +28,7 @@ import {
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
+  getCombatDeclarationAttackPhases,
   getCombatRoundDistanceEdge,
   getCombatRoundRequiredCombatExperienceTrigger,
   getPlayerCombatCurrentRollAction,
@@ -61,9 +60,7 @@ import {
   rollOpenEndedD20,
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
-  clearDistanceGeneratedObSkillModifierForPhase,
   getDistanceEdgeBetweenParticipantAliases,
-  getNearestPreferredDistance,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
   removeDistanceGeneratedObSkillModifiers,
@@ -74,9 +71,11 @@ import {
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import type {
+  CombatActionGeneratedDistanceModifierInput,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundState,
+  CombatRoundPhaseContexts,
   EncounterSession,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
@@ -575,9 +574,52 @@ function getSnapshotWeaponTemplates(participant: ScenarioParticipant): WeaponTem
   );
 }
 
-function findAttackWeaponTemplate(input: {
+function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
+  const snapshot = isRecord(participant.snapshot) ? participant.snapshot : undefined;
+  const equipmentStateValue = snapshot?.["equipmentState"];
+  const equipmentState = isRecord(equipmentStateValue) ? equipmentStateValue : undefined;
+  const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
+  const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
+  const characterId =
+    participant.characterId ??
+    (activeLoadouts ? Object.keys(activeLoadouts).find((key) => key.trim().length > 0) : undefined);
+  const activeLoadoutValue = characterId ? activeLoadouts?.[characterId] : undefined;
+  const activeLoadout = isRecord(activeLoadoutValue) ? activeLoadoutValue : undefined;
+  const activeWeaponItemIds = [
+    activeLoadout?.["activePrimaryWeaponItemId"],
+    activeLoadout?.["activeSecondaryWeaponItemId"],
+    activeLoadout?.["activeMissileWeaponItemId"],
+  ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+  const itemsValue = equipmentState?.["itemsById"];
+  const itemsById = isRecord(itemsValue) ? itemsValue : undefined;
+  const templatesValue = equipmentState?.["templates"];
+  const templates = isRecord(templatesValue) ? templatesValue : undefined;
+  const templatesByIdValue = templates?.["templatesById"];
+  const templatesById = isRecord(templatesByIdValue) ? templatesByIdValue : undefined;
+
+  if (!itemsById || !templatesById) {
+    return [];
+  }
+
+  return activeWeaponItemIds
+    .map((itemId) => {
+      const item = itemsById[itemId];
+      const templateId = isRecord(item) ? item["templateId"] : undefined;
+      const template = typeof templateId === "string" ? templatesById[templateId] : undefined;
+
+      return isRecord(template) &&
+        template.category === "weapon" &&
+        typeof template.name === "string" &&
+        template.name.trim().length > 0
+        ? (template as unknown as WeaponTemplate)
+        : undefined;
+    })
+    .filter((template): template is WeaponTemplate => Boolean(template));
+}
+
+function findAttackWeaponTemplateByName(input: {
   participant: ScenarioParticipant;
-  weaponName: string;
+  weaponName?: string;
 }): WeaponTemplate | undefined {
   const weaponName = normalizeWeaponName(input.weaponName);
 
@@ -585,7 +627,11 @@ function findAttackWeaponTemplate(input: {
     return undefined;
   }
 
-  const candidates = [...getSnapshotWeaponTemplates(input.participant), ...weaponTemplates];
+  const candidates = [
+    ...getSnapshotActiveWeaponTemplates(input.participant),
+    ...getSnapshotWeaponTemplates(input.participant),
+    ...weaponTemplates,
+  ];
   const exactMatch = candidates.find(
     (template) => normalizeWeaponName(template.name) === weaponName,
   );
@@ -604,171 +650,276 @@ function findAttackWeaponTemplate(input: {
   });
 }
 
-function distanceModifierEntryMatchesPhase(
-  entry: ScenarioCombatModifierEntry,
-  phase: "phase1" | "phase2",
-): boolean {
+function getDefaultAttackWeaponTemplate(
+  participant: ScenarioParticipant,
+): WeaponTemplate | undefined {
   return (
-    isDistanceGeneratedObSkillModifier(entry) &&
-    (entry.sourcePhase === phase || entry.id === `generated:distance:${phase}:ob-skill`)
+    getSnapshotActiveWeaponTemplates(participant)[0] ?? getSnapshotWeaponTemplates(participant)[0]
   );
 }
 
-function getDistanceModifierValueFromEntries(
-  entries: readonly ScenarioCombatModifierEntry[],
-  phase: "phase1" | "phase2",
-): number {
-  return entries
-    .filter((entry) => distanceModifierEntryMatchesPhase(entry, phase))
-    .reduce((sum, entry) => sum + entry.value, 0);
+function participantAliasesInclude(input: {
+  id?: string;
+  participant: Parameters<typeof getCombatDistanceParticipantAliases>[0];
+}): boolean {
+  if (!input.id) {
+    return false;
+  }
+
+  return getCombatDistanceParticipantAliases(input.participant).includes(input.id);
 }
 
-function getDistanceModifierValueFromSnapshot(
-  snapshot: CombatRoundState["stepSnapshots"][number] | undefined,
-  phase: "phase1" | "phase2",
-): number | undefined {
-  if (!snapshot?.modifierSummary) {
+function findCombatRoundParticipantByAlias(input: {
+  id?: string;
+  state: CombatRoundState;
+}): CombatRoundState["participants"][number] | undefined {
+  return input.state.participants.find((participant) =>
+    participantAliasesInclude({ id: input.id, participant }),
+  );
+}
+
+function findEncounterParticipantByScenarioParticipant(input: {
+  encounterParticipants: EncounterSession["participants"];
+  scenarioParticipant?: ScenarioParticipant;
+}): EncounterSession["participants"][number] | undefined {
+  return input.scenarioParticipant
+    ? input.encounterParticipants.find(
+        (participant) =>
+          participant.scenarioParticipantId === input.scenarioParticipant?.id ||
+          participant.id === input.scenarioParticipant?.id ||
+          (input.scenarioParticipant?.characterId &&
+            participant.characterId === input.scenarioParticipant.characterId),
+      )
+    : undefined;
+}
+
+function buildCombatActionDistanceModifierInputs(input: {
+  actionId?: string;
+  encounterParticipant: EncounterSession["participants"][number];
+  phaseContexts?: CombatRoundPhaseContexts;
+  phase: "phase1" | "phase2";
+  phaseWeaponName?: string;
+  roundState: CombatRoundState;
+  scenarioParticipant: ScenarioParticipant;
+}): CombatActionGeneratedDistanceModifierInput | undefined {
+  const targetParticipantId = input.phaseContexts?.[input.phase]?.targetParticipantId;
+
+  if (!targetParticipantId) {
     return undefined;
   }
 
-  return snapshot.modifierSummary.rows.reduce(
-    (sum, row) => sum + getDistanceModifierValueFromEntries(row.entries, phase),
-    0,
-  );
-}
-
-function getDistanceModifierValueFromCombatContext(
-  combatContext: ScenarioParticipantCombatContext,
-  phase: "phase1" | "phase2",
-): number {
-  return getDistanceModifierValueFromEntries(combatContext.modifierBuckets.situationObSkill, phase);
-}
-
-function buildDistanceUnavailableModifierResult(input: {
-  combatContext: ScenarioParticipantCombatContext;
-  phase: "phase1" | "phase2";
-  preferredDistances: number[];
-  warning: string;
-  weaponName: string;
-}): {
-  combatContext: ScenarioParticipantCombatContext;
-  detail: CombatRoundAttackDistanceModifierDetail;
-} {
-  return {
-    combatContext: clearDistanceGeneratedObSkillModifierForPhase({
-      combatContext: input.combatContext,
-      phase: input.phase,
-    }),
-    detail: {
-      createdCombatModifierIds: [],
-      preferredDistances: input.preferredDistances,
-      value: 0,
-      warning: input.warning,
-      weaponName: input.weaponName,
-    },
-  };
-}
-
-function resolveAttackDistanceModifier(input: {
-  actionId: string;
-  attackerEncounterParticipant: EncounterSession["participants"][number];
-  attackerScenarioParticipant: ScenarioParticipant;
-  baseCombatContext: ScenarioParticipantCombatContext;
-  defenderEncounterParticipant: EncounterSession["participants"][number];
-  defenderScenarioParticipant: ScenarioParticipant;
-  phase: "phase1" | "phase2";
-  roundState: CombatRoundState;
-  snapshotDistanceModifierValue?: number;
-  weaponName: string;
-}): {
-  combatContext: ScenarioParticipantCombatContext;
-  detail: CombatRoundAttackDistanceModifierDetail;
-  existingDistanceModifierValue: number;
-} {
-  const existingDistanceModifierValue =
-    input.snapshotDistanceModifierValue ??
-    getDistanceModifierValueFromCombatContext(input.baseCombatContext, input.phase);
-  const weaponTemplate = findAttackWeaponTemplate({
-    participant: input.attackerScenarioParticipant,
-    weaponName: input.weaponName,
-  });
-  const preferredDistances = getWeaponPreferredDistances(weaponTemplate ?? {});
-
-  if (preferredDistances.length === 0) {
-    const result = buildDistanceUnavailableModifierResult({
-      combatContext: input.baseCombatContext,
-      phase: input.phase,
-      preferredDistances,
-      warning: "Weapon preferred distance unavailable.",
-      weaponName: input.weaponName,
-    });
-
-    return { ...result, existingDistanceModifierValue };
-  }
-
+  const targetRoundParticipant =
+    findCombatRoundParticipantByAlias({
+      id: targetParticipantId,
+      state: input.roundState,
+    }) ?? { participantId: targetParticipantId };
   const distanceEdge = getDistanceEdgeBetweenParticipantAliases({
-    participantA: {
-      characterId:
-        input.attackerScenarioParticipant.characterId ??
-        input.attackerEncounterParticipant.characterId,
-      id: input.attackerEncounterParticipant.id,
-      participantId: input.attackerEncounterParticipant.id,
-      scenarioParticipantId: input.attackerScenarioParticipant.id,
-    },
-    participantB: {
-      characterId:
-        input.defenderScenarioParticipant.characterId ??
-        input.defenderEncounterParticipant.characterId,
-      id: input.defenderEncounterParticipant.id,
-      participantId: input.defenderEncounterParticipant.id,
-      scenarioParticipantId: input.defenderScenarioParticipant.id,
-    },
+    participantA: input.encounterParticipant,
+    participantB: targetRoundParticipant,
     state: input.roundState.distanceState,
   });
 
   if (!distanceEdge) {
-    const result = buildDistanceUnavailableModifierResult({
-      combatContext: input.baseCombatContext,
-      phase: input.phase,
-      preferredDistances,
-      warning: "Distance unavailable.",
-      weaponName: input.weaponName,
-    });
-
-    return { ...result, existingDistanceModifierValue };
+    return undefined;
   }
 
-  const modifier = buildDistanceGeneratedObSkillModifier({
+  const weaponTemplate =
+    findAttackWeaponTemplateByName({
+      participant: input.scenarioParticipant,
+      weaponName: input.phaseWeaponName,
+    }) ?? getDefaultAttackWeaponTemplate(input.scenarioParticipant);
+  const preferredDistances = getWeaponPreferredDistances(weaponTemplate ?? {});
+
+  if (preferredDistances.length === 0) {
+    return undefined;
+  }
+
+  return {
     actualDistance: distanceEdge.distance,
     phase: input.phase,
     preferredDistances,
     sourceActionId: input.actionId,
-    weaponName: input.weaponName,
+    weaponName: weaponTemplate?.name ?? input.phaseWeaponName,
+  };
+}
+
+function buildCombatActionDistanceModifierInputsForDeclaration(input: {
+  actionId?: string;
+  encounterParticipant: EncounterSession["participants"][number];
+  phaseContexts?: CombatRoundPhaseContexts;
+  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
+  roundState: CombatRoundState;
+  scenarioParticipant: ScenarioParticipant;
+  secondaryActionId?: string;
+}): CombatActionGeneratedDistanceModifierInput[] {
+  return getCombatDeclarationAttackPhases({
+    actionId: input.actionId,
+    secondaryActionId: input.secondaryActionId,
+  })
+    .map((phase) =>
+      buildCombatActionDistanceModifierInputs({
+        actionId: input.actionId,
+        encounterParticipant: input.encounterParticipant,
+        phase,
+        phaseContexts: input.phaseContexts,
+        phaseWeaponName: input.phaseWeaponNames?.[phase],
+        roundState: input.roundState,
+        scenarioParticipant: input.scenarioParticipant,
+      }),
+    )
+    .filter(
+      (entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined,
+    );
+}
+
+function findExistingDistanceModifierEntry(input: {
+  combatContext: ScenarioParticipantCombatContext;
+  phase: "phase1" | "phase2";
+}): ScenarioCombatModifierEntry | undefined {
+  return findExistingDistanceModifierEntryFromEntries({
+    entries: input.combatContext.modifierBuckets.situationObSkill,
+    phase: input.phase,
   });
-  const nearestPreferredDistance = getNearestPreferredDistance(
-    distanceEdge.distance,
-    preferredDistances,
+}
+
+function findExistingDistanceModifierEntryFromEntries(input: {
+  entries: readonly ScenarioCombatModifierEntry[];
+  phase: "phase1" | "phase2";
+}): ScenarioCombatModifierEntry | undefined {
+  return input.entries.find(
+    (entry) =>
+      isDistanceGeneratedObSkillModifier(entry) &&
+      (entry.sourcePhase === input.phase ||
+        entry.id === `generated:distance:${input.phase}:ob-skill`),
   );
+}
+
+function findExistingDistanceModifierEntryFromSnapshot(input: {
+  phase: "phase1" | "phase2";
+  snapshot: CombatRoundState["stepSnapshots"][number] | undefined;
+}): ScenarioCombatModifierEntry | undefined {
+  return input.snapshot?.modifierSummary?.rows
+    .map((row) =>
+      findExistingDistanceModifierEntryFromEntries({
+        entries: row.entries,
+        phase: input.phase,
+      }),
+    )
+    .find((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
+}
+
+function buildDistanceModifierDetailFromExistingEntry(
+  entry: ScenarioCombatModifierEntry | undefined,
+): CombatRoundAttackDistanceModifierDetail | undefined {
+  if (!entry) {
+    return undefined;
+  }
 
   return {
-    combatContext: applyDistanceGeneratedObSkillModifier({
-      actualDistance: distanceEdge.distance,
-      combatContext: input.baseCombatContext,
-      phase: input.phase,
-      preferredDistances,
-      sourceActionId: input.actionId,
-      weaponName: input.weaponName,
+    createdCombatModifierIds: [],
+    modifierId: entry.id,
+    notes: entry.notes,
+    preferredDistances: [],
+    value: entry.value,
+  };
+}
+
+function applyGeneratedCombatActionModifiersForDeclaration(input: {
+  actionId?: string;
+  combatContext: ScenarioParticipantCombatContext;
+  encounterParticipant: EncounterSession["participants"][number];
+  phaseContexts?: CombatRoundPhaseContexts;
+  roundState: CombatRoundState;
+  scenarioParticipant: ScenarioParticipant;
+  secondaryActionId?: string;
+}): ScenarioParticipantCombatContext {
+  return applyCombatActionGeneratedModifiers({
+    actionId: input.actionId,
+    combatContext: input.combatContext,
+    distanceModifiers: buildCombatActionDistanceModifierInputsForDeclaration({
+      actionId: input.actionId,
+      encounterParticipant: input.encounterParticipant,
+      phaseContexts: input.phaseContexts,
+      roundState: input.roundState,
+      scenarioParticipant: input.scenarioParticipant,
+      secondaryActionId: input.secondaryActionId,
     }),
-    detail: {
-      actualDistance: distanceEdge.distance,
-      createdCombatModifierIds: modifier ? [modifier.id] : [],
-      modifierId: modifier?.id,
-      nearestPreferredDistance,
-      preferredDistances,
-      value: modifier?.value ?? 0,
-      weaponName: input.weaponName,
+  });
+}
+
+function recomputeRoundDeclarationCombatActionModifiers(input: {
+  encounter: EncounterSession;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}): {
+  participantStatesById: Map<string, ScenarioParticipant["state"]>;
+  roundState: CombatRoundState;
+} {
+  const participantStatesById = new Map<string, ScenarioParticipant["state"]>();
+  const nextParticipants = input.roundState.participants.map((roundParticipant) => {
+    const declaration = roundParticipant.declaration;
+
+    if (!declaration) {
+      return roundParticipant;
+    }
+
+    const scenarioParticipant = input.scenarioParticipants.find(
+      (participant) =>
+        participant.id === roundParticipant.scenarioParticipantId ||
+        participant.id === roundParticipant.participantId ||
+        (participant.characterId && participant.characterId === roundParticipant.characterId),
+    );
+    const encounterParticipant =
+      input.encounter.participants.find((participant) =>
+        participantAliasesInclude({ id: roundParticipant.participantId, participant }),
+      ) ??
+      findEncounterParticipantByScenarioParticipant({
+        encounterParticipants: input.encounter.participants,
+        scenarioParticipant,
+      });
+
+    if (!scenarioParticipant || !encounterParticipant) {
+      return roundParticipant;
+    }
+
+    const currentContext = scenarioParticipantCombatContextSchema.parse(
+      scenarioParticipant.state.combat.combatContext ?? declaration.combatContext ?? {},
+    );
+    const nextCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
+      actionId: declaration.actionId,
+      combatContext: currentContext,
+      encounterParticipant,
+      phaseContexts: declaration.phaseContexts,
+      roundState: input.roundState,
+      scenarioParticipant,
+      secondaryActionId: declaration.secondaryActionId,
+    });
+
+    if (combatContextsDiffer(currentContext, nextCombatContext)) {
+      participantStatesById.set(scenarioParticipant.id, {
+        ...scenarioParticipant.state,
+        combat: {
+          ...scenarioParticipant.state.combat,
+          combatContext: nextCombatContext,
+        },
+      });
+    }
+
+    return {
+      ...roundParticipant,
+      declaration: {
+        ...declaration,
+        combatContext: nextCombatContext,
+      },
+    };
+  });
+
+  return {
+    participantStatesById,
+    roundState: {
+      ...input.roundState,
+      participants: nextParticipants,
     },
-    existingDistanceModifierValue,
   };
 }
 
@@ -1236,15 +1387,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
-      const submittedCombatContext = applyCombatActionGeneratedModifiers({
-        actionId: body.actionId,
-        combatContext: gmAuthorizedOperation
-          ? body.combatContext
-          : preservePlayerCombatModifierBuckets({
-              existingContext: existingCombatContext,
-              requestedContext: body.combatContext,
-            }),
-      });
       const submittedPhaseContexts = body.phaseContexts
         ? {
             phase1: body.phaseContexts.phase1
@@ -1265,6 +1407,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : undefined,
           }
         : undefined;
+      const baseSubmittedCombatContext = gmAuthorizedOperation
+        ? body.combatContext
+        : preservePlayerCombatModifierBuckets({
+            existingContext: existingCombatContext,
+            requestedContext: body.combatContext,
+          });
+      const submittedCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
+        actionId: body.actionId,
+        combatContext: baseSubmittedCombatContext,
+        encounterParticipant,
+        phaseContexts: submittedPhaseContexts,
+        roundState,
+        scenarioParticipant,
+        secondaryActionId: body.secondaryActionId,
+      });
 
       if (!gmAuthorizedOperation) {
         if (
@@ -1635,6 +1792,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parsePairDistanceBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const roundState = initializeCombatRoundState({ encounter });
       const submittedAt = new Date().toISOString();
       const nextRoundState = setCombatRoundPairDistance({
@@ -1647,14 +1805,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         participantBId: body.participantBId,
         state: roundState,
       });
+      const recomputed = recomputeRoundDeclarationCombatActionModifiers({
+        encounter,
+        roundState: nextRoundState,
+        scenarioParticipants,
+      });
+      const participants = [];
+
+      for (const [participantId, state] of recomputed.participantStatesById) {
+        participants.push(
+          await encounterService.updateScenarioParticipantState({
+            participantId,
+            scenarioId,
+            state,
+          }),
+        );
+      }
+
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
         session: {
           ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
+          combatRoundState: recomputed.roundState,
+          currentRound: recomputed.roundState.roundNumber,
           updatedAt: submittedAt,
         },
       });
@@ -1664,8 +1839,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         edge: getCombatRoundDistanceEdge({
           participantAId: body.participantAId,
           participantBId: body.participantBId,
-          state: nextRoundState,
+          state: recomputed.roundState,
         }),
+        participants,
       };
     } catch (error) {
       return reply.code(400).send({
@@ -2396,30 +2572,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
-      const distanceModifier = resolveAttackDistanceModifier({
-        actionId,
-        attackerEncounterParticipant: encounterParticipant,
-        attackerScenarioParticipant: scenarioParticipant,
-        baseCombatContext: attackerCombatContext,
-        defenderEncounterParticipant,
-        defenderScenarioParticipant,
-        phase: body.phase,
-        roundState,
-        snapshotDistanceModifierValue: getDistanceModifierValueFromSnapshot(
-          latestAttackerSnapshot,
-          body.phase,
-        ),
-        weaponName,
-      });
-      const finalOb =
-        ob - distanceModifier.existingDistanceModifierValue + distanceModifier.detail.value;
+      const distanceModifierDetail = buildDistanceModifierDetailFromExistingEntry(
+        findExistingDistanceModifierEntry({
+          combatContext: attackerCombatContext,
+          phase: body.phase,
+        }) ??
+          findExistingDistanceModifierEntryFromSnapshot({
+            phase: body.phase,
+            snapshot: latestAttackerSnapshot,
+          }),
+      );
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
         attackerParticipantId: encounterParticipant.id,
         defenderDb,
         defenderParticipantId: defenderEncounterParticipant.id,
-        ob: finalOb,
+        ob,
         openEndedD10s: roll.openEndedD10s,
         phase: body.phase,
         rollD20: roll.rollD20,
@@ -2435,8 +2604,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt: submittedAt,
           createdByUserId: user.id,
           facts: {
-            createdCombatModifierIds: distanceModifier.detail.createdCombatModifierIds,
-            distanceModifier: distanceModifier.detail,
+            ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
           },
         },
         participantId: encounterParticipant.id,
@@ -2444,22 +2612,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",
       });
-      const savedParticipant = combatContextsDiffer(
-        attackerCombatContext,
-        distanceModifier.combatContext,
-      )
-        ? await encounterService.updateScenarioParticipantState({
-            participantId: scenarioParticipant.id,
-            scenarioId,
-            state: {
-              ...scenarioParticipant.state,
-              combat: {
-                ...scenarioParticipant.state.combat,
-                combatContext: distanceModifier.combatContext,
-              },
-            },
-          })
-        : undefined;
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -2472,7 +2624,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { attackResult, encounter: savedEncounter, participant: savedParticipant };
+      return { attackResult, encounter: savedEncounter };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat attack.",

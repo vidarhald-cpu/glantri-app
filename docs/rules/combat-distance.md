@@ -30,8 +30,8 @@ read-only text in a small right-side Target-row meta area. Player Combat shows t
 distance for the player's selected visible target and does not expose the full matrix or editing
 controls in this slice.
 
-During live A1/A2 attack resolution, using a weapon outside its preferred distance creates a
-generated Skill/OB modifier for that attack:
+During declaration and combat-action modifier review, using a weapon outside its preferred distance
+creates a generated Skill/OB modifier for the relevant A1/A2 attack:
 
 - penalty is `-2` per range step outside the nearest preferred distance
 - preferred `[3]`, actual `3` gives no modifier
@@ -40,8 +40,19 @@ generated Skill/OB modifier for that attack:
 - preferred `[1, 2]`, actual `4` gives `-4`
 - preferred `[3, 4]`, actual `1` gives `-4`
 
-The generated row is a phase-scoped combat action modifier in the Skill/OB bucket. It is included
-once in the attack OB total and is command-backed so Clear/undo removes it with the attack command.
-Distance modifiers apply to attack rolls only; they do not affect DB/Parry, damage lookup,
-initiative, critical rolls, armor, or base weapon OB. Full coordinates, facing, pathing, movement
-conflict resolution, and automatic round-end distance changes are future work.
+The generated row is a phase-scoped combat action modifier in the Skill/OB bucket, visible to GM
+and player review before the attack is declared or rolled. The attack roll consumes the visible
+Skill/OB row through the existing OB total; the late attack-roll route must not create a second
+hidden distance modifier. Clear/undo of the attack does not remove the declaration-time row unless
+an older command explicitly recorded that it created the row. Distance modifiers apply to attack
+rolls only; they do not affect DB/Parry, damage lookup, initiative, critical rolls, armor, or base
+weapon OB.
+
+Examples:
+
+- Broad sword preferred `2`, actual `3` gives Skill/OB `-2`
+- Long sword preferred `3`, actual `3` gives no modifier
+- Long sword preferred `3`, actual `5` gives Skill/OB `-4`
+
+Full coordinates, facing, pathing, movement conflict resolution, and automatic round-end distance
+changes are future work.

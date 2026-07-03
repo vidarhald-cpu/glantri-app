@@ -28,6 +28,7 @@ import {
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
   getDistanceEdgeBetweenParticipantAliases,
+  getCombatDistanceParticipantAliases,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -121,6 +122,7 @@ import {
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
+import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -198,6 +200,10 @@ function formatCombatDistanceModifierDetailLine(
 ): string | undefined {
   if (!detail) {
     return undefined;
+  }
+
+  if (detail.notes && detail.actualDistance === undefined) {
+    return detail.notes;
   }
 
   const weaponName = detail.weaponName ?? "Weapon";
@@ -1141,23 +1147,53 @@ export default function ScenarioPlayerCombatPageContent({
         })
       : undefined;
   const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep);
+  const projectedCombatContextDraft = useMemo(
+    () =>
+      projectCombatActionGeneratedModifiers({
+        actionId: selectedActionId || undefined,
+        combatContext: combatContextDraft,
+        encounterParticipant: selectedRoundParticipant
+          ? encounterSession?.participants.find((participant) =>
+              getCombatDistanceParticipantAliases(selectedRoundParticipant).some((alias) =>
+                getCombatDistanceParticipantAliases(participant).includes(alias),
+              ),
+            )
+          : undefined,
+        phaseContexts: phaseCombatContextDrafts,
+        resolvedEquipmentState: controlledEquipmentState ?? undefined,
+        roundState: combatRoundState ?? undefined,
+        scenarioParticipant: selectedParticipant ?? undefined,
+        secondaryActionId: selectedSecondaryActionId || undefined,
+      }),
+    [
+      combatContextDraft,
+      combatRoundState,
+      controlledEquipmentState,
+      encounterSession?.participants,
+      phaseCombatContextDrafts,
+      selectedActionId,
+      selectedParticipant,
+      selectedRoundParticipant,
+      selectedSecondaryActionId,
+    ],
+  );
   const liveCombatModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
-        combatContext: combatContextDraft,
+        combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
         phaseKey: currentModifierPhase,
       }),
-    [combatContextDraft, currentModifierPhase, selectedParticipant?.state.combatEffects],
+    [currentModifierPhase, projectedCombatContextDraft, selectedParticipant?.state.combatEffects],
   );
   const modifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
-        combatContext: combatContextDraft,
+        combatContext: projectedCombatContextDraft,
         liveModifiers: liveCombatModifiers,
         phaseKey: currentModifierPhase,
       }),
-    [combatContextDraft, currentModifierPhase, liveCombatModifiers],
+    [currentModifierPhase, liveCombatModifiers, projectedCombatContextDraft],
   );
 
   const loadoutFieldValueMap = useMemo(
@@ -1304,7 +1340,7 @@ export default function ScenarioPlayerCombatPageContent({
       const { encounter, participant } = await submitCombatDeclarationOnServer({
         actionId: selectedActionId || undefined,
         additionalActionNotes,
-        combatContext: combatContextDraft,
+        combatContext: projectedCombatContextDraft,
         encounterId,
         movementId: selectedMovementId || undefined,
         phaseContexts: phaseCombatContextDrafts,
@@ -1641,7 +1677,7 @@ export default function ScenarioPlayerCombatPageContent({
   const phaseCombatLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
-        combatContext: combatContextDraft,
+        combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
         phaseKey,
       });
@@ -1676,11 +1712,11 @@ export default function ScenarioPlayerCombatPageContent({
     };
   }, [
     combatAllocationInputs,
-    combatContextDraft,
     content,
     controlledBuild,
     controlledEquipmentState,
     displayedParticipant?.characterId,
+    projectedCombatContextDraft,
     selectedActionId,
     selectedParticipant?.state.combatEffects,
     selectedSecondaryActionId,

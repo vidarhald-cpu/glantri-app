@@ -6385,6 +6385,7 @@ export interface CombatRoundAttackDistanceModifierDetail {
   createdCombatModifierIds: string[];
   modifierId?: string;
   nearestPreferredDistance?: number;
+  notes?: string;
   preferredDistances: number[];
   value: number;
   warning?: string;
@@ -6420,6 +6421,7 @@ function parseCombatRoundAttackDistanceModifierDetail(
       Number.isInteger(record.nearestPreferredDistance)
         ? record.nearestPreferredDistance
         : undefined,
+    notes: typeof record.notes === "string" ? record.notes : undefined,
     preferredDistances,
     value: valueNumber,
     warning: typeof record.warning === "string" ? record.warning : undefined,

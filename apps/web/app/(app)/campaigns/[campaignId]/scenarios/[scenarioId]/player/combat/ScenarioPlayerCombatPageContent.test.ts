@@ -36,6 +36,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("projectCombatActionGeneratedModifiers");
+    expect(source).toContain("projectedCombatContextDraft");
+    expect(source).toContain("combatContext: projectedCombatContextDraft");
+    expect(source).toContain("resolvedEquipmentState: controlledEquipmentState ?? undefined");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain(
       "const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep)",
@@ -107,6 +111,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatCombatDistanceModifierDetailLine");
     expect(source).toContain("buildPlayerCombatDistanceModifierSection");
     expect(source).toContain("distanceModifierDetail");
+    expect(source).toContain("detail.notes && detail.actualDistance === undefined");
     expect(source).toContain('title: "Distance"');
     expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");

@@ -183,6 +183,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatDistanceModifierDetailLine");
     expect(source).toContain("buildCombatDistanceModifierSection");
     expect(source).toContain("distanceModifierDetail");
+    expect(source).toContain("detail.notes && detail.actualDistance === undefined");
     expect(source).toContain('title: "Distance"');
     expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
     expect(source).toContain("playerCombatTopPanelRowStyle");
@@ -198,6 +199,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("resolvedCharacterStateByParticipantId");
     expect(source).toContain("hydrateInspectorCharacterState");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("projectCombatActionGeneratedModifiers");
+    expect(source).toContain("inspectorGeneratedCombatContext");
+    expect(source).toContain("combatContext: inspectorGeneratedCombatContext");
+    expect(source).toContain("resolvedEquipmentState: inspectorEquipmentState ?? undefined");
+    expect(source).toContain("participants ?? []");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain(
       "const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step)",

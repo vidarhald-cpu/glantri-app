@@ -31,6 +31,14 @@ export const ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID =
 export const ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE = "adjust-range-attack-phase2-db-parry";
 export const DISTANCE_OB_SKILL_SOURCE_RULE = "distance-ob-skill";
 
+export interface CombatActionGeneratedDistanceModifierInput {
+  actualDistance: CombatDistance | number;
+  phase: "phase1" | "phase2";
+  preferredDistances: readonly (CombatDistance | number)[];
+  sourceActionId?: string;
+  weaponName?: string;
+}
+
 export function buildDistanceGeneratedObSkillModifier(input: {
   actualDistance: CombatDistance | number;
   phase: "phase1" | "phase2";
@@ -58,7 +66,7 @@ export function buildDistanceGeneratedObSkillModifier(input: {
     durationRounds: 1,
     generated: true,
     id: `generated:distance:${input.phase}:ob-skill`,
-    notes: `${input.weaponName ? `${input.weaponName} ` : ""}preferred ${preferredLabel} · actual ${actualDistance} · nearest ${nearestPreferredDistance} · Skill/OB ${value}`,
+    notes: `distance: ${input.weaponName ? `${input.weaponName} ` : ""}preferred ${preferredLabel} · actual ${actualDistance} · nearest ${nearestPreferredDistance} · Skill/OB ${value}`,
     scope: "until",
     sourceActionId: input.sourceActionId,
     sourcePhase: input.phase,
@@ -133,7 +141,7 @@ function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEnt
 }
 
 function isCombatActionGeneratedObSkillModifier(entry: ScenarioCombatModifierEntry): boolean {
-  return isDoubleAttackGeneratedObSkillModifier(entry);
+  return isDoubleAttackGeneratedObSkillModifier(entry) || isDistanceGeneratedObSkillModifier(entry);
 }
 
 export function applyDistanceGeneratedObSkillModifier(input: {
@@ -488,6 +496,7 @@ export function buildAdjustRangeAttackGeneratedDbParryModifiers(): ScenarioComba
 export function applyCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
+  distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter(
@@ -509,6 +518,14 @@ export function applyCombatActionGeneratedModifiers(input: {
             : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];
+  const generatedDistanceObSkillModifiers = (input.distanceModifiers ?? [])
+    .map((modifierInput) =>
+      buildDistanceGeneratedObSkillModifier({
+        ...modifierInput,
+        sourceActionId: modifierInput.sourceActionId ?? input.actionId,
+      }),
+    )
+    .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
 
   return {
     ...input.combatContext,
@@ -520,6 +537,7 @@ export function applyCombatActionGeneratedModifiers(input: {
       situationObSkill: [
         ...situationObSkillWithoutGeneratedActionModifiers,
         ...generatedObSkillModifiers,
+        ...generatedDistanceObSkillModifiers,
       ],
     },
   };
