@@ -133,7 +133,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("distanceMatrixRowHeaderStyle");
     expect(source).toContain("distanceMatrixColumnHeaderStyle");
     expect(source).toContain("distanceMatrixColumnHeaderTextStyle");
-    expect(source).toContain('transform: "translateX(-0.3rem) rotate(-45deg)"');
+    expect(source).toContain('height: "4.75rem"');
+    expect(source).toContain('overflow: "visible"');
+    expect(source).toContain('bottom: "0.1rem"');
+    expect(source).toContain('width: "6.5rem"');
+    expect(source).toContain('transform: "translateX(-0.15rem) rotate(-45deg)"');
     expect(source).toContain('textOverflow: "ellipsis"');
     expect(source).toContain('position: "absolute"');
     expect(source).toContain("title={participant.label}");

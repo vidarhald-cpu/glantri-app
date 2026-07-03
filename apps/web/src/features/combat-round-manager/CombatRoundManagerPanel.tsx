@@ -244,9 +244,10 @@ const distanceMatrixRowHeaderStyle = {
 
 const distanceMatrixColumnHeaderStyle = {
   boxSizing: "border-box",
-  height: "6.75rem",
+  height: "4.75rem",
   maxWidth: distanceMatrixCellSize,
   minWidth: distanceMatrixCellSize,
+  overflow: "visible",
   padding: 0,
   position: "relative",
   verticalAlign: "bottom",
@@ -254,19 +255,19 @@ const distanceMatrixColumnHeaderStyle = {
 } as const;
 
 const distanceMatrixColumnHeaderTextStyle = {
-  bottom: "0.35rem",
+  bottom: "0.1rem",
   display: "inline-block",
   fontSize: "0.75rem",
   left: "50%",
-  lineHeight: 1,
-  maxWidth: "7.25rem",
+  lineHeight: 1.05,
+  maxWidth: "6.5rem",
   overflow: "hidden",
   position: "absolute",
   textOverflow: "ellipsis",
-  transform: "translateX(-0.3rem) rotate(-45deg)",
+  transform: "translateX(-0.15rem) rotate(-45deg)",
   transformOrigin: "bottom left",
   whiteSpace: "nowrap",
-  width: "7.25rem",
+  width: "6.5rem",
 } as const;
 
 const distanceMatrixInputStyle = {
@@ -7176,7 +7177,7 @@ export default function CombatRoundManagerPanel({
           border: "1px solid #e3e1dc",
           borderRadius: 8,
           display: "grid",
-          gap: "0.5rem",
+          gap: "0.35rem",
           padding: "0.65rem 0.75rem",
         }}
       >
