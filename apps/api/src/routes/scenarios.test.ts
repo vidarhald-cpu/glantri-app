@@ -473,6 +473,22 @@ function makeWeaponEquipmentState(input: {
   };
 }
 
+function makeServerWeaponEquipmentState(input: {
+  characterId?: string;
+  name: string;
+  range: string;
+  templateId?: string;
+}) {
+  const webState = makeWeaponEquipmentState(input);
+
+  return {
+    activeLoadoutByCharacterId: webState.activeLoadoutByCharacterId,
+    itemsById: webState.itemsById,
+    locationsById: webState.locationsById,
+    templatesById: webState.templates.templatesById,
+  };
+}
+
 function makeCombatScenarioParticipantWithWeapon(
   overrides: Record<string, unknown> & { weaponName?: string; weaponRange?: string } = {},
 ) {
@@ -2414,7 +2430,7 @@ describe("scenarios route contract", () => {
       role: "non_player_character",
       snapshot: {
         displayName: "Scyrian cavalry guy",
-        equipmentState: makeWeaponEquipmentState({
+        equipmentState: makeServerWeaponEquipmentState({
           characterId: "character-scyrian",
           name: "Broad sword",
           range: "2.0",
@@ -2536,7 +2552,7 @@ describe("scenarios route contract", () => {
       role: "non_player_character",
       snapshot: {
         displayName: "Scyrian cavalry guy",
-        equipmentState: makeWeaponEquipmentState({
+        equipmentState: makeServerWeaponEquipmentState({
           characterId: "character-scyrian",
           name: "Broad sword",
           range: "2.0",
@@ -2556,7 +2572,7 @@ describe("scenarios route contract", () => {
           id: "scenario-gladiator",
           snapshot: {
             displayName: "The Gladiator",
-            equipmentState: makeWeaponEquipmentState({
+            equipmentState: makeServerWeaponEquipmentState({
               characterId: "character-gladiator",
               name: "Long sword",
               range: "3.0",
@@ -3904,6 +3920,80 @@ describe("scenarios route contract", () => {
     ).toBeUndefined();
   });
 
+  it("returns materialized default pair distances from active server equipment without a GM save", async () => {
+    const combatEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: [
+        {
+          ...makeCombatEncounter().participants[0],
+          characterId: "character-gladiator",
+          id: "gladiator",
+          label: "The Gladiator",
+          scenarioParticipantId: "scenario-gladiator",
+        },
+        {
+          ...makeCombatEncounter().participants[0],
+          characterId: "character-scyrian",
+          id: "scyrian",
+          label: "Scyrian cavalry guy",
+          scenarioParticipantId: "scenario-scyrian",
+        },
+      ],
+    }) as EncounterSession;
+
+    setupCombatDeclarationRoute({
+      encounter: combatEncounter,
+      participants: [
+        makeCombatScenarioParticipant({
+          characterId: "character-gladiator",
+          id: "scenario-gladiator",
+          snapshot: {
+            displayName: "The Gladiator",
+            equipmentState: makeServerWeaponEquipmentState({
+              characterId: "character-gladiator",
+              name: "Long sword",
+              range: "3.0",
+            }),
+          },
+        }),
+        makeCombatScenarioParticipant({
+          characterId: "character-scyrian",
+          controlledByUserId: undefined,
+          id: "scenario-scyrian",
+          role: "npc",
+          snapshot: {
+            displayName: "Scyrian cavalry guy",
+            equipmentState: makeServerWeaponEquipmentState({
+              characterId: "character-scyrian",
+              name: "Broad sword",
+              range: "2.0",
+            }),
+          },
+          sourceType: "entity",
+        }),
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const distanceState = response.json().encounter.combatRoundState.distanceState;
+    const edge = distanceState.edges[makeDistancePairKey("gladiator", "scyrian")];
+
+    expect(edge).toMatchObject({
+      distance: 3,
+      source: "default_weapon_reach",
+    });
+    expect(edge.notes).toBeUndefined();
+    expect(getDistanceBetween(distanceState, "gladiator", "scyrian")).toBe(3);
+  });
+
   it("returns player-safe materialized default pair distances without a GM save", async () => {
     const combatEncounter = makeCombatEncounterWithResolvedCombatExperience({
       participants: [
@@ -3943,7 +4033,7 @@ describe("scenarios route contract", () => {
           id: "scenario-gladiator",
           snapshot: {
             displayName: "The Gladiator",
-            equipmentState: makeWeaponEquipmentState({
+            equipmentState: makeServerWeaponEquipmentState({
               characterId: "character-gladiator",
               name: "Long sword",
               range: "3.0",
@@ -3957,7 +4047,7 @@ describe("scenarios route contract", () => {
           role: "npc",
           snapshot: {
             displayName: "Scyrian cavalry guy",
-            equipmentState: makeWeaponEquipmentState({
+            equipmentState: makeServerWeaponEquipmentState({
               characterId: "character-scyrian",
               name: "Broad sword",
               range: "2.0",

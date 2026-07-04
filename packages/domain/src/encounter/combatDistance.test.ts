@@ -65,6 +65,64 @@ describe("combat distance", () => {
     expect(result).toEqual({ distance: 4 });
   });
 
+  it("materializes pair defaults from the longest active weapon range metadata", () => {
+    const longSwordBroadSword = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["gladiator", "scyrian"],
+      weaponsByParticipantId: {
+        gladiator: [{ range: "3.0" }],
+        scyrian: [{ range: "2.0" }],
+      },
+    });
+    const broadSwordBroadSword = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["scyrian-a", "scyrian-b"],
+      weaponsByParticipantId: {
+        "scyrian-a": [{ preferredDistances: [2] }],
+        "scyrian-b": [{ range: "2.0" }],
+      },
+    });
+    const spearLongSword = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["pikeman", "gladiator"],
+      weaponsByParticipantId: {
+        gladiator: [{ range: "3.0" }],
+        pikeman: [{ preferredDistances: [4] }],
+      },
+    });
+
+    expect(getDistanceBetween(longSwordBroadSword, "gladiator", "scyrian")).toBe(3);
+    expect(getDistanceBetween(broadSwordBroadSword, "scyrian-a", "scyrian-b")).toBe(2);
+    expect(getDistanceBetween(spearLongSword, "pikeman", "gladiator")).toBe(4);
+  });
+
+  it("does not fall back when one participant has valid weapon distance metadata", () => {
+    const state = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["participant-a", "participant-b"],
+      weaponsByParticipantId: {
+        "participant-a": [{}],
+        "participant-b": [{ range: "3.0" }],
+      },
+    });
+    const edge = state.edges[makeDistancePairKey("participant-a", "participant-b")];
+
+    expect(edge).toMatchObject({
+      distance: 3,
+      source: "default_weapon_reach",
+    });
+    expect(edge?.notes).toBeUndefined();
+  });
+
+  it("uses the weapon range field, not initiative, when materializing defaults", () => {
+    const longSwordWithInitiative = { initiative: "7.0", range: "3.0" };
+    const state = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["gladiator", "scyrian"],
+      weaponsByParticipantId: {
+        gladiator: [longSwordWithInitiative],
+        scyrian: [{ range: "2.0" }],
+      },
+    });
+
+    expect(getDistanceBetween(state, "gladiator", "scyrian")).toBe(3);
+  });
+
   it("falls back safely when weapon distance metadata is missing or invalid", () => {
     const missingResult = getDefaultCombatDistanceForWeapons({
       participantAWeapons: [{}],

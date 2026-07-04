@@ -570,32 +570,86 @@ function normalizeWeaponName(value: unknown): string | undefined {
     : undefined;
 }
 
-function getSnapshotWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
+function getSnapshotEquipmentState(
+  participant: ScenarioParticipant,
+): Record<string, unknown> | undefined {
   const snapshot = isRecord(participant.snapshot) ? participant.snapshot : undefined;
   const equipmentStateValue = snapshot?.["equipmentState"];
-  const equipmentState = isRecord(equipmentStateValue) ? equipmentStateValue : undefined;
-  const templatesValue = equipmentState?.["templates"];
-  const templates = isRecord(templatesValue) ? templatesValue : undefined;
-  const templatesByIdValue = templates?.["templatesById"];
-  const templatesById = isRecord(templatesByIdValue) ? templatesByIdValue : undefined;
+
+  return isRecord(equipmentStateValue) ? equipmentStateValue : undefined;
+}
+
+function getEquipmentTemplatesById(
+  equipmentState: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const nestedTemplatesValue = equipmentState?.["templates"];
+  const nestedTemplates = isRecord(nestedTemplatesValue) ? nestedTemplatesValue : undefined;
+  const nestedTemplatesByIdValue = nestedTemplates?.["templatesById"];
+
+  if (isRecord(nestedTemplatesByIdValue)) {
+    return nestedTemplatesByIdValue;
+  }
+
+  const flatTemplatesByIdValue = equipmentState?.["templatesById"];
+
+  return isRecord(flatTemplatesByIdValue) ? flatTemplatesByIdValue : undefined;
+}
+
+function isWeaponTemplateLike(template: unknown): template is WeaponTemplate {
+  return (
+    isRecord(template) &&
+    template.category === "weapon" &&
+    typeof template.name === "string" &&
+    template.name.trim().length > 0
+  );
+}
+
+function getSnapshotWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
+  const equipmentState = getSnapshotEquipmentState(participant);
+  const templatesById = getEquipmentTemplatesById(equipmentState);
 
   if (!templatesById) {
     return [];
   }
 
-  return Object.values(templatesById).filter(
-    (template): template is WeaponTemplate =>
-      isRecord(template) &&
-      template.category === "weapon" &&
-      typeof template.name === "string" &&
-      template.name.trim().length > 0,
+  return Object.values(templatesById).filter(isWeaponTemplateLike);
+}
+
+function getScenarioParticipantReadyItemIds(participant: ScenarioParticipant): string[] {
+  const participantRecord = participant as unknown;
+  const state = isRecord(participantRecord) ? participantRecord["state"] : undefined;
+  const equipment = isRecord(state) ? state["equipment"] : undefined;
+  const readyItemIds = isRecord(equipment) ? equipment["readyItemIds"] : undefined;
+
+  return (Array.isArray(readyItemIds) ? readyItemIds : []).filter(
+    (itemId): itemId is string => typeof itemId === "string" && itemId.length > 0,
   );
 }
 
+function getEquipmentItemTemplate(input: {
+  itemId: string;
+  itemsById: Record<string, unknown>;
+  templatesById: Record<string, unknown> | undefined;
+}): WeaponTemplate | undefined {
+  const item = input.itemsById[input.itemId];
+  const templateId = isRecord(item) ? item["templateId"] : undefined;
+  const template =
+    typeof templateId === "string" ? input.templatesById?.[templateId] : undefined;
+
+  if (isWeaponTemplateLike(template)) {
+    return template;
+  }
+
+  const contentTemplate =
+    typeof templateId === "string"
+      ? weaponTemplates.find((candidate) => candidate.id === templateId)
+      : undefined;
+
+  return isWeaponTemplateLike(contentTemplate) ? contentTemplate : undefined;
+}
+
 function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
-  const snapshot = isRecord(participant.snapshot) ? participant.snapshot : undefined;
-  const equipmentStateValue = snapshot?.["equipmentState"];
-  const equipmentState = isRecord(equipmentStateValue) ? equipmentStateValue : undefined;
+  const equipmentState = getSnapshotEquipmentState(participant);
   const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
   const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
   const characterId =
@@ -608,30 +662,18 @@ function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): Wea
     activeLoadout?.["activeSecondaryWeaponItemId"],
     activeLoadout?.["activeMissileWeaponItemId"],
   ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+  const readyItemIds = getScenarioParticipantReadyItemIds(participant);
+  const candidateWeaponItemIds = [...new Set([...activeWeaponItemIds, ...readyItemIds])];
   const itemsValue = equipmentState?.["itemsById"];
   const itemsById = isRecord(itemsValue) ? itemsValue : undefined;
-  const templatesValue = equipmentState?.["templates"];
-  const templates = isRecord(templatesValue) ? templatesValue : undefined;
-  const templatesByIdValue = templates?.["templatesById"];
-  const templatesById = isRecord(templatesByIdValue) ? templatesByIdValue : undefined;
+  const templatesById = getEquipmentTemplatesById(equipmentState);
 
-  if (!itemsById || !templatesById) {
+  if (!itemsById) {
     return [];
   }
 
-  return activeWeaponItemIds
-    .map((itemId) => {
-      const item = itemsById[itemId];
-      const templateId = isRecord(item) ? item["templateId"] : undefined;
-      const template = typeof templateId === "string" ? templatesById[templateId] : undefined;
-
-      return isRecord(template) &&
-        template.category === "weapon" &&
-        typeof template.name === "string" &&
-        template.name.trim().length > 0
-        ? (template as unknown as WeaponTemplate)
-        : undefined;
-    })
+  return candidateWeaponItemIds
+    .map((itemId) => getEquipmentItemTemplate({ itemId, itemsById, templatesById }))
     .filter((template): template is WeaponTemplate => Boolean(template));
 }
 

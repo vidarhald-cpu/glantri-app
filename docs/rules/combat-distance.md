@@ -10,6 +10,7 @@ Combat distance is shared pairwise encounter state.
 Missing pair distances are materialized into combat state from weapon reach. The default is the
 longest preferred distance across the active/wielded weapons of both participants. Current imported
 weapon data stores this as weapon `range`; optional `preferredDistances` metadata is also supported.
+Weapon initiative metadata is a separate combat value and is never used as distance reach.
 If no usable weapon distance metadata is available, the app falls back to distance `2` and records a
 note.
 Whole-number decimal source values such as `3.0` are parsed as distance `3`; fractional values such
