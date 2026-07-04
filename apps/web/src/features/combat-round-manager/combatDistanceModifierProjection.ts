@@ -4,10 +4,12 @@ import {
   getCombatDistanceParticipantAliases,
   getDistanceEdgeBetweenParticipantAliases,
   getWeaponPreferredDistances,
+  isDistanceGeneratedObSkillModifier,
   type CombatActionGeneratedDistanceModifierInput,
   type CombatRoundPhaseContexts,
   type CombatRoundState,
   type EncounterSession,
+  type ScenarioCombatModifierEntry,
   type ScenarioParticipant,
   type ScenarioParticipantCombatContext,
   type WeaponTemplate,
@@ -185,6 +187,46 @@ function buildDistanceModifierInput(input: {
   };
 }
 
+function getDistanceModifierPhase(entry: ScenarioCombatModifierEntry): PhaseKey | undefined {
+  if (entry.sourcePhase === "phase1" || entry.sourcePhase === "phase2") {
+    return entry.sourcePhase;
+  }
+
+  if (entry.id === "generated:distance:phase1:ob-skill") {
+    return "phase1";
+  }
+
+  return entry.id === "generated:distance:phase2:ob-skill" ? "phase2" : undefined;
+}
+
+function getCommittedDistanceRowsToPreserve(input: {
+  attackPhases: readonly PhaseKey[];
+  combatContext: ScenarioParticipantCombatContext;
+  distanceModifiers: readonly CombatActionGeneratedDistanceModifierInput[];
+  phaseContexts?: CombatRoundPhaseContexts;
+  phaseWeaponNames?: Partial<Record<PhaseKey, string | undefined>>;
+}): ScenarioCombatModifierEntry[] {
+  const recomputedDistancePhases = new Set(
+    input.distanceModifiers.map((modifier) => modifier.phase),
+  );
+
+  return input.combatContext.modifierBuckets.situationObSkill.filter((entry) => {
+    if (!isDistanceGeneratedObSkillModifier(entry)) {
+      return false;
+    }
+
+    const phase = getDistanceModifierPhase(entry);
+
+    return Boolean(
+      phase &&
+        input.attackPhases.includes(phase) &&
+        input.phaseContexts?.[phase]?.targetParticipantId &&
+        !input.phaseWeaponNames?.[phase] &&
+        !recomputedDistancePhases.has(phase),
+    );
+  });
+}
+
 export function projectCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
@@ -196,10 +238,11 @@ export function projectCombatActionGeneratedModifiers(input: {
   scenarioParticipant?: ScenarioParticipant;
   secondaryActionId?: string;
 }): ScenarioParticipantCombatContext {
-  const distanceModifiers = getCombatDeclarationAttackPhases({
+  const attackPhases = getCombatDeclarationAttackPhases({
     actionId: input.actionId,
     secondaryActionId: input.secondaryActionId,
-  })
+  });
+  const distanceModifiers = attackPhases
     .map((phase) =>
       buildDistanceModifierInput({
         actionId: input.actionId,
@@ -215,10 +258,39 @@ export function projectCombatActionGeneratedModifiers(input: {
     .filter(
       (entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined,
     );
-
-  return applyCombatActionGeneratedModifiers({
+  const committedDistanceRowsToPreserve = getCommittedDistanceRowsToPreserve({
+    attackPhases,
+    combatContext: input.combatContext,
+    distanceModifiers,
+    phaseContexts: input.phaseContexts,
+    phaseWeaponNames: input.phaseWeaponNames,
+  });
+  const projectedContext = applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     combatContext: input.combatContext,
     distanceModifiers,
   });
+
+  if (committedDistanceRowsToPreserve.length === 0) {
+    return projectedContext;
+  }
+
+  const projectedDistanceRowIds = new Set(
+    projectedContext.modifierBuckets.situationObSkill
+      .filter(isDistanceGeneratedObSkillModifier)
+      .map((entry) => entry.id),
+  );
+
+  return {
+    ...projectedContext,
+    modifierBuckets: {
+      ...projectedContext.modifierBuckets,
+      situationObSkill: [
+        ...projectedContext.modifierBuckets.situationObSkill,
+        ...committedDistanceRowsToPreserve.filter(
+          (entry) => !projectedDistanceRowIds.has(entry.id),
+        ),
+      ],
+    },
+  };
 }
