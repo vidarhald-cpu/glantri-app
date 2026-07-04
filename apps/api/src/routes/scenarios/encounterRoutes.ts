@@ -24,6 +24,7 @@ import {
   combatRoundPhaseSchema,
   combatRoundStepSchema,
   encounterSessionSchema,
+  ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
@@ -72,6 +73,7 @@ import {
 } from "@glantri/domain";
 import type {
   CombatActionGeneratedDistanceModifierInput,
+  CombatDistanceWeaponLike,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundState,
@@ -709,6 +711,63 @@ function findEncounterParticipantByScenarioParticipant(input: {
     : undefined;
 }
 
+function buildDistanceDefaultWeaponsByParticipantId(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+}): Record<string, readonly CombatDistanceWeaponLike[]> {
+  return Object.fromEntries(
+    input.encounter.participants.map((encounterParticipant) => {
+      const scenarioParticipant = input.scenarioParticipants.find(
+        (participant) =>
+          participant.id === encounterParticipant.scenarioParticipantId ||
+          participant.id === encounterParticipant.id ||
+          (participant.characterId && participant.characterId === encounterParticipant.characterId),
+      );
+
+      return [
+        encounterParticipant.id,
+        scenarioParticipant ? getSnapshotActiveWeaponTemplates(scenarioParticipant) : [],
+      ];
+    }),
+  );
+}
+
+function materializeCombatRoundDistanceDefaults(input: {
+  encounter: EncounterSession;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}): CombatRoundState {
+  return {
+    ...input.roundState,
+    distanceState: ensureDistanceEdgesForParticipantPairs({
+      lastChangedRound: input.roundState.roundNumber,
+      participantIds: input.roundState.participants.map((participant) => participant.participantId),
+      refreshFallbackDefaultEdges: true,
+      state: input.roundState.distanceState,
+      weaponsByParticipantId: buildDistanceDefaultWeaponsByParticipantId({
+        encounter: input.encounter,
+        scenarioParticipants: input.scenarioParticipants,
+      }),
+    }),
+  };
+}
+
+function initializeMaterializedCombatRoundState(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+}): CombatRoundState {
+  const roundState = initializeCombatRoundState({
+    encounter: input.encounter,
+    weaponsByParticipantId: buildDistanceDefaultWeaponsByParticipantId(input),
+  });
+
+  return materializeCombatRoundDistanceDefaults({
+    encounter: input.encounter,
+    roundState,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+}
+
 function buildCombatActionDistanceModifierInputs(input: {
   actionId?: string;
   encounterParticipant: EncounterSession["participants"][number];
@@ -1003,7 +1062,12 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): CombatRoundState | undefined {
-  const roundState = input.encounter.combatRoundState;
+  const roundState = input.encounter.combatRoundState
+    ? initializeMaterializedCombatRoundState({
+        encounter: input.encounter,
+        scenarioParticipants: input.scenarioParticipants,
+      })
+    : undefined;
 
   if (!roundState) {
     return undefined;
@@ -1222,10 +1286,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roundState = initializeCombatRoundState({ encounter });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const shouldNormalizeCombatRoundState =
+        (encounter.kind === "combat" || Boolean(encounter.combatRoundState)) &&
+        (!encounter.combatRoundState ||
+          combatRoundStatesDiffer(roundState, encounter.combatRoundState));
       const normalizedEncounter =
-        encounter.combatRoundState &&
-        combatRoundStatesDiffer(roundState, encounter.combatRoundState)
+        shouldNormalizeCombatRoundState
           ? await encounterService.updateEncounter({
               campaignId: access.campaignId,
               encounterId,
@@ -1240,8 +1311,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : encounter;
 
       if (access.mode === "player") {
-        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-
         return {
           encounter: {
             ...normalizedEncounter,
@@ -1395,7 +1464,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const gmAuthorizedOperation = access.mode === "gm";
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
 
       if (
         roundState.currentStep === "select_actions" &&
@@ -1631,7 +1703,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const gmAuthorizedOperation = access.mode === "gm";
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const phase = getCombatRoundInitiativePhaseForStep(roundState.currentStep);
 
       if (
@@ -1749,7 +1824,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const body = parseCombatExperienceDifficultyBody(request.body);
-        const roundState = initializeCombatRoundState({ encounter });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
         const nextRoundState = setCombatRoundCombatExperienceDifficulty({
           difficulty: body.difficulty,
           state: roundState,
@@ -1819,7 +1898,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parsePairDistanceBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const submittedAt = new Date().toISOString();
       const nextRoundState = setCombatRoundPairDistance({
         command: {
@@ -1940,7 +2022,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const gmAuthorizedOperation = access.mode === "gm";
-        const roundState = initializeCombatRoundState({ encounter });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
 
         if (!gmAuthorizedOperation) {
           if (
@@ -2114,7 +2199,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const roundState = initializeCombatRoundState({ encounter });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
         const backedOut = backOutCombatRoundPhaseAttack({
           combatContext: scenarioParticipant.state.combat.combatContext,
           command: {
@@ -2241,7 +2329,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const roundState = initializeCombatRoundState({ encounter });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
         const continued = continueCombatRoundPhaseAttack({
           command: {
             createdAt: submittedAt,
@@ -2322,7 +2413,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const roundState = initializeCombatRoundState({ encounter });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
         const participantInputs: Record<string, CombatRoundPhaseInitiativeCommitParticipantInput> =
           {};
 
@@ -2520,7 +2614,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
         participantId: encounterParticipant.id,
         phase: body.phase,
@@ -2741,7 +2838,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const currentRollAction = getPlayerCombatCurrentRollAction({
         participantId: encounterParticipant.id,
         state: roundState,
@@ -2888,7 +2988,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const attackResult = getCombatRoundAttackResultById({
         attackResultId: body.attackResultId,
         state: roundState,
@@ -3064,7 +3167,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const attackResult = getCombatRoundAttackResultById({
         attackResultId: body.attackResultId,
         state: roundState,
@@ -3192,7 +3298,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const selectedStep = selectedStepValue
         ? combatRoundStepSchema.parse(selectedStepValue)
         : undefined;
-      const roundState = initializeCombatRoundState({ encounter });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const stateForClear =
         selectedParticipantId && selectedStep
           ? setCombatRoundSelection({
@@ -3235,12 +3344,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               step: selectedStep,
             })
           : clearCurrentCombatRoundStepAndRewind(roundState);
-      const nextRoundState = initializeCombatRoundState({
+      const nextRoundState = initializeMaterializedCombatRoundState({
         encounter: {
           ...encounter,
           combatRoundState: clearedRoundState,
           currentRound: clearedRoundState.roundNumber,
         },
+        scenarioParticipants,
       });
       const removedDeclareCommandParticipantIds = new Set(
         roundState.commands

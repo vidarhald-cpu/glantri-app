@@ -113,6 +113,7 @@ import {
   PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
 } from "./combatActionModifiers";
 import { encounterSessionSchema } from "./session";
+import { getDistanceBetween, makeDistancePairKey, setDistanceBetween } from "./combatDistance";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
 import type { CombatEffectsState } from "./combatEffects";
 
@@ -850,6 +851,82 @@ describe("combat round manager", () => {
         step: "phase_1_damage",
       }),
     ).toBe("pending");
+  });
+
+  it("materializes default distance edges during round initialization", () => {
+    const state = initializeCombatRoundState({
+      encounter: encounter({
+        participants: [
+          participant({ id: "gladiator", label: "The Gladiator" }),
+          participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+          participant({ id: "guard", label: "City guard" }),
+        ],
+      }),
+      weaponsByParticipantId: {
+        gladiator: [{ range: "3.0" }],
+        guard: [],
+        scyrian: [{ preferredDistances: [2] }],
+      },
+    });
+    const pairKey = makeDistancePairKey("gladiator", "scyrian");
+
+    expect(Object.keys(state.distanceState.edges)).toHaveLength(3);
+    expect(state.distanceState.edges[pairKey]).toMatchObject({
+      distance: 3,
+      lastChangedRound: 3,
+      source: "default_weapon_reach",
+    });
+    expect(state.distanceState.edges[pairKey]?.notes).toBeUndefined();
+    expect(getDistanceBetween(state.distanceState, "gladiator", "scyrian")).toBe(3);
+  });
+
+  it("preserves GM-set distance edges while materializing missing pairs", () => {
+    const baseEncounter = encounter({
+      participants: [
+        participant({ id: "gladiator", label: "The Gladiator" }),
+        participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+      ],
+    });
+    const initial = initializeCombatRoundState({
+      encounter: baseEncounter,
+      weaponsByParticipantId: {
+        gladiator: [{ range: "3.0" }],
+        scyrian: [{ preferredDistances: [2] }],
+      },
+    });
+    const withGmDistance = {
+      ...initial,
+      distanceState: setDistanceBetween({
+        distance: 1,
+        participantAId: "gladiator",
+        participantBId: "scyrian",
+        source: "gm_set",
+        state: initial.distanceState,
+      }),
+    };
+    const state = initializeCombatRoundState({
+      encounter: {
+        ...baseEncounter,
+        combatRoundState: withGmDistance,
+        participants: [
+          ...baseEncounter.participants,
+          participant({ id: "guard", label: "City guard" }),
+        ],
+      },
+      weaponsByParticipantId: {
+        gladiator: [{ range: "3.0" }],
+        guard: [{ preferredDistances: [4] }],
+        scyrian: [{ preferredDistances: [2] }],
+      },
+    });
+    const gmPairKey = makeDistancePairKey("gladiator", "scyrian");
+
+    expect(state.distanceState.edges[gmPairKey]).toMatchObject({
+      distance: 1,
+      source: "gm_set",
+    });
+    expect(getDistanceBetween(state.distanceState, "gladiator", "guard")).toBe(4);
+    expect(getDistanceBetween(state.distanceState, "guard", "scyrian")).toBe(4);
   });
 
   it("stamps initialized combat round state with the owning encounter id", () => {

@@ -354,6 +354,7 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
   lastChangedPhase?: string;
   lastChangedRound?: number;
   participantIds: readonly string[];
+  refreshFallbackDefaultEdges?: boolean;
   state?: CombatDistanceState;
   weaponsByParticipantId?: Record<string, readonly (CombatDistanceWeaponLike | undefined | null)[]>;
 }): CombatDistanceState {
@@ -374,7 +375,14 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
 
       const pairKey = makeDistancePairKey(participantAId, participantBId);
 
-      if (nextState.edges[pairKey]) {
+      const existingEdge = nextState.edges[pairKey];
+
+      if (
+        existingEdge &&
+        (!input.refreshFallbackDefaultEdges ||
+          existingEdge.source !== "default_weapon_reach" ||
+          !existingEdge.notes?.includes("metadata was missing or invalid"))
+      ) {
         continue;
       }
 

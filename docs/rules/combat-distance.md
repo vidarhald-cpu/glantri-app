@@ -7,15 +7,18 @@ Combat distance is shared pairwise encounter state.
 - Melee distances are `0` through `4`.
 - A to B and B to A always resolve to the same edge.
 
-Missing pair distances can be defaulted from weapon reach. The default is the longest preferred
-distance across the active/wielded weapons of both participants. Current imported weapon data stores
-this as weapon `range`; optional `preferredDistances` metadata is also supported. If no usable
-weapon distance metadata is available, the app falls back to distance `2` and records a note.
+Missing pair distances are materialized into combat state from weapon reach. The default is the
+longest preferred distance across the active/wielded weapons of both participants. Current imported
+weapon data stores this as weapon `range`; optional `preferredDistances` metadata is also supported.
+If no usable weapon distance metadata is available, the app falls back to distance `2` and records a
+note.
 Whole-number decimal source values such as `3.0` are parsed as distance `3`; fractional values such
 as `2.5` are treated as invalid unless a source rule explicitly defines rounding.
 
 The GM can set pair distance manually. A GM-set edge overrides the weapon default and is command
 backed, so Clear restores the previous edge or removes the GM-set edge if no previous edge existed.
+Displayed default distances are rule-active immediately; the GM only saves matrix changes for
+overrides/edits, not to activate defaults.
 In the GM Combat screen, distance editing is presented as a compact participant-by-participant
 matrix below the Combat inspector. Participant names form the row and column axes. Row labels are
 left aligned and truncated when needed; column labels are compact, rotated, and truncated so each

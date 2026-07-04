@@ -22,6 +22,7 @@ import {
   combatDistanceEdgeSchema,
   combatDistanceSchema,
   combatDistanceStateSchema,
+  ensureDistanceEdgesForParticipantPairs,
   getDistanceEdgeBetween,
   makeDistancePairKey,
   setDistanceBetween,
@@ -29,6 +30,7 @@ import {
   type CombatDistanceEdge,
   type CombatDistanceState,
   type CombatDistanceSource,
+  type CombatDistanceWeaponLike,
 } from "./combatDistance";
 import {
   getCombatDeclarationAttackPhases,
@@ -11845,6 +11847,7 @@ function combatRoundStateHasUnsupportedPhaseStep(input: {
 
 export function initializeCombatRoundState(input: {
   encounter: Pick<EncounterSession, "combatRoundState" | "currentRound" | "id" | "participants">;
+  weaponsByParticipantId?: Record<string, readonly (CombatDistanceWeaponLike | undefined | null)[]>;
 }): CombatRoundState {
   const parsedExisting = input.encounter.combatRoundState
     ? combatRoundStateSchema.parse(input.encounter.combatRoundState)
@@ -11881,9 +11884,15 @@ export function initializeCombatRoundState(input: {
     participantIds,
     rounds: existing?.rounds,
   });
-  const distanceState = filterCombatDistanceStateForParticipantIds({
-    participantIds,
-    state: existing?.distanceState,
+  const distanceState = ensureDistanceEdgesForParticipantPairs({
+    lastChangedRound: roundNumber,
+    participantIds: [...participantIds],
+    refreshFallbackDefaultEdges: Boolean(input.weaponsByParticipantId),
+    state: filterCombatDistanceStateForParticipantIds({
+      participantIds,
+      state: existing?.distanceState,
+    }),
+    weaponsByParticipantId: input.weaponsByParticipantId,
   });
   const commands = (existing?.commands ?? []).filter(
     (command) =>

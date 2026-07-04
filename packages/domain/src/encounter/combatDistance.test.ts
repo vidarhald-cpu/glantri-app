@@ -279,6 +279,33 @@ describe("combat distance", () => {
     expect(getDistanceBetween(state, "encounter-gladiator", "encounter-scyrian")).toBe(3);
   });
 
+  it("refreshes fallback default edges when weapon metadata becomes available", () => {
+    const fallbackState = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["encounter-gladiator", "encounter-scyrian"],
+    });
+    const refreshedState = ensureDistanceEdgesForParticipantPairs({
+      participantIds: ["encounter-gladiator", "encounter-scyrian"],
+      refreshFallbackDefaultEdges: true,
+      state: fallbackState,
+      weaponsByParticipantId: {
+        "encounter-gladiator": [{ range: "3.0" }],
+        "encounter-scyrian": [{ range: "2.0" }],
+      },
+    });
+    const pairKey = makeDistancePairKey("encounter-gladiator", "encounter-scyrian");
+
+    expect(fallbackState.edges[pairKey]).toMatchObject({
+      distance: 2,
+      source: "default_weapon_reach",
+    });
+    expect(fallbackState.edges[pairKey]?.notes).toContain("metadata was missing");
+    expect(refreshedState.edges[pairKey]).toMatchObject({
+      distance: 3,
+      source: "default_weapon_reach",
+    });
+    expect(refreshedState.edges[pairKey]?.notes).toBeUndefined();
+  });
+
   it("resolves distance edges through participant, scenario participant, and character aliases", () => {
     const state = setDistanceBetween({
       distance: 3,

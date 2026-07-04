@@ -105,6 +105,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatDistanceTableRows");
     expect(source).toContain("getCombatDistanceTableRowForParticipants");
     expect(source).toContain("ensureDistanceEdgesForParticipantPairs");
+    expect(source).toContain("state: input.roundState.distanceState");
     expect(source).toContain("getCombatDistanceParticipantAliases");
     expect(source).toContain("resolvedEquipmentStateByScenarioParticipantId");
     expect(source).toContain("setPairDistanceOnServer");
