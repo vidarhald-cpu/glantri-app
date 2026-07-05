@@ -278,6 +278,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedPhaseAttackBackOutOpportunity &&");
     expect(source).toContain('"Roll Combat Experience"');
     expect(source).toContain('"Confirm Combat Experience"');
+    expect(source).toContain('"Roll distance control"');
+    expect(source).toContain("rollRoundEndDistanceControlOnServer");
+    expect(source).toContain("selectedDistanceControlActionAvailable");
+    expect(source).toContain("Roll your Dodge for distance control.");
+    expect(source).toContain("Waiting for other distance-control roll(s).");
+    expect(source).toContain("Waiting for GM to commit distance control.");
     expect(source).toContain('"Back out of attack"');
     expect(source).toContain('"Waiting for GM"');
     expect(source).toContain("Waiting for GM to start Combat Experience rolls.");

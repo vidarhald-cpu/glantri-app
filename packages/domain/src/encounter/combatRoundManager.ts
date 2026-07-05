@@ -365,6 +365,8 @@ export const combatRoundEndDistanceRollResultSchema = z.object({
   generalFatigueModifier: z.number().int().default(0),
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   rolledAt: z.string().datetime(),
+  rolledAtRound: z.number().int().positive(),
+  rolledBy: z.enum(["player", "gm_proxy"]).default("gm_proxy"),
   rolledByUserId: idSchema.optional(),
   rollD20: z.number().int().min(1).max(20),
   rollTotal: z.number().int(),
@@ -379,6 +381,7 @@ export const combatRoundEndDistanceControlSideSchema = z.object({
   generalFatigueModifier: z.number().int().default(0),
   participantId: idSchema,
   result: combatRoundEndDistanceRollResultSchema.optional(),
+  status: z.enum(["pending", "rolled", "not_required"]).default("pending"),
   warnings: z.array(z.string().min(1)).default([]),
 });
 export type CombatRoundEndDistanceControlSide = z.infer<
@@ -409,8 +412,12 @@ export const combatRoundEndDistanceProposalSchema = z.object({
   participantB: combatRoundEndDistanceControlSideSchema,
   participantBId: idSchema,
   proposedDistance: combatDistanceSchema.optional(),
-  status: z.enum(["pending", "rolled", "review_ready", "committed"]).default("pending"),
+  requiresContest: z.boolean().default(false),
+  status: z
+    .enum(["pending", "pending_rolls", "rolled", "review_ready", "committed"])
+    .default("pending"),
   warnings: z.array(z.string().min(1)).default([]),
+  winnerParticipantId: idSchema.optional(),
 });
 export type CombatRoundEndDistanceProposal = z.infer<
   typeof combatRoundEndDistanceProposalSchema
@@ -9566,6 +9573,7 @@ function buildCombatRoundEndDistanceControlSide(input: {
   desiredDistance?: CombatDistance;
   participantId: string;
   participantInput?: CombatRoundEndDistanceControlParticipantInput;
+  requiresRoll: boolean;
 }): CombatRoundEndDistanceControlSide {
   const warnings = [...(input.participantInput?.warnings ?? [])];
 
@@ -9578,6 +9586,7 @@ function buildCombatRoundEndDistanceControlSide(input: {
     dodgeSkillTotal: input.participantInput?.dodgeSkillTotal ?? 0,
     generalFatigueModifier: input.participantInput?.generalFatigueModifier ?? 0,
     participantId: input.participantId,
+    status: input.requiresRoll ? "pending" : "not_required",
     warnings: [...new Set(warnings)],
   });
 }
@@ -9653,8 +9662,9 @@ function buildCombatRoundEndDistanceProposals(input: {
       desiredDistanceA !== undefined &&
       desiredDistanceB !== undefined &&
       desiredDistanceA === desiredDistanceB;
+    const requiresContest = !samePreference;
     const proposedDistance = samePreference ? desiredDistanceA : undefined;
-    const status = samePreference ? "review_ready" : "pending";
+    const status = samePreference ? "review_ready" : "pending_rolls";
     const outcome = samePreference ? "uncontested" : "contest_pending";
 
     return combatRoundEndDistanceProposalSchema.parse({
@@ -9670,15 +9680,18 @@ function buildCombatRoundEndDistanceProposals(input: {
         desiredDistance: desiredDistanceA,
         participantId: entry.participantAId,
         participantInput: input.participantInputs?.[entry.participantAId],
+        requiresRoll: requiresContest,
       }),
       participantAId: entry.participantAId,
       participantB: buildCombatRoundEndDistanceControlSide({
         desiredDistance: desiredDistanceB,
         participantId: entry.participantBId,
         participantInput: input.participantInputs?.[entry.participantBId],
+        requiresRoll: requiresContest,
       }),
       participantBId: entry.participantBId,
       proposedDistance,
+      requiresContest,
       status,
       warnings,
     });
@@ -9895,6 +9908,33 @@ export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean
   });
 }
 
+export function getCombatRoundEndDistanceControlPendingRollCount(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): number {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const review = normalized.roundEndReview;
+
+  if (!review || review.roundNumber !== normalized.roundNumber) {
+    return 0;
+  }
+
+  return review.proposedDistances.filter((proposal) => {
+    if (!proposal.accepted || proposal.status !== "pending_rolls") {
+      return false;
+    }
+
+    const side =
+      proposal.participantAId === input.participantId
+        ? proposal.participantA
+        : proposal.participantBId === input.participantId
+          ? proposal.participantB
+          : undefined;
+
+    return side?.status === "pending";
+  }).length;
+}
+
 export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): string | undefined {
   const normalized = combatRoundStateSchema.parse(state);
   const review = normalized.roundEndReview;
@@ -9904,7 +9944,8 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
   }
 
   const pendingDistanceProposal = review.proposedDistances.find(
-    (proposal) => proposal.accepted && proposal.status === "pending",
+    (proposal) =>
+      proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls"),
   );
 
   if (pendingDistanceProposal) {
@@ -10708,6 +10749,8 @@ function buildCombatRoundEndDistanceRollResult(input: {
     createdAt: string;
     createdByUserId?: string;
   };
+  rolledAtRound: number;
+  rolledBy: "player" | "gm_proxy";
   roll: OpenEndedD20Roll;
   side: CombatRoundEndDistanceControlSide;
 }): CombatRoundEndDistanceRollResult {
@@ -10720,10 +10763,65 @@ function buildCombatRoundEndDistanceRollResult(input: {
     generalFatigueModifier: input.side.generalFatigueModifier,
     openEndedD10s: input.roll.openEndedD10s,
     rolledAt: input.command.createdAt,
+    rolledAtRound: input.rolledAtRound,
+    rolledBy: input.rolledBy,
     rolledByUserId: input.command.createdByUserId,
     rollD20: input.roll.rollD20,
     rollTotal: input.roll.dieResult,
   });
+}
+
+function getCombatRoundEndDistanceControlOutcome(
+  proposal: CombatRoundEndDistanceProposal,
+): Pick<
+  CombatRoundEndDistanceProposal,
+  "outcome" | "proposedDistance" | "status" | "winnerParticipantId"
+> {
+  const resultA = proposal.participantA.result;
+  const resultB = proposal.participantB.result;
+
+  if (!proposal.requiresContest) {
+    return {
+      outcome: proposal.outcome,
+      proposedDistance: proposal.proposedDistance,
+      status: "review_ready",
+      winnerParticipantId: proposal.winnerParticipantId,
+    };
+  }
+
+  if (!resultA || !resultB) {
+    return {
+      outcome: "contest_pending",
+      proposedDistance: undefined,
+      status: "pending_rolls",
+      winnerParticipantId: undefined,
+    };
+  }
+
+  if (resultA.finalTotal > resultB.finalTotal) {
+    return {
+      outcome: "participant_a_wins",
+      proposedDistance: proposal.participantA.desiredDistance ?? proposal.currentDistance,
+      status: "rolled",
+      winnerParticipantId: proposal.participantAId,
+    };
+  }
+
+  if (resultB.finalTotal > resultA.finalTotal) {
+    return {
+      outcome: "participant_b_wins",
+      proposedDistance: proposal.participantB.desiredDistance ?? proposal.currentDistance,
+      status: "rolled",
+      winnerParticipantId: proposal.participantBId,
+    };
+  }
+
+  return {
+    outcome: "tie",
+    proposedDistance: proposal.currentDistance,
+    status: "rolled",
+    winnerParticipantId: undefined,
+  };
 }
 
 export function rollCombatRoundEndDistanceControl(input: {
@@ -10733,9 +10831,9 @@ export function rollCombatRoundEndDistanceControl(input: {
     createdByUserId?: string;
   };
   distanceProposalId?: string;
-  participantARoll?: OpenEndedD20Roll;
-  participantBRoll?: OpenEndedD20Roll;
   participantId: string;
+  roll?: OpenEndedD20Roll;
+  rolledBy?: "player" | "gm_proxy";
   rng?: () => number;
   state: CombatRoundState;
 }): {
@@ -10752,7 +10850,7 @@ export function rollCombatRoundEndDistanceControl(input: {
   const distanceProposal = roundEndReview.proposedDistances.find(
     (proposal) =>
       proposal.accepted &&
-      proposal.status === "pending" &&
+      (proposal.status === "pending_rolls" || proposal.status === "pending") &&
       (!input.distanceProposalId || proposal.id === input.distanceProposalId),
   );
 
@@ -10760,47 +10858,49 @@ export function rollCombatRoundEndDistanceControl(input: {
     throw new RangeError("No pending distance control proposal matches this round.");
   }
 
-  const participantARoll = input.participantARoll ?? rollOpenEndedD20(input.rng);
-  const participantBRoll = input.participantBRoll ?? rollOpenEndedD20(input.rng);
-  const participantAResult = buildCombatRoundEndDistanceRollResult({
+  const sideKey =
+    distanceProposal.participantAId === input.participantId
+      ? "participantA"
+      : distanceProposal.participantBId === input.participantId
+        ? "participantB"
+        : undefined;
+
+  if (!sideKey) {
+    throw new RangeError("Participant is not part of this distance control proposal.");
+  }
+
+  const side = distanceProposal[sideKey];
+
+  if (side.status !== "pending" || side.result) {
+    throw new RangeError("Distance control roll is not pending for this participant.");
+  }
+
+  const participantRoll = input.roll ?? rollOpenEndedD20(input.rng);
+  const participantResult = buildCombatRoundEndDistanceRollResult({
     command: input.command,
-    roll: participantARoll,
-    side: distanceProposal.participantA,
+    roll: participantRoll,
+    rolledAtRound: normalized.roundNumber,
+    rolledBy: input.rolledBy ?? "gm_proxy",
+    side,
   });
-  const participantBResult = buildCombatRoundEndDistanceRollResult({
-    command: input.command,
-    roll: participantBRoll,
-    side: distanceProposal.participantB,
+  const proposalWithRoll = combatRoundEndDistanceProposalSchema.parse({
+    ...distanceProposal,
+    [sideKey]: {
+      ...side,
+      result: participantResult,
+      status: "rolled",
+    },
   });
-  const participantAWins = participantAResult.finalTotal > participantBResult.finalTotal;
-  const participantBWins = participantBResult.finalTotal > participantAResult.finalTotal;
-  const outcome = participantAWins
-    ? "participant_a_wins"
-    : participantBWins
-      ? "participant_b_wins"
-      : "tie";
-  const proposedDistance = participantAWins
-    ? (distanceProposal.participantA.desiredDistance ?? distanceProposal.currentDistance)
-    : participantBWins
-      ? (distanceProposal.participantB.desiredDistance ?? distanceProposal.currentDistance)
-      : distanceProposal.currentDistance;
+  const outcome = getCombatRoundEndDistanceControlOutcome(proposalWithRoll);
+  const nextProposal = combatRoundEndDistanceProposalSchema.parse({
+    ...proposalWithRoll,
+    outcome: outcome.outcome,
+    proposedDistance: outcome.proposedDistance,
+    status: outcome.status,
+    winnerParticipantId: outcome.winnerParticipantId,
+  });
   const updatedDistanceProposals = roundEndReview.proposedDistances.map((proposal) =>
-    proposal.id === distanceProposal.id
-      ? combatRoundEndDistanceProposalSchema.parse({
-          ...proposal,
-          outcome,
-          participantA: {
-            ...proposal.participantA,
-            result: participantAResult,
-          },
-          participantB: {
-            ...proposal.participantB,
-            result: participantBResult,
-          },
-          proposedDistance,
-          status: "review_ready",
-        })
-      : proposal,
+    proposal.id === distanceProposal.id ? nextProposal : proposal,
   );
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
     ...roundEndReview,
@@ -10823,15 +10923,17 @@ export function rollCombatRoundEndDistanceControl(input: {
     facts: {
       currentDistance: distanceProposal.currentDistance,
       distanceProposalId: distanceProposal.id,
-      outcome,
+      nextProposal,
+      outcome: nextProposal.outcome,
       pairKey: distanceProposal.pairKey,
       participantAId: distanceProposal.participantAId,
-      participantAFinalTotal: participantAResult.finalTotal,
-      participantARoll: participantAResult,
       participantBId: distanceProposal.participantBId,
-      participantBFinalTotal: participantBResult.finalTotal,
-      participantBRoll: participantBResult,
-      proposedDistance,
+      previousProposal: distanceProposal,
+      proposedDistance: nextProposal.proposedDistance,
+      rolledBy: participantResult.rolledBy,
+      rolledParticipantFinalTotal: participantResult.finalTotal,
+      rolledParticipantId: input.participantId,
+      rolledParticipantRoll: participantResult,
     },
     id:
       input.command.commandId ??
@@ -10901,7 +11003,7 @@ export function commitCombatRoundEndDistanceControl(input: {
     throw new RangeError("No distance control proposal matches this round.");
   }
 
-  if (distanceProposal.status === "pending") {
+  if (distanceProposal.status === "pending" || distanceProposal.status === "pending_rolls") {
     throw new RangeError("Round-end distance control roll must be resolved before committing.");
   }
 
@@ -15327,29 +15429,17 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
     typeof command.facts.distanceProposalId === "string"
       ? command.facts.distanceProposalId
       : undefined;
+  const previousProposal = combatRoundEndDistanceProposalSchema.safeParse(
+    command.facts.previousProposal,
+  );
   const roundEndReview = normalized.roundEndReview;
 
-  if (!roundEndReview || !distanceProposalId) {
+  if (!roundEndReview || !distanceProposalId || !previousProposal.success) {
     return undefined;
   }
 
   const restoredDistanceProposals = roundEndReview.proposedDistances.map((proposal) =>
-    proposal.id === distanceProposalId
-      ? combatRoundEndDistanceProposalSchema.parse({
-          ...proposal,
-          outcome: "contest_pending",
-          participantA: {
-            ...proposal.participantA,
-            result: undefined,
-          },
-          participantB: {
-            ...proposal.participantB,
-            result: undefined,
-          },
-          proposedDistance: undefined,
-          status: "pending",
-        })
-      : proposal,
+    proposal.id === distanceProposalId ? previousProposal.data : proposal,
   );
 
   return combatRoundStateSchema.parse({

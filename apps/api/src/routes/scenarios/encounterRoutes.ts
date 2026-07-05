@@ -57,6 +57,7 @@ import {
   removeCombatRoundEndParticipantReviewEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  rollCombatRoundEndDistanceControl,
   rollOpenEndedCombatToHitD20,
   rollOpenEndedD20,
   rollOpenEndedD6,
@@ -396,6 +397,20 @@ function parseCombatExperienceBody(body: unknown): {
   return {
     ...parsed,
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
+  };
+}
+
+function parseRoundEndDistanceControlRollBody(body: unknown): {
+  distanceProposalId: string;
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Round-end distance control roll payload");
+  const parsed = parseParticipantCommandBody(value, "Round-end distance control roll payload");
+  const distanceProposalId = parseNonEmptyString(value.distanceProposalId, "distanceProposalId");
+
+  return {
+    ...parsed,
+    distanceProposalId,
   };
 }
 
@@ -2249,6 +2264,126 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error: error instanceof Error ? error.message : "Unable to roll Combat Experience.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-distance-control",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const body = parseRoundEndDistanceControlRollBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const scenarioParticipant = scenarioParticipants.find(
+          (participant) => participant.id === body.scenarioParticipantId,
+        );
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const encounterParticipant = scenarioParticipant
+          ? membership.participants.find(
+              (participant) =>
+                participant.scenarioParticipantId === scenarioParticipant.id ||
+                participant.id === scenarioParticipant.id ||
+                (scenarioParticipant.characterId &&
+                  participant.characterId === scenarioParticipant.characterId),
+            )
+          : undefined;
+
+        if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+
+        const gmAuthorizedOperation = access.mode === "gm";
+
+        if (
+          !gmAuthorizedOperation &&
+          (scenarioParticipant.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const rolled = rollCombatRoundEndDistanceControl({
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          distanceProposalId: body.distanceProposalId,
+          participantId: encounterParticipant.id,
+          rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
+          state: roundState,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          command: rolled.command,
+          encounter: savedEncounter,
+          participant: scenarioParticipant,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to roll distance control contest.",
         });
       }
     },

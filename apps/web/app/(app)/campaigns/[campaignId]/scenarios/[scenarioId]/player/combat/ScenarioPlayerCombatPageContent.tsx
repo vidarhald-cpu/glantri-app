@@ -113,6 +113,7 @@ import {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollRoundEndDistanceControlOnServer,
   submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
@@ -998,6 +999,16 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined,
     [combatRoundState, selectedEncounterParticipant],
   );
+  const roundParticipantLabelsById = useMemo(
+    () =>
+      Object.fromEntries(
+        (combatRoundState?.participants ?? []).map((participant) => [
+          participant.participantId,
+          participant.label,
+        ]),
+      ),
+    [combatRoundState?.participants],
+  );
   const selectedCombatExperienceTrigger =
     combatRoundState && selectedRoundParticipant
       ? getCombatRoundRequiredCombatExperienceTrigger({
@@ -1218,6 +1229,58 @@ export default function ScenarioPlayerCombatPageContent({
     selectedCombatExperienceRequired &&
     selectedCombatExperienceWindowOpen &&
     selectedCombatExperienceSkillTotal >= selectedCombatExperienceDifficulty;
+  const selectedDistanceControlProposal = useMemo(() => {
+    const participantId = selectedRoundParticipant?.participantId;
+    const proposals = combatRoundState?.roundEndReview?.proposedDistances ?? [];
+
+    if (!participantId || combatRoundState?.currentStep !== "round_summary") {
+      return undefined;
+    }
+
+    const proposal = proposals.find(
+      (candidate) =>
+        candidate.accepted &&
+        candidate.requiresContest &&
+        candidate.status !== "committed" &&
+        (candidate.participantAId === participantId || candidate.participantBId === participantId),
+    );
+
+    if (!proposal) {
+      return undefined;
+    }
+
+    const isParticipantA = proposal.participantAId === participantId;
+    const ownParticipantId = isParticipantA ? proposal.participantAId : proposal.participantBId;
+    const opponentParticipantId = isParticipantA
+      ? proposal.participantBId
+      : proposal.participantAId;
+    const ownSide = isParticipantA ? proposal.participantA : proposal.participantB;
+    const opponentSide = isParticipantA ? proposal.participantB : proposal.participantA;
+
+    return {
+      opponentLabel: roundParticipantLabelsById[opponentParticipantId] ?? opponentParticipantId,
+      opponentParticipantId,
+      opponentSide,
+      ownLabel: roundParticipantLabelsById[ownParticipantId] ?? ownParticipantId,
+      ownParticipantId,
+      ownSide,
+      proposal,
+    };
+  }, [
+    combatRoundState?.roundEndReview?.proposedDistances,
+    combatRoundState?.currentStep,
+    roundParticipantLabelsById,
+    selectedRoundParticipant?.participantId,
+  ]);
+  const selectedDistanceControlRollPending =
+    selectedDistanceControlProposal?.ownSide.status === "pending";
+  const selectedDistanceControlActionAvailable = Boolean(
+    selectedDistanceControlRollPending &&
+      selectedDistanceControlProposal &&
+      selectedParticipant &&
+      encounterId &&
+      !readOnlyInspection,
+  );
 
   const controlledEquipmentState = useMemo(() => {
     const candidate = displayedParticipant?.equipmentState;
@@ -1509,6 +1572,42 @@ export default function ScenarioPlayerCombatPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll Combat Experience.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function rollDistanceControl() {
+    if (readOnlyInspection || !selectedParticipant || !encounterId) {
+      return;
+    }
+
+    const distanceProposalId = selectedDistanceControlProposal?.proposal.id;
+
+    if (!distanceProposalId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter, participant } = await rollRoundEndDistanceControlOnServer({
+        distanceProposalId,
+        encounterId,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll distance control.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -2275,42 +2374,46 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: declareActionDisabled,
           isGameMaster,
         });
-  const playerActionButtonLabel = selectedCombatExperienceRequired
-    ? !selectedCombatExperienceWindowOpen
-      ? "Waiting for GM"
-      : selectedCombatExperienceNoRollAvailable
-        ? "Confirm Combat Experience"
-        : "Roll Combat Experience"
-    : selectedPhaseInitiativeChoice
-      ? "Phase choice submitted"
-      : selectedPhaseContinueAvailable
-        ? "Continue attack"
-        : (attackerPrivilegedAction?.label ??
-          currentParryAction?.label ??
-          currentAttackAction?.label ??
-          declarationButtonLabel);
-  const playerActionButtonDisabled = attackerPrivilegedAction
-    ? selectedCombatExperienceRequired ||
-      controlsDisabled ||
-      savingCombatContext ||
-      attackerPrivilegedAction.disabled
-    : currentParryAction
+  const playerActionButtonLabel = selectedDistanceControlActionAvailable
+    ? "Roll distance control"
+    : selectedCombatExperienceRequired
+      ? !selectedCombatExperienceWindowOpen
+        ? "Waiting for GM"
+        : selectedCombatExperienceNoRollAvailable
+          ? "Confirm Combat Experience"
+          : "Roll Combat Experience"
+      : selectedPhaseInitiativeChoice
+        ? "Phase choice submitted"
+        : selectedPhaseContinueAvailable
+          ? "Continue attack"
+          : (attackerPrivilegedAction?.label ??
+            currentParryAction?.label ??
+            currentAttackAction?.label ??
+            declarationButtonLabel);
+  const playerActionButtonDisabled = selectedDistanceControlActionAvailable
+    ? controlsDisabled || savingCombatContext
+    : attackerPrivilegedAction
       ? selectedCombatExperienceRequired ||
         controlsDisabled ||
         savingCombatContext ||
-        currentParryAction.disabled
-      : currentAttackAction
+        attackerPrivilegedAction.disabled
+      : currentParryAction
         ? selectedCombatExperienceRequired ||
           controlsDisabled ||
           savingCombatContext ||
-          currentAttackAction.disabled
-        : selectedCombatExperienceRequired
-          ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
-          : selectedPhaseInitiativeChoice
-            ? true
-            : selectedPhaseContinueAvailable
-              ? controlsDisabled || savingCombatContext
-              : declareActionDisabled;
+          currentParryAction.disabled
+        : currentAttackAction
+          ? selectedCombatExperienceRequired ||
+            controlsDisabled ||
+            savingCombatContext ||
+            currentAttackAction.disabled
+          : selectedCombatExperienceRequired
+            ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
+            : selectedPhaseInitiativeChoice
+              ? true
+              : selectedPhaseContinueAvailable
+                ? controlsDisabled || savingCombatContext
+                : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -2333,9 +2436,15 @@ export default function ScenarioPlayerCombatPageContent({
     : selectedCombatExperienceNoRollAvailable
       ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
       : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
-  const declarationStatusText = selectedCombatExperienceRequired
-    ? combatExperienceStatusText
-    : isGameMaster
+  const declarationStatusText = selectedDistanceControlActionAvailable
+    ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
+    : selectedDistanceControlProposal?.ownSide.status === "rolled"
+      ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
+        ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
+        : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
+      : selectedCombatExperienceRequired
+        ? combatExperienceStatusText
+        : isGameMaster
       ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
       : currentInitiativePhase
         ? selectedParticipantRolledCurrentInitiative
@@ -2670,11 +2779,68 @@ export default function ScenarioPlayerCombatPageContent({
                   </div>
                 ) : null}
               </section>
+              {selectedDistanceControlProposal ? (
+                <section style={panelStyle}>
+                  <strong>Distance control</strong>
+                  <div style={{ color: "#4f5f57", display: "grid", gap: "0.25rem" }}>
+                    <div>
+                      {selectedDistanceControlProposal.ownLabel} ↔{" "}
+                      {selectedDistanceControlProposal.opponentLabel}
+                    </div>
+                    <div>
+                      Current {selectedDistanceControlProposal.proposal.currentDistance} · you:{" "}
+                      {selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"} ·{" "}
+                      {selectedDistanceControlProposal.opponentLabel}:{" "}
+                      {selectedDistanceControlProposal.opponentSide.desiredDistance ??
+                        "no preference"}
+                    </div>
+                    <div>
+                      Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} ·
+                      Gen/Fatigue{" "}
+                      {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
+                    </div>
+                    {selectedDistanceControlProposal.ownSide.result ? (
+                      <div style={{ color: "#3f5f46" }}>
+                        Your roll:{" "}
+                        {formatOpenEndedD20RollBreakdown({
+                          dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
+                          openEndedD10s:
+                            selectedDistanceControlProposal.ownSide.result.openEndedD10s,
+                          rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
+                        })}{" "}
+                        = {selectedDistanceControlProposal.ownSide.result.rollTotal}; final{" "}
+                        {selectedDistanceControlProposal.ownSide.result.finalTotal}
+                      </div>
+                    ) : selectedDistanceControlProposal.ownSide.status === "pending" ? (
+                      <div>Roll your Dodge for distance control.</div>
+                    ) : null}
+                    {selectedDistanceControlProposal.opponentSide.result ? (
+                      <div>
+                        {selectedDistanceControlProposal.opponentLabel} rolled final{" "}
+                        {selectedDistanceControlProposal.opponentSide.result.finalTotal}.
+                      </div>
+                    ) : selectedDistanceControlProposal.proposal.status === "pending_rolls" ? (
+                      <div>
+                        {selectedDistanceControlProposal.opponentLabel} distance-control roll
+                        pending.
+                      </div>
+                    ) : null}
+                    {selectedDistanceControlProposal.proposal.proposedDistance !== undefined ? (
+                      <div>
+                        Proposed next-round distance:{" "}
+                        {selectedDistanceControlProposal.proposal.proposedDistance}
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
               <PlayerCombatActionButtonPanel
                 buttonLabel={playerActionButtonLabel}
                 disabled={playerActionButtonDisabled}
                 onDeclareAction={() =>
-                  void (selectedCombatExperienceRequired
+                  void (selectedDistanceControlActionAvailable
+                    ? rollDistanceControl()
+                    : selectedCombatExperienceRequired
                     ? selectedCombatExperienceWindowOpen
                       ? rollCombatExperience()
                       : undefined

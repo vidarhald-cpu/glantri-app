@@ -121,6 +121,28 @@ export async function rollCombatExperienceOnServer(input: {
   return payload;
 }
 
+export async function rollRoundEndDistanceControlOnServer(input: {
+  distanceProposalId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-distance-control`, {
+    body: JSON.stringify({
+      distanceProposalId: input.distanceProposalId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function backOutPhaseAttackOnServer(input: {
   encounterId: string;
   phase: "phase1" | "phase2";

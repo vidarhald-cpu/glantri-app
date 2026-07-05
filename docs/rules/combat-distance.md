@@ -71,15 +71,22 @@ into shared round-level distance-control items keyed by unordered participant pa
 created and resolved at most once per round:
 
 - matching preferences propose that distance without a contest
-- one-sided or conflicting preferences create a Dodge control contest
+- one-sided or conflicting preferences create one pairwise Dodge control contest with a separate
+  roll requirement for each active contesting participant
+- each participant rolls their own Dodge control result; the GM may roll either side as proxy
 - Dodge control uses the participant Dodge total supplied by the combat snapshot plus current
   General/Fatigue modifiers; unavailable Dodge falls back to `+0` with a warning
-- the higher final Dodge result sets that pair's distance for the next round
+- after all required participant rolls are in, the higher final Dodge result sets that pair's
+  distance for the next round
 - ties keep the current distance unless the GM overrides the proposal
 
-The GM reviews each pair proposal in the shared Round distance control section, may roll pending
-contests, may override the final distance from `0` to `8`, and commits the result as a
-command-backed `round_end_review` distance edge. The edge is updated at SU commit and is carried
-into the next round; GM manual distance edits remain available.
+The GM reviews each pair proposal in the shared Round distance control section, sees which
+participant rolls are pending or submitted, may proxy-roll either side, may override the final
+distance from `0` to `8`, and commits the result as a command-backed `round_end_review` distance
+edge. Player Combat surfaces the player's own pending distance-control rolls during round summary;
+after rolling, the player waits for the other participant roll or GM commit. The tracker marks
+participants with pending round-end distance-control rolls until their side is submitted. The edge
+is updated at SU commit and is carried into the next round; GM manual distance edits remain
+available.
 
 Full coordinates, facing, pathing, terrain legality, and tactical geometry remain future work.

@@ -715,6 +715,114 @@ function setupCombatDeclarationRoute(
   return { encounter, participant, participants };
 }
 
+function makeDistanceControlReviewFixture(): {
+  encounter: EncounterSession;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  proposalId: string;
+} {
+  const encounterParticipants = makeTwoCombatEncounterParticipants();
+  const baseEncounter = makeCombatEncounter({
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const resolvedEncounter = withResolvedCombatStartExperience(baseEncounter) as EncounterSession;
+  const baseState =
+    resolvedEncounter.combatRoundState ?? initializeCombatRoundState({ encounter: baseEncounter });
+  const distanceState = setDistanceBetween({
+    distance: 3,
+    participantAId: "encounter-participant-1",
+    participantBId: "encounter-participant-2",
+    source: "gm_set",
+    state: baseState.distanceState,
+  });
+  const gladiatorDeclared = recordCombatRoundDeclaration({
+    declaration: {
+      movementIntent: {
+        distancePreferences: [
+          {
+            desiredDistance: 3,
+            source: "player_declared",
+            targetParticipantId: "participant-2",
+          },
+        ],
+        mode: "set_distance_preferences",
+      },
+      roundNumber: baseState.roundNumber,
+    },
+    participantId: "encounter-participant-1",
+    state: { ...baseState, distanceState },
+    submittedBy: "player",
+  });
+  const scyrianDeclared = recordCombatRoundDeclaration({
+    declaration: {
+      movementIntent: {
+        distancePreferences: [
+          {
+            desiredDistance: 2,
+            source: "player_declared",
+            targetParticipantId: "participant-1",
+          },
+        ],
+        mode: "set_distance_preferences",
+      },
+      roundNumber: baseState.roundNumber,
+    },
+    participantId: "encounter-participant-2",
+    state: gladiatorDeclared,
+    submittedBy: "player",
+  });
+  const reviewed = prepareCombatRoundEndReview({
+    participantInputs: {
+      "encounter-participant-1": {
+        distanceControl: {
+          dodgeSkillTotal: 8,
+          generalFatigueModifier: -1,
+        },
+      },
+      "encounter-participant-2": {
+        distanceControl: {
+          dodgeSkillTotal: 4,
+          generalFatigueModifier: 0,
+        },
+      },
+    },
+    state: {
+      ...scyrianDeclared,
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: baseState.roundNumber,
+        step: "SU",
+      },
+      currentStep: "round_summary",
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    },
+  });
+  const proposalId = reviewed.roundEndReview?.proposedDistances[0]?.id;
+
+  if (!proposalId) {
+    throw new Error("Distance control fixture did not create a proposal.");
+  }
+
+  return {
+    encounter: {
+      ...resolvedEncounter,
+      combatRoundState: reviewed,
+      currentRound: reviewed.roundNumber,
+    },
+    participants: [
+      makeCombatScenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: {
+          displayName: "Scyrian cavalry guy",
+        },
+      }),
+    ],
+    proposalId,
+  };
+}
+
 function preparePhaseCombatExperienceBackOutRouteFixture(
   input: {
     gladiatorInitiative?: number;
@@ -3205,6 +3313,127 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(403);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("lets a player roll their own round-end distance-control requirement", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-distance-control",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const proposal = updatedEncounter.combatRoundState.roundEndReview.proposedDistances[0];
+    expect(proposal).toMatchObject({
+      status: "pending_rolls",
+      winnerParticipantId: undefined,
+    });
+    expect(proposal.participantA).toMatchObject({
+      result: expect.objectContaining({
+        finalTotal: 12,
+        rolledBy: "player",
+        rolledByUserId: "player-1",
+      }),
+      status: "rolled",
+    });
+    expect(proposal.participantB).toMatchObject({
+      status: "pending",
+    });
+    expect(proposal.participantB.result).toBeUndefined();
+  });
+
+  it("rejects player round-end distance-control rolls for another participant", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-distance-control",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("lets a GM proxy each round-end distance-control side and computes the proposal after both rolls", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValueOnce(0.2).mockReturnValueOnce(0.1);
+    const app = await buildScenarioTestApp();
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      payload: {
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-distance-control",
+    });
+    const firstUpdatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]
+      ?.session as EncounterSession;
+    mocks.encounterService.getEncounterById.mockResolvedValue(firstUpdatedEncounter);
+    const secondResponse = await app.inject({
+      method: "POST",
+      payload: {
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-distance-control",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[1]?.[0]?.session;
+    const proposal = updatedEncounter.combatRoundState.roundEndReview.proposedDistances[0];
+    expect(proposal).toMatchObject({
+      outcome: "participant_a_wins",
+      proposedDistance: 3,
+      status: "rolled",
+      winnerParticipantId: "encounter-participant-1",
+    });
+    expect(proposal.participantA.result).toMatchObject({
+      rolledBy: "gm_proxy",
+      rolledByUserId: "gm-1",
+    });
+    expect(proposal.participantB.result).toMatchObject({
+      rolledBy: "gm_proxy",
+      rolledByUserId: "gm-1",
+    });
   });
 
   it("lets a player confirm no-roll Combat Experience when displayed skill total meets difficulty", async () => {

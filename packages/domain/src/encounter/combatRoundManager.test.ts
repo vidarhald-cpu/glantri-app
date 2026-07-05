@@ -58,6 +58,7 @@ import {
   getCombatRoundPhaseCombatExperienceDetectionReport,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseInitiativeChoiceStatuses,
+  getCombatRoundEndDistanceControlPendingRollCount,
   getFirstCombatStartExperienceRequiredParticipantId,
   getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
   getFirstCombatRoundDeclarationRequiredParticipantId,
@@ -11402,8 +11403,11 @@ describe("combat round manager", () => {
       outcome: "uncontested",
       pairKey: makeDistancePairKey("gladiator", "guard"),
       proposedDistance: 3,
+      requiresContest: false,
       status: "review_ready",
     });
+    expect(proposal?.participantA.status).toBe("not_required");
+    expect(proposal?.participantB.status).toBe("not_required");
     expect(reviewed.roundEndReview?.proposedDistances).toHaveLength(1);
     expect(reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances).toEqual([]);
     expect(reviewed.roundEndReview?.participantReviews.guard?.proposedDistances).toEqual([]);
@@ -11484,45 +11488,97 @@ describe("combat round manager", () => {
     expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
     expect(proposal).toMatchObject({
       currentDistance: 2,
-      status: "pending",
+      requiresContest: true,
+      status: "pending_rolls",
     });
+    expect(proposal?.participantA).toMatchObject({ participantId: "gladiator", status: "pending" });
+    expect(proposal?.participantB).toMatchObject({ participantId: "guard", status: "pending" });
+    expect(
+      getCombatRoundEndDistanceControlPendingRollCount({
+        participantId: "gladiator",
+        state: reviewed,
+      }),
+    ).toBe(1);
+    expect(
+      getCombatRoundEndDistanceControlPendingRollCount({
+        participantId: "guard",
+        state: reviewed,
+      }),
+    ).toBe(1);
 
-    const rolled = rollCombatRoundEndDistanceControl({
+    const gladiatorRolled = rollCombatRoundEndDistanceControl({
       command: {
         createdAt: "2026-01-01T00:11:00.000Z",
       },
       distanceProposalId: proposal?.id,
-      participantARoll: {
+      participantId: "gladiator",
+      roll: {
         dieResult: 10,
         openEndedD10s: [],
         rollD20: 10,
       },
-      participantBRoll: {
+      rolledBy: "player",
+      state: reviewed,
+    });
+    const afterFirstRoll = gladiatorRolled.state.roundEndReview?.proposedDistances[0];
+
+    expect(afterFirstRoll).toMatchObject({
+      outcome: "contest_pending",
+      proposedDistance: undefined,
+      status: "pending_rolls",
+    });
+    expect(afterFirstRoll?.participantA).toMatchObject({
+      result: { finalTotal: 17, rolledBy: "player", rolledAtRound: 3 },
+      status: "rolled",
+    });
+    expect(afterFirstRoll?.participantB).toMatchObject({ status: "pending" });
+    expect(
+      getCombatRoundEndDistanceControlPendingRollCount({
+        participantId: "gladiator",
+        state: gladiatorRolled.state,
+      }),
+    ).toBe(0);
+    expect(
+      getCombatRoundEndDistanceControlPendingRollCount({
+        participantId: "guard",
+        state: gladiatorRolled.state,
+      }),
+    ).toBe(1);
+
+    const rolled = rollCombatRoundEndDistanceControl({
+      command: {
+        createdAt: "2026-01-01T00:11:30.000Z",
+      },
+      distanceProposalId: proposal?.id,
+      participantId: "guard",
+      roll: {
         dieResult: 12,
         openEndedD10s: [],
         rollD20: 12,
       },
-      participantId: "gladiator",
-      state: reviewed,
+      rolledBy: "gm_proxy",
+      state: gladiatorRolled.state,
     });
     const rolledProposal = rolled.state.roundEndReview?.proposedDistances[0];
 
     expect(rolledProposal).toMatchObject({
       outcome: "participant_a_wins",
       proposedDistance: 3,
-      status: "review_ready",
+      status: "rolled",
+      winnerParticipantId: "gladiator",
     });
     expect(rolledProposal?.participantA.result?.finalTotal).toBe(17);
     expect(rolledProposal?.participantB.result?.finalTotal).toBe(16);
+    expect(rolledProposal?.participantB.result?.rolledBy).toBe("gm_proxy");
 
     const unrolled = clearCombatRoundStep({ state: rolled.state, step: "round_summary" });
 
     expect(unrolled.roundEndReview?.proposedDistances[0]).toMatchObject({
       outcome: "contest_pending",
       proposedDistance: undefined,
-      status: "pending",
+      status: "pending_rolls",
     });
-    expect(unrolled.roundEndReview?.proposedDistances[0]?.participantA.result).toBeUndefined();
+    expect(unrolled.roundEndReview?.proposedDistances[0]?.participantA.result).toBeDefined();
     expect(unrolled.roundEndReview?.proposedDistances[0]?.participantB.result).toBeUndefined();
 
     const committed = commitCombatRoundEndDistanceControl({
@@ -11544,7 +11600,7 @@ describe("combat round manager", () => {
 
     expect(getDistanceBetween(undone.distanceState, "gladiator", "guard")).toBe(2);
     expect(undone.roundEndReview?.proposedDistances[0]).toMatchObject({
-      status: "review_ready",
+      status: "rolled",
     });
     expect(undone.roundEndReview?.proposedDistances[0]?.appliedDistance).toBeUndefined();
   });

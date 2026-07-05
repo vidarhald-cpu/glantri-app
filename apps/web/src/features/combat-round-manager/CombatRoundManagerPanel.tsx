@@ -78,6 +78,7 @@ import {
   getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
+  getCombatRoundEndDistanceControlPendingRollCount,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
@@ -3277,7 +3278,7 @@ function CombatRoundEndReviewPanel(input: {
   onCommitDistanceControl: (distanceProposalId: string) => void;
   onDistanceOverrideDraftChange: (distanceProposalId: string, value: string) => void;
   onDifficultyDraftChange: (healthRollId: string, value: string) => void;
-  onRollDistanceContest: (distanceProposalId: string) => void;
+  onRollDistanceContest: (distanceProposalId: string, participantId: string) => void;
   participantLabel?: string;
   participantLabelsById: Record<string, string>;
   review?: RoundEndParticipantReview;
@@ -3433,6 +3434,24 @@ function CombatRoundEndReviewPanel(input: {
                 const overrideValue = input.distanceOverrideDrafts[proposal.id] ?? "";
                 const resultA = proposal.participantA.result;
                 const resultB = proposal.participantB.result;
+                const participantASummary = resultA
+                  ? `${formatOpenEndedD20RollBreakdown({
+                      dieResult: resultA.rollTotal,
+                      openEndedD10s: resultA.openEndedD10s,
+                      rollD20: resultA.rollD20,
+                    })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}`
+                  : proposal.participantA.status === "pending"
+                    ? "pending"
+                    : "not required";
+                const participantBSummary = resultB
+                  ? `${formatOpenEndedD20RollBreakdown({
+                      dieResult: resultB.rollTotal,
+                      openEndedD10s: resultB.openEndedD10s,
+                      rollD20: resultB.rollD20,
+                    })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
+                  : proposal.participantB.status === "pending"
+                    ? "pending"
+                    : "not required";
 
                 return (
                   <div
@@ -3454,20 +3473,22 @@ function CombatRoundEndReviewPanel(input: {
                       {proposal.participantB.desiredDistance ?? "no preference"}
                     </div>
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      {resultA && resultB
-                        ? `${participantALabel} ${formatOpenEndedD20RollBreakdown({
-                            dieResult: resultA.rollTotal,
-                            openEndedD10s: resultA.openEndedD10s,
-                            rollD20: resultA.rollD20,
-                          })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}; ${participantBLabel} ${formatOpenEndedD20RollBreakdown({
-                            dieResult: resultB.rollTotal,
-                            openEndedD10s: resultB.openEndedD10s,
-                            rollD20: resultB.rollD20,
-                          })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
-                        : proposal.status === "pending"
-                          ? "Dodge contest pending"
-                          : "No contest needed"}
+                      {participantALabel}: {participantASummary}
                     </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      {participantBLabel}: {participantBSummary}
+                    </div>
+                    {proposal.winnerParticipantId ? (
+                      <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
+                        Winner:{" "}
+                        {input.participantLabelsById[proposal.winnerParticipantId] ??
+                          proposal.winnerParticipantId}
+                      </div>
+                    ) : proposal.status === "rolled" && proposal.outcome === "tie" ? (
+                      <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
+                        Tie: current distance remains unless GM overrides.
+                      </div>
+                    ) : null}
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
                       Proposed next-round distance: {proposal.proposedDistance ?? "pending"}
                       {proposal.appliedDistance !== undefined
@@ -3494,16 +3515,31 @@ function CombatRoundEndReviewPanel(input: {
                         ))}
                       </select>
                     </label>
-                    {proposal.status === "pending" ? (
+                    {proposal.participantA.status === "pending" ? (
                       <button
                         disabled={input.controlsDisabled}
-                        onClick={() => input.onRollDistanceContest(proposal.id)}
+                        onClick={() =>
+                          input.onRollDistanceContest(proposal.id, proposal.participantAId)
+                        }
                         type="button"
                       >
-                        Roll distance contest
+                        Roll for {participantALabel}
                       </button>
                     ) : null}
-                    {proposal.status !== "pending" && proposal.status !== "committed" ? (
+                    {proposal.participantB.status === "pending" ? (
+                      <button
+                        disabled={input.controlsDisabled}
+                        onClick={() =>
+                          input.onRollDistanceContest(proposal.id, proposal.participantBId)
+                        }
+                        type="button"
+                      >
+                        Roll for {participantBLabel}
+                      </button>
+                    ) : null}
+                    {proposal.status !== "pending" &&
+                    proposal.status !== "pending_rolls" &&
+                    proposal.status !== "committed" ? (
                       <button
                         disabled={input.controlsDisabled}
                         onClick={() => input.onCommitDistanceControl(proposal.id)}
@@ -6965,10 +7001,19 @@ export default function CombatRoundManagerPanel({
                             visibility: encounter.roleplayState?.visibility,
                           }),
                         );
-                      const marker = getStatusMarker({
-                        current: currentStepCell,
-                        status: stepStatus,
-                      });
+                      const pendingDistanceControlRollCount =
+                        step === "round_summary"
+                          ? getCombatRoundEndDistanceControlPendingRollCount({
+                              participantId: participant.participantId,
+                              state: timelineRoundState,
+                            })
+                          : 0;
+                      const marker = pendingDistanceControlRollCount
+                        ? String(pendingDistanceControlRollCount)
+                        : getStatusMarker({
+                            current: currentStepCell,
+                            status: stepStatus,
+                          });
                       const initiative =
                         step === "initiative_phase_1"
                           ? roundParticipant.initiatives.phase1
@@ -6977,9 +7022,13 @@ export default function CombatRoundManagerPanel({
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
-                      const buttonTitle = phaseCombatExperienceMarkerRequired
-                        ? `${title}. Combat Experience check required before attack.`
-                        : title;
+                      const buttonTitle = pendingDistanceControlRollCount
+                        ? `${title}. ${pendingDistanceControlRollCount} round-end distance-control roll${
+                            pendingDistanceControlRollCount === 1 ? "" : "s"
+                          } pending.`
+                        : phaseCombatExperienceMarkerRequired
+                          ? `${title}. Combat Experience check required before attack.`
+                          : title;
                       const cellKey = getCombatRoundTimelineCellKey({
                         participantId: participant.participantId,
                         roundNumber,
@@ -7560,18 +7609,15 @@ export default function CombatRoundManagerPanel({
                             [healthRollId]: value,
                           }))
                         }
-                        onRollDistanceContest={(distanceProposalId) => {
-                          if (!inspector.participant?.participantId) {
-                            return;
-                          }
-
+                        onRollDistanceContest={(distanceProposalId, participantId) => {
                           const updatedAt = new Date().toISOString();
                           const rolled = rollCombatRoundEndDistanceControl({
                             command: {
                               createdAt: updatedAt,
                             },
                             distanceProposalId,
-                            participantId: inspector.participant.participantId,
+                            participantId,
+                            rolledBy: "gm_proxy",
                             state: roundState,
                           });
 
