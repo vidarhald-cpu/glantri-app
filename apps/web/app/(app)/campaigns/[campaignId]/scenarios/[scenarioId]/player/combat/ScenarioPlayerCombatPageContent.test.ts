@@ -294,8 +294,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollRoundEndDistanceControlOnServer");
     expect(source).toContain("selectedDistanceControlActionAvailable");
     expect(source).toContain("Roll your Dodge for distance control.");
+    expect(source).toContain("formatDistanceControlOpponentStatus");
+    expect(source).toContain("selectedDistanceControlCommittedDistance");
+    expect(source).toContain("selectedDistanceControlResultPanel");
+    expect(source).toContain("Waiting for opponent distance-control roll.");
     expect(source).toContain("Waiting for other distance-control roll(s).");
     expect(source).toContain("Waiting for GM to commit distance control.");
+    expect(source).toContain("Distance control committed: distance");
+    expect(source).not.toContain("opponentSide.desiredDistance");
+    expect(source).not.toContain("opponentSide.result");
     expect(source).toContain('"Back out of attack"');
     expect(source).toContain('"Waiting for GM"');
     expect(source).toContain("Waiting for GM to start Combat Experience rolls.");

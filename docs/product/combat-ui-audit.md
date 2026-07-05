@@ -390,6 +390,7 @@ Recommended broad fix:
 
 ### Slice 2 - Hide Opponent Distance-Control Private Data Before Commit
 
+- Status: addressed in this branch by filtering player-safe combat round state and Player Combat rendering so precommit distance-control proposals expose own-side details plus generic opponent status only; GM state remains full visibility.
 - Affected files/components: `ScenarioPlayerCombatPageContent.tsx`, any extracted player distance-control projection helper, and Player Combat tests.
 - Contract rule: player privacy; other participants' hidden distance preferences and precommit roll details are not visible to the player.
 - Why it matters: contested pairwise distance choices can reveal tactical intent before commit.

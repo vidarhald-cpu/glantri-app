@@ -4,12 +4,14 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
   rollCombatRoundCombatExperience,
+  rollCombatRoundEndDistanceControl,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
@@ -821,6 +823,58 @@ function makeDistanceControlReviewFixture(): {
     ],
     proposalId,
   };
+}
+
+function rollDistanceControlFixtureBothSides(input: {
+  encounter: EncounterSession;
+  proposalId: string;
+}): CombatRoundState {
+  const firstRoll = rollCombatRoundEndDistanceControl({
+    command: {
+      createdAt: "2026-01-01T00:11:00.000Z",
+      createdByUserId: "player-1",
+    },
+    distanceProposalId: input.proposalId,
+    participantId: "encounter-participant-1",
+    roll: {
+      dieResult: 10,
+      openEndedD10s: [],
+      rollD20: 10,
+    },
+    rolledBy: "player",
+    state: input.encounter.combatRoundState ?? initializeCombatRoundState({ encounter: input.encounter }),
+  });
+  const secondRoll = rollCombatRoundEndDistanceControl({
+    command: {
+      createdAt: "2026-01-01T00:11:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    distanceProposalId: input.proposalId,
+    participantId: "encounter-participant-2",
+    roll: {
+      dieResult: 12,
+      openEndedD10s: [],
+      rollD20: 12,
+    },
+    rolledBy: "gm_proxy",
+    state: firstRoll.state,
+  });
+
+  return secondRoll.state;
+}
+
+function commitDistanceControlFixture(input: {
+  proposalId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  return commitCombatRoundEndDistanceControl({
+    command: {
+      createdAt: "2026-01-01T00:12:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    distanceProposalId: input.proposalId,
+    state: input.state,
+  }).state;
 }
 
 function makeHealthCheckReviewFixture(): {
@@ -3449,6 +3503,23 @@ describe("scenarios route contract", () => {
       status: "pending",
     });
     expect(proposal.participantB.result).toBeUndefined();
+    const responseProposal =
+      response.json().encounter.combatRoundState.roundEndReview.proposedDistances[0];
+    expect(responseProposal.participantA).toMatchObject({
+      desiredDistance: 3,
+      result: expect.objectContaining({
+        finalTotal: 12,
+        rolledBy: "player",
+      }),
+      status: "rolled",
+    });
+    expect(responseProposal.participantB).toMatchObject({
+      participantId: "encounter-participant-2",
+      status: "pending",
+    });
+    expect(responseProposal.participantB.desiredDistance).toBeUndefined();
+    expect(responseProposal.participantB.result).toBeUndefined();
+    expect(response.json().command.facts.nextProposal.participantB.desiredDistance).toBeUndefined();
   });
 
   it("rejects player round-end distance-control rolls for another participant", async () => {
@@ -3483,7 +3554,7 @@ describe("scenarios route contract", () => {
       participants: fixture.participants,
       user: mocks.adminUser,
     });
-    const randomSpy = vi.spyOn(Math, "random").mockReturnValueOnce(0.2).mockReturnValueOnce(0.1);
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
     const app = await buildScenarioTestApp();
 
     const firstResponse = await app.inject({
@@ -3497,6 +3568,7 @@ describe("scenarios route contract", () => {
     const firstUpdatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]
       ?.session as EncounterSession;
     mocks.encounterService.getEncounterById.mockResolvedValue(firstUpdatedEncounter);
+    randomSpy.mockReturnValue(0.1);
     const secondResponse = await app.inject({
       method: "POST",
       payload: {
@@ -3527,6 +3599,187 @@ describe("scenarios route contract", () => {
       rolledBy: "gm_proxy",
       rolledByUserId: "gm-1",
     });
+  });
+
+  it("returns player-safe pending distance-control proposals with own details only", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const proposal = response.json().encounter.combatRoundState.roundEndReview.proposedDistances[0];
+    const opponentRoundParticipant = response
+      .json()
+      .encounter.combatRoundState.participants.find(
+        (participant: { participantId?: string }) =>
+          participant.participantId === "encounter-participant-2",
+      );
+
+    expect(proposal).toMatchObject({
+      currentDistance: 3,
+      outcome: "contest_pending",
+      status: "pending_rolls",
+    });
+    expect(proposal.participantA).toMatchObject({
+      desiredDistance: 3,
+      dodgeSkillTotal: 8,
+      generalFatigueModifier: -1,
+      status: "pending",
+    });
+    expect(proposal.participantB).toMatchObject({
+      participantId: "encounter-participant-2",
+      status: "pending",
+    });
+    expect(proposal.participantB.desiredDistance).toBeUndefined();
+    expect(proposal.participantB.result).toBeUndefined();
+    expect(proposal.proposedDistance).toBeUndefined();
+    expect(proposal.winnerParticipantId).toBeUndefined();
+    expect(opponentRoundParticipant?.declaration?.movementIntent).toBeUndefined();
+  });
+
+  it("hides opponent roll details and proposed outcome before distance-control commit", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: rolledState,
+        currentRound: rolledState.roundNumber,
+      },
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const proposal = response.json().encounter.combatRoundState.roundEndReview.proposedDistances[0];
+
+    expect(proposal).toMatchObject({
+      outcome: "contest_pending",
+      status: "rolled",
+    });
+    expect(proposal.participantA.result).toMatchObject({
+      finalTotal: 17,
+      rollD20: 10,
+      rollTotal: 10,
+    });
+    expect(proposal.participantB).toMatchObject({
+      participantId: "encounter-participant-2",
+      status: "rolled",
+    });
+    expect(proposal.participantB.desiredDistance).toBeUndefined();
+    expect(proposal.participantB.result).toBeUndefined();
+    expect(proposal.proposedDistance).toBeUndefined();
+    expect(proposal.winnerParticipantId).toBeUndefined();
+  });
+
+  it("keeps GM distance-control live state fully visible", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: rolledState,
+        currentRound: rolledState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const proposal = response.json().encounter.combatRoundState.roundEndReview.proposedDistances[0];
+
+    expect(proposal).toMatchObject({
+      outcome: "participant_a_wins",
+      proposedDistance: 3,
+      status: "rolled",
+      winnerParticipantId: "encounter-participant-1",
+    });
+    expect(proposal.participantB).toMatchObject({
+      desiredDistance: 2,
+      result: expect.objectContaining({
+        finalTotal: 16,
+        rollD20: 12,
+        rollTotal: 12,
+      }),
+    });
+  });
+
+  it("returns public committed distance outcome in player-safe live state", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    const committedState = commitDistanceControlFixture({
+      proposalId: fixture.proposalId,
+      state: rolledState,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: committedState,
+        currentRound: committedState.roundNumber,
+      },
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const proposal = response.json().encounter.combatRoundState.roundEndReview.proposedDistances[0];
+
+    expect(proposal).toMatchObject({
+      appliedDistance: 3,
+      proposedDistance: 3,
+      status: "committed",
+    });
+    expect(proposal.participantB).toMatchObject({
+      participantId: "encounter-participant-2",
+      status: "rolled",
+    });
+    expect(proposal.participantB.desiredDistance).toBeUndefined();
+    expect(proposal.participantB.result).toBeUndefined();
   });
 
   it("lets a player roll their own round-end health check", async () => {

@@ -365,6 +365,50 @@ function formatRoundEndHealthCheckResultLine(
     : "Result: failure";
 }
 
+function formatDistanceControlOpponentStatus(input: {
+  opponentLabel: string;
+  opponentStatus: string;
+  proposalStatus: string;
+}): string {
+  if (input.proposalStatus === "committed") {
+    return `${input.opponentLabel}: committed`;
+  }
+
+  if (input.proposalStatus === "rolled" || input.proposalStatus === "review_ready") {
+    return `${input.opponentLabel}: waiting for GM`;
+  }
+
+  if (input.opponentStatus === "rolled") {
+    return `${input.opponentLabel}: rolled`;
+  }
+
+  if (input.opponentStatus === "not_required") {
+    return `${input.opponentLabel}: submitted`;
+  }
+
+  return `${input.opponentLabel}: pending`;
+}
+
+function formatDistanceControlProgressLine(input: {
+  ownStatus: string;
+  opponentStatus: string;
+  proposalStatus: string;
+}): string | undefined {
+  if (input.proposalStatus === "committed") {
+    return undefined;
+  }
+
+  if (input.ownStatus === "pending") {
+    return "Roll your Dodge for distance control.";
+  }
+
+  if (input.opponentStatus === "pending") {
+    return "Waiting for opponent distance-control roll.";
+  }
+
+  return "Waiting for GM to commit distance control.";
+}
+
 function formatCombatExperienceEffectiveTableLine(
   result: CombatRoundCombatExperienceResult,
 ): string | undefined {
@@ -1281,7 +1325,6 @@ export default function ScenarioPlayerCombatPageContent({
       (candidate) =>
         candidate.accepted &&
         candidate.requiresContest &&
-        candidate.status !== "committed" &&
         (candidate.participantAId === participantId || candidate.participantBId === participantId),
     );
 
@@ -2385,6 +2428,49 @@ export default function ScenarioPlayerCombatPageContent({
             ],
           }
         : null;
+  const selectedDistanceControlCommittedDistance =
+    selectedDistanceControlProposal?.proposal.status === "committed"
+      ? (selectedDistanceControlProposal.proposal.appliedDistance ??
+        selectedDistanceControlProposal.proposal.proposedDistance)
+      : undefined;
+  const selectedDistanceControlProgressText = selectedDistanceControlProposal
+    ? formatDistanceControlProgressLine({
+        opponentStatus: selectedDistanceControlProposal.opponentSide.status,
+        ownStatus: selectedDistanceControlProposal.ownSide.status,
+        proposalStatus: selectedDistanceControlProposal.proposal.status,
+      })
+    : undefined;
+  const selectedDistanceControlResultPanel = selectedDistanceControlProposal?.ownSide.result
+    ? {
+        interpretedResult: `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${selectedDistanceControlProposal.ownSide.result.rollTotal} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
+        rankLabel: "Distance control",
+        sections: [
+          {
+            calculationLines: [
+              `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${formatOpenEndedD20RollBreakdown({
+                dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
+                openEndedD10s: selectedDistanceControlProposal.ownSide.result.openEndedD10s,
+                rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
+              })} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
+              `Your preference: ${
+                selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"
+              }`,
+            ],
+            resultLine:
+              selectedDistanceControlCommittedDistance !== undefined
+                ? `Result: distance ${selectedDistanceControlCommittedDistance} next round`
+                : "Result: distance-control roll recorded",
+            title: "Distance control",
+          },
+        ],
+      }
+    : selectedDistanceControlCommittedDistance !== undefined
+      ? {
+          interpretedResult: `Distance control committed: distance ${selectedDistanceControlCommittedDistance} next round`,
+          rankLabel: "Distance control",
+          resultLabel: `Distance control committed: distance ${selectedDistanceControlCommittedDistance} next round`,
+        }
+      : null;
   const initiativeStepStatus =
     currentCombatStep === "initiative_phase_1"
       ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
@@ -2589,7 +2675,9 @@ export default function ScenarioPlayerCombatPageContent({
       ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
       : selectedDistanceControlActionAvailable
         ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
-        : selectedDistanceControlProposal?.ownSide.status === "rolled"
+        : selectedDistanceControlCommittedDistance !== undefined
+          ? `Current step: ${currentCombatStepLabel}. Distance control committed.`
+          : selectedDistanceControlProposal?.ownSide.status === "rolled"
       ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
         ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
         : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
@@ -2987,47 +3075,29 @@ export default function ScenarioPlayerCombatPageContent({
                       {selectedDistanceControlProposal.opponentLabel}
                     </div>
                     <div>
-                      Current {selectedDistanceControlProposal.proposal.currentDistance} · you:{" "}
-                      {selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"} ·{" "}
-                      {selectedDistanceControlProposal.opponentLabel}:{" "}
-                      {selectedDistanceControlProposal.opponentSide.desiredDistance ??
-                        "no preference"}
+                      Current {selectedDistanceControlProposal.proposal.currentDistance} · your
+                      preference:{" "}
+                      {selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"}
                     </div>
                     <div>
                       Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} ·
                       Gen/Fatigue{" "}
                       {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
                     </div>
-                    {selectedDistanceControlProposal.ownSide.result ? (
+                    <div>
+                      {formatDistanceControlOpponentStatus({
+                        opponentLabel: selectedDistanceControlProposal.opponentLabel,
+                        opponentStatus: selectedDistanceControlProposal.opponentSide.status,
+                        proposalStatus: selectedDistanceControlProposal.proposal.status,
+                      })}
+                    </div>
+                    {selectedDistanceControlProgressText ? (
+                      <div>{selectedDistanceControlProgressText}</div>
+                    ) : null}
+                    {selectedDistanceControlCommittedDistance !== undefined ? (
                       <div style={{ color: "#3f5f46" }}>
-                        Your roll:{" "}
-                        {formatOpenEndedD20RollBreakdown({
-                          dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
-                          openEndedD10s:
-                            selectedDistanceControlProposal.ownSide.result.openEndedD10s,
-                          rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
-                        })}{" "}
-                        = {selectedDistanceControlProposal.ownSide.result.rollTotal}; final{" "}
-                        {selectedDistanceControlProposal.ownSide.result.finalTotal}
-                      </div>
-                    ) : selectedDistanceControlProposal.ownSide.status === "pending" ? (
-                      <div>Roll your Dodge for distance control.</div>
-                    ) : null}
-                    {selectedDistanceControlProposal.opponentSide.result ? (
-                      <div>
-                        {selectedDistanceControlProposal.opponentLabel} rolled final{" "}
-                        {selectedDistanceControlProposal.opponentSide.result.finalTotal}.
-                      </div>
-                    ) : selectedDistanceControlProposal.proposal.status === "pending_rolls" ? (
-                      <div>
-                        {selectedDistanceControlProposal.opponentLabel} distance-control roll
-                        pending.
-                      </div>
-                    ) : null}
-                    {selectedDistanceControlProposal.proposal.proposedDistance !== undefined ? (
-                      <div>
-                        Proposed next-round distance:{" "}
-                        {selectedDistanceControlProposal.proposal.proposedDistance}
+                        Distance control committed: distance{" "}
+                        {selectedDistanceControlCommittedDistance} next round.
                       </div>
                     ) : null}
                   </div>
@@ -3076,6 +3146,7 @@ export default function ScenarioPlayerCombatPageContent({
             <PlayerCombatActionResultPanel
               result={
                 selectedHealthCheckResultPanel ??
+                selectedDistanceControlResultPanel ??
                 selectedCurrentPhaseResolutionResultPanel ??
                 selectedAttackerPrivilegedResultPanel ??
                 selectedCurrentAttackResultPanel ??

@@ -78,6 +78,9 @@ import {
 import type {
   CombatActionGeneratedDistanceModifierInput,
   CombatDistanceWeaponLike,
+  CombatRoundCommand,
+  CombatRoundEndDistanceControlSide,
+  CombatRoundEndDistanceProposal,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundState,
@@ -1210,22 +1213,14 @@ function hasCombatDistanceVisibility(input: {
   });
 }
 
-function buildPlayerSafeCombatRoundStateForUser(input: {
+function buildPlayerSafeCombatScopeForUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
-}): CombatRoundState | undefined {
-  const roundState = input.encounter.combatRoundState
-    ? initializeMaterializedCombatRoundState({
-        encounter: input.encounter,
-        scenarioParticipants: input.scenarioParticipants,
-      })
-    : undefined;
-
-  if (!roundState) {
-    return undefined;
-  }
-
+}): {
+  controlledEncounterParticipantIds: Set<string>;
+  visibleParticipantIds: Set<string>;
+} {
   const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
@@ -1250,6 +1245,238 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       )
       .flatMap((participant) => getCombatDistanceParticipantAliases(participant)),
   );
+
+  return {
+    controlledEncounterParticipantIds,
+    visibleParticipantIds,
+  };
+}
+
+function isPlayerControlledCombatParticipant(input: {
+  controlledEncounterParticipantIds: Set<string>;
+  participantId: string;
+}): boolean {
+  return input.controlledEncounterParticipantIds.has(input.participantId);
+}
+
+function getPlayerSafeDistanceControlSide(input: {
+  controlledEncounterParticipantIds: Set<string>;
+  side: CombatRoundEndDistanceControlSide;
+}): CombatRoundEndDistanceControlSide {
+  if (
+    isPlayerControlledCombatParticipant({
+      controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+      participantId: input.side.participantId,
+    })
+  ) {
+    return input.side;
+  }
+
+  return {
+    participantId: input.side.participantId,
+    status: input.side.status,
+  } as CombatRoundEndDistanceControlSide;
+}
+
+function buildPlayerSafeDistanceControlProposalForUser(input: {
+  controlledEncounterParticipantIds: Set<string>;
+  proposal: CombatRoundEndDistanceProposal;
+  visibleParticipantIds: Set<string>;
+}): CombatRoundEndDistanceProposal | undefined {
+  const participantAControlled = isPlayerControlledCombatParticipant({
+    controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+    participantId: input.proposal.participantAId,
+  });
+  const participantBControlled = isPlayerControlledCombatParticipant({
+    controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+    participantId: input.proposal.participantBId,
+  });
+
+  if (!participantAControlled && !participantBControlled) {
+    return undefined;
+  }
+
+  const opponentParticipantId = participantAControlled
+    ? input.proposal.participantBId
+    : input.proposal.participantAId;
+
+  if (!input.visibleParticipantIds.has(opponentParticipantId)) {
+    return undefined;
+  }
+
+  const safeProposal = {
+    ...input.proposal,
+    notes: undefined,
+    participantA: getPlayerSafeDistanceControlSide({
+      controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+      side: input.proposal.participantA,
+    }),
+    participantB: getPlayerSafeDistanceControlSide({
+      controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+      side: input.proposal.participantB,
+    }),
+  } satisfies CombatRoundEndDistanceProposal;
+
+  if (input.proposal.status === "committed") {
+    return safeProposal;
+  }
+
+  return {
+    ...safeProposal,
+    appliedDistance: undefined,
+    gmOverrideDistance: undefined,
+    outcome: "contest_pending",
+    proposedDistance: undefined,
+    warnings: [],
+    winnerParticipantId: undefined,
+  };
+}
+
+function sanitizePlayerSafeDistanceControlCommandFacts(input: {
+  command: CombatRoundCommand;
+  controlledEncounterParticipantIds: Set<string>;
+  visibleParticipantIds: Set<string>;
+}): CombatRoundCommand | undefined {
+  const facts = input.command.facts;
+  const nextProposal = facts.nextProposal as CombatRoundEndDistanceProposal | undefined;
+  const previousProposal = facts.previousProposal as CombatRoundEndDistanceProposal | undefined;
+  const proposal = nextProposal ?? previousProposal;
+  const safeNextProposal = nextProposal
+    ? buildPlayerSafeDistanceControlProposalForUser({
+        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+        proposal: nextProposal,
+        visibleParticipantIds: input.visibleParticipantIds,
+      })
+    : undefined;
+  const safePreviousProposal = previousProposal
+    ? buildPlayerSafeDistanceControlProposalForUser({
+        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+        proposal: previousProposal,
+        visibleParticipantIds: input.visibleParticipantIds,
+      })
+    : undefined;
+
+  if (proposal && !safeNextProposal && !safePreviousProposal) {
+    return undefined;
+  }
+
+  const rolledParticipantId =
+    typeof facts.rolledParticipantId === "string" ? facts.rolledParticipantId : undefined;
+  const playerRolledOwnSide =
+    rolledParticipantId &&
+    isPlayerControlledCombatParticipant({
+      controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+      participantId: rolledParticipantId,
+    });
+
+  if (input.command.type === "roll_round_end_distance_control" && !playerRolledOwnSide) {
+    return {
+      ...input.command,
+      facts: {
+        distanceProposalId: facts.distanceProposalId,
+        pairKey: facts.pairKey,
+        participantAId: facts.participantAId,
+        participantBId: facts.participantBId,
+        rolledParticipantId,
+        status: safeNextProposal?.status ?? safePreviousProposal?.status,
+      },
+    };
+  }
+
+  if (input.command.type === "roll_round_end_distance_control") {
+    return {
+      ...input.command,
+      facts: {
+        currentDistance: facts.currentDistance,
+        distanceProposalId: facts.distanceProposalId,
+        nextProposal: safeNextProposal,
+        outcome: safeNextProposal?.outcome ?? "contest_pending",
+        pairKey: facts.pairKey,
+        participantAId: facts.participantAId,
+        participantBId: facts.participantBId,
+        previousProposal: safePreviousProposal,
+        proposedDistance: safeNextProposal?.proposedDistance,
+        rolledBy: facts.rolledBy,
+        rolledParticipantFinalTotal: facts.rolledParticipantFinalTotal,
+        rolledParticipantId,
+        rolledParticipantRoll: facts.rolledParticipantRoll,
+      },
+    };
+  }
+
+  if (input.command.type === "commit_round_end_distance_control") {
+    const safeProposal = safeNextProposal ?? safePreviousProposal;
+
+    if (!safeProposal) {
+      return undefined;
+    }
+
+    return {
+      ...input.command,
+      facts: {
+        appliedDistance: facts.appliedDistance,
+        distanceProposalId: facts.distanceProposalId,
+        nextEdge: facts.nextEdge,
+        nextProposal: safeNextProposal,
+        outcome: safeProposal.outcome,
+        pairKey: facts.pairKey,
+        participantAId: facts.participantAId,
+        participantBId: facts.participantBId,
+        proposedDistance: safeProposal.proposedDistance,
+      },
+    };
+  }
+
+  return input.command;
+}
+
+function buildPlayerSafeCombatRoundCommandForUser(input: {
+  command: CombatRoundCommand;
+  controlledEncounterParticipantIds: Set<string>;
+  visibleParticipantIds: Set<string>;
+}): CombatRoundCommand | undefined {
+  if (
+    input.command.type === "submit_phase_initiative_choice" &&
+    !input.controlledEncounterParticipantIds.has(input.command.participantId)
+  ) {
+    return undefined;
+  }
+
+  if (
+    input.command.type === "declare_action" &&
+    !input.controlledEncounterParticipantIds.has(input.command.participantId)
+  ) {
+    return undefined;
+  }
+
+  if (
+    input.command.type === "roll_round_end_distance_control" ||
+    input.command.type === "commit_round_end_distance_control"
+  ) {
+    return sanitizePlayerSafeDistanceControlCommandFacts(input);
+  }
+
+  return input.command;
+}
+
+function buildPlayerSafeCombatRoundStateForUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): CombatRoundState | undefined {
+  const roundState = input.encounter.combatRoundState
+    ? initializeMaterializedCombatRoundState({
+        encounter: input.encounter,
+        scenarioParticipants: input.scenarioParticipants,
+      })
+    : undefined;
+
+  if (!roundState) {
+    return undefined;
+  }
+
+  const { controlledEncounterParticipantIds, visibleParticipantIds } =
+    buildPlayerSafeCombatScopeForUser(input);
   const safeDistanceEdges = Object.fromEntries(
     Object.entries(roundState.distanceState?.edges ?? {}).filter(
       ([, edge]) =>
@@ -1259,17 +1486,64 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           visibleParticipantIds.has(edge.participantAId)),
     ),
   );
+  const safeRoundEndReview = roundState.roundEndReview
+    ? {
+        ...roundState.roundEndReview,
+        proposedDistances: roundState.roundEndReview.proposedDistances
+          .map((proposal) =>
+            buildPlayerSafeDistanceControlProposalForUser({
+              controlledEncounterParticipantIds,
+              proposal,
+              visibleParticipantIds,
+            }),
+          )
+          .filter((proposal): proposal is CombatRoundEndDistanceProposal => Boolean(proposal)),
+      }
+    : undefined;
 
   return {
     ...roundState,
-    commands: roundState.commands.filter(
-      (command) =>
-        command.type !== "submit_phase_initiative_choice" ||
-        controlledEncounterParticipantIds.has(command.participantId),
-    ),
+    commands: roundState.commands
+      .map((command) =>
+        buildPlayerSafeCombatRoundCommandForUser({
+          command,
+          controlledEncounterParticipantIds,
+          visibleParticipantIds,
+        }),
+      )
+      .filter((command): command is CombatRoundCommand => Boolean(command)),
     distanceState: {
       edges: safeDistanceEdges,
     },
+    participants: roundState.participants.map((participant) =>
+      controlledEncounterParticipantIds.has(participant.participantId)
+        ? participant
+        : {
+            ...participant,
+            declaration: participant.declaration
+              ? {
+                  ...participant.declaration,
+                  additionalActionNotes: undefined,
+                  movementIntent: undefined,
+                }
+              : undefined,
+          },
+    ),
+    roundEndReview: safeRoundEndReview,
+  };
+}
+
+function buildPlayerSafeEncounterForUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): EncounterSession {
+  return {
+    ...input.encounter,
+    combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
+    roleplayState: input.encounter.roleplayState
+      ? buildPlayerSafeRoleplayStateForUser(input)
+      : undefined,
   };
 }
 
@@ -1317,21 +1591,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
         return {
-          encounters: encounters.map((enc) => ({
-            ...enc,
-            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
+          encounters: encounters.map((enc) =>
+            buildPlayerSafeEncounterForUser({
               encounter: enc,
               scenarioParticipants,
               userId: user.id,
             }),
-            roleplayState: enc.roleplayState
-              ? buildPlayerSafeRoleplayStateForUser({
-                  encounter: enc,
-                  scenarioParticipants,
-                  userId: user.id,
-                })
-              : undefined,
-          })),
+          ),
         };
       }
 
@@ -1465,21 +1731,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (access.mode === "player") {
         return {
-          encounter: {
-            ...normalizedEncounter,
-            combatRoundState: buildPlayerSafeCombatRoundStateForUser({
-              encounter: normalizedEncounter,
-              scenarioParticipants,
-              userId: user.id,
-            }),
-            roleplayState: normalizedEncounter.roleplayState
-              ? buildPlayerSafeRoleplayStateForUser({
-                  encounter: normalizedEncounter,
-                  scenarioParticipants,
-                  userId: user.id,
-                })
-              : undefined,
-          },
+          encounter: buildPlayerSafeEncounterForUser({
+            encounter: normalizedEncounter,
+            scenarioParticipants,
+            userId: user.id,
+          }),
         };
       }
 
@@ -2389,10 +2645,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           },
         });
+        const responseEncounter = gmAuthorizedOperation
+          ? savedEncounter
+          : buildPlayerSafeEncounterForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            });
+        const responseCommand = gmAuthorizedOperation
+          ? rolled.command
+          : buildPlayerSafeCombatRoundCommandForUser({
+              command: rolled.command,
+              ...buildPlayerSafeCombatScopeForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            });
 
         return {
-          command: rolled.command,
-          encounter: savedEncounter,
+          command: responseCommand,
+          encounter: responseEncounter,
           participant: scenarioParticipant,
         };
       } catch (error) {
