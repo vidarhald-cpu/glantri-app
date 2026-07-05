@@ -231,6 +231,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "commit_round_end_participant_review",
   "roll_round_end_health_check",
   "roll_round_end_distance_control",
+  "commit_round_end_distance_control",
   "complete_round",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
@@ -433,6 +434,7 @@ export const combatRoundEndReviewSchema = z.object({
   participantReviews: z.record(idSchema, combatRoundEndParticipantReviewSchema).default({}),
   preparedAt: z.string().datetime().optional(),
   preparedByUserId: idSchema.optional(),
+  proposedDistances: z.array(combatRoundEndDistanceProposalSchema).default([]),
   roundNumber: z.number().int().positive(),
 });
 export type CombatRoundEndReview = z.infer<typeof combatRoundEndReviewSchema>;
@@ -4059,7 +4061,9 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "commit_phase_damage" ||
     type === "prepare_round_end_review" ||
     type === "commit_round_end_participant_review" ||
-    type === "roll_round_end_health_check"
+    type === "roll_round_end_health_check" ||
+    type === "roll_round_end_distance_control" ||
+    type === "commit_round_end_distance_control"
   );
 }
 
@@ -9692,14 +9696,6 @@ function getCombatRoundEndReviewParticipantStatus(
     return "health_roll_pending";
   }
 
-  if (
-    review.proposedDistances.some(
-      (proposal) => proposal.accepted && proposal.status === "pending",
-    )
-  ) {
-    return "distance_roll_pending";
-  }
-
   return "review_ready";
 }
 
@@ -9884,6 +9880,14 @@ export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean
     return false;
   }
 
+  if (
+    review.proposedDistances.some(
+      (proposal) => proposal.accepted && proposal.status !== "committed",
+    )
+  ) {
+    return false;
+  }
+
   return normalized.participants.every((participant) => {
     const participantReview = review.participantReviews[participant.participantId];
 
@@ -9899,6 +9903,22 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
     return "Round-end review incomplete.";
   }
 
+  const pendingDistanceProposal = review.proposedDistances.find(
+    (proposal) => proposal.accepted && proposal.status === "pending",
+  );
+
+  if (pendingDistanceProposal) {
+    return "Distance control roll pending.";
+  }
+
+  const uncommittedDistanceProposal = review.proposedDistances.find(
+    (proposal) => proposal.accepted && proposal.status !== "committed",
+  );
+
+  if (uncommittedDistanceProposal) {
+    return "Distance control commit pending.";
+  }
+
   for (const participant of normalized.participants) {
     const participantReview = review.participantReviews[participant.participantId];
 
@@ -9912,14 +9932,6 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
 
     if (pendingHealthRoll) {
       return `Health roll pending for ${participant.label}.`;
-    }
-
-    const pendingDistanceProposal = participantReview.proposedDistances.find(
-      (proposal) => proposal.accepted && proposal.status === "pending",
-    );
-
-    if (pendingDistanceProposal) {
-      return `Distance control roll pending for ${participant.label}.`;
     }
 
     if (participantReview.status !== "complete") {
@@ -9962,18 +9974,6 @@ export function prepareCombatRoundEndReview(input: {
     participantInputs: distanceControlInputs,
     state: normalized,
   });
-  const distanceProposalsByReviewParticipantId = new Map<
-    string,
-    CombatRoundEndDistanceProposal[]
-  >();
-
-  for (const proposal of distanceProposals) {
-    distanceProposalsByReviewParticipantId.set(proposal.participantAId, [
-      ...(distanceProposalsByReviewParticipantId.get(proposal.participantAId) ?? []),
-      proposal,
-    ]);
-  }
-
   const participantReviews = Object.fromEntries(
     normalized.participants.map((participant) => {
       const participantInput = input.participantInputs?.[participant.participantId];
@@ -9984,8 +9984,6 @@ export function prepareCombatRoundEndReview(input: {
           combatEffects: participantInput?.combatEffects,
           healthStat: participantInput?.healthStat,
           participantId: participant.participantId,
-          proposedDistances:
-            distanceProposalsByReviewParticipantId.get(participant.participantId) ?? [],
           roundNumber: normalized.roundNumber,
         }),
       ];
@@ -9996,6 +9994,7 @@ export function prepareCombatRoundEndReview(input: {
     participantReviews,
     preparedAt,
     preparedByUserId: input.command?.createdByUserId,
+    proposedDistances: distanceProposals,
     roundNumber: normalized.roundNumber,
   });
   const firstReviewParticipant = normalized.participants.find(
@@ -10305,7 +10304,6 @@ export function commitCombatRoundEndParticipantReview(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
-  distanceOverrides?: Record<string, CombatDistance | number | string | undefined>;
   encounterId?: string;
   participantId: string;
   scenarioId?: string;
@@ -10340,75 +10338,9 @@ export function commitCombatRoundEndParticipantReview(input: {
     throw new RangeError("Round-end health rolls must be resolved before committing review.");
   }
 
-  const pendingDistanceProposals = participantReview.proposedDistances.filter(
-    (proposal) => proposal.accepted && proposal.status === "pending",
-  );
-
-  if (pendingDistanceProposals.length > 0) {
-    throw new RangeError("Round-end distance control rolls must be resolved before committing review.");
-  }
-
   const rolledHealthRolls = participantReview.proposedHealthRolls.filter(
     (proposal) => proposal.accepted && proposal.status === "rolled",
   );
-  const distanceApplicationFacts: Array<{
-    distanceProposalId: string;
-    nextEdge: CombatDistanceEdge;
-    previousEdge?: CombatDistanceEdge;
-  }> = [];
-  let nextDistanceState = normalized.distanceState;
-  const nextProposedDistances = participantReview.proposedDistances.map((proposal) => {
-    if (!proposal.accepted || proposal.status === "pending") {
-      return proposal;
-    }
-
-    const overrideValue = input.distanceOverrides?.[proposal.id] ?? proposal.gmOverrideDistance;
-    const appliedDistance =
-      overrideValue !== undefined
-        ? combatDistanceSchema.parse(overrideValue)
-        : proposal.proposedDistance;
-
-    if (appliedDistance === undefined) {
-      return proposal;
-    }
-
-    const previousEdge = getDistanceEdgeBetween(
-      nextDistanceState,
-      proposal.participantAId,
-      proposal.participantBId,
-    );
-    nextDistanceState = setDistanceBetween({
-      distance: appliedDistance,
-      lastChangedPhase: "round_end",
-      lastChangedRound: normalized.roundNumber,
-      notes: `Round ${normalized.roundNumber} distance control; applies from round ${proposal.appliesFromRound}.`,
-      participantAId: proposal.participantAId,
-      participantBId: proposal.participantBId,
-      source: "round_end_review",
-      state: nextDistanceState,
-    });
-    const nextEdge = getDistanceEdgeBetween(
-      nextDistanceState,
-      proposal.participantAId,
-      proposal.participantBId,
-    );
-
-    if (nextEdge) {
-      distanceApplicationFacts.push({
-        distanceProposalId: proposal.id,
-        nextEdge,
-        previousEdge,
-      });
-    }
-
-    return combatRoundEndDistanceProposalSchema.parse({
-      ...proposal,
-      appliedDistance,
-      gmOverrideDistance: overrideValue !== undefined ? appliedDistance : proposal.gmOverrideDistance,
-      outcome: overrideValue !== undefined ? "gm_override" : proposal.outcome,
-      status: "committed",
-    });
-  });
   const nextStatus: CombatRoundEndParticipantReviewStatus = "complete";
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
@@ -10446,7 +10378,6 @@ export function commitCombatRoundEndParticipantReview(input: {
     ...participantReview,
     committedAt: input.command.createdAt,
     committedByUserId: input.command.createdByUserId,
-    proposedDistances: nextProposedDistances,
     status: nextStatus,
   });
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
@@ -10477,13 +10408,9 @@ export function commitCombatRoundEndParticipantReview(input: {
         .filter((proposal) => proposal.accepted)
         .map((proposal) => proposal.id),
       acceptedHealthRollIds: rolledHealthRolls.map((proposal) => proposal.id),
-      acceptedDistanceProposalIds: nextProposedDistances
-        .filter((proposal) => proposal.accepted && proposal.appliedDistance !== undefined)
-        .map((proposal) => proposal.id),
       acceptedRemovalProposalIds: participantReview.proposedRemovals
         .filter((proposal) => proposal.accepted)
         .map((proposal) => proposal.id),
-      appliedDistanceEdges: distanceApplicationFacts,
       createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
       createdCombatEffectIds: effectApplication.createdCombatEffectIds,
       nextReviewStatus: nextStatus,
@@ -10502,7 +10429,6 @@ export function commitCombatRoundEndParticipantReview(input: {
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
       currentStep: "round_summary",
-      distanceState: nextDistanceState,
       participants: normalized.participants.map((participant) =>
         participant.participantId === input.participantId
           ? {
@@ -10818,17 +10744,12 @@ export function rollCombatRoundEndDistanceControl(input: {
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
   const roundEndReview = normalized.roundEndReview;
-  const participantReview = roundEndReview?.participantReviews[input.participantId];
 
   if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
     throw new RangeError("Round-end review has not been prepared.");
   }
 
-  if (!participantReview || participantReview.status !== "distance_roll_pending") {
-    throw new RangeError("No round-end distance control roll is pending for this participant.");
-  }
-
-  const distanceProposal = participantReview.proposedDistances.find(
+  const distanceProposal = roundEndReview.proposedDistances.find(
     (proposal) =>
       proposal.accepted &&
       proposal.status === "pending" &&
@@ -10836,7 +10757,7 @@ export function rollCombatRoundEndDistanceControl(input: {
   );
 
   if (!distanceProposal) {
-    throw new RangeError("No pending distance control proposal matches this participant.");
+    throw new RangeError("No pending distance control proposal matches this round.");
   }
 
   const participantARoll = input.participantARoll ?? rollOpenEndedD20(input.rng);
@@ -10863,7 +10784,7 @@ export function rollCombatRoundEndDistanceControl(input: {
     : participantBWins
       ? (distanceProposal.participantB.desiredDistance ?? distanceProposal.currentDistance)
       : distanceProposal.currentDistance;
-  const updatedDistanceProposals = participantReview.proposedDistances.map((proposal) =>
+  const updatedDistanceProposals = roundEndReview.proposedDistances.map((proposal) =>
     proposal.id === distanceProposal.id
       ? combatRoundEndDistanceProposalSchema.parse({
           ...proposal,
@@ -10881,20 +10802,9 @@ export function rollCombatRoundEndDistanceControl(input: {
         })
       : proposal,
   );
-  const reviewWithoutStatus = {
-    ...participantReview,
-    proposedDistances: updatedDistanceProposals,
-  };
-  const updatedParticipantReview = combatRoundEndParticipantReviewSchema.parse({
-    ...reviewWithoutStatus,
-    status: getCombatRoundEndReviewParticipantStatus(reviewWithoutStatus),
-  });
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
     ...roundEndReview,
-    participantReviews: {
-      ...roundEndReview.participantReviews,
-      [input.participantId]: updatedParticipantReview,
-    },
+    proposedDistances: updatedDistanceProposals,
   });
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
@@ -10955,6 +10865,145 @@ export function rollCombatRoundEndDistanceControl(input: {
             }
           : participant,
       ),
+      roundEndReview: nextRoundEndReview,
+      selectedParticipantId: afterCursor.participantId,
+      selectedStep: "round_summary",
+    }),
+  };
+}
+
+export function commitCombatRoundEndDistanceControl(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  distanceOverride?: CombatDistance | number | string;
+  distanceProposalId: string;
+  participantId?: string;
+  state: CombatRoundState;
+}): {
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const roundEndReview = normalized.roundEndReview;
+
+  if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
+    throw new RangeError("Round-end review has not been prepared.");
+  }
+
+  const distanceProposal = roundEndReview.proposedDistances.find(
+    (proposal) => proposal.accepted && proposal.id === input.distanceProposalId,
+  );
+
+  if (!distanceProposal) {
+    throw new RangeError("No distance control proposal matches this round.");
+  }
+
+  if (distanceProposal.status === "pending") {
+    throw new RangeError("Round-end distance control roll must be resolved before committing.");
+  }
+
+  if (distanceProposal.status === "committed") {
+    throw new RangeError("Round-end distance control proposal is already committed.");
+  }
+
+  const appliedDistance =
+    input.distanceOverride !== undefined
+      ? combatDistanceSchema.parse(input.distanceOverride)
+      : distanceProposal.proposedDistance;
+
+  if (appliedDistance === undefined) {
+    throw new RangeError("Round-end distance control has no proposed distance to commit.");
+  }
+
+  const previousEdge = getDistanceEdgeBetween(
+    normalized.distanceState,
+    distanceProposal.participantAId,
+    distanceProposal.participantBId,
+  );
+  const nextDistanceState = setDistanceBetween({
+    distance: appliedDistance,
+    lastChangedPhase: "round_end",
+    lastChangedRound: normalized.roundNumber,
+    notes: `Round ${normalized.roundNumber} distance control; applies from round ${distanceProposal.appliesFromRound}.`,
+    participantAId: distanceProposal.participantAId,
+    participantBId: distanceProposal.participantBId,
+    source: "round_end_review",
+    state: normalized.distanceState,
+  });
+  const nextEdge = getDistanceEdgeBetween(
+    nextDistanceState,
+    distanceProposal.participantAId,
+    distanceProposal.participantBId,
+  );
+
+  if (!nextEdge) {
+    throw new RangeError("Round-end distance control could not apply the distance edge.");
+  }
+
+  const nextProposal = combatRoundEndDistanceProposalSchema.parse({
+    ...distanceProposal,
+    appliedDistance,
+    gmOverrideDistance:
+      input.distanceOverride !== undefined ? appliedDistance : distanceProposal.gmOverrideDistance,
+    outcome: input.distanceOverride !== undefined ? "gm_override" : distanceProposal.outcome,
+    status: "committed",
+  });
+  const nextRoundEndReview = combatRoundEndReviewSchema.parse({
+    ...roundEndReview,
+    proposedDistances: roundEndReview.proposedDistances.map((proposal) =>
+      proposal.id === distanceProposal.id ? nextProposal : proposal,
+    ),
+  });
+  const commandParticipantId =
+    input.participantId ?? normalized.currentCursor?.participantId ?? distanceProposal.participantAId;
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: normalized.currentCursor?.participantId ?? commandParticipantId,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndReviewCursor({
+    participantId: beforeCursor.participantId ?? commandParticipantId,
+    state: normalized,
+  });
+  const commandType = "commit_round_end_distance_control" satisfies CombatRoundCommandType;
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      appliedDistance,
+      distanceProposalId: distanceProposal.id,
+      nextEdge,
+      nextProposal,
+      pairKey: distanceProposal.pairKey,
+      previousEdge,
+      previousProposal: distanceProposal,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: commandParticipantId,
+        state: normalized,
+        type: commandType,
+      }),
+    participantId: commandParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: "SU",
+    type: commandType,
+  });
+
+  return {
+    command,
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      currentCursor: afterCursor,
+      currentStep: "round_summary",
+      distanceState: nextDistanceState,
       roundEndReview: nextRoundEndReview,
       selectedParticipantId: afterCursor.participantId,
       selectedStep: "round_summary",
@@ -15279,13 +15328,12 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
       ? command.facts.distanceProposalId
       : undefined;
   const roundEndReview = normalized.roundEndReview;
-  const participantReview = roundEndReview?.participantReviews[command.participantId];
 
-  if (!roundEndReview || !participantReview || !distanceProposalId) {
+  if (!roundEndReview || !distanceProposalId) {
     return undefined;
   }
 
-  const restoredDistanceProposals = participantReview.proposedDistances.map((proposal) =>
+  const restoredDistanceProposals = roundEndReview.proposedDistances.map((proposal) =>
     proposal.id === distanceProposalId
       ? combatRoundEndDistanceProposalSchema.parse({
           ...proposal,
@@ -15303,11 +15351,6 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
         })
       : proposal,
   );
-  const restoredReview = combatRoundEndParticipantReviewSchema.parse({
-    ...participantReview,
-    proposedDistances: restoredDistanceProposals,
-    status: "distance_roll_pending",
-  });
 
   return combatRoundStateSchema.parse({
     ...normalized,
@@ -15327,10 +15370,71 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
     ),
     roundEndReview: {
       ...roundEndReview,
-      participantReviews: {
-        ...roundEndReview.participantReviews,
-        [command.participantId]: restoredReview,
-      },
+      proposedDistances: restoredDistanceProposals,
+    },
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
+function undoCombatRoundEndDistanceControlCommitCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "commit_round_end_distance_control"
+  ) {
+    return undefined;
+  }
+
+  const distanceProposalId =
+    typeof command.facts.distanceProposalId === "string"
+      ? command.facts.distanceProposalId
+      : undefined;
+  const previousProposal = combatRoundEndDistanceProposalSchema.safeParse(
+    command.facts.previousProposal,
+  );
+  const roundEndReview = normalized.roundEndReview;
+
+  if (!roundEndReview || !distanceProposalId || !previousProposal.success) {
+    return undefined;
+  }
+
+  const restoredDistanceProposals = roundEndReview.proposedDistances.map((proposal) =>
+    proposal.id === distanceProposalId ? previousProposal.data : proposal,
+  );
+  const distanceEdges = { ...normalized.distanceState.edges };
+  const nextEdge = combatDistanceEdgeSchema.safeParse(command.facts.nextEdge);
+  const previousEdge = combatDistanceEdgeSchema.safeParse(command.facts.previousEdge);
+  const pairKey =
+    nextEdge.success
+      ? nextEdge.data.pairKey
+      : previousEdge.success
+        ? previousEdge.data.pairKey
+        : previousProposal.data.pairKey;
+
+  if (previousEdge.success) {
+    distanceEdges[pairKey] = previousEdge.data;
+  } else {
+    delete distanceEdges[pairKey];
+  }
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    distanceState: {
+      edges: distanceEdges,
+    },
+    roundEndReview: {
+      ...roundEndReview,
+      proposedDistances: restoredDistanceProposals,
     },
     selectedParticipantId: command.beforeCursor.participantId,
     selectedStep: "round_summary",
@@ -15459,6 +15563,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_round_end_distance_control") {
     return undoCombatRoundEndDistanceControlCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "commit_round_end_distance_control") {
+    return undoCombatRoundEndDistanceControlCommitCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

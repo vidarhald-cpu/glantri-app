@@ -527,10 +527,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("CombatRoundEndReviewPanel");
     expect(source).toContain("ensureCombatRoundEndReviewPrepared");
     expect(source).toContain("commitCombatRoundEndParticipantReview");
+    expect(source).toContain("commitCombatRoundEndDistanceControl");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("rollCombatRoundEndDistanceControl");
-    expect(source).toContain("Distance control");
+    expect(source).toContain("Round distance control");
     expect(source).toContain("Roll distance contest");
+    expect(source).toContain("Apply distance");
     expect(source).toContain("GM override");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("const commandParticipantId =");

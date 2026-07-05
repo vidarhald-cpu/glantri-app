@@ -67,7 +67,8 @@ available. The GM may proxy declarations.
 
 Distance intentions do not change current-round attack distance and therefore do not change
 current-round distance OB modifiers. At SU / round-end review, declared preferences are collected
-by unordered participant pair:
+into shared round-level distance-control items keyed by unordered participant pair. Each pair is
+created and resolved at most once per round:
 
 - matching preferences propose that distance without a contest
 - one-sided or conflicting preferences create a Dodge control contest
@@ -76,8 +77,9 @@ by unordered participant pair:
 - the higher final Dodge result sets that pair's distance for the next round
 - ties keep the current distance unless the GM overrides the proposal
 
-The GM reviews each proposal, may roll pending contests, may override the final distance from `0`
-to `8`, and commits the result as a command-backed `round_end_review` distance edge. The edge is
-updated at SU commit and is carried into the next round; GM manual distance edits remain available.
+The GM reviews each pair proposal in the shared Round distance control section, may roll pending
+contests, may override the final distance from `0` to `8`, and commits the result as a
+command-backed `round_end_review` distance edge. The edge is updated at SU commit and is carried
+into the next round; GM manual distance edits remain available.
 
 Full coordinates, facing, pathing, terrain legality, and tactical geometry remain future work.

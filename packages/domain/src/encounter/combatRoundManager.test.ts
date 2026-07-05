@@ -87,6 +87,7 @@ import {
   recordCombatRoundParryResolution,
   recordCombatRoundParticipantStepReview,
   prepareCombatRoundEndReview,
+  commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   removeCombatRoundCombatExperienceEffects,
   restoreCombatRoundBackOutCombatContextModifiers,
@@ -11394,8 +11395,7 @@ describe("combat round manager", () => {
         selectedStep: "round_summary",
       },
     });
-    const proposal =
-      reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+    const proposal = reviewed.roundEndReview?.proposedDistances[0];
 
     expect(proposal).toMatchObject({
       currentDistance: 2,
@@ -11404,6 +11404,9 @@ describe("combat round manager", () => {
       proposedDistance: 3,
       status: "review_ready",
     });
+    expect(reviewed.roundEndReview?.proposedDistances).toHaveLength(1);
+    expect(reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances).toEqual([]);
+    expect(reviewed.roundEndReview?.participantReviews.guard?.proposedDistances).toEqual([]);
     expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
   });
 
@@ -11476,12 +11479,9 @@ describe("combat round manager", () => {
       },
       state: roundSummaryState,
     });
-    const proposal =
-      reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+    const proposal = reviewed.roundEndReview?.proposedDistances[0];
 
-    expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe(
-      "distance_roll_pending",
-    );
+    expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
     expect(proposal).toMatchObject({
       currentDistance: 2,
       status: "pending",
@@ -11505,8 +11505,7 @@ describe("combat round manager", () => {
       participantId: "gladiator",
       state: reviewed,
     });
-    const rolledProposal =
-      rolled.state.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+    const rolledProposal = rolled.state.roundEndReview?.proposedDistances[0];
 
     expect(rolledProposal).toMatchObject({
       outcome: "participant_a_wins",
@@ -11516,19 +11515,26 @@ describe("combat round manager", () => {
     expect(rolledProposal?.participantA.result?.finalTotal).toBe(17);
     expect(rolledProposal?.participantB.result?.finalTotal).toBe(16);
 
-    const committed = commitCombatRoundEndParticipantReview({
+    const unrolled = clearCombatRoundStep({ state: rolled.state, step: "round_summary" });
+
+    expect(unrolled.roundEndReview?.proposedDistances[0]).toMatchObject({
+      outcome: "contest_pending",
+      proposedDistance: undefined,
+      status: "pending",
+    });
+    expect(unrolled.roundEndReview?.proposedDistances[0]?.participantA.result).toBeUndefined();
+    expect(unrolled.roundEndReview?.proposedDistances[0]?.participantB.result).toBeUndefined();
+
+    const committed = commitCombatRoundEndDistanceControl({
       command: {
         createdAt: "2026-01-01T00:12:00.000Z",
       },
-      participantId: "gladiator",
-      scenarioParticipantId: "scenario-gladiator",
+      distanceProposalId: rolledProposal?.id ?? "missing",
       state: rolled.state,
     });
 
     expect(getDistanceBetween(committed.state.distanceState, "gladiator", "guard")).toBe(3);
-    expect(
-      committed.state.roundEndReview?.participantReviews.gladiator?.proposedDistances[0],
-    ).toMatchObject({
+    expect(committed.state.roundEndReview?.proposedDistances[0]).toMatchObject({
       appliedDistance: 3,
       appliesFromRound: 4,
       status: "committed",
@@ -11537,12 +11543,10 @@ describe("combat round manager", () => {
     const undone = clearCombatRoundStep({ state: committed.state, step: "round_summary" });
 
     expect(getDistanceBetween(undone.distanceState, "gladiator", "guard")).toBe(2);
-    expect(undone.roundEndReview?.participantReviews.gladiator?.proposedDistances[0]).toMatchObject(
-      {
-        appliedDistance: undefined,
-        status: "review_ready",
-      },
-    );
+    expect(undone.roundEndReview?.proposedDistances[0]).toMatchObject({
+      status: "review_ready",
+    });
+    expect(undone.roundEndReview?.proposedDistances[0]?.appliedDistance).toBeUndefined();
   });
 
   it("builds SU duration proposals for active round-based effects", () => {

@@ -26,6 +26,7 @@ import type {
   CombatDistanceEdge,
   EncounterSession,
   MovementIntent,
+  CombatRoundEndReview,
   RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
@@ -45,6 +46,7 @@ import {
   canClearCombatRoundStep,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
+  commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
@@ -3272,14 +3274,17 @@ function CombatRoundEndReviewPanel(input: {
   controlsDisabled?: boolean;
   distanceOverrideDrafts: Record<string, string>;
   difficultyDrafts: Record<string, string>;
+  onCommitDistanceControl: (distanceProposalId: string) => void;
   onDistanceOverrideDraftChange: (distanceProposalId: string, value: string) => void;
   onDifficultyDraftChange: (healthRollId: string, value: string) => void;
   onRollDistanceContest: (distanceProposalId: string) => void;
   participantLabel?: string;
   participantLabelsById: Record<string, string>;
   review?: RoundEndParticipantReview;
+  roundReview?: CombatRoundEndReview;
 }) {
   const review = input.review;
+  const distanceProposals = input.roundReview?.proposedDistances ?? [];
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -3415,10 +3420,10 @@ function CombatRoundEndReviewPanel(input: {
               })}
             </section>
           ) : null}
-          {review.proposedDistances.length > 0 ? (
+          {distanceProposals.length > 0 ? (
             <section style={{ display: "grid", gap: "0.4rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Distance control</strong>
-              {review.proposedDistances.map((proposal) => {
+              <strong style={{ fontSize: "0.9rem" }}>Round distance control</strong>
+              {distanceProposals.map((proposal) => {
                 const participantALabel =
                   input.participantLabelsById[proposal.participantAId] ??
                   proposal.participantAId;
@@ -3465,13 +3470,17 @@ function CombatRoundEndReviewPanel(input: {
                     </div>
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
                       Proposed next-round distance: {proposal.proposedDistance ?? "pending"}
+                      {proposal.appliedDistance !== undefined
+                        ? ` · applied ${proposal.appliedDistance}`
+                        : ""}
+                      {` · ${proposal.status.replaceAll("_", " ")}`}
                     </div>
                     <label style={{ display: "grid", gap: "0.2rem", maxWidth: "10rem" }}>
                       <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
                         GM override
                       </span>
                       <select
-                        disabled={input.controlsDisabled}
+                        disabled={input.controlsDisabled || proposal.status === "committed"}
                         onChange={(event) =>
                           input.onDistanceOverrideDraftChange(proposal.id, event.target.value)
                         }
@@ -3492,6 +3501,15 @@ function CombatRoundEndReviewPanel(input: {
                         type="button"
                       >
                         Roll distance contest
+                      </button>
+                    ) : null}
+                    {proposal.status !== "pending" && proposal.status !== "committed" ? (
+                      <button
+                        disabled={input.controlsDisabled}
+                        onClick={() => input.onCommitDistanceControl(proposal.id)}
+                        type="button"
+                      >
+                        Apply distance
                       </button>
                     ) : null}
                     {[
@@ -3523,7 +3541,7 @@ function CombatRoundEndReviewPanel(input: {
           review.proposedRemovals.length === 0 &&
           review.proposedDamage.length === 0 &&
           review.proposedHealthRolls.length === 0 &&
-          review.proposedDistances.length === 0 ? (
+          distanceProposals.length === 0 ? (
             <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
               No round-end changes proposed.
             </div>
@@ -4511,7 +4529,7 @@ export default function CombatRoundManagerPanel({
       inspectorRoundEndReview.proposedRemovals.length > 0 ||
       inspectorRoundEndReview.proposedDamage.length > 0 ||
       inspectorRoundEndReview.proposedHealthRolls.length > 0 ||
-      inspectorRoundEndReview.proposedDistances.length > 0),
+      (selectedTimelineRoundState.roundEndReview?.proposedDistances.length ?? 0) > 0),
   );
   const inspectorCombatExperienceWindowValidationMessage =
     inspectorCombatExperienceIsCombatStart &&
@@ -4580,9 +4598,6 @@ export default function CombatRoundManagerPanel({
                 : inspector.step === "round_summary" &&
                     inspectorRoundEndReview?.status === "health_roll_pending"
                   ? "Roll health check"
-                  : inspector.step === "round_summary" &&
-                      inspectorRoundEndReview?.status === "distance_roll_pending"
-                    ? "Roll distance contest"
                   : inspector.step === "round_summary" &&
                       inspectorRoundEndReview?.status === "complete"
                     ? "Round-end review complete"
@@ -6348,17 +6363,11 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
-        const distanceOverrides = Object.fromEntries(
-          Object.entries(roundEndDistanceOverrideDrafts)
-            .filter(([, value]) => value.trim().length > 0)
-            .map(([proposalId, value]) => [proposalId, parseCombatInteger(value, "Distance")]),
-        );
         const committed = commitCombatRoundEndParticipantReview({
           command: {
             createdAt: updatedAt,
           },
           combatEffects: selectedScenarioParticipant.state.combatEffects,
-          distanceOverrides,
           encounterId: encounter.id,
           participantId: inspector.participant.participantId,
           scenarioId: encounter.scenarioId,
@@ -6380,15 +6389,6 @@ export default function CombatRoundManagerPanel({
         }));
         onScenarioParticipantsUpdated?.([updatedParticipant]);
         await persistRoundState(committed.state);
-        setRoundEndDistanceOverrideDrafts((current) => {
-          const next = { ...current };
-
-          participantReview.proposedDistances.forEach((proposal) => {
-            delete next[proposal.id];
-          });
-
-          return next;
-        });
         setSaveError(undefined);
         return;
       }
@@ -6443,34 +6443,51 @@ export default function CombatRoundManagerPanel({
         return;
       }
 
-      if (participantReview.status === "distance_roll_pending") {
-        const pendingDistanceProposal = participantReview.proposedDistances.find(
-          (proposal) => proposal.accepted && proposal.status === "pending",
-        );
-
-        if (!pendingDistanceProposal) {
-          setSaveError("No pending distance contest is available for this participant.");
-          return;
-        }
-
-        const rolled = rollCombatRoundEndDistanceControl({
-          command: {
-            createdAt: updatedAt,
-          },
-          distanceProposalId: pendingDistanceProposal.id,
-          participantId: inspector.participant.participantId,
-          state: roundState,
-        });
-
-        await persistRoundState(rolled.state);
-        setSaveError(undefined);
-        return;
-      }
-
       setSaveError("Round-end review complete for this participant.");
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to advance SU review.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function commitRoundEndDistanceControl(distanceProposalId: string) {
+    if (!selectedRoundIsActive || inspector.step !== "round_summary") {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const overrideDraft = roundEndDistanceOverrideDrafts[distanceProposalId];
+      const committed = commitCombatRoundEndDistanceControl({
+        command: {
+          createdAt: updatedAt,
+        },
+        distanceOverride:
+          overrideDraft && overrideDraft.trim().length > 0
+            ? parseCombatInteger(overrideDraft, "Distance")
+            : undefined,
+        distanceProposalId,
+        participantId: inspector.participant?.participantId,
+        state: roundState,
+      });
+
+      await persistRoundState(committed.state);
+      setRoundEndDistanceOverrideDrafts((current) => {
+        const next = { ...current };
+
+        delete next[distanceProposalId];
+
+        return next;
+      });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to apply distance control.",
       );
     } finally {
       setSaving(false);
@@ -7528,6 +7545,9 @@ export default function CombatRoundManagerPanel({
                         controlsDisabled={saving || inspectorIsInspectionOnly}
                         distanceOverrideDrafts={roundEndDistanceOverrideDrafts}
                         difficultyDrafts={roundEndHealthDifficultyDrafts}
+                        onCommitDistanceControl={(distanceProposalId) => {
+                          void commitRoundEndDistanceControl(distanceProposalId);
+                        }}
                         onDistanceOverrideDraftChange={(distanceProposalId, value) =>
                           setRoundEndDistanceOverrideDrafts((current) => ({
                             ...current,
@@ -7560,6 +7580,7 @@ export default function CombatRoundManagerPanel({
                         participantLabel={inspector.participant?.label}
                         participantLabelsById={roundParticipantLabelsById}
                         review={inspectorRoundEndReview}
+                        roundReview={selectedTimelineRoundState.roundEndReview}
                       />
                     ) : null}
                     <PlayerCombatActionButtonPanel
