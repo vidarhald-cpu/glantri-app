@@ -64,6 +64,8 @@ import {
   getDistanceEdgeBetweenParticipantAliases,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
+  movementIntentSchema,
+  normalizeMovementIntent,
   removeDistanceGeneratedObSkillModifiers,
   scenarioParticipantCombatContextSchema,
   setCombatRoundCombatExperienceDifficulty,
@@ -79,6 +81,7 @@ import type {
   CombatRoundState,
   CombatRoundPhaseContexts,
   EncounterSession,
+  MovementIntent,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
   ScenarioParticipant,
@@ -224,6 +227,7 @@ function parseCombatDeclarationBody(body: unknown): {
   additionalActionNotes?: string;
   combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
   movementId?: string;
+  movementIntent?: MovementIntent;
   phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
@@ -242,6 +246,7 @@ function parseCombatDeclarationBody(body: unknown): {
       typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
     combatContext: scenarioParticipantCombatContextSchema.parse(value.combatContext ?? {}),
     movementId: parseOptionalDeclarationString(value.movementId),
+    movementIntent: normalizeMovementIntent(value.movementIntent),
     phaseContexts:
       value.phaseContexts === undefined
         ? undefined
@@ -250,6 +255,82 @@ function parseCombatDeclarationBody(body: unknown): {
     scenarioParticipantId,
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
   };
+}
+
+function normalizeCombatDeclarationMovementIntent(input: {
+  encounter: EncounterSession;
+  encounterParticipant: EncounterSession["participants"][number];
+  gmAuthorizedOperation: boolean;
+  movementIntent?: MovementIntent;
+  roundState: CombatRoundState;
+}): MovementIntent | undefined {
+  if (!input.movementIntent) {
+    return undefined;
+  }
+
+  if (input.movementIntent.mode === "hold_position") {
+    return movementIntentSchema.parse({
+      distancePreferences: [],
+      mode: "hold_position",
+    });
+  }
+
+  const source = input.gmAuthorizedOperation ? "gm_proxy" : "player_declared";
+  const hasVisibilityRows = Object.keys(input.encounter.roleplayState?.visibility ?? {}).length > 0;
+  const preferencesByTargetParticipantId = new Map<string, MovementIntent["distancePreferences"][number]>();
+
+  for (const preference of input.movementIntent.distancePreferences) {
+    const targetRoundParticipant = findCombatRoundParticipantByAlias({
+      id: preference.targetParticipantId,
+      state: input.roundState,
+    });
+
+    if (!targetRoundParticipant) {
+      throw new Error("Distance preference target is not part of this combat round.");
+    }
+
+    if (targetRoundParticipant.participantId === input.encounterParticipant.id) {
+      throw new Error("Distance preference target must be another participant.");
+    }
+
+    const targetEncounterParticipant = input.encounter.participants.find((participant) =>
+      participantAliasesInclude({ id: targetRoundParticipant.participantId, participant }),
+    );
+
+    if (!targetEncounterParticipant) {
+      throw new Error("Distance preference target is not assigned to this encounter.");
+    }
+
+    if (
+      !input.gmAuthorizedOperation &&
+      hasVisibilityRows &&
+      !hasCombatDistanceVisibility({
+        target: targetEncounterParticipant,
+        viewer: input.encounterParticipant,
+        visibility: input.encounter.roleplayState?.visibility,
+      })
+    ) {
+      throw new Error("Distance preference target is not visible to this player.");
+    }
+
+    preferencesByTargetParticipantId.set(
+      targetRoundParticipant.participantId,
+      movementIntentSchema.parse({
+        distancePreferences: [
+          {
+            ...preference,
+            source,
+          },
+        ],
+        mode: "set_distance_preferences",
+      }).distancePreferences[0],
+    );
+  }
+
+  return movementIntentSchema.parse({
+    distancePreferences: [...preferencesByTargetParticipantId.values()],
+    mode: "set_distance_preferences",
+  });
 }
 
 function parseParticipantCommandBody(
@@ -1589,6 +1670,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      const submittedMovementIntent = normalizeCombatDeclarationMovementIntent({
+        encounter,
+        encounterParticipant,
+        gmAuthorizedOperation,
+        movementIntent: body.movementIntent,
+        roundState,
+      });
+
       const targetValidation = validateCombatDeclarationTargets({
         actionId: body.actionId,
         phaseContexts: submittedPhaseContexts,
@@ -1618,6 +1707,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             lastDeclaredRoundNumber: roundState.roundNumber,
             lastDeclaredSecondaryActionId: body.secondaryActionId,
             lastDeclarationNotes: body.additionalActionNotes,
+            lastMovementIntent: submittedMovementIntent,
           },
         },
       });
@@ -1634,6 +1724,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           additionalActionNotes: body.additionalActionNotes,
           combatContext: submittedCombatContext,
           movementId: body.movementId,
+          movementIntent: submittedMovementIntent,
           phaseContexts: submittedPhaseContexts,
           roundNumber: roundState.roundNumber,
           secondaryActionId: body.secondaryActionId,

@@ -6,6 +6,7 @@ import type {
   CombatRoundPhaseContexts,
   CombatRoundStep,
   EncounterSession,
+  MovementIntent,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
@@ -71,6 +72,7 @@ export async function submitCombatDeclarationOnServer(input: {
   combatContext: ScenarioParticipantCombatContext;
   encounterId: string;
   movementId?: string;
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
@@ -84,6 +86,7 @@ export async function submitCombatDeclarationOnServer(input: {
         additionalActionNotes: input.additionalActionNotes,
         combatContext: input.combatContext,
         movementId: input.movementId,
+        movementIntent: input.movementIntent,
         phaseContexts: input.phaseContexts,
         phaseWeaponNames: input.phaseWeaponNames,
         scenarioParticipantId: input.scenarioParticipantId,

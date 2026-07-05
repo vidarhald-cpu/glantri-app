@@ -2304,6 +2304,85 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("persists player-declared distance movement intent from the combat declaration route", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        movementId: "step",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "gm_proxy",
+              targetParticipantId: "participant-2",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updateStateCall =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+
+    expect(updateStateCall.state.combat.lastMovementIntent).toEqual({
+      distancePreferences: [
+        {
+          desiredDistance: 3,
+          source: "player_declared",
+          targetParticipantId: "participant-2",
+        },
+      ],
+      mode: "set_distance_preferences",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].declaration.movementIntent).toEqual({
+      distancePreferences: [
+        {
+          desiredDistance: 3,
+          source: "player_declared",
+          targetParticipantId: "participant-2",
+        },
+      ],
+      mode: "set_distance_preferences",
+    });
+  });
+
   it("generates a declaration-time distance Skill/OB row for an out-of-range attack", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({

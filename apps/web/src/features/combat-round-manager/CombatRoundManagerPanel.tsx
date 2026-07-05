@@ -22,9 +22,10 @@ import type {
   CombatRoundStepStatus,
   CombatRoundInitiativeRank,
   CombatRoundStepSnapshot,
-  CombatEffectsState,
+  CombatDistance,
   CombatDistanceEdge,
   EncounterSession,
+  MovementIntent,
   RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
@@ -97,6 +98,7 @@ import {
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollCombatRoundEndHealthCheck,
+  rollCombatRoundEndDistanceControl,
   rollOpenEndedD20,
   sortCombatRoundParticipantsByInitiative,
   skipCombatRoundCurrentPhaseAction,
@@ -138,6 +140,7 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  type PlayerCombatDistancePreferenceOption,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
@@ -337,6 +340,7 @@ interface CombatInspectorDeclarationDraft {
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
   movementId: PlayerEncounterMovementId | "";
+  movementIntent: MovementIntent;
   phaseContexts: CombatInspectorPhaseContextDrafts;
   secondaryActionId: PlayerEncounterActionId | "";
 }
@@ -599,6 +603,8 @@ function buildDeclarationDraft(
     movementId: (declaration?.movementId ??
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
+    movementIntent:
+      declaration?.movementIntent ?? scopedCombat?.lastMovementIntent ?? createDefaultMovementIntent(),
     phaseContexts: buildInspectorPhaseContexts(participant, declaration, scope),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
@@ -638,11 +644,19 @@ function getModifierBucketContextKey(
   }
 }
 
+function createDefaultMovementIntent(): MovementIntent {
+  return {
+    distancePreferences: [],
+    mode: "hold_position",
+  };
+}
+
 function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): boolean {
   return Boolean(
     declaration?.actionId ||
     declaration?.secondaryActionId ||
     declaration?.movementId ||
+    declaration?.movementIntent ||
     declaration?.additionalActionNotes ||
     declaration?.combatContext ||
     declaration?.phaseContexts,
@@ -2265,6 +2279,30 @@ function getActiveWeaponTemplatesForScenarioParticipant(
     .filter((template): template is WeaponTemplate => Boolean(template));
 }
 
+function normalizeCombatWeaponName(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toLocaleLowerCase()
+    : undefined;
+}
+
+function getLongestPreferredDistanceForWeaponName(input: {
+  participant?: ScenarioParticipant;
+  resolvedEquipmentState?: EquipmentFeatureState | null;
+  weaponName?: string;
+}): CombatDistance | undefined {
+  const weaponName = normalizeCombatWeaponName(input.weaponName);
+  const activeWeapons = getActiveWeaponTemplatesForScenarioParticipant(
+    input.participant,
+    input.resolvedEquipmentState ?? undefined,
+  );
+  const weapon =
+    activeWeapons.find((candidate) => normalizeCombatWeaponName(candidate.name) === weaponName) ??
+    activeWeapons[0];
+  const distances = getWeaponPreferredDistances(weapon);
+
+  return distances.at(-1);
+}
+
 function formatCombatDistanceSource(source: CombatDistanceEdge["source"]): string {
   switch (source) {
     case "gm_set":
@@ -2390,6 +2428,44 @@ function getScenarioParticipantHealthStat(participant?: ScenarioParticipant): nu
   const buildResult = characterBuildSchema.safeParse(participant?.snapshot.build);
 
   return buildResult.success ? buildResult.data.profile.rolledStats.health : undefined;
+}
+
+function getSheetSummaryDodgeTotal(sheetSummary: unknown): number | undefined {
+  const summary = sheetSummary as
+    | {
+        combat?: { dodge?: unknown };
+        draftView?: {
+          skills?: Array<{
+            effectiveSkillNumber?: unknown;
+            name?: unknown;
+            skillId?: unknown;
+            totalSkill?: unknown;
+          }>;
+        };
+      }
+    | undefined;
+  const combatDodge = summary?.combat?.dodge;
+
+  if (typeof combatDodge === "number" && Number.isFinite(combatDodge)) {
+    return Math.round(combatDodge);
+  }
+
+  const dodgeSkill = summary?.draftView?.skills?.find((skill) => {
+    const skillId = typeof skill.skillId === "string" ? skill.skillId.toLocaleLowerCase() : "";
+    const name = typeof skill.name === "string" ? skill.name.toLocaleLowerCase() : "";
+
+    return skillId === "dodge" || name === "dodge";
+  });
+  const effectiveSkillNumber = dodgeSkill?.effectiveSkillNumber;
+  const totalSkill = dodgeSkill?.totalSkill;
+
+  if (typeof effectiveSkillNumber === "number" && Number.isFinite(effectiveSkillNumber)) {
+    return Math.round(effectiveSkillNumber);
+  }
+
+  return typeof totalSkill === "number" && Number.isFinite(totalSkill)
+    ? Math.round(totalSkill)
+    : undefined;
 }
 
 function getEncounterScenarioParticipantIds(
@@ -3194,9 +3270,13 @@ function CombatDamageReviewPanel(input: {
 
 function CombatRoundEndReviewPanel(input: {
   controlsDisabled?: boolean;
+  distanceOverrideDrafts: Record<string, string>;
   difficultyDrafts: Record<string, string>;
+  onDistanceOverrideDraftChange: (distanceProposalId: string, value: string) => void;
   onDifficultyDraftChange: (healthRollId: string, value: string) => void;
+  onRollDistanceContest: (distanceProposalId: string) => void;
   participantLabel?: string;
+  participantLabelsById: Record<string, string>;
   review?: RoundEndParticipantReview;
 }) {
   const review = input.review;
@@ -3335,6 +3415,102 @@ function CombatRoundEndReviewPanel(input: {
               })}
             </section>
           ) : null}
+          {review.proposedDistances.length > 0 ? (
+            <section style={{ display: "grid", gap: "0.4rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Distance control</strong>
+              {review.proposedDistances.map((proposal) => {
+                const participantALabel =
+                  input.participantLabelsById[proposal.participantAId] ??
+                  proposal.participantAId;
+                const participantBLabel =
+                  input.participantLabelsById[proposal.participantBId] ??
+                  proposal.participantBId;
+                const overrideValue = input.distanceOverrideDrafts[proposal.id] ?? "";
+                const resultA = proposal.participantA.result;
+                const resultB = proposal.participantB.result;
+
+                return (
+                  <div
+                    key={proposal.id}
+                    style={{
+                      borderTop: "1px solid #ddd3bf",
+                      display: "grid",
+                      gap: "0.3rem",
+                      paddingTop: "0.4rem",
+                    }}
+                  >
+                    <div style={{ fontSize: "0.88rem", fontWeight: 700 }}>
+                      {participantALabel} ↔ {participantBLabel}
+                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      Current {proposal.currentDistance} · {participantALabel}:{" "}
+                      {proposal.participantA.desiredDistance ?? "no preference"} ·{" "}
+                      {participantBLabel}:{" "}
+                      {proposal.participantB.desiredDistance ?? "no preference"}
+                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      {resultA && resultB
+                        ? `${participantALabel} ${formatOpenEndedD20RollBreakdown({
+                            dieResult: resultA.rollTotal,
+                            openEndedD10s: resultA.openEndedD10s,
+                            rollD20: resultA.rollD20,
+                          })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}; ${participantBLabel} ${formatOpenEndedD20RollBreakdown({
+                            dieResult: resultB.rollTotal,
+                            openEndedD10s: resultB.openEndedD10s,
+                            rollD20: resultB.rollD20,
+                          })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
+                        : proposal.status === "pending"
+                          ? "Dodge contest pending"
+                          : "No contest needed"}
+                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      Proposed next-round distance: {proposal.proposedDistance ?? "pending"}
+                    </div>
+                    <label style={{ display: "grid", gap: "0.2rem", maxWidth: "10rem" }}>
+                      <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                        GM override
+                      </span>
+                      <select
+                        disabled={input.controlsDisabled}
+                        onChange={(event) =>
+                          input.onDistanceOverrideDraftChange(proposal.id, event.target.value)
+                        }
+                        value={overrideValue}
+                      >
+                        <option value="">Use proposal</option>
+                        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                          <option key={distance} value={distance}>
+                            Distance {distance}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {proposal.status === "pending" ? (
+                      <button
+                        disabled={input.controlsDisabled}
+                        onClick={() => input.onRollDistanceContest(proposal.id)}
+                        type="button"
+                      >
+                        Roll distance contest
+                      </button>
+                    ) : null}
+                    {[
+                      ...proposal.warnings,
+                      ...proposal.participantA.warnings,
+                      ...proposal.participantB.warnings,
+                    ].map((warning, warningIndex) => (
+                      <div
+                        key={`end-review-distance-warning:${proposal.id}:${warningIndex}:${warning}`}
+                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
+                      >
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </section>
+          ) : null}
           {review.warnings.map((warning, index) => (
             <div
               key={`end-review-warning:${index}:${warning}`}
@@ -3346,7 +3522,8 @@ function CombatRoundEndReviewPanel(input: {
           {review.proposedEffects.length === 0 &&
           review.proposedRemovals.length === 0 &&
           review.proposedDamage.length === 0 &&
-          review.proposedHealthRolls.length === 0 ? (
+          review.proposedHealthRolls.length === 0 &&
+          review.proposedDistances.length === 0 ? (
             <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
               No round-end changes proposed.
             </div>
@@ -3396,6 +3573,9 @@ export default function CombatRoundManagerPanel({
   >({});
   const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
   const [roundEndHealthDifficultyDrafts, setRoundEndHealthDifficultyDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
     Record<string, string>
   >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -3564,9 +3744,16 @@ export default function CombatRoundManagerPanel({
           inspector.participant.participantId
         ]
       : undefined;
+  const roundParticipantLabelsById = useMemo(
+    () =>
+      Object.fromEntries(
+        roundState.participants.map((participant) => [participant.participantId, participant.label]),
+      ),
+    [roundState.participants],
+  );
   const buildRoundEndParticipantInputs = (
     stateForReview: typeof roundState = roundState,
-  ): Record<string, { combatEffects?: CombatEffectsState; healthStat?: number }> =>
+  ): Parameters<typeof ensureCombatRoundEndReviewPrepared>[0]["participantInputs"] =>
     Object.fromEntries(
       stateForReview.participants.map((participant) => {
         const encounterParticipant = encounter.participants.find(
@@ -3584,11 +3771,33 @@ export default function CombatRoundManagerPanel({
         const buildResult = characterBuildSchema.safeParse(
           resolvedCharacterState?.serverRecord.build ?? scenarioParticipant?.snapshot.build,
         );
+        const sheetSummary =
+          content && buildResult.success
+            ? buildCharacterSheetSummary({
+                build: buildResult.data,
+                content,
+              })
+            : (scenarioParticipant?.snapshot.sheetSummary as unknown);
+        const dodgeSkillTotal = getSheetSummaryDodgeTotal(sheetSummary);
+        const combatContext =
+          participant.declaration?.combatContext ?? scenarioParticipant?.state.combat.combatContext;
+        const generalFatigueModifier = buildEncounterLiveCombatModifierSummary({
+          combatContext,
+          combatEffects: scenarioParticipant?.state.combatEffects,
+        }).generalFatigueRaw;
 
         return [
           participant.participantId,
           {
             combatEffects: scenarioParticipant?.state.combatEffects,
+            distanceControl: {
+              dodgeSkillTotal,
+              generalFatigueModifier,
+              warnings:
+                dodgeSkillTotal === undefined
+                  ? ["Dodge total unavailable in participant snapshot."]
+                  : [],
+            },
             healthStat: buildResult.success
               ? buildResult.data.profile.rolledStats.health
               : getScenarioParticipantHealthStat(scenarioParticipant),
@@ -3676,6 +3885,8 @@ export default function CombatRoundManagerPanel({
           (inspectorSnapshot.declarationSummary?.movementId as
             | PlayerEncounterMovementId
             | undefined) ?? inspectorDraft.movementId,
+        movementIntent:
+          inspectorSnapshot.declarationSummary?.movementIntent ?? inspectorDraft.movementIntent,
         phaseContexts:
           inspectorSnapshot.phase && inspectorSnapshot.phaseContext
             ? {
@@ -4011,6 +4222,39 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.characterId,
     selectedScenarioParticipant?.state.combatEffects,
   ]);
+  const inspectorDistancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
+    const primaryTargetId =
+      inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId ??
+      inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId ??
+      inspectorDisplayDraft.combatContext.targetParticipantId;
+    const primaryTargetPhase = inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId
+      ? "phase1"
+      : inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId
+        ? "phase2"
+        : undefined;
+    const defaultDistance =
+      primaryTargetId && primaryTargetPhase
+        ? getLongestPreferredDistanceForWeaponName({
+            participant: selectedScenarioParticipant,
+            resolvedEquipmentState: inspectorEquipmentState,
+            weaponName: inspectorPhaseLoadoutSummaries[primaryTargetPhase].attackStats?.weaponName,
+          })
+        : undefined;
+
+    return inspectorTargetOptions.map((option) => ({
+      defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
+      displayName: option.displayName,
+      id: option.id,
+    }));
+  }, [
+    inspectorDisplayDraft.combatContext.targetParticipantId,
+    inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId,
+    inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId,
+    inspectorEquipmentState,
+    inspectorPhaseLoadoutSummaries,
+    inspectorTargetOptions,
+    selectedScenarioParticipant,
+  ]);
   const inspectorCurrentInitiativePhase =
     inspector.step === "initiative_phase_1"
       ? "phase1"
@@ -4266,7 +4510,8 @@ export default function CombatRoundManagerPanel({
     (inspectorRoundEndReview.proposedEffects.length > 0 ||
       inspectorRoundEndReview.proposedRemovals.length > 0 ||
       inspectorRoundEndReview.proposedDamage.length > 0 ||
-      inspectorRoundEndReview.proposedHealthRolls.length > 0),
+      inspectorRoundEndReview.proposedHealthRolls.length > 0 ||
+      inspectorRoundEndReview.proposedDistances.length > 0),
   );
   const inspectorCombatExperienceWindowValidationMessage =
     inspectorCombatExperienceIsCombatStart &&
@@ -4335,6 +4580,9 @@ export default function CombatRoundManagerPanel({
                 : inspector.step === "round_summary" &&
                     inspectorRoundEndReview?.status === "health_roll_pending"
                   ? "Roll health check"
+                  : inspector.step === "round_summary" &&
+                      inspectorRoundEndReview?.status === "distance_roll_pending"
+                    ? "Roll distance contest"
                   : inspector.step === "round_summary" &&
                       inspectorRoundEndReview?.status === "complete"
                     ? "Round-end review complete"
@@ -4942,6 +5190,7 @@ export default function CombatRoundManagerPanel({
           actionId: draft.actionId || undefined,
           additionalActionNotes: draft.additionalActionNotes || undefined,
           movementId: draft.movementId || undefined,
+          movementIntent: draft.movementIntent,
           secondaryActionId: draft.secondaryActionId || undefined,
         },
         defenseSummary:
@@ -5368,6 +5617,7 @@ export default function CombatRoundManagerPanel({
         combatContext: inspectorGeneratedCombatContext,
         encounterId: encounter.id,
         movementId: inspectorDraft.movementId || undefined,
+        movementIntent: inspectorDraft.movementIntent,
         phaseContexts: inspectorDraft.phaseContexts,
         phaseWeaponNames: {
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
@@ -6098,11 +6348,17 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
+        const distanceOverrides = Object.fromEntries(
+          Object.entries(roundEndDistanceOverrideDrafts)
+            .filter(([, value]) => value.trim().length > 0)
+            .map(([proposalId, value]) => [proposalId, parseCombatInteger(value, "Distance")]),
+        );
         const committed = commitCombatRoundEndParticipantReview({
           command: {
             createdAt: updatedAt,
           },
           combatEffects: selectedScenarioParticipant.state.combatEffects,
+          distanceOverrides,
           encounterId: encounter.id,
           participantId: inspector.participant.participantId,
           scenarioId: encounter.scenarioId,
@@ -6124,6 +6380,15 @@ export default function CombatRoundManagerPanel({
         }));
         onScenarioParticipantsUpdated?.([updatedParticipant]);
         await persistRoundState(committed.state);
+        setRoundEndDistanceOverrideDrafts((current) => {
+          const next = { ...current };
+
+          participantReview.proposedDistances.forEach((proposal) => {
+            delete next[proposal.id];
+          });
+
+          return next;
+        });
         setSaveError(undefined);
         return;
       }
@@ -6173,6 +6438,30 @@ export default function CombatRoundManagerPanel({
           [updatedParticipant.id]: updatedParticipant,
         }));
         onScenarioParticipantsUpdated?.([updatedParticipant]);
+        await persistRoundState(rolled.state);
+        setSaveError(undefined);
+        return;
+      }
+
+      if (participantReview.status === "distance_roll_pending") {
+        const pendingDistanceProposal = participantReview.proposedDistances.find(
+          (proposal) => proposal.accepted && proposal.status === "pending",
+        );
+
+        if (!pendingDistanceProposal) {
+          setSaveError("No pending distance contest is available for this participant.");
+          return;
+        }
+
+        const rolled = rollCombatRoundEndDistanceControl({
+          command: {
+            createdAt: updatedAt,
+          },
+          distanceProposalId: pendingDistanceProposal.id,
+          participantId: inspector.participant.participantId,
+          state: roundState,
+        });
+
         await persistRoundState(rolled.state);
         setSaveError(undefined);
         return;
@@ -6818,12 +7107,17 @@ export default function CombatRoundManagerPanel({
                       Boolean(inspectorSnapshot) ||
                       inspectorCombatExperienceRequired
                     }
+                    distancePreferenceOptions={inspectorDistancePreferenceOptions}
                     movementId={inspectorDisplayDraft.movementId}
+                    movementIntent={inspectorDisplayDraft.movementIntent}
                     onActionChange={(actionId) => updateInspectorDraft({ actionId })}
                     onAdditionalActionNotesChange={(additionalActionNotes) =>
                       updateInspectorDraft({ additionalActionNotes })
                     }
                     onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
+                    onMovementIntentChange={(movementIntent) =>
+                      updateInspectorDraft({ movementIntent })
+                    }
                     onSecondaryActionChange={(secondaryActionId) =>
                       updateInspectorDraft({ secondaryActionId })
                     }
@@ -7232,14 +7526,39 @@ export default function CombatRoundManagerPanel({
                     {inspector.step === "round_summary" ? (
                       <CombatRoundEndReviewPanel
                         controlsDisabled={saving || inspectorIsInspectionOnly}
+                        distanceOverrideDrafts={roundEndDistanceOverrideDrafts}
                         difficultyDrafts={roundEndHealthDifficultyDrafts}
+                        onDistanceOverrideDraftChange={(distanceProposalId, value) =>
+                          setRoundEndDistanceOverrideDrafts((current) => ({
+                            ...current,
+                            [distanceProposalId]: value,
+                          }))
+                        }
                         onDifficultyDraftChange={(healthRollId, value) =>
                           setRoundEndHealthDifficultyDrafts((current) => ({
                             ...current,
                             [healthRollId]: value,
                           }))
                         }
+                        onRollDistanceContest={(distanceProposalId) => {
+                          if (!inspector.participant?.participantId) {
+                            return;
+                          }
+
+                          const updatedAt = new Date().toISOString();
+                          const rolled = rollCombatRoundEndDistanceControl({
+                            command: {
+                              createdAt: updatedAt,
+                            },
+                            distanceProposalId,
+                            participantId: inspector.participant.participantId,
+                            state: roundState,
+                          });
+
+                          void persistRoundState(rolled.state);
+                        }}
                         participantLabel={inspector.participant?.label}
+                        participantLabelsById={roundParticipantLabelsById}
                         review={inspectorRoundEndReview}
                       />
                     ) : null}

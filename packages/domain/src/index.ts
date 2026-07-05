@@ -13,6 +13,7 @@ export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";
 export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatDistance";
+export * from "./encounter/combatMovementIntent";
 export * from "./encounter/combatEffects";
 export * from "./encounter/combatActionModifiers";
 export * from "./encounter/combatDeclarationValidation";

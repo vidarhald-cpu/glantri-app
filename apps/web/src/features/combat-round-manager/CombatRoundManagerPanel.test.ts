@@ -528,6 +528,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("ensureCombatRoundEndReviewPrepared");
     expect(source).toContain("commitCombatRoundEndParticipantReview");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
+    expect(source).toContain("rollCombatRoundEndDistanceControl");
+    expect(source).toContain("Distance control");
+    expect(source).toContain("Roll distance contest");
+    expect(source).toContain("GM override");
+    expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("advanceCombatRoundStep(stateForCommit, {");
     expect(source).toContain("visibility: encounter.roleplayState?.visibility");

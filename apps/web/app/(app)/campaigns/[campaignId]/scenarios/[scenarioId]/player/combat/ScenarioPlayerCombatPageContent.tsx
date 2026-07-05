@@ -13,6 +13,7 @@ import {
   type CombatRoundPhase,
   type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
+  type CombatDistance,
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
@@ -35,6 +36,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
+  getWeaponPreferredDistances,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
@@ -46,6 +48,8 @@ import {
   type ScenarioParticipantCombatContext,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
+  type MovementIntent,
+  type WeaponTemplate,
   buildCombatRoundPhaseResolutionResult,
 } from "@glantri/domain";
 
@@ -64,6 +68,7 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
@@ -440,6 +445,7 @@ interface PlayerCombatDeclarationDraft {
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
   movementId: PlayerEncounterMovementId | "";
+  movementIntent: MovementIntent;
   phaseContexts: PlayerCombatPhaseContextDrafts;
   secondaryActionId: PlayerEncounterActionId | "";
 }
@@ -487,10 +493,75 @@ function hasCombatRoundDeclarationAction(
     declaration?.actionId ||
     declaration?.secondaryActionId ||
     declaration?.movementId ||
+    declaration?.movementIntent ||
     declaration?.additionalActionNotes ||
     declaration?.combatContext ||
     declaration?.phaseContexts,
   );
+}
+
+function createDefaultMovementIntent(): MovementIntent {
+  return {
+    distancePreferences: [],
+    mode: "hold_position",
+  };
+}
+
+function normalizeCombatWeaponName(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toLocaleLowerCase()
+    : undefined;
+}
+
+function getActiveWeaponTemplatesForScenarioParticipant(
+  participant: ScenarioParticipant | undefined | null,
+  resolvedEquipmentState?: EquipmentFeatureState | null,
+): WeaponTemplate[] {
+  const equipmentStateCandidate = resolvedEquipmentState ?? participant?.snapshot.equipmentState;
+
+  if (!isEquipmentFeatureState(equipmentStateCandidate)) {
+    return [];
+  }
+
+  const characterId =
+    participant?.characterId ?? Object.keys(equipmentStateCandidate.activeLoadoutByCharacterId)[0];
+  const loadout = characterId
+    ? equipmentStateCandidate.activeLoadoutByCharacterId[characterId]
+    : undefined;
+  const activeWeaponItemIds = [
+    loadout?.activePrimaryWeaponItemId,
+    loadout?.activeSecondaryWeaponItemId,
+    loadout?.activeMissileWeaponItemId,
+  ].filter((itemId): itemId is string => Boolean(itemId));
+
+  return activeWeaponItemIds
+    .map((itemId) => {
+      const item = equipmentStateCandidate.itemsById[itemId];
+      const template = item
+        ? equipmentStateCandidate.templates.templatesById[item.templateId]
+        : undefined;
+
+      return template?.category === "weapon" ? template : undefined;
+    })
+    .filter((template): template is WeaponTemplate => Boolean(template));
+}
+
+function getLongestPreferredDistanceForWeaponName(input: {
+  participant?: ScenarioParticipant | null;
+  resolvedEquipmentState?: EquipmentFeatureState | null;
+  weaponName?: string;
+}): CombatDistance | undefined {
+  const weaponName = normalizeCombatWeaponName(input.weaponName);
+  const activeWeapons = getActiveWeaponTemplatesForScenarioParticipant(
+    input.participant,
+    input.resolvedEquipmentState,
+  );
+  const weapon =
+    activeWeapons.find((candidate) => normalizeCombatWeaponName(candidate.name) === weaponName) ??
+    activeWeapons[0];
+  const distances = getWeaponPreferredDistances(weapon);
+
+  return distances.at(-1);
 }
 
 function buildPlayerCombatDeclarationDraft(input: {
@@ -526,6 +597,8 @@ function buildPlayerCombatDeclarationDraft(input: {
     movementId: (declaration?.movementId ??
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
+    movementIntent:
+      declaration?.movementIntent ?? scopedCombat?.lastMovementIntent ?? createDefaultMovementIntent(),
     phaseContexts: buildPlayerCombatPhaseContexts(input),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
@@ -685,6 +758,9 @@ export default function ScenarioPlayerCombatPageContent({
   >("");
   const [selectedMovementId, setSelectedMovementId] = useState<PlayerEncounterMovementId | "">(
     "hold",
+  );
+  const [selectedMovementIntent, setSelectedMovementIntent] = useState<MovementIntent>(
+    createDefaultMovementIntent(),
   );
   const [additionalActionNotes, setAdditionalActionNotes] = useState("");
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
@@ -989,6 +1065,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectedActionId("");
       setSelectedSecondaryActionId("");
       setSelectedMovementId("hold");
+      setSelectedMovementIntent(createDefaultMovementIntent());
       setAdditionalActionNotes("");
       setCombatContextDraft(createEmptyPlayerEncounterCombatContext());
       setPhaseCombatContextDrafts({
@@ -1018,6 +1095,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSelectedActionId(nextDraft.actionId);
     setSelectedSecondaryActionId(nextDraft.secondaryActionId);
     setSelectedMovementId(nextDraft.movementId);
+    setSelectedMovementIntent(nextDraft.movementIntent);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
     setCombatContextDraft(nextDraft.combatContext);
     setPhaseCombatContextDrafts(nextDraft.phaseContexts);
@@ -1351,6 +1429,7 @@ export default function ScenarioPlayerCombatPageContent({
         combatContext: projectedCombatContextDraft,
         encounterId,
         movementId: selectedMovementId || undefined,
+        movementIntent: selectedMovementIntent,
         phaseContexts: phaseCombatContextDrafts,
         phaseWeaponNames: {
           phase1: phaseCombatLoadoutSummaries.phase1.attackStats?.weaponName,
@@ -1732,6 +1811,39 @@ export default function ScenarioPlayerCombatPageContent({
     selectedActionId,
     selectedParticipant?.state.combatEffects,
     selectedSecondaryActionId,
+  ]);
+  const distancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
+    const primaryTargetId =
+      phaseCombatContextDrafts.phase1.targetParticipantId ??
+      phaseCombatContextDrafts.phase2.targetParticipantId ??
+      combatContextDraft.targetParticipantId;
+    const primaryTargetPhase = phaseCombatContextDrafts.phase1.targetParticipantId
+      ? "phase1"
+      : phaseCombatContextDrafts.phase2.targetParticipantId
+        ? "phase2"
+        : undefined;
+    const defaultDistance =
+      primaryTargetId && primaryTargetPhase
+        ? getLongestPreferredDistanceForWeaponName({
+            participant: selectedParticipant,
+            resolvedEquipmentState: controlledEquipmentState,
+            weaponName: phaseCombatLoadoutSummaries[primaryTargetPhase].attackStats?.weaponName,
+          })
+        : undefined;
+
+    return targetOptions.map((option) => ({
+      defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
+      displayName: option.displayName,
+      id: option.id,
+    }));
+  }, [
+    combatContextDraft.targetParticipantId,
+    controlledEquipmentState,
+    phaseCombatContextDrafts.phase1.targetParticipantId,
+    phaseCombatContextDrafts.phase2.targetParticipantId,
+    phaseCombatLoadoutSummaries,
+    selectedParticipant,
+    targetOptions,
   ]);
   const initiativeCalculation = useMemo(
     () =>
@@ -2341,7 +2453,9 @@ export default function ScenarioPlayerCombatPageContent({
               actionId={selectedActionId}
               additionalActionNotes={additionalActionNotes}
               controlsDisabled={declarationControlsDisabled}
+              distancePreferenceOptions={distancePreferenceOptions}
               movementId={selectedMovementId}
+              movementIntent={selectedMovementIntent}
               onActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedActionId(actionId);
@@ -2353,6 +2467,10 @@ export default function ScenarioPlayerCombatPageContent({
               onMovementChange={(movementId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedMovementId(movementId);
+              }}
+              onMovementIntentChange={(movementIntent) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedMovementIntent(movementIntent);
               }}
               onSecondaryActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();

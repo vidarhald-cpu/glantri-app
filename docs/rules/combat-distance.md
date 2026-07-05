@@ -59,5 +59,25 @@ Examples:
 - Long sword preferred `3`, actual `3` gives no modifier
 - Long sword preferred `3`, actual `5` gives Skill/OB `-4`
 
-Full coordinates, facing, pathing, movement conflict resolution, and automatic round-end distance
-changes are future work.
+Declared desired distance is separate from actual pair distance. During declaration, a participant
+may hold position or set preferred distances from `0` to `8` against one or more visible opponents;
+the UI emphasizes melee zones `0` through `4`. A common default is the acting participant's active
+attacking weapon preferred distance against the selected attack target when that metadata is
+available. The GM may proxy declarations.
+
+Distance intentions do not change current-round attack distance and therefore do not change
+current-round distance OB modifiers. At SU / round-end review, declared preferences are collected
+by unordered participant pair:
+
+- matching preferences propose that distance without a contest
+- one-sided or conflicting preferences create a Dodge control contest
+- Dodge control uses the participant Dodge total supplied by the combat snapshot plus current
+  General/Fatigue modifiers; unavailable Dodge falls back to `+0` with a warning
+- the higher final Dodge result sets that pair's distance for the next round
+- ties keep the current distance unless the GM overrides the proposal
+
+The GM reviews each proposal, may roll pending contests, may override the final distance from `0`
+to `8`, and commits the result as a command-backed `round_end_review` distance edge. The edge is
+updated at SU commit and is carried into the next round; GM manual distance edits remain available.
+
+Full coordinates, facing, pathing, terrain legality, and tactical geometry remain future work.

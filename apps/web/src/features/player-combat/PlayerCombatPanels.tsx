@@ -4,8 +4,10 @@ import type { ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
+  type CombatDistance,
   type CombatRoundInitiativeResult,
   type CombatRoundStep,
+  type MovementIntent,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
@@ -18,7 +20,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
-  PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
   getPlayerEncounterCombatModifierTotals,
@@ -94,13 +95,22 @@ interface PlayerCombatActionSelectorPanelProps {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
   controlsDisabled?: boolean;
+  distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
   movementId: PlayerEncounterMovementId | "";
+  movementIntent?: MovementIntent;
   onActionChange: (actionId: PlayerEncounterActionId | "") => void;
   onAdditionalActionNotesChange: (notes: string) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
+  onMovementIntentChange?: (movementIntent: MovementIntent) => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
   roundNumber?: number;
   secondaryActionId: PlayerEncounterActionId | "";
+}
+
+export interface PlayerCombatDistancePreferenceOption {
+  defaultDistance?: CombatDistance;
+  displayName: string;
+  id: string;
 }
 
 interface PlayerCombatAttackStatsTableProps {
@@ -198,6 +208,18 @@ const compactWideFieldLabelStyle = {
   display: "grid",
   gap: "0.18rem",
   maxWidth: "100%",
+} as const;
+
+const compactDistancePreferenceGridStyle = {
+  display: "grid",
+  gap: "0.3rem",
+} as const;
+
+const compactDistancePreferenceRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.5rem",
+  gridTemplateColumns: "minmax(0, 1fr) 7.5rem",
 } as const;
 
 const compactModifierGroupHeaderStyle = {
@@ -558,14 +580,58 @@ export function PlayerCombatActionSelectorPanel({
   actionId,
   additionalActionNotes,
   controlsDisabled = false,
+  distancePreferenceOptions = [],
   movementId,
+  movementIntent,
   onActionChange,
   onAdditionalActionNotesChange,
   onMovementChange,
+  onMovementIntentChange,
   onSecondaryActionChange,
   roundNumber,
   secondaryActionId,
 }: PlayerCombatActionSelectorPanelProps) {
+  const effectiveMovementIntent =
+    movementIntent ??
+    ({
+      distancePreferences: [],
+      mode: movementId && movementId !== "hold" ? "set_distance_preferences" : "hold_position",
+    } satisfies MovementIntent);
+  const updateMovementMode = (mode: MovementIntent["mode"]) => {
+    onMovementChange(mode === "hold_position" ? "hold" : "step");
+    onMovementIntentChange?.({
+      distancePreferences:
+        mode === "set_distance_preferences"
+          ? distancePreferenceOptions
+              .filter((option) => option.defaultDistance !== undefined)
+              .map((option) => ({
+                desiredDistance: option.defaultDistance as CombatDistance,
+                source: "player_declared" as const,
+                targetParticipantId: option.id,
+              }))
+          : [],
+      mode,
+    });
+  };
+  const updateDistancePreference = (targetParticipantId: string, desiredDistance: string) => {
+    const nextPreferences = effectiveMovementIntent.distancePreferences.filter(
+      (preference) => preference.targetParticipantId !== targetParticipantId,
+    );
+
+    if (desiredDistance !== "") {
+      nextPreferences.push({
+        desiredDistance: Number(desiredDistance) as CombatDistance,
+        source: "player_declared",
+        targetParticipantId,
+      });
+    }
+
+    onMovementIntentChange?.({
+      distancePreferences: nextPreferences,
+      mode: "set_distance_preferences",
+    });
+  };
+
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Action selector{roundNumber ? ` · Round ${roundNumber}` : ""}</strong>
@@ -607,18 +673,73 @@ export function PlayerCombatActionSelectorPanel({
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Movement</span>
         <select
           disabled={controlsDisabled}
-          onChange={(event) =>
-            onMovementChange(event.target.value as PlayerEncounterMovementId | "")
-          }
-          value={movementId}
+          onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
+          value={effectiveMovementIntent.mode}
         >
-          {PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <option value="hold_position">Hold position</option>
+          <option value="set_distance_preferences">Set preferred distance</option>
         </select>
       </label>
+
+      {effectiveMovementIntent.mode === "set_distance_preferences" ? (
+        <section style={compactDistancePreferenceGridStyle}>
+          {distancePreferenceOptions.length === 0 ? (
+            <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+              No visible opponents available.
+            </div>
+          ) : (
+            distancePreferenceOptions.map((option) => {
+              const preference = effectiveMovementIntent.distancePreferences.find(
+                (entry) => entry.targetParticipantId === option.id,
+              );
+
+              return (
+                <label key={option.id} style={compactDistancePreferenceRowStyle}>
+                  <span
+                    style={{
+                      fontSize: "0.84rem",
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={option.displayName}
+                  >
+                    {option.displayName}
+                  </span>
+                  <select
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      updateDistancePreference(option.id, event.target.value)
+                    }
+                    value={
+                      preference?.desiredDistance !== undefined
+                        ? String(preference.desiredDistance)
+                        : ""
+                    }
+                  >
+                    <option value="">No preference</option>
+                    <optgroup label="Melee zones">
+                      {[0, 1, 2, 3, 4].map((distance) => (
+                        <option key={distance} value={distance}>
+                          Distance {distance}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Extended">
+                      {[5, 6, 7, 8].map((distance) => (
+                        <option key={distance} value={distance}>
+                          Distance {distance}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+              );
+            })
+          )}
+        </section>
+      ) : null}
 
       <label style={compactWideFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>

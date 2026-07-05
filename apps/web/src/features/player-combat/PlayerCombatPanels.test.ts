@@ -31,6 +31,18 @@ describe("PlayerCombatPanels", () => {
     expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
   });
 
+  it("renders structured distance preference movement controls instead of placeholder-only options", () => {
+    const source = readSource();
+
+    expect(source).toContain("Set preferred distance");
+    expect(source).toContain("distancePreferenceOptions");
+    expect(source).toContain("No preference");
+    expect(source).toContain("Melee zones");
+    expect(source).toContain("Extended");
+    expect(source).toContain("onMovementIntentChange");
+    expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
+  });
+
   it("filters phase-scoped generated modifier rows while keeping manual rows broad", () => {
     const combatContext = {
       modifierBuckets: {

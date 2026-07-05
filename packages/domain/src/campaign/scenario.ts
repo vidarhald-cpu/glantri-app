@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
@@ -180,6 +181,7 @@ export const scenarioParticipantStateSchema = z.object({
     lastDeclaredRoundNumber: z.number().int().positive().optional(),
     lastDeclaredSecondaryActionId: idSchema.optional(),
     lastDeclarationNotes: z.string().optional(),
+    lastMovementIntent: movementIntentSchema.optional(),
     stance: z.string().min(1).optional(),
   }),
   combatEffects: combatEffectsStateSchema.optional(),

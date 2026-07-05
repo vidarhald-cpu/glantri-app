@@ -96,6 +96,7 @@ import {
   rollCombatRoundCombatExperience,
   hasCombatRoundCombatExperienceRoll,
   rollCombatRoundEndHealthCheck,
+  rollCombatRoundEndDistanceControl,
   removeCombatRoundCommittedDamageEffects,
   rollOpenEndedD6,
   setCombatRoundCombatExperienceDifficulty,
@@ -11271,6 +11272,277 @@ describe("combat round manager", () => {
       step: "SU",
     });
     expect(getCombatRoundStartNextRoundBlocker(completedGuard.state)).toBeUndefined();
+  });
+
+  it("stores declared distance preferences for one or more opponents", () => {
+    const state = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "player_declared",
+              targetParticipantId: "guard",
+            },
+            {
+              desiredDistance: 4,
+              source: "player_declared",
+              targetParticipantId: "scenario-scout",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({
+        encounter: encounter({
+          participants: [
+            participant({ id: "gladiator", label: "The Gladiator" }),
+            participant({ id: "guard", label: "City guard" }),
+            participant({ id: "scout", label: "Scout" }),
+          ],
+        }),
+      }),
+      submittedBy: "player",
+    });
+
+    expect(state.participants[0]?.declaration?.movementIntent).toMatchObject({
+      distancePreferences: [
+        { desiredDistance: 3, targetParticipantId: "guard" },
+        { desiredDistance: 4, targetParticipantId: "scenario-scout" },
+      ],
+      mode: "set_distance_preferences",
+    });
+  });
+
+  it("rejects distance preferences outside 0-8", () => {
+    expect(() =>
+      recordCombatRoundDeclaration({
+        declaration: {
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance: 9 as never,
+                source: "player_declared",
+                targetParticipantId: "guard",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          roundNumber: 3,
+        },
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+        submittedBy: "player",
+      }),
+    ).toThrow();
+  });
+
+  it("builds canonical same-distance proposals without a Dodge contest", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 2,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const withGladiatorPreference = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "player_declared",
+              targetParticipantId: "scenario-guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "player",
+    });
+    const withMatchingGuardPreference = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "player_declared",
+              targetParticipantId: "scenario-gladiator",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "guard",
+      state: withGladiatorPreference,
+      submittedBy: "player",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: {
+        ...withMatchingGuardPreference,
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      },
+    });
+    const proposal =
+      reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+
+    expect(proposal).toMatchObject({
+      currentDistance: 2,
+      outcome: "uncontested",
+      pairKey: makeDistancePairKey("gladiator", "guard"),
+      proposedDistance: 3,
+      status: "review_ready",
+    });
+    expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
+  });
+
+  it("rolls conflicting Dodge distance control and commits the winner for the next round", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 2,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const withGladiatorPreference = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "gm_proxy",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "gm",
+    });
+    const withGuardPreference = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 1,
+              source: "gm_proxy",
+              targetParticipantId: "gladiator",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "guard",
+      state: withGladiatorPreference,
+      submittedBy: "gm",
+    });
+    const roundSummaryState = {
+      ...withGuardPreference,
+      currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" as const },
+      currentStep: "round_summary" as const,
+      selectedParticipantId: "gladiator",
+      selectedStep: "round_summary" as const,
+    };
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          distanceControl: {
+            dodgeSkillTotal: 8,
+            generalFatigueModifier: -1,
+          },
+        },
+        guard: {
+          distanceControl: {
+            dodgeSkillTotal: 4,
+            generalFatigueModifier: 0,
+          },
+        },
+      },
+      state: roundSummaryState,
+    });
+    const proposal =
+      reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+
+    expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe(
+      "distance_roll_pending",
+    );
+    expect(proposal).toMatchObject({
+      currentDistance: 2,
+      status: "pending",
+    });
+
+    const rolled = rollCombatRoundEndDistanceControl({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      distanceProposalId: proposal?.id,
+      participantARoll: {
+        dieResult: 10,
+        openEndedD10s: [],
+        rollD20: 10,
+      },
+      participantBRoll: {
+        dieResult: 12,
+        openEndedD10s: [],
+        rollD20: 12,
+      },
+      participantId: "gladiator",
+      state: reviewed,
+    });
+    const rolledProposal =
+      rolled.state.roundEndReview?.participantReviews.gladiator?.proposedDistances[0];
+
+    expect(rolledProposal).toMatchObject({
+      outcome: "participant_a_wins",
+      proposedDistance: 3,
+      status: "review_ready",
+    });
+    expect(rolledProposal?.participantA.result?.finalTotal).toBe(17);
+    expect(rolledProposal?.participantB.result?.finalTotal).toBe(16);
+
+    const committed = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:12:00.000Z",
+      },
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: rolled.state,
+    });
+
+    expect(getDistanceBetween(committed.state.distanceState, "gladiator", "guard")).toBe(3);
+    expect(
+      committed.state.roundEndReview?.participantReviews.gladiator?.proposedDistances[0],
+    ).toMatchObject({
+      appliedDistance: 3,
+      appliesFromRound: 4,
+      status: "committed",
+    });
+
+    const undone = clearCombatRoundStep({ state: committed.state, step: "round_summary" });
+
+    expect(getDistanceBetween(undone.distanceState, "gladiator", "guard")).toBe(2);
+    expect(undone.roundEndReview?.participantReviews.gladiator?.proposedDistances[0]).toMatchObject(
+      {
+        appliedDistance: undefined,
+        status: "review_ready",
+      },
+    );
   });
 
   it("builds SU duration proposals for active round-based effects", () => {
