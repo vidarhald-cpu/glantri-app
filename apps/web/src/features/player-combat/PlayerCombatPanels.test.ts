@@ -43,6 +43,15 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
   });
 
+  it("keeps alternate task outcomes above one primary action", () => {
+    const source = readSource();
+
+    expect(source).toContain("preActionControls");
+    expect(source).toContain("outcomes for the same pending task should use preActionControls");
+    expect(source).toContain("{preActionControls ? (");
+    expect(source).toContain("secondaryButtonLabel");
+  });
+
   it("filters phase-scoped generated modifier rows while keeping manual rows broad", () => {
     const combatContext = {
       modifierBuckets: {

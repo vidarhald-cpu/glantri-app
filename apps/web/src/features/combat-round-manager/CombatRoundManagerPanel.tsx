@@ -210,6 +210,8 @@ interface CombatRoundManagerPanelProps {
   scenarioParticipants?: ScenarioParticipant[];
 }
 
+type PhaseAttackChoiceSelection = "continue" | "back_out";
+
 const panelStyle = {
   background: "#fbfaf7",
   border: "1px solid #d9ddd8",
@@ -608,7 +610,9 @@ function buildDeclarationDraft(
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
     movementIntent:
-      declaration?.movementIntent ?? scopedCombat?.lastMovementIntent ?? createDefaultMovementIntent(),
+      declaration?.movementIntent ??
+      scopedCombat?.lastMovementIntent ??
+      createDefaultMovementIntent(),
     phaseContexts: buildInspectorPhaseContexts(participant, declaration, scope),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
@@ -3427,11 +3431,9 @@ function CombatRoundEndReviewPanel(input: {
               <strong style={{ fontSize: "0.9rem" }}>Round distance control</strong>
               {distanceProposals.map((proposal) => {
                 const participantALabel =
-                  input.participantLabelsById[proposal.participantAId] ??
-                  proposal.participantAId;
+                  input.participantLabelsById[proposal.participantAId] ?? proposal.participantAId;
                 const participantBLabel =
-                  input.participantLabelsById[proposal.participantBId] ??
-                  proposal.participantBId;
+                  input.participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
                 const overrideValue = input.distanceOverrideDrafts[proposal.id] ?? "";
                 const resultA = proposal.participantA.result;
                 const resultB = proposal.participantB.result;
@@ -3633,6 +3635,8 @@ export default function CombatRoundManagerPanel({
   const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
     Record<string, string>
   >({});
+  const [inspectorPhaseAttackChoiceSelection, setInspectorPhaseAttackChoiceSelection] =
+    useState<PhaseAttackChoiceSelection>("continue");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -4179,6 +4183,27 @@ export default function CombatRoundManagerPanel({
     selectedRoundIsActive &&
     !inspectorSnapshot,
   );
+  const inspectorPhaseAttackChoiceSelectorAvailable = Boolean(
+    inspectorCanBackOutPhaseAttack &&
+    !inspectorPhaseInitiativeChoiceSubmitted &&
+    (inspectorPhaseCombatExperienceRequirement || inspectorCanContinuePhaseAttack),
+  );
+  const inspectorPhaseAttackChoiceKey = inspectorPhaseAttackBackOutOpportunity
+    ? [
+        inspector.participant?.participantId ?? "unknown",
+        inspectorPhaseAttackBackOutOpportunity.phase,
+        inspectorPhaseAttackBackOutOpportunity.ceRequired ? "ce" : "continue",
+        inspectorPhaseInitiativeChoice?.choice ?? "pending",
+      ].join(":")
+    : "none";
+
+  useEffect(() => {
+    setInspectorPhaseAttackChoiceSelection("continue");
+  }, [inspectorPhaseAttackChoiceKey]);
+
+  const inspectorPhaseAttackChoiceIsBackOut =
+    inspectorPhaseAttackChoiceSelectorAvailable &&
+    inspectorPhaseAttackChoiceSelection === "back_out";
   const combatExperienceDifficultyControlsDisabled =
     saving ||
     !inspectorCombatExperienceIsCombatStart ||
@@ -4465,6 +4490,8 @@ export default function CombatRoundManagerPanel({
       inspectorPhaseResolutionStatus.substep === "pending" ||
       inspectorPhaseResolutionStatus.substep === "attack") &&
     !inspectorDisplayAttackResult;
+  const inspectorSecondarySkipActionAvailable =
+    inspectorCanSkipCurrentPhaseAction && !inspectorPhaseAttackChoiceSelectorAvailable;
   const inspectorCurrentAttackSourceMissing =
     inspectorCanRollPhaseAttack &&
     Boolean(inspectorCurrentAttackPhase) &&
@@ -4615,52 +4642,85 @@ export default function CombatRoundManagerPanel({
     ? "Attack already rolled"
     : inspectorPhaseInitiativeChoiceSubmitted
       ? "Phase choice submitted"
-      : inspectorCanContinuePhaseAttack
-        ? "Continue attack"
-        : inspectorCombatExperienceRequired
-          ? !inspectorCombatExperienceWindowOpen
-            ? "Set CE difficulty first"
-            : inspectorCombatExperienceNoRollAvailable
-              ? "Confirm Combat Experience"
-              : "Roll Combat Experience"
-          : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-            ? "Inspecting step - use Current task to resume"
-            : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-              ? "Preparing round-end review"
-              : inspector.step === "round_summary" &&
-                  inspectorRoundEndReview?.status === "review_ready"
-                ? inspectorRoundEndReviewHasProposals
-                  ? "Commit participant SU review"
-                  : "Mark SU review complete"
+      : inspectorPhaseAttackChoiceIsBackOut
+        ? "Back out of attack"
+        : inspectorCanContinuePhaseAttack
+          ? "Continue attack"
+          : inspectorCombatExperienceRequired
+            ? !inspectorCombatExperienceWindowOpen
+              ? "Set CE difficulty first"
+              : inspectorCombatExperienceNoRollAvailable
+                ? "Confirm Combat Experience"
+                : "Roll Combat Experience"
+            : inspectorIsInspectionOnly && inspector.step !== "select_actions"
+              ? "Inspecting step - use Current task to resume"
+              : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+                ? "Preparing round-end review"
                 : inspector.step === "round_summary" &&
-                    inspectorRoundEndReview?.status === "health_roll_pending"
-                  ? "Roll health check"
+                    inspectorRoundEndReview?.status === "review_ready"
+                  ? inspectorRoundEndReviewHasProposals
+                    ? "Commit participant SU review"
+                    : "Mark SU review complete"
                   : inspector.step === "round_summary" &&
-                      inspectorRoundEndReview?.status === "complete"
-                    ? "Round-end review complete"
-                    : inspectorDamageCommitted
-                      ? "Phase damage committed"
-                      : inspectorDamageSubstate === "critical_pending"
-                        ? "Roll critical"
-                        : inspectorDamageSubstate === "location_pending"
-                          ? "Roll hit location"
-                          : inspectorDamageSubstate === "location_rolled"
-                            ? "Prepare damage review"
-                            : inspectorDamageProposalReady
-                              ? "Commit phase damage"
-                              : inspectorCanRollParry
-                                ? "Roll parry"
-                                : inspectorAttackSourceValidationMessage
-                                  ? inspectorAttackSourceValidationMessage
-                                  : inspectorCurrentResolutionPhase &&
-                                      inspectorActionPhaseHasAttack === false
-                                    ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-                                    : getCombatResolutionButtonLabel({
-                                        hasPhaseAttack: inspectorActionPhaseHasAttack,
-                                        phase: inspectorCurrentResolutionPhase,
-                                        step: inspector.step,
-                                        substep: inspectorActionPhaseResolutionStatus?.substep,
-                                      });
+                      inspectorRoundEndReview?.status === "health_roll_pending"
+                    ? "Roll health check"
+                    : inspector.step === "round_summary" &&
+                        inspectorRoundEndReview?.status === "complete"
+                      ? "Round-end review complete"
+                      : inspectorDamageCommitted
+                        ? "Phase damage committed"
+                        : inspectorDamageSubstate === "critical_pending"
+                          ? "Roll critical"
+                          : inspectorDamageSubstate === "location_pending"
+                            ? "Roll hit location"
+                            : inspectorDamageSubstate === "location_rolled"
+                              ? "Prepare damage review"
+                              : inspectorDamageProposalReady
+                                ? "Commit phase damage"
+                                : inspectorCanRollParry
+                                  ? "Roll parry"
+                                  : inspectorAttackSourceValidationMessage
+                                    ? inspectorAttackSourceValidationMessage
+                                    : inspectorCurrentResolutionPhase &&
+                                        inspectorActionPhaseHasAttack === false
+                                      ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                                      : getCombatResolutionButtonLabel({
+                                          hasPhaseAttack: inspectorActionPhaseHasAttack,
+                                          phase: inspectorCurrentResolutionPhase,
+                                          step: inspector.step,
+                                          substep: inspectorActionPhaseResolutionStatus?.substep,
+                                        });
+  const inspectorActionButtonDisabled =
+    saving ||
+    (inspectorPhaseAttackChoiceIsBackOut
+      ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
+      : (inspectorIsInspectionOnly &&
+          inspector.step !== "select_actions" &&
+          !inspectorCombatExperienceRequired) ||
+        inspectorPhaseInitiativeChoiceSubmitted ||
+        Boolean(inspectorActionValidationMessage) ||
+        inspectorSelectedAttackAlreadyRolled ||
+        inspectorDamageCommitted ||
+        Boolean(inspectorSnapshot));
+  const inspectorPhaseAttackChoiceControls = inspectorPhaseAttackChoiceSelectorAvailable ? (
+    <label style={compactFieldLabelStyle}>
+      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Phase choice</span>
+      <select
+        disabled={saving || Boolean(inspectorSnapshot)}
+        onChange={(event) =>
+          setInspectorPhaseAttackChoiceSelection(event.target.value as PhaseAttackChoiceSelection)
+        }
+        value={inspectorPhaseAttackChoiceSelection}
+      >
+        <option value="continue">
+          {inspectorPhaseCombatExperienceRequirement
+            ? "Continue and roll Combat Experience"
+            : "Continue attack"}
+        </option>
+        <option value="back_out">Back out of attack</option>
+      </select>
+    </label>
+  ) : null;
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -7652,65 +7712,50 @@ export default function CombatRoundManagerPanel({
                     ) : null}
                     <PlayerCombatActionButtonPanel
                       buttonLabel={inspectorActionButtonLabel}
-                      disabled={
-                        saving ||
-                        (inspectorIsInspectionOnly &&
-                          inspector.step !== "select_actions" &&
-                          !inspectorCombatExperienceRequired) ||
-                        inspectorPhaseInitiativeChoiceSubmitted ||
-                        Boolean(inspectorActionValidationMessage) ||
-                        inspectorSelectedAttackAlreadyRolled ||
-                        inspectorDamageCommitted ||
-                        Boolean(inspectorSnapshot)
-                      }
+                      disabled={inspectorActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (inspectorCombatExperienceRequired
-                          ? rollInspectorCombatExperience()
-                          : inspectorCanContinuePhaseAttack
-                            ? continueInspectorPhaseAttack()
-                            : inspector.step === "round_summary"
-                              ? advanceInspectorRoundEndReview()
-                              : inspectorCurrentStepIsInitiative
-                                ? rollInspectorInitiative()
-                                : inspectorCanRollParry
-                                  ? rollInspectorParry()
-                                  : inspectorCurrentResolutionPhase &&
-                                      (inspectorActionPhaseHasAttack === false ||
-                                        inspectorActionPhaseResolutionStatus?.substep === "effects")
-                                    ? completeInspectorPhaseResolution(
-                                        inspectorCurrentResolutionPhase,
-                                      )
+                        void (inspectorPhaseAttackChoiceIsBackOut
+                          ? backOutInspectorPhaseAttack()
+                          : inspectorCombatExperienceRequired
+                            ? rollInspectorCombatExperience()
+                            : inspectorCanContinuePhaseAttack
+                              ? continueInspectorPhaseAttack()
+                              : inspector.step === "round_summary"
+                                ? advanceInspectorRoundEndReview()
+                                : inspectorCurrentStepIsInitiative
+                                  ? rollInspectorInitiative()
+                                  : inspectorCanRollParry
+                                    ? rollInspectorParry()
                                     : inspectorCurrentResolutionPhase &&
-                                        (inspectorActionPhaseResolutionStatus?.substep ===
-                                          "parry" ||
+                                        (inspectorActionPhaseHasAttack === false ||
                                           inspectorActionPhaseResolutionStatus?.substep ===
-                                            "damage")
-                                      ? advanceInspectorPhaseResolutionSubstep(
+                                            "effects")
+                                      ? completeInspectorPhaseResolution(
                                           inspectorCurrentResolutionPhase,
                                         )
-                                      : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                                        ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                        : saveInspectorDeclaration())
+                                      : inspectorCurrentResolutionPhase &&
+                                          (inspectorActionPhaseResolutionStatus?.substep ===
+                                            "parry" ||
+                                            inspectorActionPhaseResolutionStatus?.substep ===
+                                              "damage")
+                                        ? advanceInspectorPhaseResolutionSubstep(
+                                            inspectorCurrentResolutionPhase,
+                                          )
+                                        : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                          ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                          : saveInspectorDeclaration())
                       }
-                      onSecondaryAction={() =>
-                        void (inspectorCanBackOutPhaseAttack
-                          ? backOutInspectorPhaseAttack()
-                          : skipInspectorCurrentPhaseAction())
-                      }
+                      preActionControls={inspectorPhaseAttackChoiceControls}
+                      onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
                       saving={saving}
                       secondaryButtonDisabled={
                         saving ||
                         Boolean(inspectorSnapshot) ||
-                        (inspectorCanBackOutPhaseAttack
-                          ? false
-                          : inspectorIsInspectionOnly || !inspectorCanSkipCurrentPhaseAction)
+                        inspectorIsInspectionOnly ||
+                        !inspectorSecondarySkipActionAvailable
                       }
                       secondaryButtonLabel={
-                        inspectorCanBackOutPhaseAttack
-                          ? "Back out of attack"
-                          : inspectorCanSkipCurrentPhaseAction
-                            ? "Skip current action"
-                            : undefined
+                        inspectorSecondarySkipActionAvailable ? "Skip current action" : undefined
                       }
                       statusText={`Current step: ${getPlayerCombatStepLabel(
                         inspector.step,

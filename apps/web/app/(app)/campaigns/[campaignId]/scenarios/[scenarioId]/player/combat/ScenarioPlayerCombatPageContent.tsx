@@ -146,6 +146,8 @@ interface ScenarioPlayerCombatPageContentProps {
   workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-combat" | "player-encounter">;
 }
 
+type PhaseAttackChoiceSelection = "continue" | "back_out";
+
 const panelStyle = {
   background: "#f6f5ef",
   border: "1px solid #d9ddd8",
@@ -859,6 +861,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
   const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
+  const [phaseAttackChoiceSelection, setPhaseAttackChoiceSelection] =
+    useState<PhaseAttackChoiceSelection>("continue");
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
     phaseLabel?: string;
@@ -2583,6 +2587,26 @@ export default function ScenarioPlayerCombatPageContent({
     encounterId &&
     !readOnlyInspection,
   );
+  const selectedPhaseAttackChoiceSelectorAvailable = Boolean(
+    selectedPhaseCombatExperienceBackOutAvailable &&
+    !selectedPhaseInitiativeChoice &&
+    (selectedPhaseCombatExperienceRequirement || selectedPhaseContinueAvailable),
+  );
+  const selectedPhaseAttackChoiceKey = selectedPhaseAttackBackOutOpportunity
+    ? [
+        selectedRoundParticipant?.participantId ?? "unknown",
+        selectedPhaseAttackBackOutOpportunity.phase,
+        selectedPhaseAttackBackOutOpportunity.ceRequired ? "ce" : "continue",
+        selectedPhaseInitiativeChoice?.choice ?? "pending",
+      ].join(":")
+    : "none";
+
+  useEffect(() => {
+    setPhaseAttackChoiceSelection("continue");
+  }, [selectedPhaseAttackChoiceKey]);
+
+  const selectedPhaseAttackChoiceIsBackOut =
+    selectedPhaseAttackChoiceSelectorAvailable && phaseAttackChoiceSelection === "back_out";
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
@@ -2607,46 +2631,52 @@ export default function ScenarioPlayerCombatPageContent({
     ? "Roll health check"
     : selectedDistanceControlActionAvailable
       ? "Roll distance control"
-      : selectedCombatExperienceRequired
-      ? !selectedCombatExperienceWindowOpen
-        ? "Waiting for GM"
-        : selectedCombatExperienceNoRollAvailable
-          ? "Confirm Combat Experience"
-          : "Roll Combat Experience"
-      : selectedPhaseInitiativeChoice
-        ? "Phase choice submitted"
-        : selectedPhaseContinueAvailable
-          ? "Continue attack"
-          : (attackerPrivilegedAction?.label ??
-            currentParryAction?.label ??
-            currentAttackAction?.label ??
-            declarationButtonLabel);
+      : selectedPhaseAttackChoiceIsBackOut
+        ? "Back out of attack"
+        : selectedCombatExperienceRequired
+          ? !selectedCombatExperienceWindowOpen
+            ? "Waiting for GM"
+            : selectedCombatExperienceNoRollAvailable
+              ? "Confirm Combat Experience"
+              : "Roll Combat Experience"
+          : selectedPhaseInitiativeChoice
+            ? "Phase choice submitted"
+            : selectedPhaseContinueAvailable
+              ? "Continue attack"
+              : (attackerPrivilegedAction?.label ??
+                currentParryAction?.label ??
+                currentAttackAction?.label ??
+                declarationButtonLabel);
   const playerActionButtonDisabled = selectedHealthCheckActionAvailable
     ? controlsDisabled || savingCombatContext
     : selectedDistanceControlActionAvailable
       ? controlsDisabled || savingCombatContext
-      : attackerPrivilegedAction
-      ? selectedCombatExperienceRequired ||
-        controlsDisabled ||
-        savingCombatContext ||
-        attackerPrivilegedAction.disabled
-      : currentParryAction
-        ? selectedCombatExperienceRequired ||
-          controlsDisabled ||
-          savingCombatContext ||
-          currentParryAction.disabled
-        : currentAttackAction
+      : selectedPhaseAttackChoiceIsBackOut
+        ? controlsDisabled || savingCombatContext || !selectedPhaseCombatExperienceBackOutAvailable
+        : attackerPrivilegedAction
           ? selectedCombatExperienceRequired ||
             controlsDisabled ||
             savingCombatContext ||
-            currentAttackAction.disabled
-          : selectedCombatExperienceRequired
-            ? controlsDisabled || savingCombatContext || !selectedCombatExperienceActionAvailable
-            : selectedPhaseInitiativeChoice
-              ? true
-              : selectedPhaseContinueAvailable
-                ? controlsDisabled || savingCombatContext
-                : declareActionDisabled;
+            attackerPrivilegedAction.disabled
+          : currentParryAction
+            ? selectedCombatExperienceRequired ||
+              controlsDisabled ||
+              savingCombatContext ||
+              currentParryAction.disabled
+            : currentAttackAction
+              ? selectedCombatExperienceRequired ||
+                controlsDisabled ||
+                savingCombatContext ||
+                currentAttackAction.disabled
+              : selectedCombatExperienceRequired
+                ? controlsDisabled ||
+                  savingCombatContext ||
+                  !selectedCombatExperienceActionAvailable
+                : selectedPhaseInitiativeChoice
+                  ? true
+                  : selectedPhaseContinueAvailable
+                    ? controlsDisabled || savingCombatContext
+                    : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -2678,36 +2708,57 @@ export default function ScenarioPlayerCombatPageContent({
         : selectedDistanceControlCommittedDistance !== undefined
           ? `Current step: ${currentCombatStepLabel}. Distance control committed.`
           : selectedDistanceControlProposal?.ownSide.status === "rolled"
-      ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
-        ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
-        : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
-      : selectedCombatExperienceRequired
-        ? combatExperienceStatusText
-        : isGameMaster
-      ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
-      : currentInitiativePhase
-        ? selectedParticipantRolledCurrentInitiative
-          ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
-          : initiativeStepStatus === "pending"
-            ? `Current step: ${currentCombatStepLabel}.`
-            : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
-        : currentParryAction
-          ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-          : currentAttackAction
-            ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-            : currentAttackSourceValidationMessage
-              ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
-              : declarationIncomplete
-                ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-                : selectedParticipantHasDeclared
-                  ? `Current step: ${currentCombatStepLabel}. Declared.`
-                  : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-                    ? `Current step: ${currentCombatStepLabel}.`
-                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+            ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
+              ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
+              : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
+            : selectedPhaseAttackChoiceIsBackOut
+              ? `Current step: ${currentCombatStepLabel}. Pending.`
+              : selectedCombatExperienceRequired
+                ? combatExperienceStatusText
+                : isGameMaster
+                  ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
+                  : currentInitiativePhase
+                    ? selectedParticipantRolledCurrentInitiative
+                      ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
+                      : initiativeStepStatus === "pending"
+                        ? `Current step: ${currentCombatStepLabel}.`
+                        : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+                    : currentParryAction
+                      ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                      : currentAttackAction
+                        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                        : currentAttackSourceValidationMessage
+                          ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
+                          : declarationIncomplete
+                            ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
+                            : selectedParticipantHasDeclared
+                              ? `Current step: ${currentCombatStepLabel}. Declared.`
+                              : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+                                ? `Current step: ${currentCombatStepLabel}.`
+                                : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
   const combatExperienceValidationMessage =
     selectedCombatExperienceRequired && !selectedCombatExperienceWindowOpen
       ? "Waiting for GM to start Combat Experience rolls."
       : undefined;
+  const selectedPhaseAttackChoiceControls = selectedPhaseAttackChoiceSelectorAvailable ? (
+    <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
+      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Phase choice</span>
+      <select
+        disabled={controlsDisabled || savingCombatContext}
+        onChange={(event) =>
+          setPhaseAttackChoiceSelection(event.target.value as PhaseAttackChoiceSelection)
+        }
+        value={phaseAttackChoiceSelection}
+      >
+        <option value="continue">
+          {selectedPhaseCombatExperienceRequirement
+            ? "Continue and roll Combat Experience"
+            : "Continue attack"}
+        </option>
+        <option value="back_out">Back out of attack</option>
+      </select>
+    </label>
+  ) : null;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -3110,31 +3161,27 @@ export default function ScenarioPlayerCombatPageContent({
                   void (selectedHealthCheckActionAvailable
                     ? rollHealthCheck()
                     : selectedDistanceControlActionAvailable
-                    ? rollDistanceControl()
-                    : selectedCombatExperienceRequired
-                      ? selectedCombatExperienceWindowOpen
-                      ? rollCombatExperience()
-                      : undefined
-                    : selectedPhaseContinueAvailable
-                      ? continuePhaseAttack()
-                      : attackerPrivilegedAction?.kind
-                        ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                        : currentParryAction
-                          ? rollCurrentParry()
-                          : currentAttackAction
-                            ? rollPhaseAttack()
-                            : currentInitiativePhase
-                              ? rollInitiative()
-                              : saveCombatContext())
+                      ? rollDistanceControl()
+                      : selectedPhaseAttackChoiceIsBackOut
+                        ? backOutPhaseAttack()
+                        : selectedCombatExperienceRequired
+                          ? selectedCombatExperienceWindowOpen
+                            ? rollCombatExperience()
+                            : undefined
+                          : selectedPhaseContinueAvailable
+                            ? continuePhaseAttack()
+                            : attackerPrivilegedAction?.kind
+                              ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                              : currentParryAction
+                                ? rollCurrentParry()
+                                : currentAttackAction
+                                  ? rollPhaseAttack()
+                                  : currentInitiativePhase
+                                    ? rollInitiative()
+                                    : saveCombatContext())
                 }
-                onSecondaryAction={() => void backOutPhaseAttack()}
+                preActionControls={selectedPhaseAttackChoiceControls}
                 saving={savingCombatContext}
-                secondaryButtonDisabled={
-                  savingCombatContext || !selectedPhaseCombatExperienceBackOutAvailable
-                }
-                secondaryButtonLabel={
-                  selectedPhaseCombatExperienceBackOutAvailable ? "Back out of attack" : undefined
-                }
                 statusText={declarationStatusText}
                 validationMessage={
                   combatExperienceValidationMessage ??

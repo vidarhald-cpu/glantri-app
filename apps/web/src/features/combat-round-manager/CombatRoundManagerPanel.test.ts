@@ -211,8 +211,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("combatContext: inspectorGeneratedCombatContext");
     expect(source).toContain("resolvedEquipmentState: inspectorEquipmentState ?? undefined");
     expect(source).toContain("phaseWeaponNames: {");
-    expect(source).toContain("phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName");
-    expect(source).toContain("phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName");
+    expect(source).toContain(
+      "phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName",
+    );
+    expect(source).toContain(
+      "phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName",
+    );
     expect(source).toContain("participants ?? []");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain(
@@ -735,6 +739,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundPhaseAttackBackOutOpportunity");
     expect(source).toContain("canBackOutCombatRoundPhaseAttack");
     expect(source).toContain("const inspectorCanBackOutPhaseAttack =");
+    expect(source).toContain("PhaseAttackChoiceSelection");
+    expect(source).toContain('useState<PhaseAttackChoiceSelection>("continue")');
+    expect(source).toContain('setInspectorPhaseAttackChoiceSelection("continue")');
+    expect(source).toContain("inspectorPhaseAttackChoiceSelectorAvailable");
+    expect(source).toContain("inspectorPhaseAttackChoiceIsBackOut");
+    expect(source).toContain("inspectorActionButtonDisabled");
+    expect(source).toContain("inspectorPhaseAttackChoiceControls");
+    expect(source).toContain('"Continue and roll Combat Experience"');
+    expect(source).toContain('<option value="continue">');
+    expect(source).toContain("preActionControls={inspectorPhaseAttackChoiceControls}");
+    expect(source).toContain("? backOutInspectorPhaseAttack()");
+    expect(source).toContain("inspectorSecondarySkipActionAvailable");
+    expect(source).toContain(
+      'inspectorSecondarySkipActionAvailable ? "Skip current action" : undefined',
+    );
+    expect(source).not.toMatch(/secondaryButtonLabel=\{[^}]*Back out of attack/s);
     expect(source).toContain("Back out of attack");
     expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
       source.indexOf(": inspectorCurrentStepIsInitiative"),

@@ -400,6 +400,7 @@ Recommended broad fix:
 
 ### Slice 3 - Convert Continue/Back-Out Decisions To Selector Plus One Primary Button
 
+- Status: addressed in this branch by routing Player and GM continue/back-out phase choices through a default-Continue selector plus one primary action button. The shared action button now has a pre-action control slot; the existing secondary-button props remain only for non-choice utility commands such as GM skip.
 - Affected files/components: `PlayerCombatActionButtonPanel`, `ScenarioPlayerCombatPageContent.tsx`, `CombatRoundManagerPanel.tsx`, and shared panel tests.
 - Contract rule: multiple possible outcomes use a selector/dropdown before one primary Action Button Area command.
 - Why it matters: the shared component currently makes competing command buttons easy to add.

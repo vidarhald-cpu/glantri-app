@@ -147,6 +147,11 @@ interface PlayerCombatActionButtonPanelProps {
   buttonLabel?: string;
   disabled?: boolean;
   onDeclareAction?: () => void;
+  preActionControls?: ReactNode;
+  /**
+   * Reserved for non-primary utility commands such as GM skip controls. Alternative
+   * outcomes for the same pending task should use preActionControls plus one primary action.
+   */
   onSecondaryAction?: () => void;
   secondaryButtonDisabled?: boolean;
   secondaryButtonLabel?: string;
@@ -759,6 +764,7 @@ export function PlayerCombatActionButtonPanel({
   buttonLabel = "Declare action",
   disabled = false,
   onDeclareAction,
+  preActionControls,
   onSecondaryAction,
   secondaryButtonDisabled = false,
   secondaryButtonLabel,
@@ -769,6 +775,9 @@ export function PlayerCombatActionButtonPanel({
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Action button</strong>
+      {preActionControls ? (
+        <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
+      ) : null}
       <button
         disabled={disabled || saving}
         onClick={onDeclareAction}
