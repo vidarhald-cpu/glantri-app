@@ -331,6 +331,7 @@ export const combatRoundEndHealthRollResultSchema = z.object({
   healthStat: z.number().int(),
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   rolledAt: z.string().datetime(),
+  rolledBy: z.enum(["player", "gm_proxy"]).default("gm_proxy"),
   rolledByUserId: idSchema.optional(),
   rollD20: z.number().int().min(1).max(20),
   rollTotal: z.number().int(),
@@ -9935,6 +9936,30 @@ export function getCombatRoundEndDistanceControlPendingRollCount(input: {
   }).length;
 }
 
+export function getCombatRoundEndHealthCheckPendingRolls(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundEndHealthRollProposal[] {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const review = normalized.roundEndReview;
+  const participantReview = review?.participantReviews[input.participantId];
+
+  if (!review || review.roundNumber !== normalized.roundNumber || !participantReview) {
+    return [];
+  }
+
+  return participantReview.proposedHealthRolls.filter(
+    (proposal) => proposal.accepted && proposal.status === "pending",
+  );
+}
+
+export function getCombatRoundEndHealthCheckPendingRollCount(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): number {
+  return getCombatRoundEndHealthCheckPendingRolls(input).length;
+}
+
 export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): string | undefined {
   const normalized = combatRoundStateSchema.parse(state);
   const review = normalized.roundEndReview;
@@ -10541,6 +10566,7 @@ export function rollCombatRoundEndHealthCheck(input: {
   healthRollId?: string;
   participantId: string;
   roll?: OpenEndedD20Roll;
+  rolledBy?: "player" | "gm_proxy";
   rng?: () => number;
   state: CombatRoundState;
 }): {
@@ -10581,6 +10607,7 @@ export function rollCombatRoundEndHealthCheck(input: {
     healthStat: healthRoll.healthStat,
     openEndedD10s: roll.openEndedD10s,
     rolledAt: input.command.createdAt,
+    rolledBy: input.rolledBy ?? "gm_proxy",
     rolledByUserId: input.command.createdByUserId,
     rollD20: roll.rollD20,
     rollTotal: roll.dieResult,
@@ -10699,6 +10726,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       openEndedD10s: roll.openEndedD10s,
       previousBleedRate,
       rollD20: roll.rollD20,
+      rolledBy: result.rolledBy,
       rollTotal: roll.dieResult,
       sourceEffectId: healthRoll.sourceEffectId,
       success: result.success,

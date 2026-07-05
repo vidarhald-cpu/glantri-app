@@ -59,6 +59,8 @@ import {
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundEndDistanceControlPendingRollCount,
+  getCombatRoundEndHealthCheckPendingRollCount,
+  getCombatRoundEndHealthCheckPendingRolls,
   getFirstCombatStartExperienceRequiredParticipantId,
   getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
   getFirstCombatRoundDeclarationRequiredParticipantId,
@@ -12045,6 +12047,45 @@ describe("combat round manager", () => {
     });
   });
 
+  it("exposes pending player-owned SU health rolls for participants with due bleed checks", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const combatEffects = combatEffectsWith([
+      {
+        description: "Bleeding wound",
+        effectGroup: "bleed",
+        id: "bleed-player-owned",
+        modifierValue: 2,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects,
+          healthStat: 8,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const pendingHealthRolls = getCombatRoundEndHealthCheckPendingRolls({
+      participantId: "gladiator",
+      state: reviewed,
+    });
+
+    expect(getCombatRoundEndHealthCheckPendingRollCount({ participantId: "gladiator", state: reviewed })).toBe(1);
+    expect(pendingHealthRolls[0]).toMatchObject({
+      bleedType: "external",
+      difficulty: 21,
+      healthStat: 8,
+      label: "Health check vs bleed 21",
+      status: "pending",
+    });
+  });
+
   it("reduces external bleed on successful health roll and restores it on undo", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
@@ -12071,6 +12112,7 @@ describe("combat round manager", () => {
     const rolled = rollCombatRoundEndHealthCheck({
       command: {
         createdAt: "2026-01-01T00:11:00.000Z",
+        createdByUserId: "player-1",
       },
       combatEffects,
       participantId: "gladiator",
@@ -12079,6 +12121,7 @@ describe("combat round manager", () => {
         openEndedD10s: [1],
         rollD20: 20,
       },
+      rolledBy: "player",
       state: reviewed,
     });
     const reducedEffect = rolled.combatEffects.effects.find(
@@ -12100,7 +12143,16 @@ describe("combat round manager", () => {
     ).toMatchObject({
       nextBleedRate: 2,
       previousBleedRate: 3,
+      result: expect.objectContaining({
+        rolledBy: "player",
+        rolledByUserId: "player-1",
+      }),
       status: "rolled",
+    });
+    expect(rolled.command.facts).toMatchObject({
+      healthRollId: "round-end:10:gladiator:external-bleed:external-bleed:health",
+      rolledBy: "player",
+      success: true,
     });
     expect(restoredState.roundEndReview?.participantReviews.gladiator?.status).toBe(
       "health_roll_pending",
@@ -12330,7 +12382,12 @@ describe("combat round manager", () => {
       difficulty: 26,
       finalTotal: 27,
       healthStat: 7,
+      rolledBy: "gm_proxy",
       rollTotal: 20,
+      success: true,
+    });
+    expect(rolled.command.facts).toMatchObject({
+      rolledBy: "gm_proxy",
       success: true,
     });
     expect(internalBleed?.modifierValue).toBe(3);

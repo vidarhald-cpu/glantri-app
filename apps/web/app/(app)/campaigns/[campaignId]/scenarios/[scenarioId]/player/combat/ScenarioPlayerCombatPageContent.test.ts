@@ -144,6 +144,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Defense: DB ${input.result.defenderDb}");
     expect(source).toContain("Main: ${input.result.weaponName} OB");
     expect(source).toContain("resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`");
+    expect(source).toContain("selectedHealthCheckResultPanel ??");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel ??");
     expect(source).toContain("selectedAttackerPrivilegedResultPanel ??");
     expect(source).toContain("selectedCurrentAttackResultPanel ??");
@@ -278,6 +279,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedPhaseAttackBackOutOpportunity &&");
     expect(source).toContain('"Roll Combat Experience"');
     expect(source).toContain('"Confirm Combat Experience"');
+    expect(source).toContain('"Roll health check"');
+    expect(source).toContain("rollRoundEndHealthCheckOnServer");
+    expect(source).toContain("getCombatRoundEndHealthCheckPendingRolls");
+    expect(source).toContain("selectedPendingHealthRoll");
+    expect(source).toContain("selectedHealthCheckActionAvailable");
+    expect(source).toContain("rollHealthCheck()");
+    expect(source).toContain("Round-end health check");
+    expect(source).toContain("Health check required");
+    expect(source).toContain("Health check rolled. Waiting for GM review.");
+    expect(source).toContain("Roll your Health check for round-end bleed review.");
+    expect(source).toContain("formatRoundEndHealthCheckResultLine");
     expect(source).toContain('"Roll distance control"');
     expect(source).toContain("rollRoundEndDistanceControlOnServer");
     expect(source).toContain("selectedDistanceControlActionAvailable");

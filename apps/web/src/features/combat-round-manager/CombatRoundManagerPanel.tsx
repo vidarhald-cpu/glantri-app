@@ -79,6 +79,7 @@ import {
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundEndDistanceControlPendingRollCount,
+  getCombatRoundEndHealthCheckPendingRollCount,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
@@ -6458,6 +6459,7 @@ export default function CombatRoundManagerPanel({
           difficulty,
           healthRollId: pendingHealthRoll.id,
           participantId: inspector.participant.participantId,
+          rolledBy: "gm_proxy",
           state: roundState,
         });
         const updatedParticipant = await updateScenarioParticipantStateOnServer({
@@ -7008,8 +7010,17 @@ export default function CombatRoundManagerPanel({
                               state: timelineRoundState,
                             })
                           : 0;
-                      const marker = pendingDistanceControlRollCount
-                        ? String(pendingDistanceControlRollCount)
+                      const pendingHealthCheckRollCount =
+                        step === "round_summary"
+                          ? getCombatRoundEndHealthCheckPendingRollCount({
+                              participantId: participant.participantId,
+                              state: timelineRoundState,
+                            })
+                          : 0;
+                      const pendingRoundEndRollCount =
+                        pendingDistanceControlRollCount + pendingHealthCheckRollCount;
+                      const marker = pendingRoundEndRollCount
+                        ? String(pendingRoundEndRollCount)
                         : getStatusMarker({
                             current: currentStepCell,
                             status: stepStatus,
@@ -7022,10 +7033,20 @@ export default function CombatRoundManagerPanel({
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
-                      const buttonTitle = pendingDistanceControlRollCount
-                        ? `${title}. ${pendingDistanceControlRollCount} round-end distance-control roll${
-                            pendingDistanceControlRollCount === 1 ? "" : "s"
-                          } pending.`
+                      const pendingRoundEndRollDetails = [
+                        pendingHealthCheckRollCount
+                          ? `${pendingHealthCheckRollCount} health check${
+                              pendingHealthCheckRollCount === 1 ? "" : "s"
+                            }`
+                          : undefined,
+                        pendingDistanceControlRollCount
+                          ? `${pendingDistanceControlRollCount} distance-control roll${
+                              pendingDistanceControlRollCount === 1 ? "" : "s"
+                            }`
+                          : undefined,
+                      ].filter((detail): detail is string => Boolean(detail));
+                      const buttonTitle = pendingRoundEndRollCount
+                        ? `${title}. Round-end pending: ${pendingRoundEndRollDetails.join(", ")}.`
                         : phaseCombatExperienceMarkerRequired
                           ? `${title}. Combat Experience check required before attack.`
                           : title;

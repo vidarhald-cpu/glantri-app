@@ -12,6 +12,7 @@ import {
   type CombatRoundParryResolution,
   type CombatRoundPhase,
   type CombatRoundPhaseResolutionResult,
+  type CombatRoundEndHealthRollProposal,
   type CombatRoundStep,
   type CombatDistance,
   characterBuildSchema,
@@ -26,6 +27,7 @@ import {
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
+  getCombatRoundEndHealthCheckPendingRolls,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
   getDistanceEdgeBetweenParticipantAliases,
@@ -114,6 +116,7 @@ import {
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
   rollRoundEndDistanceControlOnServer,
+  rollRoundEndHealthCheckOnServer,
   submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
@@ -323,6 +326,43 @@ function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceRes
   return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
     result.durationRounds === 1 ? "" : "s"
   }`;
+}
+
+function formatRoundEndHealthCheckReason(input: {
+  damageLabel?: string;
+  proposal: CombatRoundEndHealthRollProposal;
+}): string {
+  if (input.damageLabel) {
+    return input.damageLabel;
+  }
+
+  return input.proposal.bleedType === "internal" ? "Internal bleed" : "Bleed";
+}
+
+function formatRoundEndHealthCheckResultLine(
+  proposal: CombatRoundEndHealthRollProposal,
+): string | undefined {
+  const result = proposal.result;
+
+  if (!result) {
+    return undefined;
+  }
+
+  const bleedLabel = proposal.bleedType === "internal" ? "internal bleed" : "bleed";
+
+  if (result.success && proposal.previousBleedRate !== undefined) {
+    return proposal.nextBleedRate !== undefined
+      ? `Result: success, ${bleedLabel} reduced from ${proposal.previousBleedRate} to ${proposal.nextBleedRate}`
+      : "Result: success";
+  }
+
+  if (result.success) {
+    return "Result: success";
+  }
+
+  return proposal.previousBleedRate !== undefined
+    ? `Result: failure, ${bleedLabel} remains ${proposal.previousBleedRate}`
+    : "Result: failure";
 }
 
 function formatCombatExperienceEffectiveTableLine(
@@ -1281,6 +1321,31 @@ export default function ScenarioPlayerCombatPageContent({
       encounterId &&
       !readOnlyInspection,
   );
+  const selectedRoundEndReview =
+    combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
+      ? combatRoundState.roundEndReview?.participantReviews[selectedRoundParticipant.participantId]
+      : undefined;
+  const selectedPendingHealthRoll =
+    combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
+      ? getCombatRoundEndHealthCheckPendingRolls({
+          participantId: selectedRoundParticipant.participantId,
+          state: combatRoundState,
+        })[0]
+      : undefined;
+  const selectedVisibleHealthRoll =
+    selectedPendingHealthRoll ??
+    selectedRoundEndReview?.proposedHealthRolls.find(
+      (proposal) => proposal.accepted && proposal.status === "rolled" && proposal.result,
+    );
+  const selectedHealthRollDamageProposal =
+    selectedVisibleHealthRoll?.damageProposalId && selectedRoundEndReview
+      ? selectedRoundEndReview.proposedDamage.find(
+          (proposal) => proposal.id === selectedVisibleHealthRoll.damageProposalId,
+        )
+      : undefined;
+  const selectedHealthCheckActionAvailable = Boolean(
+    selectedPendingHealthRoll && selectedParticipant && encounterId && !readOnlyInspection,
+  );
 
   const controlledEquipmentState = useMemo(() => {
     const candidate = displayedParticipant?.equipmentState;
@@ -1608,6 +1673,42 @@ export default function ScenarioPlayerCombatPageContent({
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to roll distance control.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function rollHealthCheck() {
+    if (readOnlyInspection || !selectedParticipant || !encounterId) {
+      return;
+    }
+
+    const healthRollId = selectedPendingHealthRoll?.id;
+
+    if (!healthRollId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter, participant } = await rollRoundEndHealthCheckOnServer({
+        encounterId,
+        healthRollId,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll round-end health check.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -2242,6 +2343,48 @@ export default function ScenarioPlayerCombatPageContent({
         resultLabel: formatCombatExperienceResultLine(selectedVisibleCombatExperienceResult),
       }
     : null;
+  const selectedHealthCheckResultPanel =
+    selectedVisibleHealthRoll?.result && selectedHealthRollDamageProposal
+      ? {
+          interpretedResult: `${selectedVisibleHealthRoll.label}`,
+          rankLabel: "Round-end health check",
+          sections: [
+            {
+              calculationLines: [
+                `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown({
+                  dieResult: selectedVisibleHealthRoll.result.rollTotal,
+                  openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
+                  rollD20: selectedVisibleHealthRoll.result.rollD20,
+                })} = ${selectedVisibleHealthRoll.result.finalTotal}`,
+                `Reason: ${formatRoundEndHealthCheckReason({
+                  damageLabel: selectedHealthRollDamageProposal.label,
+                  proposal: selectedVisibleHealthRoll,
+                })}`,
+              ],
+              resultLine: formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll),
+              title: "Health check",
+            },
+          ],
+        }
+      : selectedVisibleHealthRoll?.result
+        ? {
+            interpretedResult: `${selectedVisibleHealthRoll.label}`,
+            rankLabel: "Round-end health check",
+            sections: [
+              {
+                calculationLines: [
+                  `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown({
+                    dieResult: selectedVisibleHealthRoll.result.rollTotal,
+                    openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
+                    rollD20: selectedVisibleHealthRoll.result.rollD20,
+                  })} = ${selectedVisibleHealthRoll.result.finalTotal}`,
+                ],
+                resultLine: formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll),
+                title: "Health check",
+              },
+            ],
+          }
+        : null;
   const initiativeStepStatus =
     currentCombatStep === "initiative_phase_1"
       ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
@@ -2374,9 +2517,11 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: declareActionDisabled,
           isGameMaster,
         });
-  const playerActionButtonLabel = selectedDistanceControlActionAvailable
-    ? "Roll distance control"
-    : selectedCombatExperienceRequired
+  const playerActionButtonLabel = selectedHealthCheckActionAvailable
+    ? "Roll health check"
+    : selectedDistanceControlActionAvailable
+      ? "Roll distance control"
+      : selectedCombatExperienceRequired
       ? !selectedCombatExperienceWindowOpen
         ? "Waiting for GM"
         : selectedCombatExperienceNoRollAvailable
@@ -2390,9 +2535,11 @@ export default function ScenarioPlayerCombatPageContent({
             currentParryAction?.label ??
             currentAttackAction?.label ??
             declarationButtonLabel);
-  const playerActionButtonDisabled = selectedDistanceControlActionAvailable
+  const playerActionButtonDisabled = selectedHealthCheckActionAvailable
     ? controlsDisabled || savingCombatContext
-    : attackerPrivilegedAction
+    : selectedDistanceControlActionAvailable
+      ? controlsDisabled || savingCombatContext
+      : attackerPrivilegedAction
       ? selectedCombatExperienceRequired ||
         controlsDisabled ||
         savingCombatContext ||
@@ -2436,9 +2583,13 @@ export default function ScenarioPlayerCombatPageContent({
     : selectedCombatExperienceNoRollAvailable
       ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
       : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
-  const declarationStatusText = selectedDistanceControlActionAvailable
-    ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
-    : selectedDistanceControlProposal?.ownSide.status === "rolled"
+  const declarationStatusText = selectedHealthCheckActionAvailable
+    ? `Current step: ${currentCombatStepLabel}. Roll health check.`
+    : selectedVisibleHealthRoll?.result
+      ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
+      : selectedDistanceControlActionAvailable
+        ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
+        : selectedDistanceControlProposal?.ownSide.status === "rolled"
       ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
         ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
         : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
@@ -2779,6 +2930,54 @@ export default function ScenarioPlayerCombatPageContent({
                   </div>
                 ) : null}
               </section>
+              {selectedVisibleHealthRoll ? (
+                <section style={panelStyle}>
+                  <strong>Round-end health check</strong>
+                  <div style={{ color: "#4f5f57", display: "grid", gap: "0.25rem" }}>
+                    <div>
+                      {selectedVisibleHealthRoll.status === "pending"
+                        ? "Health check required"
+                        : "Health check rolled"}
+                    </div>
+                    <div>
+                      Reason:{" "}
+                      {formatRoundEndHealthCheckReason({
+                        damageLabel: selectedHealthRollDamageProposal?.label,
+                        proposal: selectedVisibleHealthRoll,
+                      })}
+                    </div>
+                    <div>
+                      Health +{selectedVisibleHealthRoll.healthStat} vs difficulty{" "}
+                      {selectedVisibleHealthRoll.difficulty}
+                    </div>
+                    {selectedVisibleHealthRoll.result ? (
+                      <div style={{ color: "#3f5f46" }}>
+                        Roll{" "}
+                        {formatOpenEndedD20RollBreakdown({
+                          dieResult: selectedVisibleHealthRoll.result.rollTotal,
+                          openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
+                          rollD20: selectedVisibleHealthRoll.result.rollD20,
+                        })}{" "}
+                        = {selectedVisibleHealthRoll.result.rollTotal}; final{" "}
+                        {selectedVisibleHealthRoll.result.finalTotal}
+                      </div>
+                    ) : (
+                      <div>Roll your Health check for round-end bleed review.</div>
+                    )}
+                    {formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll) ? (
+                      <div>{formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll)}</div>
+                    ) : null}
+                    {selectedVisibleHealthRoll.warnings.map((warning, warningIndex) => (
+                      <div
+                        key={`player-health-roll-warning:${selectedVisibleHealthRoll.id}:${warningIndex}:${warning}`}
+                        style={{ color: "#7c2d12" }}
+                      >
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
               {selectedDistanceControlProposal ? (
                 <section style={panelStyle}>
                   <strong>Distance control</strong>
@@ -2838,10 +3037,12 @@ export default function ScenarioPlayerCombatPageContent({
                 buttonLabel={playerActionButtonLabel}
                 disabled={playerActionButtonDisabled}
                 onDeclareAction={() =>
-                  void (selectedDistanceControlActionAvailable
+                  void (selectedHealthCheckActionAvailable
+                    ? rollHealthCheck()
+                    : selectedDistanceControlActionAvailable
                     ? rollDistanceControl()
                     : selectedCombatExperienceRequired
-                    ? selectedCombatExperienceWindowOpen
+                      ? selectedCombatExperienceWindowOpen
                       ? rollCombatExperience()
                       : undefined
                     : selectedPhaseContinueAvailable
@@ -2874,6 +3075,7 @@ export default function ScenarioPlayerCombatPageContent({
             </div>
             <PlayerCombatActionResultPanel
               result={
+                selectedHealthCheckResultPanel ??
                 selectedCurrentPhaseResolutionResultPanel ??
                 selectedAttackerPrivilegedResultPanel ??
                 selectedCurrentAttackResultPanel ??

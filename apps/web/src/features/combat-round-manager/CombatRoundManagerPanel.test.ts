@@ -530,12 +530,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitCombatRoundEndDistanceControl");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("rollCombatRoundEndDistanceControl");
+    expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
     expect(source).toContain("Round distance control");
     expect(source).toContain("Roll for {participantALabel}");
     expect(source).toContain("Roll for {participantBLabel}");
     expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
-    expect(source).toContain("round-end distance-control roll${");
-    expect(source).toContain("} pending.");
+    expect(source).toContain("Round-end pending:");
+    expect(source).toContain("distance-control roll${");
     expect(source).toContain("Apply distance");
     expect(source).toContain("GM override");
     expect(source).toContain("roundEndDistanceOverrideDrafts");

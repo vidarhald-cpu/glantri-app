@@ -83,6 +83,7 @@ export {
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
   rollRoundEndDistanceControlOnServer,
+  rollRoundEndHealthCheckOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
   submitCombatDeclarationOnServer,

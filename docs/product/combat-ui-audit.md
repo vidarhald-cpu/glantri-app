@@ -380,6 +380,7 @@ Recommended broad fix:
 
 ### Slice 1 - Surface Player-Owned Round-End Health Checks
 
+- Status: addressed in this branch by adding a player-owned round-end health-check route, Player Combat action, result display, and focused tests while preserving GM proxy roll behavior.
 - Affected files/components: `ScenarioPlayerCombatPageContent.tsx`, `apps/web/src/lib/api/encounterClient.ts`, the relevant scenario encounter API route/handler, `CombatRoundManagerPanel.tsx` only for GM proxy preservation, and Player Combat tests.
 - Contract rule: player-owned rolls must appear in Player Combat; GM proxy must not replace player rolls; "Waiting for GM" only when no player-owned action is pending.
 - Why it matters: current SU health rolls are only executable from GM Combat, which is a P0 command ownership issue.

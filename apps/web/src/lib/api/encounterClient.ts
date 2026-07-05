@@ -143,6 +143,28 @@ export async function rollRoundEndDistanceControlOnServer(input: {
   return payload;
 }
 
+export async function rollRoundEndHealthCheckOnServer(input: {
+  encounterId: string;
+  healthRollId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-health-check`, {
+    body: JSON.stringify({
+      healthRollId: input.healthRollId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function backOutPhaseAttackOnServer(input: {
   encounterId: string;
   phase: "phase1" | "phase2";

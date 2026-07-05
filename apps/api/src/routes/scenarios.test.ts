@@ -823,6 +823,99 @@ function makeDistanceControlReviewFixture(): {
   };
 }
 
+function makeHealthCheckReviewFixture(): {
+  encounter: EncounterSession;
+  healthRollId: string;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+} {
+  const encounterParticipants = makeTwoCombatEncounterParticipants();
+  const baseEncounter = makeCombatEncounter({
+    currentRound: 10,
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+  const combatEffects: CombatEffectsState = {
+    effects: [
+      {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        damage: 0,
+        effectGroup: "bleed",
+        generalDamage: 0,
+        id: "player-bleed",
+        modifierValue: 2,
+        roundNumber: 1,
+        sourceEventId: "bleed-event",
+        status: "active",
+        targetParticipantId: "participant-1",
+        type: "bleed",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+    events: [
+      {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        description: "Bleeding wound",
+        id: "bleed-event",
+        sourceLabel: "Bleeding wound",
+        sourceType: "manual",
+        targetParticipantId: "participant-1",
+      },
+    ],
+  };
+  const reviewed = prepareCombatRoundEndReview({
+    participantInputs: {
+      "encounter-participant-1": {
+        combatEffects,
+        healthStat: 6,
+      },
+    },
+    state: {
+      ...baseState,
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: 10,
+        step: "SU",
+      },
+      currentStep: "round_summary",
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    },
+  });
+  const healthRollId =
+    reviewed.roundEndReview?.participantReviews["encounter-participant-1"]?.proposedHealthRolls[0]
+      ?.id;
+
+  if (!healthRollId) {
+    throw new Error("Health check fixture did not create a pending health roll.");
+  }
+
+  return {
+    encounter: {
+      ...baseEncounter,
+      combatRoundState: reviewed,
+      currentRound: reviewed.roundNumber,
+    },
+    healthRollId,
+    participants: [
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects,
+        },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: {
+          displayName: "Scyrian cavalry guy",
+        },
+      }),
+    ],
+  };
+}
+
 function preparePhaseCombatExperienceBackOutRouteFixture(
   input: {
     gladiatorInitiative?: number;
@@ -3433,6 +3526,169 @@ describe("scenarios route contract", () => {
     expect(proposal.participantB.result).toMatchObject({
       rolledBy: "gm_proxy",
       rolledByUserId: "gm-1",
+    });
+  });
+
+  it("lets a player roll their own round-end health check", async () => {
+    const fixture = makeHealthCheckReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        healthRollId: fixture.healthRollId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-health-check",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const healthRoll =
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
+        "encounter-participant-1"
+      ].proposedHealthRolls[0];
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+
+    expect(healthRoll).toMatchObject({
+      result: expect.objectContaining({
+        rolledBy: "player",
+        rolledByUserId: "player-1",
+        success: true,
+      }),
+      status: "rolled",
+    });
+    expect(
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
+        "encounter-participant-1"
+      ].status,
+    ).toBe("review_ready");
+    expect(updatedParticipantState.combatEffects.effects[0]).toMatchObject({
+      id: "player-bleed",
+      modifierValue: 1,
+    });
+  });
+
+  it("rejects player round-end health checks for another participant", async () => {
+    const fixture = makeHealthCheckReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        healthRollId: fixture.healthRollId,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-health-check",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("lets a GM proxy a pending round-end health check", async () => {
+    const fixture = makeHealthCheckReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        healthRollId: fixture.healthRollId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-health-check",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const command = updatedEncounter.combatRoundState.commands.at(-1);
+    const healthRoll =
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
+        "encounter-participant-1"
+      ].proposedHealthRolls[0];
+
+    expect(command).toMatchObject({
+      facts: expect.objectContaining({
+        rolledBy: "gm_proxy",
+      }),
+      type: "roll_round_end_health_check",
+    });
+    expect(healthRoll.result).toMatchObject({
+      rolledBy: "gm_proxy",
+      rolledByUserId: "gm-1",
+    });
+  });
+
+  it("restores pending round-end health check state when the GM clears the health roll", async () => {
+    const fixture = makeHealthCheckReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const app = await buildScenarioTestApp();
+
+    const rollResponse = await app.inject({
+      method: "POST",
+      payload: {
+        healthRollId: fixture.healthRollId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-health-check",
+    });
+    const rolledEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]
+      ?.session as EncounterSession;
+    mocks.encounterService.getEncounterById.mockResolvedValue(rolledEncounter);
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(rollResponse.statusCode).toBe(200);
+    expect(clearResponse.statusCode).toBe(200);
+    const clearedEncounter = mocks.encounterService.updateEncounter.mock.calls[1]?.[0]?.session;
+    const restoredReview =
+      clearedEncounter.combatRoundState.roundEndReview.participantReviews[
+        "encounter-participant-1"
+      ];
+
+    expect(restoredReview.status).toBe("health_roll_pending");
+    expect(restoredReview.proposedHealthRolls[0]).toMatchObject({
+      result: undefined,
+      status: "pending",
     });
   });
 
