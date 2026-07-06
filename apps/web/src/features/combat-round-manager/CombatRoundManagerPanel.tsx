@@ -2810,16 +2810,80 @@ function getRoundEndDistanceCommitPendingCount(roundState: CombatRoundState): nu
     .length;
 }
 
-function formatCombatTrackerStatusSuffix(status: CombatRoundStepStatus): string {
-  switch (status) {
-    case "gmEdited":
-      return ", GM edited";
-    case "submitted":
-      return ", submitted";
-    case "ready":
-      return ", ready for review";
-    case "complete":
-      return ", complete";
+type CombatTrackerInitiativeResolutionSource =
+  | "gm_override"
+  | "resolved_by_gm"
+  | "rolled_by_gm";
+
+function getCombatTrackerInitiativeCommandType(
+  step: CombatRoundStep,
+): "roll_initiative_phase1" | "roll_initiative_phase2" | undefined {
+  switch (step) {
+    case "initiative_phase_1":
+      return "roll_initiative_phase1";
+    case "initiative_phase_2":
+      return "roll_initiative_phase2";
+    default:
+      return undefined;
+  }
+}
+
+function getCombatTrackerCommandFactString(
+  command: CombatRoundState["commands"][number] | undefined,
+  key: string,
+): string | undefined {
+  const value = command?.facts[key];
+
+  return typeof value === "string" ? value : undefined;
+}
+
+function getCombatTrackerInitiativeResolutionSource(input: {
+  commands: readonly CombatRoundState["commands"][number][];
+  participantId: string;
+  roundNumber: number;
+  status: CombatRoundStepStatus;
+  step: CombatRoundStep;
+}): CombatTrackerInitiativeResolutionSource | undefined {
+  if (input.status !== "gmEdited") {
+    return undefined;
+  }
+
+  const commandType = getCombatTrackerInitiativeCommandType(input.step);
+
+  if (!commandType) {
+    return "resolved_by_gm";
+  }
+
+  const command = [...input.commands].reverse().find(
+    (candidate) =>
+      candidate.type === commandType &&
+      candidate.participantId === input.participantId &&
+      candidate.roundNumber === input.roundNumber,
+  );
+  const commandSource = getCombatTrackerCommandFactString(command, "source");
+  const commandStatus = getCombatTrackerCommandFactString(command, "status");
+
+  if (commandSource === "gm_override" || commandStatus === "gm_override") {
+    return "gm_override";
+  }
+
+  if (commandSource === "gm_proxy" || commandStatus === "gmEdited" || command) {
+    return "rolled_by_gm";
+  }
+
+  return "resolved_by_gm";
+}
+
+function formatCombatTrackerInitiativeSuffix(
+  source: CombatTrackerInitiativeResolutionSource | undefined,
+): string {
+  switch (source) {
+    case "rolled_by_gm":
+      return ", rolled by GM";
+    case "gm_override":
+      return ", GM override";
+    case "resolved_by_gm":
+      return ", resolved by GM";
     default:
       return "";
   }
@@ -2858,7 +2922,7 @@ function getCombatTrackerHandledStepDetail(input: {
 
   switch (input.status) {
     case "gmEdited":
-      return `${stepNoun}, GM edited.`;
+      return `${stepNoun} resolved by GM.`;
     case "submitted":
       return `${stepNoun} submitted.`;
     case "ready":
@@ -2890,6 +2954,7 @@ function getCombatTrackerCellDetail(input: {
   pendingDistanceControlCommitCount: number;
   pendingRoundEndRollCount: number;
   pendingRoundEndRollDetails: readonly string[];
+  initiativeResolutionSource: CombatTrackerInitiativeResolutionSource | undefined;
   initiativeTotal: number | undefined;
   status: CombatRoundStepStatus;
   step: CombatRoundStep;
@@ -2914,7 +2979,9 @@ function getCombatTrackerCellDetail(input: {
   }
 
   if (input.initiativeTotal !== undefined) {
-    return `initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix(input.status)}.`;
+    return `initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix(
+      input.initiativeResolutionSource,
+    )}.`;
   }
 
   if (input.status === "skipped") {
@@ -7814,6 +7881,14 @@ export default function CombatRoundManagerPanel({
                             }`
                           : undefined,
                       ].filter((detail): detail is string => Boolean(detail));
+                      const initiativeResolutionSource =
+                        getCombatTrackerInitiativeResolutionSource({
+                          commands: timelineRoundState.commands,
+                          participantId: participant.participantId,
+                          roundNumber,
+                          status: stepStatus,
+                          step,
+                        });
                       const buttonTitle = formatCombatTrackerCellTitle({
                         participantLabel: participant.label,
                         roundNumber,
@@ -7823,6 +7898,7 @@ export default function CombatRoundManagerPanel({
                           pendingDistanceControlCommitCount,
                           pendingRoundEndRollCount,
                           pendingRoundEndRollDetails,
+                          initiativeResolutionSource,
                           initiativeTotal,
                           status: stepStatus,
                           step,

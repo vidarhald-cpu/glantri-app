@@ -103,7 +103,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("not reached.");
     expect(source).toContain("phase CE required.");
     expect(source).toContain("round-end roll${");
-    expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix");
+    expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix");
     expect(source).toContain("distance-control commit${");
     expect(source).toContain("getRoundEndDistanceCommitPendingCount");
     expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
@@ -111,6 +111,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('label: "action/roll required"');
     expect(source).not.toContain("getCombatTrackerStatusDetail");
     expect(source).not.toContain("joinTrackerTitleParts");
+    expect(source).not.toContain("formatCombatTrackerStatusSuffix");
     expect(source).not.toContain("${markerMeaning.marker} = ${markerMeaning.label}.");
     expect(source).not.toContain("Recorded initiative result ${initiativeTotal}.");
     expect(source).not.toContain("Previous round history.");
@@ -134,6 +135,28 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('trackerLegendMarkerKinds.add("required")');
   });
 
+  it("uses precise tracker initiative provenance wording", () => {
+    const source = readSource();
+
+    expect(source).toContain("getCombatTrackerInitiativeResolutionSource");
+    expect(source).toContain("getCombatTrackerCommandFactString(command, \"source\")");
+    expect(source).toContain("getCombatTrackerCommandFactString(command, \"status\")");
+    expect(source).toContain("commandSource === \"gm_override\" || commandStatus === \"gm_override\"");
+    expect(source).toContain('return "gm_override";');
+    expect(source).toContain("commandSource === \"gm_proxy\" || commandStatus === \"gmEdited\" || command");
+    expect(source).toContain('return "rolled_by_gm";');
+    expect(source).toContain('return "resolved_by_gm";');
+    expect(source).toContain('return ", rolled by GM";');
+    expect(source).toContain('return ", GM override";');
+    expect(source).toContain('return ", resolved by GM";');
+    expect(source).toContain("initiativeResolutionSource");
+    expect(source).toContain("commands: timelineRoundState.commands");
+    expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix");
+    expect(source).toContain("return \"\";");
+    expect(source).not.toContain('return ", GM edited";');
+    expect(source).not.toContain("initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix");
+  });
+
   it("keeps tracker tooltips concise and non-repetitive", () => {
     const source = readSource();
 
@@ -149,6 +172,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Step not reached yet. Step not reached");
     expect(source).not.toContain("status ${stepStatus}");
     expect(source).not.toContain("marker: step has been handled");
+    expect(source).not.toContain("stepNoun}, GM edited.");
   });
 
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {

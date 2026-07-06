@@ -20,6 +20,8 @@ Cleanup note, 2026-07-06: Slice 7 added a compact GM tracker legend and explicit
 
 Cleanup note, 2026-07-06: Slice 7 follow-up now derives the legend from the same marker-kind helper used by rendered tracker cells, so `?` appears in the legend whenever a required-action/roll cell is visible. Tracker cell titles were shortened to one participant/round/step summary with one blocker or result detail.
 
+Cleanup note, 2026-07-06: Tracker initiative titles now avoid the ambiguous `GM edited` phrase. Initiative roll commands submitted from the GM path display `rolled by GM`, future explicit override facts can display `GM override`, and legacy GM-completed cells without command provenance fall back to `resolved by GM`.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`
@@ -192,7 +194,7 @@ Recommended slice:
 
 #### P1 - Tracker markers are not explicit enough for current GM work
 
-Status, 2026-07-06: Addressed for the GM tracker. A compact legend explains only marker kinds present in the timeline, including `?` whenever a rendered tracker cell has a required action/roll marker. Cell titles/aria labels now use a concise participant/round/step summary with one CE requirement, initiative result, declaration pending, round-end health or distance-control blocker, skipped/cancelled action, or completion detail. Distance-control commit pending remains a title/current-task distinction rather than a unique visible marker.
+Status, 2026-07-06: Addressed for the GM tracker. A compact legend explains only marker kinds present in the timeline, including `?` whenever a rendered tracker cell has a required action/roll marker. Cell titles/aria labels now use a concise participant/round/step summary with one CE requirement, initiative result, declaration pending, round-end health or distance-control blocker, skipped/cancelled action, or completion detail. Initiative titles use command provenance for `rolled by GM` and no longer use the ambiguous `GM edited` wording. Distance-control commit pending remains a title/current-task distinction rather than a unique visible marker.
 
 Observed behavior:
 
@@ -459,7 +461,7 @@ Recommended broad fix:
 
 ### Slice 7 - Add Explicit Tracker Marker Meanings For Pending Work
 
-- Status, 2026-07-06: Addressed for the GM tracker. Follow-up addressed `?` legend inclusion by deriving legend entries from the rendered cell marker kind and shortened repetitive cell tooltips. Remaining ambiguity: distance-control commit pending does not have a separate symbol; it is exposed through cell title text and the current Action Button Area.
+- Status, 2026-07-06: Addressed for the GM tracker. Follow-up addressed `?` legend inclusion by deriving legend entries from the rendered cell marker kind, shortened repetitive cell tooltips, and replaced ambiguous tracker `GM edited` initiative wording with command-provenance wording. Remaining ambiguity: distance-control commit pending does not have a separate symbol; it is exposed through cell title text and the current Action Button Area.
 - Affected files/components: `CombatRoundManagerPanel.tsx`, `combatRoundTimelineNavigation.ts`, and GM timeline tests.
 - Contract rule: tracker markers must be explicit, including pending player-owned work and GM-only review.
 - Why it matters: compact symbols are not enough to distinguish CE requirements, distance-control rolls, health rolls, completed review, skipped work, and current work.
