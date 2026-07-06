@@ -149,6 +149,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedHealthCheckResultPanel ??");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel ??");
     expect(source).toContain("selectedAttackerPrivilegedResultPanel ??");
+    expect(source).toContain("selectedInvolvedDamageResultPanel ??");
     expect(source).toContain("selectedCurrentAttackResultPanel ??");
     expect(source).toContain("selectedRelevantInitiativeResultPanel ??");
     expect(source).toContain("declarationButtonLabel");
@@ -234,6 +235,42 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("isGameMaster");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
+  });
+
+  it("shows player-owned damage-chain facts only to involved attackers and defenders", () => {
+    const source = readSource();
+
+    expect(source).toContain("getCombatRoundEffectiveDamageResult");
+    expect(source).toContain("getCombatRoundEffectiveCriticalRoll");
+    expect(source).toContain("formatPlayerCombatLocationCalculationLine");
+    expect(source).toContain("formatPlayerCombatCriticalCalculationLine");
+    expect(source).toContain("formatPlayerCombatRecordedDamageLine");
+    expect(source).toContain("formatPlayerCombatRecordedEffectsLine");
+    expect(source).toContain('title: "Hit location"');
+    expect(source).toContain('title: "Critical"');
+    expect(source).toContain('title:');
+    expect(source).toContain('"Recorded damage"');
+    expect(source).toContain("getHitLocationFullLabel(locationRoll.selectedHitLocation)");
+    expect(source).toContain('`2d8 ${criticalRoll.criticalDice.join(" + ")}');
+    expect(source).toContain("proposal?.title");
+    expect(source).toContain(
+      "Recorded damage: ${effectiveDamage.effectiveTotalDamage}${formatPlayerCombatDamageLocationSuffix",
+    );
+    expect(source).toContain("Recorded effects: ${labels.join");
+    expect(source).toContain("isPlayerInvolvedInPhaseResolution");
+    expect(source).toContain("isPlayerVisibleDamageResolution");
+    expect(source).toContain(
+      "input.resolution.attackerParticipantId === input.participantId",
+    );
+    expect(source).toContain(
+      "input.resolution.defenderParticipantId === input.participantId",
+    );
+    expect(source).toContain("getLatestPlayerVisibleDamageResolution");
+    expect(source).toContain("selectedInvolvedDamageResolution");
+    expect(source).toContain("selectedInvolvedDamageResultPanel");
+    expect(source).toContain("sections: selectedAttackerPrivilegedResolutionLines.sections");
+    expect(source).toContain("sections: selectedInvolvedDamageResolutionLines.sections");
+    expect(source).not.toContain("selectedUninvolvedDamageResultPanel");
   });
 
   it("lets players roll or confirm their own Combat Experience before declaring", () => {

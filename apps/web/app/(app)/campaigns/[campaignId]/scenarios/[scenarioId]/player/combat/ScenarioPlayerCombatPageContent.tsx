@@ -24,6 +24,8 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatRoundEffectiveCriticalRoll,
+  getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
@@ -37,6 +39,7 @@ import {
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
+  getHitLocationFullLabel,
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
   getWeaponPreferredDistances,
@@ -149,6 +152,12 @@ interface ScenarioPlayerCombatPageContentProps {
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
+
+type PlayerCombatActionResultSectionView = {
+  calculationLines: readonly string[];
+  resultLine?: string;
+  title: string;
+};
 
 const panelStyle = {
   background: "#f6f5ef",
@@ -487,6 +496,214 @@ function formatCombatParryCalculationLine(
   return `Parry: P ${resolution.combinedParryScore} + [mods] ${resolution.modifierAdjustment >= 0 ? "+" : ""}${resolution.modifierAdjustment} + roll ${rollText} = ${resolution.total}`;
 }
 
+function formatPlayerCombatLocationCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled") {
+    return undefined;
+  }
+
+  const rollsLabel = locationRoll.hitLocationRolls.join(", ");
+  const targetLabel =
+    locationRoll.targetLocation && locationRoll.targetLocation !== "none"
+      ? getHitLocationFullLabel(locationRoll.targetLocation)
+      : "None";
+  const selectedLabel = locationRoll.selectedHitLocation
+    ? getHitLocationFullLabel(locationRoll.selectedHitLocation)
+    : "Unknown";
+
+  return locationRoll.selectionReason === "targeted_closest"
+    ? `Target ${targetLabel}; rolls ${rollsLabel} -> ${selectedLabel}`
+    : `Roll ${rollsLabel}`;
+}
+
+function formatPlayerCombatLocationResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled" || !locationRoll.selectedHitLocation) {
+    return undefined;
+  }
+
+  return `Result: ${getHitLocationFullLabel(locationRoll.selectedHitLocation)}`;
+}
+
+function formatPlayerCombatDamageLocationSuffix(
+  resolution: CombatRoundPhaseResolutionResult,
+): string {
+  const damage = resolution.damageResult;
+  const location = damage
+    ? getCombatRoundEffectiveDamageResult(damage).effectiveSelectedHitLocation
+    : resolution.hitLocationRoll.selectedHitLocation;
+
+  return location ? ` at ${getHitLocationFullLabel(location).toLowerCase()}` : "";
+}
+
+function formatPlayerCombatDamageCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const damage = resolution.damageResult;
+
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
+  if (damage.grazing && effectiveDamage.effectiveDamageRoll.required) {
+    const rawGrazingDamage =
+      effectiveDamage.effectiveDamageRoll.rawGrazingDamage ??
+      effectiveDamage.effectiveDamageRoll.total;
+    const rollLabel =
+      effectiveDamage.effectiveDamageRoll.diceExpression && rawGrazingDamage !== undefined
+        ? `${effectiveDamage.effectiveDamageRoll.diceExpression} = ${rawGrazingDamage}`
+        : "grazing damage roll recorded";
+
+    return `Grazing damage: ${rollLabel}`;
+  }
+
+  if (effectiveDamage.effectiveDamageLookupTotal !== undefined) {
+    return `Damage lookup ${effectiveDamage.effectiveDamageLookupTotal}`;
+  }
+
+  return "Damage proposal recorded";
+}
+
+function formatPlayerCombatRecordedDamageLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const damage = resolution.damageResult;
+
+  if (!damage || resolution.damageProposal.status !== "committed") {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
+  return `Recorded damage: ${effectiveDamage.effectiveTotalDamage}${formatPlayerCombatDamageLocationSuffix(
+    resolution,
+  )}`;
+}
+
+function formatPlayerCombatRecordedEffectsLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  if (resolution.damageProposal.status !== "committed") {
+    return undefined;
+  }
+
+  const review = resolution.damageResult?.review;
+  const acceptedEffectLabels = (review?.additionalEffects ?? [])
+    .filter((effect) => effect.accepted !== false)
+    .map((effect) => effect.label);
+  const acceptedOperationalLabels = (review?.operationalConsequences ?? [])
+    .filter((consequence) => consequence.accepted !== false)
+    .map((consequence) => consequence.label);
+  const labels = [...acceptedEffectLabels, ...acceptedOperationalLabels];
+
+  return labels.length > 0 ? `Recorded effects: ${labels.join(", ")}` : undefined;
+}
+
+function formatPlayerCombatCriticalCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "No critical roll required" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled" || !criticalRoll.criticalDice) {
+    return "Critical roll required";
+  }
+
+  return `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
+    effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
+  } + armor crit mod ${
+    effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
+  } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
+}
+
+function formatPlayerCombatCriticalResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const proposal = resolution.damageResult?.review?.criticalEffectProposal;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "Result: no critical" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled") {
+    return "Result: pending";
+  }
+
+  if (proposal?.criticalIndexStatus === "no_effect") {
+    return "Result: no critical effect";
+  }
+
+  if (proposal?.title) {
+    return `Result: ${proposal.title}`;
+  }
+
+  const location = effectiveCritical.criticalLocation
+    ? ` at ${getHitLocationFullLabel(effectiveCritical.criticalLocation).toLowerCase()}`
+    : "";
+
+  return `Result: critical roll ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}${location}`;
+}
+
+function isPlayerInvolvedInPhaseResolution(input: {
+  participantId?: string;
+  resolution: CombatRoundPhaseResolutionResult;
+}): boolean {
+  return Boolean(
+    input.participantId &&
+      (input.resolution.attackerParticipantId === input.participantId ||
+        input.resolution.defenderParticipantId === input.participantId),
+  );
+}
+
+function isPlayerVisibleDamageResolution(input: {
+  participantId?: string;
+  resolution: CombatRoundPhaseResolutionResult;
+}): boolean {
+  if (!isPlayerInvolvedInPhaseResolution(input)) {
+    return false;
+  }
+
+  return (
+    input.resolution.hitLocationRoll.status === "rolled" ||
+    input.resolution.criticalRoll.status === "rolled" ||
+    input.resolution.damageProposal.status === "committed"
+  );
+}
+
+function getLatestPlayerVisibleDamageResolution(input: {
+  participantId?: string;
+  resolutions: readonly CombatRoundPhaseResolutionResult[];
+}): CombatRoundPhaseResolutionResult | undefined {
+  return [...input.resolutions]
+    .filter((resolution) =>
+      isPlayerVisibleDamageResolution({
+        participantId: input.participantId,
+        resolution,
+      }),
+    )
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+}
+
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
@@ -504,8 +721,16 @@ function formatCombatPhaseResolutionResultLines(input: {
 } {
   const parry = input.resolution.parryResolution;
   const damage = input.resolution.damageRoll;
+  const damageResult = input.resolution.damageResult;
   const proposal = input.resolution.damageProposal;
   const resolvedParryLine = formatCombatParryCalculationLine(parry);
+  const locationCalculationLine = formatPlayerCombatLocationCalculationLine(input.resolution);
+  const locationResultLine = formatPlayerCombatLocationResultLine(input.resolution);
+  const damageCalculationLine = formatPlayerCombatDamageCalculationLine(input.resolution);
+  const recordedDamageLine = formatPlayerCombatRecordedDamageLine(input.resolution);
+  const recordedEffectsLine = formatPlayerCombatRecordedEffectsLine(input.resolution);
+  const criticalCalculationLine = formatPlayerCombatCriticalCalculationLine(input.resolution);
+  const criticalResultLine = formatPlayerCombatCriticalResultLine(input.resolution);
   const parryLine =
     resolvedParryLine ??
     `Parry: ${formatResolutionStatusLabel(parry.status)}${
@@ -513,12 +738,30 @@ function formatCombatPhaseResolutionResultLines(input: {
     }`;
   const parryResultLine =
     parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
+  const committedDamageResultLine = recordedDamageLine
+    ? `Result: ${recordedDamageLine.replace(/^Recorded damage: /, "")}`
+    : undefined;
+  const proposalLine =
+    input.resolution.damageProposal.status === "committed"
+      ? (committedDamageResultLine ?? "Result: damage recorded")
+      : criticalResultLine && input.resolution.criticalRoll.status === "rolled"
+        ? criticalResultLine
+        : parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+  const statusLine = recordedDamageLine
+    ? recordedDamageLine
+    : criticalResultLine && input.resolution.criticalRoll.status === "rolled"
+      ? criticalResultLine.replace(/^Result: /, "Critical: ")
+      : locationResultLine
+        ? locationResultLine.replace(/^Result: /, "Hit location: ")
+        : parryResultLine
+          ? parryLine
+          : `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
 
   const attackLine = `${formatCombatAttackResultLine({
     participantId: input.participantId,
     result: input.attackResult,
   })} · Result: ${input.attackResult.tableResult}`;
-  const sections = [
+  const sections: PlayerCombatActionResultSectionView[] = [
     {
       calculationLines: [
         formatCombatAttackResultLine({
@@ -530,6 +773,44 @@ function formatCombatPhaseResolutionResultLines(input: {
       title: "To hit",
     },
     buildPlayerCombatDistanceModifierSection(input.distanceModifierDetail),
+    {
+      calculationLines: [resolvedParryLine ?? `Parry ${formatResolutionStatusLabel(parry.status)}`],
+      resultLine: parryResultLine ?? `Result: ${formatResolutionStatusLabel(parry.status)}`,
+      title: "Parry",
+    },
+    locationCalculationLine
+      ? {
+          calculationLines: [locationCalculationLine],
+          resultLine: locationResultLine,
+          title: "Hit location",
+        }
+      : undefined,
+    criticalCalculationLine || criticalResultLine
+      ? {
+          calculationLines: [criticalCalculationLine].filter((line): line is string =>
+            Boolean(line),
+          ),
+          resultLine: criticalResultLine,
+          title: "Critical",
+        }
+      : undefined,
+    damageResult || recordedDamageLine
+      ? {
+          calculationLines: [
+            damageCalculationLine,
+            recordedEffectsLine,
+            input.resolution.damageProposal.status === "committed"
+              ? undefined
+              : "Waiting for GM damage review.",
+          ].filter((line): line is string => Boolean(line)),
+          resultLine:
+            input.resolution.damageProposal.status === "committed"
+              ? (committedDamageResultLine ?? "Result: damage recorded")
+              : "Result: waiting for GM review",
+          title:
+            input.resolution.damageProposal.status === "committed" ? "Recorded damage" : "Damage",
+        }
+      : undefined,
   ].filter(
     (
       section,
@@ -542,11 +823,9 @@ function formatCombatPhaseResolutionResultLines(input: {
 
   return {
     attackLine,
-    proposalLine: parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`,
+    proposalLine,
     sections,
-    statusLine: parryResultLine
-      ? parryLine
-      : `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`,
+    statusLine,
   };
 }
 
@@ -2335,6 +2614,44 @@ export default function ScenarioPlayerCombatPageContent({
         interpretedResult: selectedAttackerPrivilegedResolutionLines.statusLine,
         rankLabel: selectedAttackerPrivilegedResolutionLines.attackLine,
         resultLabel: selectedAttackerPrivilegedResolutionLines.proposalLine,
+        sections: selectedAttackerPrivilegedResolutionLines.sections,
+      }
+    : null;
+  const selectedInvolvedDamageResolution =
+    combatRoundState && selectedRoundParticipant
+      ? getLatestPlayerVisibleDamageResolution({
+          participantId: selectedRoundParticipant.participantId,
+          resolutions: combatRoundState.phaseResolutionResults,
+        })
+      : undefined;
+  const selectedInvolvedDamageAttackResult =
+    combatRoundState && selectedInvolvedDamageResolution
+      ? getCombatRoundAttackResultById({
+          attackResultId: selectedInvolvedDamageResolution.attackResultId,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedInvolvedDamageResolutionLines =
+    selectedInvolvedDamageAttackResult && selectedInvolvedDamageResolution
+      ? formatCombatPhaseResolutionResultLines({
+          attackResult: selectedInvolvedDamageAttackResult,
+          distanceModifierDetail:
+            combatRoundState && selectedInvolvedDamageAttackResult
+              ? getCombatRoundAttackDistanceModifierDetail({
+                  result: selectedInvolvedDamageAttackResult,
+                  state: combatRoundState,
+                })
+              : undefined,
+          participantId: selectedRoundParticipant?.participantId,
+          resolution: selectedInvolvedDamageResolution,
+        })
+      : undefined;
+  const selectedInvolvedDamageResultPanel = selectedInvolvedDamageResolutionLines
+    ? {
+        interpretedResult: selectedInvolvedDamageResolutionLines.statusLine,
+        rankLabel: selectedInvolvedDamageResolutionLines.attackLine,
+        resultLabel: selectedInvolvedDamageResolutionLines.proposalLine,
+        sections: selectedInvolvedDamageResolutionLines.sections,
       }
     : null;
   const attackerPrivilegedAction = selectedAttackerPrivilegedAttackResult
@@ -3313,6 +3630,7 @@ export default function ScenarioPlayerCombatPageContent({
                 selectedDistanceControlResultPanel ??
                 selectedCurrentPhaseResolutionResultPanel ??
                 selectedAttackerPrivilegedResultPanel ??
+                selectedInvolvedDamageResultPanel ??
                 selectedCurrentAttackResultPanel ??
                 selectedPhaseInitiativeChoiceResultPanel ??
                 selectedRelevantInitiativeResultPanel ??
