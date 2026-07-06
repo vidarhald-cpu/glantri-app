@@ -30,6 +30,8 @@ Cleanup note, 2026-07-06: Damage Roll Ownership Labels clarified that D1/D2 hit-
 
 Cleanup note, 2026-07-06: GM Damage Review Declutter separated the GM D1/D2 damage/effects review card into context, outcome summary, proposed recorded effects, GM adjustments, calculation details, and commit readiness sections while preserving review controls and the primary Current action commit path.
 
+Cleanup note, 2026-07-06: Player Mutation Response Sanitization routes non-GM player-owned combat roll mutation responses through a response-only player-safe sanitizer, preserving GM full responses while removing unrelated current phase results, unrelated attack results, and damage review details from non-GM roll responses. Historical snapshot/command projection hardening remains a separate follow-up.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

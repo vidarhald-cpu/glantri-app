@@ -78,11 +78,13 @@ import {
 import type {
   CombatActionGeneratedDistanceModifierInput,
   CombatDistanceWeaponLike,
+  CombatRoundAttackResults,
   CombatRoundCommand,
   CombatRoundEndDistanceControlSide,
   CombatRoundEndDistanceProposal,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
+  CombatRoundPhaseResolutionResult,
   CombatRoundState,
   CombatRoundPhaseContexts,
   EncounterSession,
@@ -1547,6 +1549,115 @@ function buildPlayerSafeEncounterForUser(input: {
   };
 }
 
+function isPlayerVisibleCombatRoundResultPair(input: {
+  attackerParticipantId: string;
+  controlledEncounterParticipantIds: Set<string>;
+  defenderParticipantId: string;
+  visibleParticipantIds: Set<string>;
+}): boolean {
+  if (input.controlledEncounterParticipantIds.has(input.attackerParticipantId)) {
+    return input.visibleParticipantIds.has(input.defenderParticipantId);
+  }
+
+  if (input.controlledEncounterParticipantIds.has(input.defenderParticipantId)) {
+    return input.visibleParticipantIds.has(input.attackerParticipantId);
+  }
+
+  return false;
+}
+
+function sanitizePlayerSafeCombatRollMutationResolution(
+  result: CombatRoundPhaseResolutionResult,
+): CombatRoundPhaseResolutionResult {
+  return {
+    ...result,
+    damageResult: result.damageResult
+      ? {
+          ...result.damageResult,
+          review: undefined,
+        }
+      : undefined,
+  };
+}
+
+function sanitizePlayerSafeCombatRollMutationAttackResults(input: {
+  attackResults: CombatRoundAttackResults;
+  controlledEncounterParticipantIds: Set<string>;
+  visibleParticipantIds: Set<string>;
+}): CombatRoundAttackResults {
+  const attackResults: CombatRoundAttackResults = {};
+
+  for (const phase of combatRoundPhaseSchema.options) {
+    const result = input.attackResults[phase];
+
+    if (
+      result &&
+      isPlayerVisibleCombatRoundResultPair({
+        attackerParticipantId: result.attackerParticipantId,
+        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+        defenderParticipantId: result.defenderParticipantId,
+        visibleParticipantIds: input.visibleParticipantIds,
+      })
+    ) {
+      attackResults[phase] = result;
+    }
+  }
+
+  return attackResults;
+}
+
+function sanitizePlayerSafeCombatRollMutationState(input: {
+  controlledEncounterParticipantIds: Set<string>;
+  state: CombatRoundState;
+  visibleParticipantIds: Set<string>;
+}): CombatRoundState {
+  return {
+    ...input.state,
+    participants: input.state.participants.map((participant) => ({
+      ...participant,
+      attackResults: sanitizePlayerSafeCombatRollMutationAttackResults({
+        attackResults: participant.attackResults,
+        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+        visibleParticipantIds: input.visibleParticipantIds,
+      }),
+    })),
+    phaseResolutionResults: input.state.phaseResolutionResults
+      .filter((result) =>
+        isPlayerVisibleCombatRoundResultPair({
+          attackerParticipantId: result.attackerParticipantId,
+          controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+          defenderParticipantId: result.defenderParticipantId,
+          visibleParticipantIds: input.visibleParticipantIds,
+        }),
+      )
+      .map(sanitizePlayerSafeCombatRollMutationResolution),
+  };
+}
+
+function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): EncounterSession {
+  const encounter = buildPlayerSafeEncounterForUser(input);
+
+  if (!encounter.combatRoundState) {
+    return encounter;
+  }
+
+  const { controlledEncounterParticipantIds, visibleParticipantIds } =
+    buildPlayerSafeCombatScopeForUser(input);
+
+  return {
+    ...encounter,
+    combatRoundState: sanitizePlayerSafeCombatRollMutationState({
+      controlledEncounterParticipantIds,
+      state: encounter.combatRoundState,
+      visibleParticipantIds,
+    }),
+  };
+}
+
 function preservePlayerCombatModifierBuckets(input: {
   existingContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
   requestedContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
@@ -2196,7 +2307,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter, initiative: rolledInitiative };
+      return {
+        encounter: gmAuthorizedOperation
+          ? savedEncounter
+          : buildPlayerSafeCombatRollMutationEncounterForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+        initiative: rolledInitiative,
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat initiative.",
@@ -2529,7 +2649,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return {
           combatExperience: rolled.result,
-          encounter: savedEncounter,
+          encounter: gmAuthorizedOperation
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
           participant: savedParticipant,
         };
       } catch (error) {
@@ -2794,7 +2920,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return {
           command: rolled.command,
-          encounter: savedEncounter,
+          encounter: gmAuthorizedOperation
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
           participant: savedParticipant,
         };
       } catch (error) {
@@ -3440,7 +3572,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { attackResult, encounter: savedEncounter };
+      return {
+        attackResult,
+        encounter:
+          access.mode === "gm"
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat attack.",
@@ -3604,7 +3746,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter };
+      return {
+        encounter:
+          access.mode === "gm"
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat parry.",
@@ -3783,7 +3934,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter };
+      return {
+        encounter:
+          access.mode === "gm"
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll hit location.",
@@ -3925,7 +4085,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter };
+      return {
+        encounter:
+          access.mode === "gm"
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll critical.",
