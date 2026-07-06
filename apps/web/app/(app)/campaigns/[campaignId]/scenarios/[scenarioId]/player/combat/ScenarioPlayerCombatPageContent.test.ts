@@ -285,6 +285,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedPhaseAttackChoiceSelectorAvailable");
     expect(source).toContain("selectedPhaseAttackChoiceIsBackOut");
     expect(source).toContain("selectedPhaseAttackChoiceControls");
+    expect(source).toContain("showInitiativeContextPanel");
+    expect(source).toContain("showPhaseCombatExperienceContextPanel");
+    expect(source).toContain("showCombatStartExperienceContextPanel");
+    expect(source).toContain("Base initiative {initiativeCalculation.baseInitiative}");
+    expect(source).toContain("Pending rolls: {currentInitiativeRollCounts.pending} of");
+    expect(source).toContain("Effective before roll {initiativeCalculation.modifiedInitiative}");
+    expect(source).toContain("Phase Combat Experience");
+    expect(source).toContain("Effective CE {selectedCombatExperienceSkillTotal}");
+    expect(source).toContain("CE roll required:");
+    expect(source).toContain("Selected choice:");
+    expect(source).toContain("Status:");
     expect(source).toContain('"Continue and roll Combat Experience"');
     expect(source).toContain('<option value="continue">');
     expect(source).toContain("preActionControls={selectedPhaseAttackChoiceControls}");
@@ -336,6 +347,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
     expect(source).toContain("Reason: attacked while attacking");
     expect(source).toContain("Incoming attacker(s):");
+    expect(source).toContain("selectedPhaseCombatExperienceThreats");
     expect(source).toContain("selectedCombatExperienceSkillLookup.warning");
     expect(source).toContain("selectedCombatExperienceRequired");
     expect(source).toContain(
@@ -343,6 +355,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     );
     expect(source).toContain("const playerActionButtonDisabled =");
     expect(source).toContain("Combat Experience");
+    expect(source).not.toContain("Phase initiative choices");
     expect(source).not.toContain("Waiting for GM to roll Combat Experience.");
   });
 });

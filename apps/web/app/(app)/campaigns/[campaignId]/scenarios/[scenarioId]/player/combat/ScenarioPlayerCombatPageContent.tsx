@@ -1445,10 +1445,16 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       buildPlayerCombatModifierRows({
         combatContext: projectedCombatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
         liveModifiers: liveCombatModifiers,
         phaseKey: currentModifierPhase,
       }),
-    [currentModifierPhase, liveCombatModifiers, projectedCombatContextDraft],
+    [
+      currentModifierPhase,
+      liveCombatModifiers,
+      projectedCombatContextDraft,
+      selectedParticipant?.state.combatEffects,
+    ],
   );
 
   const loadoutFieldValueMap = useMemo(
@@ -2479,6 +2485,15 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedParticipantRolledCurrentInitiative = Boolean(
     currentInitiativePhase && selectedCurrentInitiative !== undefined,
   );
+  const currentInitiativeRollCounts =
+    currentInitiativePhase && combatRoundState
+      ? {
+          pending: combatRoundState.participants.filter(
+            (participant) => participant.initiatives[currentInitiativePhase] === undefined,
+          ).length,
+          total: combatRoundState.participants.length,
+        }
+      : undefined;
   const canUseInitiativeButton =
     Boolean(currentInitiativePhase) &&
     Boolean(displayedParticipant) &&
@@ -2760,6 +2775,26 @@ export default function ScenarioPlayerCombatPageContent({
       </select>
     </label>
   ) : null;
+  const selectedPhaseCombatExperienceThreats =
+    selectedPhaseCombatExperienceRequirement?.threats ??
+    selectedPhaseAttackBackOutOpportunity?.threats ??
+    [];
+  const selectedPhaseCombatExperienceRollRequired =
+    selectedPhaseAttackBackOutOpportunity?.ceRequired ??
+    Boolean(selectedPhaseCombatExperienceRequirement);
+  const showPhaseCombatExperienceContextPanel =
+    Boolean(
+      selectedPhaseCombatExperienceRequirement ||
+        selectedPhaseAttackBackOutOpportunity ||
+        selectedPhaseInitiativeChoice,
+    );
+  const showInitiativeContextPanel =
+    !showPhaseCombatExperienceContextPanel && Boolean(currentInitiativePhase);
+  const showCombatStartExperienceContextPanel =
+    !showInitiativeContextPanel &&
+    !showPhaseCombatExperienceContextPanel &&
+    selectedCombatExperienceRequired &&
+    selectedCombatExperienceTrigger === "combat_start";
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -3014,62 +3049,114 @@ export default function ScenarioPlayerCombatPageContent({
               rows={modifierRows}
             />
             <div style={{ display: "grid", gap: "0.75rem" }}>
-              <section style={panelStyle}>
-                <strong>Combat Experience</strong>
-                <div>{formatCombatExperienceStatus(selectedVisibleCombatExperienceResult)}</div>
-                <div>Skill total {selectedCombatExperienceSkillTotal}</div>
-                <div>Difficulty {selectedCombatExperienceDifficulty}</div>
-                {selectedPhaseCombatExperienceRequirement ? (
+              {showInitiativeContextPanel ? (
+                <section style={panelStyle}>
+                  <strong>Initiative</strong>
                   <div style={{ color: "#4f5f57", display: "grid", gap: "0.2rem" }}>
-                    <div>Combat Experience required</div>
+                    <div>Base initiative {initiativeCalculation.baseInitiative}</div>
+                    <div>
+                      Gen/Fatigue + Initiative modifiers{" "}
+                      {initiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
+                      {initiativeCalculation.rawModifierTotal}
+                    </div>
+                    <div>
+                      Effective before roll {initiativeCalculation.modifiedInitiative}
+                      {initiativeCalculation.modifierAdjustment !== 0
+                        ? ` (${initiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${initiativeCalculation.modifierAdjustment})`
+                        : ""}
+                    </div>
+                    {currentInitiativeRollCounts ? (
+                      <div>
+                        Pending rolls: {currentInitiativeRollCounts.pending} of{" "}
+                        {currentInitiativeRollCounts.total}
+                      </div>
+                    ) : null}
+                    {selectedCurrentInitiative ? (
+                      <div style={{ color: "#3f5f46" }}>
+                        Rolled initiative {selectedCurrentInitiative.total}.
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+              {showPhaseCombatExperienceContextPanel ? (
+                <section style={panelStyle}>
+                  <strong>Phase Combat Experience</strong>
+                  <div style={{ color: "#4f5f57", display: "grid", gap: "0.2rem" }}>
+                    <div>Effective CE {selectedCombatExperienceSkillTotal}</div>
                     <div>Reason: attacked while attacking</div>
                     <div>
-                      Incoming attacker(s):{" "}
-                      {selectedPhaseCombatExperienceRequirement.threats
-                        .map((threat) => {
-                          const attacker = combatRoundState?.participants.find(
-                            (participant) =>
-                              participant.participantId === threat.attackerParticipantId,
-                          );
-
-                          return attacker?.label ?? threat.attackerParticipantId;
-                        })
-                        .join(", ")}
+                      CE roll required: {selectedPhaseCombatExperienceRollRequired ? "Yes" : "No"}
                     </div>
-                    {selectedPhaseCombatExperienceRequirement.threats.map((threat) => (
-                      <div
-                        key={`player-phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
-                      >
-                        Initiative: {threat.participantInitiative} vs {threat.attackerInitiative}.
-                        Difference: {threat.initiativeDifference}
+                    {selectedPhaseCombatExperienceThreats.length > 0 ? (
+                      <>
+                        <div>
+                          Incoming attacker(s):{" "}
+                          {selectedPhaseCombatExperienceThreats
+                            .map((threat) => {
+                              const attacker = combatRoundState?.participants.find(
+                                (participant) =>
+                                  participant.participantId === threat.attackerParticipantId,
+                              );
+
+                              return attacker?.label ?? threat.attackerParticipantId;
+                            })
+                            .join(", ")}
+                        </div>
+                        {selectedPhaseCombatExperienceThreats.map((threat) => (
+                          <div
+                            key={`player-phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
+                          >
+                            Initiative: {threat.participantInitiative} vs{" "}
+                            {threat.attackerInitiative}. Difference: {threat.initiativeDifference}
+                          </div>
+                        ))}
+                      </>
+                    ) : null}
+                    {selectedPhaseAttackBackOutOpportunity &&
+                    !selectedPhaseCombatExperienceRequirement ? (
+                      <div>Back-out choice available without a CE roll.</div>
+                    ) : null}
+                    {selectedPhaseAttackChoiceSelectorAvailable ? (
+                      <div>
+                        Selected choice:{" "}
+                        {phaseAttackChoiceSelection === "back_out" ? "Back out" : "Continue"}
                       </div>
-                    ))}
+                    ) : null}
+                    {selectedPhaseInitiativeChoice ? (
+                      <div style={{ color: "#3f5f46" }}>
+                        Submitted:{" "}
+                        {selectedPhaseInitiativeChoice.choice === "roll_ce_result"
+                          ? "Combat Experience rolled"
+                          : selectedPhaseInitiativeChoice.choice === "back_out"
+                            ? "Back out"
+                            : "Continue"}
+                        .
+                      </div>
+                    ) : (
+                      <div>
+                        Status:{" "}
+                        {selectedPhaseCombatExperienceRequirement
+                          ? "waiting for selected participant CE/choice"
+                          : "waiting for selected participant choice"}
+                      </div>
+                    )}
                   </div>
-                ) : null}
-                {selectedPhaseAttackBackOutOpportunity &&
-                !selectedPhaseCombatExperienceRequirement ? (
-                  <div style={{ color: "#4f5f57" }}>
-                    Threatened while attacking. Combat Experience is not required; choose Continue
-                    attack or Back out.
-                  </div>
-                ) : null}
-                {selectedPhaseInitiativeChoice ? (
-                  <div style={{ color: "#3f5f46" }}>
-                    Submitted:{" "}
-                    {selectedPhaseInitiativeChoice.choice === "roll_ce_result"
-                      ? "Combat Experience rolled"
-                      : selectedPhaseInitiativeChoice.choice === "back_out"
-                        ? "Back out of attack"
-                        : "Continue attack"}
-                    .
-                  </div>
-                ) : null}
-                {selectedCombatExperienceSkillLookup.warning ? (
-                  <div style={{ color: "#7c2d12" }}>
-                    {selectedCombatExperienceSkillLookup.warning}
-                  </div>
-                ) : null}
-              </section>
+                </section>
+              ) : null}
+              {showCombatStartExperienceContextPanel ? (
+                <section style={panelStyle}>
+                  <strong>Combat Experience</strong>
+                  <div>{formatCombatExperienceStatus(selectedCombatExperienceResult)}</div>
+                  <div>Skill total {selectedCombatExperienceSkillTotal}</div>
+                  <div>Difficulty {selectedCombatExperienceDifficulty}</div>
+                  {selectedCombatExperienceSkillLookup.warning ? (
+                    <div style={{ color: "#7c2d12" }}>
+                      {selectedCombatExperienceSkillLookup.warning}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
               {selectedVisibleHealthRoll ? (
                 <section style={panelStyle}>
                   <strong>Round-end health check</strong>

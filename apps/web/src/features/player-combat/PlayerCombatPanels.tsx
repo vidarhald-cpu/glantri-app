@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
+  type CombatEffect,
+  type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
   type CombatRoundStep,
@@ -35,11 +37,20 @@ import {
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
+  characterStateEntries?: PlayerCombatModifierDisplayEntry[];
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
   locked?: boolean;
   total: number;
+}
+
+export interface PlayerCombatModifierDisplayEntry {
+  details?: string;
+  id: string;
+  scopeLabel: string;
+  sourceLabel: "Character/state" | "Situational";
+  value: number;
 }
 
 export interface PlayerCombatPhaseCardView {
@@ -244,7 +255,7 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
   minWidth: 0,
 } as const;
 
@@ -252,7 +263,17 @@ const compactModifierMiniTableEntryRowStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  minWidth: 0,
+} as const;
+
+const compactModifierDisplayRowStyle = {
+  alignItems: "center",
+  color: "#5e5a50",
+  display: "grid",
+  fontSize: "0.88rem",
+  gap: "0.35rem",
+  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr)",
   minWidth: 0,
 } as const;
 
@@ -316,8 +337,59 @@ function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): numbe
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
 
-function formatModifierDuration(entry: ScenarioCombatModifierEntry): string {
-  return entry.durationRounds ? `${entry.durationRounds} rnd` : entry.scope;
+function formatSignedModifierValue(value: number): string {
+  return value >= 0 ? `+${value}` : String(value);
+}
+
+function formatModifierPhaseLabel(phase?: "phase1" | "phase2"): string | undefined {
+  return phase === "phase1" ? "P1" : phase === "phase2" ? "P2" : undefined;
+}
+
+function inferModifierPhase(entry: ScenarioCombatModifierEntry): "phase1" | "phase2" | undefined {
+  if (entry.sourcePhase === "phase1" || entry.sourcePhase === "phase2") {
+    return entry.sourcePhase;
+  }
+
+  const sourceText = `${entry.id} ${entry.sourceRule ?? ""}`;
+
+  if (sourceText.includes("phase1")) {
+    return "phase1";
+  }
+
+  return sourceText.includes("phase2") ? "phase2" : undefined;
+}
+
+export function formatCombatModifierScopeLabel(entry: ScenarioCombatModifierEntry): string {
+  const phaseLabel = formatModifierPhaseLabel(inferModifierPhase(entry));
+
+  if (phaseLabel) {
+    return phaseLabel;
+  }
+
+  if (entry.generated && entry.durationRounds === 1) {
+    return "1 attack";
+  }
+
+  if (entry.durationRounds) {
+    return entry.durationRounds === 1 ? "RD" : `duration ${entry.durationRounds}`;
+  }
+
+  return entry.scope === "save" ? "until save" : "until SU";
+}
+
+export function formatCombatModifierDisplayLine(input: {
+  bucketLabel: string;
+  entry: ScenarioCombatModifierEntry;
+}): string {
+  const details = input.entry.notes?.trim();
+
+  return [
+    `${input.bucketLabel} ${formatSignedModifierValue(input.entry.value)}`,
+    formatCombatModifierScopeLabel(input.entry),
+    details,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
 }
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
@@ -411,6 +483,7 @@ export function getPlayerCombatActionButtonLabel(input: {
 
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
   liveModifiers?: EncounterLiveCombatModifierSummary;
   phaseKey?: EncounterCombatPhaseKey;
 }): PlayerCombatModifierBucketView[] {
@@ -437,10 +510,12 @@ export function buildPlayerCombatModifierRows(input: {
     ...combatContext,
     modifierBuckets: filteredModifierBuckets,
   });
+  const characterStateEntries = buildCharacterStateModifierEntries(input.combatEffects);
 
   return [
     {
       bucketKey: "general",
+      characterStateEntries: characterStateEntries.general,
       entries: [],
       label: "General/Fatigue",
       locked: true,
@@ -454,17 +529,147 @@ export function buildPlayerCombatModifierRows(input: {
     },
     {
       bucketKey: "situation_ob_skill",
+      characterStateEntries: characterStateEntries.situationObSkill,
       entries: filteredModifierBuckets.situationObSkill,
       label: "Skill/OB",
       total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
     },
     {
       bucketKey: "situation_db",
+      characterStateEntries: characterStateEntries.situationDb,
       entries: filteredModifierBuckets.situationDb,
       label: "DB/Parry",
       total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
     },
   ];
+}
+
+function isActiveModifierCombatEffect(effect: CombatEffect): boolean {
+  return (
+    effect.status === "active" &&
+    effect.type !== "physical_damage" &&
+    effect.type !== "general_damage" &&
+    effect.type !== "bleed" &&
+    effect.type !== "internal_bleed"
+  );
+}
+
+function getCombatEffectModifierValue(effect: CombatEffect): number {
+  if (effect.modifierValue != null) {
+    return effect.modifierValue;
+  }
+
+  if (effect.damage !== 0) {
+    return effect.damage;
+  }
+
+  return effect.generalDamage;
+}
+
+function formatCombatEffectFallbackLabel(effect: CombatEffect): string {
+  return effect.type.replaceAll("_", " ");
+}
+
+function buildCharacterStateModifierEntries(
+  combatEffects?: CombatEffectsState,
+): {
+  general: PlayerCombatModifierDisplayEntry[];
+  situationDb: PlayerCombatModifierDisplayEntry[];
+  situationObSkill: PlayerCombatModifierDisplayEntry[];
+} {
+  const eventsById = new Map(
+    (combatEffects?.events ?? []).map((event) => [event.id, event] as const),
+  );
+  const result = {
+    general: [] as PlayerCombatModifierDisplayEntry[],
+    situationDb: [] as PlayerCombatModifierDisplayEntry[],
+    situationObSkill: [] as PlayerCombatModifierDisplayEntry[],
+  };
+
+  for (const effect of combatEffects?.effects ?? []) {
+    if (!isActiveModifierCombatEffect(effect)) {
+      continue;
+    }
+
+    const value = getCombatEffectModifierValue(effect);
+
+    if (value === 0) {
+      continue;
+    }
+
+    const event = eventsById.get(effect.sourceEventId);
+    const details =
+      event?.sourceLabel && event.sourceLabel !== "Manual combat effect"
+        ? event.sourceLabel
+        : (effect.description?.trim() ??
+          event?.description?.trim() ??
+          formatCombatEffectFallbackLabel(effect));
+    const entry = {
+      details,
+      id: effect.id,
+      scopeLabel:
+        effect.duration?.trim() ??
+        (effect.expiresAtRound ? `until RD ${effect.expiresAtRound}` : "until SU"),
+      sourceLabel: "Character/state" as const,
+      value,
+    };
+
+    if (effect.type === "fatigue" || effect.effectGroup === "fatigue") {
+      result.general.push(entry);
+    } else if (effect.effectGroup === "general") {
+      result.general.push(entry);
+    } else if (effect.effectGroup === "obSkill") {
+      result.situationObSkill.push(entry);
+    } else if (effect.effectGroup === "db") {
+      result.situationDb.push(entry);
+    }
+  }
+
+  return result;
+}
+
+function buildSituationalModifierDisplayEntry(
+  entry: ScenarioCombatModifierEntry,
+): PlayerCombatModifierDisplayEntry {
+  return {
+    details: entry.notes?.trim() || undefined,
+    id: entry.id,
+    scopeLabel: formatCombatModifierScopeLabel(entry),
+    sourceLabel: "Situational",
+    value: entry.value,
+  };
+}
+
+function ModifierDisplayEntryRow({
+  bucketLabel,
+  entry,
+}: {
+  bucketLabel: string;
+  entry: PlayerCombatModifierDisplayEntry;
+}) {
+  return (
+    <div
+      key={`${entry.sourceLabel}:${entry.id}`}
+      style={compactModifierDisplayRowStyle}
+      title={`${bucketLabel} ${formatSignedModifierValue(entry.value)} · ${entry.scopeLabel}${
+        entry.details ? ` · ${entry.details}` : ""
+      }`}
+    >
+      <span>{entry.sourceLabel}</span>
+      <span>{formatSignedModifierValue(entry.value)}</span>
+      <span>{entry.scopeLabel}</span>
+      <span
+        style={{
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {entry.details ?? "—"}
+      </span>
+    </div>
+  );
 }
 
 export function PlayerCombatModifierPanel({
@@ -504,8 +709,15 @@ export function PlayerCombatModifierPanel({
 
           {editable && !row.locked && row.entries.length > 0 ? (
             <div style={compactModifierMiniTableStyle}>
+              {row.characterStateEntries?.map((entry) => (
+                <ModifierDisplayEntryRow
+                  bucketLabel={row.label}
+                  entry={entry}
+                  key={`${entry.sourceLabel}:${entry.id}`}
+                />
+              ))}
               <div style={compactModifierMiniTableHeaderStyle}>
-                {["Mod", "Dur", "Details"].map((heading) => (
+                {["Source", "Mod", "Dur", "Details"].map((heading) => (
                   <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
                     {heading}
                   </span>
@@ -514,6 +726,7 @@ export function PlayerCombatModifierPanel({
               </div>
               {row.entries.map((entry) => (
                 <div key={entry.id} style={compactModifierMiniTableEntryRowStyle}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational</span>
                   <input
                     aria-label={`${row.label} modifier value`}
                     disabled={controlsDisabled}
@@ -567,13 +780,22 @@ export function PlayerCombatModifierPanel({
               ))}
             </div>
           ) : (
-            row.entries.map((entry) => (
-              <div key={entry.id} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {entry.value >= 0 ? "+" : ""}
-                {entry.value} · {formatModifierDuration(entry)}
-                {entry.notes ? ` · ${entry.notes}` : ""}
-              </div>
-            ))
+            <>
+              {row.characterStateEntries?.map((entry) => (
+                <ModifierDisplayEntryRow
+                  bucketLabel={row.label}
+                  entry={entry}
+                  key={`${entry.sourceLabel}:${entry.id}`}
+                />
+              ))}
+              {row.entries.map((entry) => (
+                <ModifierDisplayEntryRow
+                  bucketLabel={row.label}
+                  entry={buildSituationalModifierDisplayEntry(entry)}
+                  key={`Situational:${entry.id}`}
+                />
+              ))}
+            </>
           )}
         </div>
       ))}

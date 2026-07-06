@@ -1559,7 +1559,7 @@ describe("combat round manager", () => {
       type: "general_modifier",
     });
     expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
-      "Round 1, DE: The Gladiator Combat Experience 19 + roll 8 = 27 vs 36. Effective CE table result: 12. Result: Active. General -2 for 2 rounds.",
+      "Round 1, DE: The Gladiator Combat Experience 19 + roll 8 = 27 vs 36. Result: Active. General -2 for 2 rounds.",
     );
   });
 

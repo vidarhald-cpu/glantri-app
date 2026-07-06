@@ -60,7 +60,6 @@ import {
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundPhaseInitiativeChoice,
-  getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
@@ -3992,10 +3991,16 @@ export default function CombatRoundManagerPanel({
     () =>
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
+        combatEffects: selectedScenarioParticipant?.state.combatEffects,
         liveModifiers: inspectorLiveModifiers,
         phaseKey: inspectorModifierPhase,
       }),
-    [inspectorGeneratedCombatContext, inspectorLiveModifiers, inspectorModifierPhase],
+    [
+      inspectorGeneratedCombatContext,
+      inspectorLiveModifiers,
+      inspectorModifierPhase,
+      selectedScenarioParticipant?.state.combatEffects,
+    ],
   );
   const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
     inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows;
@@ -4059,14 +4064,6 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined;
-  const inspectorPhaseInitiativeChoiceStatuses =
-    inspectorInitiativeResolutionPhase && selectedRoundIsActive
-      ? getCombatRoundPhaseInitiativeChoiceStatuses({
-          phase: inspectorInitiativeResolutionPhase,
-          state: roundState,
-          visibility: encounter.roleplayState?.visibility,
-        })
-      : [];
   const inspectorVisibleCombatExperienceResult =
     inspectorPhaseInitiativeChoice?.combatExperience ?? inspectorCombatExperienceResult;
   const inspectorPhaseResolutionCursor =
@@ -4356,6 +4353,16 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorDisplayInitiative =
     inspectorSnapshot?.initiativeResult ?? inspectorCurrentInitiative;
+  const inspectorInitiativeRollCounts =
+    inspectorCurrentInitiativePhase && selectedRoundIsActive
+      ? {
+          pending: roundState.participants.filter(
+            (participant) =>
+              participant.initiatives[inspectorCurrentInitiativePhase] === undefined,
+          ).length,
+          total: roundState.participants.length,
+        }
+      : undefined;
   const inspectorDisplayAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorAttackPhase
@@ -4764,6 +4771,25 @@ export default function CombatRoundManagerPanel({
         {inspectorPhaseAttackChoiceControls}
       </>
     ) : null;
+  const inspectorPhaseCombatExperienceThreats =
+    inspectorPhaseCombatExperienceRequirement?.threats ??
+    inspectorPhaseAttackBackOutOpportunity?.threats ??
+    [];
+  const inspectorPhaseCombatExperienceRollRequired =
+    inspectorPhaseAttackBackOutOpportunity?.ceRequired ??
+    Boolean(inspectorPhaseCombatExperienceRequirement);
+  const showInspectorPhaseCombatExperienceContextPanel = Boolean(
+    inspectorPhaseCombatExperienceRequirement ||
+      inspectorPhaseAttackBackOutOpportunity ||
+      inspectorPhaseInitiativeChoice,
+  );
+  const showInspectorInitiativeContextPanel =
+    !showInspectorPhaseCombatExperienceContextPanel && inspectorCurrentStepIsInitiative;
+  const showInspectorCombatStartExperienceContextPanel =
+    !showInspectorInitiativeContextPanel &&
+    !showInspectorPhaseCombatExperienceContextPanel &&
+    inspectorCombatExperienceRequired &&
+    inspectorCombatExperienceIsCombatStart;
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -5120,6 +5146,7 @@ export default function CombatRoundManagerPanel({
     });
     const modifierRows = buildPlayerCombatModifierRows({
       combatContext: draft.combatContext,
+      combatEffects: input.scenarioParticipant?.state.combatEffects,
       liveModifiers,
       phaseKey: input.phaseKey,
     });
@@ -7484,127 +7511,138 @@ export default function CombatRoundManagerPanel({
                     rows={inspectorDisplayModifierRows}
                   />
                   <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {inspector.step === "select_actions" ||
-                    inspectorCombatExperienceRequired ||
-                    inspectorPhaseAttackBackOutOpportunity ||
-                    inspectorPhaseInitiativeChoiceStatuses.length > 0 ? (
+                    {showInspectorInitiativeContextPanel ? (
+                      <section style={playerCombatPanelCardStyle}>
+                        <strong>Initiative</strong>
+                        <div
+                          style={{
+                            color: "#5e5a50",
+                            display: "grid",
+                            fontSize: "0.85rem",
+                            gap: "0.2rem",
+                          }}
+                        >
+                          <div>Base initiative {inspectorInitiativeCalculation.baseInitiative}</div>
+                          <div>
+                            Gen/Fatigue + Initiative modifiers{" "}
+                            {inspectorInitiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
+                            {inspectorInitiativeCalculation.rawModifierTotal}
+                          </div>
+                          <div>
+                            Effective before roll{" "}
+                            {inspectorInitiativeCalculation.modifiedInitiative}
+                            {inspectorInitiativeCalculation.modifierAdjustment !== 0
+                              ? ` (${inspectorInitiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${inspectorInitiativeCalculation.modifierAdjustment})`
+                              : ""}
+                          </div>
+                          {inspectorInitiativeRollCounts ? (
+                            <div>
+                              Pending rolls: {inspectorInitiativeRollCounts.pending} of{" "}
+                              {inspectorInitiativeRollCounts.total}
+                            </div>
+                          ) : null}
+                          {inspectorDisplayInitiative ? (
+                            <div style={{ color: "#3f5f46" }}>
+                              Rolled initiative {inspectorDisplayInitiative.total}.
+                            </div>
+                          ) : null}
+                        </div>
+                      </section>
+                    ) : null}
+                    {showInspectorPhaseCombatExperienceContextPanel ? (
+                      <section style={playerCombatPanelCardStyle}>
+                        <strong>Phase Combat Experience</strong>
+                        <div
+                          style={{
+                            color: "#5e5a50",
+                            display: "grid",
+                            fontSize: "0.85rem",
+                            gap: "0.2rem",
+                          }}
+                        >
+                          <div>Effective CE {inspectorCombatExperienceSkillTotal}</div>
+                          <div>Reason: attacked while attacking</div>
+                          <div>
+                            CE roll required:{" "}
+                            {inspectorPhaseCombatExperienceRollRequired ? "Yes" : "No"}
+                          </div>
+                          {inspectorPhaseCombatExperienceThreats.length > 0 ? (
+                            <>
+                              <div>
+                                Incoming attacker(s):{" "}
+                                {inspectorPhaseCombatExperienceThreats
+                                  .map((threat) => {
+                                    const attacker = roundState.participants.find(
+                                      (participant) =>
+                                        participant.participantId === threat.attackerParticipantId,
+                                    );
+
+                                    return attacker?.label ?? threat.attackerParticipantId;
+                                  })
+                                  .join(", ")}
+                              </div>
+                              {inspectorPhaseCombatExperienceThreats.map((threat) => (
+                                <div
+                                  key={`phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
+                                >
+                                  Initiative: {threat.participantInitiative} vs{" "}
+                                  {threat.attackerInitiative}. Difference:{" "}
+                                  {threat.initiativeDifference}
+                                </div>
+                              ))}
+                            </>
+                          ) : null}
+                          {inspectorPhaseAttackBackOutOpportunity &&
+                          !inspectorPhaseCombatExperienceRequirement ? (
+                            <div>Back-out choice available without a CE roll.</div>
+                          ) : null}
+                          {inspectorPhaseAttackChoiceSelectorAvailable ? (
+                            <div>
+                              Selected choice:{" "}
+                              {inspectorPhaseAttackChoiceSelection === "back_out"
+                                ? "Back out"
+                                : "Continue"}
+                            </div>
+                          ) : null}
+                          {inspectorPhaseInitiativeChoice ? (
+                            <div style={{ color: "#3f5f46" }}>
+                              Submitted:{" "}
+                              {inspectorPhaseInitiativeChoice.choice === "roll_ce_result"
+                                ? "Combat Experience rolled"
+                                : inspectorPhaseInitiativeChoice.choice === "back_out"
+                                  ? "Back out"
+                                  : "Continue"}
+                              .
+                            </div>
+                          ) : (
+                            <div>
+                              Status:{" "}
+                              {inspectorPhaseCombatExperienceRequirement
+                                ? "waiting for selected participant CE/choice"
+                                : "waiting for selected participant choice"}
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    ) : null}
+                    {showInspectorCombatStartExperienceContextPanel ? (
                       <section style={playerCombatPanelCardStyle}>
                         <strong>Combat Experience</strong>
-                        <div>
-                          {formatCombatExperienceStatus(inspectorVisibleCombatExperienceResult)}
-                        </div>
+                        <div>{formatCombatExperienceStatus(inspectorCombatExperienceResult)}</div>
                         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
                           Skill total {inspectorCombatExperienceSkillTotal}
+                        </div>
+                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          {inspectorCombatExperienceWindowOpen
+                            ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
+                            : "Waiting for GM to start CE."}
+                          {combatExperienceRollRecorded
+                            ? " Difficulty locked after the first CE result."
+                            : ""}
                         </div>
                         {inspectorCombatExperienceSkillLookup.warning ? (
                           <div style={{ color: "#8a4f21", fontSize: "0.85rem" }}>
                             {inspectorCombatExperienceSkillLookup.warning}
-                          </div>
-                        ) : null}
-                        {inspectorCombatExperienceRequired &&
-                        inspectorCombatExperienceIsCombatStart ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            {inspectorCombatExperienceWindowOpen
-                              ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
-                              : "Waiting for GM to start CE."}
-                            {combatExperienceRollRecorded
-                              ? " Difficulty locked after the first CE result."
-                              : ""}
-                          </div>
-                        ) : null}
-                        {inspectorCombatExperienceRequired &&
-                        !inspectorCombatExperienceIsCombatStart ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            Phase Combat Experience uses difficulty{" "}
-                            {activeCombatExperienceDifficulty}.
-                          </div>
-                        ) : null}
-                        {inspectorPhaseCombatExperienceRequirement ? (
-                          <div
-                            style={{
-                              color: "#5e5a50",
-                              display: "grid",
-                              fontSize: "0.85rem",
-                              gap: "0.2rem",
-                            }}
-                          >
-                            <div>Combat Experience required</div>
-                            <div>Reason: attacked while attacking</div>
-                            <div>
-                              Incoming attacker(s):{" "}
-                              {inspectorPhaseCombatExperienceRequirement.threats
-                                .map((threat) => {
-                                  const attacker = roundState.participants.find(
-                                    (participant) =>
-                                      participant.participantId === threat.attackerParticipantId,
-                                  );
-
-                                  return attacker?.label ?? threat.attackerParticipantId;
-                                })
-                                .join(", ")}
-                            </div>
-                            {inspectorPhaseCombatExperienceRequirement.threats.map((threat) => (
-                              <div
-                                key={`phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
-                              >
-                                Initiative: {threat.participantInitiative} vs{" "}
-                                {threat.attackerInitiative}. Difference:{" "}
-                                {threat.initiativeDifference}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                        {inspectorPhaseAttackBackOutOpportunity &&
-                        !inspectorPhaseCombatExperienceRequirement ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            Threatened while attacking. Combat Experience is not required; choose
-                            Continue attack or Back out before GM commits initiative resolution.
-                          </div>
-                        ) : null}
-                        {inspectorPhaseInitiativeChoice ? (
-                          <div style={{ color: "#3f5f46", fontSize: "0.85rem" }}>
-                            Submitted:{" "}
-                            {inspectorPhaseInitiativeChoice.choice === "roll_ce_result"
-                              ? "Combat Experience rolled"
-                              : inspectorPhaseInitiativeChoice.choice === "back_out"
-                                ? "Back out of attack"
-                                : "Continue attack"}
-                            .
-                          </div>
-                        ) : null}
-                        {inspectorPhaseInitiativeChoiceStatuses.length > 0 ? (
-                          <div
-                            style={{
-                              borderTop: "1px solid #e5ded0",
-                              color: "#5e5a50",
-                              display: "grid",
-                              fontSize: "0.85rem",
-                              gap: "0.2rem",
-                              paddingTop: "0.5rem",
-                            }}
-                          >
-                            <strong>Phase initiative choices</strong>
-                            {inspectorPhaseInitiativeChoiceStatuses.map((status) => {
-                              const participantLabel =
-                                roundState.participants.find(
-                                  (participant) =>
-                                    participant.participantId === status.participantId,
-                                )?.label ?? status.participantId;
-                              const choiceLabel = status.choice
-                                ? status.choice.choice === "roll_ce_result"
-                                  ? "CE rolled"
-                                  : status.choice.choice === "back_out"
-                                    ? "Back out"
-                                    : "Continue"
-                                : "Unsubmitted";
-
-                              return (
-                                <div key={`phase-choice:${status.phase}:${status.participantId}`}>
-                                  {participantLabel}: {status.ceRequired ? "CE required" : "No CE"}{" "}
-                                  - {choiceLabel}
-                                </div>
-                              );
-                            })}
                           </div>
                         ) : null}
                       </section>

@@ -8,6 +8,8 @@ This is an audit-only document. It identifies contract violations and implementa
 
 Cleanup note, 2026-07-06: the focused CE/action-area pass removed duplicate Player Combat CE waiting copy, moved GM CE start/update ownership into the primary Action Button Area, hid the internal effective CE table line from normal Action Result panels, normalized modifier-review status copy, and fixed player-safe distance projection so visible player distance uses the materialized round distance edge instead of falling back to melee distance `2`.
 
+Cleanup note, 2026-07-06: the focused modifier/context pass clarified combat modifier source and scope display, split Initiative context from Combat Experience context, limited phase Combat Experience context to the selected participant, and kept other participants' phase-choice progress out of the selected-context panel.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

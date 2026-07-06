@@ -3,7 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { buildPlayerCombatModifierRows } from "./PlayerCombatPanels";
+import {
+  buildPlayerCombatModifierRows,
+  formatCombatModifierDisplayLine,
+  formatCombatModifierScopeLabel,
+} from "./PlayerCombatPanels";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "PlayerCombatPanels.tsx");
 
@@ -140,6 +144,25 @@ describe("PlayerCombatPanels", () => {
       "double attack",
     ]);
     expect(phase2ObRow?.total).toBe(1);
+    const attackParryEntry = phase1DbRow?.entries.find((entry) => entry.notes === "attack parry");
+    const doubleAttackEntry = phase1ObRow?.entries.find((entry) => entry.notes === "double attack");
+
+    if (!attackParryEntry || !doubleAttackEntry) {
+      throw new Error("Expected generated phase modifier entries to be present.");
+    }
+
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "DB/Parry",
+        entry: attackParryEntry,
+      }),
+    ).toBe("DB/Parry -4 · P1 · attack parry");
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Skill/OB",
+        entry: doubleAttackEntry,
+      }),
+    ).toBe("Skill/OB -1 · P1 · double attack");
   });
 
   it("shows generated distance modifiers in the phase Skill/OB bucket", () => {
@@ -186,6 +209,92 @@ describe("PlayerCombatPanels", () => {
     });
     expect(phase2ObRow?.entries).toEqual([]);
     expect(phase2ObRow?.total).toBe(0);
+    const distanceEntry = phase1ObRow?.entries[0];
+
+    if (!distanceEntry) {
+      throw new Error("Expected generated distance modifier entry to be present.");
+    }
+
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Skill/OB",
+        entry: distanceEntry,
+      }),
+    ).toContain("Skill/OB -2 · P1 · distance: Broad sword preferred 2");
+  });
+
+  it("labels character-state and situational modifier sources without changing totals", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              generated: true,
+              id: "generated:attack-parry:phase1:db-parry",
+              notes: "attack parry",
+              scope: "until" as const,
+              sourcePhase: "phase1" as const,
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: {
+        effects: [
+          {
+            createdAt: "2026-01-01T00:00:00.000Z",
+            damage: 0,
+            duration: "2 rounds",
+            effectGroup: "general",
+            generalDamage: 0,
+            id: "ce-effect",
+            modifierValue: -1,
+            sourceEventId: "ce-event",
+            status: "active",
+            targetParticipantId: "scenario-1",
+            type: "general_modifier",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-01-01T00:00:00.000Z",
+            description: "Combat Experience: Active",
+            id: "ce-event",
+            sourceLabel: "Combat Experience",
+            sourceType: "skill_roll",
+            targetParticipantId: "scenario-1",
+          },
+        ],
+      },
+      phaseKey: "phase1",
+    });
+    const generalRow = rows.find((row) => row.bucketKey === "general");
+    const dbRow = rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(generalRow?.characterStateEntries).toEqual([
+      expect.objectContaining({
+        details: "Combat Experience",
+        scopeLabel: "2 rounds",
+        sourceLabel: "Character/state",
+        value: -1,
+      }),
+    ]);
+    expect(dbRow?.entries[0]).toMatchObject({
+      generated: true,
+      notes: "attack parry",
+      value: -4,
+    });
+    const dbEntry = dbRow?.entries[0];
+
+    if (!dbEntry) {
+      throw new Error("Expected generated DB/Parry entry to be present.");
+    }
+
+    expect(formatCombatModifierScopeLabel(dbEntry)).toBe("P1");
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
@@ -203,9 +312,15 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
     expect(source).toContain("compactModifierMiniTableEntryRowStyle");
     expect(source).not.toContain("compactModifierMiniTableDraftRowStyle");
-    expect(source).toContain('gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem"');
-    expect(source).toContain('["Mod", "Dur", "Details"].map');
-    expect(source).not.toContain('["Mod", "Dur", "Details", "Remove"].map');
+    expect(source).toContain(
+      'gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem"',
+    );
+    expect(source).toContain('["Source", "Mod", "Dur", "Details"].map');
+    expect(source).not.toContain('["Source", "Mod", "Dur", "Details", "Remove"].map');
+    expect(source).toContain("characterStateEntries");
+    expect(source).toContain("Character/state");
+    expect(source).toContain("Situational");
+    expect(source).toContain("ModifierDisplayEntryRow");
     expect(source).toContain("createModifierEntryDraft");
     expect(source).not.toContain("createModifierEntryFromDraft");
     expect(source).not.toContain("updateEntryDraft");
@@ -234,7 +349,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toMatch(/>\s*-\s*<\/button>/);
     expect(source).not.toContain(">Remove</button>");
     expect(source).toContain('<span aria-hidden="true" />');
-    expect(source).toContain("formatModifierDuration");
+    expect(source).toContain("formatCombatModifierScopeLabel");
+    expect(source).toContain("formatCombatModifierDisplayLine");
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');
   });

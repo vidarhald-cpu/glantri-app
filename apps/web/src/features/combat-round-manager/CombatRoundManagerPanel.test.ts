@@ -84,10 +84,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Combat Experience check required before attack.");
     expect(source).toContain('? "?"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
-    expect(source).toContain("Combat Experience required");
+    expect(source).toContain("Phase Combat Experience");
+    expect(source).toContain("CE roll required:");
     expect(source).toContain("Reason: attacked while attacking");
     expect(source).toContain("Incoming attacker(s):");
     expect(source).toContain("threat.initiativeDifference");
+    expect(source).toContain("showInspectorPhaseCombatExperienceContextPanel");
+    expect(source).toContain("inspectorPhaseCombatExperienceThreats");
+    expect(source).not.toContain("Phase initiative choices");
   });
 
   it("renders compact GM distance matrix controls below the inspector", () => {
@@ -733,8 +737,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("onBlur={(event) =>");
     expect(source).not.toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
-    expect(source).toContain("inspectorPhaseInitiativeChoiceStatuses.length > 0");
-    expect(source).toContain("Phase Combat Experience uses difficulty");
+    expect(source).toContain("showInspectorInitiativeContextPanel");
+    expect(source).toContain("showInspectorPhaseCombatExperienceContextPanel");
+    expect(source).toContain("showInspectorCombatStartExperienceContextPanel");
+    expect(source).toContain("Base initiative {inspectorInitiativeCalculation.baseInitiative}");
+    expect(source).toContain("Pending rolls: {inspectorInitiativeRollCounts.pending} of");
+    expect(source).toContain("Effective CE {inspectorCombatExperienceSkillTotal}");
+    expect(source).toContain("Selected choice:");
+    expect(source).toContain("Status:");
+    expect(source).not.toContain("inspectorPhaseInitiativeChoiceStatuses");
+    expect(source).not.toContain("Phase initiative choices");
     expect(source).toContain("inspectorCombatExperienceRequired");
     expect(source).toContain("rollInspectorCombatExperience()");
     expect(source).toContain("backOutPhaseAttackOnServer");

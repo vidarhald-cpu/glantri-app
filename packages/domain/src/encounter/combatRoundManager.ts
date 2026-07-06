@@ -16641,7 +16641,6 @@ function getCombatRoundLatestEventForCommand(input: {
     const rollTotal = getCombatRoundLatestEventFactNumber(facts, "rollTotal");
     const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
     const noRollRequired = getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
-    const effectiveTableTotal = getCombatRoundLatestEventFactNumber(facts, "effectiveTableTotal");
     const difficulty =
       getCombatRoundLatestEventFactNumber(facts, "difficulty") ??
       COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
@@ -16658,10 +16657,6 @@ function getCombatRoundLatestEventForCommand(input: {
         : modifierValue !== 0 && durationRounds > 0
           ? ` General ${modifierValue} for ${durationRounds} round${durationRounds === 1 ? "" : "s"}.`
           : " No modifier.";
-    const effectiveTableText =
-      effectiveTableTotal !== undefined
-        ? ` Effective CE table result: ${effectiveTableTotal}.`
-        : "";
     const stepLabel = command.step ?? "DE";
 
     return {
@@ -16670,10 +16665,10 @@ function getCombatRoundLatestEventForCommand(input: {
       shortTitle: "Combat Experience",
       step: command.step,
       summaryText: noRollRequired
-        ? `Round ${command.roundNumber}, ${stepLabel}: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}, no roll required.${effectText}`
+        ? `Round ${command.roundNumber}, ${stepLabel}: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}. Result: ${resultLabel}, no roll required.${effectText}`
         : `Round ${command.roundNumber}, ${stepLabel}: ${actorLabel} Combat Experience ${skillTotal} + roll ${
             rollTotal ?? "?"
-          } = ${finalTotal ?? "?"} vs ${difficulty}.${effectiveTableText} Result: ${resultLabel}.${effectText}`,
+          } = ${finalTotal ?? "?"} vs ${difficulty}. Result: ${resultLabel}.${effectText}`,
     };
   }
 
