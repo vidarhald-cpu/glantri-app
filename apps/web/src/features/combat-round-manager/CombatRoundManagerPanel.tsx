@@ -175,6 +175,7 @@ import {
   type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
+  createEmptyPlayerEncounterCombatContext,
   getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
@@ -356,6 +357,11 @@ interface CombatInspectorPhaseContextDrafts {
   phase1: ScenarioParticipantCombatContext;
   phase2: ScenarioParticipantCombatContext;
 }
+
+type CombatInspectorSourceMode =
+  | "current"
+  | "history"
+  | "snapshot_with_current_reference";
 
 interface CombatParrySourceOption {
   label: string;
@@ -664,6 +670,62 @@ function buildInspectorDraftKey(input: {
     input.declaration?.roundNumber ?? "no-round-declaration",
     input.declaration?.submittedAt ?? "no-submission-time",
   ].join(":");
+}
+
+function getCombatInspectorSourceLabel(mode: CombatInspectorSourceMode): string | undefined {
+  switch (mode) {
+    case "current":
+      return undefined;
+    case "history":
+      return "History";
+    case "snapshot_with_current_reference":
+      return "History · Current reference";
+  }
+}
+
+function createUnrecordedHistoricalPhaseContext(): ScenarioParticipantCombatContext {
+  return applyDefaultPlayerCombatPhaseContext(createEmptyPlayerEncounterCombatContext());
+}
+
+function buildHistoricalInspectorPhaseContexts(
+  snapshot: CombatRoundStepSnapshot,
+): CombatInspectorPhaseContextDrafts {
+  return {
+    phase1:
+      snapshot.phase === "phase1" && snapshot.phaseContext
+        ? snapshot.phaseContext
+        : createUnrecordedHistoricalPhaseContext(),
+    phase2:
+      snapshot.phase === "phase2" && snapshot.phaseContext
+        ? snapshot.phaseContext
+        : createUnrecordedHistoricalPhaseContext(),
+  };
+}
+
+function buildInspectorDisplayDraft(input: {
+  draft: CombatInspectorDeclarationDraft;
+  snapshot?: CombatRoundStepSnapshot;
+}): CombatInspectorDeclarationDraft {
+  if (!input.snapshot) {
+    return input.draft;
+  }
+
+  return {
+    actionId:
+      (input.snapshot.declarationSummary?.actionId as PlayerEncounterActionId | undefined) ?? "",
+    additionalActionNotes: input.snapshot.declarationSummary?.additionalActionNotes ?? "",
+    combatContext: createEmptyPlayerEncounterCombatContext(),
+    movementId:
+      (input.snapshot.declarationSummary?.movementId as PlayerEncounterMovementId | undefined) ??
+      "",
+    movementIntent:
+      input.snapshot.declarationSummary?.movementIntent ?? createDefaultMovementIntent(),
+    phaseContexts: buildHistoricalInspectorPhaseContexts(input.snapshot),
+    secondaryActionId:
+      (input.snapshot.declarationSummary?.secondaryActionId as
+        | PlayerEncounterActionId
+        | undefined) ?? "",
+  };
 }
 
 function getModifierBucketContextKey(
@@ -4041,34 +4103,12 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspector.step,
   });
-  const inspectorDisplayDraft = inspectorSnapshot
-    ? {
-        ...inspectorDraft,
-        actionId:
-          (inspectorSnapshot.declarationSummary?.actionId as PlayerEncounterActionId | undefined) ??
-          inspectorDraft.actionId,
-        additionalActionNotes:
-          inspectorSnapshot.declarationSummary?.additionalActionNotes ??
-          inspectorDraft.additionalActionNotes,
-        movementId:
-          (inspectorSnapshot.declarationSummary?.movementId as
-            | PlayerEncounterMovementId
-            | undefined) ?? inspectorDraft.movementId,
-        movementIntent:
-          inspectorSnapshot.declarationSummary?.movementIntent ?? inspectorDraft.movementIntent,
-        phaseContexts:
-          inspectorSnapshot.phase && inspectorSnapshot.phaseContext
-            ? {
-                ...inspectorDraft.phaseContexts,
-                [inspectorSnapshot.phase]: inspectorSnapshot.phaseContext,
-              }
-            : inspectorDraft.phaseContexts,
-        secondaryActionId:
-          (inspectorSnapshot.declarationSummary?.secondaryActionId as
-            | PlayerEncounterActionId
-            | undefined) ?? inspectorDraft.secondaryActionId,
-      }
-    : inspectorDraft;
+  const inspectorSourceMode: CombatInspectorSourceMode = inspectorSnapshot ? "history" : "current";
+  const inspectorSourceLabel = getCombatInspectorSourceLabel(inspectorSourceMode);
+  const inspectorDisplayDraft = buildInspectorDisplayDraft({
+    draft: inspectorDraft,
+    snapshot: inspectorSnapshot,
+  });
   const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
   const inspectorEquipmentState = useMemo(() => {
     const candidate =
@@ -4129,6 +4169,14 @@ export default function CombatRoundManagerPanel({
   );
   const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
     inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows;
+  const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorSnapshot
+    ? inspectorSnapshot.modifierSummary
+      ? "history"
+      : "snapshot_with_current_reference"
+    : "current";
+  const inspectorModifierSourceLabel = getCombatInspectorSourceLabel(
+    inspectorModifierSourceMode,
+  );
   const inspectorTargetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
@@ -7583,6 +7631,7 @@ export default function CombatRoundManagerPanel({
                     }
                     roundNumber={selectedRoundNumber}
                     secondaryActionId={inspectorDisplayDraft.secondaryActionId}
+                    sourceLabel={inspectorSourceLabel}
                   />
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
@@ -7612,6 +7661,20 @@ export default function CombatRoundManagerPanel({
                     });
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
+                    const phaseSourceLabel = getCombatInspectorSourceLabel(
+                      inspectorSnapshot ? "history" : "current",
+                    );
+                    const phaseDistanceLabel = phaseTargetEncounterParticipant
+                      ? inspectorSnapshot
+                        ? `Distance: ${
+                            snapshotForPhase
+                              ? (inspectorDisplayAttackDistanceModifierDetail?.actualDistance ??
+                                inspectorResolutionAttackDistanceModifierDetail?.actualDistance ??
+                                "Not recorded")
+                              : "Not recorded"
+                          }`
+                        : `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
+                      : undefined;
                     const phaseDefenseStats = buildPlayerCombatDefenseStats({
                       mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
                       offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
@@ -7638,7 +7701,7 @@ export default function CombatRoundManagerPanel({
                         : undefined;
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
-                      attackStats: phaseLoadoutSummary.attackStats,
+                      attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats,
                       liveModifiers:
                         phaseKey === inspectorResolutionPhase
                           ? inspectorParryDefenderPhaseSummary?.liveModifiers
@@ -7650,7 +7713,7 @@ export default function CombatRoundManagerPanel({
                       participantId: inspector.participant?.participantId,
                       phaseCard,
                       phaseContext: phaseCombatContext,
-                      phaseDefenseStats,
+                      phaseDefenseStats: inspectorSnapshot ? null : phaseDefenseStats,
                       phaseKey,
                       secondaryActionId: inspectorDisplayDraft.secondaryActionId,
                       selectedResolutionContext,
@@ -7671,7 +7734,13 @@ export default function CombatRoundManagerPanel({
                       <PlayerCombatPhasePanel
                         key={phaseModel.phaseCard.phaseLabel}
                         phaseCard={phaseCard}
+                        sourceLabel={phaseSourceLabel}
                       >
+                        {inspectorSnapshot && !snapshotForPhase ? (
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            No recorded phase facts.
+                          </div>
+                        ) : null}
                         {phaseModel.showAttackStats && phaseModel.attackStats ? (
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                         ) : null}
@@ -7680,11 +7749,7 @@ export default function CombatRoundManagerPanel({
                             <PlayerCombatAttackTargetSelector
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
-                              distanceLabel={
-                                phaseTargetEncounterParticipant
-                                  ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
-                                  : undefined
-                              }
+                              distanceLabel={phaseDistanceLabel}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
@@ -7761,6 +7826,7 @@ export default function CombatRoundManagerPanel({
                     }
                     readOnly={Boolean(inspectorSnapshot)}
                     rows={inspectorDisplayModifierRows}
+                    sourceLabel={inspectorModifierSourceLabel}
                   />
                   <div style={{ display: "grid", gap: "0.75rem" }}>
                     {showInspectorInitiativeContextPanel ? (

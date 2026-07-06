@@ -14,6 +14,8 @@ Cleanup note, 2026-07-06: the focused combat display hygiene pass made modifier 
 
 Cleanup note, 2026-07-06: Slice 5 separated participant SU review from shared Round distance control, removed round-end distance roll/apply buttons from the distance-control body, and routed GM proxy roll/apply through the primary Action Button Area with compact pair/override controls.
 
+Cleanup note, 2026-07-06: Slice 6 marked GM historical inspector panels with compact History/current-reference markers and stopped committed phase panels from silently filling missing snapshot phase facts, target distance, attack stats, or defense stats from current mutable state.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`
@@ -255,6 +257,8 @@ Recommended broad fix:
 
 #### P1 - Historical inspector views can silently mix snapshot and current draft state
 
+Status, 2026-07-06: Addressed for GM inspector display. Historical Action Selector, phase panels, and Combat Modifiers now show source markers; unrecorded historical phase facts show as not recorded or hidden instead of using current mutable phase context.
+
 Observed behavior:
 
 - `CombatRoundManagerPanel` builds committed-step display state from `inspectorSnapshot` where possible.
@@ -277,6 +281,8 @@ Recommended slice:
 - See "Slice 6 - Mark Historical Panels And Stop Silent Snapshot/Current Mixing".
 
 #### P1 - Combat Modifier Panel does not show source mode in historical review
+
+Status, 2026-07-06: Addressed for GM inspector display. Snapshot modifier rows are marked History; if a historical modifier snapshot is unavailable and current generated rows are used as a reference, the panel is marked History · Current reference.
 
 Observed behavior:
 
@@ -437,6 +443,7 @@ Recommended broad fix:
 
 ### Slice 6 - Mark Historical Panels And Stop Silent Snapshot/Current Mixing
 
+- Status, 2026-07-06: Addressed for the GM inspector. Remaining limitation: fields not stored in the committed snapshot cannot be reconstructed and are shown as Not recorded/hidden; no schema expansion was added.
 - Affected files/components: `CombatRoundManagerPanel.tsx`, `PlayerCombatPanels.tsx`, `combatRoundPhasePanelProjection.ts`, modifier panel tests, and timeline/inspector tests.
 - Contract rule: current and historical state must not be silently mixed; historical panels need visible history/current markers; canonical source precedence must be explicit.
 - Why it matters: committed inspector views can combine snapshot values with current draft phase contexts.

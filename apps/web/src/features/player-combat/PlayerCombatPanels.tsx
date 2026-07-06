@@ -95,11 +95,13 @@ interface PlayerCombatModifierPanelProps {
   ) => void;
   readOnly?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
+  sourceLabel?: string;
 }
 
 interface PlayerCombatPhasePanelProps {
   children?: ReactNode;
   phaseCard: PlayerCombatPhaseCardView;
+  sourceLabel?: string;
 }
 
 interface PlayerCombatActionSelectorPanelProps {
@@ -116,6 +118,7 @@ interface PlayerCombatActionSelectorPanelProps {
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
   roundNumber?: number;
   secondaryActionId: PlayerEncounterActionId | "";
+  sourceLabel?: string;
 }
 
 export interface PlayerCombatDistancePreferenceOption {
@@ -213,6 +216,38 @@ export const playerCombatTopPanelRowStyle = {
   gap: "0.75rem",
   gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns,
 } as const;
+
+const panelTitleWithSourceStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.4rem",
+} as const;
+
+const panelSourceMarkerStyle = {
+  border: "1px solid #ddd3bf",
+  borderRadius: 999,
+  color: "#5e5a50",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  lineHeight: 1.25,
+  padding: "0.04rem 0.4rem",
+} as const;
+
+function PanelTitleWithSource({
+  label,
+  sourceLabel,
+}: {
+  label: string;
+  sourceLabel?: string;
+}) {
+  return (
+    <div style={panelTitleWithSourceStyle}>
+      <strong>{label}</strong>
+      {sourceLabel ? <span style={panelSourceMarkerStyle}>{sourceLabel}</span> : null}
+    </div>
+  );
+}
 
 const compactFieldLabelStyle = {
   display: "grid",
@@ -817,6 +852,7 @@ export function PlayerCombatModifierPanel({
   onUpdateEntry,
   readOnly = false,
   rows,
+  sourceLabel,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
   const [draftEntries, setDraftEntries] = useState<
@@ -842,7 +878,7 @@ export function PlayerCombatModifierPanel({
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Combat modifiers</strong>
+      <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
       {rows.map((row) => {
         const draftEntry = draftEntries[row.bucketKey];
         const hasVisibleRows =
@@ -961,6 +997,7 @@ export function PlayerCombatActionSelectorPanel({
   onSecondaryActionChange,
   roundNumber,
   secondaryActionId,
+  sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
   const effectiveMovementIntent =
     movementIntent ??
@@ -1005,7 +1042,10 @@ export function PlayerCombatActionSelectorPanel({
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Action selector{roundNumber ? ` · Round ${roundNumber}` : ""}</strong>
+      <PanelTitleWithSource
+        label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
+        sourceLabel={sourceLabel}
+      />
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
@@ -1567,7 +1607,11 @@ export function PlayerCombatParryContextPanel({
   );
 }
 
-export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhasePanelProps) {
+export function PlayerCombatPhasePanel({
+  children,
+  phaseCard,
+  sourceLabel,
+}: PlayerCombatPhasePanelProps) {
   return (
     <section
       style={{
@@ -1575,7 +1619,7 @@ export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhas
         minHeight: 178,
       }}
     >
-      <strong>{phaseCard.phaseLabel}</strong>
+      <PanelTitleWithSource label={phaseCard.phaseLabel} sourceLabel={sourceLabel} />
       {phaseCard.title ? (
         <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>{phaseCard.title}</div>
       ) : null}

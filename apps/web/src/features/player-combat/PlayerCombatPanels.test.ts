@@ -353,6 +353,9 @@ describe("PlayerCombatPanels", () => {
 
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("readOnly");
+    expect(source).toContain("sourceLabel");
+    expect(source).toContain("PanelTitleWithSource");
+    expect(source).toContain("panelSourceMarkerStyle");
     expect(source).toContain("onAddEntry");
     expect(source).toContain("onRemoveEntry");
     expect(source).toContain("onUpdateEntry");
@@ -482,6 +485,8 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("PlayerCombatActionSelectorPanel");
+    expect(source).toContain("sourceLabel");
+    expect(source).toContain("PanelTitleWithSource");
     expect(source).toContain("Action selector");
     expect(source).toContain("Secondary action");
     expect(source).toContain("Movement");

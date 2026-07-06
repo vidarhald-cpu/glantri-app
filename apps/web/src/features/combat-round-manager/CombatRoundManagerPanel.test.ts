@@ -584,6 +584,34 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedRoundNumber");
   });
 
+  it("marks historical inspector panels and prevents silent current-state fallbacks", () => {
+    const source = readSource();
+
+    expect(source).toContain("type CombatInspectorSourceMode =");
+    expect(source).toContain('"snapshot_with_current_reference"');
+    expect(source).toContain('return "History";');
+    expect(source).toContain('return "History · Current reference";');
+    expect(source).toContain("buildInspectorDisplayDraft({");
+    expect(source).toContain("buildHistoricalInspectorPhaseContexts");
+    expect(source).toContain("createUnrecordedHistoricalPhaseContext");
+    expect(source).toContain("combatContext: createEmptyPlayerEncounterCombatContext()");
+    expect(source).toContain("phaseContexts: buildHistoricalInspectorPhaseContexts(input.snapshot)");
+    expect(source).toContain("sourceLabel={inspectorSourceLabel}");
+    expect(source).toContain("sourceLabel={phaseSourceLabel}");
+    expect(source).toContain("sourceLabel={inspectorModifierSourceLabel}");
+    expect(source).toContain("No recorded phase facts.");
+    expect(source).toContain('"Not recorded"');
+    expect(source).toContain(
+      "attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats",
+    );
+    expect(source).toContain(
+      "phaseDefenseStats: inspectorSnapshot ? null : phaseDefenseStats",
+    );
+    expect(source).toContain("inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows");
+    expect(source).toContain("inspectorSnapshot.modifierSummary");
+    expect(source).not.toContain("...inspectorDraft,\n        actionId:");
+  });
+
   it("separates participant SU review from shared distance-control review", () => {
     const source = readSource();
     const participantPanelStart = source.indexOf("function CombatRoundEndParticipantReviewPanel");
