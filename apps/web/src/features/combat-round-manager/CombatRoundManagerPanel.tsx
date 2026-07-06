@@ -17,6 +17,7 @@ import type {
   CombatRoundParryResolution,
   CombatRoundParryModifierBreakdownEntry,
   CombatRoundPhase,
+  CombatRoundPhaseInitiativeChoice,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
   CombatRoundStepStatus,
@@ -154,6 +155,7 @@ import {
   playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
+  sanitizePlayerCombatModifierContext,
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
@@ -526,9 +528,7 @@ function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceRes
   const isPhaseResult = result.trigger !== "combat_start";
 
   if (result.noRollRequired) {
-    return isPhaseResult
-      ? "Result: Attack continues - no roll required"
-      : "Result: Active - no roll required";
+    return "Result: Active, no modifier";
   }
 
   if (
@@ -536,20 +536,58 @@ function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceRes
     result.effectiveTableTotal !== undefined &&
     result.effectiveTableTotal <= 5
   ) {
-    return "Result: No attack made";
+    return "Result: attack cancelled";
   }
 
   if (isPhaseResult && result.modifierValue < 0) {
-    return `Result: Attack continues, phase attack OB ${result.modifierValue}`;
+    return `Result: OB ${result.modifierValue}`;
   }
 
   if (!result.needsEffectRow || result.modifierValue === 0) {
-    return isPhaseResult ? "Result: Attack continues, no modifier" : "Result: Active, no modifier";
+    return "Result: Active, no modifier";
   }
 
   return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
     result.durationRounds === 1 ? "" : "s"
   }`;
+}
+
+function buildPhaseInitiativeChoiceResultPanel(
+  choice?: CombatRoundPhaseInitiativeChoice,
+): {
+  interpretedResult: string;
+  rankLabel?: string;
+  resultLabel?: string;
+} | null {
+  if (!choice) {
+    return null;
+  }
+
+  if (choice.choice === "roll_ce_result" && choice.combatExperience) {
+    return {
+      interpretedResult: formatCombatExperienceCalculation(choice.combatExperience),
+      rankLabel: "Combat Experience",
+      resultLabel: formatCombatExperienceEffectLine(choice.combatExperience),
+    };
+  }
+
+  if (choice.choice === "back_out") {
+    return {
+      interpretedResult: "Back out of attack",
+      rankLabel: "Phase Combat Experience",
+      resultLabel: "Result: attack cancelled/backed out",
+    };
+  }
+
+  if (choice.choice === "continue_without_ce") {
+    return {
+      interpretedResult: "Continue attack",
+      rankLabel: "Phase Combat Experience",
+      resultLabel: "Result: no CE roll required",
+    };
+  }
+
+  return null;
 }
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
@@ -3981,7 +4019,7 @@ export default function CombatRoundManagerPanel({
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
-        combatContext: inspectorGeneratedCombatContext,
+        combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
         phaseKey: inspectorModifierPhase,
       }),
@@ -4739,11 +4777,13 @@ export default function CombatRoundManagerPanel({
         value={inspectorPhaseAttackChoiceSelection}
       >
         <option value="continue">
-          {inspectorPhaseCombatExperienceRequirement
-            ? "Continue and roll Combat Experience"
-            : "Continue attack"}
+          {inspectorPhaseCombatExperienceRequirement ? "Continue and roll CE" : "Continue attack"}
         </option>
-        <option value="back_out">Back out of attack</option>
+        <option value="back_out">
+          {inspectorPhaseCombatExperienceRequirement
+            ? "Back out of attack (-2 DB/Parry penalty)"
+            : "Back out of attack (no CE roll)"}
+        </option>
       </select>
     </label>
   ) : null;
@@ -4785,11 +4825,22 @@ export default function CombatRoundManagerPanel({
   );
   const showInspectorInitiativeContextPanel =
     !showInspectorPhaseCombatExperienceContextPanel && inspectorCurrentStepIsInitiative;
+  const showInspectorModifierReviewContextPanel =
+    !showInspectorInitiativeContextPanel &&
+    !showInspectorPhaseCombatExperienceContextPanel &&
+    (inspector.step === "review_action_modifiers" || inspector.step === "review_phase_2_modifiers");
   const showInspectorCombatStartExperienceContextPanel =
     !showInspectorInitiativeContextPanel &&
     !showInspectorPhaseCombatExperienceContextPanel &&
+    !showInspectorModifierReviewContextPanel &&
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceIsCombatStart;
+  const inspectorPhaseInitiativeChoiceResultPanel = buildPhaseInitiativeChoiceResultPanel(
+    inspectorPhaseInitiativeChoice,
+  );
+  const inspectorFallbackCombatExperienceResult = inspectorPhaseInitiativeChoiceResultPanel
+    ? undefined
+    : inspectorVisibleCombatExperienceResult;
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -4835,7 +4886,9 @@ export default function CombatRoundManagerPanel({
           ? {
               interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
             }
-          : inspectorDisplayInitiative
+          : inspectorPhaseInitiativeChoiceResultPanel
+            ? inspectorPhaseInitiativeChoiceResultPanel
+            : inspectorDisplayInitiative
             ? {
                 interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
                 rankLabel:
@@ -4846,14 +4899,14 @@ export default function CombatRoundManagerPanel({
                     value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
                   }),
               }
-            : inspectorVisibleCombatExperienceResult
+              : inspectorFallbackCombatExperienceResult
               ? {
                   interpretedResult: formatCombatExperienceCalculation(
-                    inspectorVisibleCombatExperienceResult,
+                    inspectorFallbackCombatExperienceResult,
                   ),
                   rankLabel: "Combat Experience",
                   resultLabel: formatCombatExperienceEffectLine(
-                    inspectorVisibleCombatExperienceResult,
+                    inspectorFallbackCombatExperienceResult,
                   ),
                 }
               : null;
@@ -7560,68 +7613,42 @@ export default function CombatRoundManagerPanel({
                             gap: "0.2rem",
                           }}
                         >
-                          <div>Effective CE {inspectorCombatExperienceSkillTotal}</div>
-                          <div>Reason: attacked while attacking</div>
-                          <div>
-                            CE roll required:{" "}
-                            {inspectorPhaseCombatExperienceRollRequired ? "Yes" : "No"}
-                          </div>
-                          {inspectorPhaseCombatExperienceThreats.length > 0 ? (
+                          {inspectorPhaseInitiativeChoice ? (
+                            <div>Phase choice submitted. Waiting for GM commit.</div>
+                          ) : (
                             <>
                               <div>
-                                Incoming attacker(s):{" "}
-                                {inspectorPhaseCombatExperienceThreats
-                                  .map((threat) => {
-                                    const attacker = roundState.participants.find(
-                                      (participant) =>
-                                        participant.participantId === threat.attackerParticipantId,
-                                    );
-
-                                    return attacker?.label ?? threat.attackerParticipantId;
-                                  })
-                                  .join(", ")}
+                                {inspectorPhaseCombatExperienceRollRequired
+                                  ? "CE roll required — attacked while attacking."
+                                  : "No CE roll required — back-out available."}
                               </div>
-                              {inspectorPhaseCombatExperienceThreats.map((threat) => (
-                                <div
-                                  key={`phase-ce-threat:${threat.attackerParticipantId}:${threat.initiativeDifference}`}
-                                >
-                                  Initiative: {threat.participantInitiative} vs{" "}
-                                  {threat.attackerInitiative}. Difference:{" "}
-                                  {threat.initiativeDifference}
+                              <div>Effective CE {inspectorCombatExperienceSkillTotal}</div>
+                              {inspectorPhaseCombatExperienceThreats.length > 0 ? (
+                                <div>
+                                  Incoming attacker(s):{" "}
+                                  {inspectorPhaseCombatExperienceThreats
+                                    .map((threat) => {
+                                      const attacker = roundState.participants.find(
+                                        (participant) =>
+                                          participant.participantId ===
+                                          threat.attackerParticipantId,
+                                      );
+
+                                      return attacker?.label ?? threat.attackerParticipantId;
+                                    })
+                                    .join(", ")}
                                 </div>
-                              ))}
+                              ) : null}
                             </>
-                          ) : null}
-                          {inspectorPhaseAttackBackOutOpportunity &&
-                          !inspectorPhaseCombatExperienceRequirement ? (
-                            <div>Back-out choice available without a CE roll.</div>
-                          ) : null}
-                          {inspectorPhaseAttackChoiceSelectorAvailable ? (
-                            <div>
-                              Selected choice:{" "}
-                              {inspectorPhaseAttackChoiceSelection === "back_out"
-                                ? "Back out"
-                                : "Continue"}
-                            </div>
-                          ) : null}
-                          {inspectorPhaseInitiativeChoice ? (
-                            <div style={{ color: "#3f5f46" }}>
-                              Submitted:{" "}
-                              {inspectorPhaseInitiativeChoice.choice === "roll_ce_result"
-                                ? "Combat Experience rolled"
-                                : inspectorPhaseInitiativeChoice.choice === "back_out"
-                                  ? "Back out"
-                                  : "Continue"}
-                              .
-                            </div>
-                          ) : (
-                            <div>
-                              Status:{" "}
-                              {inspectorPhaseCombatExperienceRequirement
-                                ? "waiting for selected participant CE/choice"
-                                : "waiting for selected participant choice"}
-                            </div>
                           )}
+                        </div>
+                      </section>
+                    ) : null}
+                    {showInspectorModifierReviewContextPanel ? (
+                      <section style={playerCombatPanelCardStyle}>
+                        <strong>Modifier review</strong>
+                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          Review generated and manual modifiers before advancing.
                         </div>
                       </section>
                     ) : null}

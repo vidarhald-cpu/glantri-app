@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
@@ -247,7 +247,7 @@ const compactModifierGroupHeaderStyle = {
 
 const compactModifierMiniTableStyle = {
   display: "grid",
-  gap: "0.2rem",
+  gap: "0.35rem",
   minWidth: 0,
 } as const;
 
@@ -255,32 +255,34 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem 4.25rem 1.75rem",
   minWidth: 0,
 } as const;
 
 const compactModifierMiniTableEntryRowStyle = {
-  alignItems: "center",
+  borderTop: "1px solid #e6e0d2",
   display: "grid",
-  gap: "0.35rem",
-  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gap: "0.3rem",
   minWidth: 0,
+  paddingTop: "0.35rem",
 } as const;
 
 const compactModifierDisplayRowStyle = {
-  alignItems: "center",
+  alignItems: "start",
+  borderTop: "1px solid #eee9dc",
   color: "#5e5a50",
   display: "grid",
   fontSize: "0.88rem",
   gap: "0.35rem",
-  gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr)",
+  gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem minmax(8rem, 2fr)",
   minWidth: 0,
+  paddingTop: "0.3rem",
 } as const;
 
 const compactModifierNumberInputStyle = {
   boxSizing: "border-box",
   minWidth: 0,
-  width: "5.5ch",
+  width: "100%",
 } as const;
 
 const compactModifierDetailsInputStyle = {
@@ -294,6 +296,22 @@ const compactModifierRemoveButtonStyle = {
   lineHeight: 1,
   minWidth: "1.35rem",
   padding: "0.08rem 0.25rem",
+} as const;
+
+const compactModifierEntryTopRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: compactModifierMiniTableHeaderStyle.gridTemplateColumns,
+  minWidth: 0,
+} as const;
+
+const compactModifierEntryDetailsRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: "4.5rem minmax(9rem, 1fr)",
+  minWidth: 0,
 } as const;
 
 const compactStatsRowStyle = {
@@ -390,6 +408,46 @@ export function formatCombatModifierDisplayLine(input: {
   ]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
+}
+
+function formatCombatModifierSourceScopeLabel(input: {
+  scopeLabel: string;
+  sourceLabel: PlayerCombatModifierDisplayEntry["sourceLabel"];
+}): string {
+  return `${input.sourceLabel} · ${input.scopeLabel}`;
+}
+
+export function isMeaningfulCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
+  return (
+    entry.value !== 0 ||
+    Boolean(entry.notes?.trim()) ||
+    Boolean(entry.sourceRule?.trim())
+  );
+}
+
+export function sanitizeCombatModifierEntries(
+  entries: readonly ScenarioCombatModifierEntry[],
+): ScenarioCombatModifierEntry[] {
+  return entries.filter(isMeaningfulCombatModifierEntry);
+}
+
+export function sanitizePlayerCombatModifierContext(
+  combatContext: ScenarioParticipantCombatContext,
+): ScenarioParticipantCombatContext {
+  return {
+    ...combatContext,
+    modifierBuckets: {
+      ...combatContext.modifierBuckets,
+      general: sanitizeCombatModifierEntries(combatContext.modifierBuckets.general),
+      situationDb: sanitizeCombatModifierEntries(combatContext.modifierBuckets.situationDb),
+      situationInitiative: sanitizeCombatModifierEntries(
+        combatContext.modifierBuckets.situationInitiative,
+      ),
+      situationObSkill: sanitizeCombatModifierEntries(
+        combatContext.modifierBuckets.situationObSkill,
+      ),
+    },
+  };
 }
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
@@ -489,21 +547,26 @@ export function buildPlayerCombatModifierRows(input: {
 }): PlayerCombatModifierBucketView[] {
   const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
   const filteredModifierBuckets = {
-    general: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.general,
-      input.phaseKey,
+    general: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.general, input.phaseKey),
     ),
-    situationDb: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationDb,
-      input.phaseKey,
+    situationDb: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationDb,
+        input.phaseKey,
+      ),
     ),
-    situationInitiative: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationInitiative,
-      input.phaseKey,
+    situationInitiative: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationInitiative,
+        input.phaseKey,
+      ),
     ),
-    situationObSkill: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationObSkill,
-      input.phaseKey,
+    situationObSkill: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationObSkill,
+        input.phaseKey,
+      ),
     ),
   };
   const totals = getPlayerEncounterCombatModifierTotals({
@@ -655,19 +718,94 @@ function ModifierDisplayEntryRow({
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
-      <span>{entry.sourceLabel}</span>
+      <span>{formatCombatModifierSourceScopeLabel(entry)}</span>
       <span>{formatSignedModifierValue(entry.value)}</span>
-      <span>{entry.scopeLabel}</span>
       <span
         style={{
           minWidth: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          overflowWrap: "anywhere",
         }}
       >
         {entry.details ?? "—"}
       </span>
+    </div>
+  );
+}
+
+function ModifierEditableEntryRow({
+  bucketLabel,
+  controlsDisabled,
+  entry,
+  onRemove,
+  onUpdate,
+}: {
+  bucketLabel: string;
+  controlsDisabled: boolean;
+  entry: ScenarioCombatModifierEntry;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "value">>) => void;
+}) {
+  const scopeLabel = formatCombatModifierScopeLabel(entry);
+
+  return (
+    <div style={compactModifierMiniTableEntryRowStyle}>
+      <div style={compactModifierEntryTopRowStyle}>
+        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+          Situational · {scopeLabel}
+        </span>
+        <input
+          aria-label={`${bucketLabel} modifier value`}
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onUpdate({
+              value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+            })
+          }
+          style={compactModifierNumberInputStyle}
+          type="number"
+          value={entry.value}
+        />
+        <input
+          aria-label={`${bucketLabel} modifier duration`}
+          disabled={controlsDisabled}
+          min={1}
+          onChange={(event) =>
+            onUpdate({
+              durationRounds:
+                event.target.value.length > 0 ? Number(event.target.value) : undefined,
+            })
+          }
+          style={compactModifierNumberInputStyle}
+          type="number"
+          value={entry.durationRounds ?? ""}
+        />
+        <button
+          aria-label="Remove modifier"
+          disabled={controlsDisabled}
+          onClick={onRemove}
+          style={compactModifierRemoveButtonStyle}
+          title="Remove modifier"
+          type="button"
+        >
+          -
+        </button>
+      </div>
+      <label style={compactModifierEntryDetailsRowStyle}>
+        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Details</span>
+        <input
+          aria-label={`${bucketLabel} modifier details`}
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onUpdate({
+              notes: event.target.value,
+            })
+          }
+          placeholder="Details"
+          style={compactModifierDetailsInputStyle}
+          type="text"
+          value={entry.notes ?? ""}
+        />
+      </label>
     </div>
   );
 }
@@ -681,124 +819,130 @@ export function PlayerCombatModifierPanel({
   rows,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
+  const [draftEntries, setDraftEntries] = useState<
+    Partial<Record<ScenarioCombatModifierBucket, ScenarioCombatModifierEntry>>
+  >({});
+
+  const setDraftEntry = (
+    bucketKey: ScenarioCombatModifierBucket,
+    entry?: ScenarioCombatModifierEntry,
+  ) => {
+    setDraftEntries((current) => {
+      const next = { ...current };
+
+      if (entry) {
+        next[bucketKey] = entry;
+      } else {
+        delete next[bucketKey];
+      }
+
+      return next;
+    });
+  };
 
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Combat modifiers</strong>
-      {rows.map((row) => (
-        <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-          <div style={compactModifierGroupHeaderStyle}>
-            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-              <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
-              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {getDisplayTotal(row) >= 0 ? "+" : ""}
-                {getDisplayTotal(row)}
-              </span>
+      {rows.map((row) => {
+        const draftEntry = draftEntries[row.bucketKey];
+        const hasVisibleRows =
+          (row.characterStateEntries?.length ?? 0) > 0 ||
+          row.entries.length > 0 ||
+          Boolean(draftEntry);
+
+        return (
+          <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
+            <div style={compactModifierGroupHeaderStyle}>
+              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
+                <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  {getDisplayTotal(row) >= 0 ? "+" : ""}
+                  {getDisplayTotal(row)}
+                </span>
+              </div>
+              {editable && !row.locked ? (
+                <button
+                  disabled={controlsDisabled || Boolean(draftEntry)}
+                  onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
+                  style={{ justifySelf: "end" }}
+                  type="button"
+                >
+                  Add
+                </button>
+              ) : null}
             </div>
-            {editable && !row.locked ? (
-              <button
-                disabled={controlsDisabled}
-                onClick={() => onAddEntry(row.bucketKey, createModifierEntryDraft())}
-                style={{ justifySelf: "end" }}
-                type="button"
-              >
-                Add
-              </button>
+
+            {hasVisibleRows ? (
+              <div style={compactModifierMiniTableStyle}>
+                {row.characterStateEntries?.map((entry) => (
+                  <ModifierDisplayEntryRow
+                    bucketLabel={row.label}
+                    entry={entry}
+                    key={`${entry.sourceLabel}:${entry.id}`}
+                  />
+                ))}
+                {editable && !row.locked ? (
+                  <>
+                    <div style={compactModifierMiniTableHeaderStyle}>
+                      {["Source/scope", "Mod", "Dur"].map((heading) => (
+                        <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                          {heading}
+                        </span>
+                      ))}
+                      <span aria-hidden="true" />
+                    </div>
+                    {row.entries.map((entry) => (
+                      <ModifierEditableEntryRow
+                        bucketLabel={row.label}
+                        controlsDisabled={controlsDisabled}
+                        entry={entry}
+                        key={entry.id}
+                        onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
+                        onUpdate={(patch) => {
+                          const nextEntry = { ...entry, ...patch };
+
+                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                            onUpdateEntry(row.bucketKey, entry.id, patch);
+                          } else {
+                            onRemoveEntry(row.bucketKey, entry.id);
+                          }
+                        }}
+                      />
+                    ))}
+                    {draftEntry ? (
+                      <ModifierEditableEntryRow
+                        bucketLabel={row.label}
+                        controlsDisabled={controlsDisabled}
+                        entry={draftEntry}
+                        key={draftEntry.id}
+                        onRemove={() => setDraftEntry(row.bucketKey)}
+                        onUpdate={(patch) => {
+                          const nextEntry = { ...draftEntry, ...patch };
+
+                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                            onAddEntry(row.bucketKey, nextEntry);
+                            setDraftEntry(row.bucketKey);
+                          } else {
+                            setDraftEntry(row.bucketKey, nextEntry);
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  row.entries.map((entry) => (
+                    <ModifierDisplayEntryRow
+                      bucketLabel={row.label}
+                      entry={buildSituationalModifierDisplayEntry(entry)}
+                      key={`Situational:${entry.id}`}
+                    />
+                  ))
+                )}
+              </div>
             ) : null}
           </div>
-
-          {editable && !row.locked && row.entries.length > 0 ? (
-            <div style={compactModifierMiniTableStyle}>
-              {row.characterStateEntries?.map((entry) => (
-                <ModifierDisplayEntryRow
-                  bucketLabel={row.label}
-                  entry={entry}
-                  key={`${entry.sourceLabel}:${entry.id}`}
-                />
-              ))}
-              <div style={compactModifierMiniTableHeaderStyle}>
-                {["Source", "Mod", "Dur", "Details"].map((heading) => (
-                  <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                    {heading}
-                  </span>
-                ))}
-                <span aria-hidden="true" />
-              </div>
-              {row.entries.map((entry) => (
-                <div key={entry.id} style={compactModifierMiniTableEntryRowStyle}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational</span>
-                  <input
-                    aria-label={`${row.label} modifier value`}
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                      })
-                    }
-                    style={compactModifierNumberInputStyle}
-                    type="number"
-                    value={entry.value}
-                  />
-                  <input
-                    aria-label={`${row.label} modifier duration`}
-                    disabled={controlsDisabled}
-                    min={1}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        durationRounds:
-                          event.target.value.length > 0 ? Number(event.target.value) : undefined,
-                      })
-                    }
-                    style={compactModifierNumberInputStyle}
-                    type="number"
-                    value={entry.durationRounds ?? ""}
-                  />
-                  <input
-                    aria-label={`${row.label} modifier details`}
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        notes: event.target.value,
-                      })
-                    }
-                    placeholder="Details"
-                    style={compactModifierDetailsInputStyle}
-                    type="text"
-                    value={entry.notes ?? ""}
-                  />
-                  <button
-                    aria-label="Remove modifier"
-                    disabled={controlsDisabled}
-                    onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
-                    style={compactModifierRemoveButtonStyle}
-                    title="Remove modifier"
-                    type="button"
-                  >
-                    -
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {row.characterStateEntries?.map((entry) => (
-                <ModifierDisplayEntryRow
-                  bucketLabel={row.label}
-                  entry={entry}
-                  key={`${entry.sourceLabel}:${entry.id}`}
-                />
-              ))}
-              {row.entries.map((entry) => (
-                <ModifierDisplayEntryRow
-                  bucketLabel={row.label}
-                  entry={buildSituationalModifierDisplayEntry(entry)}
-                  key={`Situational:${entry.id}`}
-                />
-              ))}
-            </>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

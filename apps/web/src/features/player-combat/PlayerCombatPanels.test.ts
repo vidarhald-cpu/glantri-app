@@ -7,6 +7,8 @@ import {
   buildPlayerCombatModifierRows,
   formatCombatModifierDisplayLine,
   formatCombatModifierScopeLabel,
+  isMeaningfulCombatModifierEntry,
+  sanitizeCombatModifierEntries,
 } from "./PlayerCombatPanels";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "PlayerCombatPanels.tsx");
@@ -223,6 +225,55 @@ describe("PlayerCombatPanels", () => {
     ).toContain("Skill/OB -2 · P1 · distance: Broad sword preferred 2");
   });
 
+  it("hides meaningless zero situational rows while keeping meaningful zero summaries possible", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [
+            {
+              id: "blank-zero",
+              notes: "",
+              scope: "until" as const,
+              value: 0,
+            },
+            {
+              id: "meaningful-zero",
+              notes: "explicit no modifier reminder",
+              scope: "until" as const,
+              value: 0,
+            },
+          ],
+          situationObSkill: [
+            {
+              id: "distance",
+              notes: "distance: Broad sword preferred 2 · actual 3",
+              scope: "until" as const,
+              sourcePhase: "phase1" as const,
+              value: -2,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase1",
+    });
+    const initiativeRow = rows.find((row) => row.bucketKey === "situation_initiative");
+    const obRow = rows.find((row) => row.bucketKey === "situation_ob_skill");
+
+    expect(isMeaningfulCombatModifierEntry({ id: "blank", scope: "until", value: 0 })).toBe(false);
+    expect(
+      sanitizeCombatModifierEntries([
+        { id: "blank", scope: "until", value: 0 },
+        { id: "actual", scope: "until", value: -2 },
+      ]).map((entry) => entry.id),
+    ).toEqual(["actual"]);
+    expect(initiativeRow?.entries.map((entry) => entry.id)).toEqual(["meaningful-zero"]);
+    expect(initiativeRow?.total).toBe(0);
+    expect(obRow?.entries.map((entry) => entry.id)).toEqual(["distance"]);
+    expect(obRow?.total).toBe(-2);
+  });
+
   it("labels character-state and situational modifier sources without changing totals", () => {
     const rows = buildPlayerCombatModifierRows({
       combatContext: {
@@ -311,39 +362,47 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierMiniTableStyle");
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
     expect(source).toContain("compactModifierMiniTableEntryRowStyle");
+    expect(source).toContain("compactModifierEntryTopRowStyle");
+    expect(source).toContain("compactModifierEntryDetailsRowStyle");
     expect(source).not.toContain("compactModifierMiniTableDraftRowStyle");
     expect(source).toContain(
-      'gridTemplateColumns: "6.25rem 4.5rem 4.5rem minmax(0, 1fr) 1.75rem"',
+      'gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem 4.25rem 1.75rem"',
     );
-    expect(source).toContain('["Source", "Mod", "Dur", "Details"].map');
+    expect(source).toContain('["Source/scope", "Mod", "Dur"].map');
     expect(source).not.toContain('["Source", "Mod", "Dur", "Details", "Remove"].map');
     expect(source).toContain("characterStateEntries");
     expect(source).toContain("Character/state");
     expect(source).toContain("Situational");
+    expect(source).toContain("Situational · {scopeLabel}");
     expect(source).toContain("ModifierDisplayEntryRow");
+    expect(source).toContain("ModifierEditableEntryRow");
     expect(source).toContain("createModifierEntryDraft");
+    expect(source).toContain("isMeaningfulCombatModifierEntry");
+    expect(source).toContain("sanitizeCombatModifierEntries");
+    expect(source).toContain("sanitizePlayerCombatModifierContext");
     expect(source).not.toContain("createModifierEntryFromDraft");
     expect(source).not.toContain("updateEntryDraft");
     expect(source).not.toContain("addEntryFromDraft");
-    expect(source).toContain("onAddEntry(row.bucketKey, createModifierEntryDraft())");
+    expect(source).toContain("setDraftEntry(row.bucketKey, createModifierEntryDraft())");
+    expect(source).toContain("onAddEntry(row.bucketKey, nextEntry)");
     expect(source).toContain("compactModifierNumberInputStyle");
     expect(source).toContain("compactModifierDetailsInputStyle");
     expect(source).toContain("compactModifierRemoveButtonStyle");
-    expect(source).toContain('width: "5.5ch"');
+    expect(source).toContain('width: "100%"');
     expect(source).toContain('boxSizing: "border-box"');
-    expect(source).toContain("row.entries.length > 0");
-    expect(source).toContain("aria-label={`${row.label} modifier value`}");
+    expect(source).toContain("hasVisibleRows");
+    expect(source).toContain("aria-label={`${bucketLabel} modifier value`}");
     expect(source).not.toContain("aria-label={`${row.label} new modifier value`}");
-    expect(source).toContain("aria-label={`${row.label} modifier details`}");
+    expect(source).toContain("aria-label={`${bucketLabel} modifier details`}");
     expect(source).not.toContain("aria-label={`${row.label} new modifier details`}");
     expect(source).toContain('"durationRounds"');
     expect(source).toContain('value={entry.durationRounds ?? ""}');
     expect(source).not.toContain('value={getEntryDraft(row.bucketKey).durationRounds ?? ""}');
     expect(source).not.toContain("value={getEntryDraft(row.bucketKey).notes}");
     expect(source).toContain(
-      "onClick={() => onAddEntry(row.bucketKey, createModifierEntryDraft())}",
+      "onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}",
     );
-    expect(source).toContain("onClick={() => onRemoveEntry(row.bucketKey, entry.id)}");
+    expect(source).toContain("onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}");
     expect(source).toContain('aria-label="Remove modifier"');
     expect(source).toContain('title="Remove modifier"');
     expect(source).toMatch(/>\s*-\s*<\/button>/);
@@ -351,6 +410,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain('<span aria-hidden="true" />');
     expect(source).toContain("formatCombatModifierScopeLabel");
     expect(source).toContain("formatCombatModifierDisplayLine");
+    expect(source).toContain("formatCombatModifierSourceScopeLabel");
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');
   });

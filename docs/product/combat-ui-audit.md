@@ -10,6 +10,8 @@ Cleanup note, 2026-07-06: the focused CE/action-area pass removed duplicate Play
 
 Cleanup note, 2026-07-06: the focused modifier/context pass clarified combat modifier source and scope display, split Initiative context from Combat Experience context, limited phase Combat Experience context to the selected participant, and kept other participants' phase-choice progress out of the selected-context panel.
 
+Cleanup note, 2026-07-06: the focused combat display hygiene pass made modifier source/scope rows readable, filtered meaningless +0 draft rows from submitted modifier display, kept modifier-review and initiative contexts task-specific, simplified phase Combat Experience context copy, and routed submitted phase CE/back-out outcomes to Action Result/latest-event display.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

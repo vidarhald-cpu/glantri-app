@@ -3477,6 +3477,9 @@ describe("combat round manager", () => {
       step: "i1",
       type: "submit_phase_initiative_choice",
     });
+    expect(getLatestCombatEventSummary(rolledGladiator.state)?.summaryText).toBe(
+      "Round 3, Phase 1: The Gladiator Combat Experience 26 vs 26. Result: Active, no modifier.",
+    );
 
     const committed = commitCombatRoundPhaseInitiativeResolution({
       command: {

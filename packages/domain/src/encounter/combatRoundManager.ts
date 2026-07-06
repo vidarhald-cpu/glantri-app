@@ -16672,6 +16672,67 @@ function getCombatRoundLatestEventForCommand(input: {
     };
   }
 
+  if (command.type === "submit_phase_initiative_choice") {
+    const choice = getCombatRoundLatestEventFactString(facts, "choice");
+
+    if (choice === "roll_ce_result") {
+      const skillTotal = getCombatRoundLatestEventFactNumber(facts, "skillTotal") ?? 0;
+      const rollTotal = getCombatRoundLatestEventFactNumber(facts, "rollTotal");
+      const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
+      const noRollRequired =
+        getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
+      const difficulty =
+        getCombatRoundLatestEventFactNumber(facts, "difficulty") ??
+        COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
+      const modifierValue = getCombatRoundLatestEventFactNumber(facts, "modifierValue") ?? 0;
+      const effectiveTableTotal = getCombatRoundLatestEventFactNumber(
+        facts,
+        "effectiveTableTotal",
+      );
+      const resultText =
+        effectiveTableTotal !== undefined && effectiveTableTotal <= 5
+          ? "Result: attack cancelled."
+          : modifierValue < 0
+            ? `Result: OB ${modifierValue}.`
+            : "Result: Active, no modifier.";
+
+      return {
+        commandId: command.id,
+        phase: command.phase,
+        roundNumber: command.roundNumber,
+        shortTitle: "Combat Experience",
+        step: command.step,
+        summaryText: noRollRequired
+          ? `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} Combat Experience ${skillTotal} vs ${difficulty}. ${resultText}`
+          : `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} Combat Experience ${skillTotal} + roll ${
+              rollTotal ?? "?"
+            } = ${finalTotal ?? "?"} vs ${difficulty}. ${resultText}`,
+      };
+    }
+
+    if (choice === "back_out") {
+      return {
+        commandId: command.id,
+        phase: command.phase,
+        roundNumber: command.roundNumber,
+        shortTitle: "Backed out of attack",
+        step: command.step,
+        summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} backed out of attack. Result: attack cancelled/backed out.`,
+      };
+    }
+
+    if (choice === "continue_without_ce") {
+      return {
+        commandId: command.id,
+        phase: command.phase,
+        roundNumber: command.roundNumber,
+        shortTitle: "Phase choice submitted",
+        step: command.step,
+        summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} continued attack. Result: no CE roll required.`,
+      };
+    }
+  }
+
   if (command.type === "commit_phase_initiative_resolution") {
     const attackStep = getCombatRoundLatestEventFactString(facts, "attackStep") ?? "A";
 
