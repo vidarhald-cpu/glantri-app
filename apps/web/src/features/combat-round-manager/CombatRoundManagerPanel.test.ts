@@ -538,20 +538,31 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit participant SU review");
     expect(source).toContain("Mark SU review complete");
     expect(source).toContain("Roll health check");
-    expect(source).toContain("CombatRoundEndReviewPanel");
+    expect(source).toContain("CombatRoundEndParticipantReviewPanel");
+    expect(source).toContain("CombatRoundEndDistanceControlPanel");
     expect(source).toContain("ensureCombatRoundEndReviewPrepared");
     expect(source).toContain("commitCombatRoundEndParticipantReview");
     expect(source).toContain("commitCombatRoundEndDistanceControl");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("rollCombatRoundEndDistanceControl");
     expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
+    expect(source).toContain("getRoundEndDistancePendingRollOptions");
+    expect(source).toContain("isRoundEndDistanceCommitReady");
+    expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
+    expect(source).toContain("inspectorRoundEndDistanceControls");
     expect(source).toContain("Round distance control");
-    expect(source).toContain("Roll for {participantALabel}");
-    expect(source).toContain("Roll for {participantBLabel}");
+    expect(source).toContain("Shared round-level pair review.");
+    expect(source).toContain("Participant round-end review");
+    expect(source).toContain("No participant-owned round-end changes proposed.");
+    expect(source).not.toContain("Roll for {participantALabel}");
+    expect(source).not.toContain("Roll for {participantBLabel}");
     expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
     expect(source).toContain("Round-end pending:");
     expect(source).toContain("distance-control roll${");
-    expect(source).toContain("Apply distance");
+    expect(source).toContain("Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}");
+    expect(source).toContain('"Apply distance control"');
+    expect(source).toContain("Distance roll");
+    expect(source).toContain("Distance pair");
     expect(source).toContain("GM override");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("const commandParticipantId =");
@@ -571,6 +582,35 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getParticipantIdsForTimelineRound");
     expect(source).toContain("roundNumbers: timelineRoundNumbers");
     expect(source).toContain("selectedRoundNumber");
+  });
+
+  it("separates participant SU review from shared distance-control review", () => {
+    const source = readSource();
+    const participantPanelStart = source.indexOf("function CombatRoundEndParticipantReviewPanel");
+    const distancePanelStart = source.indexOf("function CombatRoundEndDistanceControlPanel");
+    const renderParticipantPanel = source.indexOf("<CombatRoundEndParticipantReviewPanel");
+    const renderDistancePanel = source.indexOf("<CombatRoundEndDistanceControlPanel");
+    const distancePanelSource = source.slice(
+      distancePanelStart,
+      source.indexOf("function shouldSortByInitiative"),
+    );
+
+    expect(participantPanelStart).toBeGreaterThan(-1);
+    expect(distancePanelStart).toBeGreaterThan(participantPanelStart);
+    expect(renderDistancePanel).toBeGreaterThan(renderParticipantPanel);
+    expect(source.slice(participantPanelStart, distancePanelStart)).not.toContain(
+      "proposedDistances",
+    );
+    expect(distancePanelSource).toContain("const distanceProposals");
+    expect(distancePanelSource.match(/distanceProposals\.map/g) ?? []).toHaveLength(1);
+    expect(distancePanelSource).not.toContain("<button");
+    expect(distancePanelSource).not.toContain("<select");
+    expect(distancePanelSource).not.toContain("<label");
+    expect(distancePanelSource).not.toContain("onClick");
+    expect(source).toContain("preActionControls={inspectorPreActionControls}");
+    expect(source).toContain("inspectorRoundEndDistanceAction?.kind === \"roll\"");
+    expect(source).toContain("inspectorRoundEndDistanceAction?.kind === \"commit\"");
+    expect(source).toContain("commitRoundEndDistanceControl(\n                                        inspectorRoundEndDistanceAction.proposal.id,");
   });
 
   it("returns from inspection to the current task without mutating combat state", () => {

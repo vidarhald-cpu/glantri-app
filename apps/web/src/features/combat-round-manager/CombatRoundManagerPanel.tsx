@@ -28,6 +28,7 @@ import type {
   EncounterSession,
   MovementIntent,
   CombatRoundEndReview,
+  CombatRoundEndDistanceProposal,
   RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
@@ -212,6 +213,14 @@ interface CombatRoundManagerPanelProps {
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
+
+type RoundEndDistanceRollOption = {
+  key: string;
+  pairLabel: string;
+  participantId: string;
+  participantLabel: string;
+  proposal: CombatRoundEndDistanceProposal;
+};
 
 const panelStyle = {
   background: "#fbfaf7",
@@ -778,6 +787,77 @@ function formatAttackDistancePreferenceLabel(distances: readonly number[]): stri
   return contiguous && normalized.length > 1
     ? `${normalized[0]}-${normalized[normalized.length - 1]}`
     : normalized.join(", ");
+}
+
+function buildRoundEndDistancePairLabel(
+  proposal: CombatRoundEndDistanceProposal,
+  participantLabelsById: Record<string, string>,
+): string {
+  const participantALabel =
+    participantLabelsById[proposal.participantAId] ?? proposal.participantAId;
+  const participantBLabel =
+    participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
+
+  return `${participantALabel} ↔ ${participantBLabel}`;
+}
+
+function buildRoundEndDistanceRollOptionKey(input: {
+  participantId: string;
+  proposalId: string;
+}): string {
+  return JSON.stringify([input.proposalId, input.participantId]);
+}
+
+function isRoundEndDistanceCommitReady(proposal: CombatRoundEndDistanceProposal): boolean {
+  return (
+    proposal.accepted &&
+    proposal.status !== "pending" &&
+    proposal.status !== "pending_rolls" &&
+    proposal.status !== "committed"
+  );
+}
+
+function getRoundEndDistancePendingRollOptions(input: {
+  participantLabelsById: Record<string, string>;
+  proposals: readonly CombatRoundEndDistanceProposal[];
+}): RoundEndDistanceRollOption[] {
+  return input.proposals.flatMap((proposal) => {
+    if (
+      !proposal.accepted ||
+      (proposal.status !== "pending" && proposal.status !== "pending_rolls")
+    ) {
+      return [];
+    }
+
+    const pairLabel = buildRoundEndDistancePairLabel(proposal, input.participantLabelsById);
+
+    return [
+      {
+        participantId: proposal.participantAId,
+        side: proposal.participantA,
+      },
+      {
+        participantId: proposal.participantBId,
+        side: proposal.participantB,
+      },
+    ]
+      .filter((entry) => entry.side.status === "pending")
+      .map((entry) => {
+        const participantLabel =
+          input.participantLabelsById[entry.participantId] ?? entry.participantId;
+
+        return {
+          key: buildRoundEndDistanceRollOptionKey({
+            participantId: entry.participantId,
+            proposalId: proposal.id,
+          }),
+          pairLabel,
+          participantId: entry.participantId,
+          participantLabel,
+          proposal,
+        };
+      });
+  });
 }
 
 function formatCombatDistanceModifierDetailLine(
@@ -3296,25 +3376,18 @@ function CombatDamageReviewPanel(input: {
   );
 }
 
-function CombatRoundEndReviewPanel(input: {
+function CombatRoundEndParticipantReviewPanel(input: {
   controlsDisabled?: boolean;
-  distanceOverrideDrafts: Record<string, string>;
   difficultyDrafts: Record<string, string>;
-  onCommitDistanceControl: (distanceProposalId: string) => void;
-  onDistanceOverrideDraftChange: (distanceProposalId: string, value: string) => void;
   onDifficultyDraftChange: (healthRollId: string, value: string) => void;
-  onRollDistanceContest: (distanceProposalId: string, participantId: string) => void;
   participantLabel?: string;
-  participantLabelsById: Record<string, string>;
   review?: RoundEndParticipantReview;
-  roundReview?: CombatRoundEndReview;
 }) {
   const review = input.review;
-  const distanceProposals = input.roundReview?.proposedDistances ?? [];
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Round-end review</strong>
+      <strong>Participant round-end review</strong>
       {!review ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
       ) : (
@@ -3446,148 +3519,6 @@ function CombatRoundEndReviewPanel(input: {
               })}
             </section>
           ) : null}
-          {distanceProposals.length > 0 ? (
-            <section style={{ display: "grid", gap: "0.4rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Round distance control</strong>
-              {distanceProposals.map((proposal) => {
-                const participantALabel =
-                  input.participantLabelsById[proposal.participantAId] ?? proposal.participantAId;
-                const participantBLabel =
-                  input.participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
-                const overrideValue = input.distanceOverrideDrafts[proposal.id] ?? "";
-                const resultA = proposal.participantA.result;
-                const resultB = proposal.participantB.result;
-                const participantASummary = resultA
-                  ? `${formatOpenEndedD20RollBreakdown({
-                      dieResult: resultA.rollTotal,
-                      openEndedD10s: resultA.openEndedD10s,
-                      rollD20: resultA.rollD20,
-                    })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}`
-                  : proposal.participantA.status === "pending"
-                    ? "pending"
-                    : "not required";
-                const participantBSummary = resultB
-                  ? `${formatOpenEndedD20RollBreakdown({
-                      dieResult: resultB.rollTotal,
-                      openEndedD10s: resultB.openEndedD10s,
-                      rollD20: resultB.rollD20,
-                    })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
-                  : proposal.participantB.status === "pending"
-                    ? "pending"
-                    : "not required";
-
-                return (
-                  <div
-                    key={proposal.id}
-                    style={{
-                      borderTop: "1px solid #ddd3bf",
-                      display: "grid",
-                      gap: "0.3rem",
-                      paddingTop: "0.4rem",
-                    }}
-                  >
-                    <div style={{ fontSize: "0.88rem", fontWeight: 700 }}>
-                      {participantALabel} ↔ {participantBLabel}
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      Current {proposal.currentDistance} · {participantALabel}:{" "}
-                      {proposal.participantA.desiredDistance ?? "no preference"} ·{" "}
-                      {participantBLabel}:{" "}
-                      {proposal.participantB.desiredDistance ?? "no preference"}
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      {participantALabel}: {participantASummary}
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      {participantBLabel}: {participantBSummary}
-                    </div>
-                    {proposal.winnerParticipantId ? (
-                      <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
-                        Winner:{" "}
-                        {input.participantLabelsById[proposal.winnerParticipantId] ??
-                          proposal.winnerParticipantId}
-                      </div>
-                    ) : proposal.status === "rolled" && proposal.outcome === "tie" ? (
-                      <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
-                        Tie: current distance remains unless GM overrides.
-                      </div>
-                    ) : null}
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      Proposed next-round distance: {proposal.proposedDistance ?? "pending"}
-                      {proposal.appliedDistance !== undefined
-                        ? ` · applied ${proposal.appliedDistance}`
-                        : ""}
-                      {` · ${proposal.status.replaceAll("_", " ")}`}
-                    </div>
-                    <label style={{ display: "grid", gap: "0.2rem", maxWidth: "10rem" }}>
-                      <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                        GM override
-                      </span>
-                      <select
-                        disabled={input.controlsDisabled || proposal.status === "committed"}
-                        onChange={(event) =>
-                          input.onDistanceOverrideDraftChange(proposal.id, event.target.value)
-                        }
-                        value={overrideValue}
-                      >
-                        <option value="">Use proposal</option>
-                        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
-                          <option key={distance} value={distance}>
-                            Distance {distance}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {proposal.participantA.status === "pending" ? (
-                      <button
-                        disabled={input.controlsDisabled}
-                        onClick={() =>
-                          input.onRollDistanceContest(proposal.id, proposal.participantAId)
-                        }
-                        type="button"
-                      >
-                        Roll for {participantALabel}
-                      </button>
-                    ) : null}
-                    {proposal.participantB.status === "pending" ? (
-                      <button
-                        disabled={input.controlsDisabled}
-                        onClick={() =>
-                          input.onRollDistanceContest(proposal.id, proposal.participantBId)
-                        }
-                        type="button"
-                      >
-                        Roll for {participantBLabel}
-                      </button>
-                    ) : null}
-                    {proposal.status !== "pending" &&
-                    proposal.status !== "pending_rolls" &&
-                    proposal.status !== "committed" ? (
-                      <button
-                        disabled={input.controlsDisabled}
-                        onClick={() => input.onCommitDistanceControl(proposal.id)}
-                        type="button"
-                      >
-                        Apply distance
-                      </button>
-                    ) : null}
-                    {[
-                      ...proposal.warnings,
-                      ...proposal.participantA.warnings,
-                      ...proposal.participantB.warnings,
-                    ].map((warning, warningIndex) => (
-                      <div
-                        key={`end-review-distance-warning:${proposal.id}:${warningIndex}:${warning}`}
-                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
-                      >
-                        {warning}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </section>
-          ) : null}
           {review.warnings.map((warning, index) => (
             <div
               key={`end-review-warning:${index}:${warning}`}
@@ -3599,13 +3530,121 @@ function CombatRoundEndReviewPanel(input: {
           {review.proposedEffects.length === 0 &&
           review.proposedRemovals.length === 0 &&
           review.proposedDamage.length === 0 &&
-          review.proposedHealthRolls.length === 0 &&
-          distanceProposals.length === 0 ? (
+          review.proposedHealthRolls.length === 0 ? (
             <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-              No round-end changes proposed.
+              No participant-owned round-end changes proposed.
             </div>
           ) : null}
         </>
+      )}
+    </section>
+  );
+}
+
+function CombatRoundEndDistanceControlPanel(input: {
+  participantLabelsById: Record<string, string>;
+  roundReview?: CombatRoundEndReview;
+}) {
+  const distanceProposals = input.roundReview?.proposedDistances ?? [];
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Round distance control</strong>
+      <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+        Shared round-level pair review.
+      </div>
+      {!input.roundReview ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
+      ) : distanceProposals.length > 0 ? (
+        <section style={{ display: "grid", gap: "0.4rem" }}>
+          {distanceProposals.map((proposal) => {
+            const participantALabel =
+              input.participantLabelsById[proposal.participantAId] ?? proposal.participantAId;
+            const participantBLabel =
+              input.participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
+            const resultA = proposal.participantA.result;
+            const resultB = proposal.participantB.result;
+            const participantASummary = resultA
+              ? `${formatOpenEndedD20RollBreakdown({
+                  dieResult: resultA.rollTotal,
+                  openEndedD10s: resultA.openEndedD10s,
+                  rollD20: resultA.rollD20,
+                })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}`
+              : proposal.participantA.status === "pending"
+                ? "pending"
+                : "not required";
+            const participantBSummary = resultB
+              ? `${formatOpenEndedD20RollBreakdown({
+                  dieResult: resultB.rollTotal,
+                  openEndedD10s: resultB.openEndedD10s,
+                  rollD20: resultB.rollD20,
+                })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
+              : proposal.participantB.status === "pending"
+                ? "pending"
+                : "not required";
+
+            return (
+              <div
+                key={proposal.id}
+                style={{
+                  borderTop: "1px solid #ddd3bf",
+                  display: "grid",
+                  gap: "0.3rem",
+                  paddingTop: "0.4rem",
+                }}
+              >
+                <div style={{ fontSize: "0.88rem", fontWeight: 700 }}>
+                  {participantALabel} ↔ {participantBLabel}
+                </div>
+                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                  Current {proposal.currentDistance} · {participantALabel}:{" "}
+                  {proposal.participantA.desiredDistance ?? "no preference"} · {participantBLabel}:{" "}
+                  {proposal.participantB.desiredDistance ?? "no preference"}
+                </div>
+                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                  {participantALabel}: {participantASummary}
+                </div>
+                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                  {participantBLabel}: {participantBSummary}
+                </div>
+                {proposal.winnerParticipantId ? (
+                  <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
+                    Winner:{" "}
+                    {input.participantLabelsById[proposal.winnerParticipantId] ??
+                      proposal.winnerParticipantId}
+                  </div>
+                ) : proposal.status === "rolled" && proposal.outcome === "tie" ? (
+                  <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
+                    Tie: current distance remains unless GM overrides.
+                  </div>
+                ) : null}
+                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                  Proposed next-round distance: {proposal.proposedDistance ?? "pending"}
+                  {proposal.appliedDistance !== undefined
+                    ? ` · applied ${proposal.appliedDistance}`
+                    : ""}
+                  {` · ${proposal.status.replaceAll("_", " ")}`}
+                </div>
+                {[
+                  ...proposal.warnings,
+                  ...proposal.participantA.warnings,
+                  ...proposal.participantB.warnings,
+                ].map((warning, warningIndex) => (
+                  <div
+                    key={`end-review-distance-warning:${proposal.id}:${warningIndex}:${warning}`}
+                    style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
+                  >
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </section>
+      ) : (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          No distance-control proposals for this round.
+        </div>
       )}
     </section>
   );
@@ -3655,6 +3694,8 @@ export default function CombatRoundManagerPanel({
   const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
     Record<string, string>
   >({});
+  const [roundEndDistanceRollSelectionKey, setRoundEndDistanceRollSelectionKey] = useState("");
+  const [roundEndDistanceCommitProposalId, setRoundEndDistanceCommitProposalId] = useState("");
   const [inspectorPhaseAttackChoiceSelection, setInspectorPhaseAttackChoiceSelection] =
     useState<PhaseAttackChoiceSelection>("continue");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -3833,6 +3874,52 @@ export default function CombatRoundManagerPanel({
       ),
     [roundState.participants],
   );
+  const activeRoundEndDistanceProposals =
+    selectedRoundIsActive && inspector.step === "round_summary"
+      ? (roundState.roundEndReview?.proposedDistances ?? []).filter((proposal) => proposal.accepted)
+      : [];
+  const inspectorRoundEndDistanceRollOptions = getRoundEndDistancePendingRollOptions({
+    participantLabelsById: roundParticipantLabelsById,
+    proposals: activeRoundEndDistanceProposals,
+  });
+  const inspectorSelectedParticipantDistanceRollOption =
+    inspectorRoundEndDistanceRollOptions.find(
+      (option) => option.participantId === inspector.participant?.participantId,
+    );
+  const resolvedRoundEndDistanceRollSelectionKey =
+    inspectorRoundEndDistanceRollOptions.some(
+      (option) => option.key === roundEndDistanceRollSelectionKey,
+    )
+      ? roundEndDistanceRollSelectionKey
+      : (inspectorSelectedParticipantDistanceRollOption?.key ??
+        inspectorRoundEndDistanceRollOptions[0]?.key);
+  const inspectorRoundEndDistanceRollOption = inspectorRoundEndDistanceRollOptions.find(
+    (option) => option.key === resolvedRoundEndDistanceRollSelectionKey,
+  );
+  const inspectorRoundEndDistanceCommitOptions = activeRoundEndDistanceProposals.filter(
+    isRoundEndDistanceCommitReady,
+  );
+  const resolvedRoundEndDistanceCommitProposalId = inspectorRoundEndDistanceCommitOptions.some(
+    (proposal) => proposal.id === roundEndDistanceCommitProposalId,
+  )
+    ? roundEndDistanceCommitProposalId
+    : inspectorRoundEndDistanceCommitOptions[0]?.id;
+  const inspectorRoundEndDistanceCommitProposal = inspectorRoundEndDistanceCommitOptions.find(
+    (proposal) => proposal.id === resolvedRoundEndDistanceCommitProposalId,
+  );
+  const inspectorRoundEndDistanceAction =
+    inspectorRoundEndReview?.status !== "health_roll_pending" && inspectorRoundEndDistanceRollOption
+      ? ({
+          kind: "roll" as const,
+          option: inspectorRoundEndDistanceRollOption,
+        } satisfies { kind: "roll"; option: RoundEndDistanceRollOption })
+      : inspectorRoundEndReview?.status !== "health_roll_pending" &&
+          inspectorRoundEndDistanceCommitProposal
+        ? ({
+            kind: "commit" as const,
+            proposal: inspectorRoundEndDistanceCommitProposal,
+          } satisfies { kind: "commit"; proposal: CombatRoundEndDistanceProposal })
+        : undefined;
   const buildRoundEndParticipantInputs = (
     stateForReview: typeof roundState = roundState,
   ): Parameters<typeof ensureCombatRoundEndReviewPrepared>[0]["participantInputs"] =>
@@ -4638,7 +4725,9 @@ export default function CombatRoundManagerPanel({
     inspector.step === "round_summary" && selectedRoundIsActive
       ? !selectedTimelineRoundState.roundEndReview
         ? "Round-end review is preparing automatically."
-        : inspectorRoundEndReview?.status === "complete"
+        : inspectorRoundEndDistanceAction
+          ? undefined
+          : inspectorRoundEndReview?.status === "complete"
           ? "Round-end review complete for this participant."
           : undefined
       : undefined;
@@ -4647,8 +4736,7 @@ export default function CombatRoundManagerPanel({
     (inspectorRoundEndReview.proposedEffects.length > 0 ||
       inspectorRoundEndReview.proposedRemovals.length > 0 ||
       inspectorRoundEndReview.proposedDamage.length > 0 ||
-      inspectorRoundEndReview.proposedHealthRolls.length > 0 ||
-      (selectedTimelineRoundState.roundEndReview?.proposedDistances.length ?? 0) > 0),
+      inspectorRoundEndReview.proposedHealthRolls.length > 0),
   );
   const inspectorCombatExperienceDifficultyValidationMessage =
     inspectorCombatExperienceDifficultyInputVisible &&
@@ -4721,6 +4809,12 @@ export default function CombatRoundManagerPanel({
               : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
                 ? "Preparing round-end review"
                 : inspector.step === "round_summary" &&
+                    inspectorRoundEndDistanceAction?.kind === "roll"
+                  ? `Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}`
+                  : inspector.step === "round_summary" &&
+                      inspectorRoundEndDistanceAction?.kind === "commit"
+                    ? "Apply distance control"
+                : inspector.step === "round_summary" &&
                     inspectorRoundEndReview?.status === "review_ready"
                   ? inspectorRoundEndReviewHasProposals
                     ? "Commit participant SU review"
@@ -4760,7 +4854,8 @@ export default function CombatRoundManagerPanel({
       ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
       : (inspectorIsInspectionOnly &&
           inspector.step !== "select_actions" &&
-          !inspectorCombatExperienceRequired) ||
+          !inspectorCombatExperienceRequired &&
+          !inspectorRoundEndDistanceAction) ||
         inspectorPhaseInitiativeChoiceSubmitted ||
         Boolean(inspectorActionValidationMessage) ||
         inspectorSelectedAttackAlreadyRolled ||
@@ -4804,11 +4899,86 @@ export default function CombatRoundManagerPanel({
         />
       </label>
     ) : null;
+  const inspectorRoundEndDistanceControls =
+    inspectorRoundEndDistanceAction?.kind === "roll" ? (
+      <div style={{ display: "grid", gap: "0.35rem" }}>
+        {inspectorRoundEndDistanceRollOptions.length > 1 ? (
+          <label style={compactFieldLabelStyle}>
+            <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Distance roll</span>
+            <select
+              disabled={saving || Boolean(inspectorSnapshot)}
+              onChange={(event) => setRoundEndDistanceRollSelectionKey(event.target.value)}
+              value={resolvedRoundEndDistanceRollSelectionKey}
+            >
+              {inspectorRoundEndDistanceRollOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.participantLabel} · {option.pairLabel}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          Distance control: {inspectorRoundEndDistanceAction.option.pairLabel}
+        </div>
+      </div>
+    ) : inspectorRoundEndDistanceAction?.kind === "commit" ? (
+      <div style={{ display: "grid", gap: "0.35rem" }}>
+        {inspectorRoundEndDistanceCommitOptions.length > 1 ? (
+          <label style={compactFieldLabelStyle}>
+            <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Distance pair</span>
+            <select
+              disabled={saving || Boolean(inspectorSnapshot)}
+              onChange={(event) => setRoundEndDistanceCommitProposalId(event.target.value)}
+              value={resolvedRoundEndDistanceCommitProposalId}
+            >
+              {inspectorRoundEndDistanceCommitOptions.map((proposal) => (
+                <option key={proposal.id} value={proposal.id}>
+                  {buildRoundEndDistancePairLabel(proposal, roundParticipantLabelsById)} · proposal{" "}
+                  {proposal.proposedDistance ?? "pending"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            Distance control:{" "}
+            {buildRoundEndDistancePairLabel(
+              inspectorRoundEndDistanceAction.proposal,
+              roundParticipantLabelsById,
+            )}
+          </div>
+        )}
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>GM override</span>
+          <select
+            disabled={saving || Boolean(inspectorSnapshot)}
+            onChange={(event) =>
+              setRoundEndDistanceOverrideDrafts((current) => ({
+                ...current,
+                [inspectorRoundEndDistanceAction.proposal.id]: event.target.value,
+              }))
+            }
+            value={roundEndDistanceOverrideDrafts[inspectorRoundEndDistanceAction.proposal.id] ?? ""}
+          >
+            <option value="">Use proposal</option>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+              <option key={distance} value={distance}>
+                Distance {distance}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    ) : null;
   const inspectorPreActionControls =
-    inspectorCombatExperienceDifficultyControls || inspectorPhaseAttackChoiceControls ? (
+    inspectorCombatExperienceDifficultyControls ||
+    inspectorPhaseAttackChoiceControls ||
+    inspectorRoundEndDistanceControls ? (
       <>
         {inspectorCombatExperienceDifficultyControls}
         {inspectorPhaseAttackChoiceControls}
+        {inspectorRoundEndDistanceControls}
       </>
     ) : null;
   const inspectorPhaseCombatExperienceThreats =
@@ -6706,6 +6876,35 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function rollRoundEndDistanceControlFromPrimaryAction() {
+    if (
+      !selectedRoundIsActive ||
+      inspector.step !== "round_summary" ||
+      inspectorRoundEndDistanceAction?.kind !== "roll"
+    ) {
+      return;
+    }
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const rolled = rollCombatRoundEndDistanceControl({
+        command: {
+          createdAt: updatedAt,
+        },
+        distanceProposalId: inspectorRoundEndDistanceAction.option.proposal.id,
+        participantId: inspectorRoundEndDistanceAction.option.participantId,
+        rolledBy: "gm_proxy",
+        state: roundState,
+      });
+
+      await persistRoundState(rolled.state);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll distance control.",
+      );
+    }
+  }
+
   async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
     const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
 
@@ -7730,44 +7929,24 @@ export default function CombatRoundManagerPanel({
                       />
                     ) : null}
                     {inspector.step === "round_summary" ? (
-                      <CombatRoundEndReviewPanel
-                        controlsDisabled={saving || inspectorIsInspectionOnly}
-                        distanceOverrideDrafts={roundEndDistanceOverrideDrafts}
-                        difficultyDrafts={roundEndHealthDifficultyDrafts}
-                        onCommitDistanceControl={(distanceProposalId) => {
-                          void commitRoundEndDistanceControl(distanceProposalId);
-                        }}
-                        onDistanceOverrideDraftChange={(distanceProposalId, value) =>
-                          setRoundEndDistanceOverrideDrafts((current) => ({
-                            ...current,
-                            [distanceProposalId]: value,
-                          }))
-                        }
-                        onDifficultyDraftChange={(healthRollId, value) =>
-                          setRoundEndHealthDifficultyDrafts((current) => ({
-                            ...current,
-                            [healthRollId]: value,
-                          }))
-                        }
-                        onRollDistanceContest={(distanceProposalId, participantId) => {
-                          const updatedAt = new Date().toISOString();
-                          const rolled = rollCombatRoundEndDistanceControl({
-                            command: {
-                              createdAt: updatedAt,
-                            },
-                            distanceProposalId,
-                            participantId,
-                            rolledBy: "gm_proxy",
-                            state: roundState,
-                          });
-
-                          void persistRoundState(rolled.state);
-                        }}
-                        participantLabel={inspector.participant?.label}
-                        participantLabelsById={roundParticipantLabelsById}
-                        review={inspectorRoundEndReview}
-                        roundReview={selectedTimelineRoundState.roundEndReview}
-                      />
+                      <>
+                        <CombatRoundEndParticipantReviewPanel
+                          controlsDisabled={saving || inspectorIsInspectionOnly}
+                          difficultyDrafts={roundEndHealthDifficultyDrafts}
+                          onDifficultyDraftChange={(healthRollId, value) =>
+                            setRoundEndHealthDifficultyDrafts((current) => ({
+                              ...current,
+                              [healthRollId]: value,
+                            }))
+                          }
+                          participantLabel={inspector.participant?.label}
+                          review={inspectorRoundEndReview}
+                        />
+                        <CombatRoundEndDistanceControlPanel
+                          participantLabelsById={roundParticipantLabelsById}
+                          roundReview={selectedTimelineRoundState.roundEndReview}
+                        />
+                      </>
                     ) : null}
                     <PlayerCombatActionButtonPanel
                       buttonLabel={inspectorActionButtonLabel}
@@ -7781,6 +7960,14 @@ export default function CombatRoundManagerPanel({
                               ? rollInspectorCombatExperience()
                               : inspectorCanContinuePhaseAttack
                                 ? continueInspectorPhaseAttack()
+                                : inspector.step === "round_summary" &&
+                                    inspectorRoundEndDistanceAction?.kind === "roll"
+                                  ? rollRoundEndDistanceControlFromPrimaryAction()
+                                  : inspector.step === "round_summary" &&
+                                      inspectorRoundEndDistanceAction?.kind === "commit"
+                                    ? commitRoundEndDistanceControl(
+                                        inspectorRoundEndDistanceAction.proposal.id,
+                                      )
                                 : inspector.step === "round_summary"
                                   ? advanceInspectorRoundEndReview()
                                   : inspectorCurrentStepIsInitiative

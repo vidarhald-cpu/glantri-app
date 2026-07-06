@@ -12,6 +12,8 @@ Cleanup note, 2026-07-06: the focused modifier/context pass clarified combat mod
 
 Cleanup note, 2026-07-06: the focused combat display hygiene pass made modifier source/scope rows readable, filtered meaningless +0 draft rows from submitted modifier display, kept modifier-review and initiative contexts task-specific, simplified phase Combat Experience context copy, and routed submitted phase CE/back-out outcomes to Action Result/latest-event display.
 
+Cleanup note, 2026-07-06: Slice 5 separated participant SU review from shared Round distance control, removed round-end distance roll/apply buttons from the distance-control body, and routed GM proxy roll/apply through the primary Action Button Area with compact pair/override controls.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`
@@ -425,7 +427,8 @@ Recommended broad fix:
 
 ### Slice 5 - Separate Round Distance Control From Participant SU Review
 
-- Affected files/components: `CombatRoundEndReviewPanel` in `CombatRoundManagerPanel.tsx`, distance-control tests, and possibly a small extracted round-level distance-control review component.
+- Status: addressed in this branch for display and action ownership. Participant SU review and Round distance control now render as sibling cards; the distance body is status/progress only. A future pair-level `currentCursor` could make shared SU tasks more explicit, but the UI no longer nests pair commands inside participant review.
+- Affected files/components: `CombatRoundEndParticipantReviewPanel` and `CombatRoundEndDistanceControlPanel` in `CombatRoundManagerPanel.tsx`, plus distance-control tests.
 - Contract rule: shared/pairwise state is not participant-owned; no competing primary buttons inside review bodies.
 - Why it matters: all pairwise proposals are displayed inside the selected participant's SU review, with direct command buttons in the body.
 - Intended behavior: participant SU review shows participant-owned effects and health review. Round distance control is a separate round-level/pairwise section. GM proxy roll/apply actions are selected as current work and executed through the primary Action Button Area.
