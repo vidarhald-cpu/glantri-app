@@ -16,6 +16,8 @@ Cleanup note, 2026-07-06: Slice 5 separated participant SU review from shared Ro
 
 Cleanup note, 2026-07-06: Slice 6 marked GM historical inspector panels with compact History/current-reference markers and stopped committed phase panels from silently filling missing snapshot phase facts, target distance, attack stats, or defense stats from current mutable state.
 
+Cleanup note, 2026-07-06: Slice 7 added a compact GM tracker legend and explicit marker title text for completed, required, pending-count, roll-result, skipped/not-applicable, and not-reached cells, including round-end health/distance blockers.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`
@@ -187,6 +189,8 @@ Recommended slice:
 ### Tracker / Timeline
 
 #### P1 - Tracker markers are not explicit enough for current GM work
+
+Status, 2026-07-06: Addressed for the GM tracker. A compact legend explains only marker kinds present in the timeline, and cell titles/aria labels identify CE requirements, initiative pending/results, declaration pending, round-end health and distance-control roll counts, skipped/cancelled actions, and prior-round history. Distance-control commit pending remains a title/current-task distinction rather than a unique visible marker.
 
 Observed behavior:
 
@@ -453,6 +457,7 @@ Recommended broad fix:
 
 ### Slice 7 - Add Explicit Tracker Marker Meanings For Pending Work
 
+- Status, 2026-07-06: Addressed for the GM tracker. Remaining ambiguity: distance-control commit pending does not have a separate symbol; it is exposed through cell title text and the current Action Button Area.
 - Affected files/components: `CombatRoundManagerPanel.tsx`, `combatRoundTimelineNavigation.ts`, and GM timeline tests.
 - Contract rule: tracker markers must be explicit, including pending player-owned work and GM-only review.
 - Why it matters: compact symbols are not enough to distinguish CE requirements, distance-control rolls, health rolls, completed review, skipped work, and current work.

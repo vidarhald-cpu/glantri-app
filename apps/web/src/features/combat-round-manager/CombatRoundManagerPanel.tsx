@@ -2677,19 +2677,134 @@ function formatStepStatus(status: string | undefined): string {
 function getStatusMarker(input: { current: boolean; status: string | undefined }): string {
   void input.current;
 
-  switch (input.status) {
+  return getCombatTrackerMarkerMeaning(getStatusMarkerKind(input.status)).marker;
+}
+
+type CombatTrackerMarkerKind =
+  | "complete"
+  | "skipped"
+  | "required"
+  | "pending_count"
+  | "roll_result"
+  | "not_reached";
+
+interface CombatTrackerMarkerMeaning {
+  kind: CombatTrackerMarkerKind;
+  label: string;
+  marker: string;
+  title: string;
+}
+
+const COMBAT_TRACKER_MARKER_MEANINGS: readonly CombatTrackerMarkerMeaning[] = [
+  {
+    kind: "complete",
+    label: "done",
+    marker: "✓",
+    title: "Completed, submitted, or ready for review.",
+  },
+  {
+    kind: "required",
+    label: "action/roll required",
+    marker: "?",
+    title: "A required choice or roll is blocking this step.",
+  },
+  {
+    kind: "pending_count",
+    label: "pending roll count",
+    marker: "1",
+    title: "Number of pending player-owned round-end rolls/actions for this participant.",
+  },
+  {
+    kind: "roll_result",
+    label: "roll/result value",
+    marker: "8",
+    title: "Recorded roll or result value.",
+  },
+  {
+    kind: "skipped",
+    label: "skipped/not applicable",
+    marker: "–",
+    title: "Skipped, cancelled, locked, or not applicable.",
+  },
+  {
+    kind: "not_reached",
+    label: "not reached",
+    marker: "·",
+    title: "Step not reached yet.",
+  },
+] as const;
+
+function getStatusMarkerKind(status: string | undefined): CombatTrackerMarkerKind {
+  switch (status) {
     case "submitted":
     case "gmEdited":
     case "complete":
     case "ready":
-      return "✓";
+      return "complete";
     case "locked":
     case "skipped":
-      return "–";
+      return "skipped";
     case "pending":
     default:
-      return "·";
+      return "not_reached";
   }
+}
+
+function getCombatTrackerMarkerMeaning(
+  kind: CombatTrackerMarkerKind,
+): CombatTrackerMarkerMeaning {
+  return (
+    COMBAT_TRACKER_MARKER_MEANINGS.find((meaning) => meaning.kind === kind) ??
+    COMBAT_TRACKER_MARKER_MEANINGS[COMBAT_TRACKER_MARKER_MEANINGS.length - 1]
+  );
+}
+
+function getRoundEndDistanceCommitPendingCount(roundState: CombatRoundState): number {
+  return (roundState.roundEndReview?.proposedDistances ?? []).filter(isRoundEndDistanceCommitReady)
+    .length;
+}
+
+function getCombatTrackerStatusDetail(input: {
+  markerKind: CombatTrackerMarkerKind;
+  status: CombatRoundStepStatus;
+  step: CombatRoundStep;
+}): string | undefined {
+  if (input.status === "skipped") {
+    return getCombatAttackPhaseForStep(input.step)
+      ? "Attack skipped or cancelled."
+      : "Step skipped or not applicable.";
+  }
+
+  if (input.status === "locked") {
+    return "Step locked or not applicable.";
+  }
+
+  if (input.markerKind === "complete") {
+    return `${formatStepStatus(input.status)} marker: step has been handled.`;
+  }
+
+  if (input.status !== "pending") {
+    return undefined;
+  }
+
+  switch (input.step) {
+    case "select_actions":
+      return "Declaration pending.";
+    case "initiative_phase_1":
+      return "Phase 1 initiative roll pending.";
+    case "initiative_phase_2":
+      return "Phase 2 initiative roll pending.";
+    case "round_summary":
+      return "Round-end review pending.";
+    default:
+      return "Step not reached.";
+  }
+}
+
+function joinTrackerTitleParts(parts: Array<string | undefined>): string {
+  return parts
+    .filter((part): part is string => Boolean(part && part.trim().length > 0))
+    .join(" ");
 }
 
 function buildCombatAttackResultParryModifiers(
@@ -7194,6 +7309,70 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  const trackerLegendMarkerKinds = new Set<CombatTrackerMarkerKind>();
+
+  for (const timelineRoundState of timelineRoundStates) {
+    for (const timelineParticipant of displayParticipants) {
+      const roundParticipant =
+        timelineRoundState.participants.find(
+          (candidate) => candidate.participantId === timelineParticipant.participantId,
+        ) ?? timelineParticipant;
+
+      for (const step of COMBAT_ROUND_STEPS) {
+        const stepStatus = getParticipantDeclarationStatus({
+          participantId: timelineParticipant.participantId,
+          roundState: timelineRoundState,
+          status: roundParticipant.stepStatuses[step] ?? "pending",
+          step,
+        });
+        const phase = getCombatAttackPhaseForStep(step);
+        const phaseCombatExperienceMarkerRequired =
+          selectedRoundIsActive &&
+          timelineRoundState.roundNumber === roundState.roundNumber &&
+          Boolean(
+            phase &&
+              getCombatRoundPhaseCombatExperienceRequirement({
+                participantId: timelineParticipant.participantId,
+                phase,
+                state: roundState,
+                visibility: encounter.roleplayState?.visibility,
+              }),
+          );
+        const pendingRoundEndRollCount =
+          step === "round_summary"
+            ? getCombatRoundEndHealthCheckPendingRollCount({
+                participantId: timelineParticipant.participantId,
+                state: timelineRoundState,
+              }) +
+              getCombatRoundEndDistanceControlPendingRollCount({
+                participantId: timelineParticipant.participantId,
+                state: timelineRoundState,
+              })
+            : 0;
+        const initiative =
+          step === "initiative_phase_1"
+            ? roundParticipant.initiatives.phase1
+            : step === "initiative_phase_2"
+              ? roundParticipant.initiatives.phase2
+              : undefined;
+
+        if (phaseCombatExperienceMarkerRequired) {
+          trackerLegendMarkerKinds.add("required");
+        } else if (pendingRoundEndRollCount > 0) {
+          trackerLegendMarkerKinds.add("pending_count");
+        } else if (getCombatRoundInitiativeTotal(initiative) !== undefined) {
+          trackerLegendMarkerKinds.add("roll_result");
+        } else {
+          trackerLegendMarkerKinds.add(getStatusMarkerKind(stepStatus));
+        }
+      }
+    }
+  }
+
+  const trackerLegendItems = COMBAT_TRACKER_MARKER_MEANINGS.filter((meaning) =>
+    trackerLegendMarkerKinds.has(meaning.kind),
+  );
+
   return (
     <section style={panelStyle}>
       <div
@@ -7291,6 +7470,29 @@ export default function CombatRoundManagerPanel({
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No resolved combat event yet.</div>
         )}
       </section>
+
+      <details
+        style={{
+          color: "#5e5a50",
+          fontSize: "0.84rem",
+        }}
+      >
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Tracker legend</summary>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.35rem 0.75rem",
+            paddingTop: "0.3rem",
+          }}
+        >
+          {trackerLegendItems.map((meaning) => (
+            <span key={meaning.kind} title={meaning.title}>
+              <strong style={{ color: "#2f5d62" }}>{meaning.marker}</strong> {meaning.label}
+            </span>
+          ))}
+        </div>
+      </details>
 
       <div
         aria-label="Combat round timeline grid"
@@ -7438,14 +7640,12 @@ export default function CombatRoundManagerPanel({
                               state: timelineRoundState,
                             })
                           : 0;
+                      const pendingDistanceControlCommitCount =
+                        step === "round_summary"
+                          ? getRoundEndDistanceCommitPendingCount(timelineRoundState)
+                          : 0;
                       const pendingRoundEndRollCount =
                         pendingDistanceControlRollCount + pendingHealthCheckRollCount;
-                      const marker = pendingRoundEndRollCount
-                        ? String(pendingRoundEndRollCount)
-                        : getStatusMarker({
-                            current: currentStepCell,
-                            status: stepStatus,
-                          });
                       const initiative =
                         step === "initiative_phase_1"
                           ? roundParticipant.initiatives.phase1
@@ -7453,7 +7653,21 @@ export default function CombatRoundManagerPanel({
                             ? roundParticipant.initiatives.phase2
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
-                      const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
+                      const statusMarkerKind = getStatusMarkerKind(stepStatus);
+                      const markerKind: CombatTrackerMarkerKind = phaseCombatExperienceMarkerRequired
+                        ? "required"
+                        : pendingRoundEndRollCount
+                          ? "pending_count"
+                          : initiativeTotal !== undefined
+                            ? "roll_result"
+                            : statusMarkerKind;
+                      const marker = pendingRoundEndRollCount
+                        ? String(pendingRoundEndRollCount)
+                        : getStatusMarker({
+                            current: currentStepCell,
+                            status: stepStatus,
+                          });
+                      const markerMeaning = getCombatTrackerMarkerMeaning(markerKind);
                       const pendingRoundEndRollDetails = [
                         pendingHealthCheckRollCount
                           ? `${pendingHealthCheckRollCount} health check${
@@ -7466,11 +7680,31 @@ export default function CombatRoundManagerPanel({
                             }`
                           : undefined,
                       ].filter((detail): detail is string => Boolean(detail));
-                      const buttonTitle = pendingRoundEndRollCount
-                        ? `${title}. Round-end pending: ${pendingRoundEndRollDetails.join(", ")}.`
-                        : phaseCombatExperienceMarkerRequired
-                          ? `${title}. Combat Experience check required before attack.`
-                          : title;
+                      const buttonTitle = joinTrackerTitleParts([
+                        `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}.`,
+                        `${markerMeaning.marker} = ${markerMeaning.label}.`,
+                        markerMeaning.title,
+                        roundNumber < roundState.roundNumber ? "Previous round history." : undefined,
+                        initiativeTotal !== undefined
+                          ? `Recorded initiative result ${initiativeTotal}.`
+                          : undefined,
+                        phaseCombatExperienceMarkerRequired
+                          ? "Phase Combat Experience required before attack."
+                          : undefined,
+                        pendingRoundEndRollCount
+                          ? `Round-end pending: ${pendingRoundEndRollDetails.join(", ")}.`
+                          : undefined,
+                        pendingDistanceControlCommitCount
+                          ? `${pendingDistanceControlCommitCount} distance-control commit${
+                              pendingDistanceControlCommitCount === 1 ? "" : "s"
+                            } pending.`
+                          : undefined,
+                        getCombatTrackerStatusDetail({
+                          markerKind: statusMarkerKind,
+                          status: stepStatus,
+                          step,
+                        }),
+                      ]);
                       const cellKey = getCombatRoundTimelineCellKey({
                         participantId: participant.participantId,
                         roundNumber,
@@ -7526,11 +7760,7 @@ export default function CombatRoundManagerPanel({
                               padding: 0,
                               width: "100%",
                             }}
-                            title={
-                              initiativeTotal !== undefined
-                                ? `${buttonTitle}, initiative ${initiativeTotal}`
-                                : buttonTitle
-                            }
+                            title={buttonTitle}
                             type="button"
                           >
                             <span

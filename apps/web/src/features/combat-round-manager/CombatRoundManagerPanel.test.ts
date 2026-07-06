@@ -54,8 +54,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('color: initiativeTotal !== undefined ? "#1f7a4d" : undefined');
     expect(source).toContain('case "submitted":');
     expect(source).toContain('case "gmEdited":');
-    expect(source).toContain('return "✓";');
-    expect(source).toContain('return "·";');
+    expect(source).toContain("COMBAT_TRACKER_MARKER_MEANINGS");
+    expect(source).toContain('marker: "✓"');
+    expect(source).toContain('marker: "·"');
+    expect(source).toContain('marker: "–"');
     expect(source).not.toContain('return "▶";');
     expect(source).not.toContain('return input.current ? "O" : "·";');
     expect(source).toContain("step === roundState.currentStep");
@@ -76,12 +78,47 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("focusRoundTable");
   });
 
+  it("renders a compact tracker legend and explicit marker titles", () => {
+    const source = readSource();
+
+    expect(source).toContain("Tracker legend");
+    expect(source).toContain("trackerLegendItems");
+    expect(source).toContain("trackerLegendMarkerKinds");
+    expect(source).toContain("getCombatTrackerMarkerMeaning");
+    expect(source).toContain("getCombatTrackerStatusDetail");
+    expect(source).toContain("joinTrackerTitleParts");
+    expect(source).toContain('label: "done"');
+    expect(source).toContain('label: "action/roll required"');
+    expect(source).toContain('label: "pending roll count"');
+    expect(source).toContain('label: "roll/result value"');
+    expect(source).toContain('label: "skipped/not applicable"');
+    expect(source).toContain('label: "not reached"');
+    expect(source).toContain("Phase 1 initiative roll pending.");
+    expect(source).toContain("Phase 2 initiative roll pending.");
+    expect(source).toContain("Declaration pending.");
+    expect(source).toContain("Attack skipped or cancelled.");
+    expect(source).toContain("Step not reached.");
+    expect(source).toContain("Previous round history.");
+    expect(source).toContain("Recorded initiative result ${initiativeTotal}.");
+    expect(source).toContain("Round-end pending: ${pendingRoundEndRollDetails.join");
+    expect(source).toContain("distance-control commit${");
+    expect(source).toContain("getRoundEndDistanceCommitPendingCount");
+    expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
+    expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
+    expect(source).toContain("${markerMeaning.marker} = ${markerMeaning.label}.");
+    expect(source).toContain("title={buttonTitle}");
+    expect(source).toContain("aria-label={buttonTitle}");
+    expect(source).toContain("onClick={() =>");
+    expect(source).toContain("selectInspector(participant.participantId, step, roundNumber)");
+    expect(source).not.toContain("commitCurrentStep(participant.participantId");
+  });
+
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
     expect(source).toContain("phaseCombatExperienceMarkerRequired");
-    expect(source).toContain("Combat Experience check required before attack.");
+    expect(source).toContain("Phase Combat Experience required before attack.");
     expect(source).toContain('? "?"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(source).toContain("Phase Combat Experience");
