@@ -26,6 +26,8 @@ Cleanup note, 2026-07-06: Slice 8 clarified round-level controls versus the sele
 
 Cleanup note, 2026-07-06: Player Damage Result Parity expanded Player Combat Action Result visibility for involved attackers and defenders, adding hit-location dice/selection, critical dice/final/effect summary, and persistent recorded-damage/effect summaries while keeping uninvolved players out of damage-chain detail selection.
 
+Cleanup note, 2026-07-06: Damage Roll Ownership Labels clarified that D1/D2 hit-location and critical rolls are attacker-owned while damage/effects review is defender-recipient, with Player Combat and GM Combat action/status labels naming that split.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

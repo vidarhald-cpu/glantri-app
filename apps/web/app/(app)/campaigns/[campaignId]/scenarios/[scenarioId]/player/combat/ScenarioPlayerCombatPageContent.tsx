@@ -2660,26 +2660,26 @@ export default function ScenarioPlayerCombatPageContent({
       ? {
           disabled: false,
           kind: "hitLocation" as const,
-          label: "Roll hit location",
+          label: "Roll hit location as attacker",
         }
       : currentRollAction?.kind === "critical" &&
           selectedAttackerPrivilegedDamageSubstate === "critical_pending"
         ? {
             disabled: false,
             kind: "critical" as const,
-            label: "Roll critical",
+            label: "Roll critical as attacker",
           }
         : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
           ? {
               disabled: true,
               kind: undefined,
-              label: "Hit location rolled",
+              label: "Attacker hit location rolled",
             }
           : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
             ? {
                 disabled: true,
                 kind: undefined,
-                label: "Critical rolled",
+                label: "Attacker critical rolled",
               }
             : undefined
     : undefined;
@@ -3100,10 +3100,14 @@ export default function ScenarioPlayerCombatPageContent({
                       : initiativeStepStatus === "pending"
                         ? `Current step: ${currentCombatStepLabel}.`
                         : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
-                    : currentParryAction
+                  : currentParryAction
+                    ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                    : attackerPrivilegedAction
+                      ? attackerPrivilegedAction.disabled
+                        ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
+                        : `Current step: ${currentCombatStepLabel}. The attacker rolls; the defender receives the damage/effects review.`
+                    : currentAttackAction
                       ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                      : currentAttackAction
-                        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
                         : currentAttackSourceValidationMessage
                           ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
                           : declarationIncomplete

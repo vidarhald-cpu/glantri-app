@@ -3120,9 +3120,11 @@ function CombatParryResolutionPanel(input: {
 }
 
 function CombatDamageReviewPanel(input: {
+  attackerLabel?: string;
   commitReadiness?: CombatRoundPhaseDamageCommitReadiness;
   controlsDisabled?: boolean;
   damageResult: CombatRoundDamageResult;
+  defenderLabel?: string;
   draft: CombatDamageReviewDraft;
   onDraftChange: (draft: CombatDamageReviewDraft) => void;
   onSaveReview: () => void;
@@ -3225,7 +3227,14 @@ function CombatDamageReviewPanel(input: {
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Damage review</strong>
+      <strong>
+        Damage/effects review{input.defenderLabel ? ` for ${input.defenderLabel}` : ""}
+      </strong>
+      <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+        The attacker rolls; {input.defenderLabel ?? "the defender"} receives the damage/effects
+        review.
+        {input.attackerLabel ? ` Attacker: ${input.attackerLabel}.` : ""}
+      </div>
       <section
         style={{
           background: "#fbfaf6",
@@ -5036,6 +5045,18 @@ export default function CombatRoundManagerPanel({
   const inspectorDamageCommitted =
     inspectorResolutionStepKind === "damage" &&
     inspectorDisplayPhaseResolutionResult?.damageProposal.status === "committed";
+  const inspectorDamageAttackerLabel = inspectorDisplayPhaseResolutionResult
+    ? (selectedTimelineRoundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorDisplayPhaseResolutionResult.attackerParticipantId,
+      )?.label ?? "attacker")
+    : undefined;
+  const inspectorDamageDefenderLabel = inspectorDisplayPhaseResolutionResult
+    ? (selectedTimelineRoundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorDisplayPhaseResolutionResult.defenderParticipantId,
+      )?.label ?? "defender")
+    : undefined;
   const inspectorDamageReviewKey =
     inspectorDisplayPhaseResolutionResult?.damageResult?.attackResultId;
   const inspectorDamageReviewDraft =
@@ -5200,9 +5221,9 @@ export default function CombatRoundManagerPanel({
                       : inspectorDamageCommitted
                         ? "Phase damage committed"
                         : inspectorDamageSubstate === "critical_pending"
-                          ? "Roll critical"
+                          ? `Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}`
                           : inspectorDamageSubstate === "location_pending"
-                            ? "Roll hit location"
+                            ? `Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}`
                             : inspectorDamageSubstate === "location_rolled"
                               ? "Prepare damage review"
                               : inspectorDamageProposalReady
@@ -8426,11 +8447,13 @@ export default function CombatRoundManagerPanel({
                     {inspectorDamageProposalReady &&
                     inspectorDisplayPhaseResolutionResult?.damageResult ? (
                       <CombatDamageReviewPanel
+                        attackerLabel={inspectorDamageAttackerLabel}
                         commitReadiness={inspectorDamageReviewCommitReadiness}
                         controlsDisabled={
                           saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
                         }
                         damageResult={inspectorDisplayPhaseResolutionResult.damageResult}
+                        defenderLabel={inspectorDamageDefenderLabel}
                         draft={inspectorDamageReviewDraft}
                         onDraftChange={(draft) => {
                           if (!inspectorDamageReviewKey) {

@@ -132,10 +132,16 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getCombatRoundAttackResultById");
     expect(source).toContain("rollCombatHitLocationOnServer");
     expect(source).toContain("rollCombatCriticalOnServer");
-    expect(source).toContain("Roll hit location");
-    expect(source).toContain("Roll critical");
-    expect(source).toContain("Hit location rolled");
-    expect(source).toContain("Critical rolled");
+    expect(source).toContain("Roll hit location as attacker");
+    expect(source).toContain("Roll critical as attacker");
+    expect(source).toContain("Attacker hit location rolled");
+    expect(source).toContain("Attacker critical rolled");
+    expect(source).toContain(
+      "The attacker rolls; the defender receives the damage/effects review.",
+    );
+    expect(source).toContain(
+      "Attacker roll recorded; defender damage/effects review waits for GM.",
+    );
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
     expect(source).toContain("formatCombatParryCalculationLine");
     expect(source).toContain("Parry: P ${resolution.combinedParryScore}");
