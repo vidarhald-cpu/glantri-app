@@ -330,6 +330,22 @@ const combatReviewRowCellStyle = {
   verticalAlign: "top",
 } as const;
 
+const combatDamageReviewSectionStyle = {
+  borderTop: "1px solid #e6e0d2",
+  display: "grid",
+  gap: "0.5rem",
+  paddingTop: "0.55rem",
+} as const;
+
+const combatDamageReviewSectionHeadingStyle = {
+  fontSize: "0.9rem",
+} as const;
+
+const combatDamageReviewHelperTextStyle = {
+  color: "#5e5a50",
+  fontSize: "0.85rem",
+} as const;
+
 const roundBoundaryStartBorder = "2px solid #c9bea4";
 
 const inspectorNavStyle = {
@@ -3235,31 +3251,53 @@ function CombatDamageReviewPanel(input: {
         review.
         {input.attackerLabel ? ` Attacker: ${input.attackerLabel}.` : ""}
       </div>
-      <section
-        style={{
-          background: "#fbfaf6",
-          border: "1px solid #e6e0d2",
-          borderRadius: "6px",
-          display: "grid",
-          gap: "0.35rem",
-          padding: "0.65rem",
-        }}
-      >
-        <strong style={{ fontSize: "0.9rem" }}>Outcome summary</strong>
+      <section style={combatDamageReviewSectionStyle}>
+        <strong style={combatDamageReviewSectionHeadingStyle}>Outcome summary</strong>
         <ul style={{ color: "#2f342b", fontSize: "0.9rem", margin: 0, paddingLeft: "1.1rem" }}>
           {outcomeSummary.map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ul>
+        {criticalEffectStatus ? (
+          <div style={combatDamageReviewHelperTextStyle}>{criticalEffectStatus}</div>
+        ) : null}
       </section>
-      <section style={{ display: "grid", gap: "0.35rem" }}>
-        <strong style={{ fontSize: "0.9rem" }}>
-          Proposed character-sheet rows: {proposedRows.length}
-        </strong>
+      <section style={combatDamageReviewSectionStyle}>
+        <strong style={combatDamageReviewSectionHeadingStyle}>Proposed recorded effects</strong>
+        <div style={combatDamageReviewHelperTextStyle}>
+          Rows proposed for commit. Review accepted rows before saving.
+        </div>
+        {criticalEffectProposal ? (
+          <section style={{ display: "grid", gap: "0.35rem" }}>
+            <strong style={{ fontSize: "0.86rem" }}>Critical table proposal</strong>
+            <div style={{ fontSize: "0.95rem", fontWeight: 700 }}>
+              {criticalEffectProposal.criticalIndexStatus === "no_effect"
+                ? "No critical effect"
+                : (criticalEffectProposal.title ?? "Critical table mapping unavailable")}
+            </div>
+            {criticalEffectProposal.bodyText ? (
+              <div style={{ lineHeight: 1.45 }}>{criticalEffectProposal.bodyText}</div>
+            ) : null}
+            {unrepresentedRollReports.length > 0 ? (
+              <div style={combatDamageReviewHelperTextStyle}>
+                App-side rolls:{" "}
+                {unrepresentedRollReports
+                  .map((report) => `${report.formula} ${report.rolls.join(" + ")} = ${report.total}`)
+                  .join("; ")}
+              </div>
+            ) : null}
+            {criticalEffectProposal.warnings.length > 0 ? (
+              <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", fontSize: "0.85rem" }}>
+                {criticalEffectProposal.warnings.map((warning, index) => (
+                  <div key={`critical-effect-proposal-warning:${index}:${warning}`}>{warning}</div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+        <strong style={{ fontSize: "0.86rem" }}>Character-sheet rows: {proposedRows.length}</strong>
         {proposedRows.length === 0 ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            No character-sheet rows proposed.
-          </div>
+          <div style={combatDamageReviewHelperTextStyle}>No character-sheet rows proposed.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: "0.82rem", width: "100%" }}>
@@ -3415,160 +3453,84 @@ function CombatDamageReviewPanel(input: {
           </div>
         )}
       </section>
-      <div
-        style={{
-          display: "grid",
-          gap: "0.5rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(8rem, 1fr))",
-        }}
-      >
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Location</span>
-          <select
-            disabled={disabled}
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                selectedHitLocationOverride: event.target.value,
-              })
-            }
-            value={input.draft.selectedHitLocationOverride}
-          >
-            {input.draft.selectedHitLocationOverride ? null : (
-              <option value="">Not recorded</option>
-            )}
-            {HIT_LOCATIONS.map((location) => (
-              <option key={location} value={location}>
-                {getHitLocationFullLabel(location)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Direction</span>
-          <select
-            disabled={disabled}
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                attackDirectionOverride: event.target.value as CombatRoundAttackDirection,
-              })
-            }
-            value={input.draft.attackDirectionOverride}
-          >
-            <option value="front">Front</option>
-            <option value="back">Back</option>
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Armor</span>
-          <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            {effectiveDamage.effectiveArmorCoverageLabel
-              ? `${effectiveDamage.effectiveArmorCoverageLabel} at ${
-                  effectiveDamage.effectiveArmorRegionLabel ?? "selected location"
-                }`
-              : "No armor coverage"}
-          </span>
-        </label>
-        <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Critical roll / effect index
-          </span>
-          <input
-            disabled={disabled}
-            inputMode="numeric"
-            onChange={(event) =>
-              input.onDraftChange({
-                ...input.draft,
-                finalCriticalRollOverride: event.target.value,
-              })
-            }
-            placeholder="No effect or 1-16"
-            type="text"
-            value={input.draft.finalCriticalRollOverride}
-          />
-        </label>
-      </div>
-      <label style={{ display: "grid", gap: "0.2rem" }}>
-        <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Notes</span>
-        <input
-          disabled={disabled}
-          onChange={(event) =>
-            input.onDraftChange({
-              ...input.draft,
-              notes: event.target.value,
-            })
-          }
-          type="text"
-          value={input.draft.notes}
-        />
-      </label>
-      {criticalEffectProposal ? (
-        <section
-          style={{
-            background: "#f7f3ea",
-            border: "1px solid #ddd3bf",
-            borderRadius: "6px",
-            display: "grid",
-            gap: "0.45rem",
-            padding: "0.7rem",
-          }}
-        >
-          <strong style={{ fontSize: "0.95rem" }}>
-            {criticalEffectProposal.criticalIndexStatus === "no_effect"
-              ? "No critical effect"
-              : (criticalEffectProposal.title ?? "Critical table mapping unavailable")}
-          </strong>
-          {criticalEffectProposal.bodyText ? (
-            <div style={{ lineHeight: 1.45 }}>{criticalEffectProposal.bodyText}</div>
-          ) : null}
-          {unrepresentedRollReports.length > 0 ? (
-            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-              App-side rolls:{" "}
-              {unrepresentedRollReports
-                .map((report) => `${report.formula} ${report.rolls.join(" + ")} = ${report.total}`)
-                .join("; ")}
-            </div>
-          ) : null}
-          {criticalEffectProposal.warnings.length > 0 ? (
-            <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", fontSize: "0.85rem" }}>
-              {criticalEffectProposal.warnings.map((warning, index) => (
-                <div key={`critical-effect-proposal-warning:${index}:${warning}`}>{warning}</div>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-      {criticalEffectStatus ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
-      ) : null}
-      <details
-        style={{
-          borderTop: "1px solid #e6e0d2",
-          color: "#5e5a50",
-          fontSize: "0.86rem",
-          paddingTop: "0.45rem",
-        }}
-      >
-        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Calculation details</summary>
-        {criticalMinimumStatus ? (
-          <div style={{ color: "#5e5a50", marginTop: "0.5rem" }}>{criticalMinimumStatus}</div>
-        ) : null}
-        {input.commitReadiness?.warnings.length ? (
-          <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", marginTop: "0.5rem" }}>
-            {input.commitReadiness.warnings.map((warning, index) => (
-              <div key={`damage-commit-readiness-warning:${index}:${warning}`}>{warning}</div>
-            ))}
-          </div>
-        ) : null}
+      <section style={combatDamageReviewSectionStyle}>
+        <strong style={combatDamageReviewSectionHeadingStyle}>GM adjustments</strong>
+        <div style={combatDamageReviewHelperTextStyle}>
+          Review overrides and accepted rows here; commit stays in Current action.
+        </div>
         <div
           style={{
             display: "grid",
             gap: "0.5rem",
             gridTemplateColumns: "repeat(auto-fit, minmax(8rem, 1fr))",
-            marginTop: "0.5rem",
           }}
         >
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Location</span>
+            <select
+              disabled={disabled}
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  selectedHitLocationOverride: event.target.value,
+                })
+              }
+              value={input.draft.selectedHitLocationOverride}
+            >
+              {input.draft.selectedHitLocationOverride ? null : (
+                <option value="">Not recorded</option>
+              )}
+              {HIT_LOCATIONS.map((location) => (
+                <option key={location} value={location}>
+                  {getHitLocationFullLabel(location)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Direction</span>
+            <select
+              disabled={disabled}
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  attackDirectionOverride: event.target.value as CombatRoundAttackDirection,
+                })
+              }
+              value={input.draft.attackDirectionOverride}
+            >
+              <option value="front">Front</option>
+              <option value="back">Back</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Armor</span>
+            <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+              {effectiveDamage.effectiveArmorCoverageLabel
+                ? `${effectiveDamage.effectiveArmorCoverageLabel} at ${
+                    effectiveDamage.effectiveArmorRegionLabel ?? "selected location"
+                  }`
+                : "No armor coverage"}
+            </span>
+          </label>
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+              Critical roll / effect index
+            </span>
+            <input
+              disabled={disabled}
+              inputMode="numeric"
+              onChange={(event) =>
+                input.onDraftChange({
+                  ...input.draft,
+                  finalCriticalRollOverride: event.target.value,
+                })
+              }
+              placeholder="No effect or 1-16"
+              type="text"
+              value={input.draft.finalCriticalRollOverride}
+            />
+          </label>
           <label style={{ display: "grid", gap: "0.2rem" }}>
             <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
               Damage override
@@ -3682,52 +3644,53 @@ function CombatDamageReviewPanel(input: {
             />
           </label>
         </div>
-      </details>
-      {input.draft.operationalConsequences.length > 0 ? (
-        <section style={{ display: "grid", gap: "0.5rem" }}>
-          <strong style={{ fontSize: "0.9rem" }}>
-            Operational consequences: {input.draft.operationalConsequences.length}
-          </strong>
-          {input.draft.operationalConsequences.map((consequence) => (
-            <label
-              key={consequence.id}
-              style={{
-                alignItems: "center",
-                display: "flex",
-                gap: "0.45rem",
-                fontSize: "0.9rem",
-              }}
-              title={consequence.reason}
-            >
-              <input
-                checked={consequence.accepted}
-                disabled={disabled}
-                onChange={(event) =>
-                  updateOperationalConsequence(consequence.id, {
-                    accepted: event.target.checked,
-                  })
-                }
-                type="checkbox"
-              />
-              <span>{consequence.label}</span>
-            </label>
-          ))}
-        </section>
-      ) : null}
-      {commitStatus ? (
-        <div
-          style={{
-            color: input.commitReadiness?.ready ? "#365f2c" : "#8a3b1f",
-            fontSize: "0.88rem",
-            fontWeight: 700,
-          }}
-        >
-          {commitStatus}
-        </div>
-      ) : null}
-      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Notes</span>
+          <input
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                notes: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.notes}
+          />
+        </label>
+        {input.draft.operationalConsequences.length > 0 ? (
+          <section style={{ display: "grid", gap: "0.5rem" }}>
+            <strong style={{ fontSize: "0.86rem" }}>
+              Operational consequences: {input.draft.operationalConsequences.length}
+            </strong>
+            {input.draft.operationalConsequences.map((consequence) => (
+              <label
+                key={consequence.id}
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "0.45rem",
+                  fontSize: "0.9rem",
+                }}
+                title={consequence.reason}
+              >
+                <input
+                  checked={consequence.accepted}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateOperationalConsequence(consequence.id, {
+                      accepted: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>{consequence.label}</span>
+              </label>
+            ))}
+          </section>
+        ) : null}
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          <strong style={{ fontSize: "0.9rem" }}>Add manual row</strong>
+          <strong style={{ fontSize: "0.86rem" }}>Add manual row</strong>
           <button
             disabled={disabled}
             onClick={() =>
@@ -3759,10 +3722,51 @@ function CombatDamageReviewPanel(input: {
             Add note row
           </button>
         </div>
+        <button disabled={disabled} onClick={input.onSaveReview} type="button">
+          {input.saving ? "Saving..." : "Save review"}
+        </button>
       </section>
-      <button disabled={disabled} onClick={input.onSaveReview} type="button">
-        {input.saving ? "Saving..." : "Save review"}
-      </button>
+      <details
+        style={{
+          ...combatDamageReviewSectionStyle,
+          color: "#5e5a50",
+          fontSize: "0.86rem",
+        }}
+      >
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Calculation details</summary>
+        {criticalMinimumStatus ? (
+          <div style={{ color: "#5e5a50", marginTop: "0.5rem" }}>{criticalMinimumStatus}</div>
+        ) : (
+          <div style={{ color: "#5e5a50", marginTop: "0.5rem" }}>
+            No additional calculation notes.
+          </div>
+        )}
+      </details>
+      <section style={combatDamageReviewSectionStyle}>
+        <strong style={combatDamageReviewSectionHeadingStyle}>Commit readiness</strong>
+        {commitStatus ? (
+          <div
+            style={{
+              color: input.commitReadiness?.ready ? "#365f2c" : "#8a3b1f",
+              fontSize: "0.88rem",
+              fontWeight: 700,
+            }}
+          >
+            {commitStatus}
+          </div>
+        ) : (
+          <div style={combatDamageReviewHelperTextStyle}>
+            Commit readiness appears after required damage rolls are resolved.
+          </div>
+        )}
+        {input.commitReadiness?.warnings.length ? (
+          <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", fontSize: "0.85rem" }}>
+            {input.commitReadiness.warnings.map((warning, index) => (
+              <div key={`damage-commit-readiness-warning:${index}:${warning}`}>{warning}</div>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </section>
   );
 }

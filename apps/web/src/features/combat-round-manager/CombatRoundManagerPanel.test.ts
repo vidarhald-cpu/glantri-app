@@ -419,9 +419,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("attackerLabel={inspectorDamageAttackerLabel}");
     expect(source).toContain("defenderLabel={inspectorDamageDefenderLabel}");
     expect(source).toContain("Outcome summary");
-    expect(source).toContain("Proposed character-sheet rows");
+    expect(source).toContain("Proposed recorded effects");
+    expect(source).toContain("Rows proposed for commit. Review accepted rows before saving.");
+    expect(source).toContain("Character-sheet rows");
     expect(source).toContain("No character-sheet rows proposed.");
+    expect(source).toContain("GM adjustments");
+    expect(source).toContain("Review overrides and accepted rows here; commit stays in Current action.");
     expect(source).toContain("criticalEffectProposal");
+    expect(source).toContain("Critical table proposal");
     expect(source).toContain("Critical table mapping unavailable");
     expect(source).not.toContain("Critical-derived rows:");
     expect(source).toContain("Critical effects unavailable:");
@@ -442,6 +447,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Consequence notes");
     expect(source).toContain("Critical minimum raises damage from");
     expect(source).toContain("Calculation details");
+    expect(source).toContain("No additional calculation notes.");
+    expect(source).toContain("Commit readiness");
+    expect(source).toContain("Commit readiness appears after required damage rolls are resolved.");
+    expect(source).toContain("Save review");
     expect(source).toContain("Skip current action");
     expect(source).toContain("skipCombatRoundCurrentPhaseAction");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
