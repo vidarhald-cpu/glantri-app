@@ -85,27 +85,35 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("trackerLegendItems");
     expect(source).toContain("trackerLegendMarkerKinds");
     expect(source).toContain("getCombatTrackerMarkerMeaning");
-    expect(source).toContain("getCombatTrackerStatusDetail");
-    expect(source).toContain("joinTrackerTitleParts");
+    expect(source).toContain("getCombatTrackerCellMarkerKind");
+    expect(source).toContain("getCombatTrackerCellMarker");
+    expect(source).toContain("getCombatTrackerCellDetail");
+    expect(source).toContain("formatCombatTrackerCellTitle");
     expect(source).toContain('label: "done"');
-    expect(source).toContain('label: "action/roll required"');
+    expect(source).toContain('marker: "?"');
+    expect(source).toContain('label: "required action/roll"');
     expect(source).toContain('label: "pending roll count"');
     expect(source).toContain('label: "roll/result value"');
     expect(source).toContain('label: "skipped/not applicable"');
     expect(source).toContain('label: "not reached"');
-    expect(source).toContain("Phase 1 initiative roll pending.");
-    expect(source).toContain("Phase 2 initiative roll pending.");
-    expect(source).toContain("Declaration pending.");
-    expect(source).toContain("Attack skipped or cancelled.");
-    expect(source).toContain("Step not reached.");
-    expect(source).toContain("Previous round history.");
-    expect(source).toContain("Recorded initiative result ${initiativeTotal}.");
-    expect(source).toContain("Round-end pending: ${pendingRoundEndRollDetails.join");
+    expect(source).toContain("phase 1 initiative roll pending.");
+    expect(source).toContain("phase 2 initiative roll pending.");
+    expect(source).toContain("declaration pending.");
+    expect(source).toContain("attack skipped.");
+    expect(source).toContain("not reached.");
+    expect(source).toContain("phase CE required.");
+    expect(source).toContain("round-end roll${");
+    expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix");
     expect(source).toContain("distance-control commit${");
     expect(source).toContain("getRoundEndDistanceCommitPendingCount");
     expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
     expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
-    expect(source).toContain("${markerMeaning.marker} = ${markerMeaning.label}.");
+    expect(source).not.toContain('label: "action/roll required"');
+    expect(source).not.toContain("getCombatTrackerStatusDetail");
+    expect(source).not.toContain("joinTrackerTitleParts");
+    expect(source).not.toContain("${markerMeaning.marker} = ${markerMeaning.label}.");
+    expect(source).not.toContain("Recorded initiative result ${initiativeTotal}.");
+    expect(source).not.toContain("Previous round history.");
     expect(source).toContain("title={buttonTitle}");
     expect(source).toContain("aria-label={buttonTitle}");
     expect(source).toContain("onClick={() =>");
@@ -113,13 +121,44 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("commitCurrentStep(participant.participantId");
   });
 
+  it("derives tracker legend entries from the same marker kind as rendered cells", () => {
+    const source = readSource();
+
+    expect(source).toContain("trackerLegendMarkerKinds.add(\n          getCombatTrackerCellMarkerKind({");
+    expect(source).toContain(
+      "phaseCombatExperienceMarkerRequired,\n            pendingRoundEndRollCount,\n            initiativeTotal: getCombatRoundInitiativeTotal(initiative)",
+    );
+    expect(source).toContain("const markerKind = getCombatTrackerCellMarkerKind({");
+    expect(source).toContain("const marker = getCombatTrackerCellMarker({");
+    expect(source).toContain("if (input.phaseCombatExperienceMarkerRequired) {\n    return \"required\";");
+    expect(source).not.toContain('trackerLegendMarkerKinds.add("required")');
+  });
+
+  it("keeps tracker tooltips concise and non-repetitive", () => {
+    const source = readSource();
+
+    expect(source).toContain("formatCombatTrackerCellTitle({");
+    expect(source).toContain("participantLabel: participant.label");
+    expect(source).toContain("Round ${input.roundNumber}");
+    expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[input.step]");
+    expect(source).toContain("phase CE required.");
+    expect(source).toContain("round-end roll${");
+    expect(source).toContain("attack skipped.");
+    expect(source).toContain("damage/effects");
+    expect(source).not.toContain("Step not reached. Step not reached");
+    expect(source).not.toContain("Step not reached yet. Step not reached");
+    expect(source).not.toContain("status ${stepStatus}");
+    expect(source).not.toContain("marker: step has been handled");
+  });
+
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
     expect(source).toContain("phaseCombatExperienceMarkerRequired");
-    expect(source).toContain("Phase Combat Experience required before attack.");
-    expect(source).toContain('? "?"');
+    expect(source).toContain("phase CE required.");
+    expect(source).toContain('marker: "?"');
+    expect(source).toContain("return getCombatTrackerMarkerMeaning(input.markerKind).marker;");
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(source).toContain("Phase Combat Experience");
     expect(source).toContain("CE roll required — attacked while attacking.");
@@ -594,7 +633,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");
     expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
-    expect(source).toContain("Round-end pending:");
     expect(source).toContain("distance-control roll${");
     expect(source).toContain("Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}");
     expect(source).toContain('"Apply distance control"');
