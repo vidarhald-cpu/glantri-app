@@ -332,15 +332,6 @@ const compactFieldLabelStyle = {
   gap: "0.2rem",
 } as const;
 
-const compactSecondaryButtonStyle = {
-  background: "#efe7d3",
-  border: "1px solid #cbbd9f",
-  borderRadius: 6,
-  cursor: "pointer",
-  fontWeight: 700,
-  padding: "0.45rem 0.7rem",
-} as const;
-
 interface CombatInspectorDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
@@ -530,14 +521,6 @@ function formatCombatExperienceCalculation(result: CombatRoundCombatExperienceRe
   }
 
   return `Combat Experience ${result.skillTotal} + roll ${result.rollTotal} = ${result.finalTotal} vs ${result.difficulty}`;
-}
-
-function formatCombatExperienceEffectiveTableLine(
-  result: CombatRoundCombatExperienceResult,
-): string | undefined {
-  return result.effectiveTableTotal === undefined
-    ? undefined
-    : `Effective CE table result: ${result.effectiveTableTotal}`;
 }
 
 function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceResult): string {
@@ -3806,7 +3789,10 @@ export default function CombatRoundManagerPanel({
   const roundParticipantLabelsById = useMemo(
     () =>
       Object.fromEntries(
-        roundState.participants.map((participant) => [participant.participantId, participant.label]),
+        roundState.participants.map((participant) => [
+          participant.participantId,
+          participant.label,
+        ]),
       ),
     [roundState.participants],
   );
@@ -3962,8 +3948,8 @@ export default function CombatRoundManagerPanel({
   const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
   const inspectorEquipmentState = useMemo(() => {
     const candidate =
-      resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]?.equipmentState ??
-      selectedScenarioParticipant?.snapshot.equipmentState;
+      resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
+        ?.equipmentState ?? selectedScenarioParticipant?.snapshot.equipmentState;
     return isEquipmentFeatureState(candidate) ? candidate : null;
   }, [
     resolvedCharacterStateByParticipantId,
@@ -4152,6 +4138,30 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceDifficulty,
     10,
   );
+  const inspectorCombatExperienceDraftDifficultyValid =
+    inspectorCombatExperienceDifficulty.trim().length > 0 &&
+    Number.isInteger(inspectorCombatExperienceDraftDifficultyValue) &&
+    inspectorCombatExperienceDraftDifficultyValue > 0;
+  const inspectorCombatExperienceDifficultyDraftChanged =
+    inspectorCombatExperienceDraftDifficultyValid &&
+    inspectorCombatExperienceDraftDifficultyValue !== activeCombatExperienceDifficulty;
+  const inspectorCombatExperienceDifficultyInputVisible =
+    inspectorCombatExperienceRequired &&
+    inspectorCombatExperienceIsCombatStart &&
+    (!inspectorCombatExperienceWindowOpen || !combatExperienceRollRecorded);
+  const inspectorCombatExperienceDifficultyStartPending =
+    inspectorCombatExperienceRequired &&
+    inspectorCombatExperienceIsCombatStart &&
+    !inspectorCombatExperienceWindowOpen;
+  const inspectorCombatExperienceDifficultyUpdatePending =
+    inspectorCombatExperienceRequired &&
+    inspectorCombatExperienceIsCombatStart &&
+    inspectorCombatExperienceWindowOpen &&
+    !combatExperienceRollRecorded &&
+    inspectorCombatExperienceDifficultyDraftChanged;
+  const inspectorCombatExperienceDifficultyCommandPending =
+    inspectorCombatExperienceDifficultyStartPending ||
+    inspectorCombatExperienceDifficultyUpdatePending;
   const inspectorCombatExperienceNoRollAvailable =
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceWindowOpen &&
@@ -4595,18 +4605,31 @@ export default function CombatRoundManagerPanel({
       inspectorRoundEndReview.proposedHealthRolls.length > 0 ||
       (selectedTimelineRoundState.roundEndReview?.proposedDistances.length ?? 0) > 0),
   );
-  const inspectorCombatExperienceWindowValidationMessage =
-    inspectorCombatExperienceIsCombatStart &&
-    inspectorCombatExperienceRequired &&
-    !inspectorCombatExperienceWindowOpen
-      ? "Start Combat Experience rolls before rolling."
+  const inspectorCombatExperienceDifficultyValidationMessage =
+    inspectorCombatExperienceDifficultyInputVisible &&
+    !inspectorCombatExperienceDraftDifficultyValid
+      ? "Enter CE difficulty."
       : undefined;
-  const inspectorActionValidationMessage =
-    inspectorCombatExperienceWindowValidationMessage ??
-    inspectorTargetValidationMessage ??
-    inspectorAttackSourceValidationMessage ??
-    inspectorDamageCommitValidationMessage ??
-    inspectorRoundEndActionValidationMessage;
+  const inspectorActionValidationMessage = inspectorCombatExperienceDifficultyCommandPending
+    ? inspectorCombatExperienceDifficultyValidationMessage
+    : (inspectorCombatExperienceDifficultyValidationMessage ??
+      inspectorTargetValidationMessage ??
+      inspectorAttackSourceValidationMessage ??
+      inspectorDamageCommitValidationMessage ??
+      inspectorRoundEndActionValidationMessage);
+  const inspectorCombatExperienceActionLabel = inspectorCombatExperienceDifficultyStartPending
+    ? "Start Combat Experience rolls"
+    : inspectorCombatExperienceDifficultyUpdatePending ||
+        (inspectorCombatExperienceDifficultyInputVisible &&
+          !inspectorCombatExperienceDraftDifficultyValid)
+      ? "Update CE difficulty"
+      : inspectorCombatExperienceRequired
+        ? !inspectorCombatExperienceWindowOpen
+          ? "Start Combat Experience rolls"
+          : inspectorCombatExperienceNoRollAvailable
+            ? "Confirm Combat Experience"
+            : "Roll Combat Experience"
+        : undefined;
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -4646,12 +4669,8 @@ export default function CombatRoundManagerPanel({
         ? "Back out of attack"
         : inspectorCanContinuePhaseAttack
           ? "Continue attack"
-          : inspectorCombatExperienceRequired
-            ? !inspectorCombatExperienceWindowOpen
-              ? "Set CE difficulty first"
-              : inspectorCombatExperienceNoRollAvailable
-                ? "Confirm Combat Experience"
-                : "Roll Combat Experience"
+          : inspectorCombatExperienceActionLabel
+            ? inspectorCombatExperienceActionLabel
             : inspectorIsInspectionOnly && inspector.step !== "select_actions"
               ? "Inspecting step - use Current task to resume"
               : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
@@ -4721,6 +4740,30 @@ export default function CombatRoundManagerPanel({
       </select>
     </label>
   ) : null;
+  const inspectorCombatExperienceDifficultyControls =
+    inspectorCombatExperienceDifficultyInputVisible ? (
+      <label style={compactFieldLabelStyle}>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>CE difficulty</span>
+        <input
+          disabled={combatExperienceDifficultyControlsDisabled}
+          onChange={(event) => {
+            setCombatExperienceDifficultyDrafts((current) => ({
+              ...current,
+              [inspectorCombatExperienceDifficultyKey]: event.target.value,
+            }));
+          }}
+          type="number"
+          value={inspectorCombatExperienceDifficulty}
+        />
+      </label>
+    ) : null;
+  const inspectorPreActionControls =
+    inspectorCombatExperienceDifficultyControls || inspectorPhaseAttackChoiceControls ? (
+      <>
+        {inspectorCombatExperienceDifficultyControls}
+        {inspectorPhaseAttackChoiceControls}
+      </>
+    ) : null;
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -4779,11 +4822,6 @@ export default function CombatRoundManagerPanel({
               }
             : inspectorVisibleCombatExperienceResult
               ? {
-                  detailLines: [
-                    formatCombatExperienceEffectiveTableLine(
-                      inspectorVisibleCombatExperienceResult,
-                    ),
-                  ].filter((line): line is string => Boolean(line)),
                   interpretedResult: formatCombatExperienceCalculation(
                     inspectorVisibleCombatExperienceResult,
                   ),
@@ -4797,10 +4835,8 @@ export default function CombatRoundManagerPanel({
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
-    : inspectorCombatExperienceIsCombatStart &&
-        inspectorCombatExperienceRequired &&
-        !inspectorCombatExperienceWindowOpen
-      ? " Start Combat Experience rolls before rolling or declaring."
+    : inspectorCombatExperienceDifficultyStartPending
+      ? " Waiting for GM to start CE."
       : inspectorPhaseResolutionCursor
         ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel(
             {
@@ -4821,17 +4857,15 @@ export default function CombatRoundManagerPanel({
             ? " Attack rolled."
             : inspectorCurrentInitiative
               ? " Initiative rolled."
-              : inspector.step === "review_action_modifiers" &&
-                  (inspectorCurrentStepStatus === "complete" ||
-                    inspectorCurrentStepStatus === "gmEdited")
-                ? " Modifiers declared."
-                : inspector.step === "review_phase_2_modifiers" &&
-                    (inspectorCurrentStepStatus === "complete" ||
-                      inspectorCurrentStepStatus === "gmEdited")
-                  ? " Phase 2 modifiers declared."
-                  : inspectorParticipantHasDeclared
-                    ? " Declared."
-                    : "";
+              : inspector.step === "review_action_modifiers" ||
+                  inspector.step === "review_phase_2_modifiers"
+                ? inspectorCurrentStepStatus === "complete" ||
+                  inspectorCurrentStepStatus === "gmEdited"
+                  ? " Reviewed."
+                  : ""
+                : inspectorParticipantHasDeclared
+                  ? " Declared."
+                  : "";
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
       return [];
@@ -7326,10 +7360,10 @@ export default function CombatRoundManagerPanel({
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
                       attackStats: phaseLoadoutSummary.attackStats,
-                        liveModifiers:
-                          phaseKey === inspectorResolutionPhase
-                            ? inspectorParryDefenderPhaseSummary?.liveModifiers
-                            : buildEncounterLiveCombatModifierSummary({
+                      liveModifiers:
+                        phaseKey === inspectorResolutionPhase
+                          ? inspectorParryDefenderPhaseSummary?.liveModifiers
+                          : buildEncounterLiveCombatModifierSummary({
                               combatContext: inspectorGeneratedCombatContext,
                               combatEffects: selectedScenarioParticipant?.state.combatEffects,
                               phaseKey,
@@ -7469,53 +7503,13 @@ export default function CombatRoundManagerPanel({
                         ) : null}
                         {inspectorCombatExperienceRequired &&
                         inspectorCombatExperienceIsCombatStart ? (
-                          <label style={compactFieldLabelStyle}>
-                            <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Difficulty</span>
-                            <input
-                              disabled={combatExperienceDifficultyControlsDisabled}
-                              onChange={(event) => {
-                                setCombatExperienceDifficultyDrafts((current) => ({
-                                  ...current,
-                                  [inspectorCombatExperienceDifficultyKey]: event.target.value,
-                                }));
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key !== "Enter") {
-                                  return;
-                                }
-
-                                void saveCombatExperienceDifficultyDraft(event.currentTarget.value);
-                              }}
-                              type="number"
-                              value={inspectorCombatExperienceDifficulty}
-                            />
-                          </label>
-                        ) : null}
-                        {inspectorCombatExperienceRequired &&
-                        inspectorCombatExperienceIsCombatStart ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                            <button
-                              disabled={
-                                combatExperienceDifficultyControlsDisabled ||
-                                !Number.isInteger(inspectorCombatExperienceDraftDifficultyValue) ||
-                                inspectorCombatExperienceDraftDifficultyValue <= 0
-                              }
-                              onClick={() => void saveCombatExperienceDifficultyDraft()}
-                              style={compactSecondaryButtonStyle}
-                              type="button"
-                            >
-                              {inspectorCombatExperienceWindowOpen
-                                ? "Update CE difficulty"
-                                : "Start Combat Experience rolls"}
-                            </button>
-                            <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                              {inspectorCombatExperienceWindowOpen
-                                ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
-                                : "Waiting for GM to start CE rolls."}
-                              {combatExperienceRollRecorded
-                                ? " Difficulty locked after the first CE result."
-                                : ""}
-                            </span>
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            {inspectorCombatExperienceWindowOpen
+                              ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
+                              : "Waiting for GM to start CE."}
+                            {combatExperienceRollRecorded
+                              ? " Difficulty locked after the first CE result."
+                              : ""}
                           </div>
                         ) : null}
                         {inspectorCombatExperienceRequired &&
@@ -7716,36 +7710,39 @@ export default function CombatRoundManagerPanel({
                       onDeclareAction={() =>
                         void (inspectorPhaseAttackChoiceIsBackOut
                           ? backOutInspectorPhaseAttack()
-                          : inspectorCombatExperienceRequired
-                            ? rollInspectorCombatExperience()
-                            : inspectorCanContinuePhaseAttack
-                              ? continueInspectorPhaseAttack()
-                              : inspector.step === "round_summary"
-                                ? advanceInspectorRoundEndReview()
-                                : inspectorCurrentStepIsInitiative
-                                  ? rollInspectorInitiative()
-                                  : inspectorCanRollParry
-                                    ? rollInspectorParry()
-                                    : inspectorCurrentResolutionPhase &&
-                                        (inspectorActionPhaseHasAttack === false ||
-                                          inspectorActionPhaseResolutionStatus?.substep ===
-                                            "effects")
-                                      ? completeInspectorPhaseResolution(
-                                          inspectorCurrentResolutionPhase,
-                                        )
+                          : inspectorCombatExperienceDifficultyCommandPending
+                            ? saveCombatExperienceDifficultyDraft()
+                            : inspectorCombatExperienceRequired
+                              ? rollInspectorCombatExperience()
+                              : inspectorCanContinuePhaseAttack
+                                ? continueInspectorPhaseAttack()
+                                : inspector.step === "round_summary"
+                                  ? advanceInspectorRoundEndReview()
+                                  : inspectorCurrentStepIsInitiative
+                                    ? rollInspectorInitiative()
+                                    : inspectorCanRollParry
+                                      ? rollInspectorParry()
                                       : inspectorCurrentResolutionPhase &&
-                                          (inspectorActionPhaseResolutionStatus?.substep ===
-                                            "parry" ||
+                                          (inspectorActionPhaseHasAttack === false ||
                                             inspectorActionPhaseResolutionStatus?.substep ===
-                                              "damage")
-                                        ? advanceInspectorPhaseResolutionSubstep(
+                                              "effects")
+                                        ? completeInspectorPhaseResolution(
                                             inspectorCurrentResolutionPhase,
                                           )
-                                        : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                                          ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                          : saveInspectorDeclaration())
+                                        : inspectorCurrentResolutionPhase &&
+                                            (inspectorActionPhaseResolutionStatus?.substep ===
+                                              "parry" ||
+                                              inspectorActionPhaseResolutionStatus?.substep ===
+                                                "damage")
+                                          ? advanceInspectorPhaseResolutionSubstep(
+                                              inspectorCurrentResolutionPhase,
+                                            )
+                                          : inspectorCanRollPhaseAttack &&
+                                              inspectorCurrentAttackPhase
+                                            ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                            : saveInspectorDeclaration())
                       }
-                      preActionControls={inspectorPhaseAttackChoiceControls}
+                      preActionControls={inspectorPreActionControls}
                       onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
                       saving={saving}
                       secondaryButtonDisabled={

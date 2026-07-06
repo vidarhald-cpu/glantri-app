@@ -6,6 +6,8 @@ Scope: GM Combat Round Manager, Player Combat, shared player-combat panels, modi
 
 This is an audit-only document. It identifies contract violations and implementation risks without proposing a broad redesign.
 
+Cleanup note, 2026-07-06: the focused CE/action-area pass removed duplicate Player Combat CE waiting copy, moved GM CE start/update ownership into the primary Action Button Area, hid the internal effective CE table line from normal Action Result panels, normalized modifier-review status copy, and fixed player-safe distance projection so visible player distance uses the materialized round distance edge instead of falling back to melee distance `2`.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

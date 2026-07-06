@@ -411,14 +411,6 @@ function formatDistanceControlProgressLine(input: {
   return "Waiting for GM to commit distance control.";
 }
 
-function formatCombatExperienceEffectiveTableLine(
-  result: CombatRoundCombatExperienceResult,
-): string | undefined {
-  return result.effectiveTableTotal === undefined
-    ? undefined
-    : `Effective CE table result: ${result.effectiveTableTotal}`;
-}
-
 function formatResolutionStatusLabel(value: string): string {
   return value
     .split("_")
@@ -685,7 +677,9 @@ function buildPlayerCombatDeclarationDraft(input: {
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
     movementIntent:
-      declaration?.movementIntent ?? scopedCombat?.lastMovementIntent ?? createDefaultMovementIntent(),
+      declaration?.movementIntent ??
+      scopedCombat?.lastMovementIntent ??
+      createDefaultMovementIntent(),
     phaseContexts: buildPlayerCombatPhaseContexts(input),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
@@ -1363,10 +1357,10 @@ export default function ScenarioPlayerCombatPageContent({
     selectedDistanceControlProposal?.ownSide.status === "pending";
   const selectedDistanceControlActionAvailable = Boolean(
     selectedDistanceControlRollPending &&
-      selectedDistanceControlProposal &&
-      selectedParticipant &&
-      encounterId &&
-      !readOnlyInspection,
+    selectedDistanceControlProposal &&
+    selectedParticipant &&
+    encounterId &&
+    !readOnlyInspection,
   );
   const selectedRoundEndReview =
     combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
@@ -1717,9 +1711,7 @@ export default function ScenarioPlayerCombatPageContent({
       setError(undefined);
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to roll distance control.",
+        caughtError instanceof Error ? caughtError.message : "Unable to roll distance control.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -2380,9 +2372,6 @@ export default function ScenarioPlayerCombatPageContent({
     : null;
   const selectedCombatExperienceResultPanel = selectedVisibleCombatExperienceResult
     ? {
-        detailLines: [
-          formatCombatExperienceEffectiveTableLine(selectedVisibleCombatExperienceResult),
-        ].filter((line): line is string => Boolean(line)),
         interpretedResult: selectedVisibleCombatExperienceResult.noRollRequired
           ? `Combat Experience ${selectedVisibleCombatExperienceResult.skillTotal} vs difficulty ${selectedVisibleCombatExperienceResult.difficulty}`
           : `Combat Experience ${selectedVisibleCombatExperienceResult.skillTotal} + roll ${selectedVisibleCombatExperienceResult.rollTotal} = ${selectedVisibleCombatExperienceResult.finalTotal} vs ${selectedVisibleCombatExperienceResult.difficulty}`,
@@ -2398,11 +2387,13 @@ export default function ScenarioPlayerCombatPageContent({
           sections: [
             {
               calculationLines: [
-                `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown({
-                  dieResult: selectedVisibleHealthRoll.result.rollTotal,
-                  openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
-                  rollD20: selectedVisibleHealthRoll.result.rollD20,
-                })} = ${selectedVisibleHealthRoll.result.finalTotal}`,
+                `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown(
+                  {
+                    dieResult: selectedVisibleHealthRoll.result.rollTotal,
+                    openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
+                    rollD20: selectedVisibleHealthRoll.result.rollD20,
+                  },
+                )} = ${selectedVisibleHealthRoll.result.finalTotal}`,
                 `Reason: ${formatRoundEndHealthCheckReason({
                   damageLabel: selectedHealthRollDamageProposal.label,
                   proposal: selectedVisibleHealthRoll,
@@ -2420,11 +2411,13 @@ export default function ScenarioPlayerCombatPageContent({
             sections: [
               {
                 calculationLines: [
-                  `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown({
-                    dieResult: selectedVisibleHealthRoll.result.rollTotal,
-                    openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
-                    rollD20: selectedVisibleHealthRoll.result.rollD20,
-                  })} = ${selectedVisibleHealthRoll.result.finalTotal}`,
+                  `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown(
+                    {
+                      dieResult: selectedVisibleHealthRoll.result.rollTotal,
+                      openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
+                      rollD20: selectedVisibleHealthRoll.result.rollD20,
+                    },
+                  )} = ${selectedVisibleHealthRoll.result.finalTotal}`,
                 ],
                 resultLine: formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll),
                 title: "Health check",
@@ -2451,11 +2444,13 @@ export default function ScenarioPlayerCombatPageContent({
         sections: [
           {
             calculationLines: [
-              `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${formatOpenEndedD20RollBreakdown({
-                dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
-                openEndedD10s: selectedDistanceControlProposal.ownSide.result.openEndedD10s,
-                rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
-              })} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
+              `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${formatOpenEndedD20RollBreakdown(
+                {
+                  dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
+                  openEndedD10s: selectedDistanceControlProposal.ownSide.result.openEndedD10s,
+                  rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
+                },
+              )} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
               `Your preference: ${
                 selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"
               }`,
@@ -2683,19 +2678,23 @@ export default function ScenarioPlayerCombatPageContent({
       selectedDeclarationStepStatus === "submitted" ||
       selectedDeclarationStepStatus === "gmEdited");
   const selectedCurrentStepStatus = selectedRoundParticipant?.stepStatuses[currentCombatStep];
+  const currentStepIsModifierReview =
+    currentCombatStep === "review_action_modifiers" ||
+    currentCombatStep === "review_phase_2_modifiers";
+  const selectedModifierReviewComplete =
+    currentStepIsModifierReview &&
+    (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited");
   const gmStatusSuffix = selectedParticipantRolledCurrentInitiative
     ? " Initiative rolled."
-    : currentCombatStep === "review_action_modifiers" &&
-        (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited")
-      ? " Modifiers declared."
-      : currentCombatStep === "review_phase_2_modifiers" &&
-          (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited")
-        ? " Phase 2 modifiers declared."
-        : selectedParticipantHasDeclared
-          ? " Declared."
-          : "";
+    : currentStepIsModifierReview
+      ? selectedModifierReviewComplete
+        ? " Reviewed."
+        : ""
+      : selectedParticipantHasDeclared
+        ? " Declared."
+        : "";
   const combatExperienceStatusText = !selectedCombatExperienceWindowOpen
-    ? `Current step: ${currentCombatStepLabel}. Waiting for GM to start Combat Experience rolls.`
+    ? "Waiting for GM to start CE."
     : selectedCombatExperienceNoRollAvailable
       ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
       : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
@@ -2731,15 +2730,17 @@ export default function ScenarioPlayerCombatPageContent({
                           ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
                           : declarationIncomplete
                             ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-                            : selectedParticipantHasDeclared
-                              ? `Current step: ${currentCombatStepLabel}. Declared.`
-                              : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+                            : selectedModifierReviewComplete
+                              ? `Current step: ${currentCombatStepLabel}. Reviewed.`
+                              : currentStepIsModifierReview
                                 ? `Current step: ${currentCombatStepLabel}.`
-                                : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
-  const combatExperienceValidationMessage =
-    selectedCombatExperienceRequired && !selectedCombatExperienceWindowOpen
-      ? "Waiting for GM to start Combat Experience rolls."
-      : undefined;
+                                : selectedParticipantHasDeclared
+                                  ? `Current step: ${currentCombatStepLabel}. Declared.`
+                                  : declarationStepOpen &&
+                                      selectedDeclarationStepStatus === "pending"
+                                    ? `Current step: ${currentCombatStepLabel}.`
+                                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+  const combatExperienceValidationMessage: string | undefined = undefined;
   const selectedPhaseAttackChoiceControls = selectedPhaseAttackChoiceSelectorAvailable ? (
     <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
       <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Phase choice</span>
@@ -3131,8 +3132,7 @@ export default function ScenarioPlayerCombatPageContent({
                       {selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"}
                     </div>
                     <div>
-                      Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} ·
-                      Gen/Fatigue{" "}
+                      Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} · Gen/Fatigue{" "}
                       {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
                     </div>
                     <div>

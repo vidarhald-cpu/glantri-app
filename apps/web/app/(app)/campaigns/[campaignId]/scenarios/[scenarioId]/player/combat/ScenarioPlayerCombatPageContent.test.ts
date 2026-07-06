@@ -75,7 +75,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedParticipantHasDeclared");
     expect(source).toContain("gmStatusSuffix");
     expect(source).toContain('" Initiative rolled."');
-    expect(source).toContain('" Modifiers declared."');
+    expect(source).toContain('" Reviewed."');
+    expect(source).not.toContain("Modifiers declared");
+    expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatAttackOnServer");
@@ -248,8 +250,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildCharacterSheetSummary");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceResultLine");
-    expect(source).toContain("formatCombatExperienceEffectiveTableLine");
-    expect(source).toContain("Effective CE table result");
+    expect(source).not.toContain("formatCombatExperienceEffectiveTableLine");
+    expect(source).not.toContain("Effective CE table result");
     expect(source).toContain("Active, no roll required");
     expect(source).toContain("Attack continues, no roll required");
     expect(source).toContain("No attack made");
@@ -318,7 +320,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("opponentSide.result");
     expect(source).toContain('"Back out of attack"');
     expect(source).toContain('"Waiting for GM"');
-    expect(source).toContain("Waiting for GM to start Combat Experience rolls.");
+    expect(source).toContain("Waiting for GM to start CE.");
+    expect(source.match(/Waiting for GM to start Combat Experience rolls\./g) ?? []).toHaveLength(
+      0,
+    );
     expect(source).toContain("combatExperienceStatusText");
     expect(source).toContain("combatExperienceValidationMessage");
     expect(source).toContain("rollCombatExperience()");

@@ -29,6 +29,7 @@ import {
   setDistanceBetween,
   type CombatDistance,
   type CombatDistanceEdge,
+  type CombatDistanceParticipantAliasLike,
   type CombatDistanceState,
   type CombatDistanceSource,
   type CombatDistanceWeaponLike,
@@ -37,10 +38,7 @@ import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
-import {
-  movementIntentSchema,
-  type DistancePreferenceIntent,
-} from "./combatMovementIntent";
+import { movementIntentSchema, type DistancePreferenceIntent } from "./combatMovementIntent";
 import {
   combatEffectEventSchema,
   combatEffectBleedStateSchema,
@@ -420,9 +418,7 @@ export const combatRoundEndDistanceProposalSchema = z.object({
   warnings: z.array(z.string().min(1)).default([]),
   winnerParticipantId: idSchema.optional(),
 });
-export type CombatRoundEndDistanceProposal = z.infer<
-  typeof combatRoundEndDistanceProposalSchema
->;
+export type CombatRoundEndDistanceProposal = z.infer<typeof combatRoundEndDistanceProposalSchema>;
 
 export const combatRoundEndParticipantReviewSchema = z.object({
   committedAt: z.string().datetime().optional(),
@@ -3652,7 +3648,9 @@ export function rollCombatRoundCombatExperience(input: {
     const requiredStep = getCombatRoundPhaseInitiativeStepForPhase(phase);
 
     if (normalized.currentStep !== requiredStep) {
-      throw new RangeError("Combat Experience can only be rolled during phase initiative resolution.");
+      throw new RangeError(
+        "Combat Experience can only be rolled during phase initiative resolution.",
+      );
     }
 
     if (!phaseRequirement) {
@@ -3814,7 +3812,9 @@ export function rollCombatRoundCombatExperience(input: {
       state: combatRoundStateSchema.parse({
         ...stateAfterChoice,
         commands: [
-          ...stateAfterChoice.commands.filter((existingCommand) => existingCommand.id !== commandId),
+          ...stateAfterChoice.commands.filter(
+            (existingCommand) => existingCommand.id !== commandId,
+          ),
           command,
         ],
       }),
@@ -5776,17 +5776,16 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   }
 
   if (normalized.currentStep !== initiativeStep) {
-    throw new RangeError("Phase initiative choices can only be submitted during initiative resolution.");
+    throw new RangeError(
+      "Phase initiative choices can only be submitted during initiative resolution.",
+    );
   }
 
   if (!backOutOpportunity) {
     throw new RangeError("Phase initiative choice is only available while attacked and attacking.");
   }
 
-  if (
-    input.choice === "continue_without_ce" &&
-    backOutOpportunity.ceRequired
-  ) {
+  if (input.choice === "continue_without_ce" && backOutOpportunity.ceRequired) {
     throw new RangeError("Combat Experience is required before continuing this attack.");
   }
 
@@ -6286,9 +6285,8 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
       softenedModifierIds:
         choice.choice === "back_out"
           ? currentSoftenedModifiers
-              .filter(
-                (change): change is { modifierId: string } =>
-                  Boolean(change && typeof change === "object" && "modifierId" in change),
+              .filter((change): change is { modifierId: string } =>
+                Boolean(change && typeof change === "object" && "modifierId" in change),
               )
               .map((change) => change.modifierId)
           : [],
@@ -6361,9 +6359,9 @@ export function restoreCombatRoundPhaseInitiativeResolutionCombatContextModifier
     .filter((choice): choice is Record<string, unknown> =>
       Boolean(
         choice &&
-          typeof choice === "object" &&
-          choice.participantId === input.participantId &&
-          choice.choice === "back_out",
+        typeof choice === "object" &&
+        choice.participantId === input.participantId &&
+        choice.choice === "back_out",
       ),
     )
     .flatMap((choice) => {
@@ -6374,14 +6372,13 @@ export function restoreCombatRoundPhaseInitiativeResolutionCombatContextModifier
         ? input.command.facts.softenedModifiers
         : [];
 
-      return softenedModifiers.filter(
-        (change): change is Record<string, unknown> =>
-          Boolean(
-            change &&
-              typeof change === "object" &&
-              typeof change.modifierId === "string" &&
-              softenedModifierIds.includes(change.modifierId),
-          ),
+      return softenedModifiers.filter((change): change is Record<string, unknown> =>
+        Boolean(
+          change &&
+          typeof change === "object" &&
+          typeof change.modifierId === "string" &&
+          softenedModifierIds.includes(change.modifierId),
+        ),
       );
     });
 
@@ -11088,7 +11085,9 @@ export function commitCombatRoundEndDistanceControl(input: {
     ),
   });
   const commandParticipantId =
-    input.participantId ?? normalized.currentCursor?.participantId ?? distanceProposal.participantAId;
+    input.participantId ??
+    normalized.currentCursor?.participantId ??
+    distanceProposal.participantAId;
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: normalized.currentCursor?.participantId ?? commandParticipantId,
     state: normalized,
@@ -12368,6 +12367,7 @@ function normalizeCompletedCombatRounds(input: {
         commands,
         currentCursor,
         distanceState: filterCombatDistanceStateForParticipantIds({
+          participants,
           participantIds: input.participantIds,
           state: round.distanceState,
         }),
@@ -12384,32 +12384,77 @@ function normalizeCompletedCombatRounds(input: {
 }
 
 function filterCombatDistanceStateForParticipantIds(input: {
+  participants?: readonly CombatDistanceParticipantAliasLike[];
   participantIds: Set<string>;
   state?: CombatDistanceState;
 }): CombatDistanceState {
   const parsed = combatDistanceStateSchema.parse(input.state ?? {});
-  const edges = Object.fromEntries(
-    Object.values(parsed.edges)
-      .filter(
-        (edge) =>
-          input.participantIds.has(edge.participantAId) &&
-          input.participantIds.has(edge.participantBId),
-      )
-      .map((edge) => {
-        const pairKey = makeDistancePairKey(edge.participantAId, edge.participantBId);
-        const [participantAId, participantBId] = pairKey.split("::");
+  const canonicalParticipantIdByAlias = new Map<string, string>();
 
-        return [
-          pairKey,
-          combatDistanceEdgeSchema.parse({
-            ...edge,
-            pairKey,
-            participantAId,
-            participantBId,
-          }),
-        ] as const;
-      }),
-  );
+  for (const participantId of input.participantIds) {
+    canonicalParticipantIdByAlias.set(participantId, participantId);
+  }
+
+  for (const participant of input.participants ?? []) {
+    const canonicalParticipantId = participant.participantId ?? participant.id;
+
+    if (!canonicalParticipantId || !input.participantIds.has(canonicalParticipantId)) {
+      continue;
+    }
+
+    for (const alias of getCombatDistanceParticipantAliases(participant)) {
+      canonicalParticipantIdByAlias.set(alias, canonicalParticipantId);
+    }
+  }
+
+  const edges: Record<string, CombatDistanceEdge> = {};
+
+  for (const edge of Object.values(parsed.edges)) {
+    const participantAId = canonicalParticipantIdByAlias.get(edge.participantAId);
+    const participantBId = canonicalParticipantIdByAlias.get(edge.participantBId);
+
+    if (!participantAId || !participantBId || participantAId === participantBId) {
+      continue;
+    }
+
+    const pairKey = makeDistancePairKey(participantAId, participantBId);
+    const [normalizedParticipantAId, normalizedParticipantBId] = pairKey.split("::");
+
+    if (!normalizedParticipantAId || !normalizedParticipantBId) {
+      continue;
+    }
+
+    const nextEdge = combatDistanceEdgeSchema.parse({
+      ...edge,
+      pairKey,
+      participantAId: normalizedParticipantAId,
+      participantBId: normalizedParticipantBId,
+    });
+
+    const existingEdge = edges[pairKey];
+
+    if (existingEdge) {
+      const existingIsFallbackDefault =
+        existingEdge.source === "default_weapon_reach" &&
+        existingEdge.notes?.includes("metadata was missing or invalid");
+      const nextIsFallbackDefault =
+        nextEdge.source === "default_weapon_reach" &&
+        nextEdge.notes?.includes("metadata was missing or invalid");
+      const edgeAlreadyUsesCanonicalIds =
+        input.participantIds.has(edge.participantAId) &&
+        input.participantIds.has(edge.participantBId);
+
+      if (!existingIsFallbackDefault && nextIsFallbackDefault) {
+        continue;
+      }
+
+      if (!existingIsFallbackDefault && !edgeAlreadyUsesCanonicalIds) {
+        continue;
+      }
+    }
+
+    edges[pairKey] = nextEdge;
+  }
 
   return combatDistanceStateSchema.parse({ edges });
 }
@@ -12612,6 +12657,7 @@ export function initializeCombatRoundState(input: {
     participantIds: [...participantIds],
     refreshFallbackDefaultEdges: Boolean(input.weaponsByParticipantId),
     state: filterCombatDistanceStateForParticipantIds({
+      participants,
       participantIds,
       state: existing?.distanceState,
     }),
@@ -12828,7 +12874,7 @@ export function initializeCombatRoundState(input: {
         ? existing.currentCursor
         : canUseRecoveredPhaseResolutionCursor
           ? recoveredPhaseResolutionCursor
-        : isGlobalCombatRoundStep(currentStep)
+          : isGlobalCombatRoundStep(currentStep)
             ? getDefaultCombatRoundCursor({
                 participantId: selectedParticipantId,
                 roundNumber,
@@ -13196,12 +13242,11 @@ export function advanceCombatRoundStep(
   };
 
   if (startsPhaseResolution) {
-    const threatenedParticipantId =
-      getCombatRoundPhaseInitiativeChoiceStatuses({
-        phase: startsPhaseResolution,
-        state: baseState,
-        visibility: input.visibility,
-      })[0]?.participantId;
+    const threatenedParticipantId = getCombatRoundPhaseInitiativeChoiceStatuses({
+      phase: startsPhaseResolution,
+      state: baseState,
+      visibility: input.visibility,
+    })[0]?.participantId;
 
     return threatenedParticipantId
       ? moveCombatRoundToPhaseInitiativeResolution({
@@ -15320,12 +15365,11 @@ function undoCombatRoundEndParticipantReviewCommitCommandAtIndex(input: {
     const record = fact as Record<string, unknown>;
     const nextEdge = combatDistanceEdgeSchema.safeParse(record.nextEdge);
     const previousEdge = combatDistanceEdgeSchema.safeParse(record.previousEdge);
-    const pairKey =
-      nextEdge.success
-        ? nextEdge.data.pairKey
-        : previousEdge.success
-          ? previousEdge.data.pairKey
-          : undefined;
+    const pairKey = nextEdge.success
+      ? nextEdge.data.pairKey
+      : previousEdge.success
+        ? previousEdge.data.pairKey
+        : undefined;
 
     if (!pairKey) {
       continue;
@@ -15529,12 +15573,11 @@ function undoCombatRoundEndDistanceControlCommitCommandAtIndex(input: {
   const distanceEdges = { ...normalized.distanceState.edges };
   const nextEdge = combatDistanceEdgeSchema.safeParse(command.facts.nextEdge);
   const previousEdge = combatDistanceEdgeSchema.safeParse(command.facts.previousEdge);
-  const pairKey =
-    nextEdge.success
-      ? nextEdge.data.pairKey
-      : previousEdge.success
-        ? previousEdge.data.pairKey
-        : previousProposal.data.pairKey;
+  const pairKey = nextEdge.success
+    ? nextEdge.data.pairKey
+    : previousEdge.success
+      ? previousEdge.data.pairKey
+      : previousProposal.data.pairKey;
 
   if (previousEdge.success) {
     distanceEdges[pairKey] = previousEdge.data;

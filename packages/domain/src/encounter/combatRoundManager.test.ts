@@ -934,6 +934,48 @@ describe("combat round manager", () => {
     expect(getDistanceBetween(state.distanceState, "guard", "scyrian")).toBe(4);
   });
 
+  it("preserves alias-keyed materialized distance edges over fallback melee defaults", () => {
+    const baseEncounter = encounter({
+      participants: [
+        {
+          ...participant({ id: "gladiator", label: "The Gladiator" }),
+          characterId: "character-gladiator",
+        },
+        {
+          ...participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+          characterId: "character-scyrian",
+        },
+      ],
+    });
+    const initial = initializeCombatRoundState({ encounter: baseEncounter });
+    const aliasDistanceState = setDistanceBetween({
+      distance: 3,
+      participantAId: "scenario-gladiator",
+      participantBId: "character-scyrian",
+      source: "default_weapon_reach",
+      state: initial.distanceState,
+    });
+    const state = initializeCombatRoundState({
+      encounter: {
+        ...baseEncounter,
+        combatRoundState: {
+          ...initial,
+          distanceState: aliasDistanceState,
+        },
+      },
+    });
+    const pairKey = makeDistancePairKey("gladiator", "scyrian");
+
+    expect(state.distanceState.edges[pairKey]).toMatchObject({
+      distance: 3,
+      participantAId: "gladiator",
+      participantBId: "scyrian",
+      source: "default_weapon_reach",
+    });
+    expect(state.distanceState.edges[pairKey]?.notes).toBeUndefined();
+    expect(getDistanceBetween(state.distanceState, "gladiator", "scyrian")).toBe(3);
+  });
+
   it("stamps initialized combat round state with the owning encounter id", () => {
     const state = initializeCombatRoundState({ encounter: encounter({ id: "encounter-a" }) });
 
@@ -2487,11 +2529,13 @@ describe("combat round manager", () => {
       noRollRequired: true,
       trigger: "phase1_attack",
     });
-    expect(getCombatRoundPhaseInitiativeChoice({
-      participantId: "gladiator",
-      phase: "phase1",
-      state: rolled.state,
-    })?.choice).toBe("roll_ce_result");
+    expect(
+      getCombatRoundPhaseInitiativeChoice({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: rolled.state,
+      })?.choice,
+    ).toBe("roll_ce_result");
     expect(rolled.state.phaseResolutionCursor).toBeUndefined();
     expect(
       canPlayerRollCombatAttack({
@@ -2542,11 +2586,13 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "i1",
     });
-    expect(getCombatRoundPhaseInitiativeChoiceStatuses({
-      phase: "phase1",
-      state: advanced,
-      visibility,
-    })).toMatchObject([
+    expect(
+      getCombatRoundPhaseInitiativeChoiceStatuses({
+        phase: "phase1",
+        state: advanced,
+        visibility,
+      }),
+    ).toMatchObject([
       { participantId: "gladiator", ceRequired: false, unresolved: true },
       { participantId: "guard", ceRequired: true, unresolved: true },
     ]);
@@ -3607,11 +3653,13 @@ describe("combat round manager", () => {
       step: "i1",
     });
     expect(cleared.participants[1]?.stepStatuses.phase_1_actions).toBe("pending");
-    expect(getCombatRoundPhaseInitiativeChoice({
-      participantId: "guard",
-      phase: "phase1",
-      state: cleared,
-    })?.choice).toBe("roll_ce_result");
+    expect(
+      getCombatRoundPhaseInitiativeChoice({
+        participantId: "guard",
+        phase: "phase1",
+        state: cleared,
+      })?.choice,
+    ).toBe("roll_ce_result");
   });
 
   it("applies phase CE OB modifiers only to the phase attack and clears them with the CE result", () => {
@@ -3686,11 +3734,13 @@ describe("combat round manager", () => {
     });
     expect(clearedState.phaseResolutionCursor).toBeUndefined();
     expect(clearedState.participants[1]?.combatExperience).toBeUndefined();
-    expect(getCombatRoundPhaseInitiativeChoice({
-      participantId: "guard",
-      phase: "phase1",
-      state: clearedState,
-    })?.choice).toBe("roll_ce_result");
+    expect(
+      getCombatRoundPhaseInitiativeChoice({
+        participantId: "guard",
+        phase: "phase1",
+        state: clearedState,
+      })?.choice,
+    ).toBe("roll_ce_result");
     expect(clearedContext.modifierBuckets.situationObSkill).toEqual([]);
   });
 
@@ -12076,7 +12126,9 @@ describe("combat round manager", () => {
       state: reviewed,
     });
 
-    expect(getCombatRoundEndHealthCheckPendingRollCount({ participantId: "gladiator", state: reviewed })).toBe(1);
+    expect(
+      getCombatRoundEndHealthCheckPendingRollCount({ participantId: "gladiator", state: reviewed }),
+    ).toBe(1);
     expect(pendingHealthRolls[0]).toMatchObject({
       bleedType: "external",
       difficulty: 21,

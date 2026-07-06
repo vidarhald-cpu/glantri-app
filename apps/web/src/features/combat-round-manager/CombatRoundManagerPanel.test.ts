@@ -243,6 +243,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("inspectorStatusSuffix");
     expect(source).toContain('" Declared."');
+    expect(source).toContain('" Reviewed."');
+    expect(source).not.toContain("Modifiers declared");
+    expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).toContain('" Initiative rolled."');
     expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
@@ -689,8 +692,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
     expect(source).toContain("formatCombatExperienceCalculation");
-    expect(source).toContain("formatCombatExperienceEffectiveTableLine");
-    expect(source).toContain("Effective CE table result");
+    expect(source).not.toContain("formatCombatExperienceEffectiveTableLine");
+    expect(source).not.toContain("Effective CE table result");
     expect(source).toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
     expect(source).toContain("const inspectorCombatExperienceIsCombatStart =");
@@ -709,10 +712,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty",
     );
+    expect(source).toContain("const inspectorCombatExperienceDifficultyCommandPending =");
+    expect(source).toContain("const inspectorCombatExperienceActionLabel =");
     expect(source).toContain("const combatExperienceDifficultyControlsDisabled =");
-    expect(source).toContain("Set CE difficulty first");
     expect(source).toContain("Start Combat Experience rolls");
     expect(source).toContain("Update CE difficulty");
+    expect(source).toContain("Enter CE difficulty.");
+    expect(source).toContain("CE difficulty");
     expect(source).toContain("Difficulty locked after the first CE result.");
     expect(source).toContain("Confirm Combat Experience");
     expect(source).toContain("Roll Combat Experience");
@@ -725,7 +731,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("setCombatExperienceDifficultyDrafts");
     expect(source).toContain("saveCombatExperienceDifficultyDraft");
     expect(source).not.toContain("onBlur={(event) =>");
-    expect(source).toContain('event.key !== "Enter"');
+    expect(source).not.toContain('event.key !== "Enter"');
     expect(source).toContain('inspectorIsInspectionOnly && inspector.step !== "select_actions"');
     expect(source).toContain("inspectorPhaseInitiativeChoiceStatuses.length > 0");
     expect(source).toContain("Phase Combat Experience uses difficulty");
@@ -748,7 +754,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorPhaseAttackChoiceControls");
     expect(source).toContain('"Continue and roll Combat Experience"');
     expect(source).toContain('<option value="continue">');
-    expect(source).toContain("preActionControls={inspectorPhaseAttackChoiceControls}");
+    expect(source).toContain("preActionControls={inspectorPreActionControls}");
+    expect(source).toContain("? saveCombatExperienceDifficultyDraft()");
     expect(source).toContain("? backOutInspectorPhaseAttack()");
     expect(source).toContain("inspectorSecondarySkipActionAvailable");
     expect(source).toContain(
@@ -760,7 +767,7 @@ describe("CombatRoundManagerPanel", () => {
       source.indexOf(": inspectorCurrentStepIsInitiative"),
     );
     expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
-      source.indexOf(": inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase"),
+      source.indexOf("rollInspectorPhaseAttack(inspectorCurrentAttackPhase)"),
     );
     expect(source).toContain("Combat Experience");
     expect(source).toContain("Latest combat event");
