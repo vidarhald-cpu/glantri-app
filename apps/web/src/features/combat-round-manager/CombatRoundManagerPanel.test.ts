@@ -27,6 +27,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("disabled={saving || !clearCurrentStepAvailable}");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
+    expect(source).toContain("Round-level controls");
+    expect(source).toContain("Timeline controls; not part of the current attack/parry step.");
     expect(source).toContain("Latest combat event");
     expect(source).toContain("getLatestCombatEventSummary");
     expect(source).toContain("latestCombatEventSummary.summaryText");
@@ -201,6 +203,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Distance matrix");
+    expect(source).toContain("Round-level distance matrix");
+    expect(source).toContain("Pair distances shared by the round; not part of the current action command.");
     expect(source).not.toContain("Participant A");
     expect(source).not.toContain("Participant B");
     expect(source.indexOf('aria-label="Distance matrix"')).toBeGreaterThan(
@@ -650,9 +654,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("isRoundEndDistanceCommitReady");
     expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
     expect(source).toContain("inspectorRoundEndDistanceControls");
-    expect(source).toContain("Round distance control");
-    expect(source).toContain("Shared round-level pair review.");
+    expect(source).toContain("Round-end distance control");
+    expect(source).toContain(
+      "Shared round-level pair review. These controls are not part of the current attack/parry",
+    );
+    expect(source).toContain("Participant review");
     expect(source).toContain("Participant round-end review");
+    expect(source).toContain("Health check review");
     expect(source).toContain("No participant-owned round-end changes proposed.");
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");

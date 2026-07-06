@@ -1180,7 +1180,7 @@ export function PlayerCombatActionButtonPanel({
 }: PlayerCombatActionButtonPanelProps) {
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Action button</strong>
+      <strong>Current action</strong>
       {preActionControls ? (
         <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
       ) : null}

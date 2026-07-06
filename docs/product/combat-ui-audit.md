@@ -22,6 +22,8 @@ Cleanup note, 2026-07-06: Slice 7 follow-up now derives the legend from the same
 
 Cleanup note, 2026-07-06: Tracker initiative titles now avoid the ambiguous `GM edited` phrase. Initiative roll commands submitted from the GM path display `rolled by GM`, future explicit override facts can display `GM override`, and legacy GM-completed cells without command provenance fall back to `resolved by GM`.
 
+Cleanup note, 2026-07-06: Slice 8 clarified round-level controls versus the selected/current action by labelling the GM timeline controls as round-level controls, renaming the shared Action Button Area heading to Current action, and marking participant SU review, health check review, round-end distance control, and the distance matrix with explicit ownership text.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`
@@ -472,6 +474,7 @@ Recommended broad fix:
 ### Slice 8 - Clarify Round-Level Controls Versus Current Action
 
 - Affected files/components: `CombatRoundManagerPanel.tsx` Step Controller and inspector action area.
+- Status, 2026-07-06: addressed with concise UI ownership labels. The top timeline controls are marked as round-level controls, the shared primary command panel is titled Current action, participant SU/health review is participant-owned, and distance-control/matrix surfaces are marked as round-level state. No command semantics or sequencing changed.
 - Contract rule: one primary Action Button Area for current work; the four GM work categories must be visually distinct.
 - Why it matters: top-level commit/advance and inspector primary actions can look like competing command surfaces.
 - Intended behavior: round-level navigation/advance controls are clearly labeled as round controls, while selected participant/pair commands live in the Action Button Area. If a commit is the current task, expose it through the same current-action pattern.

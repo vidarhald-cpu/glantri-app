@@ -3769,7 +3769,10 @@ function CombatRoundEndParticipantReviewPanel(input: {
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Participant round-end review</strong>
+      <strong>Participant review</strong>
+      <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+        Participant round-end review for SU health, bleed, duration, and status.
+      </div>
       {!review ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
       ) : (
@@ -3841,7 +3844,7 @@ function CombatRoundEndParticipantReviewPanel(input: {
           ) : null}
           {review.proposedHealthRolls.length > 0 ? (
             <section style={{ display: "grid", gap: "0.4rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Health rolls</strong>
+              <strong style={{ fontSize: "0.9rem" }}>Health check review</strong>
               {review.proposedHealthRolls.map((proposal) => {
                 const result = proposal.result;
                 const difficultyValue =
@@ -3931,9 +3934,10 @@ function CombatRoundEndDistanceControlPanel(input: {
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Round distance control</strong>
+      <strong>Round-end distance control</strong>
       <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-        Shared round-level pair review.
+        Shared round-level pair review. These controls are not part of the current attack/parry
+        step.
       </div>
       {!input.roundReview ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
@@ -7599,38 +7603,59 @@ export default function CombatRoundManagerPanel({
             gap: "0.5rem",
           }}
         >
-          <button
-            disabled={
-              saving ||
-              !selectedRoundIsActive ||
-              inspectorSelectedStepIsSequential ||
-              Boolean(roundEndStartNextRoundBlocker)
-            }
-            onClick={() => void commitCurrentStep()}
-            type="button"
-            title={roundEndStartNextRoundBlocker}
+          <div
+            style={{
+              display: "grid",
+              gap: "0.1rem",
+              minWidth: "12rem",
+            }}
           >
-            {saving
-              ? "Saving..."
-              : topPhaseInitiativeResolutionOpen && topPhaseInitiativeResolutionPhase
-                ? `Commit ${formatCombatPhaseLabel(topPhaseInitiativeResolutionPhase)} initiative resolution`
-                : getAdvanceButtonLabel(inspector.step)}
-          </button>
-          <button
-            disabled={saving || !currentTaskSelection}
-            onClick={selectCurrentTask}
-            title="Return to the current unresolved combat step"
-            type="button"
+            <strong>Round-level controls</strong>
+            <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+              Timeline controls; not part of the current attack/parry step.
+            </span>
+          </div>
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.5rem",
+            }}
           >
-            Current task
-          </button>
-          <button
-            disabled={saving || !clearCurrentStepAvailable}
-            onClick={() => void clearCurrentStep()}
-            type="button"
-          >
-            Clear current step
-          </button>
+            <button
+              disabled={
+                saving ||
+                !selectedRoundIsActive ||
+                inspectorSelectedStepIsSequential ||
+                Boolean(roundEndStartNextRoundBlocker)
+              }
+              onClick={() => void commitCurrentStep()}
+              type="button"
+              title={roundEndStartNextRoundBlocker}
+            >
+              {saving
+                ? "Saving..."
+                : topPhaseInitiativeResolutionOpen && topPhaseInitiativeResolutionPhase
+                  ? `Commit ${formatCombatPhaseLabel(topPhaseInitiativeResolutionPhase)} initiative resolution`
+                  : getAdvanceButtonLabel(inspector.step)}
+            </button>
+            <button
+              disabled={saving || !currentTaskSelection}
+              onClick={selectCurrentTask}
+              title="Return to the current unresolved combat step"
+              type="button"
+            >
+              Current task
+            </button>
+            <button
+              disabled={saving || !clearCurrentStepAvailable}
+              onClick={() => void clearCurrentStep()}
+              type="button"
+            >
+              Clear current step
+            </button>
+          </div>
         </section>
       </div>
 
@@ -8536,7 +8561,7 @@ export default function CombatRoundManagerPanel({
             justifyContent: "space-between",
           }}
         >
-          <strong>Distance matrix</strong>
+          <strong>Round-level distance matrix</strong>
           <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
             {dirtyCombatDistanceRows.length === 0
               ? "No unsaved distance changes."
@@ -8544,6 +8569,9 @@ export default function CombatRoundManagerPanel({
                   dirtyCombatDistanceRows.length === 1 ? "change" : "changes"
                 }.`}
           </span>
+        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+          Pair distances shared by the round; not part of the current action command.
         </div>
         {displayParticipants.length > 1 ? (
           <>

@@ -507,6 +507,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("Choose opponent");
     expect(source).not.toContain("selectedOpponentId");
     expect(source).toContain("PlayerCombatActionButtonPanel");
+    expect(source).toContain("Current action");
+    expect(source).not.toContain("Action button");
     expect(source).toContain("validationMessage");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
