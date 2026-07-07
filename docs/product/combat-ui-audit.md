@@ -32,6 +32,8 @@ Cleanup note, 2026-07-06: GM Damage Review Declutter separated the GM D1/D2 dama
 
 Cleanup note, 2026-07-06: Player Mutation Response Sanitization routes non-GM player-owned combat roll mutation responses through a response-only player-safe sanitizer, preserving GM full responses while removing unrelated current phase results, unrelated attack results, and damage review details from non-GM roll responses. Historical snapshot/command projection hardening remains a separate follow-up.
 
+Cleanup note, 2026-07-06: Player read-path combat projection now uses the same current-round result sanitizer as non-GM roll mutation responses, so player GET payloads keep involved attacker/defender result facts while removing unrelated current attack results, unrelated phase results, and damage review details. Historical snapshots and command-history projection remain separate follow-ups.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

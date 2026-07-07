@@ -401,6 +401,106 @@ function makeCriticalRollMutationFixture() {
   };
 }
 
+function makeCombatReadProjectionFixture() {
+  const encounterParticipants = makeFourCombatEncounterParticipants();
+  const combatEncounter = makeCombatEncounter({
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const attackHit = buildCombatRoundAttackRollResult({
+    actionId: "attack_parry",
+    attackerParticipantId: "encounter-participant-1",
+    defenderDb: 10,
+    defenderParticipantId: "encounter-participant-2",
+    ob: 10,
+    phase: "phase1",
+    rollD20: 14,
+    rollTotal: 14,
+    rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponName: "Broad sword",
+  });
+  const afterAttack = recordCombatRoundAttackResult({
+    command: {
+      createdAt: attackHit.rolledAt,
+      createdByUserId: "gm-1",
+    },
+    participantId: "encounter-participant-1",
+    result: attackHit,
+    state: initializeCombatRoundState({ encounter: combatEncounter }),
+    submittedBy: "gm",
+  });
+  const afterParry = recordCombatRoundParryResult({
+    attackResult: attackHit,
+    command: {
+      createdAt: "2026-01-01T00:04:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    parryResolution: {
+      combinedParryScore: 9,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry failed",
+      rollD20: 8,
+      rollTotal: 8,
+      status: "resolved",
+      success: false,
+      targetNumber: 21,
+      total: 17,
+    },
+    state: afterAttack,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:00.000Z",
+  });
+  const afterLocation = recordCombatRoundHitLocationRoll({
+    attackResult: attackHit,
+    command: {
+      createdAt: "2026-01-01T00:04:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    hitLocationRolls: [12],
+    rolledByParticipantId: "encounter-participant-1",
+    state: afterParry,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:30.000Z",
+  });
+  const afterDamage = recordCombatRoundDamageResult({
+    attackResult: attackHit,
+    command: {
+      createdAt: "2026-01-01T00:05:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    defenderDm: 0,
+    dmb: 8,
+    state: afterLocation,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:00.000Z",
+  });
+  const attackResultId = "1:phase1:encounter-participant-1:encounter-participant-2";
+
+  return {
+    attackResultId,
+    encounterParticipants,
+    scenarioParticipants: [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "uninvolved-player",
+        id: "participant-3",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "fourth-player",
+        id: "participant-4",
+      }),
+    ],
+    state: addPrivateDamageReviewToResolution({
+      attackResultId,
+      state: afterDamage,
+    }),
+  };
+}
+
 function makeOpenPhase1AttackRoundState(
   input: {
     distance?: number;
@@ -7635,6 +7735,179 @@ describe("scenarios route contract", () => {
     expect(responseResolution.damageResult.review).toMatchObject({
       notes: "secret-gm-review",
       reviewedByUserId: "gm-1",
+    });
+  });
+
+  it("returns involved current-round combat result facts to the attacker on encounter read", async () => {
+    const fixture = makeCombatReadProjectionFixture();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: fixture.state,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const responseRoundState = response.json().encounter.combatRoundState;
+    const responseResolution = responseRoundState.phaseResolutionResults[0];
+    expect(responseRoundState.phaseResolutionResults).toHaveLength(1);
+    expect(responseResolution).toMatchObject({
+      attackerParticipantId: "encounter-participant-1",
+      defenderParticipantId: "encounter-participant-2",
+      hitLocationRoll: {
+        status: "rolled",
+      },
+    });
+    expect(responseResolution.damageResult).toMatchObject({
+      attackResultId: fixture.attackResultId,
+      defenderParticipantId: "encounter-participant-2",
+      hitLocationRolls: [12],
+      totalDamage: expect.any(Number),
+    });
+    expect(responseResolution.damageResult.review).toBeUndefined();
+    expect(JSON.stringify(responseRoundState)).not.toContain("secret-gm-review");
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.attackResults.phase1,
+    ).toMatchObject({
+      defenderParticipantId: "encounter-participant-2",
+      rollD20: 14,
+    });
+  });
+
+  it("returns involved current-round combat result facts to the defender on encounter read", async () => {
+    const fixture = makeCombatReadProjectionFixture();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: fixture.state,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: {
+        ...mocks.playerUser,
+        id: "other-player",
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const responseRoundState = response.json().encounter.combatRoundState;
+    expect(responseRoundState.phaseResolutionResults).toHaveLength(1);
+    expect(responseRoundState.phaseResolutionResults[0]).toMatchObject({
+      attackerParticipantId: "encounter-participant-1",
+      defenderParticipantId: "encounter-participant-2",
+      parryResolution: {
+        status: "resolved",
+      },
+    });
+    expect(responseRoundState.phaseResolutionResults[0].damageResult.review).toBeUndefined();
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.attackResults.phase1,
+    ).toMatchObject({
+      defenderParticipantId: "encounter-participant-2",
+      rollD20: 14,
+    });
+  });
+
+  it("omits unrelated current-round combat result details for an uninvolved player on encounter read", async () => {
+    const fixture = makeCombatReadProjectionFixture();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: fixture.state,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: {
+        ...mocks.playerUser,
+        id: "uninvolved-player",
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const responseRoundState = response.json().encounter.combatRoundState;
+    expect(responseRoundState.phaseResolutionResults).toEqual([]);
+    expect(JSON.stringify(responseRoundState)).not.toContain("secret-gm-review");
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.attackResults,
+    ).toEqual({});
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-2",
+      )?.attackResults,
+    ).toEqual({});
+  });
+
+  it("keeps GM encounter read responses fully detailed", async () => {
+    const fixture = makeCombatReadProjectionFixture();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: fixture.state,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const responseRoundState = response.json().encounter.combatRoundState;
+    expect(responseRoundState.phaseResolutionResults).toHaveLength(1);
+    expect(responseRoundState.phaseResolutionResults[0].damageResult.review).toMatchObject({
+      notes: "secret-gm-review",
+      reviewedByUserId: "gm-1",
+    });
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.attackResults.phase1,
+    ).toMatchObject({
+      defenderParticipantId: "encounter-participant-2",
+      rollD20: 14,
     });
   });
 

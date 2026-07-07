@@ -1503,7 +1503,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       }
     : undefined;
 
-  return {
+  const safeState: CombatRoundState = {
     ...roundState,
     commands: roundState.commands
       .map((command) =>
@@ -1533,6 +1533,12 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     ),
     roundEndReview: safeRoundEndReview,
   };
+
+  return sanitizePlayerSafeCurrentCombatResultsState({
+    controlledEncounterParticipantIds,
+    state: safeState,
+    visibleParticipantIds,
+  });
 }
 
 function buildPlayerSafeEncounterForUser(input: {
@@ -1566,7 +1572,7 @@ function isPlayerVisibleCombatRoundResultPair(input: {
   return false;
 }
 
-function sanitizePlayerSafeCombatRollMutationResolution(
+function sanitizePlayerSafeCurrentCombatResultResolution(
   result: CombatRoundPhaseResolutionResult,
 ): CombatRoundPhaseResolutionResult {
   return {
@@ -1580,7 +1586,7 @@ function sanitizePlayerSafeCombatRollMutationResolution(
   };
 }
 
-function sanitizePlayerSafeCombatRollMutationAttackResults(input: {
+function sanitizePlayerSafeCurrentCombatAttackResults(input: {
   attackResults: CombatRoundAttackResults;
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
@@ -1606,7 +1612,7 @@ function sanitizePlayerSafeCombatRollMutationAttackResults(input: {
   return attackResults;
 }
 
-function sanitizePlayerSafeCombatRollMutationState(input: {
+function sanitizePlayerSafeCurrentCombatResultsState(input: {
   controlledEncounterParticipantIds: Set<string>;
   state: CombatRoundState;
   visibleParticipantIds: Set<string>;
@@ -1615,7 +1621,7 @@ function sanitizePlayerSafeCombatRollMutationState(input: {
     ...input.state,
     participants: input.state.participants.map((participant) => ({
       ...participant,
-      attackResults: sanitizePlayerSafeCombatRollMutationAttackResults({
+      attackResults: sanitizePlayerSafeCurrentCombatAttackResults({
         attackResults: participant.attackResults,
         controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
         visibleParticipantIds: input.visibleParticipantIds,
@@ -1630,7 +1636,7 @@ function sanitizePlayerSafeCombatRollMutationState(input: {
           visibleParticipantIds: input.visibleParticipantIds,
         }),
       )
-      .map(sanitizePlayerSafeCombatRollMutationResolution),
+      .map(sanitizePlayerSafeCurrentCombatResultResolution),
   };
 }
 
@@ -1639,23 +1645,7 @@ function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): EncounterSession {
-  const encounter = buildPlayerSafeEncounterForUser(input);
-
-  if (!encounter.combatRoundState) {
-    return encounter;
-  }
-
-  const { controlledEncounterParticipantIds, visibleParticipantIds } =
-    buildPlayerSafeCombatScopeForUser(input);
-
-  return {
-    ...encounter,
-    combatRoundState: sanitizePlayerSafeCombatRollMutationState({
-      controlledEncounterParticipantIds,
-      state: encounter.combatRoundState,
-      visibleParticipantIds,
-    }),
-  };
+  return buildPlayerSafeEncounterForUser(input);
 }
 
 function preservePlayerCombatModifierBuckets(input: {
