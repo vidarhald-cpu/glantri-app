@@ -73,9 +73,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
     expect(source).toContain("Declared.");
     expect(source).toContain("selectedParticipantHasDeclared");
-    expect(source).toContain("gmStatusSuffix");
-    expect(source).toContain('" Initiative rolled."');
-    expect(source).toContain('" Reviewed."');
+    expect(source).not.toContain("gmStatusSuffix");
+    expect(source).toContain(". Initiative rolled.");
+    expect(source).toContain(". Reviewed.");
     expect(source).not.toContain("Modifiers declared");
     expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).not.toContain("GM can save or revise this participant declaration.");
@@ -150,12 +150,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Defense: DB ${input.result.defenderDb}");
     expect(source).toContain("Main: ${input.result.weaponName} OB");
     expect(source).toContain("resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`");
-    expect(source).toContain("selectedHealthCheckResultPanel ??");
-    expect(source).toContain("selectedCurrentPhaseResolutionResultPanel ??");
-    expect(source).toContain("selectedAttackerPrivilegedResultPanel ??");
-    expect(source).toContain("selectedInvolvedDamageResultPanel ??");
-    expect(source).toContain("selectedCurrentAttackResultPanel ??");
-    expect(source).toContain("selectedRelevantInitiativeResultPanel ??");
+    expect(source).toContain(
+      "selectPlayerCombatActionResultPanel<PlayerCombatActionResultPanelView>",
+    );
+    expect(source).toContain("healthCheck: selectedHealthCheckResultPanel");
+    expect(source).toContain("attackerPrivileged: selectedAttackerPrivilegedResultPanel");
+    expect(source).toContain("currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel");
+    expect(source).toContain("currentAttack: selectedCurrentAttackResultPanel");
+    expect(source).toContain("involvedDamage: selectedInvolvedDamageResultPanel");
+    expect(source).toContain("relevantInitiative: selectedRelevantInitiativeResultPanel");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("playerActionButtonLabel");
     expect(source).toContain("selectedParticipantStoredDeclarationThisRound");
@@ -200,13 +203,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("markCombatDeclarationDraftDirty");
     expect(source).toContain("combatDeclarationDraftKey === selectedCombatDeclarationDraftKey");
-    expect(source).toContain("(isGameMaster || declarationStepOpen)");
+    expect(source).toContain("declarationStepOpen");
     expect(source).toContain("setCombatDeclarationDraftDirty(false)");
-    expect(source).toContain("onAddEntry={");
+    expect(source).not.toContain("onAddEntry={");
     expect(source).toContain("isGameMaster");
-    expect(source).toContain("(bucketKey, entry) =>");
-    expect(source).toContain("entry ?? createModifierEntryDraft()");
-    expect(source).toContain("readOnly={!isGameMaster}");
+    expect(source).not.toContain("(bucketKey, entry) =>");
+    expect(source).not.toContain("entry ?? createModifierEntryDraft()");
+    expect(source).toContain("readOnly");
+    expect(source).not.toContain("readOnly={!isGameMaster}");
     expect(source).toContain("roundNumber={combatRoundState?.roundNumber}");
     expect(source).toContain("mainHandParryItemLabel");
     expect(source).toContain("offHandParryItemLabel");
@@ -224,7 +228,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
     expect(source).toContain("getEncounterScenarioParticipantIds");
-    expect(source).toContain("projectionVisibleParticipants: projection?.visibleParticipants");
+    expect(source).toContain("playerPerspectiveVisibleParticipants");
+    expect(source).toContain("projectionVisibleParticipants: playerPerspectiveVisibleParticipants");
     expect(source).toContain("selectedParticipantId: selectedParticipant?.id");
     expect(source).toContain("hasScenarioParticipantCombatDeclarationForEncounterRound");
     expect(source).toContain(
@@ -252,7 +257,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatPlayerCombatRecordedEffectsLine");
     expect(source).toContain('title: "Hit location"');
     expect(source).toContain('title: "Critical"');
-    expect(source).toContain('title:');
+    expect(source).toContain("title:");
     expect(source).toContain('"Recorded damage"');
     expect(source).toContain("getHitLocationFullLabel(locationRoll.selectedHitLocation)");
     expect(source).toContain('`2d8 ${criticalRoll.criticalDice.join(" + ")}');
@@ -263,12 +268,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Recorded effects: ${labels.join");
     expect(source).toContain("isPlayerInvolvedInPhaseResolution");
     expect(source).toContain("isPlayerVisibleDamageResolution");
-    expect(source).toContain(
-      "input.resolution.attackerParticipantId === input.participantId",
-    );
-    expect(source).toContain(
-      "input.resolution.defenderParticipantId === input.participantId",
-    );
+    expect(source).toContain("input.resolution.attackerParticipantId === input.participantId");
+    expect(source).toContain("input.resolution.defenderParticipantId === input.participantId");
     expect(source).toContain("getLatestPlayerVisibleDamageResolution");
     expect(source).toContain("selectedInvolvedDamageResolution");
     expect(source).toContain("selectedInvolvedDamageResultPanel");
@@ -348,7 +349,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('<option value="continue">');
     expect(source).toContain("preActionControls={selectedPhaseAttackChoiceControls}");
     expect(source).toContain("? backOutPhaseAttack()");
-    expect(source).toContain("selectedPhaseInitiativeChoiceResultPanel ??");
+    expect(source).toContain("phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel");
     expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).not.toContain("secondaryButtonLabel=");
     expect(source).not.toContain("secondaryButtonDisabled=");

@@ -47,11 +47,10 @@ import {
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
   type EncounterSession,
-  type ScenarioCombatModifierBucket,
-  type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
+  type ScenarioPlayerVisibleParticipant,
   type MovementIntent,
   type WeaponTemplate,
   buildCombatRoundPhaseResolutionResult,
@@ -89,6 +88,7 @@ import {
   isEquipmentFeatureState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
+import { selectPlayerCombatActionResultPanel } from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
@@ -155,6 +155,14 @@ type PlayerCombatActionResultSectionView = {
   calculationLines: readonly string[];
   resultLine?: string;
   title: string;
+};
+
+type PlayerCombatActionResultPanelView = {
+  detailLines?: readonly string[];
+  interpretedResult: string;
+  rankLabel?: string;
+  resultLabel?: string;
+  sections?: readonly PlayerCombatActionResultSectionView[];
 };
 
 const panelStyle = {
@@ -253,9 +261,7 @@ function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceRes
   }`;
 }
 
-function buildPhaseInitiativeChoiceResultPanel(
-  choice?: CombatRoundPhaseInitiativeChoice,
-): {
+function buildPhaseInitiativeChoiceResultPanel(choice?: CombatRoundPhaseInitiativeChoice): {
   interpretedResult: string;
   rankLabel?: string;
   resultLabel?: string;
@@ -584,8 +590,8 @@ function isPlayerInvolvedInPhaseResolution(input: {
 }): boolean {
   return Boolean(
     input.participantId &&
-      (input.resolution.attackerParticipantId === input.participantId ||
-        input.resolution.defenderParticipantId === input.participantId),
+    (input.resolution.attackerParticipantId === input.participantId ||
+      input.resolution.defenderParticipantId === input.participantId),
   );
 }
 
@@ -659,7 +665,7 @@ function formatCombatPhaseResolutionResultLines(input: {
       ? (committedDamageResultLine ?? "Result: damage recorded")
       : criticalResultLine && input.resolution.criticalRoll.status === "rolled"
         ? criticalResultLine
-        : parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+        : (parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`);
   const statusLine = recordedDamageLine
     ? recordedDamageLine
     : criticalResultLine && input.resolution.criticalRoll.status === "rolled"
@@ -693,39 +699,39 @@ function formatCombatPhaseResolutionResultLines(input: {
     ...(locationCalculationLine
       ? [
           {
-          calculationLines: [locationCalculationLine],
-          resultLine: locationResultLine,
-          title: "Hit location",
+            calculationLines: [locationCalculationLine],
+            resultLine: locationResultLine,
+            title: "Hit location",
           },
         ]
       : []),
     ...(criticalCalculationLine || criticalResultLine
       ? [
           {
-          calculationLines: [criticalCalculationLine].filter((line): line is string =>
-            Boolean(line),
-          ),
-          resultLine: criticalResultLine,
-          title: "Critical",
+            calculationLines: [criticalCalculationLine].filter((line): line is string =>
+              Boolean(line),
+            ),
+            resultLine: criticalResultLine,
+            title: "Critical",
           },
         ]
       : []),
     ...(damageResult || recordedDamageLine
       ? [
           {
-          calculationLines: [
-            damageCalculationLine,
-            recordedEffectsLine,
-            input.resolution.damageProposal.status === "committed"
-              ? undefined
-              : "Waiting for GM damage review.",
-          ].filter((line): line is string => Boolean(line)),
-          resultLine:
-            input.resolution.damageProposal.status === "committed"
-              ? (committedDamageResultLine ?? "Result: damage recorded")
-              : "Result: waiting for GM review",
-          title:
-            input.resolution.damageProposal.status === "committed" ? "Recorded damage" : "Damage",
+            calculationLines: [
+              damageCalculationLine,
+              recordedEffectsLine,
+              input.resolution.damageProposal.status === "committed"
+                ? undefined
+                : "Waiting for GM damage review.",
+            ].filter((line): line is string => Boolean(line)),
+            resultLine:
+              input.resolution.damageProposal.status === "committed"
+                ? (committedDamageResultLine ?? "Result: damage recorded")
+                : "Result: waiting for GM review",
+            title:
+              input.resolution.damageProposal.status === "committed" ? "Recorded damage" : "Damage",
           },
         ]
       : []),
@@ -736,15 +742,6 @@ function formatCombatPhaseResolutionResultLines(input: {
     proposalLine,
     sections,
     statusLine,
-  };
-}
-
-function createModifierEntryDraft(): ScenarioCombatModifierEntry {
-  return {
-    id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    notes: "",
-    scope: "until",
-    value: 0,
   };
 }
 
@@ -942,21 +939,6 @@ function buildPlayerCombatDeclarationDraftKey(input: {
     input.stepStatus ?? "no-status",
     input.declaration?.submittedAt ?? "no-submission-time",
   ].join(":");
-}
-
-function getModifierBucketContextKey(
-  bucket: ScenarioCombatModifierBucket,
-): keyof ScenarioParticipantCombatContext["modifierBuckets"] {
-  switch (bucket) {
-    case "general":
-      return "general";
-    case "situation_db":
-      return "situationDb";
-    case "situation_initiative":
-      return "situationInitiative";
-    case "situation_ob_skill":
-      return "situationObSkill";
-  }
 }
 
 function formatPlayerCombatInitiativeRank(input: {
@@ -1402,7 +1384,7 @@ export default function ScenarioPlayerCombatPageContent({
     if (
       combatDeclarationDraftDirty &&
       combatDeclarationDraftKey === selectedCombatDeclarationDraftKey &&
-      (isGameMaster || declarationStepOpen)
+      declarationStepOpen
     ) {
       return;
     }
@@ -1427,7 +1409,6 @@ export default function ScenarioPlayerCombatPageContent({
     combatDeclarationDraftDirty,
     combatDeclarationDraftKey,
     declarationStepOpen,
-    isGameMaster,
     selectedCombatDeclarationDraftKey,
     selectedParticipant,
     selectedRoundDeclaration,
@@ -1782,22 +1763,6 @@ export default function ScenarioPlayerCombatPageContent({
   function markCombatDeclarationDraftDirty() {
     setCombatDeclarationDraftDirty(true);
     setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
-  }
-
-  function updateModifierBucket(
-    bucket: ScenarioCombatModifierBucket,
-    updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
-  ) {
-    const bucketKey = getModifierBucketContextKey(bucket);
-
-    markCombatDeclarationDraftDirty();
-    setCombatContextDraft((current) => ({
-      ...current,
-      modifierBuckets: {
-        ...current.modifierBuckets,
-        [bucketKey]: updater(current.modifierBuckets[bucketKey]),
-      },
-    }));
   }
 
   async function saveCombatContext() {
@@ -2220,21 +2185,42 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
+  const playerPerspectiveVisibleParticipants = useMemo<ScenarioPlayerVisibleParticipant[]>(() => {
+    if (!isGameMaster) {
+      return projection?.visibleParticipants ?? [];
+    }
+
+    return selectableParticipants
+      .filter((participant) => participant.isActive)
+      .map((participant) => ({
+        displayName: participant.snapshot.displayName,
+        factionId: participant.factionId,
+        id: participant.id,
+        isActive: participant.isActive,
+        isControlledByPlayer: participant.id === selectedParticipant?.id,
+        role: participant.role,
+        sourceType: participant.sourceType,
+      }));
+  }, [
+    isGameMaster,
+    projection?.visibleParticipants,
+    selectableParticipants,
+    selectedParticipant?.id,
+  ]);
   const targetOptions = useMemo(
     () =>
       getPlayerEncounterOpponentParticipants({
         allowedParticipantIds: encounterScenarioParticipantIds,
         currentUserId: currentUser?.id,
-        isGameMaster,
+        isGameMaster: false,
         participants: selectableParticipants,
-        projectionVisibleParticipants: projection?.visibleParticipants,
+        projectionVisibleParticipants: playerPerspectiveVisibleParticipants,
         selectedParticipantId: selectedParticipant?.id,
       }),
     [
       currentUser?.id,
       encounterScenarioParticipantIds,
-      isGameMaster,
-      projection?.visibleParticipants,
+      playerPerspectiveVisibleParticipants,
       selectableParticipants,
       selectedParticipant?.id,
     ],
@@ -2741,8 +2727,8 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(currentInitiativePhase) &&
     Boolean(displayedParticipant) &&
     Boolean(selectedRoundParticipant) &&
-    (isGameMaster ||
-      (initiativeStepStatus === "pending" && !selectedParticipantRolledCurrentInitiative));
+    initiativeStepStatus === "pending" &&
+    !selectedParticipantRolledCurrentInitiative;
   const canUseCurrentAttackButton =
     Boolean(currentAttackPhase) &&
     Boolean(displayedParticipant) &&
@@ -2808,8 +2794,7 @@ export default function ScenarioPlayerCombatPageContent({
       selectedParticipantStoredDeclarationThisRound) &&
     selectedStoredDeclarationComplete;
   const playerDeclarationLocked =
-    !isGameMaster &&
-    (!declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete);
+    !declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete;
   const declarationControlsDisabled =
     controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
   const selectedCombatExperienceActionAvailable =
@@ -2868,17 +2853,14 @@ export default function ScenarioPlayerCombatPageContent({
     !displayedParticipant ||
     (currentInitiativePhase
       ? !canUseInitiativeButton
-      : (isGameMaster ? false : playerDeclarationLocked || !hasMeaningfulDeclaration) ||
-        !targetValidation.valid);
+      : playerDeclarationLocked || !hasMeaningfulDeclaration || !targetValidation.valid);
   const declarationButtonLabel =
-    !isGameMaster &&
-    currentCombatStep === "select_actions" &&
-    (!playerDeclarationLocked || declarationIncomplete)
+    currentCombatStep === "select_actions" && (!playerDeclarationLocked || declarationIncomplete)
       ? "Declare action"
       : getPlayerCombatActionButtonLabel({
           currentStep: currentCombatStep,
           disabled: declareActionDisabled,
-          isGameMaster,
+          isGameMaster: false,
         });
   const playerActionButtonLabel = selectedHealthCheckActionAvailable
     ? "Roll health check"
@@ -2942,15 +2924,6 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedModifierReviewComplete =
     currentStepIsModifierReview &&
     (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited");
-  const gmStatusSuffix = selectedParticipantRolledCurrentInitiative
-    ? " Initiative rolled."
-    : currentStepIsModifierReview
-      ? selectedModifierReviewComplete
-        ? " Reviewed."
-        : ""
-      : selectedParticipantHasDeclared
-        ? " Declared."
-        : "";
   const combatExperienceStatusText = !selectedCombatExperienceWindowOpen
     ? "Waiting for GM to start CE."
     : selectedCombatExperienceNoRollAvailable
@@ -2972,22 +2945,20 @@ export default function ScenarioPlayerCombatPageContent({
               ? `Current step: ${currentCombatStepLabel}. Pending.`
               : selectedCombatExperienceRequired
                 ? combatExperienceStatusText
-                : isGameMaster
-                  ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
-                  : currentInitiativePhase
-                    ? selectedParticipantRolledCurrentInitiative
-                      ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
-                      : initiativeStepStatus === "pending"
-                        ? `Current step: ${currentCombatStepLabel}.`
-                        : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+                : currentInitiativePhase
+                  ? selectedParticipantRolledCurrentInitiative
+                    ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
+                    : initiativeStepStatus === "pending"
+                      ? `Current step: ${currentCombatStepLabel}.`
+                      : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
                   : currentParryAction
                     ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
                     : attackerPrivilegedAction
                       ? attackerPrivilegedAction.disabled
                         ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
                         : `Current step: ${currentCombatStepLabel}. The attacker rolls; the defender receives the damage/effects review.`
-                    : currentAttackAction
-                      ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                      : currentAttackAction
+                        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
                         : currentAttackSourceValidationMessage
                           ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
                           : declarationIncomplete
@@ -3031,12 +3002,11 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedPhaseCombatExperienceRollRequired =
     selectedPhaseAttackBackOutOpportunity?.ceRequired ??
     Boolean(selectedPhaseCombatExperienceRequirement);
-  const showPhaseCombatExperienceContextPanel =
-    Boolean(
-      selectedPhaseCombatExperienceRequirement ||
-        selectedPhaseAttackBackOutOpportunity ||
-        selectedPhaseInitiativeChoice,
-    );
+  const showPhaseCombatExperienceContextPanel = Boolean(
+    selectedPhaseCombatExperienceRequirement ||
+    selectedPhaseAttackBackOutOpportunity ||
+    selectedPhaseInitiativeChoice,
+  );
   const showInitiativeContextPanel =
     !showPhaseCombatExperienceContextPanel && Boolean(currentInitiativePhase);
   const showModifierReviewContextPanel =
@@ -3267,39 +3237,7 @@ export default function ScenarioPlayerCombatPageContent({
           <div style={playerCombatPanelRowStyle}>
             <PlayerCombatModifierPanel
               controlsDisabled={declarationControlsDisabled}
-              onAddEntry={
-                isGameMaster
-                  ? (bucketKey, entry) =>
-                      updateModifierBucket(bucketKey, (current) => [
-                        ...current,
-                        entry ?? createModifierEntryDraft(),
-                      ])
-                  : undefined
-              }
-              onRemoveEntry={
-                isGameMaster
-                  ? (bucketKey, entryId) =>
-                      updateModifierBucket(bucketKey, (current) =>
-                        current.filter((currentEntry) => currentEntry.id !== entryId),
-                      )
-                  : undefined
-              }
-              onUpdateEntry={
-                isGameMaster
-                  ? (bucketKey, entryId, patch) =>
-                      updateModifierBucket(bucketKey, (current) =>
-                        current.map((currentEntry) =>
-                          currentEntry.id === entryId
-                            ? {
-                                ...currentEntry,
-                                ...patch,
-                              }
-                            : currentEntry,
-                        ),
-                      )
-                  : undefined
-              }
-              readOnly={!isGameMaster}
+              readOnly
               rows={modifierRows}
             />
             <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -3509,18 +3447,18 @@ export default function ScenarioPlayerCombatPageContent({
               />
             </div>
             <PlayerCombatActionResultPanel
-              result={
-                selectedHealthCheckResultPanel ??
-                selectedDistanceControlResultPanel ??
-                selectedCurrentPhaseResolutionResultPanel ??
-                selectedAttackerPrivilegedResultPanel ??
-                selectedInvolvedDamageResultPanel ??
-                selectedCurrentAttackResultPanel ??
-                selectedPhaseInitiativeChoiceResultPanel ??
-                selectedRelevantInitiativeResultPanel ??
-                selectedCombatExperienceResultPanel ??
-                actionRollResult
-              }
+              result={selectPlayerCombatActionResultPanel<PlayerCombatActionResultPanelView>({
+                actionRoll: actionRollResult,
+                attackerPrivileged: selectedAttackerPrivilegedResultPanel,
+                combatExperience: selectedCombatExperienceResultPanel,
+                currentAttack: selectedCurrentAttackResultPanel,
+                currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel,
+                distanceControl: selectedDistanceControlResultPanel,
+                healthCheck: selectedHealthCheckResultPanel,
+                involvedDamage: selectedInvolvedDamageResultPanel,
+                phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel,
+                relevantInitiative: selectedRelevantInitiativeResultPanel,
+              })}
             />
           </div>
         </section>

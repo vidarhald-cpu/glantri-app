@@ -497,6 +497,12 @@ Recommended broad fix:
 - Affected files/components: `PlayerCombatPanels.tsx`, `ScenarioPlayerCombatPageContent.tsx`, and tracker tooltip provenance in `CombatRoundManagerPanel.tsx`.
 - Contract rule: modifiers/context are not command results; result panels show command facts; tracker titles should describe provenance without overstating GM intervention.
 
+### GM Player Combat Perspective Reuse
+
+- Status, 2026-07-07: addressed. The GM Player Combat tab continues to supply the GM-only participant selector, but the embedded combat surface now follows the same player-facing perspective rules for action availability, status text, modifier display, target visibility, and result precedence. GM review/edit controls remain in GM Combat/Combat Inspector.
+- Affected files/components: `CampaignWorkspaceShell.tsx`, `ScenarioPlayerCombatPageContent.tsx`, and `playerCombatResultSelection.ts`.
+- Contract rule: GM Player Combat is a copy of the selected participant's player view; it must not maintain separate action/result interpretation.
+
 ## Safe To Fix Broadly
 
 - Naming and label consistency for tracker markers, phase titles, and status labels.
