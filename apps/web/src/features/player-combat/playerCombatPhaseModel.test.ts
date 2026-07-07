@@ -110,7 +110,7 @@ function buildLoadoutModel(input: {
 }
 
 describe("player combat phase model", () => {
-  it("maps Attack - Parry into phase 1 attack/defense and phase 2 defense", () => {
+  it("maps Single attack into phase 1 attack/defense and phase 2 defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -146,7 +146,7 @@ describe("player combat phase model", () => {
     expect(phase2.showDefenseContext).toBe(true);
   });
 
-  it("maps Parry - Attack into separate phase 1 defense and phase 2 attack/defense", () => {
+  it("maps Reactive attack into separate phase 1 defense and phase 2 attack/defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",

@@ -71,8 +71,8 @@ describe("playerEncounter", () => {
         secondaryActionId: "parry_attack",
       }),
     ).toEqual({
-      phaseOne: "Attack - Parry",
-      phaseTwo: "Parry - Attack",
+      phaseOne: "Single attack",
+      phaseTwo: "Reactive attack",
     });
 
     expect(
@@ -81,8 +81,8 @@ describe("playerEncounter", () => {
         secondaryActionId: "attack_parry",
       }),
     ).toEqual({
-      phaseOne: "Parry - Attack",
-      phaseTwo: "Attack - Parry",
+      phaseOne: "Reactive attack",
+      phaseTwo: "Single attack",
     });
   });
 
@@ -135,7 +135,7 @@ describe("playerEncounter", () => {
     });
   });
 
-  it("counts generated Parry - Attack DB/Parry rows in the defense total", () => {
+  it("counts generated Reactive attack DB/Parry rows in the defense total", () => {
     expect(
       getPlayerEncounterCombatModifierTotals({
         modifierBuckets: {

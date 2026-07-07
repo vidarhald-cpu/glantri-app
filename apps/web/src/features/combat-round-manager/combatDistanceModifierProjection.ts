@@ -1,14 +1,17 @@
 import {
   applyCombatActionGeneratedModifiers,
+  buildReactiveAttackPhase2InitiativeModifierEntry,
   getCombatDeclarationAttackPhases,
   getCombatDistanceParticipantAliases,
   getDistanceEdgeBetweenParticipantAliases,
+  getSingleAttackDeclaredDistanceForPenalty,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
   type CombatActionGeneratedDistanceModifierInput,
   type CombatRoundPhaseContexts,
   type CombatRoundState,
   type EncounterSession,
+  type MovementIntent,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipant,
   type ScenarioParticipantCombatContext,
@@ -144,6 +147,7 @@ function findRoundParticipantByAlias(input: {
 function buildDistanceModifierInput(input: {
   actionId?: string;
   encounterParticipant?: EncounterSession["participants"][number];
+  movementIntent?: MovementIntent;
   phase: PhaseKey;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponName?: string;
@@ -178,8 +182,17 @@ function buildDistanceModifierInput(input: {
     return undefined;
   }
 
+  const declaredPenaltyDistance = getSingleAttackDeclaredDistanceForPenalty({
+    actionId: input.actionId,
+    movementIntent: input.movementIntent,
+    phase: input.phase,
+    preferredDistances,
+    targetParticipantId,
+  });
+
   return {
-    actualDistance: distanceEdge.distance,
+    actualDistance: declaredPenaltyDistance ?? distanceEdge.distance,
+    actualDistanceBasis: declaredPenaltyDistance === undefined ? "current" : "declared_intent",
     phase: input.phase,
     preferredDistances,
     sourceActionId: input.actionId,
@@ -231,6 +244,7 @@ export function projectCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterParticipant?: EncounterSession["participants"][number];
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<PhaseKey, string | undefined>>;
   resolvedEquipmentState?: EquipmentFeatureState;
@@ -247,6 +261,7 @@ export function projectCombatActionGeneratedModifiers(input: {
       buildDistanceModifierInput({
         actionId: input.actionId,
         encounterParticipant: input.encounterParticipant,
+        movementIntent: input.movementIntent,
         phase,
         phaseContexts: input.phaseContexts,
         phaseWeaponName: input.phaseWeaponNames?.[phase],
@@ -265,10 +280,26 @@ export function projectCombatActionGeneratedModifiers(input: {
     phaseContexts: input.phaseContexts,
     phaseWeaponNames: input.phaseWeaponNames,
   });
+  const roundParticipantId =
+    input.roundState && input.encounterParticipant
+      ? (findRoundParticipantByAlias({
+          id: input.encounterParticipant.id,
+          roundState: input.roundState,
+        })?.participantId ?? input.encounterParticipant.id)
+      : undefined;
   const projectedContext = applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     combatContext: input.combatContext,
     distanceModifiers,
+    initiativeModifiers:
+      input.roundState && roundParticipantId
+        ? [
+            buildReactiveAttackPhase2InitiativeModifierEntry({
+              participantId: roundParticipantId,
+              state: input.roundState,
+            }),
+          ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry))
+        : [],
   });
 
   if (committedDistanceRowsToPreserve.length === 0) {
