@@ -18,6 +18,24 @@ const ATTACK_ACTION_IDS = new Set([
   "disarm",
 ]);
 
+export const COMBAT_DECLARATION_ACTION_LABELS: Record<string, string> = {
+  adjust_range_attack: "Adjust Range - Attack",
+  attack_parry: "Single attack",
+  counterattack: "Counterattack",
+  disarm: "Disarm",
+  double_attack: "Double Attack",
+  feint_attack: "Feint - Attack",
+  observe_opponent: "Observe Opponent",
+  offensive_parry: "Offensive Parry",
+  other: "Other",
+  parry_attack: "Reactive attack",
+  parry_disarm: "Parry - Disarm",
+};
+
+export function getCombatDeclarationActionLabel(actionId?: string): string {
+  return actionId ? (COMBAT_DECLARATION_ACTION_LABELS[actionId] ?? actionId) : "Open";
+}
+
 function isAttackAction(actionId?: string): boolean {
   return Boolean(actionId && ATTACK_ACTION_IDS.has(actionId));
 }

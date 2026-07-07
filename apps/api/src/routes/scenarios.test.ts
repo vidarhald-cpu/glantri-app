@@ -2992,6 +2992,96 @@ describe("scenarios route contract", () => {
     ).toEqual([expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 })]);
   });
 
+  it("uses Single attack declared farther distance for the declaration-time Skill/OB row", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const roundState = {
+      ...initializeCombatRoundState({ encounter: baseEncounter }),
+      distanceState: setDistanceBetween({
+        distance: 2,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+      }),
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 4,
+              source: "player_declared",
+              targetParticipantId: "participant-2",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-2",
+          },
+        },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updateStateCall =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
+    const distanceRows =
+      updateStateCall.state.combat.combatContext.modifierBuckets.situationObSkill;
+
+    expect(distanceRows).toEqual([
+      expect.objectContaining({
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("declared 4"),
+        value: -4,
+      }),
+    ]);
+  });
+
   it("generates Scyrian's Broad sword distance row when the browser submits a scenario target id", async () => {
     const encounterParticipants = [
       {
@@ -5434,7 +5524,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("creates the phase 2 DB/Parry modifier when a player declares Parry - Attack", async () => {
+  it("creates the phase 2 DB/Parry modifier when a player declares Reactive attack", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
 
@@ -5915,7 +6005,7 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("allows a GM to declare Parry - Attack for another player's participant after DE", async () => {
+  it("allows a GM to declare Reactive attack for another player's participant after DE", async () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
@@ -6834,7 +6924,28 @@ describe("scenarios route contract", () => {
               stepStatuses,
             },
             {
-              attackResults: {},
+              attackResults: {
+                phase1: {
+                  actionId: "attack_parry",
+                  attackerParticipantId: "encounter-participant-2",
+                  defenderDb: 10,
+                  defenderParryModifier: 0,
+                  defenderParticipantId: "encounter-participant-1",
+                  grazing: false,
+                  hit: false,
+                  kind: "attackRoll",
+                  lookupTotal: 8,
+                  marginOverMissThreshold: -2,
+                  ob: 10,
+                  openEndedD10s: [],
+                  phase: "phase1",
+                  rollD20: 8,
+                  rollTotal: 8,
+                  rolledAt: "2026-01-01T00:01:00.000Z",
+                  tableResult: "Miss",
+                  weaponName: "Long sword",
+                },
+              },
               initiatives: {
                 phase2: {
                   baseInitiative: 0,

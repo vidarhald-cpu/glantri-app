@@ -604,6 +604,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment",
     );
+    expect(source).toContain("movementIntent: inspectorDraft.movementIntent");
     expect(source).toContain("phaseContexts: inspectorDraft.phaseContexts");
     expect(source).toContain(
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',

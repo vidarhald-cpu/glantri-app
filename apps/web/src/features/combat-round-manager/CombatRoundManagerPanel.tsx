@@ -4477,6 +4477,7 @@ export default function CombatRoundManagerPanel({
         actionId: inspectorDraft.actionId || undefined,
         combatContext: inspectorDraft.combatContext,
         encounterParticipant: selectedEncounterParticipant,
+        movementIntent: inspectorDraft.movementIntent,
         phaseContexts: inspectorDraft.phaseContexts,
         resolvedEquipmentState: inspectorEquipmentState ?? undefined,
         roundState: selectedTimelineRoundState,
@@ -4486,6 +4487,7 @@ export default function CombatRoundManagerPanel({
     [
       inspectorDraft.actionId,
       inspectorDraft.combatContext,
+      inspectorDraft.movementIntent,
       inspectorDraft.phaseContexts,
       inspectorDraft.secondaryActionId,
       inspectorEquipmentState,

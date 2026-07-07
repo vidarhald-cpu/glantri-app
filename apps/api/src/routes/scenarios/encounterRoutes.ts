@@ -14,6 +14,7 @@ import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
+  buildReactiveAttackPhase2InitiativeModifierEntry,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
@@ -34,6 +35,7 @@ import {
   getCombatRoundDistanceEdge,
   getCombatRoundRequiredCombatExperienceTrigger,
   getPlayerCombatCurrentRollAction,
+  getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
@@ -948,6 +950,7 @@ function initializeMaterializedCombatRoundState(input: {
 function buildCombatActionDistanceModifierInputs(input: {
   actionId?: string;
   encounterParticipant: EncounterSession["participants"][number];
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phase: "phase1" | "phase2";
   phaseWeaponName?: string;
@@ -986,8 +989,17 @@ function buildCombatActionDistanceModifierInputs(input: {
     return undefined;
   }
 
+  const declaredPenaltyDistance = getSingleAttackDeclaredDistanceForPenalty({
+    actionId: input.actionId,
+    movementIntent: input.movementIntent,
+    phase: input.phase,
+    preferredDistances,
+    targetParticipantId,
+  });
+
   return {
-    actualDistance: distanceEdge.distance,
+    actualDistance: declaredPenaltyDistance ?? distanceEdge.distance,
+    actualDistanceBasis: declaredPenaltyDistance === undefined ? "current" : "declared_intent",
     phase: input.phase,
     preferredDistances,
     sourceActionId: input.actionId,
@@ -998,6 +1010,7 @@ function buildCombatActionDistanceModifierInputs(input: {
 function buildCombatActionDistanceModifierInputsForDeclaration(input: {
   actionId?: string;
   encounterParticipant: EncounterSession["participants"][number];
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   roundState: CombatRoundState;
@@ -1012,6 +1025,7 @@ function buildCombatActionDistanceModifierInputsForDeclaration(input: {
       buildCombatActionDistanceModifierInputs({
         actionId: input.actionId,
         encounterParticipant: input.encounterParticipant,
+        movementIntent: input.movementIntent,
         phase,
         phaseContexts: input.phaseContexts,
         phaseWeaponName: input.phaseWeaponNames?.[phase],
@@ -1087,24 +1101,38 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterParticipant: EncounterSession["participants"][number];
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
 }): ScenarioParticipantCombatContext {
+  const roundParticipantId =
+    findCombatRoundParticipantByAlias({
+      id: input.encounterParticipant.id,
+      state: input.roundState,
+    })?.participantId ?? input.encounterParticipant.id;
+
   return applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     combatContext: input.combatContext,
     distanceModifiers: buildCombatActionDistanceModifierInputsForDeclaration({
       actionId: input.actionId,
       encounterParticipant: input.encounterParticipant,
+      movementIntent: input.movementIntent,
       phaseContexts: input.phaseContexts,
       phaseWeaponNames: input.phaseWeaponNames,
       roundState: input.roundState,
       scenarioParticipant: input.scenarioParticipant,
       secondaryActionId: input.secondaryActionId,
     }),
+    initiativeModifiers: [
+      buildReactiveAttackPhase2InitiativeModifierEntry({
+        participantId: roundParticipantId,
+        state: input.roundState,
+      }),
+    ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry)),
   });
 }
 
@@ -1150,6 +1178,7 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
       actionId: declaration.actionId,
       combatContext: currentContext,
       encounterParticipant,
+      movementIntent: declaration.movementIntent,
       phaseContexts: declaration.phaseContexts,
       roundState: input.roundState,
       scenarioParticipant,
@@ -2043,6 +2072,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         actionId: body.actionId,
         combatContext: baseSubmittedCombatContext,
         encounterParticipant,
+        movementIntent: body.movementIntent,
         phaseContexts: submittedPhaseContexts,
         phaseWeaponNames: body.phaseWeaponNames,
         roundState,

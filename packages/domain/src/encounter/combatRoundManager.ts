@@ -21,6 +21,7 @@ import {
   type CombatArmorModifierClass,
 } from "./armorModifier";
 import {
+  buildReactiveAttackPhase2GeneratedInitiativeModifier,
   restoreCombatActionGeneratedBackOutModifiers,
   softenCombatActionGeneratedBackOutModifier,
 } from "./combatActionModifiers";
@@ -4695,6 +4696,14 @@ export function getCombatRoundIncomingAttackResultsForParticipantPhase(input: {
   return getCombatRoundAttackResultsForParticipantPhase(input).incoming;
 }
 
+export function combatRoundParticipantWasAttackedInPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): boolean {
+  return getCombatRoundIncomingAttackResultsForParticipantPhase(input).length > 0;
+}
+
 export function getCombatRoundDisplayIncomingAttackResultForParticipantPhase(input: {
   participantId: string;
   phase: CombatRoundPhase;
@@ -4802,6 +4811,14 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
   );
   const targetParticipantId =
     participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+  const reactiveAttackIsOpen =
+    participant?.declaration?.actionId !== "parry_attack" ||
+    input.phase !== "phase2" ||
+    combatRoundParticipantWasAttackedInPhase({
+      participantId: input.participantId,
+      phase: "phase1",
+      state: normalized,
+    });
 
   return Boolean(
     combatRoundParticipantHasPhaseAttack({
@@ -4809,6 +4826,7 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       phase: input.phase,
       state: normalized,
     }) &&
+    reactiveAttackIsOpen &&
     targetParticipantId &&
     getCombatRoundParticipantByTargetId({
       state: normalized,
@@ -6726,6 +6744,135 @@ export function getCombatRoundPhaseResolutionResultForAttack(input: {
   return normalized.phaseResolutionResults.find(
     (resolution) => resolution.attackResultId === attackResultId,
   );
+}
+
+export type ReactiveAttackPhase2InitiativeModifierCategory =
+  | "no_hit_no_parry_needed"
+  | "no_hit_parry_margin_6_plus"
+  | "no_hit_parry_margin_0_to_5"
+  | "hit"
+  | "critical_hit";
+
+export interface ReactiveAttackPhase2InitiativeModifier {
+  attackResultId: string;
+  category: ReactiveAttackPhase2InitiativeModifierCategory;
+  parryMargin?: number;
+  reason: string;
+  value: number;
+}
+
+function getReactiveAttackPhase2InitiativeModifierForIncomingAttack(input: {
+  attackResult: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): ReactiveAttackPhase2InitiativeModifier {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+  const resolution = getCombatRoundPhaseResolutionResultForAttack({
+    attackResult: input.attackResult,
+    state: normalized,
+  });
+  const effectiveDamage = resolution?.damageResult
+    ? getCombatRoundEffectiveDamageResult(resolution.damageResult)
+    : undefined;
+
+  if (!input.attackResult.hit) {
+    return {
+      attackResultId,
+      category: "no_hit_no_parry_needed",
+      reason: "phase 1 attack missed; no parry needed",
+      value: 6,
+    };
+  }
+
+  if (effectiveDamage?.effectiveCriticalGrade) {
+    return {
+      attackResultId,
+      category: "critical_hit",
+      reason: `critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()} received in phase 1`,
+      value: -6,
+    };
+  }
+
+  const parryResolution = resolution?.parryResolution;
+
+  if (parryResolution?.success) {
+    const targetNumber = parryResolution.targetNumber ?? 21;
+    const parryTotal = parryResolution.total ?? targetNumber;
+    const parryMargin = parryTotal - targetNumber;
+
+    return parryMargin >= 6
+      ? {
+          attackResultId,
+          category: "no_hit_parry_margin_6_plus",
+          parryMargin,
+          reason: `phase 1 parry succeeded by ${parryMargin}`,
+          value: 6,
+        }
+      : {
+          attackResultId,
+          category: "no_hit_parry_margin_0_to_5",
+          parryMargin,
+          reason: `phase 1 parry succeeded by ${parryMargin}`,
+          value: 0,
+        };
+  }
+
+  return {
+    attackResultId,
+    category: "hit",
+    reason: "phase 1 attack hit",
+    value: -3,
+  };
+}
+
+export function getReactiveAttackPhase2InitiativeModifier(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): ReactiveAttackPhase2InitiativeModifier | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+
+  if (participant?.declaration?.actionId !== "parry_attack") {
+    return undefined;
+  }
+
+  const incomingAttacks = getCombatRoundIncomingAttackResultsForParticipantPhase({
+    participantId: input.participantId,
+    phase: "phase1",
+    state: normalized,
+  });
+
+  if (incomingAttacks.length === 0) {
+    return undefined;
+  }
+
+  return incomingAttacks
+    .map((attackResult) =>
+      getReactiveAttackPhase2InitiativeModifierForIncomingAttack({
+        attackResult,
+        state: normalized,
+      }),
+    )
+    .sort((left, right) => left.value - right.value)[0];
+}
+
+export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): ScenarioCombatModifierEntry | undefined {
+  const modifier = getReactiveAttackPhase2InitiativeModifier(input);
+
+  return modifier
+    ? buildReactiveAttackPhase2GeneratedInitiativeModifier({
+        reason: modifier.reason,
+        value: modifier.value,
+      })
+    : undefined;
 }
 
 export function getCombatRoundDisplayPhaseResolutionResultForParticipantPhase(input: {

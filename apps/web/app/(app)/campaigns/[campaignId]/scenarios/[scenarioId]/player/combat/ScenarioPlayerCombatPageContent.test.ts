@@ -39,7 +39,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("projectCombatActionGeneratedModifiers");
     expect(source).toContain("projectedCombatContextDraft");
     expect(source).toContain("combatContext: projectedCombatContextDraft");
+    expect(source).toContain("movementIntent: selectedMovementIntent");
     expect(source).toContain("resolvedEquipmentState: controlledEquipmentState ?? undefined");
+    expect(source).toContain(
+      "Reactive attack: no phase 1 attack received, so no phase 2 attack opens.",
+    );
+    expect(source).toContain("Target switch is GM-adjudicated.");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain(
       "const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep)",

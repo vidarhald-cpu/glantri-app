@@ -10,6 +10,7 @@ import {
   getNearestPreferredDistance,
   type CombatDistance,
 } from "./combatDistance";
+import type { MovementIntent } from "./combatMovementIntent";
 
 export const ATTACK_PARRY_DB_PARRY_MODIFIER_ID = "generated:attack-parry:phase1:db-parry";
 export const ATTACK_PARRY_DB_PARRY_SOURCE_RULE = "attack-parry-db-parry-phase1";
@@ -30,26 +31,72 @@ export const ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID =
   "generated:adjust-range-attack:phase2:db-parry";
 export const ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE = "adjust-range-attack-phase2-db-parry";
 export const DISTANCE_OB_SKILL_SOURCE_RULE = "distance-ob-skill";
+export const REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID =
+  "generated:parry-attack:phase2:initiative";
+export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE =
+  "parry-attack-phase2-initiative";
 
 export interface CombatActionGeneratedDistanceModifierInput {
   actualDistance: CombatDistance | number;
+  actualDistanceBasis?: "current" | "declared_intent";
   phase: "phase1" | "phase2";
   preferredDistances: readonly (CombatDistance | number)[];
   sourceActionId?: string;
   weaponName?: string;
 }
 
+function normalizeCombatDistanceValues(
+  distances: readonly (CombatDistance | number)[],
+): CombatDistance[] {
+  return distances.map((distance) => combatDistanceSchema.parse(distance));
+}
+
+export function getSingleAttackDeclaredDistanceForPenalty(input: {
+  actionId?: string;
+  movementIntent?: MovementIntent;
+  phase: "phase1" | "phase2";
+  preferredDistances: readonly (CombatDistance | number)[];
+  targetParticipantId?: string;
+}): CombatDistance | undefined {
+  if (
+    input.actionId !== "attack_parry" ||
+    input.phase !== "phase1" ||
+    input.movementIntent?.mode !== "set_distance_preferences" ||
+    !input.targetParticipantId
+  ) {
+    return undefined;
+  }
+
+  const preferredDistances = normalizeCombatDistanceValues(input.preferredDistances);
+
+  if (preferredDistances.length === 0) {
+    return undefined;
+  }
+
+  const longestAttackDistance = Math.max(...preferredDistances);
+  const matchingPreference = input.movementIntent.distancePreferences.find((preference) => {
+    const preferencePhase = preference.phase ?? "round";
+
+    return (
+      preference.targetParticipantId === input.targetParticipantId &&
+      (preferencePhase === "round" || preferencePhase === input.phase) &&
+      preference.desiredDistance > longestAttackDistance
+    );
+  });
+
+  return matchingPreference?.desiredDistance;
+}
+
 export function buildDistanceGeneratedObSkillModifier(input: {
   actualDistance: CombatDistance | number;
+  actualDistanceBasis?: "current" | "declared_intent";
   phase: "phase1" | "phase2";
   preferredDistances: readonly (CombatDistance | number)[];
   sourceActionId?: string;
   weaponName?: string;
 }): ScenarioCombatModifierEntry | undefined {
   const actualDistance = combatDistanceSchema.parse(input.actualDistance);
-  const preferredDistances = input.preferredDistances.map((distance) =>
-    combatDistanceSchema.parse(distance),
-  );
+  const preferredDistances = normalizeCombatDistanceValues(input.preferredDistances);
   const value = calculateDistanceObPenalty(actualDistance, preferredDistances);
   const nearestPreferredDistance = getNearestPreferredDistance(actualDistance, preferredDistances);
 
@@ -61,12 +108,16 @@ export function buildDistanceGeneratedObSkillModifier(input: {
     preferredDistances.length === 1
       ? String(preferredDistances[0])
       : `${Math.min(...preferredDistances)}-${Math.max(...preferredDistances)}`;
+  const distanceLabel =
+    input.actualDistanceBasis === "declared_intent"
+      ? `declared ${actualDistance}`
+      : `actual ${actualDistance}`;
 
   return scenarioCombatModifierEntrySchema.parse({
     durationRounds: 1,
     generated: true,
     id: `generated:distance:${input.phase}:ob-skill`,
-    notes: `distance: ${input.weaponName ? `${input.weaponName} ` : ""}preferred ${preferredLabel} · actual ${actualDistance} · nearest ${nearestPreferredDistance} · Skill/OB ${value}`,
+    notes: `distance: ${input.weaponName ? `${input.weaponName} ` : ""}preferred ${preferredLabel} · ${distanceLabel} · nearest ${nearestPreferredDistance} · Skill/OB ${value}`,
     scope: "until",
     sourceActionId: input.sourceActionId,
     sourcePhase: input.phase,
@@ -131,6 +182,15 @@ export function isAdjustRangeAttackGeneratedDbParryModifier(
   );
 }
 
+export function isReactiveAttackGeneratedInitiativeModifier(
+  entry: ScenarioCombatModifierEntry,
+): boolean {
+  return (
+    entry.id === REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID ||
+    entry.sourceRule === REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE
+  );
+}
+
 function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     isAttackParryGeneratedDbParryModifier(entry) ||
@@ -142,6 +202,10 @@ function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEnt
 
 function isCombatActionGeneratedObSkillModifier(entry: ScenarioCombatModifierEntry): boolean {
   return isDoubleAttackGeneratedObSkillModifier(entry) || isDistanceGeneratedObSkillModifier(entry);
+}
+
+function isCombatActionGeneratedInitiativeModifier(entry: ScenarioCombatModifierEntry): boolean {
+  return isReactiveAttackGeneratedInitiativeModifier(entry);
 }
 
 export function applyDistanceGeneratedObSkillModifier(input: {
@@ -412,6 +476,23 @@ export function buildParryAttackGeneratedDbParryModifier(): ScenarioCombatModifi
   };
 }
 
+export function buildReactiveAttackPhase2GeneratedInitiativeModifier(input: {
+  reason: string;
+  value: number;
+}): ScenarioCombatModifierEntry {
+  return scenarioCombatModifierEntrySchema.parse({
+    durationRounds: 1,
+    generated: true,
+    id: REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
+    notes: `reactive attack: ${input.reason}`,
+    scope: "until",
+    sourceActionId: "parry_attack",
+    sourcePhase: "phase2",
+    sourceRule: REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE,
+    value: input.value,
+  } satisfies ScenarioCombatModifierEntry);
+}
+
 export function buildDoubleAttackGeneratedObSkillModifiers(): ScenarioCombatModifierEntry[] {
   return [
     {
@@ -497,6 +578,7 @@ export function applyCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
+  initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter(
@@ -505,6 +587,10 @@ export function applyCombatActionGeneratedModifiers(input: {
   const situationObSkillWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationObSkill.filter(
       (entry) => !isCombatActionGeneratedObSkillModifier(entry),
+    );
+  const situationInitiativeWithoutGeneratedActionModifiers =
+    input.combatContext.modifierBuckets.situationInitiative.filter(
+      (entry) => !isCombatActionGeneratedInitiativeModifier(entry),
     );
   const generatedDbParryModifiers =
     input.actionId === "attack_parry"
@@ -534,6 +620,10 @@ export function applyCombatActionGeneratedModifiers(input: {
       // The stored key remains situationDb for backward compatibility, while the
       // product-facing bucket is now DB/Parry.
       situationDb: [...situationDbWithoutGeneratedActionModifiers, ...generatedDbParryModifiers],
+      situationInitiative: [
+        ...situationInitiativeWithoutGeneratedActionModifiers,
+        ...(input.initiativeModifiers ?? []),
+      ],
       situationObSkill: [
         ...situationObSkillWithoutGeneratedActionModifiers,
         ...generatedObSkillModifiers,

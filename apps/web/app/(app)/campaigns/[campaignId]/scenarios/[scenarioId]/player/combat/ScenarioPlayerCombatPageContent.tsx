@@ -26,12 +26,14 @@ import {
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
+  getCombatRoundIncomingAttackResultsForParticipantPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundEndHealthCheckPendingRolls,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
+  getReactiveAttackPhase2InitiativeModifier,
   getDistanceEdgeBetweenParticipantAliases,
   getCombatDistanceParticipantAliases,
   getCombatRoundInitiativeRanks,
@@ -1708,6 +1710,7 @@ export default function ScenarioPlayerCombatPageContent({
             )
           : undefined,
         phaseContexts: phaseCombatContextDrafts,
+        movementIntent: selectedMovementIntent,
         resolvedEquipmentState: controlledEquipmentState ?? undefined,
         roundState: combatRoundState ?? undefined,
         scenarioParticipant: selectedParticipant ?? undefined,
@@ -1719,6 +1722,7 @@ export default function ScenarioPlayerCombatPageContent({
       controlledEquipmentState,
       encounterSession?.participants,
       phaseCombatContextDrafts,
+      selectedMovementIntent,
       selectedActionId,
       selectedParticipant,
       selectedRoundParticipant,
@@ -2463,6 +2467,54 @@ export default function ScenarioPlayerCombatPageContent({
       phaseCombatContextDrafts[currentAttackPhase])
     : undefined;
   const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
+  const selectedReactivePhase1IncomingAttacks =
+    combatRoundState &&
+    selectedRoundParticipant &&
+    selectedRoundDeclaration?.actionId === "parry_attack"
+      ? getCombatRoundIncomingAttackResultsForParticipantPhase({
+          participantId: selectedRoundParticipant.participantId,
+          phase: "phase1",
+          state: combatRoundState,
+        })
+      : [];
+  const selectedReactiveAttackPhase2Modifier =
+    combatRoundState &&
+    selectedRoundParticipant &&
+    selectedRoundDeclaration?.actionId === "parry_attack"
+      ? getReactiveAttackPhase2InitiativeModifier({
+          participantId: selectedRoundParticipant.participantId,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedReactiveAttackPhase2DeclaredTarget =
+    selectedRoundDeclaration?.phaseContexts?.phase2?.targetParticipantId;
+  const selectedReactiveAttackPhase2TargetParticipant =
+    selectedReactiveAttackPhase2DeclaredTarget && combatRoundState
+      ? combatRoundState.participants.find((participant) =>
+          getCombatDistanceParticipantAliases(participant).includes(
+            selectedReactiveAttackPhase2DeclaredTarget,
+          ),
+        )
+      : undefined;
+  const selectedReactiveAttackNeedsTargetAdjudication = Boolean(
+    selectedReactiveAttackPhase2TargetParticipant &&
+      selectedReactivePhase1IncomingAttacks.some(
+        (attack) =>
+          attack.attackerParticipantId !==
+          selectedReactiveAttackPhase2TargetParticipant.participantId,
+      ),
+  );
+  const selectedReactiveAttackPhase2StatusText =
+    selectedRoundDeclaration?.actionId === "parry_attack" &&
+    currentCombatStep === "phase_2_actions"
+      ? selectedReactivePhase1IncomingAttacks.length === 0
+        ? "Reactive attack: no phase 1 attack received, so no phase 2 attack opens."
+        : `Reactive attack: phase 2 opens because a phase 1 attack was received${
+            selectedReactiveAttackPhase2Modifier
+              ? ` (${selectedReactiveAttackPhase2Modifier.reason}, Initiative ${selectedReactiveAttackPhase2Modifier.value >= 0 ? "+" : ""}${selectedReactiveAttackPhase2Modifier.value})`
+              : ""
+          }.${selectedReactiveAttackNeedsTargetAdjudication ? " Target switch is GM-adjudicated." : ""}`
+      : undefined;
   const selectedCurrentAttackResult =
     combatRoundState && selectedRoundParticipant && currentAttackPhase
       ? getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -3067,6 +3119,8 @@ export default function ScenarioPlayerCombatPageContent({
                       : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
                   : currentParryAction
                     ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                    : selectedReactiveAttackPhase2StatusText
+                      ? `Current step: ${currentCombatStepLabel}. ${selectedReactiveAttackPhase2StatusText}`
                     : attackerPrivilegedAction
                       ? attackerPrivilegedAction.disabled
                         ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`

@@ -26,6 +26,7 @@ import {
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
+  combatRoundParticipantWasAttackedInPhase,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   combatRoundAttackRollResultSchema,
@@ -60,6 +61,7 @@ import {
   getCombatRoundPhaseCombatExperienceDetectionReport,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseInitiativeChoiceStatuses,
+  getReactiveAttackPhase2InitiativeModifier,
   getCombatRoundEndDistanceControlPendingRollCount,
   getCombatRoundEndHealthCheckPendingRollCount,
   getCombatRoundEndHealthCheckPendingRolls,
@@ -358,6 +360,7 @@ function preparePhaseResolutionState(input: {
   guardActionId: string;
   gladiatorActionId: string;
   phase: "phase1" | "phase2";
+  reactivePhase1Incoming?: boolean;
 }): ReturnType<typeof initializeCombatRoundState> {
   const withDeclarations = declareRoundAction({
     actionId: input.guardActionId,
@@ -368,6 +371,12 @@ function preparePhaseResolutionState(input: {
       state: initializeCombatRoundState({ encounter: encounter() }),
     }),
   });
+  const withReactiveIncoming =
+    input.phase === "phase2" &&
+    input.reactivePhase1Incoming !== false &&
+    (input.guardActionId === "parry_attack" || input.gladiatorActionId === "parry_attack")
+      ? addReactivePhase1IncomingAttacksForDeclarations(withDeclarations)
+      : withDeclarations;
   const withInitiatives = setCombatRoundParticipantInitiative({
     initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
     participantId: "guard",
@@ -376,7 +385,7 @@ function preparePhaseResolutionState(input: {
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
       participantId: "gladiator",
       phase: input.phase,
-      state: withDeclarations,
+      state: withReactiveIncoming,
     }),
   });
   const withCursor = initializeCombatRoundPhaseResolutionCursor({
@@ -394,6 +403,142 @@ function preparePhaseResolutionState(input: {
         updatedAt: "2026-01-01T00:02:30.000Z",
       })
     : withCursor;
+}
+
+function buildTestPhase1AttackResult(input: {
+  attackerParticipantId?: string;
+  defenderParticipantId?: string;
+  hit?: boolean;
+}) {
+  return buildCombatRoundAttackRollResult({
+    actionId: "attack_parry",
+    attackerParticipantId: input.attackerParticipantId ?? "guard",
+    defenderDb: 10,
+    defenderParticipantId: input.defenderParticipantId ?? "gladiator",
+    ob: 10,
+    phase: "phase1",
+    rollD20: input.hit === false ? 8 : 14,
+    rollTotal: input.hit === false ? 8 : 14,
+    rolledAt: "2026-01-01T00:02:30.000Z",
+    weaponName: "Long sword",
+  });
+}
+
+function addPhase1IncomingAttack(input: {
+  attackResult?: ReturnType<typeof buildCombatRoundAttackRollResult>;
+  damageResult?: ReturnType<typeof buildCombatRoundDamageResult>;
+  parryResolution?: NonNullable<
+    ReturnType<typeof buildCombatRoundPhaseResolutionResult>["parryResolution"]
+  >;
+  state: ReturnType<typeof initializeCombatRoundState>;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const attackResult = input.attackResult ?? buildTestPhase1AttackResult({});
+  const resolution = {
+    ...buildCombatRoundPhaseResolutionResult({
+      attackResult,
+      roundNumber: input.state.roundNumber,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+    }),
+    ...(input.damageResult
+      ? {
+          criticalRoll: input.damageResult.criticalGrade
+            ? {
+                attackResultId: input.damageResult.attackResultId,
+                attackerParticipantId: input.damageResult.attackerParticipantId,
+                criticalGrade: input.damageResult.criticalGrade,
+                defenderParticipantId: input.damageResult.defenderParticipantId,
+                rollPrivilege: "attacker" as const,
+                status: "pending" as const,
+              }
+            : { status: "not_required" as const },
+          damageProposal: {
+            proposedEffects: [],
+            status: "drafted" as const,
+          },
+          damageResult: input.damageResult,
+          damageRoll: {
+            required: false,
+            status: "rolled" as const,
+            total: input.damageResult.totalDamage,
+          },
+          hitLocationRoll: {
+            attackResultId: input.damageResult.attackResultId,
+            attackerParticipantId: input.damageResult.attackerParticipantId,
+            defenderParticipantId: input.damageResult.defenderParticipantId,
+            hitLocationRolls: input.damageResult.hitLocationRolls,
+            rolledAt: input.damageResult.createdAt,
+            rolledByParticipantId: input.damageResult.attackerParticipantId,
+            rollPrivilege: "attacker" as const,
+            selectedHitLocation: input.damageResult.selectedHitLocation,
+            selectedHitLocationRoll: input.damageResult.selectedHitLocationRoll,
+            selectionReason: input.damageResult.hitLocationSelectionReason,
+            status: "rolled" as const,
+            targetLocation: input.damageResult.targetLocation,
+          },
+        }
+      : {}),
+    ...(input.parryResolution ? { parryResolution: input.parryResolution } : {}),
+  };
+
+  return combatRoundStateSchema.parse({
+    ...input.state,
+    participants: input.state.participants.map((participant) =>
+      participant.participantId === attackResult.attackerParticipantId
+        ? {
+            ...participant,
+            attackResults: {
+              ...participant.attackResults,
+              phase1: attackResult,
+            },
+          }
+        : participant,
+    ),
+    phaseResolutionResults: [...input.state.phaseResolutionResults, resolution],
+  });
+}
+
+function findRoundParticipantIdForTestTarget(
+  state: ReturnType<typeof initializeCombatRoundState>,
+  targetParticipantId: string | undefined,
+): string | undefined {
+  if (!targetParticipantId) {
+    return undefined;
+  }
+
+  return state.participants.find((participant) =>
+    [
+      participant.participantId,
+      participant.scenarioParticipantId,
+      participant.characterId,
+    ].includes(targetParticipantId),
+  )?.participantId;
+}
+
+function addReactivePhase1IncomingAttacksForDeclarations(
+  state: ReturnType<typeof initializeCombatRoundState>,
+): ReturnType<typeof initializeCombatRoundState> {
+  return state.participants.reduce((current, participant) => {
+    if (participant.declaration?.actionId !== "parry_attack") {
+      return current;
+    }
+
+    const attackerParticipantId =
+      findRoundParticipantIdForTestTarget(
+        current,
+        participant.declaration.phaseContexts?.phase2?.targetParticipantId,
+      ) ??
+      current.participants.find((candidate) => candidate.participantId !== participant.participantId)
+        ?.participantId;
+
+    return addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({
+        attackerParticipantId,
+        defenderParticipantId: participant.participantId,
+        hit: false,
+      }),
+      state: current,
+    });
+  }, state);
 }
 
 function preparePhaseInitiativeCompleteState(input: {
@@ -420,7 +565,9 @@ function preparePhaseInitiativeCompleteState(input: {
     }),
   });
   const atInitiativeStep = advanceToStep(
-    withDeclarations,
+    input.phase === "phase2" && input.actionId === "parry_attack"
+      ? addReactivePhase1IncomingAttacksForDeclarations(withDeclarations)
+      : withDeclarations,
     input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
   );
 
@@ -518,8 +665,14 @@ function prepareScenarioTargetPhaseInitiativeCompleteState(input: {
       state: scyrianCombatExperienceResolved,
     }),
   });
+  const withReactiveIncoming =
+    input.phase === "phase2" &&
+    ((input.gladiatorActionId ?? "attack_parry") === "parry_attack" ||
+      (input.scyrianActionId ?? "attack_parry") === "parry_attack")
+      ? addReactivePhase1IncomingAttacksForDeclarations(withDeclarations)
+      : withDeclarations;
   const atInitiativeStep = advanceToStep(
-    withDeclarations,
+    withReactiveIncoming,
     input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
   );
 
@@ -577,8 +730,15 @@ function prepareScenarioTargetPhaseInitiativeStepState(input: {
     }),
   });
 
+  const withReactiveIncoming =
+    input.phase === "phase2" &&
+    ((input.gladiatorActionId ?? "attack_parry") === "parry_attack" ||
+      (input.scyrianActionId ?? "attack_parry") === "parry_attack")
+      ? addReactivePhase1IncomingAttacksForDeclarations(withDeclarations)
+      : withDeclarations;
+
   return advanceToStep(
-    withDeclarations,
+    withReactiveIncoming,
     input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
   );
 }
@@ -11034,7 +11194,10 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "D2",
     });
-    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(
+      cleared.phaseResolutionResults.find((result) => result.phase === "phase2")?.damageProposal
+        .status,
+    ).toBe("drafted");
   });
 
   it("advances from final phase-two D2 damage to SU", () => {
@@ -11074,7 +11237,10 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "D2",
     });
-    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(
+      cleared.phaseResolutionResults.find((result) => result.phase === "phase2")?.damageProposal
+        .status,
+    ).toBe("drafted");
   });
 
   it("advances from a final phase-one attack miss to phase-two setup", () => {
@@ -13269,8 +13435,10 @@ describe("combat round manager", () => {
       state,
       submittedBy: "gm",
     });
-    const withSnapshot = advanceCombatRoundStep(withResult, {
+    const withSnapshot = combatRoundStateSchema.parse({
+      ...withResult,
       stepSnapshots: [
+        ...withResult.stepSnapshots,
         stepSnapshot({
           attackResult: result,
           participantId: "gladiator",
@@ -14514,11 +14682,12 @@ describe("combat round manager", () => {
   });
 
   it("phase2 cursor follows phase2 initiative and substeps", () => {
-    const state = declareRoundAction({
+    const declared = declareRoundAction({
       actionId: "parry_attack",
       participantId: "guard",
       state: initializeCombatRoundState({ encounter: encounter() }),
     });
+    const state = addReactivePhase1IncomingAttacksForDeclarations(declared);
     const withInitiatives = setCombatRoundParticipantInitiative({
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [2], rollTotal: 2, total: 2 },
       participantId: "gladiator",
@@ -15040,11 +15209,75 @@ describe("combat round manager", () => {
     });
   });
 
-  it("opens A2 for a valid Parry - Attack participant after phase-two initiative", () => {
+  it("keeps Reactive attack A2 closed when no phase-one attack was received", () => {
     const state = preparePhaseResolutionState({
       guardActionId: "parry_attack",
       gladiatorActionId: "parry_attack",
       phase: "phase2",
+      reactivePhase1Incoming: false,
+    });
+
+    expect(state.currentStep).toBe("round_summary");
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(
+      combatRoundParticipantWasAttackedInPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(false);
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state,
+      }),
+    ).toBe(false);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state,
+      }),
+    ).toBe(false);
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state })).toBeUndefined();
+  });
+
+  it("opens A2 for a Reactive attack participant after a phase-one attack was received", () => {
+    const withDeclarations = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "guard",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+    const withIncomingAttack = addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({ hit: false }),
+      state: withDeclarations,
+    });
+    const withInitiatives = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+      participantId: "guard",
+      phase: "phase2",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6],
+          rollTotal: 6,
+          total: 6,
+        },
+        participantId: "gladiator",
+        phase: "phase2",
+        state: withIncomingAttack,
+      }),
+    });
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: withInitiatives,
+      updatedAt: "2026-01-01T00:04:00.000Z",
     });
 
     expect(state.currentStep).toBe("phase_2_actions");
@@ -15052,6 +15285,18 @@ describe("combat round manager", () => {
       participantId: "gladiator",
       step: "A2",
     });
+    expect(state.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase2",
+      substep: "attack",
+    });
+    expect(
+      combatRoundParticipantWasAttackedInPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(true);
     expect(
       combatRoundParticipantHasExecutablePhaseAttack({
         participantId: "gladiator",
@@ -15059,6 +15304,155 @@ describe("combat round manager", () => {
         state,
       }),
     ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state,
+      }),
+    ).toBe(true);
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state })).toMatchObject({
+      kind: "attack",
+      phase: "phase2",
+    });
+  });
+
+  it("calculates Reactive attack phase-two initiative from a missed phase-one attack", () => {
+    const state = addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({ hit: false }),
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state,
+      }),
+    ).toMatchObject({
+      category: "no_hit_no_parry_needed",
+      value: 6,
+    });
+  });
+
+  it("calculates Reactive attack phase-two initiative from parry margins", () => {
+    const attackResult = buildTestPhase1AttackResult({ hit: true });
+    const baseState = declareRoundAction({
+      actionId: "parry_attack",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const highMarginState = addPhase1IncomingAttack({
+      attackResult,
+      parryResolution: {
+        openEndedD10s: [],
+        resultLabel: "Parry successful",
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 27,
+      },
+      state: baseState,
+    });
+    const lowMarginState = addPhase1IncomingAttack({
+      attackResult,
+      parryResolution: {
+        openEndedD10s: [],
+        resultLabel: "Parry successful",
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 25,
+      },
+      state: baseState,
+    });
+
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: highMarginState,
+      }),
+    ).toMatchObject({
+      category: "no_hit_parry_margin_6_plus",
+      parryMargin: 6,
+      value: 6,
+    });
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: lowMarginState,
+      }),
+    ).toMatchObject({
+      category: "no_hit_parry_margin_0_to_5",
+      parryMargin: 4,
+      value: 0,
+    });
+  });
+
+  it("calculates Reactive attack phase-two initiative from hit and critical outcomes", () => {
+    const attackResult = buildTestPhase1AttackResult({ hit: true });
+    const baseState = declareRoundAction({
+      actionId: "parry_attack",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const hitState = addPhase1IncomingAttack({
+      attackResult,
+      parryResolution: {
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 16,
+      },
+      state: baseState,
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult,
+      createdAt: "2026-01-01T00:04:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: fixedChestLocationSelection(),
+      roundNumber: baseState.roundNumber,
+    });
+    const criticalState = addPhase1IncomingAttack({
+      attackResult,
+      damageResult,
+      parryResolution: {
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 16,
+      },
+      state: baseState,
+    });
+
+    expect(damageResult.criticalGrade).toBe("b");
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: hitState,
+      }),
+    ).toMatchObject({
+      category: "hit",
+      value: -3,
+    });
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: criticalState,
+      }),
+    ).toMatchObject({
+      category: "critical_hit",
+      value: -6,
+    });
   });
 
   it("opens A2 for a valid Double Attack participant after phase-two initiative", () => {
@@ -15120,6 +15514,10 @@ describe("combat round manager", () => {
       state: withGladiatorDeclaration,
       submittedBy: "gm",
     });
+    const withIncomingAttack = addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({ hit: false }),
+      state: withGuardDeclaration,
+    });
     const withGladiatorI2 = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:02:00.000Z",
@@ -15128,7 +15526,7 @@ describe("combat round manager", () => {
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
       participantId: "gladiator",
       phase: "phase2",
-      state: withGuardDeclaration,
+      state: withIncomingAttack,
       submittedBy: "gm",
     });
     const withGuardI2 = recordCombatRoundInitiative({
