@@ -61,6 +61,7 @@ import {
   getCombatRoundEndDistanceControlPendingRollCount,
   getCombatRoundEndHealthCheckPendingRollCount,
   getCombatRoundEndHealthCheckPendingRolls,
+  getNextCombatRoundEndTask,
   getFirstCombatStartExperienceRequiredParticipantId,
   getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
   getFirstCombatRoundDeclarationRequiredParticipantId,
@@ -11467,6 +11468,13 @@ describe("combat round manager", () => {
     expect(reviewed.roundEndReview?.participantReviews.gladiator?.proposedDistances).toEqual([]);
     expect(reviewed.roundEndReview?.participantReviews.guard?.proposedDistances).toEqual([]);
     expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
+    expect(getNextCombatRoundEndTask({ state: reviewed })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_commit",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBe("Distance control commit pending.");
   });
 
   it("rolls conflicting Dodge distance control and commits the winner for the next round", () => {
@@ -11548,6 +11556,27 @@ describe("combat round manager", () => {
     });
     expect(proposal?.participantA).toMatchObject({ participantId: "gladiator", status: "pending" });
     expect(proposal?.participantB).toMatchObject({ participantId: "guard", status: "pending" });
+    expect(getNextCombatRoundEndTask({ state: reviewed })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_roll",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
+    expect(reviewed.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(() =>
+      commitCombatRoundEndParticipantReview({
+        command: {
+          createdAt: "2026-01-01T00:10:30.000Z",
+        },
+        participantId: "gladiator",
+        scenarioParticipantId: "scenario-gladiator",
+        state: reviewed,
+      }),
+    ).toThrow("Round-end distance control must be completed before participant SU review.");
     expect(
       getCombatRoundEndDistanceControlPendingRollCount({
         participantId: "gladiator",
@@ -11587,6 +11616,17 @@ describe("combat round manager", () => {
       status: "rolled",
     });
     expect(afterFirstRoll?.participantB).toMatchObject({ status: "pending" });
+    expect(getNextCombatRoundEndTask({ state: gladiatorRolled.state })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_roll",
+      pairKey: proposal?.pairKey,
+      participantId: "guard",
+    });
+    expect(gladiatorRolled.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
     expect(
       getCombatRoundEndDistanceControlPendingRollCount({
         participantId: "gladiator",
@@ -11625,6 +11665,23 @@ describe("combat round manager", () => {
     expect(rolledProposal?.participantA.result?.finalTotal).toBe(17);
     expect(rolledProposal?.participantB.result?.finalTotal).toBe(16);
     expect(rolledProposal?.participantB.result?.rolledBy).toBe("gm_proxy");
+    expect(getNextCombatRoundEndTask({ state: rolled.state })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_commit",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
+    expect(rolled.state.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
+      "Round 3, SU: City guard rolled distance control 16 for The Gladiator ↔ City guard.",
+    );
+    expect(getLatestCombatEventSummary(rolled.state)?.details).toBe(
+      "Proposed distance 3 next round.",
+    );
 
     const unrolled = clearCombatRoundStep({ state: rolled.state, step: "round_summary" });
 
@@ -11650,6 +11707,18 @@ describe("combat round manager", () => {
       appliesFromRound: 4,
       status: "committed",
     });
+    expect(getNextCombatRoundEndTask({ state: committed.state })).toEqual({
+      kind: "participant_review",
+      participantId: "gladiator",
+    });
+    expect(committed.state.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(getLatestCombatEventSummary(committed.state)?.summaryText).toBe(
+      "Round 3, SU: Distance control applied for The Gladiator ↔ City guard: distance 3 next round.",
+    );
 
     const undone = clearCombatRoundStep({ state: committed.state, step: "round_summary" });
 

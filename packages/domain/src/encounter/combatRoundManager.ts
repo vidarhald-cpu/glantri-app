@@ -9376,6 +9376,150 @@ function getCombatRoundEndReviewCursor(input: {
   });
 }
 
+export type CombatRoundEndTask =
+  | {
+      distanceProposalId: string;
+      kind: "distance_roll";
+      pairKey: string;
+      participantId: string;
+    }
+  | {
+      distanceProposalId: string;
+      kind: "distance_commit";
+      pairKey: string;
+      participantId: string;
+    }
+  | {
+      kind: "participant_review";
+      participantId: string;
+    }
+  | {
+      kind: "round_boundary";
+    };
+
+function isAcceptedDistanceProposalPending(
+  proposal: CombatRoundEndDistanceProposal,
+): boolean {
+  return proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls");
+}
+
+function isAcceptedDistanceProposalCommitReady(
+  proposal: CombatRoundEndDistanceProposal,
+): boolean {
+  return (
+    proposal.accepted &&
+    proposal.status !== "pending" &&
+    proposal.status !== "pending_rolls" &&
+    proposal.status !== "committed"
+  );
+}
+
+function getRoundEndReviewParticipantTaskId(input: {
+  afterParticipantId?: string;
+  roundEndReview: CombatRoundEndReview;
+  state: CombatRoundState;
+}): string | undefined {
+  const participantIndex = input.afterParticipantId
+    ? input.state.participants.findIndex(
+        (participant) => participant.participantId === input.afterParticipantId,
+      )
+    : -1;
+  const orderedParticipants =
+    participantIndex >= 0
+      ? [
+          ...input.state.participants.slice(participantIndex + 1),
+          ...input.state.participants.slice(0, participantIndex + 1),
+        ]
+      : input.state.participants;
+
+  return orderedParticipants.find(
+    (participant) =>
+      input.roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
+  )?.participantId;
+}
+
+export function getNextCombatRoundEndTask(input: {
+  afterParticipantId?: string;
+  roundEndReview?: CombatRoundEndReview;
+  state: CombatRoundState;
+}): CombatRoundEndTask | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const roundEndReview = input.roundEndReview ?? normalized.roundEndReview;
+
+  if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
+    return undefined;
+  }
+
+  for (const proposal of roundEndReview.proposedDistances) {
+    if (!isAcceptedDistanceProposalPending(proposal)) {
+      continue;
+    }
+
+    if (proposal.participantA.status === "pending") {
+      return {
+        distanceProposalId: proposal.id,
+        kind: "distance_roll",
+        pairKey: proposal.pairKey,
+        participantId: proposal.participantAId,
+      };
+    }
+
+    if (proposal.participantB.status === "pending") {
+      return {
+        distanceProposalId: proposal.id,
+        kind: "distance_roll",
+        pairKey: proposal.pairKey,
+        participantId: proposal.participantBId,
+      };
+    }
+  }
+
+  const commitReadyProposal = roundEndReview.proposedDistances.find(
+    isAcceptedDistanceProposalCommitReady,
+  );
+
+  if (commitReadyProposal) {
+    return {
+      distanceProposalId: commitReadyProposal.id,
+      kind: "distance_commit",
+      pairKey: commitReadyProposal.pairKey,
+      participantId: commitReadyProposal.participantAId,
+    };
+  }
+
+  const reviewParticipantId = getRoundEndReviewParticipantTaskId({
+    afterParticipantId: input.afterParticipantId,
+    roundEndReview,
+    state: normalized,
+  });
+
+  if (reviewParticipantId) {
+    return {
+      kind: "participant_review",
+      participantId: reviewParticipantId,
+    };
+  }
+
+  return { kind: "round_boundary" };
+}
+
+function getCombatRoundEndTaskCursor(input: {
+  state: CombatRoundState;
+  task?: CombatRoundEndTask;
+}): CombatRoundCursor {
+  return getCombatRoundEndReviewCursor({
+    boundary: !input.task || input.task.kind === "round_boundary",
+    participantId: input.task?.kind === "round_boundary" ? undefined : input.task?.participantId,
+    state: input.state,
+  });
+}
+
+function hasUncommittedAcceptedDistanceProposal(roundEndReview: CombatRoundEndReview): boolean {
+  return roundEndReview.proposedDistances.some(
+    (proposal) => proposal.accepted && proposal.status !== "committed",
+  );
+}
+
 function parseCombatRoundEffectRoundDuration(duration?: string): number | undefined {
   if (!duration) {
     return undefined;
@@ -10060,20 +10204,19 @@ export function prepareCombatRoundEndReview(input: {
     proposedDistances: distanceProposals,
     roundNumber: normalized.roundNumber,
   });
-  const firstReviewParticipant = normalized.participants.find(
-    (participant) =>
-      roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
-  );
+  const nextRoundEndTask = getNextCombatRoundEndTask({
+    roundEndReview,
+    state: normalized,
+  });
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId:
       normalized.currentCursor?.participantId ??
-      firstReviewParticipant?.participantId ??
+      (nextRoundEndTask?.kind === "round_boundary" ? undefined : nextRoundEndTask?.participantId) ??
       normalized.participants[0]?.participantId,
     state: normalized,
   });
-  const afterCursor = getCombatRoundEndReviewCursor({
-    boundary: !firstReviewParticipant,
-    participantId: firstReviewParticipant?.participantId,
+  const afterCursor = getCombatRoundEndTaskCursor({
+    task: nextRoundEndTask,
     state: normalized,
   });
   const command = input.command
@@ -10341,25 +10484,6 @@ function applyCombatRoundEndReviewEffects(input: {
   };
 }
 
-function getNextRoundEndReviewParticipantId(input: {
-  participantId: string;
-  roundEndReview: CombatRoundEndReview;
-  state: CombatRoundState;
-}): string | undefined {
-  const currentIndex = input.state.participants.findIndex(
-    (participant) => participant.participantId === input.participantId,
-  );
-  const orderedParticipants = [
-    ...input.state.participants.slice(Math.max(0, currentIndex + 1)),
-    ...input.state.participants.slice(0, Math.max(0, currentIndex + 1)),
-  ];
-
-  return orderedParticipants.find(
-    (participant) =>
-      input.roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
-  )?.participantId;
-}
-
 export function commitCombatRoundEndParticipantReview(input: {
   command: {
     commandId?: string;
@@ -10391,6 +10515,12 @@ export function commitCombatRoundEndParticipantReview(input: {
 
   if (participantReview.status !== "review_ready") {
     throw new RangeError("Round-end participant review is not ready to commit.");
+  }
+
+  if (hasUncommittedAcceptedDistanceProposal(roundEndReview)) {
+    throw new RangeError(
+      "Round-end distance control must be completed before participant SU review.",
+    );
   }
 
   const pendingHealthRolls = participantReview.proposedHealthRolls.filter(
@@ -10450,14 +10580,13 @@ export function commitCombatRoundEndParticipantReview(input: {
       [input.participantId]: committedReview,
     },
   });
-  const nextParticipantId = getNextRoundEndReviewParticipantId({
-    participantId: input.participantId,
+  const nextRoundEndTask = getNextCombatRoundEndTask({
+    afterParticipantId: input.participantId,
     roundEndReview: nextRoundEndReview,
     state: normalized,
   });
-  const afterCursor = getCombatRoundEndReviewCursor({
-    boundary: !nextParticipantId,
-    participantId: nextParticipantId,
+  const afterCursor = getCombatRoundEndTaskCursor({
+    task: nextRoundEndTask,
     state: normalized,
   });
   const command = combatRoundCommandSchema.parse({
@@ -10935,8 +11064,12 @@ export function rollCombatRoundEndDistanceControl(input: {
     participantId: input.participantId,
     state: normalized,
   });
-  const afterCursor = getCombatRoundEndReviewCursor({
-    participantId: input.participantId,
+  const nextRoundEndTask = getNextCombatRoundEndTask({
+    roundEndReview: nextRoundEndReview,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndTaskCursor({
+    task: nextRoundEndTask,
     state: normalized,
   });
   const commandType = "roll_round_end_distance_control" satisfies CombatRoundCommandType;
@@ -11092,8 +11225,12 @@ export function commitCombatRoundEndDistanceControl(input: {
     participantId: normalized.currentCursor?.participantId ?? commandParticipantId,
     state: normalized,
   });
-  const afterCursor = getCombatRoundEndReviewCursor({
-    participantId: beforeCursor.participantId ?? commandParticipantId,
+  const nextRoundEndTask = getNextCombatRoundEndTask({
+    roundEndReview: nextRoundEndReview,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndTaskCursor({
+    task: nextRoundEndTask,
     state: normalized,
   });
   const commandType = "commit_round_end_distance_control" satisfies CombatRoundCommandType;
@@ -11108,6 +11245,8 @@ export function commitCombatRoundEndDistanceControl(input: {
       nextEdge,
       nextProposal,
       pairKey: distanceProposal.pairKey,
+      participantAId: distanceProposal.participantAId,
+      participantBId: distanceProposal.participantBId,
       previousEdge,
       previousProposal: distanceProposal,
     },
@@ -16788,6 +16927,59 @@ function getCombatRoundLatestEventForCommand(input: {
       }${difficulty !== undefined ? ` vs ${difficulty}` : ""}${
         success === undefined ? "." : success ? ` succeeded${bleedResult}` : ` failed${bleedResult}`
       }`,
+    };
+  }
+
+  if (command.type === "roll_round_end_distance_control") {
+    const participantAId = getCombatRoundLatestEventFactString(facts, "participantAId");
+    const participantBId = getCombatRoundLatestEventFactString(facts, "participantBId");
+    const participantALabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: participantAId,
+    });
+    const participantBLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: participantBId,
+    });
+    const finalTotal = getCombatRoundLatestEventFactNumber(facts, "rolledParticipantFinalTotal");
+    const proposedDistance = getCombatRoundLatestEventFactNumber(facts, "proposedDistance");
+
+    return {
+      commandId: command.id,
+      details:
+        proposedDistance !== undefined
+          ? `Proposed distance ${proposedDistance} next round.`
+          : "Waiting for the opposing distance-control roll.",
+      roundNumber: command.roundNumber,
+      shortTitle: "Distance control rolled",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, SU: ${actorLabel} rolled distance control${
+        finalTotal !== undefined ? ` ${finalTotal}` : ""
+      } for ${participantALabel} ↔ ${participantBLabel}.`,
+    };
+  }
+
+  if (command.type === "commit_round_end_distance_control") {
+    const participantAId = getCombatRoundLatestEventFactString(facts, "participantAId");
+    const participantBId = getCombatRoundLatestEventFactString(facts, "participantBId");
+    const participantALabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: participantAId,
+    });
+    const participantBLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: participantBId,
+    });
+    const appliedDistance = getCombatRoundLatestEventFactNumber(facts, "appliedDistance");
+
+    return {
+      commandId: command.id,
+      roundNumber: command.roundNumber,
+      shortTitle: "Distance control applied",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, SU: Distance control applied for ${participantALabel} ↔ ${participantBLabel}: distance ${
+        appliedDistance ?? "?"
+      } next round.`,
     };
   }
 

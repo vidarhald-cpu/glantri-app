@@ -668,6 +668,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
+    expect(source).toContain("getNextCombatRoundEndTask");
     expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
     expect(source).toContain("inspectorRoundEndDistanceControls");
     expect(source).toContain("Round-end distance control");
@@ -761,6 +762,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("preActionControls={inspectorPreActionControls}");
     expect(source).toContain("inspectorRoundEndDistanceAction?.kind === \"roll\"");
     expect(source).toContain("inspectorRoundEndDistanceAction?.kind === \"commit\"");
+    expect(source).toContain("inspectorRoundEndTask?.kind === \"distance_roll\"");
+    expect(source).toContain("inspectorRoundEndTask?.kind === \"distance_commit\"");
+    expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
+    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
+    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
     expect(source).toContain("commitRoundEndDistanceControl(\n                                        inspectorRoundEndDistanceAction.proposal.id,");
   });
 

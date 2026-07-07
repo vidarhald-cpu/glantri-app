@@ -34,6 +34,8 @@ Cleanup note, 2026-07-06: Player Mutation Response Sanitization routes non-GM pl
 
 Cleanup note, 2026-07-06: Player read-path combat projection now uses the same current-round result sanitizer as non-GM roll mutation responses, so player GET payloads keep involved attacker/defender result facts while removing unrelated current attack results, unrelated phase results, and damage review details. Historical snapshots and command-history projection remain separate follow-ups.
 
+Cleanup note, 2026-07-07: Round-end sequencing now resolves accepted distance-control proposals before participant SU/health/status review. The domain selects the next round-end task with distance roll, distance commit, participant review, then round-boundary precedence; GM Combat gates participant review until distance control is complete and distance roll/apply commands appear in latest-event/result surfaces.
+
 ## Canonical Surfaces Inspected
 
 - GM Combat Round Manager: `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx`

@@ -81,6 +81,7 @@ import {
   getCombatRoundInitiativeTotal,
   getCombatRoundEndDistanceControlPendingRollCount,
   getCombatRoundEndHealthCheckPendingRollCount,
+  getNextCombatRoundEndTask,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
@@ -4267,6 +4268,10 @@ export default function CombatRoundManagerPanel({
           inspector.participant.participantId
         ]
       : undefined;
+  const inspectorRoundEndTask =
+    selectedRoundIsActive && inspector.step === "round_summary"
+      ? getNextCombatRoundEndTask({ state: roundState })
+      : undefined;
   const roundParticipantLabelsById = useMemo(
     () =>
       Object.fromEntries(
@@ -4289,40 +4294,61 @@ export default function CombatRoundManagerPanel({
     inspectorRoundEndDistanceRollOptions.find(
       (option) => option.participantId === inspector.participant?.participantId,
     );
+  const inspectorRoundEndTaskDistanceRollKey =
+    inspectorRoundEndTask?.kind === "distance_roll"
+      ? buildRoundEndDistanceRollOptionKey({
+          participantId: inspectorRoundEndTask.participantId,
+          proposalId: inspectorRoundEndTask.distanceProposalId,
+        })
+      : undefined;
   const resolvedRoundEndDistanceRollSelectionKey =
-    inspectorRoundEndDistanceRollOptions.some(
+    inspectorRoundEndTaskDistanceRollKey ??
+    (inspectorRoundEndDistanceRollOptions.some(
       (option) => option.key === roundEndDistanceRollSelectionKey,
     )
       ? roundEndDistanceRollSelectionKey
       : (inspectorSelectedParticipantDistanceRollOption?.key ??
-        inspectorRoundEndDistanceRollOptions[0]?.key);
+        inspectorRoundEndDistanceRollOptions[0]?.key));
   const inspectorRoundEndDistanceRollOption = inspectorRoundEndDistanceRollOptions.find(
     (option) => option.key === resolvedRoundEndDistanceRollSelectionKey,
   );
   const inspectorRoundEndDistanceCommitOptions = activeRoundEndDistanceProposals.filter(
     isRoundEndDistanceCommitReady,
   );
+  const inspectorRoundEndTaskDistanceCommitProposalId =
+    inspectorRoundEndTask?.kind === "distance_commit"
+      ? inspectorRoundEndTask.distanceProposalId
+      : undefined;
   const resolvedRoundEndDistanceCommitProposalId = inspectorRoundEndDistanceCommitOptions.some(
-    (proposal) => proposal.id === roundEndDistanceCommitProposalId,
+    (proposal) => proposal.id === inspectorRoundEndTaskDistanceCommitProposalId,
   )
-    ? roundEndDistanceCommitProposalId
-    : inspectorRoundEndDistanceCommitOptions[0]?.id;
+    ? inspectorRoundEndTaskDistanceCommitProposalId
+    : inspectorRoundEndDistanceCommitOptions.some(
+          (proposal) => proposal.id === roundEndDistanceCommitProposalId,
+        )
+      ? roundEndDistanceCommitProposalId
+      : inspectorRoundEndDistanceCommitOptions[0]?.id;
   const inspectorRoundEndDistanceCommitProposal = inspectorRoundEndDistanceCommitOptions.find(
     (proposal) => proposal.id === resolvedRoundEndDistanceCommitProposalId,
   );
   const inspectorRoundEndDistanceAction =
-    inspectorRoundEndReview?.status !== "health_roll_pending" && inspectorRoundEndDistanceRollOption
+    inspectorRoundEndTask?.kind === "distance_roll" && inspectorRoundEndDistanceRollOption
       ? ({
           kind: "roll" as const,
           option: inspectorRoundEndDistanceRollOption,
         } satisfies { kind: "roll"; option: RoundEndDistanceRollOption })
-      : inspectorRoundEndReview?.status !== "health_roll_pending" &&
-          inspectorRoundEndDistanceCommitProposal
+      : inspectorRoundEndTask?.kind === "distance_commit" && inspectorRoundEndDistanceCommitProposal
         ? ({
             kind: "commit" as const,
             proposal: inspectorRoundEndDistanceCommitProposal,
           } satisfies { kind: "commit"; proposal: CombatRoundEndDistanceProposal })
         : undefined;
+  const inspectorRoundEndDistanceControlComplete = Boolean(
+    selectedTimelineRoundState.roundEndReview &&
+      !selectedTimelineRoundState.roundEndReview.proposedDistances.some(
+        (proposal) => proposal.accepted && proposal.status !== "committed",
+      ),
+  );
   const buildRoundEndParticipantInputs = (
     stateForReview: typeof roundState = roundState,
   ): Parameters<typeof ensureCombatRoundEndReviewPrepared>[0]["participantInputs"] =>
@@ -5303,7 +5329,7 @@ export default function CombatRoundManagerPanel({
   const inspectorRoundEndDistanceControls =
     inspectorRoundEndDistanceAction?.kind === "roll" ? (
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        {inspectorRoundEndDistanceRollOptions.length > 1 ? (
+        {!inspectorRoundEndTask && inspectorRoundEndDistanceRollOptions.length > 1 ? (
           <label style={compactFieldLabelStyle}>
             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Distance roll</span>
             <select
@@ -5325,7 +5351,7 @@ export default function CombatRoundManagerPanel({
       </div>
     ) : inspectorRoundEndDistanceAction?.kind === "commit" ? (
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        {inspectorRoundEndDistanceCommitOptions.length > 1 ? (
+        {!inspectorRoundEndTask && inspectorRoundEndDistanceCommitOptions.length > 1 ? (
           <label style={compactFieldLabelStyle}>
             <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Distance pair</span>
             <select
@@ -5421,6 +5447,24 @@ export default function CombatRoundManagerPanel({
           resolution: inspectorDisplayPhaseResolutionResult,
         })
       : undefined;
+  const inspectorLatestRoundEndDistanceResult =
+    selectedRoundIsActive &&
+    inspector.step === "round_summary" &&
+    latestCombatEventSummary?.roundNumber === roundState.roundNumber &&
+    (latestCombatEventSummary.shortTitle === "Distance control rolled" ||
+      latestCombatEventSummary.shortTitle === "Distance control applied")
+      ? {
+          detailLines: latestCombatEventSummary.details
+            ? [latestCombatEventSummary.details]
+            : undefined,
+          interpretedResult: latestCombatEventSummary.summaryText,
+          rankLabel: latestCombatEventSummary.shortTitle,
+          resultLabel:
+            latestCombatEventSummary.shortTitle === "Distance control applied"
+              ? latestCombatEventSummary.summaryText
+              : undefined,
+        }
+      : undefined;
   const inspectorActionResult = inspectorPhaseResolutionLines
     ? {
         detailLines: [inspectorPhaseResolutionLines.armorLine].filter((line): line is string =>
@@ -5480,6 +5524,8 @@ export default function CombatRoundManagerPanel({
                     inspectorFallbackCombatExperienceResult,
                   ),
                 }
+              : inspectorLatestRoundEndDistanceResult
+                ? inspectorLatestRoundEndDistanceResult
               : null;
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
@@ -8479,18 +8525,20 @@ export default function CombatRoundManagerPanel({
                     ) : null}
                     {inspector.step === "round_summary" ? (
                       <>
-                        <CombatRoundEndParticipantReviewPanel
-                          controlsDisabled={saving || inspectorIsInspectionOnly}
-                          difficultyDrafts={roundEndHealthDifficultyDrafts}
-                          onDifficultyDraftChange={(healthRollId, value) =>
-                            setRoundEndHealthDifficultyDrafts((current) => ({
-                              ...current,
-                              [healthRollId]: value,
-                            }))
-                          }
-                          participantLabel={inspector.participant?.label}
-                          review={inspectorRoundEndReview}
-                        />
+                        {inspectorRoundEndDistanceControlComplete ? (
+                          <CombatRoundEndParticipantReviewPanel
+                            controlsDisabled={saving || inspectorIsInspectionOnly}
+                            difficultyDrafts={roundEndHealthDifficultyDrafts}
+                            onDifficultyDraftChange={(healthRollId, value) =>
+                              setRoundEndHealthDifficultyDrafts((current) => ({
+                                ...current,
+                                [healthRollId]: value,
+                              }))
+                            }
+                            participantLabel={inspector.participant?.label}
+                            review={inspectorRoundEndReview}
+                          />
+                        ) : null}
                         <CombatRoundEndDistanceControlPanel
                           participantLabelsById={roundParticipantLabelsById}
                           roundReview={selectedTimelineRoundState.roundEndReview}
