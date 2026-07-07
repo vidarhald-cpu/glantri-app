@@ -2883,11 +2883,15 @@ function getCombatTrackerInitiativeResolutionSource(input: {
     return "gm_override";
   }
 
-  if (commandSource === "gm_proxy" || commandStatus === "gmEdited" || command) {
+  if (commandSource === "player" || commandStatus === "submitted") {
+    return undefined;
+  }
+
+  if (commandSource === "gm_proxy" || commandStatus === "gmEdited") {
     return "rolled_by_gm";
   }
 
-  return "resolved_by_gm";
+  return command ? undefined : "resolved_by_gm";
 }
 
 function formatCombatTrackerInitiativeSuffix(

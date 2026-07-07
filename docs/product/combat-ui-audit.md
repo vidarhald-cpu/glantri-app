@@ -491,6 +491,12 @@ Recommended broad fix:
 - Test focus: one dominant command is visible for the selected current task; round-level controls do not duplicate participant/pair commands.
 - Before combat action completion: before adding more GM work categories or action-specific completion flows.
 
+### Player Combat Display Regression Follow-Up
+
+- Status, 2026-07-07: addressed visible Player Combat regressions. Modifier rows use readable Source/Mod/Dur/Details columns in read-only and editable modes, distance modifier context no longer renders as an attack result section, and tracker initiative provenance suppresses GM wording for player-submitted command facts.
+- Affected files/components: `PlayerCombatPanels.tsx`, `ScenarioPlayerCombatPageContent.tsx`, and tracker tooltip provenance in `CombatRoundManagerPanel.tsx`.
+- Contract rule: modifiers/context are not command results; result panels show command facts; tracker titles should describe provenance without overstating GM intervention.
+
 ## Safe To Fix Broadly
 
 - Naming and label consistency for tracker markers, phase titles, and status labels.

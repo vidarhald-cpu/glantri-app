@@ -366,12 +366,12 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
     expect(source).toContain("compactModifierMiniTableEntryRowStyle");
     expect(source).toContain("compactModifierEntryTopRowStyle");
-    expect(source).toContain("compactModifierEntryDetailsRowStyle");
+    expect(source).toContain("compactModifierEditableDetailsStyle");
     expect(source).not.toContain("compactModifierMiniTableDraftRowStyle");
     expect(source).toContain(
-      'gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem 4.25rem 1.75rem"',
+      'gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)"',
     );
-    expect(source).toContain('["Source/scope", "Mod", "Dur"].map');
+    expect(source).toContain('["Source", "Mod", "Dur", "Details"].map');
     expect(source).not.toContain('["Source", "Mod", "Dur", "Details", "Remove"].map');
     expect(source).toContain("characterStateEntries");
     expect(source).toContain("Character/state");
@@ -410,10 +410,10 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain('title="Remove modifier"');
     expect(source).toMatch(/>\s*-\s*<\/button>/);
     expect(source).not.toContain(">Remove</button>");
-    expect(source).toContain('<span aria-hidden="true" />');
     expect(source).toContain("formatCombatModifierScopeLabel");
     expect(source).toContain("formatCombatModifierDisplayLine");
-    expect(source).toContain("formatCombatModifierSourceScopeLabel");
+    expect(source).toContain("<span>{entry.sourceLabel}</span>");
+    expect(source).toContain("<span>{entry.scopeLabel}</span>");
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');
   });

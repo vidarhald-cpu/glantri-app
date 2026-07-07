@@ -145,9 +145,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatTrackerCommandFactString(command, \"status\")");
     expect(source).toContain("commandSource === \"gm_override\" || commandStatus === \"gm_override\"");
     expect(source).toContain('return "gm_override";');
-    expect(source).toContain("commandSource === \"gm_proxy\" || commandStatus === \"gmEdited\" || command");
+    expect(source).toContain("commandSource === \"player\" || commandStatus === \"submitted\"");
+    expect(source).toContain("commandSource === \"gm_proxy\" || commandStatus === \"gmEdited\"");
     expect(source).toContain('return "rolled_by_gm";');
-    expect(source).toContain('return "resolved_by_gm";');
+    expect(source).toContain('return command ? undefined : "resolved_by_gm";');
     expect(source).toContain('return ", rolled by GM";');
     expect(source).toContain('return ", GM override";');
     expect(source).toContain('return ", resolved by GM";');
@@ -155,6 +156,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commands: timelineRoundState.commands");
     expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix");
     expect(source).toContain("return \"\";");
+    expect(source).not.toContain("commandSource === \"gm_proxy\" || commandStatus === \"gmEdited\" || command");
     expect(source).not.toContain('return ", GM edited";');
     expect(source).not.toContain("initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix");
   });

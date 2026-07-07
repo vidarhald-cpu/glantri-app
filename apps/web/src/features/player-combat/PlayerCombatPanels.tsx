@@ -290,7 +290,7 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem 4.25rem 1.75rem",
+  gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)",
   minWidth: 0,
 } as const;
 
@@ -309,7 +309,7 @@ const compactModifierDisplayRowStyle = {
   display: "grid",
   fontSize: "0.88rem",
   gap: "0.35rem",
-  gridTemplateColumns: "minmax(8rem, 1fr) 4.25rem minmax(8rem, 2fr)",
+  gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)",
   minWidth: 0,
   paddingTop: "0.3rem",
 } as const;
@@ -341,11 +341,10 @@ const compactModifierEntryTopRowStyle = {
   minWidth: 0,
 } as const;
 
-const compactModifierEntryDetailsRowStyle = {
+const compactModifierEditableDetailsStyle = {
   alignItems: "center",
-  display: "grid",
-  gap: "0.35rem",
-  gridTemplateColumns: "4.5rem minmax(9rem, 1fr)",
+  display: "flex",
+  gap: "0.25rem",
   minWidth: 0,
 } as const;
 
@@ -443,13 +442,6 @@ export function formatCombatModifierDisplayLine(input: {
   ]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
-}
-
-function formatCombatModifierSourceScopeLabel(input: {
-  scopeLabel: string;
-  sourceLabel: PlayerCombatModifierDisplayEntry["sourceLabel"];
-}): string {
-  return `${input.sourceLabel} · ${input.scopeLabel}`;
 }
 
 export function isMeaningfulCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
@@ -753,12 +745,13 @@ function ModifierDisplayEntryRow({
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
-      <span>{formatCombatModifierSourceScopeLabel(entry)}</span>
+      <span>{entry.sourceLabel}</span>
       <span>{formatSignedModifierValue(entry.value)}</span>
+      <span>{entry.scopeLabel}</span>
       <span
         style={{
           minWidth: 0,
-          overflowWrap: "anywhere",
+          overflowWrap: "break-word",
         }}
       >
         {entry.details ?? "—"}
@@ -814,33 +807,32 @@ function ModifierEditableEntryRow({
           type="number"
           value={entry.durationRounds ?? ""}
         />
-        <button
-          aria-label="Remove modifier"
-          disabled={controlsDisabled}
-          onClick={onRemove}
-          style={compactModifierRemoveButtonStyle}
-          title="Remove modifier"
-          type="button"
-        >
-          -
-        </button>
+        <span style={compactModifierEditableDetailsStyle}>
+          <input
+            aria-label={`${bucketLabel} modifier details`}
+            disabled={controlsDisabled}
+            onChange={(event) =>
+              onUpdate({
+                notes: event.target.value,
+              })
+            }
+            placeholder="Details"
+            style={compactModifierDetailsInputStyle}
+            type="text"
+            value={entry.notes ?? ""}
+          />
+          <button
+            aria-label="Remove modifier"
+            disabled={controlsDisabled}
+            onClick={onRemove}
+            style={compactModifierRemoveButtonStyle}
+            title="Remove modifier"
+            type="button"
+          >
+            -
+          </button>
+        </span>
       </div>
-      <label style={compactModifierEntryDetailsRowStyle}>
-        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Details</span>
-        <input
-          aria-label={`${bucketLabel} modifier details`}
-          disabled={controlsDisabled}
-          onChange={(event) =>
-            onUpdate({
-              notes: event.target.value,
-            })
-          }
-          placeholder="Details"
-          style={compactModifierDetailsInputStyle}
-          type="text"
-          value={entry.notes ?? ""}
-        />
-      </label>
     </div>
   );
 }
@@ -910,6 +902,23 @@ export function PlayerCombatModifierPanel({
 
             {hasVisibleRows ? (
               <div style={compactModifierMiniTableStyle}>
+                {(row.characterStateEntries?.length ?? 0) > 0 ||
+                (!editable && row.entries.length > 0) ? (
+                  <div style={compactModifierDisplayRowStyle}>
+                    {["Source", "Mod", "Dur", "Details"].map((heading) => (
+                      <span
+                        key={heading}
+                        style={{
+                          color: "#1f1b14",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {heading}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 {row.characterStateEntries?.map((entry) => (
                   <ModifierDisplayEntryRow
                     bucketLabel={row.label}
@@ -919,14 +928,15 @@ export function PlayerCombatModifierPanel({
                 ))}
                 {editable && !row.locked ? (
                   <>
-                    <div style={compactModifierMiniTableHeaderStyle}>
-                      {["Source/scope", "Mod", "Dur"].map((heading) => (
-                        <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                          {heading}
-                        </span>
-                      ))}
-                      <span aria-hidden="true" />
-                    </div>
+                    {row.entries.length > 0 || draftEntry ? (
+                      <div style={compactModifierMiniTableHeaderStyle}>
+                        {["Source", "Mod", "Dur", "Details"].map((heading) => (
+                          <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                            {heading}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     {row.entries.map((entry) => (
                       <ModifierEditableEntryRow
                         bucketLabel={row.label}

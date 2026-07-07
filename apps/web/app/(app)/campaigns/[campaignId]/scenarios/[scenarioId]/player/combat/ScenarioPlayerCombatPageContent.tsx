@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  type CombatRoundAttackDistanceModifierDetail,
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
@@ -19,7 +18,6 @@ import {
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
-  getCombatRoundAttackDistanceModifierDetail,
   getCombatRoundAttackResultById,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
@@ -195,90 +193,6 @@ function formatCombatAttackResultLine(input: {
   return input.participantId === input.result.defenderParticipantId
     ? `Defense: DB ${input.result.defenderDb} vs ${attackText} = ${lookupText}`
     : `Main: ${input.result.weaponName} OB ${input.result.ob} - DB ${input.result.defenderDb} + roll ${rollText} = ${lookupText}`;
-}
-
-function formatSignedCombatNumber(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value}`;
-}
-
-function formatPreferredDistanceLabel(distances: readonly number[]): string {
-  const normalized = [...new Set(distances)].sort((left, right) => left - right);
-
-  if (normalized.length === 0) {
-    return "unknown";
-  }
-
-  const contiguous = normalized.every((distance, index) =>
-    index === 0 ? true : distance === normalized[index - 1] + 1,
-  );
-
-  return contiguous && normalized.length > 1
-    ? `${normalized[0]}-${normalized[normalized.length - 1]}`
-    : normalized.join(", ");
-}
-
-function formatCombatDistanceModifierDetailLine(
-  detail: CombatRoundAttackDistanceModifierDetail | undefined,
-): string | undefined {
-  if (!detail) {
-    return undefined;
-  }
-
-  if (detail.notes && detail.actualDistance === undefined) {
-    const normalizedNotes = detail.notes.replace(/^distance:\s*/i, "");
-    const skillMarker = " · Skill/OB ";
-
-    if (normalizedNotes.includes(skillMarker)) {
-      const [context, value] = normalizedNotes.split(skillMarker);
-      return `${context.replace(/\s· nearest \d+$/, "")} -> Skill/OB ${value}`;
-    }
-
-    return normalizedNotes;
-  }
-
-  const weaponName = detail.weaponName ?? "Weapon";
-  const preferredLabel = formatPreferredDistanceLabel(detail.preferredDistances);
-
-  if (detail.warning) {
-    return `${weaponName} preferred ${preferredLabel} -> ${detail.warning}`;
-  }
-
-  if (detail.actualDistance === undefined) {
-    return undefined;
-  }
-
-  const baseLine = `${weaponName} preferred ${preferredLabel} · actual ${detail.actualDistance}`;
-
-  return detail.value < 0
-    ? `${baseLine} -> Skill/OB ${formatSignedCombatNumber(detail.value)}`
-    : `${baseLine} -> no modifier`;
-}
-
-function buildPlayerCombatDistanceModifierSection(
-  detail: CombatRoundAttackDistanceModifierDetail | undefined,
-):
-  | {
-      calculationLines: readonly string[];
-      resultLine?: string;
-      title: string;
-    }
-  | undefined {
-  const distanceLine = formatCombatDistanceModifierDetailLine(detail);
-
-  if (!distanceLine) {
-    return undefined;
-  }
-
-  return {
-    calculationLines: [distanceLine],
-    resultLine:
-      detail?.value && detail.value < 0
-        ? `Result: Skill/OB ${formatSignedCombatNumber(detail.value)}`
-        : detail?.warning
-          ? `Result: ${detail.warning}`
-          : "Result: no distance modifier",
-    title: "Distance",
-  };
 }
 
 function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult): string {
@@ -706,7 +620,6 @@ function getLatestPlayerVisibleDamageResolution(input: {
 
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
-  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
 }): {
@@ -772,30 +685,34 @@ function formatCombatPhaseResolutionResultLines(input: {
       resultLine: `Result: ${input.attackResult.tableResult}`,
       title: "To hit",
     },
-    buildPlayerCombatDistanceModifierSection(input.distanceModifierDetail),
     {
       calculationLines: [resolvedParryLine ?? `Parry ${formatResolutionStatusLabel(parry.status)}`],
       resultLine: parryResultLine ?? `Result: ${formatResolutionStatusLabel(parry.status)}`,
       title: "Parry",
     },
-    locationCalculationLine
-      ? {
+    ...(locationCalculationLine
+      ? [
+          {
           calculationLines: [locationCalculationLine],
           resultLine: locationResultLine,
           title: "Hit location",
-        }
-      : undefined,
-    criticalCalculationLine || criticalResultLine
-      ? {
+          },
+        ]
+      : []),
+    ...(criticalCalculationLine || criticalResultLine
+      ? [
+          {
           calculationLines: [criticalCalculationLine].filter((line): line is string =>
             Boolean(line),
           ),
           resultLine: criticalResultLine,
           title: "Critical",
-        }
-      : undefined,
-    damageResult || recordedDamageLine
-      ? {
+          },
+        ]
+      : []),
+    ...(damageResult || recordedDamageLine
+      ? [
+          {
           calculationLines: [
             damageCalculationLine,
             recordedEffectsLine,
@@ -809,17 +726,10 @@ function formatCombatPhaseResolutionResultLines(input: {
               : "Result: waiting for GM review",
           title:
             input.resolution.damageProposal.status === "committed" ? "Recorded damage" : "Damage",
-        }
-      : undefined,
-  ].filter(
-    (
-      section,
-    ): section is {
-      calculationLines: readonly string[];
-      resultLine?: string;
-      title: string;
-    } => Boolean(section),
-  );
+          },
+        ]
+      : []),
+  ];
 
   return {
     attackLine,
@@ -2492,13 +2402,6 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
-  const selectedCurrentAttackDistanceModifierDetail =
-    combatRoundState && selectedCurrentAttackResult
-      ? getCombatRoundAttackDistanceModifierDetail({
-          result: selectedCurrentAttackResult,
-          state: combatRoundState,
-        })
-      : undefined;
   const selectedCurrentAttackResultPanel = selectedCurrentAttackResult
     ? {
         interpretedResult: selectedCurrentAttackResult.tableResult,
@@ -2513,16 +2416,7 @@ export default function ScenarioPlayerCombatPageContent({
             resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`,
             title: "To hit",
           },
-          buildPlayerCombatDistanceModifierSection(selectedCurrentAttackDistanceModifierDetail),
-        ].filter(
-          (
-            section,
-          ): section is {
-            calculationLines: readonly string[];
-            resultLine?: string;
-            title: string;
-          } => Boolean(section),
-        ),
+        ],
       }
     : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
@@ -2550,13 +2444,6 @@ export default function ScenarioPlayerCombatPageContent({
     selectedCurrentResolutionAttackResult && selectedCurrentPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
           attackResult: selectedCurrentResolutionAttackResult,
-          distanceModifierDetail:
-            combatRoundState && selectedCurrentResolutionAttackResult
-              ? getCombatRoundAttackDistanceModifierDetail({
-                  result: selectedCurrentResolutionAttackResult,
-                  state: combatRoundState,
-                })
-              : undefined,
           participantId: selectedRoundParticipant?.participantId,
           resolution: selectedCurrentPhaseResolutionResult,
         })
@@ -2635,13 +2522,6 @@ export default function ScenarioPlayerCombatPageContent({
     selectedInvolvedDamageAttackResult && selectedInvolvedDamageResolution
       ? formatCombatPhaseResolutionResultLines({
           attackResult: selectedInvolvedDamageAttackResult,
-          distanceModifierDetail:
-            combatRoundState && selectedInvolvedDamageAttackResult
-              ? getCombatRoundAttackDistanceModifierDetail({
-                  result: selectedInvolvedDamageAttackResult,
-                  state: combatRoundState,
-                })
-              : undefined,
           participantId: selectedRoundParticipant?.participantId,
           resolution: selectedInvolvedDamageResolution,
         })
