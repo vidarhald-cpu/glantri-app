@@ -7,8 +7,7 @@ substep before that proposal is calculated; if the proposal has a critical grade
 is a second explicit D1/D2 substep before commit. Committing that proposal writes source-linked
 combat-effect rows for the defender. The proposal includes compact GM review overrides for location,
 armor, total damage, critical grade, critical-roll modifiers/result, notes, and manual immediate
-effect rows. Critical-effect automation, bleeding, full injury typing, and live armor-location
-equipment lookup remain future work.
+effect rows. Critical-effect automation, bleeding, and full injury typing remain future work.
 
 ## Hit lookup
 
@@ -136,10 +135,10 @@ stored as table metadata when present, but critical effects remain a GM review n
 If the damage lookup produces a critical grade, D1/D2 enters critical pending after the damage
 proposal is created. The attacker rolls `2d8`; the final critical roll is `2d8 + critical type
 modifier + armor critical modifier`. The critical type modifier comes from the combat critical
-modifier table. Armor critical modifier is currently `0` until live hit-location armor mapping is
-wired, and the GM may review or override the critical type modifier, armor critical modifier, final
-critical roll, and critical location. The stored critical roll is informational for now and does not
-create automated critical-effect rows.
+modifier table. Armor critical modifier is read from the selected hit-location armor coverage when
+available, and the GM may review or override the critical type modifier, armor critical modifier,
+final critical roll, and critical location. The stored critical roll is informational for now and
+does not create automated critical-effect rows.
 
 During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
 Review fields can override selected hit location, armor modifier, total damage, critical grade,

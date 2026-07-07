@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { defaultCanonicalContent, weaponTemplates } from "@glantri/content";
+import { defaultCanonicalContent, equipmentTemplatesById, weaponTemplates } from "@glantri/content";
 import {
   CampaignService,
   CharacterService,
@@ -12,6 +12,7 @@ import {
   applyCombatActionGeneratedModifiers,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
@@ -40,6 +41,7 @@ import {
   isCombatRoundCombatExperienceWindowOpen,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
+  normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
@@ -867,6 +869,23 @@ function findEncounterParticipantByScenarioParticipant(input: {
             participant.characterId === input.scenarioParticipant.characterId),
       )
     : undefined;
+}
+
+function findScenarioParticipantForEncounterParticipant(input: {
+  encounterParticipant?: EncounterSession["participants"][number];
+  scenarioParticipants: ScenarioParticipant[];
+}): ScenarioParticipant | undefined {
+  const encounterParticipant = input.encounterParticipant;
+  if (!encounterParticipant) {
+    return undefined;
+  }
+
+  return input.scenarioParticipants.find(
+    (participant) =>
+      participant.id === encounterParticipant.scenarioParticipantId ||
+      participant.id === encounterParticipant.id ||
+      (participant.characterId && participant.characterId === encounterParticipant.characterId),
+  );
 }
 
 function buildDistanceDefaultWeaponsByParticipantId(input: {
@@ -3890,11 +3909,28 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         latestDefenderSnapshot?.defenseSummary?.dm,
         "Defender DM",
       );
+      const defenderEncounterParticipant = encounter.participants.find((participant) =>
+        participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
+      );
+      const defenderScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: defenderEncounterParticipant,
+        scenarioParticipants,
+      });
+      const armorCoverage = buildCombatRoundDamageArmorCoverageFromEquipmentState({
+        characterId: defenderScenarioParticipant?.characterId,
+        equipmentState: defenderScenarioParticipant?.snapshot.equipmentState,
+        fallbackTemplatesById: equipmentTemplatesById,
+      });
+      const weaponArmorClass = normalizeCombatArmorModifierClass(
+        latestAttackerSnapshot?.attackSummary?.attackMode,
+      );
       const damageProposal =
         dmb !== undefined && defenderDm !== undefined
           ? {
+              armorCoverage,
               defenderDm,
               dmb,
+              weaponArmorClass,
             }
           : undefined;
       const nextRoundState = recordCombatRoundHitLocationRoll({

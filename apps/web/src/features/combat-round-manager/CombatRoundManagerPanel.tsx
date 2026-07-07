@@ -43,6 +43,7 @@ import {
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   buildCombatRoundPhaseResolutionResult,
+  buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
   canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
@@ -2252,23 +2253,6 @@ function getCombinedParrySource(
         label: getCombatTableCell({ columns: table.columns, label: "Weapon", row }),
         score,
       };
-}
-
-function buildCombatRoundDamageArmorCoverageFromLoadoutModel(
-  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null,
-): CombatRoundDamageArmorCoverage {
-  const coverage: CombatRoundDamageArmorCoverage = {};
-
-  for (const location of model?.armorSummary?.locations ?? []) {
-    coverage[location.key] = {
-      armorClass: normalizeCombatArmorModifierClass(location.type),
-      coverageLabel: location.valueWithType !== "—" ? location.valueWithType : undefined,
-      label: location.label,
-      value: location.value ?? undefined,
-    };
-  }
-
-  return coverage;
 }
 
 function buildCombatParrySourceOptions(input: {
@@ -5905,7 +5889,10 @@ export default function CombatRoundManagerPanel({
       : null;
 
     return {
-      armorCoverage: buildCombatRoundDamageArmorCoverageFromLoadoutModel(baseLoadoutModel),
+      armorCoverage: buildCombatRoundDamageArmorCoverageFromEquipmentState({
+        characterId: input.scenarioParticipant?.characterId,
+        equipmentState,
+      }),
       attackStats: loadoutSummary.attackStats,
       baseDefenseStats,
       defenseStats,

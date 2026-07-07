@@ -7281,8 +7281,68 @@ describe("scenarios route contract", () => {
     const scenarioParticipants = [
       makeCombatScenarioParticipant({ id: "participant-1" }),
       makeCombatScenarioParticipant({
+        characterId: "guard-character",
         controlledByUserId: "other-player",
         id: "participant-2",
+        snapshot: {
+          displayName: "City guard",
+          equipmentState: {
+            activeLoadoutByCharacterId: {
+              "guard-character": {
+                wornArmorItemId: "armor-item-test-coverage",
+              },
+            },
+            itemsById: {
+              "armor-item-test-coverage": {
+                id: "armor-item-test-coverage",
+                templateId: "armor-template-test-coverage",
+              },
+            },
+            locationsById: {},
+            templates: {
+              templatesById: {
+                "armor-template-test-coverage": {
+                  category: "armor",
+                  criticalModifierByArea: {
+                    abdomen: 1,
+                    backArm: 1,
+                    backFoot: 1,
+                    backThigh: 1,
+                    chest: 1,
+                    frontArm: 1,
+                    frontFoot: 1,
+                    frontThigh: 1,
+                    head: 1,
+                  },
+                  id: "armor-template-test-coverage",
+                  locationTypes: {
+                    abdomen: "B",
+                    backArm: "B",
+                    backFoot: "B",
+                    backThigh: "B",
+                    chest: "B",
+                    frontArm: "B",
+                    frontFoot: "B",
+                    frontThigh: "B",
+                    head: "B",
+                  },
+                  locationValues: {
+                    abdomen: 3,
+                    backArm: 3,
+                    backFoot: 3,
+                    backThigh: 3,
+                    chest: 3,
+                    frontArm: 3,
+                    frontFoot: 3,
+                    frontThigh: 3,
+                    head: 3,
+                  },
+                  name: "Test coverage armor",
+                },
+              },
+            },
+          },
+        },
       }),
     ];
 
@@ -7354,10 +7414,25 @@ describe("scenarios route contract", () => {
     );
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toMatchObject(
       {
+        armorClass: "B",
+        armorCoverageLabel: "3B",
+        armorValue: 3,
         defenderDm: 0,
         dmb: 8,
+        weaponArmorClass: "C",
       },
     );
+    expect(
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult.armorWarnings,
+    ).toEqual([]);
+    expect(
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult
+        .armorModifierSource,
+    ).toMatchObject({
+      armorClass: "B",
+      status: "applied",
+      weaponArmorClass: "C",
+    });
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.criticalRoll.status).toBe(
       "pending",
     );

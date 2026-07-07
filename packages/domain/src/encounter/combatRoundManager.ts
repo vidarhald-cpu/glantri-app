@@ -8,6 +8,12 @@ import {
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import { rollOpenEndedD20, type OpenEndedD20Roll } from "../dice/openEndedD20";
+import type {
+  ArmorTemplate,
+  CharacterLoadout,
+  EquipmentItem,
+  EquipmentTemplate,
+} from "../equipment";
 import {
   combatArmorModifierClassSchema,
   lookupCombatArmorModifier,
@@ -183,6 +189,7 @@ export const COMBAT_ROUND_ARMOR_REGION_LABELS = {
 const combatRoundDamageArmorCoverageEntrySchema = z.object({
   armorClass: combatArmorModifierClassSchema.optional(),
   coverageLabel: z.string().min(1).optional(),
+  criticalModifier: z.number().int().optional(),
   label: z.string().min(1).optional(),
   value: z.number().int().min(0).optional(),
 });
@@ -204,6 +211,133 @@ export const combatRoundDamageArmorCoverageSchema = z
   })
   .default({});
 export type CombatRoundDamageArmorCoverage = z.infer<typeof combatRoundDamageArmorCoverageSchema>;
+
+type CombatRoundEquipmentStateLike = {
+  activeLoadoutByCharacterId?: Record<string, Partial<CharacterLoadout> | undefined>;
+  itemsById?: Record<string, Partial<EquipmentItem> | undefined>;
+  templates?: {
+    templatesById?: Record<string, EquipmentTemplate | undefined>;
+  };
+  templatesById?: Record<string, EquipmentTemplate | undefined>;
+};
+
+const COMBAT_ROUND_ARMOR_REGION_KEYS = Object.keys(
+  COMBAT_ROUND_ARMOR_REGION_LABELS,
+) as CombatRoundArmorRegion[];
+
+function isCombatRoundEquipmentStateLike(value: unknown): value is CombatRoundEquipmentStateLike {
+  return isCombatRoundRecord(value);
+}
+
+function isCombatRoundArmorTemplate(template: unknown): template is ArmorTemplate {
+  return isCombatRoundRecord(template) && template.category === "armor";
+}
+
+function roundCombatRoundArmorLocationValue(value: number | null | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : undefined;
+}
+
+function getCombatRoundEquipmentTemplatesById(
+  equipmentState: CombatRoundEquipmentStateLike,
+): Record<string, EquipmentTemplate | undefined> {
+  return {
+    ...(equipmentState.templatesById ?? {}),
+    ...(equipmentState.templates?.templatesById ?? {}),
+  };
+}
+
+function getCombatRoundActiveLoadout(input: {
+  characterId?: string;
+  equipmentState: CombatRoundEquipmentStateLike;
+}): Partial<CharacterLoadout> | undefined {
+  const loadouts = input.equipmentState.activeLoadoutByCharacterId ?? {};
+
+  if (input.characterId && loadouts[input.characterId]) {
+    return loadouts[input.characterId];
+  }
+
+  return Object.values(loadouts).find(Boolean);
+}
+
+function buildKnownNoArmorCoverage(): CombatRoundDamageArmorCoverage {
+  return combatRoundDamageArmorCoverageSchema.parse(
+    Object.fromEntries(
+      COMBAT_ROUND_ARMOR_REGION_KEYS.map((region) => [
+        region,
+        {
+          armorClass: "A",
+          coverageLabel: "0A",
+          criticalModifier: 0,
+          label: COMBAT_ROUND_ARMOR_REGION_LABELS[region],
+          value: 0,
+        },
+      ]),
+    ),
+  );
+}
+
+export function buildCombatRoundDamageArmorCoverageFromEquipmentState(input: {
+  characterId?: string;
+  equipmentState?: unknown;
+  fallbackTemplatesById?: Record<string, EquipmentTemplate | undefined>;
+}): CombatRoundDamageArmorCoverage {
+  if (!isCombatRoundEquipmentStateLike(input.equipmentState)) {
+    return combatRoundDamageArmorCoverageSchema.parse({});
+  }
+
+  const activeLoadout = getCombatRoundActiveLoadout({
+    characterId: input.characterId,
+    equipmentState: input.equipmentState,
+  });
+
+  if (activeLoadout && !activeLoadout.wornArmorItemId) {
+    return buildKnownNoArmorCoverage();
+  }
+
+  const wornArmorItemId = activeLoadout?.wornArmorItemId;
+
+  if (!wornArmorItemId) {
+    return combatRoundDamageArmorCoverageSchema.parse({});
+  }
+
+  const armorItem = input.equipmentState.itemsById?.[wornArmorItemId];
+  const templatesById = {
+    ...(input.fallbackTemplatesById ?? {}),
+    ...getCombatRoundEquipmentTemplatesById(input.equipmentState),
+  };
+  const armorTemplate = armorItem?.templateId
+    ? templatesById[armorItem.templateId]
+    : undefined;
+
+  if (!isCombatRoundArmorTemplate(armorTemplate)) {
+    return combatRoundDamageArmorCoverageSchema.parse({});
+  }
+
+  return combatRoundDamageArmorCoverageSchema.parse(
+    Object.fromEntries(
+      COMBAT_ROUND_ARMOR_REGION_KEYS.map((region) => {
+        const value = roundCombatRoundArmorLocationValue(armorTemplate.locationValues?.[region]);
+        const armorClass = normalizeCombatArmorModifierClass(
+          armorTemplate.locationTypes?.[region],
+        );
+        const criticalModifier = roundCombatRoundArmorLocationValue(
+          armorTemplate.criticalModifierByArea?.[region],
+        );
+
+        return [
+          region,
+          {
+            armorClass,
+            coverageLabel: value === undefined ? undefined : `${value}${armorClass ?? ""}`,
+            criticalModifier,
+            label: COMBAT_ROUND_ARMOR_REGION_LABELS[region],
+            value,
+          },
+        ];
+      }),
+    ),
+  );
+}
 
 export const combatRoundCommandTypeSchema = z.enum([
   "declare_action",
@@ -855,7 +989,7 @@ export const combatRoundCriticalRollResultSchema = z
         status: z.enum(["applied", "not_applied"]),
       })
       .default({
-        reason: "Hit-location armor critical modifier is not wired to live defender equipment yet.",
+        reason: "Armor critical modifier was not available; using 0.",
         status: "not_applied",
       }),
     attackResultId: idSchema.optional(),
@@ -6964,6 +7098,7 @@ function getHitLocationSelectionFromRoll(
 function buildCombatRoundCriticalRollResult(input: {
   attackResult: CombatRoundAttackRollResult;
   armorCriticalModifier?: number;
+  armorCriticalModifierSource?: CombatRoundCriticalRollResult["armorCriticalModifierSource"];
   criticalDice?: [number, number];
   criticalGrade: string;
   rng?: () => number;
@@ -6982,6 +7117,7 @@ function buildCombatRoundCriticalRollResult(input: {
 
   return combatRoundCriticalRollResultSchema.parse({
     armorCriticalModifier,
+    armorCriticalModifierSource: input.armorCriticalModifierSource,
     attackResultId: getCombatRoundAttackResultId({
       result: input.attackResult,
       roundNumber: input.roundNumber,
@@ -7000,6 +7136,49 @@ function buildCombatRoundCriticalRollResult(input: {
     selectedHitLocation: input.selectedHitLocation,
     status: "rolled",
   });
+}
+
+export function getCombatRoundArmorCriticalModifierForDamageResult(
+  damageResult: CombatRoundDamageResult,
+): {
+  armorCriticalModifier: number;
+  source: CombatRoundCriticalRollResult["armorCriticalModifierSource"];
+} {
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damageResult);
+
+  if (!effectiveDamage.effectiveSelectedHitLocation) {
+    return {
+      armorCriticalModifier: 0,
+      source: {
+        reason: "Hit location is missing; armor critical modifier is 0.",
+        status: "not_applied",
+      },
+    };
+  }
+
+  const mapping = mapHitLocationAndDirectionToArmorRegion({
+    direction: effectiveDamage.effectiveAttackDirection,
+    hitLocation: effectiveDamage.effectiveSelectedHitLocation,
+  });
+  const coverage = damageResult.armorCoverage[mapping.armorRegion];
+
+  if (coverage?.criticalModifier !== undefined) {
+    return {
+      armorCriticalModifier: coverage.criticalModifier,
+      source: {
+        reason: `${mapping.armorRegionLabel} armor critical modifier ${coverage.criticalModifier} applied.`,
+        status: "applied",
+      },
+    };
+  }
+
+  return {
+    armorCriticalModifier: 0,
+    source: {
+      reason: `${mapping.armorRegionLabel} armor critical modifier was not available; using 0.`,
+      status: "not_applied",
+    },
+  };
 }
 
 function calculateCombatRoundDamageLookupTotal(input: {
@@ -8294,6 +8473,7 @@ function recordCombatRoundCriticalRollCommand(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       armorCriticalModifier: input.criticalRoll.armorCriticalModifier,
+      armorCriticalModifierSource: input.criticalRoll.armorCriticalModifierSource,
       attackResultId: input.criticalRoll.attackResultId,
       attackerParticipantId: input.attackResult.attackerParticipantId,
       criticalDice: input.criticalRoll.criticalDice,
@@ -8373,8 +8553,19 @@ export function recordCombatRoundCriticalRoll(input: {
     throw new RangeError("Only the attacker can roll the critical die.");
   }
 
+  const computedArmorCritical = getCombatRoundArmorCriticalModifierForDamageResult(damageResult);
+  const armorCriticalModifier =
+    input.armorCriticalModifier ?? computedArmorCritical.armorCriticalModifier;
+  const armorCriticalModifierSource =
+    input.armorCriticalModifier !== undefined
+      ? {
+          reason: "Armor critical modifier was provided by the roll request.",
+          status: "applied" as const,
+        }
+      : computedArmorCritical.source;
   const criticalRoll = buildCombatRoundCriticalRollResult({
-    armorCriticalModifier: input.armorCriticalModifier ?? 0,
+    armorCriticalModifier,
+    armorCriticalModifierSource,
     attackResult: input.attackResult,
     criticalDice: input.criticalDice,
     criticalGrade,

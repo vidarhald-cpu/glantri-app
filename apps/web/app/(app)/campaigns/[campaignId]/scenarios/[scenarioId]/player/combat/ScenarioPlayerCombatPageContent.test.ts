@@ -132,6 +132,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollCombatCriticalOnServer");
     expect(source).toContain("Roll hit location as attacker");
     expect(source).toContain("Roll critical as attacker");
+    expect(source).toContain("selectedAttackerCriticalContext");
+    expect(source).toContain("selectedAttackerCriticalStatusContext");
+    expect(source).toContain("Critical context: ${attackerPrivilegedAction.statusContext}.");
     expect(source).toContain("Attacker hit location rolled");
     expect(source).toContain("Attacker critical rolled");
     expect(source).toContain(
@@ -251,7 +254,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
 
     expect(source).toContain("getCombatRoundEffectiveDamageResult");
     expect(source).toContain("getCombatRoundEffectiveCriticalRoll");
+    expect(source).toContain("getCombatRoundArmorCriticalModifierForDamageResult");
+    expect(source).toContain("lookupCombatCriticalModifier");
     expect(source).toContain("formatPlayerCombatLocationCalculationLine");
+    expect(source).toContain("formatPlayerCombatCriticalContextLine");
     expect(source).toContain("formatPlayerCombatCriticalCalculationLine");
     expect(source).toContain("formatPlayerCombatRecordedDamageLine");
     expect(source).toContain("formatPlayerCombatRecordedEffectsLine");
@@ -260,6 +266,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("title:");
     expect(source).toContain('"Recorded damage"');
     expect(source).toContain("getHitLocationFullLabel(locationRoll.selectedHitLocation)");
+    expect(source).toContain("Critical roll required: ${contextLine}");
+    expect(source).toContain("MC ${input.attackResult.weaponCriticalCode}");
+    expect(source).toContain("type mod ${formatSignedPlayerCombatNumber");
+    expect(source).toContain("armor crit ${formatSignedPlayerCombatNumber");
     expect(source).toContain('`2d8 ${criticalRoll.criticalDice.join(" + ")}');
     expect(source).toContain("proposal?.title");
     expect(source).toContain(

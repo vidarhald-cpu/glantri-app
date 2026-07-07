@@ -312,8 +312,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("loadCanonicalContent");
     expect(source).toContain("buildEquipmentLoadoutModuleModel");
-    expect(source).toContain("armorSummary");
-    expect(source).toContain("buildCombatRoundDamageArmorCoverageFromLoadoutModel");
+    expect(source).toContain("buildCombatRoundDamageArmorCoverageFromEquipmentState");
     expect(source).toContain("loadServerCharacterById");
     expect(source).toContain("loadCharacterEquipmentState");
     expect(source).toContain("resolvedCharacterStateByParticipantId");

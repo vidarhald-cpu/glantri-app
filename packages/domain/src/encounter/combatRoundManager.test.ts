@@ -10,6 +10,7 @@ import {
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
+  buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundDamageResult,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
@@ -50,6 +51,7 @@ import {
   getCombatRoundTimelineRoundStates,
   getLatestCombatEventSummary,
   getCombatRoundEffectiveDamageResult,
+  getCombatRoundArmorCriticalModifierForDamageResult,
   getCombatRoundDamageSubstate,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -8867,6 +8869,189 @@ describe("combat round manager", () => {
     expect(lowerLegDamageResult.armorWarnings).toContain(
       "Front Foot armor coverage was not available; using 0A.",
     );
+  });
+
+  it("builds damage armor coverage from participant equipment snapshots", () => {
+    const armorCoverage = buildCombatRoundDamageArmorCoverageFromEquipmentState({
+      characterId: "guard-character",
+      equipmentState: {
+        activeLoadoutByCharacterId: {
+          "guard-character": {
+            wornArmorItemId: "armor-item-leather-jerkin",
+          },
+        },
+        itemsById: {
+          "armor-item-leather-jerkin": {
+            id: "armor-item-leather-jerkin",
+            templateId: "armor-template-leather-jerkin",
+          },
+        },
+        templates: {
+          templatesById: {
+            "armor-template-leather-jerkin": {
+              category: "armor",
+              criticalModifierByArea: {
+                chest: 1,
+                frontFoot: 1,
+              },
+              id: "armor-template-leather-jerkin",
+              locationTypes: {
+                chest: "B",
+                frontFoot: "B",
+              },
+              locationValues: {
+                chest: 3,
+                frontFoot: 3,
+              },
+              name: "Leather Jerkin",
+            },
+          },
+        },
+      },
+    });
+
+    expect(armorCoverage.chest).toMatchObject({
+      armorClass: "B",
+      coverageLabel: "3B",
+      criticalModifier: 1,
+      label: "Chest",
+      value: 3,
+    });
+    expect(armorCoverage.frontFoot).toMatchObject({
+      armorClass: "B",
+      coverageLabel: "3B",
+      criticalModifier: 1,
+      label: "Front Foot",
+      value: 3,
+    });
+  });
+
+  it("uses defender armor coverage and weapon armor class without false fallback warnings", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "B",
+          coverageLabel: "3B",
+          criticalModifier: 1,
+          label: "Chest",
+          value: 3,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: fixedChestLocationSelection(),
+      roundNumber: 3,
+      weaponArmorClass: "C",
+    });
+    const effectiveDamage = getCombatRoundEffectiveDamageResult(damageResult);
+
+    expect(effectiveDamage).toMatchObject({
+      effectiveArmorClass: "B",
+      effectiveArmorCoverageLabel: "3B",
+      effectiveArmorModifier: 0,
+      effectiveArmorRegion: "chest",
+      effectiveArmorValue: 3,
+      effectiveWeaponArmorClass: "C",
+    });
+    expect(effectiveDamage.effectiveArmorWarnings).toEqual([]);
+    expect(damageResult.armorModifierSource).toMatchObject({
+      armorClass: "B",
+      status: "applied",
+      weaponArmorClass: "C",
+    });
+  });
+
+  it("derives armor critical modifier from the selected armor region when data exists", () => {
+    const pending = prepareFailedParryPendingDamage({
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "B",
+          coverageLabel: "3B",
+          criticalModifier: 1,
+          label: "Chest",
+          value: 3,
+        },
+      },
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+      weaponArmorClass: "C",
+    });
+    const damageResult = afterDamage.phaseResolutionResults[0]?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("Expected damage result.");
+    }
+
+    expect(getCombatRoundArmorCriticalModifierForDamageResult(damageResult)).toMatchObject({
+      armorCriticalModifier: 1,
+      source: {
+        status: "applied",
+      },
+    });
+
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+
+    expect(afterCritical.phaseResolutionResults[0]?.criticalRoll).toMatchObject({
+      armorCriticalModifier: 1,
+      armorCriticalModifierSource: {
+        status: "applied",
+      },
+      criticalDiceTotal: 9,
+      criticalTypeModifier: -4,
+      finalCriticalRoll: 6,
+      selectedHitLocation: "chest",
+    });
+    expect(afterCritical.commands.at(-1)?.facts).toMatchObject({
+      armorCriticalModifier: 1,
+      armorCriticalModifierSource: {
+        status: "applied",
+      },
+    });
   });
 
   it("derives effective D1 damage values from GM review overrides without replacing computed values", () => {

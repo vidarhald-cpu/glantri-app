@@ -19,6 +19,7 @@ import {
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundAttackResultById,
+  getCombatRoundArmorCriticalModifierForDamageResult,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
@@ -45,6 +46,7 @@ import {
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundPhaseInitiativeComplete,
+  lookupCombatCriticalModifier,
   validateCombatDeclarationTargets,
   type EncounterSession,
   type ScenarioParticipantCombatContext,
@@ -492,6 +494,80 @@ function formatPlayerCombatDamageCalculationLine(
   return "Damage proposal recorded";
 }
 
+function formatSignedPlayerCombatNumber(value: number): string {
+  return value >= 0 ? `+${value}` : `${value}`;
+}
+
+function getPlayerCombatCriticalTypeModifier(grade: string | undefined): number | undefined {
+  if (!grade) {
+    return undefined;
+  }
+
+  try {
+    return lookupCombatCriticalModifier(grade).criticalTypeModifier;
+  } catch {
+    return undefined;
+  }
+}
+
+function formatPlayerCombatCriticalContextLine(input: {
+  attackResult?: CombatRoundAttackRollResult;
+  compact?: boolean;
+  resolution: CombatRoundPhaseResolutionResult;
+}): string | undefined {
+  const damage = input.resolution.damageResult;
+  const criticalRoll = input.resolution.criticalRoll;
+  const effectiveDamage = damage ? getCombatRoundEffectiveDamageResult(damage) : undefined;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: damage?.review,
+  });
+  const criticalGrade =
+    effectiveDamage?.effectiveCriticalGrade ?? criticalRoll.criticalGrade ?? undefined;
+  const selectedLocation =
+    effectiveCritical.criticalLocation ??
+    effectiveDamage?.effectiveSelectedHitLocation ??
+    criticalRoll.selectedHitLocation;
+
+  if (!criticalGrade && !selectedLocation && !input.attackResult?.weaponCriticalCode) {
+    return undefined;
+  }
+
+  const contextParts = [
+    criticalGrade ? `Critical ${criticalGrade.toUpperCase()}` : "Critical",
+    selectedLocation ? `to ${getHitLocationFullLabel(selectedLocation).toLowerCase()}` : undefined,
+    input.attackResult?.weaponCriticalCode
+      ? `MC ${input.attackResult.weaponCriticalCode}`
+      : undefined,
+    input.attackResult?.weaponDamageClass,
+  ].filter((part): part is string => Boolean(part));
+
+  if (input.compact) {
+    return contextParts.join(" ");
+  }
+
+  const criticalTypeModifier =
+    effectiveCritical.criticalTypeModifier ??
+    criticalRoll.criticalTypeModifier ??
+    getPlayerCombatCriticalTypeModifier(criticalGrade);
+  const armorCriticalModifier =
+    effectiveCritical.armorCriticalModifier ??
+    criticalRoll.armorCriticalModifier ??
+    (damage
+      ? getCombatRoundArmorCriticalModifierForDamageResult(damage).armorCriticalModifier
+      : undefined);
+  const modifierParts = [
+    criticalTypeModifier !== undefined
+      ? `type mod ${formatSignedPlayerCombatNumber(criticalTypeModifier)}`
+      : undefined,
+    armorCriticalModifier !== undefined
+      ? `armor crit ${formatSignedPlayerCombatNumber(armorCriticalModifier)}`
+      : undefined,
+  ].filter((part): part is string => Boolean(part));
+
+  return [...contextParts, ...modifierParts].join(" · ");
+}
+
 function formatPlayerCombatRecordedDamageLine(
   resolution: CombatRoundPhaseResolutionResult,
 ): string | undefined {
@@ -527,28 +603,32 @@ function formatPlayerCombatRecordedEffectsLine(
   return labels.length > 0 ? `Recorded effects: ${labels.join(", ")}` : undefined;
 }
 
-function formatPlayerCombatCriticalCalculationLine(
-  resolution: CombatRoundPhaseResolutionResult,
-): string | undefined {
-  const criticalRoll = resolution.criticalRoll;
+function formatPlayerCombatCriticalCalculationLine(input: {
+  attackResult?: CombatRoundAttackRollResult;
+  resolution: CombatRoundPhaseResolutionResult;
+}): string | undefined {
+  const criticalRoll = input.resolution.criticalRoll;
   const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
     criticalRoll,
-    review: resolution.damageResult?.review,
+    review: input.resolution.damageResult?.review,
   });
+  const contextLine = formatPlayerCombatCriticalContextLine(input);
 
   if (criticalRoll.status === "not_required") {
-    return resolution.damageResult ? "No critical roll required" : undefined;
+    return input.resolution.damageResult ? "No critical roll required" : undefined;
   }
 
   if (criticalRoll.status !== "rolled" || !criticalRoll.criticalDice) {
-    return "Critical roll required";
+    return contextLine ? `Critical roll required: ${contextLine}` : "Critical roll required";
   }
 
-  return `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
+  const rollLine = `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
     effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
   } + armor crit mod ${
     effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
   } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
+
+  return contextLine ? `${contextLine}; ${rollLine}` : rollLine;
 }
 
 function formatPlayerCombatCriticalResultLine(
@@ -648,7 +728,10 @@ function formatCombatPhaseResolutionResultLines(input: {
   const damageCalculationLine = formatPlayerCombatDamageCalculationLine(input.resolution);
   const recordedDamageLine = formatPlayerCombatRecordedDamageLine(input.resolution);
   const recordedEffectsLine = formatPlayerCombatRecordedEffectsLine(input.resolution);
-  const criticalCalculationLine = formatPlayerCombatCriticalCalculationLine(input.resolution);
+  const criticalCalculationLine = formatPlayerCombatCriticalCalculationLine({
+    attackResult: input.attackResult,
+    resolution: input.resolution,
+  });
   const criticalResultLine = formatPlayerCombatCriticalResultLine(input.resolution);
   const parryLine =
     resolvedParryLine ??
@@ -2530,6 +2613,21 @@ export default function ScenarioPlayerCombatPageContent({
         sections: selectedInvolvedDamageResolutionLines.sections,
       }
     : null;
+  const selectedAttackerCriticalContext =
+    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
+      ? formatPlayerCombatCriticalContextLine({
+          attackResult: selectedAttackerPrivilegedAttackResult,
+          compact: true,
+          resolution: selectedAttackerPrivilegedResolution,
+        })
+      : undefined;
+  const selectedAttackerCriticalStatusContext =
+    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
+      ? formatPlayerCombatCriticalContextLine({
+          attackResult: selectedAttackerPrivilegedAttackResult,
+          resolution: selectedAttackerPrivilegedResolution,
+        })
+      : undefined;
   const attackerPrivilegedAction = selectedAttackerPrivilegedAttackResult
     ? currentRollAction?.kind === "hit_location" &&
       selectedAttackerPrivilegedDamageSubstate === "location_pending"
@@ -2537,25 +2635,31 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: false,
           kind: "hitLocation" as const,
           label: "Roll hit location as attacker",
+          statusContext: undefined,
         }
       : currentRollAction?.kind === "critical" &&
           selectedAttackerPrivilegedDamageSubstate === "critical_pending"
-        ? {
-            disabled: false,
-            kind: "critical" as const,
-            label: "Roll critical as attacker",
-          }
+          ? {
+              disabled: false,
+              kind: "critical" as const,
+              label: selectedAttackerCriticalContext
+                ? `Roll critical as attacker: ${selectedAttackerCriticalContext}`
+                : "Roll critical as attacker",
+              statusContext: selectedAttackerCriticalStatusContext,
+            }
         : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
           ? {
               disabled: true,
               kind: undefined,
               label: "Attacker hit location rolled",
+              statusContext: undefined,
             }
           : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
             ? {
                 disabled: true,
                 kind: undefined,
                 label: "Attacker critical rolled",
+                statusContext: undefined,
               }
             : undefined
     : undefined;
@@ -2966,7 +3070,11 @@ export default function ScenarioPlayerCombatPageContent({
                     : attackerPrivilegedAction
                       ? attackerPrivilegedAction.disabled
                         ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
-                        : `Current step: ${currentCombatStepLabel}. The attacker rolls; the defender receives the damage/effects review.`
+                        : `Current step: ${currentCombatStepLabel}. ${
+                            attackerPrivilegedAction.statusContext
+                              ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
+                              : "The attacker rolls; the defender receives the damage/effects review."
+                          }`
                       : currentAttackAction
                         ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
                         : currentAttackSourceValidationMessage
