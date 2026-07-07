@@ -27,8 +27,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("disabled={saving || !clearCurrentStepAvailable}");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
-    expect(source).toContain("Round-level controls");
-    expect(source).toContain("Timeline controls; not part of the current attack/parry step.");
+    expect(source).not.toContain("Round-level controls");
+    expect(source).not.toContain("Timeline controls; not part of the current attack/parry step.");
     expect(source).toContain("Latest combat event");
     expect(source).toContain("getLatestCombatEventSummary");
     expect(source).toContain("latestCombatEventSummary.summaryText");

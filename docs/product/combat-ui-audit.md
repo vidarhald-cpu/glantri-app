@@ -22,7 +22,7 @@ Cleanup note, 2026-07-06: Slice 7 follow-up now derives the legend from the same
 
 Cleanup note, 2026-07-06: Tracker initiative titles now avoid the ambiguous `GM edited` phrase. Initiative roll commands submitted from the GM path display `rolled by GM`, future explicit override facts can display `GM override`, and legacy GM-completed cells without command provenance fall back to `resolved by GM`.
 
-Cleanup note, 2026-07-06: Slice 8 clarified round-level controls versus the selected/current action by labelling the GM timeline controls as round-level controls, renaming the shared Action Button Area heading to Current action, and marking participant SU review, health check review, round-end distance control, and the distance matrix with explicit ownership text.
+Cleanup note, 2026-07-06: Slice 8 clarified round-level controls versus the selected/current action by keeping the GM timeline controls separate from Current action, renaming the shared Action Button Area heading to Current action, and marking participant SU review, health check review, round-end distance control, and the distance matrix with explicit ownership text.
 
 Cleanup note, 2026-07-06: Player Damage Result Parity expanded Player Combat Action Result visibility for involved attackers and defenders, adding hit-location dice/selection, critical dice/final/effect summary, and persistent recorded-damage/effect summaries while keeping uninvolved players out of damage-chain detail selection.
 

@@ -366,12 +366,17 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
     expect(source).toContain("compactModifierMiniTableEntryRowStyle");
     expect(source).toContain("compactModifierEntryTopRowStyle");
-    expect(source).toContain("compactModifierEditableDetailsStyle");
+    expect(source).toContain("compactModifierTopRowColumns");
+    expect(source).toContain("compactModifierDisplayTopRowStyle");
+    expect(source).toContain("compactModifierDetailsRowStyle");
+    expect(source).toContain("compactModifierEditableDetailsRowStyle");
     expect(source).not.toContain("compactModifierMiniTableDraftRowStyle");
     expect(source).toContain(
-      'gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)"',
+      'const compactModifierTopRowColumns = "minmax(7rem, 1fr) 3.75rem 4.25rem"',
     );
-    expect(source).toContain('["Source", "Mod", "Dur", "Details"].map');
+    expect(source).toContain('gridTemplateColumns: "4.25rem minmax(0, 1fr)"');
+    expect(source).toContain('gridTemplateColumns: "4.25rem minmax(0, 1fr) auto"');
+    expect(source).toContain('["Source/scope", "Mod", "Dur"].map');
     expect(source).not.toContain('["Source", "Mod", "Dur", "Details", "Remove"].map');
     expect(source).toContain("characterStateEntries");
     expect(source).toContain("Character/state");

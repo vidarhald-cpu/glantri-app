@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe("PlayerCombatModifierPanel", () => {
-  it("renders player modifier rows with readable source, mod, duration, and details columns", () => {
+  it("renders player modifier rows with readable source, mod, duration, and details lines", () => {
     render(
       <PlayerCombatModifierPanel
         readOnly
@@ -33,7 +33,7 @@ describe("PlayerCombatModifierPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Source/scope")).toBeInTheDocument();
     expect(screen.getByText("Mod")).toBeInTheDocument();
     expect(screen.getByText("Dur")).toBeInTheDocument();
     expect(screen.getByText("Details")).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText(/Broad sword preferred 2/)).toBeInTheDocument();
   });
 
-  it("keeps editable modifier details in the row instead of a cramped secondary field", () => {
+  it("keeps editable modifier details on a full-width row", () => {
     render(
       <PlayerCombatModifierPanel
         onAddEntry={vi.fn()}
@@ -71,7 +71,7 @@ describe("PlayerCombatModifierPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Source/scope")).toBeInTheDocument();
     expect(screen.getByText("Mod")).toBeInTheDocument();
     expect(screen.getByText("Dur")).toBeInTheDocument();
     expect(screen.getByText("Details")).toBeInTheDocument();

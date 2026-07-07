@@ -7680,18 +7680,6 @@ export default function CombatRoundManagerPanel({
         >
           <div
             style={{
-              display: "grid",
-              gap: "0.1rem",
-              minWidth: "12rem",
-            }}
-          >
-            <strong>Round-level controls</strong>
-            <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-              Timeline controls; not part of the current attack/parry step.
-            </span>
-          </div>
-          <div
-            style={{
               alignItems: "center",
               display: "flex",
               flexWrap: "wrap",

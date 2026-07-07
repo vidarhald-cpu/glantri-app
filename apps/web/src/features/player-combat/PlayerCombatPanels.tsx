@@ -286,11 +286,13 @@ const compactModifierMiniTableStyle = {
   minWidth: 0,
 } as const;
 
+const compactModifierTopRowColumns = "minmax(7rem, 1fr) 3.75rem 4.25rem";
+
 const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)",
+  gridTemplateColumns: compactModifierTopRowColumns,
   minWidth: 0,
 } as const;
 
@@ -303,15 +305,21 @@ const compactModifierMiniTableEntryRowStyle = {
 } as const;
 
 const compactModifierDisplayRowStyle = {
-  alignItems: "start",
   borderTop: "1px solid #eee9dc",
   color: "#5e5a50",
   display: "grid",
   fontSize: "0.88rem",
-  gap: "0.35rem",
-  gridTemplateColumns: "minmax(6.5rem, 1fr) 3.75rem 4.25rem minmax(8rem, 1.8fr)",
+  gap: "0.25rem",
   minWidth: 0,
   paddingTop: "0.3rem",
+} as const;
+
+const compactModifierDisplayTopRowStyle = {
+  alignItems: "start",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: compactModifierTopRowColumns,
+  minWidth: 0,
 } as const;
 
 const compactModifierNumberInputStyle = {
@@ -337,14 +345,23 @@ const compactModifierEntryTopRowStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: compactModifierMiniTableHeaderStyle.gridTemplateColumns,
+  gridTemplateColumns: compactModifierTopRowColumns,
   minWidth: 0,
 } as const;
 
-const compactModifierEditableDetailsStyle = {
+const compactModifierDetailsRowStyle = {
   alignItems: "center",
-  display: "flex",
+  display: "grid",
   gap: "0.25rem",
+  gridTemplateColumns: "4.25rem minmax(0, 1fr)",
+  minWidth: 0,
+} as const;
+
+const compactModifierEditableDetailsRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.25rem",
+  gridTemplateColumns: "4.25rem minmax(0, 1fr) auto",
   minWidth: 0,
 } as const;
 
@@ -745,17 +762,22 @@ function ModifierDisplayEntryRow({
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
-      <span>{entry.sourceLabel}</span>
-      <span>{formatSignedModifierValue(entry.value)}</span>
-      <span>{entry.scopeLabel}</span>
-      <span
-        style={{
-          minWidth: 0,
-          overflowWrap: "break-word",
-        }}
-      >
-        {entry.details ?? "—"}
-      </span>
+      <div style={compactModifierDisplayTopRowStyle}>
+        <span>{entry.sourceLabel}</span>
+        <span>{formatSignedModifierValue(entry.value)}</span>
+        <span>{entry.scopeLabel}</span>
+      </div>
+      <div style={compactModifierDetailsRowStyle}>
+        <span style={{ color: "#1f1b14", fontWeight: 700 }}>Details</span>
+        <span
+          style={{
+            minWidth: 0,
+            overflowWrap: "break-word",
+          }}
+        >
+          {entry.details ?? "—"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -807,31 +829,34 @@ function ModifierEditableEntryRow({
           type="number"
           value={entry.durationRounds ?? ""}
         />
-        <span style={compactModifierEditableDetailsStyle}>
-          <input
-            aria-label={`${bucketLabel} modifier details`}
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              onUpdate({
-                notes: event.target.value,
-              })
-            }
-            placeholder="Details"
-            style={compactModifierDetailsInputStyle}
-            type="text"
-            value={entry.notes ?? ""}
-          />
-          <button
-            aria-label="Remove modifier"
-            disabled={controlsDisabled}
-            onClick={onRemove}
-            style={compactModifierRemoveButtonStyle}
-            title="Remove modifier"
-            type="button"
-          >
-            -
-          </button>
+      </div>
+      <div style={compactModifierEditableDetailsRowStyle}>
+        <span style={{ color: "#1f1b14", fontSize: "0.78rem", fontWeight: 700 }}>
+          Details
         </span>
+        <input
+          aria-label={`${bucketLabel} modifier details`}
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onUpdate({
+              notes: event.target.value,
+            })
+          }
+          placeholder="Details"
+          style={compactModifierDetailsInputStyle}
+          type="text"
+          value={entry.notes ?? ""}
+        />
+        <button
+          aria-label="Remove modifier"
+          disabled={controlsDisabled}
+          onClick={onRemove}
+          style={compactModifierRemoveButtonStyle}
+          title="Remove modifier"
+          type="button"
+        >
+          -
+        </button>
       </div>
     </div>
   );
@@ -905,7 +930,7 @@ export function PlayerCombatModifierPanel({
                 {(row.characterStateEntries?.length ?? 0) > 0 ||
                 (!editable && row.entries.length > 0) ? (
                   <div style={compactModifierDisplayRowStyle}>
-                    {["Source", "Mod", "Dur", "Details"].map((heading) => (
+                    {["Source/scope", "Mod", "Dur"].map((heading) => (
                       <span
                         key={heading}
                         style={{
@@ -930,7 +955,7 @@ export function PlayerCombatModifierPanel({
                   <>
                     {row.entries.length > 0 || draftEntry ? (
                       <div style={compactModifierMiniTableHeaderStyle}>
-                        {["Source", "Mod", "Dur", "Details"].map((heading) => (
+                        {["Source/scope", "Mod", "Dur"].map((heading) => (
                           <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
                             {heading}
                           </span>
