@@ -843,6 +843,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   encounterId={workspaceState.activeEncounterId}
                   embedded
                   encounterTitle={activeEncounter.title}
+                  key={`${activeEncounter.id}:${selectedGmInspectableCandidate.id}`}
                   participantId={selectedGmInspectableCandidate.id}
                   scenarioId={workspaceState.activeScenarioId}
                   showParticipantSelector={false}

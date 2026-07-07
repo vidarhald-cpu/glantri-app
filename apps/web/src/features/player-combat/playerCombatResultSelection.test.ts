@@ -22,6 +22,15 @@ describe("selectPlayerCombatActionResultPanel", () => {
     expect(result).toBe("current attack roll");
   });
 
+  it("uses current phase resolution facts before latest involved damage fallback", () => {
+    const result = selectPlayerCombatActionResultPanel({
+      currentPhaseResolution: "current parry or defense resolution",
+      involvedDamage: "latest involved damage fallback",
+    });
+
+    expect(result).toBe("current parry or defense resolution");
+  });
+
   it("falls back to the local action roll only after stored command facts", () => {
     const result = selectPlayerCombatActionResultPanel({
       actionRoll: "local optimistic roll",

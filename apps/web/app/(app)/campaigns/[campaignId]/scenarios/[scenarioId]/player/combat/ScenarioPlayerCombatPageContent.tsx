@@ -2406,7 +2406,7 @@ export default function ScenarioPlayerCombatPageContent({
       }
     : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
-  const selectedCurrentResolutionAttackResult =
+  const selectedCurrentIncomingResolutionAttackResult =
     combatRoundState && selectedRoundParticipant && currentResolutionPhase
       ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: selectedRoundParticipant.participantId,
@@ -2414,6 +2414,16 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
+  const selectedCurrentOutgoingResolutionAttackResult =
+    combatRoundState && selectedRoundParticipant && currentResolutionPhase
+      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentResolutionPhase,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedCurrentResolutionAttackResult =
+    selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult;
   const selectedCurrentPhaseResolutionResult =
     combatRoundState && selectedCurrentResolutionAttackResult
       ? (getCombatRoundPhaseResolutionResultForAttack({

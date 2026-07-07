@@ -278,6 +278,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("selectedUninvolvedDamageResultPanel");
   });
 
+  it("selects current phase-resolution facts for the selected participant before stale fallbacks", () => {
+    const source = readSource();
+
+    expect(source).toContain("selectedCurrentIncomingResolutionAttackResult");
+    expect(source).toContain("selectedCurrentOutgoingResolutionAttackResult");
+    expect(source).toContain(
+      "selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult",
+    );
+    expect(source).toContain("currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel");
+    expect(source).toContain("involvedDamage: selectedInvolvedDamageResultPanel");
+  });
+
   it("lets players roll or confirm their own Combat Experience before declaring", () => {
     const source = readSource();
 

@@ -501,7 +501,7 @@ Recommended broad fix:
 
 ### GM Player Combat Perspective Reuse
 
-- Status, 2026-07-07: addressed. The GM Player Combat tab continues to supply the GM-only participant selector, but the embedded combat surface now follows the same player-facing perspective rules for action availability, status text, modifier display, target visibility, and result precedence. GM review/edit controls remain in GM Combat/Combat Inspector.
+- Status, 2026-07-07: addressed. The GM Player Combat tab continues to supply the GM-only participant selector, but the embedded combat surface now remounts per selected participant and follows the same player-facing perspective rules for action availability, status text, modifier display, target visibility, and result precedence. Current attacker/defender phase-resolution facts beat older involved-result fallbacks. GM review/edit controls remain in GM Combat/Combat Inspector.
 - Affected files/components: `CampaignWorkspaceShell.tsx`, `ScenarioPlayerCombatPageContent.tsx`, and `playerCombatResultSelection.ts`.
 - Contract rule: GM Player Combat is a copy of the selected participant's player view; it must not maintain separate action/result interpretation.
 
