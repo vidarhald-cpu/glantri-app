@@ -126,6 +126,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
     expect(source).toContain("selectedCurrentAttackResult");
     expect(source).toContain("selectedCurrentAttackResultPanel");
+    expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).toContain("selectedLatestRelevantAttackResult");
+    expect(source).toContain("selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel");
     expect(source).toContain("currentParryAction");
     expect(source).toContain("Roll parry");
@@ -166,6 +169,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel");
     expect(source).toContain("currentAttack: selectedCurrentAttackResultPanel");
     expect(source).toContain("involvedDamage: selectedInvolvedDamageResultPanel");
+    expect(source).toContain("latestAttack: selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("relevantInitiative: selectedRelevantInitiativeResultPanel");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("playerActionButtonLabel");
@@ -301,8 +305,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain(
       "selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult",
     );
+    expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).toContain("selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel");
     expect(source).toContain("involvedDamage: selectedInvolvedDamageResultPanel");
+    expect(source).toContain("latestAttack: selectedLatestRelevantAttackResultPanel");
   });
 
   it("lets players roll or confirm their own Combat Experience before declaring", () => {

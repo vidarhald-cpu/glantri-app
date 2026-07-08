@@ -92,7 +92,10 @@ import {
   isEquipmentFeatureState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
-import { selectPlayerCombatActionResultPanel } from "@/features/player-combat/playerCombatResultSelection";
+import {
+  getLatestRelevantPlayerCombatAttackResult,
+  selectPlayerCombatActionResultPanel,
+} from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
@@ -2540,6 +2543,30 @@ export default function ScenarioPlayerCombatPageContent({
         ],
       }
     : null;
+  const selectedLatestRelevantAttackResult =
+    combatRoundState && selectedRoundParticipant
+      ? getLatestRelevantPlayerCombatAttackResult({
+          participantId: selectedRoundParticipant.participantId,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedLatestRelevantAttackResultPanel = selectedLatestRelevantAttackResult
+    ? {
+        interpretedResult: selectedLatestRelevantAttackResult.tableResult,
+        sections: [
+          {
+            calculationLines: [
+              formatCombatAttackResultLine({
+                participantId: selectedRoundParticipant?.participantId,
+                result: selectedLatestRelevantAttackResult,
+              }),
+            ],
+            resultLine: `Result: ${selectedLatestRelevantAttackResult.tableResult}`,
+            title: "To hit",
+          },
+        ],
+      }
+    : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
   const selectedCurrentIncomingResolutionAttackResult =
     combatRoundState && selectedRoundParticipant && currentResolutionPhase
@@ -3628,6 +3655,7 @@ export default function ScenarioPlayerCombatPageContent({
                 distanceControl: selectedDistanceControlResultPanel,
                 healthCheck: selectedHealthCheckResultPanel,
                 involvedDamage: selectedInvolvedDamageResultPanel,
+                latestAttack: selectedLatestRelevantAttackResultPanel,
                 phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel,
                 relevantInitiative: selectedRelevantInitiativeResultPanel,
               })}
