@@ -163,26 +163,26 @@ future work and should be added as named raw modifier sources rather than as fin
 
 ## Generated action modifiers
 
-Declaring `Attack - Parry` currently creates one generated encounter modifier in the DB/Parry
+Declaring `Single attack` currently creates one generated encounter modifier in the DB/Parry
 bucket:
 
 ```text
 Stored bucket key = situationDb
 Value = -4
 Duration = 1 round
-Details = attack parry
+Details = single attack
 Source phase = phase 1
 ```
 
 This phase 1 row modifies phase 1 DB and Parry/P, but does not modify phase 2 DB/P.
 
-Declaring `Parry - Attack` mirrors the same rule in phase 2:
+Declaring `Reactive attack` mirrors the same rule in phase 2:
 
 ```text
 Stored bucket key = situationDb
 Value = -4
 Duration = 1 round
-Details = parry attack
+Details = reactive attack
 Source phase = phase 2
 ```
 

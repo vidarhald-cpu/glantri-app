@@ -162,6 +162,7 @@ import {
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import { getLatestRelevantPlayerCombatAttackResult } from "@/features/player-combat/playerCombatResultSelection";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildPlayerCombatDefenseStats,
@@ -995,6 +996,28 @@ function buildCombatDistanceModifierSection(
           ? `Result: ${detail.warning}`
           : "Result: no distance modifier",
     title: "Distance",
+  };
+}
+
+function buildCombatAttackResultPanel(input: {
+  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
+  participantId?: string;
+  result: CombatRoundAttackRollResult;
+}) {
+  return {
+    interpretedResult: formatCombatAttackResultLine({
+      participantId: input.participantId,
+      result: input.result,
+    }),
+    resultLabel: `Result: ${input.result.tableResult}`,
+    sections: [
+      {
+        calculationLines: [formatCombatToHitCalculationLine(input.result)],
+        resultLine: `Result: ${formatCombatAttackTableResultLabel(input.result.tableResult)}`,
+        title: "To hit",
+      },
+      buildCombatDistanceModifierSection(input.distanceModifierDetail),
+    ].filter((section): section is CombatActionResultSection => Boolean(section)),
   };
 }
 
@@ -4904,6 +4927,23 @@ export default function CombatRoundManagerPanel({
         state: selectedTimelineRoundState,
       })
     : undefined;
+  const inspectorCanShowLatestRelevantAttackResult =
+    COMBAT_ROUND_STEPS.indexOf(inspector.step) >= COMBAT_ROUND_STEPS.indexOf("phase_1_actions") &&
+    inspector.step !== "round_summary";
+  const inspectorLatestRelevantAttackResult =
+    inspectorCanShowLatestRelevantAttackResult && inspector.participant
+      ? getLatestRelevantPlayerCombatAttackResult({
+          participantId: inspector.participant.participantId,
+          state: selectedTimelineRoundState,
+        })
+      : undefined;
+  const inspectorLatestRelevantAttackDistanceModifierDetail =
+    inspectorLatestRelevantAttackResult
+      ? getCombatRoundAttackDistanceModifierDetail({
+          result: inspectorLatestRelevantAttackResult,
+          state: selectedTimelineRoundState,
+        })
+      : undefined;
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
@@ -5461,29 +5501,23 @@ export default function CombatRoundManagerPanel({
         resultLabel: inspectorPhaseResolutionLines.proposalLine,
         sections: inspectorPhaseResolutionLines.sections,
       }
-    : inspectorResolutionPhase
-      ? {
-          interpretedResult: `No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result.`,
-        }
-      : inspectorDisplayAttackResult
-        ? {
-            interpretedResult: formatCombatAttackResultLine({
-              participantId: inspector.participant?.participantId,
-              result: inspectorDisplayAttackResult,
-            }),
-            resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
-            sections: [
-              {
-                calculationLines: [formatCombatToHitCalculationLine(inspectorDisplayAttackResult)],
-                resultLine: `Result: ${formatCombatAttackTableResultLabel(
-                  inspectorDisplayAttackResult.tableResult,
-                )}`,
-                title: "To hit",
-              },
-              buildCombatDistanceModifierSection(inspectorDisplayAttackDistanceModifierDetail),
-            ].filter((section): section is CombatActionResultSection => Boolean(section)),
-          }
-        : inspectorNoPhaseAttack
+    : inspectorDisplayAttackResult
+      ? buildCombatAttackResultPanel({
+          distanceModifierDetail: inspectorDisplayAttackDistanceModifierDetail,
+          participantId: inspector.participant?.participantId,
+          result: inspectorDisplayAttackResult,
+        })
+      : inspectorLatestRelevantAttackResult
+        ? buildCombatAttackResultPanel({
+            distanceModifierDetail: inspectorLatestRelevantAttackDistanceModifierDetail,
+            participantId: inspector.participant?.participantId,
+            result: inspectorLatestRelevantAttackResult,
+          })
+        : inspectorResolutionPhase
+          ? {
+              interpretedResult: `No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result.`,
+            }
+          : inspectorNoPhaseAttack
           ? {
               interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
             }

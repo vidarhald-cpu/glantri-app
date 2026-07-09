@@ -545,7 +545,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("formatCombatAttackResultMainLine");
     expect(source).toContain("formatCombatAttackResultLine");
-    expect(source).toContain("Result: ${inspectorDisplayAttackResult.tableResult}");
+    expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).toContain("inspectorCanShowLatestRelevantAttackResult");
+    expect(source).toContain("inspectorLatestRelevantAttackResult");
+    expect(source).toContain("inspectorLatestRelevantAttackDistanceModifierDetail");
+    expect(source).toContain("buildCombatAttackResultPanel");
+    expect(source).toContain("Result: ${input.result.tableResult}");
+    expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
+      source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
+    );
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
     expect(source).toContain("inspectorPhaseResolutionStatus");

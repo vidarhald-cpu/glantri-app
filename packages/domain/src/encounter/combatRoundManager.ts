@@ -22,6 +22,7 @@ import {
 } from "./armorModifier";
 import {
   buildReactiveAttackPhase2GeneratedInitiativeModifier,
+  isReactiveAttackGeneratedInitiativeModifier,
   restoreCombatActionGeneratedBackOutModifiers,
   softenCombatActionGeneratedBackOutModifier,
 } from "./combatActionModifiers";
@@ -6875,6 +6876,54 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
     : undefined;
 }
 
+function refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
+  state: CombatRoundState,
+): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    participants: normalized.participants.map((participant) => {
+      const declaration = participant.declaration;
+
+      if (!declaration) {
+        return participant;
+      }
+
+      const combatContext = scenarioParticipantCombatContextSchema.parse(
+        declaration.combatContext ?? {},
+      );
+      const nextReactiveModifier =
+        declaration.actionId === "parry_attack"
+          ? buildReactiveAttackPhase2InitiativeModifierEntry({
+              participantId: participant.participantId,
+              state: normalized,
+            })
+          : undefined;
+      const nextSituationInitiative = [
+        ...combatContext.modifierBuckets.situationInitiative.filter(
+          (entry) => !isReactiveAttackGeneratedInitiativeModifier(entry),
+        ),
+        ...(nextReactiveModifier ? [nextReactiveModifier] : []),
+      ];
+
+      return {
+        ...participant,
+        declaration: {
+          ...declaration,
+          combatContext: {
+            ...combatContext,
+            modifierBuckets: {
+              ...combatContext.modifierBuckets,
+              situationInitiative: nextSituationInitiative,
+            },
+          },
+        },
+      };
+    }),
+  });
+}
+
 export function getCombatRoundDisplayPhaseResolutionResultForParticipantPhase(input: {
   participantId: string;
   phase: CombatRoundPhase;
@@ -6951,10 +7000,12 @@ export function ensureCombatRoundPhaseResolutionResultsForPhase(input: {
       );
     });
 
-  return upsertCombatRoundPhaseResolutionResults({
-    results,
-    state: normalized,
-  });
+  return refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
+    upsertCombatRoundPhaseResolutionResults({
+      results,
+      state: normalized,
+    }),
+  );
 }
 
 export function recordCombatRoundParryResolution(input: {
@@ -7007,10 +7058,12 @@ export function recordCombatRoundParryResolution(input: {
     updatedAt: input.updatedAt,
   });
 
-  return upsertCombatRoundPhaseResolutionResults({
-    results: [nextResult],
-    state: normalized,
-  });
+  return refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
+    upsertCombatRoundPhaseResolutionResults({
+      results: [nextResult],
+      state: normalized,
+    }),
+  );
 }
 
 function getCombatRoundParryCommandAfterCursor(input: {
@@ -8156,10 +8209,12 @@ function recordCombatRoundDamageResolution(input: {
     updatedAt: input.updatedAt,
   });
 
-  return upsertCombatRoundPhaseResolutionResults({
-    results: [nextResult],
-    state: normalized,
-  });
+  return refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
+    upsertCombatRoundPhaseResolutionResults({
+      results: [nextResult],
+      state: normalized,
+    }),
+  );
 }
 
 function recordCombatRoundResolveDamageCommand(input: {
@@ -14109,15 +14164,17 @@ export function recordCombatRoundAttackResult(input: {
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: attackStep,
   });
+  const withReactiveModifiers =
+    refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(withStatus);
 
   return input.command
     ? recordCombatRoundAttackCommand({
         command: input.command,
         participantId: input.participantId,
         result: input.result,
-        state: withStatus,
+        state: withReactiveModifiers,
       })
-    : withStatus;
+    : withReactiveModifiers;
 }
 
 export function recordCombatRoundParticipantStepReview(input: {
