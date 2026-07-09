@@ -67,7 +67,7 @@ describe("PlayerCombatPanels", () => {
           {
             generated: true,
             id: "generated:attack-parry:phase1:db-parry",
-            notes: "attack parry",
+            notes: "single attack",
             scope: "until" as const,
             sourcePhase: "phase1" as const,
             value: -4,
@@ -75,7 +75,7 @@ describe("PlayerCombatPanels", () => {
           {
             generated: true,
             id: "generated:parry-attack:phase2:db-parry",
-            notes: "parry attack",
+            notes: "reactive attack",
             scope: "until" as const,
             sourcePhase: "phase2" as const,
             value: -4,
@@ -128,12 +128,12 @@ describe("PlayerCombatPanels", () => {
     expect(noPhaseObRow?.total).toBe(2);
     expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
-      "attack parry",
+      "single attack",
     ]);
     expect(phase1DbRow?.total).toBe(-5);
     expect(phase2DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
-      "parry attack",
+      "reactive attack",
     ]);
     expect(phase2DbRow?.total).toBe(-5);
     expect(phase1ObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
@@ -146,7 +146,7 @@ describe("PlayerCombatPanels", () => {
       "double attack",
     ]);
     expect(phase2ObRow?.total).toBe(1);
-    const attackParryEntry = phase1DbRow?.entries.find((entry) => entry.notes === "attack parry");
+    const attackParryEntry = phase1DbRow?.entries.find((entry) => entry.notes === "single attack");
     const doubleAttackEntry = phase1ObRow?.entries.find((entry) => entry.notes === "double attack");
 
     if (!attackParryEntry || !doubleAttackEntry) {
@@ -158,7 +158,7 @@ describe("PlayerCombatPanels", () => {
         bucketLabel: "DB/Parry",
         entry: attackParryEntry,
       }),
-    ).toBe("DB/Parry -4 · P1 · attack parry");
+    ).toBe("DB/Parry -4 · P1 · single attack");
     expect(
       formatCombatModifierDisplayLine({
         bucketLabel: "Skill/OB",
@@ -283,7 +283,7 @@ describe("PlayerCombatPanels", () => {
             {
               generated: true,
               id: "generated:attack-parry:phase1:db-parry",
-              notes: "attack parry",
+              notes: "single attack",
               scope: "until" as const,
               sourcePhase: "phase1" as const,
               value: -4,
@@ -336,7 +336,7 @@ describe("PlayerCombatPanels", () => {
     ]);
     expect(dbRow?.entries[0]).toMatchObject({
       generated: true,
-      notes: "attack parry",
+      notes: "single attack",
       value: -4,
     });
     const dbEntry = dbRow?.entries[0];

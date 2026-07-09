@@ -76,7 +76,7 @@ Example: if two participants both make valid A1 attacks against each other, both
 their i1 totals are `5` and `5`, both must resolve phase CE before either A1 attack roll opens. If
 their i1 totals are `9` and `4`, only the lower-initiative participant must roll CE if they continue,
 but the higher-initiative participant may still back out before their attack is rolled. If
-one participant declared Parry - Attack, that participant has no A1 attack, so their declaration
+one participant declared Reactive attack, that participant has no A1 attack, so their declaration
 cannot create a phase-1 attacked-while-attacking CE check.
 
 Phase CE uses the same displayed effective skill total, difficulty-shifted table lookup, no-roll

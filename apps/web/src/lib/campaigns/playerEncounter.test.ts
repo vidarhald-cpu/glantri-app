@@ -145,7 +145,7 @@ describe("playerEncounter", () => {
               durationRounds: 1,
               generated: true,
               id: "generated:parry-attack:phase2:db-parry",
-              notes: "parry attack",
+              notes: "reactive attack",
               scope: "until",
               sourceActionId: "parry_attack",
               sourcePhase: "phase2",

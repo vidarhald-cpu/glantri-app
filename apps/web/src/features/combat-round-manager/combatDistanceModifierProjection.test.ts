@@ -106,7 +106,7 @@ function buildCommittedContext(): ScenarioParticipantCombatContext {
           durationRounds: 1,
           generated: true,
           id: "generated:attack-parry:phase1:db-parry",
-          notes: "attack parry",
+          notes: "single attack",
           scope: "until",
           sourceActionId: "attack_parry",
           sourcePhase: "phase1",

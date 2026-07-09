@@ -57,7 +57,7 @@ describe("PlayerCombatModifierPanel", () => {
                 durationRounds: 1,
                 generated: true,
                 id: "generated:attack-parry:phase1:db-parry",
-                notes: "attack parry",
+                notes: "single attack",
                 scope: "until",
                 sourcePhase: "phase1",
                 sourceRule: "attack-parry-db-phase1",
@@ -76,6 +76,6 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText("Dur")).toBeInTheDocument();
     expect(screen.getByText("Details")).toBeInTheDocument();
     expect(screen.getByText("Situational · P1")).toBeInTheDocument();
-    expect(screen.getByLabelText("DB/Parry modifier details")).toHaveValue("attack parry");
+    expect(screen.getByLabelText("DB/Parry modifier details")).toHaveValue("single attack");
   });
 });
