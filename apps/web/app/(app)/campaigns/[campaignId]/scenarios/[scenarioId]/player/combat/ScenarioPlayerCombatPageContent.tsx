@@ -2767,7 +2767,13 @@ export default function ScenarioPlayerCombatPageContent({
     combatRoundState &&
     isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: combatRoundState }),
   );
-  const currentResultPhase = currentModifierPhase ?? currentInitiativePhase;
+  const latestRolledInitiativePhase = selectedRoundParticipant?.initiatives.phase2
+    ? "phase2"
+    : selectedRoundParticipant?.initiatives.phase1
+      ? "phase1"
+      : undefined;
+  const currentResultPhase =
+    currentModifierPhase ?? currentInitiativePhase ?? latestRolledInitiativePhase;
   const selectedRelevantInitiative = currentResultPhase
     ? selectedRoundParticipant?.initiatives[currentResultPhase]
     : undefined;

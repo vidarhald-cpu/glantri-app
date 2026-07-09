@@ -1,4 +1,5 @@
 import {
+  getCombatDeclarationAttackPhases,
   getCombatRoundModifierPhaseForStep,
   type CombatRoundStep,
 } from "@glantri/domain";
@@ -13,10 +14,15 @@ export function getPlayerCombatModifierDisplayPhase(input: {
 }): PlayerCombatModifierDisplayPhase | undefined {
   const stepPhase = getCombatRoundModifierPhaseForStep(input.step);
 
-  if (
-    input.actionId === "parry_attack" &&
-    (input.step === "select_actions" || input.step === "review_action_modifiers")
-  ) {
+  if (input.actionId && input.step === "select_actions") {
+    const attackPhases = getCombatDeclarationAttackPhases({ actionId: input.actionId });
+
+    if (attackPhases.length === 1) {
+      return attackPhases[0];
+    }
+  }
+
+  if (input.actionId === "parry_attack" && input.step === "review_action_modifiers") {
     return "phase2";
   }
 

@@ -5119,7 +5119,12 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
     });
 
     if (!hasPhaseAttack) {
-      return phaseStatus.substep === "done" ? "skipped" : storedStatus;
+      const currentStepIndex = COMBAT_ROUND_STEPS.indexOf(normalized.currentStep);
+      const actionStepIndex = COMBAT_ROUND_STEPS.indexOf(actionStep);
+      const actionSlotReached =
+        currentStepIndex >= 0 && actionStepIndex >= 0 && currentStepIndex >= actionStepIndex;
+
+      return phaseStatus.substep === "done" || actionSlotReached ? "skipped" : storedStatus;
     }
 
     const outgoingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -6892,7 +6897,7 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
     reason: phase2ReviewReached
       ? "no phase 1 attack received; no phase 2 attack opens"
       : "phase 2 initiative pending phase 1 incoming result",
-    value: 0,
+    value: phase2ReviewReached ? 0 : 6,
   });
 }
 

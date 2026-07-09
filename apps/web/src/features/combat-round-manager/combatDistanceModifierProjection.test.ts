@@ -292,7 +292,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
         id: "generated:parry-attack:phase2:initiative",
         notes: "reactive attack: phase 2 initiative pending phase 1 incoming result",
         sourcePhase: "phase2",
-        value: 0,
+        value: 6,
       }),
     ]);
   });

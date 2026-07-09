@@ -446,11 +446,72 @@ export function formatCombatModifierScopeLabel(entry: ScenarioCombatModifierEntr
   return entry.scope === "save" ? "until save" : "until SU";
 }
 
+function isGeneratedDistanceModifier(entry: ScenarioCombatModifierEntry): boolean {
+  return (
+    entry.id.startsWith("generated:distance:") ||
+    entry.sourceRule === "distance-ob-skill" ||
+    entry.sourceRule === "distance-ob-skill-phase1" ||
+    entry.sourceRule === "distance-ob-skill-phase2" ||
+    entry.notes?.trim().toLowerCase().startsWith("distance:") === true
+  );
+}
+
+function formatCompactDistanceModifierDetails(entry: ScenarioCombatModifierEntry): string {
+  const notes = entry.notes ?? "";
+  const actualMatch = notes.match(/\b(?:actual|declared)\s+(\d+)/i);
+  const nearestMatch = notes.match(/\bnearest\s+(\d+)/i);
+  const actualDistance = actualMatch ? Number(actualMatch[1]) : undefined;
+  const nearestDistance = nearestMatch ? Number(nearestMatch[1]) : undefined;
+
+  if (actualDistance !== undefined && nearestDistance !== undefined) {
+    if (actualDistance > nearestDistance) {
+      return "long distance";
+    }
+
+    if (actualDistance < nearestDistance) {
+      return "short distance";
+    }
+  }
+
+  return "distance";
+}
+
+export function formatCombatModifierDetailsLabel(
+  entry: ScenarioCombatModifierEntry,
+): string | undefined {
+  if (
+    entry.id === "generated:parry-attack:phase2:initiative" ||
+    entry.sourceRule === "parry-attack-phase2-initiative"
+  ) {
+    return "reactive initiative";
+  }
+
+  if (isGeneratedDistanceModifier(entry)) {
+    return formatCompactDistanceModifierDetails(entry);
+  }
+
+  if (
+    entry.sourceActionId === "attack_parry" ||
+    entry.sourceRule?.startsWith("attack-parry-db-parry") === true
+  ) {
+    return "single attack";
+  }
+
+  if (
+    entry.sourceActionId === "parry_attack" ||
+    entry.sourceRule?.startsWith("parry-attack-db-parry") === true
+  ) {
+    return "reactive attack";
+  }
+
+  return entry.notes?.trim() || undefined;
+}
+
 export function formatCombatModifierDisplayLine(input: {
   bucketLabel: string;
   entry: ScenarioCombatModifierEntry;
 }): string {
-  const details = input.entry.notes?.trim();
+  const details = formatCombatModifierDetailsLabel(input.entry);
 
   return [
     `${input.bucketLabel} ${formatSignedModifierValue(input.entry.value)}`,
@@ -739,7 +800,7 @@ function buildSituationalModifierDisplayEntry(
   entry: ScenarioCombatModifierEntry,
 ): PlayerCombatModifierDisplayEntry {
   return {
-    details: entry.notes?.trim() || undefined,
+    details: formatCombatModifierDetailsLabel(entry),
     id: entry.id,
     scopeLabel: formatCombatModifierScopeLabel(entry),
     sourceLabel: "Situational",
@@ -796,6 +857,9 @@ function ModifierEditableEntryRow({
   onUpdate: (patch: Partial<Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "value">>) => void;
 }) {
   const scopeLabel = formatCombatModifierScopeLabel(entry);
+  const detailsValue = entry.generated
+    ? (formatCombatModifierDetailsLabel(entry) ?? entry.notes ?? "")
+    : (entry.notes ?? "");
 
   return (
     <div style={compactModifierMiniTableEntryRowStyle}>
@@ -845,7 +909,7 @@ function ModifierEditableEntryRow({
           placeholder="Details"
           style={compactModifierDetailsInputStyle}
           type="text"
-          value={entry.notes ?? ""}
+          value={detailsValue}
         />
         <button
           aria-label="Remove modifier"

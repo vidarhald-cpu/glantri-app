@@ -15537,6 +15537,226 @@ describe("combat round manager", () => {
     ).toBe(true);
   });
 
+  it("keeps persisted Reactive attack vs Single attack on Gladiator A2 after incoming A1 is recorded", () => {
+    const encounterParticipants = [
+      participant({ id: "gladiator", label: "The Gladiator" }),
+      participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+    ];
+    const baseState = initializeCombatRoundState({
+      encounter: encounter({ currentRound: 4, participants: encounterParticipants }),
+    });
+    const withDeclarations = declareTestRoundAction({
+      actionId: "attack_parry",
+      participantId: "scyrian",
+      phase1Target: "scenario-gladiator",
+      phase2Target: "scenario-gladiator",
+      state: declareTestRoundAction({
+        actionId: "parry_attack",
+        participantId: "gladiator",
+        phase1Target: "scenario-scyrian",
+        phase2Target: "scenario-scyrian",
+        state: baseState,
+      }),
+    });
+    const atI1 = advanceToStep(withDeclarations, "initiative_phase_1");
+    const withGladiatorI1 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [6, 6],
+        rollTotal: 12,
+        total: 12,
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: atI1,
+      submittedBy: "gm",
+    });
+    const atA1 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [6],
+        rollTotal: 6,
+        total: 6,
+      },
+      participantId: "scyrian",
+      phase: "phase1",
+      state: withGladiatorI1,
+      submittedBy: "gm",
+    });
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "scyrian",
+      defenderDb: 13,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 5,
+      rollTotal: 5,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterA1 = recordCombatRoundAttackResult({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "scyrian",
+      result: attackResult,
+      state: atA1,
+      submittedBy: "gm",
+    });
+    const reloadedAfterA1 = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: afterA1,
+        currentRound: 4,
+        participants: encounterParticipants,
+      }),
+    });
+    const gladiatorReactiveModifier = reloadedAfterA1.participants
+      .find((participant) => participant.participantId === "gladiator")
+      ?.declaration?.combatContext?.modifierBuckets.situationInitiative.find(
+        (entry) => entry.id === REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
+      );
+
+    expect(atA1.currentStep).toBe("phase_1_actions");
+    expect(atA1.currentCursor).toMatchObject({ participantId: "scyrian", step: "A1" });
+    expect(afterA1.currentStep).toBe("review_phase_2_modifiers");
+    expect(afterA1.commands.at(-1)).toMatchObject({
+      facts: {
+        attackResultId: expect.stringContaining("phase1:scyrian:gladiator"),
+        defenderParticipantId: "gladiator",
+        hit: false,
+        nextStepOpened: {
+          participantId: "gladiator",
+          step: "M2",
+        },
+      },
+      participantId: "scyrian",
+      step: "A1",
+      type: "roll_attack",
+    });
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "scyrian",
+        phase: "phase1",
+        state: reloadedAfterA1,
+      }),
+    ).toMatchObject({
+      defenderParticipantId: "gladiator",
+      tableResult: "Miss",
+    });
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: reloadedAfterA1,
+        step: "phase_1_actions",
+      }),
+    ).toBe("skipped");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "scyrian",
+        state: reloadedAfterA1,
+        step: "phase_1_actions",
+      }),
+    ).toBe("gmEdited");
+    expect(gladiatorReactiveModifier).toMatchObject({
+      generated: true,
+      notes: "reactive attack: phase 1 attack missed; no parry needed",
+      sourceActionId: "parry_attack",
+      sourcePhase: "phase2",
+      value: 6,
+    });
+    expect(
+      combatRoundParticipantWasAttackedInPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: reloadedAfterA1,
+      }),
+    ).toBe(true);
+
+    const withGladiatorM2Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:03:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reloadedAfterA1,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const withScyrianM2Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:03:40.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "scyrian",
+      state: withGladiatorM2Reviewed,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const atI2 = advanceCombatRoundStep(withScyrianM2Reviewed);
+    const withScyrianI2 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "scyrian",
+      phase: "phase2",
+      state: atI2,
+      submittedBy: "gm",
+    });
+    const afterI2 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 6, rolls: [2], rollTotal: 2, total: 8 },
+      participantId: "gladiator",
+      phase: "phase2",
+      state: withScyrianI2,
+      submittedBy: "gm",
+    });
+    const reloadedAfterI2 = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: afterI2,
+        currentRound: 4,
+        participants: encounterParticipants,
+      }),
+    });
+
+    expect(atI2.currentStep).toBe("initiative_phase_2");
+    expect(reloadedAfterI2.currentStep).toBe("phase_2_actions");
+    expect(reloadedAfterI2.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A2",
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: reloadedAfterI2,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: reloadedAfterI2,
+      }),
+    ).toBe(true);
+  });
+
   it("calculates Reactive attack phase-two initiative from a missed phase-one attack", () => {
     const state = addPhase1IncomingAttack({
       attackResult: buildTestPhase1AttackResult({ hit: false }),

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPlayerCombatModifierRows,
+  formatCombatModifierDetailsLabel,
   formatCombatModifierDisplayLine,
   formatCombatModifierScopeLabel,
   isMeaningfulCombatModifierEntry,
@@ -223,7 +224,33 @@ describe("PlayerCombatPanels", () => {
         bucketLabel: "Skill/OB",
         entry: distanceEntry,
       }),
-    ).toContain("Skill/OB -2 · P1 · distance: Broad sword preferred 2");
+    ).toBe("Skill/OB -2 · P1 · long distance");
+    expect(formatCombatModifierDetailsLabel(distanceEntry)).toBe("long distance");
+    expect(
+      formatCombatModifierDetailsLabel({
+        ...distanceEntry,
+        notes: "distance: Broad sword preferred 3 · actual 2 · nearest 3 · Skill/OB -2",
+      }),
+    ).toBe("short distance");
+  });
+
+  it("uses compact details for generated Reactive initiative rows", () => {
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Initiative",
+        entry: {
+          durationRounds: 1,
+          generated: true,
+          id: "generated:parry-attack:phase2:initiative",
+          notes: "reactive attack: phase 2 initiative pending phase 1 incoming result",
+          scope: "until" as const,
+          sourceActionId: "parry_attack",
+          sourcePhase: "phase2" as const,
+          sourceRule: "parry-attack-phase2-initiative",
+          value: 6,
+        },
+      }),
+    ).toBe("Initiative +6 · P2 · reactive initiative");
   });
 
   it("hides meaningless zero situational rows while keeping meaningful zero summaries possible", () => {

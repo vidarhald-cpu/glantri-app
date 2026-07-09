@@ -40,7 +40,8 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText("Situational")).toBeInTheDocument();
     expect(screen.getAllByText("-2")).toHaveLength(2);
     expect(screen.getByText("P1")).toBeInTheDocument();
-    expect(screen.getByText(/Broad sword preferred 2/)).toBeInTheDocument();
+    expect(screen.getByText("long distance")).toBeInTheDocument();
+    expect(screen.queryByText(/Broad sword preferred 2/)).not.toBeInTheDocument();
   });
 
   it("keeps editable modifier details on a full-width row", () => {

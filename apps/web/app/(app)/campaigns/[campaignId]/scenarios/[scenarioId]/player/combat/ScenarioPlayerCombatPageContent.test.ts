@@ -110,6 +110,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("selectedRelevantInitiativeResultPanel");
     expect(source).toContain("selectedRelevantInitiativeRankLabel");
+    expect(source).toContain("latestRolledInitiativePhase");
+    expect(source).toContain(
+      "currentModifierPhase ?? currentInitiativePhase ?? latestRolledInitiativePhase",
+    );
     expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
     expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
     expect(source).not.toContain("buildPlayerCombatDistanceModifierSection");

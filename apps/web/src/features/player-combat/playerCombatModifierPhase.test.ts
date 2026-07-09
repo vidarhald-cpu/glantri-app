@@ -22,6 +22,12 @@ describe("getPlayerCombatModifierDisplayPhase", () => {
     expect(
       getPlayerCombatModifierDisplayPhase({
         actionId: "attack_parry",
+        step: "select_actions",
+      }),
+    ).toBe("phase1");
+    expect(
+      getPlayerCombatModifierDisplayPhase({
+        actionId: "attack_parry",
         step: "review_action_modifiers",
       }),
     ).toBe("phase1");
