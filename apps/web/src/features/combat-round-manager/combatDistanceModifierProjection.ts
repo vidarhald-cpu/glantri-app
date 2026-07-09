@@ -295,6 +295,7 @@ export function projectCombatActionGeneratedModifiers(input: {
       input.roundState && roundParticipantId
         ? [
             buildReactiveAttackPhase2InitiativeModifierEntry({
+              actionId: input.actionId,
               participantId: roundParticipantId,
               state: input.roundState,
             }),

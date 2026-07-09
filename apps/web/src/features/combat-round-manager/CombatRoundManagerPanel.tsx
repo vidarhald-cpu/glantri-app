@@ -4667,6 +4667,10 @@ export default function CombatRoundManagerPanel({
           visibility: encounter.roleplayState?.visibility,
         })
       : false;
+  const inspectorPhaseInitiativeCommitLabel =
+    inspectorPhaseInitiativeResolutionOpen && inspectorInitiativeResolutionPhase
+      ? `Commit ${formatCombatPhaseLabel(inspectorInitiativeResolutionPhase)} initiative`
+      : undefined;
   const inspectorCanExecuteSelectedStep =
     selectedRoundIsActive &&
     (inspectorSelectionIsCurrentTask ||
@@ -5345,9 +5349,11 @@ export default function CombatRoundManagerPanel({
           ? "Continue attack"
           : inspectorCombatExperienceActionLabel
             ? inspectorCombatExperienceActionLabel
-            : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-              ? "Inspecting step - use Current task to resume"
-              : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+            : inspectorPhaseInitiativeCommitLabel
+              ? inspectorPhaseInitiativeCommitLabel
+              : inspectorIsInspectionOnly && inspector.step !== "select_actions"
+                ? "Inspecting step - use Current task to resume"
+                : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
                 ? "Preparing round-end review"
                 : inspector.step === "round_summary" &&
                     inspectorRoundEndDistanceAction?.kind === "roll"
@@ -8696,6 +8702,8 @@ export default function CombatRoundManagerPanel({
                                       )
                                 : inspector.step === "round_summary"
                                   ? advanceInspectorRoundEndReview()
+                                  : inspectorPhaseInitiativeCommitLabel
+                                    ? commitCurrentStep()
                                   : inspectorCurrentStepIsInitiative
                                     ? rollInspectorInitiative()
                                     : inspectorCanRollParry

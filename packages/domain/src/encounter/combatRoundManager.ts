@@ -6862,6 +6862,7 @@ export function getReactiveAttackPhase2InitiativeModifier(input: {
 }
 
 export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
+  actionId?: string;
   participantId: string;
   state: CombatRoundState;
 }): ScenarioCombatModifierEntry | undefined {
@@ -6878,8 +6879,9 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
+  const actionId = input.actionId ?? participant?.declaration?.actionId;
 
-  if (participant?.declaration?.actionId !== "parry_attack") {
+  if (actionId !== "parry_attack") {
     return undefined;
   }
 

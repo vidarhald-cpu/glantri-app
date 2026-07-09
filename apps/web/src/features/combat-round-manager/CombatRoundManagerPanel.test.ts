@@ -778,7 +778,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
-    expect(source).toContain("commitRoundEndDistanceControl(\n                                        inspectorRoundEndDistanceAction.proposal.id,");
+    expect(source).toContain("commitRoundEndDistanceControl(");
+    expect(source).toContain("inspectorRoundEndDistanceAction.proposal.id");
   });
 
   it("returns from inspection to the current task without mutating combat state", () => {
@@ -877,6 +878,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");
     expect(source).not.toContain('roundState.currentStep === "review_action_modifiers" &&');
     expect(source).not.toContain('roundState.currentStep === "review_phase_2_modifiers" &&');
+  });
+
+  it("uses the GM initiative commit action once phase initiative is complete", () => {
+    const source = readSource();
+
+    expect(source).toContain("const inspectorPhaseInitiativeCommitLabel =");
+    expect(source).toContain("`Commit ${formatCombatPhaseLabel");
+    expect(source).toContain("initiative`");
+    expect(source).toContain(": inspectorPhaseInitiativeCommitLabel\n");
+    expect(source).toContain("? inspectorPhaseInitiativeCommitLabel");
+    expect(source).toContain(": inspectorPhaseInitiativeCommitLabel\n                                    ? commitCurrentStep()");
+    expect(source.indexOf("inspectorPhaseInitiativeCommitLabel")).toBeLessThan(
+      source.indexOf("inspectorCurrentStepIsInitiative\n                                    ? rollInspectorInitiative()"),
+    );
   });
 
   it("guards recorded attack results against accidental re-rolls", () => {

@@ -1129,6 +1129,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
     }),
     initiativeModifiers: [
       buildReactiveAttackPhase2InitiativeModifierEntry({
+        actionId: input.actionId,
         participantId: roundParticipantId,
         state: input.roundState,
       }),

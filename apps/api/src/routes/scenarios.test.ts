@@ -4,10 +4,15 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  combatRoundParticipantHasExecutablePhaseAttack,
+  combatRoundParticipantWasAttackedInPhase,
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
+  ensureCombatRoundPhaseResolutionResultsForPhase,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantPhaseStepStatus,
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
   rollCombatRoundCombatExperience,
@@ -979,6 +984,62 @@ function setupCombatDeclarationRoute(
   mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
 
   return { encounter, participant, participants };
+}
+
+function setupMutableCombatRouteState(input: {
+  encounter: EncounterSession;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  user?: typeof mocks.playerUser | typeof mocks.adminUser;
+}) {
+  let currentEncounter = input.encounter;
+  let currentParticipants = input.participants;
+
+  mocks.requireAuthenticatedUser.mockResolvedValue(input.user ?? mocks.adminUser);
+  mocks.requireAdminUser.mockResolvedValue(input.user ?? mocks.adminUser);
+  mocks.encounterService.getEncounterById.mockImplementation(async () => currentEncounter);
+  mocks.encounterService.updateEncounter.mockImplementation(
+    async (update: { session: EncounterSession }) => {
+      currentEncounter = update.session;
+      return currentEncounter;
+    },
+  );
+  mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+    async (update: { participantId: string; state: unknown }) => {
+      const updatedParticipant = {
+        ...currentParticipants.find((participant) => participant.id === update.participantId),
+        state: update.state,
+      } as ReturnType<typeof makeCombatScenarioParticipant>;
+      currentParticipants = currentParticipants.map((participant) =>
+        participant.id === update.participantId ? updatedParticipant : participant,
+      );
+
+      return updatedParticipant;
+    },
+  );
+  mocks.scenarioService.getScenarioById.mockResolvedValue({
+    campaignId: "campaign-1",
+    id: "scenario-1",
+    kind: "combat",
+    name: "Bridge Ambush",
+    status: "live",
+  });
+  mocks.campaignService.getCampaignById.mockResolvedValue({
+    gmUserId: "gm-1",
+    id: "campaign-1",
+    name: "Border Trouble",
+    status: "active",
+  });
+  mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+  mocks.scenarioService.listScenarioParticipants.mockImplementation(async () => currentParticipants);
+
+  return {
+    get encounter() {
+      return currentEncounter;
+    },
+    get participants() {
+      return currentParticipants;
+    },
+  };
 }
 
 function makeDistanceControlReviewFixture(): {
@@ -6160,6 +6221,333 @@ describe("scenarios route contract", () => {
       },
       type: "review_modifiers_phase2",
     });
+  });
+
+  it("keeps Reactive attack executable through the browser/API persisted lifecycle", async () => {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-2",
+        label: "Scyrian cavalry guy",
+        order: 1,
+        scenarioParticipantId: "participant-2",
+      }),
+    ];
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const baseRoundState =
+      baseEncounter.combatRoundState ?? initializeCombatRoundState({ encounter: baseEncounter });
+    const combatRoundState = {
+      ...baseRoundState,
+      distanceState: setDistanceBetween({
+        distance: 2,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+        state: baseRoundState.distanceState,
+      }),
+    };
+    const fixture = setupMutableCombatRouteState({
+      encounter: {
+        ...baseEncounter,
+        combatRoundState,
+        currentRound: combatRoundState.roundNumber,
+      },
+      participants: [
+        makeCombatScenarioParticipantWithWeapon({
+          characterId: "character-1",
+          id: "participant-1",
+          snapshot: {
+            displayName: "The Gladiator",
+          },
+          weaponName: "Long sword",
+          weaponRange: "3.0",
+        }),
+        makeCombatScenarioParticipantWithWeapon({
+          characterId: "character-2",
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: {
+            displayName: "Scyrian cavalry guy",
+          },
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const emptyCombatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    };
+    const roundState = () => fixture.encounter.combatRoundState as CombatRoundState;
+    const participantState = (participantId: string) =>
+      roundState().participants.find((participant) => participant.participantId === participantId);
+    const commitCurrentStepViaBrowserPut = async () => {
+      const startingStep = roundState().currentStep;
+
+      for (let index = 0; index <= encounterParticipants.length; index += 1) {
+        const current = roundState();
+        const committedAt = `2026-01-01T00:10:0${index}.000Z`;
+        const stateForCommit =
+          current.currentStep === "review_phase_2_modifiers"
+            ? ensureCombatRoundPhaseResolutionResultsForPhase({
+                phase: "phase1",
+                state: current,
+                updatedAt: committedAt,
+              })
+            : current;
+        const nextState = advanceCombatRoundStep(stateForCommit, {
+          command: {
+            createdAt: committedAt,
+            participantId:
+              stateForCommit.currentCursor?.participantId ??
+              stateForCommit.selectedParticipantId ??
+              "encounter-participant-1",
+          },
+          stepSnapshots: [],
+        });
+        const response = await app.inject({
+          method: "PUT",
+          payload: {
+            session: {
+              ...fixture.encounter,
+              combatRoundState: nextState,
+              currentRound: nextState.roundNumber,
+            },
+          },
+          url: "/encounters/encounter-1",
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        if (roundState().currentStep !== startingStep) {
+          return;
+        }
+      }
+    };
+    const rollInitiative = async (scenarioParticipantId: string, initiativeBase = 0) => {
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          initiativeBase,
+          scenarioParticipantId,
+        },
+        url: "/encounters/encounter-1/combat-initiative",
+      });
+
+      expect(response.statusCode).toBe(200);
+    };
+    const commitPhaseInitiative = async (phase: "phase1" | "phase2") => {
+      const response = await app.inject({
+        method: "POST",
+        payload: { phase },
+        url: "/encounters/encounter-1/combat-round/commit-phase-initiative-resolution",
+      });
+
+      expect(response.statusCode).toBe(200);
+    };
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const gladiatorDeclarationResponse = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "parry_attack",
+          combatContext: emptyCombatContext,
+          movementId: "set_preferred_distance",
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance: 3,
+                source: "gm_proxy",
+                targetParticipantId: "participant-2",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          phaseContexts: {
+            phase2: testCombatPhaseContext("participant-2"),
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      const scyrianDeclarationResponse = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: emptyCombatContext,
+          movementId: "hold",
+          phaseContexts: {
+            phase1: testCombatPhaseContext("participant-1"),
+          },
+          scenarioParticipantId: "participant-2",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+      expect(
+        gladiatorDeclarationResponse.statusCode,
+        JSON.stringify(gladiatorDeclarationResponse.json()),
+      ).toBe(200);
+      expect(
+        scyrianDeclarationResponse.statusCode,
+        JSON.stringify(scyrianDeclarationResponse.json()),
+      ).toBe(200);
+      expect(participantState("encounter-participant-1")?.declaration).toMatchObject({
+        actionId: "parry_attack",
+        phaseContexts: {
+          phase2: {
+            targetParticipantId: "participant-2",
+          },
+        },
+      });
+      expect(participantState("encounter-participant-2")?.declaration).toMatchObject({
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: {
+            targetParticipantId: "participant-1",
+          },
+        },
+      });
+      expect(
+        participantState("encounter-participant-1")?.declaration?.combatContext?.modifierBuckets
+          .situationDb,
+      ).toEqual([parryAttackDbParryModifier]);
+      expect(
+        participantState("encounter-participant-1")?.declaration?.combatContext?.modifierBuckets
+          .situationInitiative,
+      ).toEqual([
+        expect.objectContaining({
+          id: "generated:parry-attack:phase2:initiative",
+          sourceRule: "parry-attack-phase2-initiative",
+          value: 6,
+        }),
+      ]);
+
+      await commitCurrentStepViaBrowserPut();
+      expect(roundState().currentStep).toBe("review_action_modifiers");
+      await commitCurrentStepViaBrowserPut();
+      expect(roundState().currentStep).toBe("initiative_phase_1");
+      expect(participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2)
+        .toMatchObject({
+          targetParticipantId: "participant-2",
+        });
+
+      await rollInitiative("participant-1");
+      await rollInitiative("participant-2");
+      expect(roundState().currentStep).toBe("initiative_phase_1");
+
+      await commitPhaseInitiative("phase1");
+      expect(roundState().currentStep).toBe("phase_1_actions");
+      expect(roundState().currentCursor).toMatchObject({
+        participantId: "encounter-participant-2",
+        step: "A1",
+      });
+      expect(
+        getCombatRoundParticipantPhaseStepStatus({
+          participantId: "encounter-participant-1",
+          state: roundState(),
+          step: "phase_1_actions",
+        }),
+      ).toBe("skipped");
+
+      const attackResponse = await app.inject({
+        method: "POST",
+        payload: {
+          defenderDb: 99,
+          defenderScenarioParticipantId: "participant-1",
+          ob: 0,
+          phase: "phase1",
+          scenarioParticipantId: "participant-2",
+          weaponName: "Broad sword",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+
+      expect(attackResponse.statusCode).toBe(200);
+      expect(
+        getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: "encounter-participant-2",
+          phase: "phase1",
+          state: roundState(),
+        }),
+      ).toMatchObject({
+        attackerParticipantId: "encounter-participant-2",
+        defenderParticipantId: "encounter-participant-1",
+        hit: false,
+      });
+      expect(
+        getCombatRoundParticipantPhaseStepStatus({
+          participantId: "encounter-participant-2",
+          state: roundState(),
+          step: "phase_1_actions",
+        }),
+      ).toBe("gmEdited");
+      expect(roundState().commands.at(-1)).toMatchObject({
+        participantId: "encounter-participant-2",
+        type: "roll_attack",
+      });
+      expect(
+        combatRoundParticipantWasAttackedInPhase({
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          state: roundState(),
+        }),
+      ).toBe(true);
+      expect(
+        participantState("encounter-participant-1")?.declaration?.combatContext?.modifierBuckets
+          .situationInitiative,
+      ).toEqual([
+        expect.objectContaining({
+          id: "generated:parry-attack:phase2:initiative",
+          notes: "reactive attack: phase 1 attack missed; no parry needed",
+          value: 6,
+        }),
+      ]);
+
+      await commitCurrentStepViaBrowserPut();
+      expect(roundState().currentStep).toBe("initiative_phase_2");
+      expect(participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2)
+        .toMatchObject({
+          targetParticipantId: "participant-2",
+        });
+      expect(
+        combatRoundParticipantHasExecutablePhaseAttack({
+          participantId: "encounter-participant-1",
+          phase: "phase2",
+          state: roundState(),
+        }),
+      ).toBe(true);
+
+      await rollInitiative("participant-1", 6);
+      await rollInitiative("participant-2");
+      expect(roundState().currentStep).toBe("initiative_phase_2");
+
+      await commitPhaseInitiative("phase2");
+      expect(roundState().currentStep).toBe("phase_2_actions");
+      expect(roundState().currentCursor).toMatchObject({
+        participantId: "encounter-participant-1",
+        step: "A2",
+      });
+      expect(roundState().roundEndReview).toBeUndefined();
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
   });
 
   it("rejects a player combat declaration after DE has advanced", async () => {
