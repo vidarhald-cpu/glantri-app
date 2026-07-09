@@ -77,6 +77,7 @@ import {
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundEndReviewComplete,
   isCombatRoundPhaseCombatExperienceRollRequired,
+  isCombatRoundPhaseInitiativeResolutionOpen,
   mapHitLocationAndDirectionToArmorRegion,
   parseCombatRoundArmorCoverageLabel,
   ensureCombatRoundPhaseResolutionResultsForPhase,
@@ -2564,7 +2565,7 @@ describe("combat round manager", () => {
     ).toBe("phase1_attack");
   });
 
-  it("opens normal A1 attack after command-backed i1 when no phase CE is pending", () => {
+  it("keeps completed i1 in initiative review until GM commits normal A1", () => {
     const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({
       phase: "phase1",
       scyrianActionId: "parry_attack",
@@ -2592,13 +2593,40 @@ describe("combat round manager", () => {
       submittedBy: "gm",
     });
 
-    expect(afterScyrianRoll.currentStep).toBe("phase_1_actions");
-    expect(afterScyrianRoll.currentCursor).toEqual({
+    expect(afterScyrianRoll.currentStep).toBe("initiative_phase_1");
+    expect(afterScyrianRoll.currentCursor).toMatchObject({
+      step: "i1",
+    });
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase1",
+        state: afterScyrianRoll,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterScyrianRoll,
+      }),
+    ).toBe(false);
+
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase1",
+      state: afterScyrianRoll,
+    });
+
+    expect(committed.state.currentStep).toBe("phase_1_actions");
+    expect(committed.state.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 2,
       step: "A1",
     });
-    expect(afterScyrianRoll.phaseResolutionCursor).toEqual({
+    expect(committed.state.phaseResolutionCursor).toEqual({
       participantId: "gladiator",
       phase: "phase1",
       substep: "attack",
@@ -2607,7 +2635,7 @@ describe("combat round manager", () => {
       canPlayerRollCombatAttack({
         participantId: "gladiator",
         phase: "phase1",
-        state: afterScyrianRoll,
+        state: committed.state,
       }),
     ).toBe(true);
   });
@@ -5974,7 +6002,7 @@ describe("combat round manager", () => {
     expect(clearedAgain.participants[1]?.stepStatuses.initiative_phase_1).toBe("pending");
   });
 
-  it("does not add invisible top-advance i1 commands after the final initiative roll advances", () => {
+  it("does not add invisible top-advance i1 commands after the final initiative roll completes", () => {
     const initiativePhase1 = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
       "initiative_phase_1",
@@ -6002,7 +6030,14 @@ describe("combat round manager", () => {
       submittedBy: "gm",
     });
 
-    expect(afterGuardRoll.currentStep).toBe("review_phase_2_modifiers");
+    expect(afterGuardRoll.currentStep).toBe("initiative_phase_1");
+    expect(afterGuardRoll.currentCursor).toMatchObject({ step: "i1" });
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase1",
+        state: afterGuardRoll,
+      }),
+    ).toBe(true);
     expect(afterGuardRoll.commands).toHaveLength(2);
     expect(afterGuardRoll.commands.map((command) => command.type)).toEqual([
       "roll_initiative_phase1",
@@ -15357,7 +15392,7 @@ describe("combat round manager", () => {
       state: atI1,
       submittedBy: "gm",
     });
-    const atA1 = recordCombatRoundInitiative({
+    const atI1Review = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:02:30.000Z",
         createdByUserId: "gm-1",
@@ -15374,6 +15409,14 @@ describe("combat round manager", () => {
       state: withGladiatorI1,
       submittedBy: "gm",
     });
+    const atA1 = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:02:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase1",
+      state: atI1Review,
+    }).state;
     const attackResult = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
@@ -15409,6 +15452,13 @@ describe("combat round manager", () => {
         (entry) => entry.id === REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
       );
 
+    expect(atI1Review.currentStep).toBe("initiative_phase_1");
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase1",
+        state: atI1Review,
+      }),
+    ).toBe(true);
     expect(atA1.currentStep).toBe("phase_1_actions");
     expect(atA1.currentCursor).toMatchObject({ participantId: "gladiator", step: "A1" });
     expect(afterA1.currentStep).toBe("review_phase_2_modifiers");
@@ -15496,7 +15546,7 @@ describe("combat round manager", () => {
       state: atI2,
       submittedBy: "gm",
     });
-    const afterI2 = recordCombatRoundInitiative({
+    const afterI2Rolls = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:04:30.000Z",
         createdByUserId: "gm-1",
@@ -15507,15 +15557,44 @@ describe("combat round manager", () => {
       state: withGladiatorI2,
       submittedBy: "gm",
     });
+    const reloadedAfterI2Rolls = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: afterI2Rolls,
+        currentRound: 2,
+        participants: encounterParticipants,
+      }),
+    });
+    const afterI2Commit = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:04:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase2",
+      state: reloadedAfterI2Rolls,
+    }).state;
     const reloadedAfterI2 = initializeCombatRoundState({
       encounter: encounter({
-        combatRoundState: afterI2,
+        combatRoundState: afterI2Commit,
         currentRound: 2,
         participants: encounterParticipants,
       }),
     });
 
     expect(atI2.currentStep).toBe("initiative_phase_2");
+    expect(reloadedAfterI2Rolls.currentStep).toBe("initiative_phase_2");
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase2",
+        state: reloadedAfterI2Rolls,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "scyrian",
+        phase: "phase2",
+        state: reloadedAfterI2Rolls,
+      }),
+    ).toBe(false);
     expect(reloadedAfterI2.currentStep).toBe("phase_2_actions");
     expect(reloadedAfterI2.currentCursor).toMatchObject({
       participantId: "scyrian",
@@ -15576,7 +15655,7 @@ describe("combat round manager", () => {
       state: atI1,
       submittedBy: "gm",
     });
-    const atA1 = recordCombatRoundInitiative({
+    const atI1Review = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:02:30.000Z",
         createdByUserId: "gm-1",
@@ -15593,6 +15672,14 @@ describe("combat round manager", () => {
       state: withGladiatorI1,
       submittedBy: "gm",
     });
+    const atA1 = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:02:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase1",
+      state: atI1Review,
+    }).state;
     const attackResult = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "scyrian",
@@ -15628,6 +15715,13 @@ describe("combat round manager", () => {
         (entry) => entry.id === REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
       );
 
+    expect(atI1Review.currentStep).toBe("initiative_phase_1");
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase1",
+        state: atI1Review,
+      }),
+    ).toBe(true);
     expect(atA1.currentStep).toBe("phase_1_actions");
     expect(atA1.currentCursor).toMatchObject({ participantId: "scyrian", step: "A1" });
     expect(afterA1.currentStep).toBe("review_phase_2_modifiers");
@@ -15716,7 +15810,7 @@ describe("combat round manager", () => {
       state: atI2,
       submittedBy: "gm",
     });
-    const afterI2 = recordCombatRoundInitiative({
+    const afterI2Rolls = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:04:30.000Z",
         createdByUserId: "gm-1",
@@ -15727,15 +15821,44 @@ describe("combat round manager", () => {
       state: withScyrianI2,
       submittedBy: "gm",
     });
+    const reloadedAfterI2Rolls = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: afterI2Rolls,
+        currentRound: 4,
+        participants: encounterParticipants,
+      }),
+    });
+    const afterI2Commit = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:04:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase2",
+      state: reloadedAfterI2Rolls,
+    }).state;
     const reloadedAfterI2 = initializeCombatRoundState({
       encounter: encounter({
-        combatRoundState: afterI2,
+        combatRoundState: afterI2Commit,
         currentRound: 4,
         participants: encounterParticipants,
       }),
     });
 
     expect(atI2.currentStep).toBe("initiative_phase_2");
+    expect(reloadedAfterI2Rolls.currentStep).toBe("initiative_phase_2");
+    expect(
+      isCombatRoundPhaseInitiativeResolutionOpen({
+        phase: "phase2",
+        state: reloadedAfterI2Rolls,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: reloadedAfterI2Rolls,
+      }),
+    ).toBe(false);
     expect(reloadedAfterI2.currentStep).toBe("phase_2_actions");
     expect(reloadedAfterI2.currentCursor).toMatchObject({
       participantId: "gladiator",

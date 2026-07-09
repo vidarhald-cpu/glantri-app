@@ -250,7 +250,7 @@ describe("PlayerCombatPanels", () => {
           value: 6,
         },
       }),
-    ).toBe("Initiative +6 · P2 · reactive initiative");
+    ).toBe("Initiative +6 · P2 · reactive attack");
   });
 
   it("hides meaningless zero situational rows while keeping meaningful zero summaries possible", () => {

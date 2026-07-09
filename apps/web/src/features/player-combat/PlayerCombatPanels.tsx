@@ -483,7 +483,7 @@ export function formatCombatModifierDetailsLabel(
     entry.id === "generated:parry-attack:phase2:initiative" ||
     entry.sourceRule === "parry-attack-phase2-initiative"
   ) {
-    return "reactive initiative";
+    return "reactive attack";
   }
 
   if (isGeneratedDistanceModifier(entry)) {

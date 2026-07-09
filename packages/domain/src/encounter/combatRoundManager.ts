@@ -3469,8 +3469,7 @@ export function isCombatRoundPhaseInitiativeResolutionOpen(input: {
 
   return (
     normalized.currentStep === getCombatRoundPhaseInitiativeStepForPhase(input.phase) &&
-    isCombatRoundPhaseInitiativeComplete({ phase: input.phase, state: normalized }) &&
-    getCombatRoundPhaseInitiativeChoiceStatuses(input).length > 0
+    isCombatRoundPhaseInitiativeComplete({ phase: input.phase, state: normalized })
   );
 }
 
@@ -5293,16 +5292,11 @@ function moveCombatRoundAfterCompletedPhaseInitiative(input: {
     visibility: input.visibility,
   })[0]?.participantId;
 
-  return threatenedParticipantId
-    ? moveCombatRoundToPhaseInitiativeResolution({
-        participantId: threatenedParticipantId,
-        phase: input.phase,
-        state: baseState,
-      })
-    : initializeCombatRoundPhaseResolutionCursor({
-        phase: input.phase,
-        state: baseState,
-      });
+  return moveCombatRoundToPhaseInitiativeResolution({
+    participantId: threatenedParticipantId,
+    phase: input.phase,
+    state: baseState,
+  });
 }
 
 function phaseCombatExperienceCancelsAttack(result: CombatRoundCombatExperienceResult): boolean {

@@ -6291,7 +6291,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
       afterCursor: {
         participantId: "encounter-participant-1",
-        step: "M2",
+        step: "i1",
       },
       beforeCursor: {
         participantId: "encounter-participant-1",
@@ -6303,7 +6303,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
-    expect(updatedEncounter.combatRoundState.currentStep).toBe("review_phase_2_modifiers");
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
   });
 
   it("allows a GM to roll initiative for another player's participant", async () => {
@@ -6359,7 +6359,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
       afterCursor: {
         participantId: "encounter-participant-1",
-        step: "SU",
+        step: "i2",
       },
       beforeCursor: {
         participantId: "encounter-participant-1",
@@ -6370,7 +6370,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
-    expect(updatedEncounter.combatRoundState.currentStep).toBe("round_summary");
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_2");
   });
 
   it("rejects player initiative rolls for another participant", async () => {
