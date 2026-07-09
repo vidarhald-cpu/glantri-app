@@ -15412,6 +15412,37 @@ describe("combat round manager", () => {
     expect(atA1.currentStep).toBe("phase_1_actions");
     expect(atA1.currentCursor).toMatchObject({ participantId: "gladiator", step: "A1" });
     expect(afterA1.currentStep).toBe("review_phase_2_modifiers");
+    expect(afterA1.commands.at(-1)).toMatchObject({
+      facts: {
+        attackResultId: expect.stringContaining("phase1:gladiator:scyrian"),
+        defenderParticipantId: "scyrian",
+        hit: false,
+        nextStepOpened: {
+          participantId: "gladiator",
+          step: "M2",
+        },
+      },
+      participantId: "gladiator",
+      step: "A1",
+      type: "roll_attack",
+    });
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: reloadedAfterA1,
+      }),
+    ).toMatchObject({
+      defenderParticipantId: "scyrian",
+      tableResult: "Miss",
+    });
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: reloadedAfterA1,
+        step: "phase_1_actions",
+      }),
+    ).toBe("gmEdited");
     expect(scyrianReactiveModifier).toMatchObject({
       generated: true,
       notes: "reactive attack: phase 1 attack missed; no parry needed",

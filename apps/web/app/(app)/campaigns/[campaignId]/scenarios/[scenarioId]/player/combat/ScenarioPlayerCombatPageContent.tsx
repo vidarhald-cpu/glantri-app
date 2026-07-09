@@ -38,7 +38,6 @@ import {
   getCombatDistanceParticipantAliases,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
-  getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getHitLocationFullLabel,
   getPlayerCombatCurrentRollAction,
@@ -92,6 +91,7 @@ import {
   isEquipmentFeatureState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
+import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import {
   getLatestRelevantPlayerCombatAttackResult,
   selectPlayerCombatActionResultPanel,
@@ -1699,7 +1699,10 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
-  const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep);
+  const currentModifierPhase = getPlayerCombatModifierDisplayPhase({
+    actionId: selectedActionId,
+    step: currentCombatStep,
+  });
   const projectedCombatContextDraft = useMemo(
     () =>
       projectCombatActionGeneratedModifiers({

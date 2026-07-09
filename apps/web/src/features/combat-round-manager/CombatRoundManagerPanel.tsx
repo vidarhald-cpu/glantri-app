@@ -162,6 +162,7 @@ import {
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import { getLatestRelevantPlayerCombatAttackResult } from "@/features/player-combat/playerCombatResultSelection";
 import {
   applyDefaultPlayerCombatPhaseContext,
@@ -2784,6 +2785,7 @@ function getCombatTrackerMarkerMeaning(
 }
 
 function getCombatTrackerCellMarkerKind(input: {
+  attackResultTotal: number | undefined;
   phaseCombatExperienceMarkerRequired: boolean;
   pendingRoundEndRollCount: number;
   initiativeTotal: number | undefined;
@@ -2801,10 +2803,15 @@ function getCombatTrackerCellMarkerKind(input: {
     return "roll_result";
   }
 
+  if (input.attackResultTotal !== undefined) {
+    return "roll_result";
+  }
+
   return getStatusMarkerKind(input.status);
 }
 
 function getCombatTrackerCellMarker(input: {
+  attackResultTotal: number | undefined;
   markerKind: CombatTrackerMarkerKind;
   pendingRoundEndRollCount: number;
   initiativeTotal: number | undefined;
@@ -2823,6 +2830,10 @@ function getCombatTrackerCellMarker(input: {
     return String(input.initiativeTotal);
   }
 
+  if (input.attackResultTotal !== undefined) {
+    return String(input.attackResultTotal);
+  }
+
   return getStatusMarker({
     current: input.current,
     status: input.status,
@@ -2838,6 +2849,11 @@ type CombatTrackerInitiativeResolutionSource =
   | "gm_override"
   | "resolved_by_gm"
   | "rolled_by_gm";
+
+type CombatTrackerDeclarationResolutionSource =
+  | "declared_by_gm"
+  | "declared_by_player"
+  | "gm_override";
 
 function getCombatTrackerInitiativeCommandType(
   step: CombatRoundStep,
@@ -2902,6 +2918,46 @@ function getCombatTrackerInitiativeResolutionSource(input: {
   return command ? undefined : "resolved_by_gm";
 }
 
+function getCombatTrackerDeclarationResolutionSource(input: {
+  commands: readonly CombatRoundState["commands"][number][];
+  declarationSubmittedBy?: "gm" | "player";
+  participantId: string;
+  roundNumber: number;
+  status: CombatRoundStepStatus;
+  step: CombatRoundStep;
+}): CombatTrackerDeclarationResolutionSource | undefined {
+  if (input.step !== "select_actions") {
+    return undefined;
+  }
+
+  const command = [...input.commands].reverse().find(
+    (candidate) =>
+      candidate.type === "declare_action" &&
+      candidate.participantId === input.participantId &&
+      candidate.roundNumber === input.roundNumber,
+  );
+  const commandSource = getCombatTrackerCommandFactString(command, "source");
+  const commandStatus = getCombatTrackerCommandFactString(command, "status");
+
+  if (commandSource === "gm_override" || commandStatus === "gm_override") {
+    return "gm_override";
+  }
+
+  if (input.declarationSubmittedBy === "player" || commandStatus === "submitted") {
+    return "declared_by_player";
+  }
+
+  if (input.declarationSubmittedBy === "gm" || commandStatus === "gmEdited") {
+    return "declared_by_gm";
+  }
+
+  if (input.status === "submitted") {
+    return "declared_by_player";
+  }
+
+  return input.status === "gmEdited" ? "declared_by_gm" : undefined;
+}
+
 function formatCombatTrackerInitiativeSuffix(
   source: CombatTrackerInitiativeResolutionSource | undefined,
 ): string {
@@ -2914,6 +2970,21 @@ function formatCombatTrackerInitiativeSuffix(
       return ", resolved by GM";
     default:
       return "";
+  }
+}
+
+function formatCombatTrackerDeclarationDetail(
+  source: CombatTrackerDeclarationResolutionSource | undefined,
+): string | undefined {
+  switch (source) {
+    case "declared_by_player":
+      return "declared by player.";
+    case "declared_by_gm":
+      return "declared by GM.";
+    case "gm_override":
+      return "GM override.";
+    default:
+      return undefined;
   }
 }
 
@@ -2978,6 +3049,8 @@ function getCombatTrackerPendingStepDetail(step: CombatRoundStep): string {
 }
 
 function getCombatTrackerCellDetail(input: {
+  attackResult: CombatRoundAttackRollResult | undefined;
+  declarationResolutionSource: CombatTrackerDeclarationResolutionSource | undefined;
   phaseCombatExperienceMarkerRequired: boolean;
   pendingDistanceControlCommitCount: number;
   pendingRoundEndRollCount: number;
@@ -3010,6 +3083,18 @@ function getCombatTrackerCellDetail(input: {
     return `initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix(
       input.initiativeResolutionSource,
     )}.`;
+  }
+
+  if (input.attackResult) {
+    return `attack ${input.attackResult.tableResult}; lookup ${input.attackResult.lookupTotal}.`;
+  }
+
+  const declarationDetail = formatCombatTrackerDeclarationDetail(
+    input.declarationResolutionSource,
+  );
+
+  if (declarationDetail) {
+    return declarationDetail;
   }
 
   if (input.status === "skipped") {
@@ -4165,11 +4250,11 @@ export default function CombatRoundManagerPanel({
       return roundState.participants;
     }
 
-    const hasInitiative = roundState.participants.some(
+    const hasCompleteInitiative = roundState.participants.every(
       (participant) => participant.initiatives[initiativeSortPhase] !== undefined,
     );
 
-    return hasInitiative
+    return hasCompleteInitiative
       ? sortCombatRoundParticipantsByInitiative({
           phase: initiativeSortPhase,
           state: roundState,
@@ -4483,7 +4568,10 @@ export default function CombatRoundManagerPanel({
     draft: inspectorDraft,
     snapshot: inspectorSnapshot,
   });
-  const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
+  const inspectorModifierPhase = getPlayerCombatModifierDisplayPhase({
+    actionId: inspectorDisplayDraft.actionId,
+    step: inspector.step,
+  });
   const inspectorEquipmentState = useMemo(() => {
     const candidate =
       resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
@@ -7662,8 +7750,17 @@ export default function CombatRoundManagerPanel({
             : step === "initiative_phase_2"
               ? roundParticipant.initiatives.phase2
               : undefined;
+        const trackerAttackPhase = getCombatAttackPhaseForStep(step);
+        const trackerAttackResult = trackerAttackPhase
+          ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+              participantId: timelineParticipant.participantId,
+              phase: trackerAttackPhase,
+              state: timelineRoundState,
+            })
+          : undefined;
         trackerLegendMarkerKinds.add(
           getCombatTrackerCellMarkerKind({
+            attackResultTotal: trackerAttackResult?.lookupTotal,
             phaseCombatExperienceMarkerRequired,
             pendingRoundEndRollCount,
             initiativeTotal: getCombatRoundInitiativeTotal(initiative),
@@ -7967,13 +8064,23 @@ export default function CombatRoundManagerPanel({
                             ? roundParticipant.initiatives.phase2
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
+                      const trackerAttackPhase = getCombatAttackPhaseForStep(step);
+                      const trackerAttackResult = trackerAttackPhase
+                        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+                            participantId: participant.participantId,
+                            phase: trackerAttackPhase,
+                            state: timelineRoundState,
+                          })
+                        : undefined;
                       const markerKind = getCombatTrackerCellMarkerKind({
+                        attackResultTotal: trackerAttackResult?.lookupTotal,
                         phaseCombatExperienceMarkerRequired,
                         pendingRoundEndRollCount,
                         initiativeTotal,
                         status: stepStatus,
                       });
                       const marker = getCombatTrackerCellMarker({
+                        attackResultTotal: trackerAttackResult?.lookupTotal,
                         markerKind,
                         pendingRoundEndRollCount,
                         initiativeTotal,
@@ -8000,11 +8107,22 @@ export default function CombatRoundManagerPanel({
                           status: stepStatus,
                           step,
                         });
+                      const declarationResolutionSource =
+                        getCombatTrackerDeclarationResolutionSource({
+                          commands: timelineRoundState.commands,
+                          declarationSubmittedBy: roundParticipant.declaration?.submittedBy,
+                          participantId: participant.participantId,
+                          roundNumber,
+                          status: stepStatus,
+                          step,
+                        });
                       const buttonTitle = formatCombatTrackerCellTitle({
                         participantLabel: participant.label,
                         roundNumber,
                         step,
                         detail: getCombatTrackerCellDetail({
+                          attackResult: trackerAttackResult,
+                          declarationResolutionSource,
                           phaseCombatExperienceMarkerRequired,
                           pendingDistanceControlCommitCount,
                           pendingRoundEndRollCount,

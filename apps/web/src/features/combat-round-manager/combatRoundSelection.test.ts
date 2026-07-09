@@ -6,6 +6,7 @@ import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/dom
 import {
   applyCombatRoundSelectionTarget,
   getCurrentCombatRoundTaskSelection,
+  getCombatRoundManagerDisplayParticipantIds,
   getNextCombatRoundParticipantSelection,
   isSelectedCombatRoundStepExecutable,
   normalizeCombatRoundManagerSelection,
@@ -55,6 +56,73 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("combat round manager selection", () => {
+  it("keeps participant order stable until phase initiative is complete", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const partialPhase2 = {
+      ...existing,
+      currentStep: "phase_2_actions" as const,
+      participants: existing.participants.map((participant) =>
+        participant.participantId === "middle"
+          ? {
+              ...participant,
+              initiatives: {
+                phase2: {
+                  baseInitiative: 0,
+                  modifierAdjustment: 0,
+                  rolls: [6],
+                  rollTotal: 6,
+                  total: 6,
+                },
+              },
+            }
+          : participant,
+      ),
+    };
+    const completePhase2 = {
+      ...partialPhase2,
+      participants: partialPhase2.participants.map((participant) =>
+        participant.participantId === "top"
+          ? {
+              ...participant,
+              initiatives: {
+                phase2: {
+                  baseInitiative: 0,
+                  modifierAdjustment: 0,
+                  rolls: [3],
+                  rollTotal: 3,
+                  total: 3,
+                },
+              },
+            }
+          : participant.participantId === "bottom"
+            ? {
+                ...participant,
+                initiatives: {
+                  phase2: {
+                    baseInitiative: 0,
+                    modifierAdjustment: 0,
+                    rolls: [4],
+                    rollTotal: 4,
+                    total: 4,
+                  },
+                },
+              }
+            : participant,
+      ),
+    };
+
+    expect(getCombatRoundManagerDisplayParticipantIds(partialPhase2)).toEqual([
+      "top",
+      "middle",
+      "bottom",
+    ]);
+    expect(getCombatRoundManagerDisplayParticipantIds(completePhase2)).toEqual([
+      "middle",
+      "bottom",
+      "top",
+    ]);
+  });
+
   it("maps the current cursor to the current task selection", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const state = {

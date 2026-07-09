@@ -109,7 +109,7 @@ describe("playerEncounter", () => {
 
   it("returns a stable movement label fallback", () => {
     expect(getPlayerEncounterMovementLabel("advance")).toBe("Advance");
-    expect(getPlayerEncounterMovementLabel("")).toBe("Hold position");
+    expect(getPlayerEncounterMovementLabel("")).toBe("Maintain distance to opponent");
   });
 
   it("derives combat modifier totals from the combat modifier buckets", () => {

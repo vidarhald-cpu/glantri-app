@@ -235,6 +235,68 @@ describe("projectCombatActionGeneratedModifiers", () => {
     ]);
   });
 
+  it("projects a pending Reactive attack phase 2 Initiative context before phase one resolves", () => {
+    const encounter = buildEncounter();
+    const baseRoundState = initializeCombatRoundState({ encounter });
+    const declared = combatRoundStateSchema.parse({
+      ...baseRoundState,
+      participants: baseRoundState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "parry_attack",
+                phaseContexts: {
+                  phase2: {
+                    modifierBuckets: {
+                      general: [],
+                      situationDb: [],
+                      situationInitiative: [],
+                      situationObSkill: [],
+                    },
+                    targetParticipantId: "scenario-scyrian",
+                  },
+                },
+                roundNumber: baseRoundState.roundNumber,
+                submittedBy: "gm",
+              },
+            }
+          : participant,
+      ),
+    });
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: encounter.participants[1],
+      phaseContexts: {
+        phase2: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+          targetParticipantId: "scenario-scyrian",
+        },
+      },
+      roundState: declared,
+    });
+    const modifierRows = buildPlayerCombatModifierRows({
+      combatContext: projectedContext,
+      phaseKey: "phase2",
+    });
+    const initiativeRow = modifierRows.find((row) => row.bucketKey === "situation_initiative");
+
+    expect(initiativeRow?.entries).toEqual([
+      expect.objectContaining({
+        id: "generated:parry-attack:phase2:initiative",
+        notes: "reactive attack: phase 2 initiative pending phase 1 incoming result",
+        sourcePhase: "phase2",
+        value: 0,
+      }),
+    ]);
+  });
+
   it("keeps a committed declaration distance row when the browser display projection lacks phase weapon names", () => {
     const declarationCombatContext = buildCommittedContext();
     const staleScenarioParticipantCombatContext: ScenarioParticipantCombatContext = {

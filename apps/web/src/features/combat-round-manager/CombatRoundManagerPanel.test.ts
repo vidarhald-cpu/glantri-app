@@ -129,7 +129,7 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("trackerLegendMarkerKinds.add(\n          getCombatTrackerCellMarkerKind({");
     expect(source).toContain(
-      "phaseCombatExperienceMarkerRequired,\n            pendingRoundEndRollCount,\n            initiativeTotal: getCombatRoundInitiativeTotal(initiative)",
+      "attackResultTotal: trackerAttackResult?.lookupTotal,\n            phaseCombatExperienceMarkerRequired,\n            pendingRoundEndRollCount,\n            initiativeTotal: getCombatRoundInitiativeTotal(initiative)",
     );
     expect(source).toContain("const markerKind = getCombatTrackerCellMarkerKind({");
     expect(source).toContain("const marker = getCombatTrackerCellMarker({");
@@ -155,6 +155,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("initiativeResolutionSource");
     expect(source).toContain("commands: timelineRoundState.commands");
     expect(source).toContain("initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix");
+    expect(source).toContain("getCombatTrackerDeclarationResolutionSource");
+    expect(source).toContain("formatCombatTrackerDeclarationDetail");
+    expect(source).toContain("declared by player.");
+    expect(source).toContain("declared by GM.");
     expect(source).toContain("return \"\";");
     expect(source).not.toContain("commandSource === \"gm_proxy\" || commandStatus === \"gmEdited\" || command");
     expect(source).not.toContain('return ", GM edited";');
@@ -331,9 +335,8 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("participants ?? []");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
-    expect(source).toContain(
-      "const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step)",
-    );
+    expect(source).toContain("getPlayerCombatModifierDisplayPhase");
+    expect(source).toContain("const inspectorModifierPhase = getPlayerCombatModifierDisplayPhase({");
     expect(source).toContain("getCombatRoundStepSnapshot");
     expect(source).toContain("inspectorSnapshot");
     expect(source).toContain("inspectorDisplayDraft");

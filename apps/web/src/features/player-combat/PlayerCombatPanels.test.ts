@@ -40,6 +40,7 @@ describe("PlayerCombatPanels", () => {
   it("renders structured distance preference movement controls instead of placeholder-only options", () => {
     const source = readSource();
 
+    expect(source).toContain("Maintain distance to opponent");
     expect(source).toContain("Set preferred distance");
     expect(source).toContain("distancePreferenceOptions");
     expect(source).toContain("No preference");

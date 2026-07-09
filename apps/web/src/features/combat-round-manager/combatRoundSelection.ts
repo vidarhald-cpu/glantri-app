@@ -79,11 +79,11 @@ export function getCombatRoundManagerDisplayParticipantIds(
     return state.participants.map((participant) => participant.participantId);
   }
 
-  const hasInitiative = state.participants.some(
+  const hasCompleteInitiative = state.participants.every(
     (participant) => participant.initiatives[phase] !== undefined,
   );
 
-  return (hasInitiative
+  return (hasCompleteInitiative
     ? sortCombatRoundParticipantsByInitiative({ phase, state })
     : state.participants
   ).map((participant) => participant.participantId);

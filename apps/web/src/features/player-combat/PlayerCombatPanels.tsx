@@ -1122,7 +1122,7 @@ export function PlayerCombatActionSelectorPanel({
           onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
           value={effectiveMovementIntent.mode}
         >
-          <option value="hold_position">Hold position</option>
+          <option value="hold_position">Maintain distance to opponent</option>
           <option value="set_distance_preferences">Set preferred distance</option>
         </select>
       </label>

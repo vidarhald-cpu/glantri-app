@@ -45,10 +45,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "Reactive attack: no phase 1 attack received, so no phase 2 attack opens.",
     );
     expect(source).toContain("Target switch is GM-adjudicated.");
-    expect(source).toContain("getCombatRoundModifierPhaseForStep");
-    expect(source).toContain(
-      "const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep)",
-    );
+    expect(source).toContain("getPlayerCombatModifierDisplayPhase");
+    expect(source).toContain("const currentModifierPhase = getPlayerCombatModifierDisplayPhase({");
     expect(source).toContain("phaseKey: currentModifierPhase");
     expect(source).toContain("validateCombatDeclarationTargets");
     expect(source).toContain("targetValidation");

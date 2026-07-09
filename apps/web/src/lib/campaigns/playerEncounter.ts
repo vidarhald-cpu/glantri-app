@@ -95,7 +95,7 @@ export function isPlayerEncounterActionId(value: unknown): value is PlayerEncoun
 
 export const PLAYER_ENCOUNTER_MOVEMENT_OPTIONS: PlayerEncounterOption<PlayerEncounterMovementId>[] =
   [
-    { label: "Hold position", value: "hold" },
+    { label: "Maintain distance to opponent", value: "hold" },
     { label: "Step", value: "step" },
     { label: "Advance", value: "advance" },
     { label: "Withdraw", value: "withdraw" },
@@ -297,12 +297,12 @@ export function getPlayerEncounterMovementLabel(
   movementId: PlayerEncounterMovementId | "",
 ): string {
   if (!movementId) {
-    return "Hold position";
+    return "Maintain distance to opponent";
   }
 
   return (
     PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.find((option) => option.value === movementId)?.label ??
-    "Hold position"
+    "Maintain distance to opponent"
   );
 }
 

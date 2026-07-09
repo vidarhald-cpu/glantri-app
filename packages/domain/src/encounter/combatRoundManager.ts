@@ -6866,14 +6866,34 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
   participantId: string;
   state: CombatRoundState;
 }): ScenarioCombatModifierEntry | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
   const modifier = getReactiveAttackPhase2InitiativeModifier(input);
 
-  return modifier
-    ? buildReactiveAttackPhase2GeneratedInitiativeModifier({
-        reason: modifier.reason,
-        value: modifier.value,
-      })
-    : undefined;
+  if (modifier) {
+    return buildReactiveAttackPhase2GeneratedInitiativeModifier({
+      reason: modifier.reason,
+      value: modifier.value,
+    });
+  }
+
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+
+  if (participant?.declaration?.actionId !== "parry_attack") {
+    return undefined;
+  }
+
+  const phase2ReviewReached =
+    COMBAT_ROUND_STEPS.indexOf(normalized.currentStep) >=
+    COMBAT_ROUND_STEPS.indexOf("review_phase_2_modifiers");
+
+  return buildReactiveAttackPhase2GeneratedInitiativeModifier({
+    reason: phase2ReviewReached
+      ? "no phase 1 attack received; no phase 2 attack opens"
+      : "phase 2 initiative pending phase 1 incoming result",
+    value: 0,
+  });
 }
 
 function refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
