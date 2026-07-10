@@ -2516,6 +2516,65 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("removes encounter participants through the narrow participants payload", async () => {
+    const existingParticipant = {
+      id: "scenario-participant-2",
+      initiative: 0,
+      label: "Scyrian cavalry guy",
+      order: 1,
+      participantType: "scenario",
+      scenarioParticipantId: "participant-2",
+    };
+    const existingEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participantMembershipMode: "explicit",
+      participants: [existingParticipant],
+      status: "active",
+      title: "Courtyard",
+    });
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => update.session,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        participantMembershipMode: "explicit",
+        participants: [],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.participants).toEqual([]);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        combatRoundState: existingEncounter.combatRoundState,
+        participantMembershipMode: "explicit",
+        participants: [],
+      }),
+    });
+  });
+
   it("allows a player to submit their own non-silent assigned roleplay roll", async () => {
     const encounter = {
       actionLog: [],
