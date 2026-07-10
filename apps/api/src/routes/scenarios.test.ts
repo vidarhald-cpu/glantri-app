@@ -24,6 +24,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundParryResult,
+  recordCombatRoundParticipantStepReview,
   type CombatRoundState,
   type CombatEffectsState,
   type EncounterSession,
@@ -4674,6 +4675,228 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("returns a canonical command envelope opening Reactive A2 after i2 commit", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "Scyrian cavalry guy",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      currentRound: 5,
+      participants: encounterParticipants,
+    });
+    const baseState = initializeCombatRoundState({ encounter: combatEncounter });
+    const withDeclarations = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-1"),
+        },
+        roundNumber: baseState.roundNumber,
+      },
+      participantId: "encounter-participant-2",
+      state: recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "parry_attack",
+          phaseContexts: {
+            phase2: testCombatPhaseContext("participant-2"),
+          },
+          roundNumber: baseState.roundNumber,
+        },
+        participantId: "encounter-participant-1",
+        state: baseState,
+        submittedBy: "gm",
+      }),
+      submittedBy: "gm",
+    });
+    const withGladiatorM1Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      state: withDeclarations,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const withScyrianM1Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-2",
+      state: withGladiatorM1Reviewed,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const atI1 = advanceCombatRoundStep(withScyrianM1Reviewed);
+    const withGladiatorI1 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: atI1,
+      submittedBy: "gm",
+    });
+    const atI1Review = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 7,
+      participantId: "encounter-participant-2",
+      phase: "phase1",
+      state: withGladiatorI1,
+      submittedBy: "gm",
+    });
+    const atA1 = commitCombatRoundPhaseInitiativeResolution({
+      command: {
+        createdAt: "2026-01-01T00:02:20.000Z",
+        createdByUserId: "gm-1",
+      },
+      phase: "phase1",
+      state: atI1Review,
+    }).state;
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-2",
+      defenderDb: 13,
+      defenderParticipantId: "encounter-participant-1",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 5,
+      rollTotal: 5,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterA1 = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-2",
+      result: attackResult,
+      state: atA1,
+      submittedBy: "gm",
+    });
+    const withGladiatorM2Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:03:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      state: afterA1,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const withScyrianM2Reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:03:40.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-2",
+      state: withGladiatorM2Reviewed,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const atI2 = advanceCombatRoundStep(withScyrianM2Reviewed);
+    const withScyrianI2 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 5,
+      participantId: "encounter-participant-2",
+      phase: "phase2",
+      state: atI2,
+      submittedBy: "gm",
+    });
+    const afterI2Rolls = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 8,
+      participantId: "encounter-participant-1",
+      phase: "phase2",
+      state: withScyrianI2,
+      submittedBy: "gm",
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: afterI2Rolls,
+        currentRound: afterI2Rolls.roundNumber,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+          snapshot: { displayName: "The Gladiator" },
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: { displayName: "Scyrian cavalry guy" },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        phase: "phase2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-phase-initiative-resolution",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    const updatedEncounter = payload.encounter;
+
+    expect(payload.commandEnvelope).toMatchObject({
+      currentTask: {
+        cursorStep: "A2",
+        participantId: "encounter-participant-1",
+        step: "phase_2_actions",
+      },
+      latestResult: {
+        kind: "phase_initiative_commit",
+        phase: "phase2",
+      },
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toMatchObject({
+      participantId: "encounter-participant-1",
+      step: "A2",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("phase_2_actions");
+    expect(
+      combatRoundParticipantWasAttackedInPhase({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state: updatedEncounter.combatRoundState,
+      }),
+    ).toBe(true);
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "encounter-participant-1",
+        phase: "phase2",
+        state: updatedEncounter.combatRoundState,
+      }),
+    ).toBe(true);
+  });
+
   it("rejects player phase attack back-out for another participant", async () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
 
@@ -6972,6 +7195,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
+    const payload = response.json();
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
     expect(attackResult).toMatchObject({
@@ -6990,6 +7214,34 @@ describe("scenarios route contract", () => {
       type: "roll_attack",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toBeUndefined();
+    expect(payload.commandEnvelope).toMatchObject({
+      commands: [
+        expect.objectContaining({
+          facts: expect.objectContaining({
+            attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+          }),
+          type: "roll_attack",
+        }),
+      ],
+      latestEvent: expect.objectContaining({
+        resultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        shortTitle: "Attack rolled",
+      }),
+      latestResult: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        kind: "attack",
+        phase: "phase1",
+      },
+    });
+    expect(
+      payload.commandEnvelope.state.participants[0].attackResults.phase1,
+    ).toMatchObject({
+      attackerParticipantId: "encounter-participant-1",
+      defenderParticipantId: "encounter-participant-2",
+      phase: "phase1",
+    });
   });
 
   it("uses the existing generated distance Skill/OB row for the current player phase 1 attack", async () => {

@@ -7,6 +7,7 @@ import type {
   CombatRoundAttackDirection,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundAttackRollResult,
+  CombatRoundCommandEnvelope,
   CombatRoundCombatExperienceResult,
   CombatRoundDamageArmorCoverage,
   CombatRoundDamageReview,
@@ -4158,6 +4159,32 @@ function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | un
   return undefined;
 }
 
+function normalizeCombatRoundManagerSelectionFromCommandEnvelope(input: {
+  commandEnvelope?: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}): CombatRoundState {
+  const initialized = initializeCombatRoundState({ encounter: input.encounter });
+  const currentTask = input.commandEnvelope?.currentTask;
+  const currentTaskSelection: CombatRoundSelectionTarget | undefined = currentTask
+    ? {
+        participantId: currentTask.participantId,
+        step: currentTask.step,
+      }
+    : undefined;
+  const selectedState = currentTaskSelection
+    ? applyCombatRoundSelectionTarget({
+        selection: currentTaskSelection,
+        state: initialized,
+      })
+    : initialized;
+
+  return normalizeCombatRoundManagerSelection({
+    manualSelection: currentTaskSelection,
+    pendingSelection: currentTaskSelection,
+    state: selectedState,
+  });
+}
+
 export default function CombatRoundManagerPanel({
   encounter,
   onEncounterUpdated,
@@ -6199,13 +6226,14 @@ export default function CombatRoundManagerPanel({
       setSaving(true);
 
       try {
-        const { encounter: nextEncounter, participants } =
+        const { commandEnvelope, encounter: nextEncounter, participants } =
           await commitPhaseInitiativeResolutionOnServer({
             encounterId: encounter.id,
             phase: phaseInitiativeResolutionPhase,
           });
-        const nextRoundState = normalizeCombatRoundManagerSelection({
-          state: initializeCombatRoundState({ encounter: nextEncounter }),
+        const nextRoundState = normalizeCombatRoundManagerSelectionFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
         });
 
         if (participants.length > 0) {
@@ -7018,20 +7046,22 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const { encounter: nextEncounter, participant } = await rollCombatAttackOnServer({
-        actionId: inspectorDraft.actionId || `${phase}_attack`,
-        defenderDb,
-        defenderScenarioParticipantId: targetScenarioParticipant.id,
-        encounterId: encounter.id,
-        ob,
-        phase,
-        scenarioParticipantId: selectedScenarioParticipant.id,
-        weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,
-        weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
-        weaponName: phaseModel.attackStats.weaponName,
-      });
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      const { commandEnvelope, encounter: nextEncounter, participant } =
+        await rollCombatAttackOnServer({
+          actionId: inspectorDraft.actionId || `${phase}_attack`,
+          defenderDb,
+          defenderScenarioParticipantId: targetScenarioParticipant.id,
+          encounterId: encounter.id,
+          ob,
+          phase,
+          scenarioParticipantId: selectedScenarioParticipant.id,
+          weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,
+          weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
+          weaponName: phaseModel.attackStats.weaponName,
+        });
+      const nextRoundState = normalizeCombatRoundManagerSelectionFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
       });
 
       if (participant) {

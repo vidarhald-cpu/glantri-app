@@ -11,6 +11,7 @@ import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
   backOutCombatRoundPhaseAttack,
+  buildCombatRoundCommandEnvelope,
   buildCombatRoundAttackRollResult,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
@@ -29,6 +30,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
+  getCombatRoundAttackResultId,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
   getCombatDeclarationAttackPhases,
@@ -3358,9 +3360,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           },
         });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({
+          commands: [committed.command],
+          latestResult: {
+            kind: "phase_initiative_commit",
+            phase,
+          },
+          state: committed.state,
+        });
 
         return {
           command: committed.command,
+          commandEnvelope,
           encounter: savedEncounter,
           participants: updatedParticipants.filter(
             (participant): participant is ScenarioParticipant => Boolean(participant),
@@ -3611,9 +3622,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
+      const attackCommand = nextRoundState.commands.at(-1);
+      const attackResultId = getCombatRoundAttackResultId({
+        result: attackResult,
+        roundNumber: nextRoundState.roundNumber,
+      });
+      const commandEnvelope = buildCombatRoundCommandEnvelope({
+        commands: attackCommand ? [attackCommand] : [],
+        latestResult: {
+          attackResultId,
+          attackerParticipantId: attackResult.attackerParticipantId,
+          defenderParticipantId: attackResult.defenderParticipantId,
+          kind: "attack",
+          phase: attackResult.phase,
+        },
+        state: nextRoundState,
+      });
 
       return {
         attackResult,
+        command: attackCommand,
+        commandEnvelope,
         encounter:
           access.mode === "gm"
             ? savedEncounter

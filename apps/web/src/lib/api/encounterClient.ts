@@ -1,5 +1,7 @@
 import type {
   CombatRoundAttackRollResult,
+  CombatRoundCommand,
+  CombatRoundCommandEnvelope,
   CombatRoundCombatExperienceResult,
   CombatDistanceEdge,
   CombatRoundInitiativeResult,
@@ -213,10 +215,12 @@ export async function commitPhaseInitiativeResolutionOnServer(input: {
   encounterId: string;
   phase: "phase1" | "phase2";
 }): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
   participants: ScenarioParticipant[];
 }> {
   const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
     participants: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/commit-phase-initiative-resolution`, {
@@ -309,11 +313,15 @@ export async function rollCombatAttackOnServer(input: {
   weaponName?: string;
 }): Promise<{
   attackResult: CombatRoundAttackRollResult;
+  command?: CombatRoundCommand;
+  commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
   participant?: ScenarioParticipant;
 }> {
   const payload = await sendJson<{
     attackResult: CombatRoundAttackRollResult;
+    command?: CombatRoundCommand;
+    commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
     participant?: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {

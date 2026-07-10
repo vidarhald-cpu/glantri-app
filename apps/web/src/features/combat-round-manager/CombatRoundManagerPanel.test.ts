@@ -894,6 +894,32 @@ describe("CombatRoundManagerPanel", () => {
     );
   });
 
+  it("uses canonical command envelopes for initiative commit and attack roll state selection", () => {
+    const source = readSource();
+
+    expect(source).toContain("normalizeCombatRoundManagerSelectionFromCommandEnvelope");
+    expect(source).toContain("commandEnvelope?: CombatRoundCommandEnvelope");
+    expect(source).toContain(
+      "const { commandEnvelope, encounter: nextEncounter, participants } =",
+    );
+    expect(source).toContain(
+      "await commitPhaseInitiativeResolutionOnServer({",
+    );
+    expect(source).toContain(
+      "const { commandEnvelope, encounter: nextEncounter, participant } =",
+    );
+    expect(source).toContain("await rollCombatAttackOnServer({");
+    expect(source).toContain("manualSelection: currentTaskSelection");
+    expect(source).toContain("pendingSelection: currentTaskSelection");
+    expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source.indexOf("await commitPhaseInitiativeResolutionOnServer({")).toBeLessThan(
+      source.indexOf("normalizeCombatRoundManagerSelectionFromCommandEnvelope({"),
+    );
+    expect(source.indexOf("await rollCombatAttackOnServer({")).toBeLessThan(
+      source.lastIndexOf("normalizeCombatRoundManagerSelectionFromCommandEnvelope({"),
+    );
+  });
+
   it("guards recorded attack results against accidental re-rolls", () => {
     const source = readSource();
 

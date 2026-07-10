@@ -12,6 +12,7 @@ import {
   backOutCombatRoundPhaseAttack,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundDamageResult,
+  buildCombatRoundCommandEnvelope,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
@@ -15439,6 +15440,17 @@ describe("combat round manager", () => {
       state: atA1,
       submittedBy: "gm",
     });
+    const attackEnvelope = buildCombatRoundCommandEnvelope({
+      commands: afterA1.commands.at(-1) ? [afterA1.commands.at(-1)!] : [],
+      latestResult: {
+        attackResultId: "2:phase1:gladiator:scyrian",
+        attackerParticipantId: "gladiator",
+        defenderParticipantId: "scyrian",
+        kind: "attack",
+        phase: "phase1",
+      },
+      state: afterA1,
+    });
     const reloadedAfterA1 = initializeCombatRoundState({
       encounter: encounter({
         combatRoundState: afterA1,
@@ -15462,6 +15474,21 @@ describe("combat round manager", () => {
     expect(atA1.currentStep).toBe("phase_1_actions");
     expect(atA1.currentCursor).toMatchObject({ participantId: "gladiator", step: "A1" });
     expect(afterA1.currentStep).toBe("review_phase_2_modifiers");
+    expect(attackEnvelope).toMatchObject({
+      currentTask: {
+        cursorStep: "M2",
+        participantId: "gladiator",
+        step: "review_phase_2_modifiers",
+      },
+      latestEvent: {
+        resultId: "2:phase1:gladiator:scyrian",
+        shortTitle: "Attack rolled",
+      },
+      latestResult: {
+        attackResultId: "2:phase1:gladiator:scyrian",
+        kind: "attack",
+      },
+    });
     expect(afterA1.commands.at(-1)).toMatchObject({
       facts: {
         attackResultId: expect.stringContaining("phase1:gladiator:scyrian"),
@@ -15835,10 +15862,18 @@ describe("combat round manager", () => {
       },
       phase: "phase2",
       state: reloadedAfterI2Rolls,
-    }).state;
+    });
+    const i2CommitEnvelope = buildCombatRoundCommandEnvelope({
+      commands: [afterI2Commit.command],
+      latestResult: {
+        kind: "phase_initiative_commit",
+        phase: "phase2",
+      },
+      state: afterI2Commit.state,
+    });
     const reloadedAfterI2 = initializeCombatRoundState({
       encounter: encounter({
-        combatRoundState: afterI2Commit,
+        combatRoundState: afterI2Commit.state,
         currentRound: 4,
         participants: encounterParticipants,
       }),
@@ -15859,6 +15894,17 @@ describe("combat round manager", () => {
         state: reloadedAfterI2Rolls,
       }),
     ).toBe(false);
+    expect(i2CommitEnvelope).toMatchObject({
+      currentTask: {
+        cursorStep: "A2",
+        participantId: "gladiator",
+        step: "phase_2_actions",
+      },
+      latestResult: {
+        kind: "phase_initiative_commit",
+        phase: "phase2",
+      },
+    });
     expect(reloadedAfterI2.currentStep).toBe("phase_2_actions");
     expect(reloadedAfterI2.currentCursor).toMatchObject({
       participantId: "gladiator",

@@ -17009,6 +17009,32 @@ export interface CombatRoundLatestEventSummary {
   summaryText: string;
 }
 
+export interface CombatRoundCommandCurrentTask {
+  cursorStep: CombatRoundCursorStep;
+  participantId?: string;
+  roundNumber: number;
+  step: CombatRoundStep;
+}
+
+export interface CombatRoundCommandEnvelopeResult {
+  attackResultId?: string;
+  attackerParticipantId?: string;
+  defenderParticipantId?: string;
+  kind: "attack" | "phase_initiative_commit";
+  phase?: CombatRoundPhase;
+}
+
+export interface CombatRoundCommandEnvelope {
+  commands: CombatRoundCommand[];
+  currentCursor?: CombatRoundCursor;
+  currentStep: CombatRoundStep;
+  currentTask?: CombatRoundCommandCurrentTask;
+  latestEvent?: CombatRoundLatestEventSummary;
+  latestResult?: CombatRoundCommandEnvelopeResult;
+  state: CombatRoundState;
+  warnings: string[];
+}
+
 type CombatRoundLatestEventParticipantLabel = {
   label: string;
   participantId: string;
@@ -17677,6 +17703,34 @@ export function getLatestCombatEventSummary(
   }
 
   return undefined;
+}
+
+export function buildCombatRoundCommandEnvelope(input: {
+  commands?: CombatRoundCommand[];
+  latestResult?: CombatRoundCommandEnvelopeResult;
+  state: CombatRoundState;
+  warnings?: string[];
+}): CombatRoundCommandEnvelope {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const currentCursor = normalized.currentCursor;
+
+  return {
+    commands: input.commands ?? [],
+    currentCursor,
+    currentStep: normalized.currentStep,
+    currentTask: currentCursor
+      ? {
+          cursorStep: currentCursor.step,
+          participantId: currentCursor.participantId,
+          roundNumber: currentCursor.roundNumber,
+          step: getCombatRoundStepForCursorStep(currentCursor.step),
+        }
+      : undefined,
+    latestEvent: getLatestCombatEventSummary(normalized),
+    latestResult: input.latestResult,
+    state: normalized,
+    warnings: input.warnings ?? [],
+  };
 }
 
 export function getCombatRoundTimelineRoundStates(state: CombatRoundState): CombatRoundState[] {
