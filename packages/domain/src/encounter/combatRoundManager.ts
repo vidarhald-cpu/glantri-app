@@ -17025,13 +17025,11 @@ export interface CombatRoundCommandEnvelopeResult {
 }
 
 export interface CombatRoundCommandEnvelope {
-  commands: CombatRoundCommand[];
   currentCursor?: CombatRoundCursor;
   currentStep: CombatRoundStep;
   currentTask?: CombatRoundCommandCurrentTask;
   latestEvent?: CombatRoundLatestEventSummary;
   latestResult?: CombatRoundCommandEnvelopeResult;
-  state: CombatRoundState;
   warnings: string[];
 }
 
@@ -17706,7 +17704,6 @@ export function getLatestCombatEventSummary(
 }
 
 export function buildCombatRoundCommandEnvelope(input: {
-  commands?: CombatRoundCommand[];
   latestResult?: CombatRoundCommandEnvelopeResult;
   state: CombatRoundState;
   warnings?: string[];
@@ -17715,7 +17712,6 @@ export function buildCombatRoundCommandEnvelope(input: {
   const currentCursor = normalized.currentCursor;
 
   return {
-    commands: input.commands ?? [],
     currentCursor,
     currentStep: normalized.currentStep,
     currentTask: currentCursor
@@ -17728,7 +17724,6 @@ export function buildCombatRoundCommandEnvelope(input: {
       : undefined,
     latestEvent: getLatestCombatEventSummary(normalized),
     latestResult: input.latestResult,
-    state: normalized,
     warnings: input.warnings ?? [],
   };
 }

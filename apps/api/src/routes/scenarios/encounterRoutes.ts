@@ -3361,7 +3361,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         });
         const commandEnvelope = buildCombatRoundCommandEnvelope({
-          commands: [committed.command],
           latestResult: {
             kind: "phase_initiative_commit",
             phase,
@@ -3628,7 +3627,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundNumber: nextRoundState.roundNumber,
       });
       const commandEnvelope = buildCombatRoundCommandEnvelope({
-        commands: attackCommand ? [attackCommand] : [],
         latestResult: {
           attackResultId,
           attackerParticipantId: attackResult.attackerParticipantId,

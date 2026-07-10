@@ -15441,7 +15441,6 @@ describe("combat round manager", () => {
       submittedBy: "gm",
     });
     const attackEnvelope = buildCombatRoundCommandEnvelope({
-      commands: afterA1.commands.at(-1) ? [afterA1.commands.at(-1)!] : [],
       latestResult: {
         attackResultId: "2:phase1:gladiator:scyrian",
         attackerParticipantId: "gladiator",
@@ -15489,6 +15488,8 @@ describe("combat round manager", () => {
         kind: "attack",
       },
     });
+    expect(attackEnvelope).not.toHaveProperty("commands");
+    expect(attackEnvelope).not.toHaveProperty("state");
     expect(afterA1.commands.at(-1)).toMatchObject({
       facts: {
         attackResultId: expect.stringContaining("phase1:gladiator:scyrian"),
@@ -15864,7 +15865,6 @@ describe("combat round manager", () => {
       state: reloadedAfterI2Rolls,
     });
     const i2CommitEnvelope = buildCombatRoundCommandEnvelope({
-      commands: [afterI2Commit.command],
       latestResult: {
         kind: "phase_initiative_commit",
         phase: "phase2",
@@ -15905,6 +15905,8 @@ describe("combat round manager", () => {
         phase: "phase2",
       },
     });
+    expect(i2CommitEnvelope).not.toHaveProperty("commands");
+    expect(i2CommitEnvelope).not.toHaveProperty("state");
     expect(reloadedAfterI2.currentStep).toBe("phase_2_actions");
     expect(reloadedAfterI2.currentCursor).toMatchObject({
       participantId: "gladiator",

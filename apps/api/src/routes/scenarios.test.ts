@@ -4876,6 +4876,14 @@ describe("scenarios route contract", () => {
         phase: "phase2",
       },
     });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(updatedEncounter).toMatchObject({
+      id: "encounter-1",
+      combatRoundState: expect.objectContaining({
+        currentStep: "phase_2_actions",
+      }),
+    });
     expect(updatedEncounter.combatRoundState.currentCursor).toMatchObject({
       participantId: "encounter-participant-1",
       step: "A2",
@@ -7214,15 +7222,13 @@ describe("scenarios route contract", () => {
       type: "roll_attack",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toBeUndefined();
+    expect(payload.command).toMatchObject({
+      facts: expect.objectContaining({
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+      }),
+      type: "roll_attack",
+    });
     expect(payload.commandEnvelope).toMatchObject({
-      commands: [
-        expect.objectContaining({
-          facts: expect.objectContaining({
-            attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
-          }),
-          type: "roll_attack",
-        }),
-      ],
       latestEvent: expect.objectContaining({
         resultId: "1:phase1:encounter-participant-1:encounter-participant-2",
         shortTitle: "Attack rolled",
@@ -7235,9 +7241,15 @@ describe("scenarios route contract", () => {
         phase: "phase1",
       },
     });
-    expect(
-      payload.commandEnvelope.state.participants[0].attackResults.phase1,
-    ).toMatchObject({
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(payload.encounter).toMatchObject({
+      id: "encounter-1",
+      combatRoundState: expect.objectContaining({
+        currentStep: expect.any(String),
+      }),
+    });
+    expect(payload.encounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
       attackerParticipantId: "encounter-participant-1",
       defenderParticipantId: "encounter-participant-2",
       phase: "phase1",

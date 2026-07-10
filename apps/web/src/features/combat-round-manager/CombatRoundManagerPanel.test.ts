@@ -912,6 +912,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("manualSelection: currentTaskSelection");
     expect(source).toContain("pendingSelection: currentTaskSelection");
     expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source).not.toContain("commandEnvelope.commands");
+    expect(source).not.toContain("commandEnvelope.state");
     expect(source.indexOf("await commitPhaseInitiativeResolutionOnServer({")).toBeLessThan(
       source.indexOf("normalizeCombatRoundManagerSelectionFromCommandEnvelope({"),
     );
