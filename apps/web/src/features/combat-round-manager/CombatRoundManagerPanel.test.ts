@@ -648,14 +648,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("fromParticipantId: actedParticipantId");
     expect(source).toContain("pendingSelectionRef");
     expect(source).toContain("manualSelectionRef");
-    expect(source).toContain("normalizeCombatRoundManagerSelection");
+    expect(source).toContain("getCombatRoundManagerInspectionSelection");
     expect(source).toContain("getCurrentCombatRoundTaskSelection");
     expect(source).toContain("getNextCombatRoundParticipantSelection");
     expect(source).toContain(
       "const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep)",
     );
     expect(source).toContain("const nextSelection = shouldUsePersistedCursor");
-    expect(source).toContain("? normalizeCombatRoundManagerSelection({");
+    expect(source).toContain("? resolveCombatRoundInspectionSelection({");
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("Use inspector for phase resolution");
@@ -789,12 +789,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("function selectCurrentTask()");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("pendingSelectionRef.current = undefined");
-    expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source).toContain("setInspectionSelection(");
+    expect(source).toContain("resolveCombatRoundInspectionSelection({");
     expect(source).toContain("scrollToCurrent: true");
     expect(source).toContain('scrollMode: "center"');
     expect(source).toContain("disabled={saving || !currentTaskSelection}");
     expect(source).toContain("onClick={selectCurrentTask}");
     expect(source).not.toContain("selectCurrentTaskOnServer");
+    expect(source).not.toContain("applyCombatRoundSelectionTarget");
   });
 
   it("initially selects and scrolls to the active current task when present", () => {
@@ -803,7 +805,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("const currentTaskSelection =");
     expect(source).toContain("!pendingSelection && !manualSelection");
     expect(source).toContain("manualSelection: manualSelection ?? currentTaskSelection");
-    expect(source).toContain("selection: currentTaskSelection");
+    expect(source).toContain("const nextInspectionSelection = resolveCombatRoundInspectionSelection");
     expect(source).toContain("scrollTimelineCellIntoView(");
     expect(source).toContain('"center"');
   });
@@ -825,25 +827,26 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseWeaponNames: {");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
+    expect(source).toContain("const currentSelection = getCurrentCombatRoundTaskSelection(roundState)");
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
-    expect(source).toContain("participantId: inspector.participant?.participantId");
-    expect(source).toContain("step: inspector.step");
+    expect(source).toContain("participantId: currentSelection?.participantId");
+    expect(source).toContain("step: currentSelection?.step ?? roundState.currentStep");
     expect(source).toContain("participantId: clearedSelection.participantId");
     expect(source).toContain("step: clearedSelection.step");
     expect(source).not.toContain("actionLog:");
   });
 
-  it("uses the server-returned selection after command-stack Clear", () => {
+  it("uses canonical current task selection after command-stack Clear", () => {
     const source = readSource();
 
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
-    expect(source).toContain("const nextSelection: CombatRoundSelectionTarget =");
-    expect(source).toContain(
-      "participantId: nextRoundState.selectedParticipantId ?? clearedSelection.participantId",
-    );
-    expect(source).toContain("step: nextRoundState.selectedStep ?? clearedSelection.step");
-    expect(source).toContain("pendingSelectionRef.current = nextSelection");
-    expect(source).toContain("manualSelectionRef.current = nextSelection");
+    expect(source).toContain("const nextSelection = resolveCombatRoundInspectionSelection({");
+    expect(source).toContain("manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState)");
+    expect(source).toContain("pendingSelectionRef.current = undefined");
+    expect(source).toContain("manualSelectionRef.current = undefined");
+    expect(source).toContain("setInspectionSelection(nextSelection)");
+    expect(source).not.toContain("nextRoundState.selectedParticipantId ?? clearedSelection.participantId");
+    expect(source).not.toContain("nextRoundState.selectedStep ?? clearedSelection.step");
   });
 
   it("keeps Clear current step visible by avoiding explicit scroll after clear", () => {
@@ -858,9 +861,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Clear current step");
   });
 
-  it("uses the selected cell as the authoritative inspector mode", () => {
+  it("uses the locally inspected cell as the authoritative inspector display mode", () => {
     const source = readSource();
 
+    expect(source).toContain("const [inspectionSelection, setInspectionSelection]");
     expect(source).toContain(
       'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',
     );
@@ -872,7 +876,8 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("inspector.participant?.stepStatuses[inspector.step]");
     expect(source).toContain("step: inspector.step");
-    expect(source).toContain("getAdvanceButtonLabel(inspector.step)");
+    expect(source).toContain("const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep");
+    expect(source).toContain("getAdvanceButtonLabel(currentTaskStep)");
     expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("inspector.step,");
     expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");
@@ -897,7 +902,7 @@ describe("CombatRoundManagerPanel", () => {
   it("uses canonical command envelopes for initiative commit and attack roll state selection", () => {
     const source = readSource();
 
-    expect(source).toContain("normalizeCombatRoundManagerSelectionFromCommandEnvelope");
+    expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope");
     expect(source).toContain("commandEnvelope?: CombatRoundCommandEnvelope");
     expect(source).toContain(
       "const { commandEnvelope, encounter: nextEncounter, participants } =",
@@ -911,14 +916,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("await rollCombatAttackOnServer({");
     expect(source).toContain("manualSelection: currentTaskSelection");
     expect(source).toContain("pendingSelection: currentTaskSelection");
-    expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source).toContain("inspectionSelection: nextInspectionSelection");
+    expect(source).toContain("setInspectionSelection(nextInspectionSelection)");
     expect(source).not.toContain("commandEnvelope.commands");
     expect(source).not.toContain("commandEnvelope.state");
     expect(source.indexOf("await commitPhaseInitiativeResolutionOnServer({")).toBeLessThan(
-      source.indexOf("normalizeCombatRoundManagerSelectionFromCommandEnvelope({"),
+      source.indexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
     );
     expect(source.indexOf("await rollCombatAttackOnServer({")).toBeLessThan(
-      source.lastIndexOf("normalizeCombatRoundManagerSelectionFromCommandEnvelope({"),
+      source.lastIndexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
     );
   });
 

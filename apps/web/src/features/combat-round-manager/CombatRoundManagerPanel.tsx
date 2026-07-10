@@ -189,12 +189,11 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
-  applyCombatRoundSelectionTarget,
+  getCombatRoundManagerInspectionSelection,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
   isSelectedCombatRoundStepExecutable,
-  normalizeCombatRoundManagerSelection,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
@@ -4159,10 +4158,27 @@ function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | un
   return undefined;
 }
 
-function normalizeCombatRoundManagerSelectionFromCommandEnvelope(input: {
+function resolveCombatRoundInspectionSelection(input: {
+  manualSelection?: CombatRoundSelectionTarget;
+  pendingSelection?: CombatRoundSelectionTarget;
+  state: CombatRoundState;
+}): CombatRoundSelectionTarget {
+  return (
+    getCombatRoundManagerInspectionSelection(input) ??
+    getCurrentCombatRoundTaskSelection(input.state) ?? {
+      participantId: input.state.participants[0]?.participantId,
+      step: input.state.currentStep,
+    }
+  );
+}
+
+function getCombatRoundManagerStateFromCommandEnvelope(input: {
   commandEnvelope?: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
-}): CombatRoundState {
+}): {
+  inspectionSelection: CombatRoundSelectionTarget;
+  state: CombatRoundState;
+} {
   const initialized = initializeCombatRoundState({ encounter: input.encounter });
   const currentTask = input.commandEnvelope?.currentTask;
   const currentTaskSelection: CombatRoundSelectionTarget | undefined = currentTask
@@ -4171,18 +4187,15 @@ function normalizeCombatRoundManagerSelectionFromCommandEnvelope(input: {
         step: currentTask.step,
       }
     : undefined;
-  const selectedState = currentTaskSelection
-    ? applyCombatRoundSelectionTarget({
-        selection: currentTaskSelection,
-        state: initialized,
-      })
-    : initialized;
 
-  return normalizeCombatRoundManagerSelection({
-    manualSelection: currentTaskSelection,
-    pendingSelection: currentTaskSelection,
-    state: selectedState,
-  });
+  return {
+    inspectionSelection: resolveCombatRoundInspectionSelection({
+      manualSelection: currentTaskSelection,
+      pendingSelection: currentTaskSelection,
+      state: initialized,
+    }),
+    state: initialized,
+  };
 }
 
 export default function CombatRoundManagerPanel({
@@ -4192,7 +4205,16 @@ export default function CombatRoundManagerPanel({
   scenarioParticipants = [],
 }: CombatRoundManagerPanelProps) {
   const initialRoundState = useMemo(() => initializeCombatRoundState({ encounter }), [encounter]);
+  const initialInspectionSelection = useMemo(
+    () =>
+      resolveCombatRoundInspectionSelection({
+        manualSelection: getCurrentCombatRoundTaskSelection(initialRoundState),
+        state: initialRoundState,
+      }),
+    [initialRoundState],
+  );
   const [roundState, setRoundState] = useState(initialRoundState);
+  const [inspectionSelection, setInspectionSelection] = useState(initialInspectionSelection);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [scenarioParticipantOverrides, setScenarioParticipantOverrides] = useState<
@@ -4314,10 +4336,11 @@ export default function CombatRoundManagerPanel({
   );
   const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
   const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
+  const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
   const inspector = buildCombatRoundInspector({
-    participantId: roundState.selectedParticipantId,
+    participantId: inspectionSelection.participantId,
     state: selectedTimelineRoundState,
-    step: roundState.selectedStep,
+    step: inspectionSelection.step,
   });
   const inspectorSelectionIsCurrentTask =
     selectedRoundIsActive &&
@@ -4329,7 +4352,7 @@ export default function CombatRoundManagerPanel({
   const clearCurrentStepAvailable =
     canClearCombatRoundStep({
       state: roundState,
-      step: inspector.step,
+      step: currentTaskStep,
     }) && selectedRoundIsActive;
   const selectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspector.participant?.participantId,
@@ -5749,18 +5772,11 @@ export default function CombatRoundManagerPanel({
       !pendingSelection && !manualSelection
         ? getCurrentCombatRoundTaskSelection(initialRoundState)
         : undefined;
-    const nextRoundStateCandidate = normalizeCombatRoundManagerSelection({
+    const nextInspectionSelection = resolveCombatRoundInspectionSelection({
       manualSelection: manualSelection ?? currentTaskSelection,
       pendingSelection,
       state: initialRoundState,
     });
-    const nextRoundState =
-      currentTaskSelection && !manualSelection && !pendingSelection
-        ? applyCombatRoundSelectionTarget({
-            selection: currentTaskSelection,
-            state: nextRoundStateCandidate,
-          })
-        : nextRoundStateCandidate;
 
     if (pendingSelection) {
       pendingSelectionRef.current = undefined;
@@ -5769,24 +5785,24 @@ export default function CombatRoundManagerPanel({
     setSelectedRoundNumber((currentRoundNumber) =>
       currentTaskSelection
         ? initialRoundState.roundNumber
-        : getCombatRoundTimelineRoundStates(nextRoundState).some(
+        : getCombatRoundTimelineRoundStates(initialRoundState).some(
               (round) => round.roundNumber === currentRoundNumber,
             )
           ? currentRoundNumber
-          : nextRoundState.roundNumber,
+          : initialRoundState.roundNumber,
     );
 
     if (
       manualSelection &&
-      (manualSelection.step !== nextRoundState.currentStep ||
-        !nextRoundState.participants.some(
-          (participant) => participant.participantId === manualSelection.participantId,
-        ))
+      !initialRoundState.participants.some(
+        (participant) => participant.participantId === manualSelection.participantId,
+      )
     ) {
       manualSelectionRef.current = undefined;
     }
 
-    setRoundState(nextRoundState);
+    setInspectionSelection(nextInspectionSelection);
+    setRoundState(initialRoundState);
 
     if (currentTaskSelection?.participantId) {
       scrollTimelineCellIntoView(
@@ -6231,7 +6247,10 @@ export default function CombatRoundManagerPanel({
             encounterId: encounter.id,
             phase: phaseInitiativeResolutionPhase,
           });
-        const nextRoundState = normalizeCombatRoundManagerSelectionFromCommandEnvelope({
+        const {
+          inspectionSelection: nextInspectionSelection,
+          state: nextRoundState,
+        } = getCombatRoundManagerStateFromCommandEnvelope({
           commandEnvelope,
           encounter: nextEncounter,
         });
@@ -6246,6 +6265,7 @@ export default function CombatRoundManagerPanel({
 
         pendingSelectionRef.current = undefined;
         manualSelectionRef.current = undefined;
+        setInspectionSelection(nextInspectionSelection);
         setRoundState(nextRoundState);
         setSelectedRoundNumber(nextRoundState.roundNumber);
         onEncounterUpdated?.(nextEncounter);
@@ -6275,9 +6295,8 @@ export default function CombatRoundManagerPanel({
       : roundState;
     const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, stateForCommit);
     const commandParticipantId =
-      inspector.participant?.participantId ??
-      stateForCommit.currentCursor?.participantId ??
-      stateForCommit.selectedParticipantId;
+      getCurrentCombatRoundTaskSelection(stateForCommit)?.participantId ??
+      stateForCommit.currentCursor?.participantId;
     const advanceInput = commandParticipantId
       ? {
           command: {
@@ -6317,6 +6336,12 @@ export default function CombatRoundManagerPanel({
     }
 
     setRoundState(stateToPersist);
+    setInspectionSelection(
+      resolveCombatRoundInspectionSelection({
+        manualSelection: getCurrentCombatRoundTaskSelection(stateToPersist),
+        state: stateToPersist,
+      }),
+    );
     setSelectedRoundNumber(stateToPersist.roundNumber);
     setSaving(true);
 
@@ -6346,9 +6371,10 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const currentSelection = getCurrentCombatRoundTaskSelection(roundState);
       const clearedSelection: CombatRoundSelectionTarget = {
-        participantId: inspector.participant?.participantId,
-        step: inspector.step,
+        participantId: currentSelection?.participantId,
+        step: currentSelection?.step ?? roundState.currentStep,
       };
       const { encounter: nextEncounter, participants } = await clearCurrentCombatRoundStepOnServer({
         encounterId: encounter.id,
@@ -6356,13 +6382,14 @@ export default function CombatRoundManagerPanel({
         step: clearedSelection.step,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      const nextSelection: CombatRoundSelectionTarget = {
-        participantId: nextRoundState.selectedParticipantId ?? clearedSelection.participantId,
-        step: nextRoundState.selectedStep ?? clearedSelection.step,
-      };
+      const nextSelection = resolveCombatRoundInspectionSelection({
+        manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState),
+        state: nextRoundState,
+      });
 
-      pendingSelectionRef.current = nextSelection;
-      manualSelectionRef.current = nextSelection;
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setSaveError(undefined);
@@ -6402,16 +6429,12 @@ export default function CombatRoundManagerPanel({
     manualSelectionRef.current = undefined;
     pendingSelectionRef.current = undefined;
     setSelectedRoundNumber(roundState.roundNumber);
-    setRoundState((current) => {
-      const selection = getCurrentCombatRoundTaskSelection(current);
-
-      return selection
-        ? applyCombatRoundSelectionTarget({
-            selection,
-            state: current,
-          })
-        : current;
-    });
+    setInspectionSelection(
+      resolveCombatRoundInspectionSelection({
+        manualSelection: getCurrentCombatRoundTaskSelection(roundState),
+        state: roundState,
+      }),
+    );
     focusRoundTable({
       scrollIntoView: false,
       scrollMode: "center",
@@ -6429,15 +6452,10 @@ export default function CombatRoundManagerPanel({
       participantId: selection.participantId,
       step: selection.step,
     };
-    setRoundState((current) =>
-      applyCombatRoundSelectionTarget({
-        selection: {
-          participantId: selection.participantId,
-          step: selection.step,
-        },
-        state: current,
-      }),
-    );
+    setInspectionSelection({
+      participantId: selection.participantId,
+      step: selection.step,
+    });
     scrollTimelineCellIntoView(selection, mode);
   }
 
@@ -6450,7 +6468,7 @@ export default function CombatRoundManagerPanel({
   }
 
   function moveSelection(input: { participantOffset?: number; stepOffset?: number }) {
-    const currentStep = roundState.selectedStep ?? roundState.currentStep;
+    const currentStep = inspectionSelection.step;
     const participantIds = getParticipantIdsForTimelineRound({
       fallbackParticipantIds: displayParticipants.map((participant) => participant.participantId),
       roundNumber: selectedRoundNumber,
@@ -6459,14 +6477,14 @@ export default function CombatRoundManagerPanel({
     const nextSelection =
       input.stepOffset !== undefined
         ? getAdjacentCombatRoundTimelineStepSelection({
-            participantId: roundState.selectedParticipantId,
+            participantId: inspectionSelection.participantId,
             roundNumbers: timelineRoundNumbers,
             selectedRoundNumber,
             step: currentStep,
             stepOffset: input.stepOffset,
           })
         : getAdjacentCombatRoundTimelineParticipantSelection({
-            participantId: roundState.selectedParticipantId,
+            participantId: inspectionSelection.participantId,
             participantIds,
             participantOffset: input.participantOffset ?? 0,
             roundNumber: selectedRoundNumber,
@@ -6620,19 +6638,15 @@ export default function CombatRoundManagerPanel({
         : getNextCombatRoundParticipantSelection({
             fromParticipantId: actedParticipantId,
             participantIds: displayedParticipantIds,
-            step: roundState.selectedStep ?? actedStep,
+            step: inspectionSelection.step,
           });
-      const nextSelectedRoundState = shouldUsePersistedCursor
-        ? normalizeCombatRoundManagerSelection({
+      const nextInspectionSelection = nextSelection
+        ? resolveCombatRoundInspectionSelection({
+            manualSelection: nextSelection,
+            pendingSelection: nextSelection,
             state: nextRoundState,
           })
-        : applyCombatRoundSelectionTarget({
-            selection: nextSelection ?? {
-              participantId: actedParticipantId,
-              step: roundState.selectedStep ?? actedStep,
-            },
-            state: nextRoundState,
-          });
+        : resolveCombatRoundInspectionSelection({ state: nextRoundState });
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
@@ -6647,7 +6661,8 @@ export default function CombatRoundManagerPanel({
         manualSelectionRef.current = undefined;
       }
 
-      setRoundState(nextSelectedRoundState);
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -6678,8 +6693,9 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextInspectionSelection = resolveCombatRoundInspectionSelection({
+        state: nextRoundState,
       });
 
       setScenarioParticipantOverrides((current) => ({
@@ -6688,6 +6704,7 @@ export default function CombatRoundManagerPanel({
       }));
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
@@ -6719,8 +6736,9 @@ export default function CombatRoundManagerPanel({
         phase: inspectorPhaseAttackBackOutOpportunity.phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextInspectionSelection = resolveCombatRoundInspectionSelection({
+        state: nextRoundState,
       });
 
       setScenarioParticipantOverrides((current) => ({
@@ -6729,6 +6747,7 @@ export default function CombatRoundManagerPanel({
       }));
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
@@ -6760,8 +6779,9 @@ export default function CombatRoundManagerPanel({
         phase: inspectorPhaseAttackBackOutOpportunity.phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextInspectionSelection = resolveCombatRoundInspectionSelection({
+        state: nextRoundState,
       });
 
       setScenarioParticipantOverrides((current) => ({
@@ -6770,6 +6790,7 @@ export default function CombatRoundManagerPanel({
       }));
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
@@ -6803,10 +6824,12 @@ export default function CombatRoundManagerPanel({
         difficulty,
         encounterId: encounter.id,
       });
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: nextEncounter }),
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextInspectionSelection = resolveCombatRoundInspectionSelection({
+        state: nextRoundState,
       });
 
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
@@ -6872,10 +6895,12 @@ export default function CombatRoundManagerPanel({
         }
       }
 
-      const nextRoundState = normalizeCombatRoundManagerSelection({
-        state: initializeCombatRoundState({ encounter: latestEncounter }),
+      const nextRoundState = initializeCombatRoundState({ encounter: latestEncounter });
+      const nextInspectionSelection = resolveCombatRoundInspectionSelection({
+        state: nextRoundState,
       });
 
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       if (Object.keys(participantOverrides).length > 0) {
@@ -6922,19 +6947,15 @@ export default function CombatRoundManagerPanel({
         : getNextCombatRoundParticipantSelection({
             fromParticipantId: actedParticipantId,
             participantIds: displayedParticipantIds,
-            step: roundState.selectedStep ?? actedStep,
+            step: inspectionSelection.step,
           });
-      const nextSelectedRoundState = shouldUsePersistedCursor
-        ? normalizeCombatRoundManagerSelection({
+      const nextInspectionSelection = nextSelection
+        ? resolveCombatRoundInspectionSelection({
+            manualSelection: nextSelection,
+            pendingSelection: nextSelection,
             state: nextRoundState,
           })
-        : applyCombatRoundSelectionTarget({
-            selection: nextSelection ?? {
-              participantId: actedParticipantId,
-              step: roundState.selectedStep ?? actedStep,
-            },
-            state: nextRoundState,
-          });
+        : resolveCombatRoundInspectionSelection({ state: nextRoundState });
 
       if (nextSelection) {
         pendingSelectionRef.current = nextSelection;
@@ -6944,7 +6965,8 @@ export default function CombatRoundManagerPanel({
         manualSelectionRef.current = undefined;
       }
 
-      setRoundState(nextSelectedRoundState);
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
@@ -7059,7 +7081,10 @@ export default function CombatRoundManagerPanel({
           weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
           weaponName: phaseModel.attackStats.weaponName,
         });
-      const nextRoundState = normalizeCombatRoundManagerSelectionFromCommandEnvelope({
+      const {
+        inspectionSelection: nextInspectionSelection,
+        state: nextRoundState,
+      } = getCombatRoundManagerStateFromCommandEnvelope({
         commandEnvelope,
         encounter: nextEncounter,
       });
@@ -7074,6 +7099,7 @@ export default function CombatRoundManagerPanel({
 
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
@@ -7846,7 +7872,7 @@ export default function CombatRoundManagerPanel({
               disabled={
                 saving ||
                 !selectedRoundIsActive ||
-                inspectorSelectedStepIsSequential ||
+                isSequentialResolutionStep(currentTaskStep) ||
                 Boolean(roundEndStartNextRoundBlocker)
               }
               onClick={() => void commitCurrentStep()}
@@ -7857,7 +7883,7 @@ export default function CombatRoundManagerPanel({
                 ? "Saving..."
                 : topPhaseInitiativeResolutionOpen && topPhaseInitiativeResolutionPhase
                   ? `Commit ${formatCombatPhaseLabel(topPhaseInitiativeResolutionPhase)} initiative resolution`
-                  : getAdvanceButtonLabel(inspector.step)}
+                  : getAdvanceButtonLabel(currentTaskStep)}
             </button>
             <button
               disabled={saving || !currentTaskSelection}
@@ -8020,7 +8046,7 @@ export default function CombatRoundManagerPanel({
           </thead>
           <tbody>
             {displayParticipants.map((participant) => {
-              const selectedRow = roundState.selectedParticipantId === participant.participantId;
+              const selectedRow = inspectionSelection.participantId === participant.participantId;
 
               return (
                 <tr
@@ -8047,8 +8073,8 @@ export default function CombatRoundManagerPanel({
                         ) ?? participant;
                       const selected =
                         roundNumber === selectedRoundNumber &&
-                        roundState.selectedParticipantId === participant.participantId &&
-                        roundState.selectedStep === step;
+                        inspectionSelection.participantId === participant.participantId &&
+                        inspectionSelection.step === step;
                       const currentStepCell =
                         roundNumber === roundState.roundNumber && step === roundState.currentStep;
                       const activeCurrentTaskCell =

@@ -4,12 +4,11 @@ import type { EncounterParticipant, EncounterSession } from "@glantri/domain";
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
-  applyCombatRoundSelectionTarget,
   getCurrentCombatRoundTaskSelection,
   getCombatRoundManagerDisplayParticipantIds,
+  getCombatRoundManagerInspectionSelection,
   getNextCombatRoundParticipantSelection,
   isSelectedCombatRoundStepExecutable,
-  normalizeCombatRoundManagerSelection,
 } from "./combatRoundSelection";
 
 function participant(input: { id: string; label: string }): EncounterParticipant {
@@ -137,19 +136,21 @@ describe("combat round manager selection", () => {
       selectedStep: "initiative_phase_1" as const,
     };
     const currentTaskSelection = getCurrentCombatRoundTaskSelection(state);
-    const selectedCurrentTask = currentTaskSelection
-      ? applyCombatRoundSelectionTarget({
-          selection: currentTaskSelection,
-          state,
-        })
-      : state;
+    const inspectionSelection = getCombatRoundManagerInspectionSelection({
+      manualSelection: currentTaskSelection,
+      state,
+    });
 
     expect(currentTaskSelection).toEqual({
       participantId: "middle",
       step: "phase_1_actions",
     });
-    expect(selectedCurrentTask.selectedParticipantId).toBe("middle");
-    expect(selectedCurrentTask.selectedStep).toBe("phase_1_actions");
+    expect(inspectionSelection).toEqual({
+      participantId: "middle",
+      step: "phase_1_actions",
+    });
+    expect(state.selectedParticipantId).toBe("top");
+    expect(state.selectedStep).toBe("initiative_phase_1");
   });
 
   it("treats non-current inspected phase cells as inspection-only", () => {
@@ -342,10 +343,11 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "select_actions" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({ state });
+    const selection = getCombatRoundManagerInspectionSelection({ state });
 
-    expect(normalized.selectedParticipantId).toBe("top");
-    expect(normalized.selectedStep).toBe("select_actions");
+    expect(selection).toEqual({ participantId: "top", step: "select_actions" });
+    expect(state.selectedParticipantId).toBe("bottom");
+    expect(state.selectedStep).toBe("select_actions");
   });
 
   it("does not let stale A/P/D selected participant override fresh DE default", () => {
@@ -356,10 +358,11 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "phase_1_damage" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({ state });
+    const selection = getCombatRoundManagerInspectionSelection({ state });
 
-    expect(normalized.selectedParticipantId).toBe("top");
-    expect(normalized.selectedStep).toBe("select_actions");
+    expect(selection).toEqual({ participantId: "top", step: "select_actions" });
+    expect(state.selectedParticipantId).toBe("bottom");
+    expect(state.selectedStep).toBe("phase_1_damage");
   });
 
   it("moves exactly one row down for DE actions without wrapping", () => {
@@ -416,7 +419,7 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "select_actions" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({
+    const selection = getCombatRoundManagerInspectionSelection({
       pendingSelection: {
         participantId: "middle",
         step: "select_actions",
@@ -425,11 +428,12 @@ describe("combat round manager selection", () => {
     });
 
     expect(currentCursor).toMatchObject({ step: "DE" });
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("select_actions");
+    expect(selection).toEqual({ participantId: "middle", step: "select_actions" });
+    expect(refreshedState.selectedParticipantId).toBe("bottom");
+    expect(refreshedState.selectedStep).toBe("select_actions");
   });
 
-  it("uses persisted currentCursor after refresh instead of stale pending/manual selection", () => {
+  it("uses persisted currentCursor after refresh instead of stale persisted inspection fields", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedState = {
       ...existing,
@@ -442,20 +446,11 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "select_actions" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({
-      manualSelection: {
-        participantId: "bottom",
-        step: "select_actions",
-      },
-      pendingSelection: {
-        participantId: "top",
-        step: "select_actions",
-      },
-      state: refreshedState,
-    });
+    const selection = getCombatRoundManagerInspectionSelection({ state: refreshedState });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("select_actions");
+    expect(selection).toEqual({ participantId: "middle", step: "select_actions" });
+    expect(refreshedState.selectedParticipantId).toBe("bottom");
+    expect(refreshedState.selectedStep).toBe("select_actions");
   });
 
   it("uses a command-undo currentCursor for initiative selection after refresh", () => {
@@ -471,23 +466,14 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "initiative_phase_1" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({
-      manualSelection: {
-        participantId: "bottom",
-        step: "initiative_phase_1",
-      },
-      pendingSelection: {
-        participantId: "middle",
-        step: "initiative_phase_1",
-      },
-      state: refreshedState,
-    });
+    const selection = getCombatRoundManagerInspectionSelection({ state: refreshedState });
 
-    expect(normalized.selectedParticipantId).toBe("top");
-    expect(normalized.selectedStep).toBe("initiative_phase_1");
+    expect(selection).toEqual({ participantId: "top", step: "initiative_phase_1" });
+    expect(refreshedState.selectedParticipantId).toBe("bottom");
+    expect(refreshedState.selectedStep).toBe("initiative_phase_1");
   });
 
-  it("uses the SU current cursor after refresh instead of stale manual inspection", () => {
+  it("uses the SU current cursor after refresh instead of stale persisted inspection fields", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedState = {
       ...existing,
@@ -500,33 +486,26 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "top",
       selectedStep: "round_summary" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({
-      manualSelection: {
-        participantId: "top",
-        step: "round_summary",
-      },
-      state: refreshedState,
-    });
+    const selection = getCombatRoundManagerInspectionSelection({ state: refreshedState });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("round_summary");
+    expect(selection).toEqual({ participantId: "middle", step: "round_summary" });
     expect(
       isSelectedCombatRoundStepExecutable({
         participantId: "middle",
-        state: normalized,
+        state: refreshedState,
         step: "round_summary",
       }),
     ).toBe(true);
     expect(
       isSelectedCombatRoundStepExecutable({
         participantId: "top",
-        state: normalized,
+        state: refreshedState,
         step: "round_summary",
       }),
     ).toBe(false);
   });
 
-  it("uses fallback-undo currentCursor after clearing an empty A1 cell", () => {
+  it("keeps a manual history inspection local while canonical current task stays unchanged", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedState = {
       ...existing,
@@ -539,7 +518,7 @@ describe("combat round manager selection", () => {
       selectedParticipantId: "bottom",
       selectedStep: "phase_1_actions" as const,
     };
-    const normalized = normalizeCombatRoundManagerSelection({
+    const selection = getCombatRoundManagerInspectionSelection({
       manualSelection: {
         participantId: "bottom",
         step: "phase_1_actions",
@@ -551,8 +530,11 @@ describe("combat round manager selection", () => {
       state: refreshedState,
     });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("initiative_phase_1");
+    expect(selection).toEqual({ participantId: "bottom", step: "phase_1_actions" });
+    expect(getCurrentCombatRoundTaskSelection(refreshedState)).toEqual({
+      participantId: "middle",
+      step: "initiative_phase_1",
+    });
   });
 
   it("repairs unsupported A1 selection after refresh despite stale manual inspection", () => {
@@ -576,7 +558,7 @@ describe("combat round manager selection", () => {
       },
     });
     const refreshedState = initializeCombatRoundState({ encounter: refreshedEncounter });
-    const normalized = normalizeCombatRoundManagerSelection({
+    const selection = getCombatRoundManagerInspectionSelection({
       manualSelection: {
         participantId: "bottom",
         step: "initiative_phase_1",
@@ -588,12 +570,13 @@ describe("combat round manager selection", () => {
       state: refreshedState,
     });
 
-    expect(normalized.currentCursor).toMatchObject({ participantId: "top", step: "DE" });
-    expect(normalized.selectedParticipantId).toBe("top");
-    expect(normalized.selectedStep).toBe("select_actions");
+    expect(refreshedState.currentCursor).toMatchObject({ participantId: "top", step: "DE" });
+    expect(selection).toEqual({ participantId: "bottom", step: "initiative_phase_1" });
+    expect(refreshedState.selectedParticipantId).toBe("top");
+    expect(refreshedState.selectedStep).toBe("select_actions");
   });
 
-  it("keeps command-undo P1 selection after refresh despite stale manual inspection", () => {
+  it("keeps command-undo P1 current task separate from stale manual inspection", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedEncounter = encounter({
       combatRoundState: {
@@ -631,7 +614,7 @@ describe("combat round manager selection", () => {
       },
     });
     const refreshedState = initializeCombatRoundState({ encounter: refreshedEncounter });
-    const normalized = normalizeCombatRoundManagerSelection({
+    const selection = getCombatRoundManagerInspectionSelection({
       manualSelection: {
         participantId: "bottom",
         step: "initiative_phase_1",
@@ -643,7 +626,10 @@ describe("combat round manager selection", () => {
       state: refreshedState,
     });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("review_phase_2_actions");
+    expect(selection).toEqual({ participantId: "bottom", step: "initiative_phase_1" });
+    expect(getCurrentCombatRoundTaskSelection(refreshedState)).toEqual({
+      participantId: "middle",
+      step: "review_phase_2_actions",
+    });
   });
 });

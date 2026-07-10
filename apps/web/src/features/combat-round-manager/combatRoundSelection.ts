@@ -2,7 +2,6 @@ import type { CombatRoundState, CombatRoundStep } from "@glantri/domain";
 import {
   getCombatRoundStepForCursorStep,
   isGlobalCombatRoundCursorStep,
-  setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
 } from "@glantri/domain";
 
@@ -109,46 +108,23 @@ export function getNextCombatRoundParticipantSelection(input: {
   };
 }
 
-export function applyCombatRoundSelectionTarget(input: {
-  selection: CombatRoundSelectionTarget;
-  state: CombatRoundState;
-}): CombatRoundState {
-  if (!input.selection.participantId) {
-    return {
-      ...input.state,
-      selectedParticipantId: undefined,
-      selectedStep: input.selection.step,
-    };
-  }
-
-  return setCombatRoundSelection({
-    participantId: input.selection.participantId,
-    state: input.state,
-    step: input.selection.step,
-  });
-}
-
 function isValidSelection(input: {
   participantIds: string[];
   selection?: CombatRoundSelectionTarget;
-  step: CombatRoundStep;
+  step?: CombatRoundStep;
 }): boolean {
   return Boolean(
     input.selection?.participantId &&
-      input.selection.step === input.step &&
+      (input.step === undefined || input.selection.step === input.step) &&
       input.participantIds.includes(input.selection.participantId),
   );
 }
 
-export function normalizeCombatRoundManagerSelection(input: {
+export function getCombatRoundManagerInspectionSelection(input: {
   manualSelection?: CombatRoundSelectionTarget;
   pendingSelection?: CombatRoundSelectionTarget;
   state: CombatRoundState;
-}): CombatRoundState {
-  if (!isGlobalCombatRoundParticipantStep(input.state.currentStep)) {
-    return input.state;
-  }
-
+}): CombatRoundSelectionTarget | undefined {
   const participantIds = getCombatRoundManagerDisplayParticipantIds(input.state);
   const pendingSelection = input.pendingSelection;
   const manualSelection = input.manualSelection;
@@ -165,44 +141,61 @@ export function normalizeCombatRoundManagerSelection(input: {
           step: cursorStep,
         }
       : undefined;
-  let selection: CombatRoundSelectionTarget;
 
   if (
-    cursorSelection &&
-    isValidSelection({
-      participantIds,
-      selection: cursorSelection,
-      step: input.state.currentStep,
-    })
-  ) {
-    selection = cursorSelection;
-  } else if (
-    pendingSelection &&
     isValidSelection({
       participantIds,
       selection: pendingSelection,
       step: input.state.currentStep,
     })
   ) {
-    selection = pendingSelection;
-  } else if (
-    manualSelection &&
+    return pendingSelection;
+  }
+
+  if (
     isValidSelection({
       participantIds,
       selection: manualSelection,
+    })
+  ) {
+    return manualSelection;
+  }
+
+  if (
+    isGlobalCombatRoundParticipantStep(input.state.currentStep) &&
+    isValidSelection({
+      participantIds,
+      selection: cursorSelection,
       step: input.state.currentStep,
     })
   ) {
-    selection = manualSelection;
-  } else {
-    selection = {
+    return cursorSelection;
+  }
+
+  const currentTask = getCurrentCombatRoundTaskSelection(input.state);
+
+  if (
+    isValidSelection({
+      participantIds,
+      selection: currentTask,
+    })
+  ) {
+    return currentTask;
+  }
+
+  if (isGlobalCombatRoundParticipantStep(input.state.currentStep) && participantIds[0]) {
+    return {
       participantId: participantIds[0],
       step: input.state.currentStep,
     };
   }
 
-  return applyCombatRoundSelectionTarget({
-    selection,
-    state: input.state,
-  });
+  if (input.state.participants[0]) {
+    return {
+      participantId: input.state.participants[0].participantId,
+      step: input.state.currentStep,
+    };
+  }
+
+  return undefined;
 }
