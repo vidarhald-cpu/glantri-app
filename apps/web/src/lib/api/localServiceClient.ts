@@ -69,6 +69,7 @@ export {
   type ScenarioParticipantFromEntityInput,
 } from "./scenarioClient";
 export {
+  advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,

@@ -7,6 +7,7 @@ import type {
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
+  CombatRoundStepSnapshot,
   EncounterParticipant,
   EncounterParticipantMembershipMode,
   EncounterSession,
@@ -311,6 +312,26 @@ export async function setPairDistanceOnServer(input: {
       distance: input.distance,
       participantAId: input.participantAId,
       participantBId: input.participantBId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function advanceCombatRoundCurrentStepOnServer(input: {
+  encounterId: string;
+  stepSnapshots?: CombatRoundStepSnapshot[];
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/advance-current-step`, {
+    body: JSON.stringify({
+      stepSnapshots: input.stepSnapshots,
     }),
     method: "POST",
   });

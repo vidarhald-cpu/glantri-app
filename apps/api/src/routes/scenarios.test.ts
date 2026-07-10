@@ -5133,6 +5133,108 @@ describe("scenarios route contract", () => {
     ).toBe(true);
   });
 
+  it("advances the current combat round step through a narrow command route", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const reviewState: CombatRoundState = {
+      ...baseState,
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: baseState.roundNumber,
+        step: "M1",
+      },
+      currentStep: "review_action_modifiers",
+      participants: baseState.participants.map((participant) => ({
+        ...participant,
+        stepStatuses: {
+          ...participant.stepStatuses,
+          select_actions: "submitted",
+        },
+      })),
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "review_action_modifiers",
+    };
+    const stepSnapshot = {
+      committedAt: "2026-01-01T00:02:00.000Z",
+      id: "1:encounter-participant-1:review_action_modifiers",
+      modifierSummary: {
+        dbRaw: 0,
+        generalFatigueRaw: 0,
+        initiativeRaw: 0,
+        obSkillRaw: 0,
+        rows: [],
+      },
+      participantId: "encounter-participant-1",
+      participantLabel: "The Gladiator",
+      roundNumber: reviewState.roundNumber,
+      step: "review_action_modifiers",
+    };
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        combatRoundState: reviewState,
+        currentRound: reviewState.roundNumber,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+          snapshot: { displayName: "The Gladiator" },
+        },
+        {
+          id: "participant-2",
+          snapshot: { displayName: "City guard" },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        stepSnapshots: [stepSnapshot],
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    const updatedEncounter = payload.encounter;
+
+    expect(payload).toHaveProperty("encounter");
+    expect(payload.commandEnvelope).toMatchObject({
+      currentStep: "initiative_phase_1",
+      currentTask: {
+        cursorStep: "i1",
+        participantId: "encounter-participant-1",
+        step: "initiative_phase_1",
+      },
+      warnings: [],
+    });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(updatedEncounter.combatRoundState).toMatchObject({
+      currentStep: "initiative_phase_1",
+      stepSnapshots: expect.arrayContaining([expect.objectContaining(stepSnapshot)]),
+    });
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          combatRoundState: expect.objectContaining({
+            currentStep: "initiative_phase_1",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("rejects player phase attack back-out for another participant", async () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
 

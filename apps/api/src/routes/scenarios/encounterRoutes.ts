@@ -16,6 +16,7 @@ import {
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
   buildReactiveAttackPhase2InitiativeModifierEntry,
+  advanceCombatRoundStep,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
@@ -26,6 +27,7 @@ import {
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
   combatRoundStepSchema,
+  combatRoundStepSnapshotSchema,
   encounterParticipantMembershipModeSchema,
   encounterSessionSchema,
   encounterStatusSchema,
@@ -93,6 +95,7 @@ import type {
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundPhaseResolutionResult,
+  CombatRoundStepSnapshot,
   CombatRoundState,
   CombatRoundPhaseContexts,
   EncounterSession,
@@ -469,6 +472,30 @@ function parsePairDistanceBody(body: unknown): {
     distance,
     participantAId,
     participantBId,
+  };
+}
+
+function parseCombatRoundAdvanceBody(body: unknown): {
+  stepSnapshots?: CombatRoundStepSnapshot[];
+} {
+  const value =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? parseBodyObject(body, "Combat round advance payload")
+      : {};
+  const stepSnapshotsValue = value.stepSnapshots;
+
+  if (stepSnapshotsValue === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(stepSnapshotsValue)) {
+    throw new Error("stepSnapshots must be an array.");
+  }
+
+  return {
+    stepSnapshots: stepSnapshotsValue.map((snapshot) =>
+      combatRoundStepSnapshotSchema.parse(snapshot),
+    ),
   };
 }
 
@@ -3370,6 +3397,88 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error: error instanceof Error ? error.message : "Unable to continue phase attack.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/advance-current-step",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can advance combat round steps.",
+          });
+        }
+
+        const body = parseCombatRoundAdvanceBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const submittedAt = new Date().toISOString();
+        const nextRoundState = advanceCombatRoundStep(roundState, {
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+            participantId: roundState.currentCursor?.participantId,
+          },
+          stepSnapshots: body.stepSnapshots,
+          visibility: encounter.roleplayState?.visibility,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({
+          state: nextRoundState,
+        });
+
+        return {
+          commandEnvelope,
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to advance combat round step.",
         });
       }
     },

@@ -379,7 +379,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatParryModifierBreakdown");
     expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
     expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
-    expect(source).toContain("ensureCombatRoundPhaseResolutionResultsForPhase");
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundPhaseResolutionStatus");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
@@ -700,11 +699,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Distance pair");
     expect(source).toContain("GM override");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
-    expect(source).toContain("const commandParticipantId =");
-    expect(source).toContain("advanceCombatRoundStep(stateForCommit, {");
-    expect(source).toContain("visibility: encounter.roleplayState?.visibility");
-    expect(source).toContain("command: {");
-    expect(source).toContain("participantId: commandParticipantId");
+    expect(source).toContain("advanceCombatRoundCurrentStepOnServer({");
+    expect(source).toContain("stepSnapshots,");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
     expect(source).toContain("inspectorDamageCommitted ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
@@ -810,15 +806,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('"center"');
   });
 
-  it("persists combat round updates through narrow encounter commands", () => {
+  it("routes current-step advance through a narrow encounter command", () => {
     const source = readSource();
 
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
-    expect(source).toContain("const stateForCommit = resolutionPhase");
-    expect(source).toContain("advanceCombatRoundStep(stateForCommit, {");
-    expect(source).toContain("visibility: encounter.roleplayState?.visibility");
-    expect(source).toContain("const commandParticipantId =");
+    expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
+    expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
+    expect(source).toContain("stepSnapshots,");
+    expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(source).not.toContain("advanceCombatRoundStep(");
     expect(source).toContain("attackResult");
     expect(source).toContain("autoPrepareRoundEndReviewState(nextRoundState)");
     expect(source).toContain("combatRoundState: stateToPersist");
@@ -904,6 +901,10 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope");
     expect(source).toContain("commandEnvelope?: CombatRoundCommandEnvelope");
+    expect(source).toContain(
+      "const { commandEnvelope, encounter: nextEncounter } =",
+    );
+    expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain(
       "const { commandEnvelope, encounter: nextEncounter, participants } =",
     );

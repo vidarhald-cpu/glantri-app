@@ -42,7 +42,6 @@ import {
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
-  advanceCombatRoundStep,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
@@ -55,7 +54,6 @@ import {
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundEndReviewPrepared,
-  ensureCombatRoundPhaseResolutionResultsForPhase,
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
@@ -123,6 +121,7 @@ import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutMo
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import {
+  advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
@@ -6285,40 +6284,37 @@ export default function CombatRoundManagerPanel({
     }
 
     const committedAt = new Date().toISOString();
-    const resolutionPhase = getCombatRoundResolutionPhaseForStep(roundState.currentStep);
-    const stateForCommit = resolutionPhase
-      ? ensureCombatRoundPhaseResolutionResultsForPhase({
-          phase: resolutionPhase,
-          state: roundState,
-          updatedAt: committedAt,
-        })
-      : roundState;
-    const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, stateForCommit);
-    const commandParticipantId =
-      getCurrentCombatRoundTaskSelection(stateForCommit)?.participantId ??
-      stateForCommit.currentCursor?.participantId;
-    const advanceInput = commandParticipantId
-      ? {
-          command: {
-            createdAt: committedAt,
-            participantId: commandParticipantId,
-          },
-          stepSnapshots,
-        }
-      : { stepSnapshots };
+    const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, roundState);
 
+    setSaving(true);
     try {
-      await persistRoundState(
-        advanceCombatRoundStep(stateForCommit, {
-          ...advanceInput,
-          visibility: encounter.roleplayState?.visibility,
-        }),
-      );
+      const { commandEnvelope, encounter: nextEncounter } =
+        await advanceCombatRoundCurrentStepOnServer({
+          encounterId: encounter.id,
+          stepSnapshots,
+        });
+      const {
+        inspectionSelection: nextInspectionSelection,
+        state: nextRoundState,
+      } = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to advance combat round.",
       );
+    } finally {
+      setSaving(false);
     }
   }
 
