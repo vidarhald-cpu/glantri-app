@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterParticipant } from "@glantri/domain";
+import type { CombatRoundStepSnapshot, EncounterParticipant } from "@glantri/domain";
 
 type LocalServiceClientModule = typeof import("./localServiceClient");
 type FetchMock = ReturnType<
@@ -565,6 +565,44 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+    });
+  });
+
+  it("advances the current combat round step through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "review_action_modifiers",
+      warnings: [],
+    };
+    const stepSnapshots: CombatRoundStepSnapshot[] = [
+      {
+        committedAt: "2026-01-01T00:00:00.000Z",
+        id: "1:encounter-participant-1:select_actions",
+        participantId: "encounter-participant-1",
+        participantLabel: "The Gladiator",
+        roundNumber: 1,
+        step: "select_actions",
+      },
+    ];
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.advanceCombatRoundCurrentStepOnServer({
+        encounterId: "encounter-1",
+        stepSnapshots,
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        stepSnapshots,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-step",
     });
   });
 
