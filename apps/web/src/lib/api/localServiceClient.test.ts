@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { EncounterParticipant } from "@glantri/domain";
+
 type LocalServiceClientModule = typeof import("./localServiceClient");
 type FetchMock = ReturnType<
   typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
@@ -286,6 +288,77 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       method: "GET",
       url: "https://api.example.test/encounters/encounter-1",
+    });
+  });
+
+  it("updates encounter status through the narrow status endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "paused",
+    };
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.updateEncounterStatusOnServer({
+        encounterId: "encounter-1",
+        status: "paused",
+      }),
+    ).resolves.toEqual(encounter);
+
+    expectFetchCall(fetchMock, {
+      body: {
+        status: "paused",
+      },
+      method: "PATCH",
+      url: "https://api.example.test/encounters/encounter-1/status",
+    });
+  });
+
+  it("updates encounter participants through the narrow participants endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      participantMembershipMode: "explicit",
+      scenarioId: "scenario-1",
+    };
+    const participants: EncounterParticipant[] = [
+      {
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any",
+        },
+        facing: "north",
+        id: "scenario-participant-1",
+        initiative: 0,
+        label: "The Gladiator",
+        order: 0,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: { x: 0, y: 0, zone: "center" },
+        scenarioParticipantId: "participant-1",
+      },
+    ];
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.updateEncounterParticipantsOnServer({
+        encounterId: "encounter-1",
+        participantMembershipMode: "explicit",
+        participants,
+      }),
+    ).resolves.toEqual(encounter);
+
+    expectFetchCall(fetchMock, {
+      body: {
+        participantMembershipMode: "explicit",
+        participants,
+      },
+      method: "PATCH",
+      url: "https://api.example.test/encounters/encounter-1/participants",
     });
   });
 

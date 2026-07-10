@@ -768,4 +768,104 @@ describe("campaign workspace", () => {
     expect(state.activeEncounterId).toBeUndefined();
     expect(state.activeTab).toBe("encounter");
   });
+
+  it("moves player combat selection from an archived encounter to an assigned live encounter", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-archived",
+          kind: "combat",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
+          status: "archived",
+        }),
+        encounter({
+          id: "enc-active",
+          kind: "combat",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
+          status: "active",
+        }),
+      ],
+      rememberedEncounterId: "enc-archived",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-combat",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-active");
+    expect(state.activeTab).toBe("player-combat");
+  });
+
+  it("moves GM combat selection away from an archived requested encounter when one live option remains", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "enc-archived",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "archived",
+        }),
+        encounter({
+          id: "enc-active",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: "enc-archived",
+      requestedScenarioId: "scn-1",
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-active");
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("clears player combat encounter selection when the only assigned encounter is archived", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-archived",
+          kind: "combat",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
+          status: "archived",
+        }),
+      ],
+      rememberedEncounterId: "enc-archived",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-combat",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-combat");
+  });
 });
