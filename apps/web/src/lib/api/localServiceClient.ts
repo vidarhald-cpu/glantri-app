@@ -88,7 +88,9 @@ export {
   setPairDistanceOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
+  updateEncounterParticipantsOnServer,
   updateEncounterOnServer,
+  updateEncounterStatusOnServer,
 } from "./encounterClient";
 export {
   addCharacterEquipmentItemOnServer,

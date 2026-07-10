@@ -30,7 +30,8 @@ import {
   loadScenarioById,
   loadScenarioEventLogs,
   loadScenarioParticipants,
-  updateEncounterOnServer,
+  updateEncounterParticipantsOnServer,
+  updateEncounterStatusOnServer,
   updateScenarioParticipantMetadataOnServer,
   updateScenarioOnServer
 } from "@/lib/api/localServiceClient";
@@ -476,14 +477,10 @@ export default function ScenarioDetailPageContent({
     participants: EncounterParticipant[];
     feedbackMessage: string;
   }) {
-    await updateEncounterOnServer({
+    await updateEncounterParticipantsOnServer({
       encounterId: input.encounter.id,
-      session: {
-        ...input.encounter,
-        participantMembershipMode: "explicit",
-        participants: input.participants,
-        updatedAt: new Date().toISOString()
-      }
+      participantMembershipMode: "explicit",
+      participants: input.participants
     });
 
     setFeedback(input.feedbackMessage);
@@ -712,13 +709,9 @@ export default function ScenarioDetailPageContent({
     try {
       setError(undefined);
       setFeedback(undefined);
-      const updated = await updateEncounterOnServer({
+      const updated = await updateEncounterStatusOnServer({
         encounterId: encounter.id,
-        session: {
-          ...encounter,
-          status,
-          updatedAt: new Date().toISOString()
-        }
+        status
       });
 
       setFeedback(`Updated encounter ${updated.title}.`);

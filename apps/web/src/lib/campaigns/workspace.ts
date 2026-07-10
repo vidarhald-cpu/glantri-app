@@ -166,6 +166,10 @@ function getEncounterStatusRank(status: EncounterSession["status"]): number {
   }
 }
 
+function isSelectableWorkspaceEncounter(encounter: EncounterSession): boolean {
+  return encounter.status !== "archived" && encounter.status !== "complete";
+}
+
 function isPlayerAssignedToEncounter(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
@@ -187,6 +191,7 @@ function resolvePlayerEncounterSelection(input: {
 }): EncounterSession | undefined {
   const candidateEncounters = input.encounters
     .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
+    .filter(isSelectableWorkspaceEncounter)
     .filter((encounter) =>
       isPlayerAssignedToEncounter({
         encounter,
@@ -219,7 +224,7 @@ function resolveGmCombatEncounterSelection(input: {
 }): EncounterSession | undefined {
   const candidateEncounters = input.encounters
     .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
-    .filter((encounter) => encounter.status !== "archived");
+    .filter(isSelectableWorkspaceEncounter);
 
   if (input.requestedEncounterId) {
     return candidateEncounters.find((encounter) => encounter.id === input.requestedEncounterId);
@@ -258,7 +263,8 @@ export function resolveCampaignWorkspaceState(input: {
     (encounter) =>
       Boolean(activeScenarioId) &&
       encounter.id === requestedEncounterId &&
-      encounter.scenarioId === activeScenarioId
+      encounter.scenarioId === activeScenarioId &&
+      isSelectableWorkspaceEncounter(encounter)
   )
     ? requestedEncounterId ?? undefined
     : undefined;
@@ -326,7 +332,8 @@ export function resolveCampaignWorkspaceState(input: {
       ? input.encounters.find(
           (encounter) =>
             encounter.id === input.requestedEncounterId &&
-            (!activeScenarioId || encounter.scenarioId === activeScenarioId)
+            (!activeScenarioId || encounter.scenarioId === activeScenarioId) &&
+            isSelectableWorkspaceEncounter(encounter)
         )
       : undefined;
 

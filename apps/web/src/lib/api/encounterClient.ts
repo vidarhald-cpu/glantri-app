@@ -7,7 +7,10 @@ import type {
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
+  EncounterParticipant,
+  EncounterParticipantMembershipMode,
   EncounterSession,
+  EncounterStatus,
   MovementIntent,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
@@ -62,6 +65,42 @@ export async function updateEncounterOnServer(input: {
         session: input.session,
       }),
       method: "PUT",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function updateEncounterStatusOnServer(input: {
+  encounterId: string;
+  status: EncounterStatus;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/status`,
+    {
+      body: JSON.stringify({
+        status: input.status,
+      }),
+      method: "PATCH",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function updateEncounterParticipantsOnServer(input: {
+  encounterId: string;
+  participantMembershipMode?: EncounterParticipantMembershipMode;
+  participants: EncounterParticipant[];
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/participants`,
+    {
+      body: JSON.stringify({
+        participantMembershipMode: input.participantMembershipMode,
+        participants: input.participants,
+      }),
+      method: "PATCH",
     },
   );
 

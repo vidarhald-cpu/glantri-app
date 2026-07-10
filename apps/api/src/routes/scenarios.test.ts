@@ -2347,6 +2347,175 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("updates encounter status through a narrow payload without requiring full encounter state", async () => {
+    const existingEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      status: "active",
+      title: "Courtyard",
+    });
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => update.session,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        status: "paused",
+      },
+      url: "/encounters/encounter-1/status",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.status).toBe("paused");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        combatRoundState: existingEncounter.combatRoundState,
+        status: "paused",
+      }),
+    });
+    expect(mocks.scenarioService.recordScenarioEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          previousStatus: "active",
+          status: "paused",
+        }),
+      }),
+    );
+  });
+
+  it("archives an encounter through the narrow status payload", async () => {
+    const existingEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      status: "paused",
+      title: "Courtyard",
+    });
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => update.session,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        status: "archived",
+      },
+      url: "/encounters/encounter-1/status",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.status).toBe("archived");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        combatRoundState: existingEncounter.combatRoundState,
+        status: "archived",
+      }),
+    });
+  });
+
+  it("updates encounter participants through a narrow payload while preserving server combat state", async () => {
+    const existingEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participantMembershipMode: "explicit",
+      status: "active",
+      title: "Courtyard",
+    });
+    const participants = [
+      {
+        id: "scenario-participant-2",
+        initiative: 0,
+        label: "Scyrian cavalry guy",
+        order: 1,
+        participantType: "scenario",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => update.session,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        participantMembershipMode: "explicit",
+        participants,
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.participants).toHaveLength(1);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        combatRoundState: existingEncounter.combatRoundState,
+        participantMembershipMode: "explicit",
+        participants: expect.arrayContaining([
+          expect.objectContaining({
+            id: "scenario-participant-2",
+            scenarioParticipantId: "participant-2",
+          }),
+        ]),
+      }),
+    });
+  });
+
   it("allows a player to submit their own non-silent assigned roleplay roll", async () => {
     const encounter = {
       actionLog: [],

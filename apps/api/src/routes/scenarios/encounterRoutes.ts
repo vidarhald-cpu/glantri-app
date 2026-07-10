@@ -26,7 +26,9 @@ import {
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
   combatRoundStepSchema,
+  encounterParticipantMembershipModeSchema,
   encounterSessionSchema,
+  encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
@@ -1959,6 +1961,152 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter.",
+      });
+    }
+  });
+
+  app.patch("/encounters/:encounterId/status", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const existingEncounter = await encounterService.getEncounterById(encounterId);
+
+      if (!existingEncounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: existingEncounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Encounter status payload");
+      const status = encounterStatusSchema.parse(body.status);
+      const encounterSession = encounterSessionSchema.parse({
+        ...existingEncounter,
+        status,
+        updatedAt: new Date().toISOString(),
+      });
+      const encounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: existingEncounter.scenarioId,
+        session: encounterSession,
+      });
+
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_updated",
+        payload: {
+          encounterId: encounter.id,
+          previousStatus: existingEncounter.status,
+          status: encounter.status,
+        },
+        scenarioId: existingEncounter.scenarioId,
+        summary: `Updated encounter ${encounter.title} status to ${encounter.status}.`,
+      });
+
+      return { encounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update encounter status.",
+      });
+    }
+  });
+
+  app.patch("/encounters/:encounterId/participants", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const existingEncounter = await encounterService.getEncounterById(encounterId);
+
+      if (!existingEncounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: existingEncounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Encounter participants payload");
+
+      if (!Array.isArray(body.participants)) {
+        throw new Error("participants is required.");
+      }
+
+      const participantMembershipMode = encounterParticipantMembershipModeSchema.parse(
+        body.participantMembershipMode ?? "explicit",
+      );
+      const encounterSession = encounterSessionSchema.parse({
+        ...existingEncounter,
+        participantMembershipMode,
+        participants: body.participants,
+        updatedAt: new Date().toISOString(),
+      });
+      const encounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: existingEncounter.scenarioId,
+        session: encounterSession,
+      });
+
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_updated",
+        payload: {
+          encounterId: encounter.id,
+          participantCount: encounter.participants.length,
+          status: encounter.status,
+        },
+        scenarioId: existingEncounter.scenarioId,
+        summary: `Updated encounter ${encounter.title} participants.`,
+      });
+
+      return { encounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update encounter participants.",
       });
     }
   });
