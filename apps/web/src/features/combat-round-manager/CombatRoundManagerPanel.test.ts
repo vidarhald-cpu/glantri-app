@@ -318,12 +318,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("getCombatRoundAttackDistanceModifierDetail");
-    expect(source).toContain("formatCombatDistanceModifierDetailLine");
-    expect(source).toContain("buildCombatDistanceModifierSection");
-    expect(source).toContain("distanceModifierDetail");
-    expect(source).toContain("detail.notes && detail.actualDistance === undefined");
-    expect(source).toContain('title: "Distance"');
-    expect(source).toContain("Skill/OB ${formatSignedCombatNumber(detail.value)}");
+    expect(source).not.toContain("formatCombatDistanceModifierDetailLine");
+    expect(source).not.toContain("buildCombatDistanceModifierSection");
+    expect(source).not.toContain("distanceModifierDetail");
+    expect(source).not.toContain('title: "Distance"');
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
@@ -584,7 +582,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorCanShowLatestRelevantAttackResult");
     expect(source).toContain("inspectorLatestRelevantAttackResult");
-    expect(source).toContain("inspectorLatestRelevantAttackDistanceModifierDetail");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(

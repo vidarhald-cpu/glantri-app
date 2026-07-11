@@ -5,7 +5,6 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackDirection,
-  CombatRoundAttackDistanceModifierDetail,
   CombatRoundAttackRollResult,
   CombatRoundCommandEnvelope,
   CombatRoundCombatExperienceResult,
@@ -848,22 +847,6 @@ function formatSignedCombatNumber(value: number): string {
   return `${value >= 0 ? "+" : ""}${value}`;
 }
 
-function formatAttackDistancePreferenceLabel(distances: readonly number[]): string {
-  const normalized = [...new Set(distances)].sort((left, right) => left - right);
-
-  if (normalized.length === 0) {
-    return "unknown";
-  }
-
-  const contiguous = normalized.every((distance, index) =>
-    index === 0 ? true : distance === normalized[index - 1] + 1,
-  );
-
-  return contiguous && normalized.length > 1
-    ? `${normalized[0]}-${normalized[normalized.length - 1]}`
-    : normalized.join(", ");
-}
-
 function buildRoundEndDistancePairLabel(
   proposal: CombatRoundEndDistanceProposal,
   participantLabelsById: Record<string, string>,
@@ -935,66 +918,7 @@ function getRoundEndDistancePendingRollOptions(input: {
   });
 }
 
-function formatCombatDistanceModifierDetailLine(
-  detail: CombatRoundAttackDistanceModifierDetail | undefined,
-): string | undefined {
-  if (!detail) {
-    return undefined;
-  }
-
-  if (detail.notes && detail.actualDistance === undefined) {
-    const normalizedNotes = detail.notes.replace(/^distance:\s*/i, "");
-    const skillMarker = " · Skill/OB ";
-
-    if (normalizedNotes.includes(skillMarker)) {
-      const [context, value] = normalizedNotes.split(skillMarker);
-      return `${context.replace(/\s· nearest \d+$/, "")} -> Skill/OB ${value}`;
-    }
-
-    return normalizedNotes;
-  }
-
-  const weaponName = detail.weaponName ?? "Weapon";
-  const preferredLabel = formatAttackDistancePreferenceLabel(detail.preferredDistances);
-
-  if (detail.warning) {
-    return `${weaponName} preferred ${preferredLabel} -> ${detail.warning}`;
-  }
-
-  if (detail.actualDistance === undefined) {
-    return undefined;
-  }
-
-  const baseLine = `${weaponName} preferred ${preferredLabel} · actual ${detail.actualDistance}`;
-
-  return detail.value < 0
-    ? `${baseLine} -> Skill/OB ${formatSignedCombatNumber(detail.value)}`
-    : `${baseLine} -> no modifier`;
-}
-
-function buildCombatDistanceModifierSection(
-  detail: CombatRoundAttackDistanceModifierDetail | undefined,
-): CombatActionResultSection | undefined {
-  const distanceLine = formatCombatDistanceModifierDetailLine(detail);
-
-  if (!distanceLine) {
-    return undefined;
-  }
-
-  return {
-    calculationLines: [distanceLine],
-    resultLine:
-      detail?.value && detail.value < 0
-        ? `Result: Skill/OB ${formatSignedCombatNumber(detail.value)}`
-        : detail?.warning
-          ? `Result: ${detail.warning}`
-          : "Result: no distance modifier",
-    title: "Distance",
-  };
-}
-
 function buildCombatAttackResultPanel(input: {
-  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
   participantId?: string;
   result: CombatRoundAttackRollResult;
 }) {
@@ -1010,8 +934,7 @@ function buildCombatAttackResultPanel(input: {
         resultLine: `Result: ${formatCombatAttackTableResultLabel(input.result.tableResult)}`,
         title: "To hit",
       },
-      buildCombatDistanceModifierSection(input.distanceModifierDetail),
-    ].filter((section): section is CombatActionResultSection => Boolean(section)),
+    ],
   };
 }
 
@@ -1309,7 +1232,6 @@ function formatCombatCriticalResultLine(
 
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
-  distanceModifierDetail?: CombatRoundAttackDistanceModifierDetail;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
 }): {
@@ -1397,11 +1319,6 @@ function formatCombatPhaseResolutionResultLines(input: {
       title: "Damage",
     },
   ];
-  const distanceSection = buildCombatDistanceModifierSection(input.distanceModifierDetail);
-
-  if (distanceSection) {
-    sections.splice(1, 0, distanceSection);
-  }
 
   if (criticalCalculationLine || criticalResultLine) {
     sections.push({
@@ -5069,12 +4986,6 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined;
-  const inspectorLatestRelevantAttackDistanceModifierDetail = inspectorLatestRelevantAttackResult
-    ? getCombatRoundAttackDistanceModifierDetail({
-        result: inspectorLatestRelevantAttackResult,
-        state: selectedTimelineRoundState,
-      })
-    : undefined;
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
@@ -5648,7 +5559,6 @@ export default function CombatRoundManagerPanel({
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
           attackResult: inspectorResolutionAttackResult,
-          distanceModifierDetail: inspectorResolutionAttackDistanceModifierDetail,
           participantId: inspector.participant?.participantId,
           resolution: inspectorDisplayPhaseResolutionResult,
         })
@@ -5683,13 +5593,11 @@ export default function CombatRoundManagerPanel({
       }
     : inspectorDisplayAttackResult
       ? buildCombatAttackResultPanel({
-          distanceModifierDetail: inspectorDisplayAttackDistanceModifierDetail,
           participantId: inspector.participant?.participantId,
           result: inspectorDisplayAttackResult,
         })
       : inspectorLatestRelevantAttackResult
         ? buildCombatAttackResultPanel({
-            distanceModifierDetail: inspectorLatestRelevantAttackDistanceModifierDetail,
             participantId: inspector.participant?.participantId,
             result: inspectorLatestRelevantAttackResult,
           })
