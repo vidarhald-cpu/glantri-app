@@ -2671,10 +2671,11 @@ function getStatusMarker(input: { current: boolean; status: string | undefined }
 }
 
 type CombatTrackerMarkerKind =
+  | "attack_hit"
+  | "attack_miss"
   | "complete"
   | "skipped"
   | "required"
-  | "pending_count"
   | "roll_result"
   | "not_reached";
 
@@ -2687,6 +2688,18 @@ interface CombatTrackerMarkerMeaning {
 
 const COMBAT_TRACKER_MARKER_MEANINGS: readonly CombatTrackerMarkerMeaning[] = [
   {
+    kind: "attack_hit",
+    label: "attack hit",
+    marker: "H",
+    title: "Attack resolved as a hit or grazing hit.",
+  },
+  {
+    kind: "attack_miss",
+    label: "attack miss",
+    marker: "M",
+    title: "Attack resolved as a miss.",
+  },
+  {
     kind: "complete",
     label: "done",
     marker: "✓",
@@ -2697,12 +2710,6 @@ const COMBAT_TRACKER_MARKER_MEANINGS: readonly CombatTrackerMarkerMeaning[] = [
     label: "required action/roll",
     marker: "?",
     title: "A required choice or roll is blocking this step.",
-  },
-  {
-    kind: "pending_count",
-    label: "pending roll count",
-    marker: "1",
-    title: "Number of pending player-owned round-end rolls/actions for this participant.",
   },
   {
     kind: "roll_result",
@@ -2748,53 +2755,119 @@ function getCombatTrackerMarkerMeaning(kind: CombatTrackerMarkerKind): CombatTra
 }
 
 function getCombatTrackerCellMarkerKind(input: {
-  attackResultTotal: number | undefined;
+  actionResultStatus?: CombatRoundStepSnapshot["actionResultStatus"];
+  activeTask: boolean;
+  attackResult: CombatRoundAttackRollResult | undefined;
   phaseCombatExperienceMarkerRequired: boolean;
+  phaseResolutionResult: CombatRoundPhaseResolutionResult | undefined;
   pendingRoundEndRollCount: number;
   initiativeTotal: number | undefined;
   status: CombatRoundStepStatus;
+  step: CombatRoundStep;
 }): CombatTrackerMarkerKind {
   if (input.phaseCombatExperienceMarkerRequired) {
     return "required";
   }
 
   if (input.pendingRoundEndRollCount > 0) {
-    return "pending_count";
+    return "required";
   }
 
   if (input.initiativeTotal !== undefined) {
     return "roll_result";
   }
 
-  if (input.attackResultTotal !== undefined) {
-    return "roll_result";
+  if (getCombatAttackPhaseForStep(input.step)) {
+    if (input.attackResult) {
+      return input.attackResult.hit || input.attackResult.grazing ? "attack_hit" : "attack_miss";
+    }
+
+    if (
+      input.actionResultStatus === "skipped" ||
+      input.actionResultStatus === "no_attack" ||
+      input.status === "skipped" ||
+      input.status === "locked"
+    ) {
+      return "skipped";
+    }
+
+    if (getStatusMarkerKind(input.status) === "complete") {
+      return "skipped";
+    }
+
+    return input.activeTask ? "required" : getStatusMarkerKind(input.status);
+  }
+
+  if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {
+    const parryStatus = input.phaseResolutionResult?.parryResolution.status;
+
+    if (parryStatus === "resolved") {
+      return "complete";
+    }
+    if (
+      parryStatus === "not_applicable" ||
+      input.actionResultStatus === "no_attack" ||
+      input.actionResultStatus === "skipped" ||
+      input.status === "skipped" ||
+      input.status === "locked"
+    ) {
+      return "skipped";
+    }
+    if (parryStatus === "pending" || input.activeTask) {
+      return "required";
+    }
+
+    if (getStatusMarkerKind(input.status) === "complete") {
+      return "skipped";
+    }
+
+    return getStatusMarkerKind(input.status);
+  }
+
+  if (input.step === "phase_1_damage" || input.step === "phase_2_damage") {
+    const resolution = input.phaseResolutionResult;
+
+    if (resolution?.damageProposal.status === "committed") {
+      return "complete";
+    }
+    if (
+      resolution?.damageRoll.status === "not_required" ||
+      input.actionResultStatus === "no_attack" ||
+      input.actionResultStatus === "skipped" ||
+      input.status === "skipped" ||
+      input.status === "locked"
+    ) {
+      return "skipped";
+    }
+    if (resolution || input.activeTask) {
+      return "required";
+    }
+
+    if (getStatusMarkerKind(input.status) === "complete") {
+      return "skipped";
+    }
   }
 
   return getStatusMarkerKind(input.status);
 }
 
 function getCombatTrackerCellMarker(input: {
-  attackResultTotal: number | undefined;
   markerKind: CombatTrackerMarkerKind;
   pendingRoundEndRollCount: number;
   initiativeTotal: number | undefined;
   current: boolean;
   status: CombatRoundStepStatus;
 }): string {
-  if (input.pendingRoundEndRollCount > 0) {
-    return String(input.pendingRoundEndRollCount);
-  }
-
-  if (input.markerKind === "required") {
+  if (
+    input.markerKind === "required" ||
+    input.markerKind === "attack_hit" ||
+    input.markerKind === "attack_miss"
+  ) {
     return getCombatTrackerMarkerMeaning(input.markerKind).marker;
   }
 
   if (input.initiativeTotal !== undefined) {
     return String(input.initiativeTotal);
-  }
-
-  if (input.attackResultTotal !== undefined) {
-    return String(input.attackResultTotal);
   }
 
   return getStatusMarker({
@@ -3019,6 +3092,7 @@ function getCombatTrackerCellDetail(input: {
   pendingDistanceControlCommitCount: number;
   pendingRoundEndRollCount: number;
   pendingRoundEndRollDetails: readonly string[];
+  phaseResolutionResult: CombatRoundPhaseResolutionResult | undefined;
   initiativeResolutionSource: CombatTrackerInitiativeResolutionSource | undefined;
   initiativeTotal: number | undefined;
   status: CombatRoundStepStatus;
@@ -3050,7 +3124,46 @@ function getCombatTrackerCellDetail(input: {
   }
 
   if (input.attackResult) {
-    return `attack ${input.attackResult.tableResult}; lookup ${input.attackResult.lookupTotal}.`;
+    const outcome = input.attackResult.grazing
+      ? "grazing hit"
+      : input.attackResult.hit
+        ? "hit"
+        : "miss";
+    return `attack ${outcome}: ${input.attackResult.tableResult}; lookup ${input.attackResult.lookupTotal}.`;
+  }
+
+  if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {
+    const parry = input.phaseResolutionResult?.parryResolution;
+
+    if (parry?.status === "resolved") {
+      return parry.success ? "parry succeeded." : "parry failed.";
+    }
+    if (parry?.status === "not_applicable") {
+      return "parry not needed.";
+    }
+    if (parry?.status === "pending") {
+      return "parry roll pending.";
+    }
+    if (input.status === "skipped" || input.status === "locked") {
+      return "parry not needed.";
+    }
+  }
+
+  if (input.step === "phase_1_damage" || input.step === "phase_2_damage") {
+    const resolution = input.phaseResolutionResult;
+
+    if (resolution?.damageProposal.status === "committed") {
+      return "damage/effects review committed.";
+    }
+    if (resolution?.damageRoll.status === "not_required") {
+      return "damage not applicable.";
+    }
+    if (resolution) {
+      return "location/critical/damage review pending.";
+    }
+    if (input.status === "skipped" || input.status === "locked") {
+      return "damage not applicable.";
+    }
   }
 
   const declarationDetail = formatCombatTrackerDeclarationDetail(input.declarationResolutionSource);
@@ -7910,20 +8023,53 @@ export default function CombatRoundManagerPanel({
               ? roundParticipant.initiatives.phase2
               : undefined;
         const trackerAttackPhase = getCombatAttackPhaseForStep(step);
-        const trackerAttackResult = trackerAttackPhase
-          ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-              participantId: timelineParticipant.participantId,
-              phase: trackerAttackPhase,
-              state: timelineRoundState,
-            })
-          : undefined;
+        const trackerSnapshot = getCombatRoundStepSnapshot({
+          participantId: timelineParticipant.participantId,
+          roundNumber: timelineRoundState.roundNumber,
+          state: timelineRoundState,
+          step,
+        });
+        const trackerAttackResult = trackerSnapshot
+          ? trackerSnapshot.attackResult
+          : trackerAttackPhase
+            ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+                participantId: timelineParticipant.participantId,
+                phase: trackerAttackPhase,
+                state: timelineRoundState,
+              })
+            : undefined;
+        const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
+        const trackerResolutionAttackResult = trackerSnapshot
+          ? trackerSnapshot.attackResult
+          : trackerResolutionPhase
+            ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+                participantId: timelineParticipant.participantId,
+                phase: trackerResolutionPhase,
+                state: timelineRoundState,
+              })
+            : undefined;
+        const trackerPhaseResolutionResult = trackerSnapshot
+          ? trackerSnapshot.phaseResolutionResult
+          : trackerResolutionAttackResult
+            ? getCombatRoundPhaseResolutionResultForAttack({
+                attackResult: trackerResolutionAttackResult,
+                state: timelineRoundState,
+              })
+            : undefined;
         trackerLegendMarkerKinds.add(
           getCombatTrackerCellMarkerKind({
-            attackResultTotal: trackerAttackResult?.lookupTotal,
+            actionResultStatus: trackerSnapshot?.actionResultStatus,
+            activeTask:
+              timelineRoundState.roundNumber === roundState.roundNumber &&
+              currentTaskSelection?.participantId === timelineParticipant.participantId &&
+              currentTaskSelection.step === step,
+            attackResult: trackerAttackResult,
             phaseCombatExperienceMarkerRequired,
+            phaseResolutionResult: trackerPhaseResolutionResult,
             pendingRoundEndRollCount,
             initiativeTotal: getCombatRoundInitiativeTotal(initiative),
             status: stepStatus,
+            step,
           }),
         );
       }
@@ -8224,22 +8370,51 @@ export default function CombatRoundManagerPanel({
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const trackerAttackPhase = getCombatAttackPhaseForStep(step);
-                      const trackerAttackResult = trackerAttackPhase
-                        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-                            participantId: participant.participantId,
-                            phase: trackerAttackPhase,
-                            state: timelineRoundState,
-                          })
-                        : undefined;
+                      const trackerSnapshot = getCombatRoundStepSnapshot({
+                        participantId: participant.participantId,
+                        roundNumber,
+                        state: timelineRoundState,
+                        step,
+                      });
+                      const trackerAttackResult = trackerSnapshot
+                        ? trackerSnapshot.attackResult
+                        : trackerAttackPhase
+                          ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+                              participantId: participant.participantId,
+                              phase: trackerAttackPhase,
+                              state: timelineRoundState,
+                            })
+                          : undefined;
+                      const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
+                      const trackerResolutionAttackResult = trackerSnapshot
+                        ? trackerSnapshot.attackResult
+                        : trackerResolutionPhase
+                          ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+                              participantId: participant.participantId,
+                              phase: trackerResolutionPhase,
+                              state: timelineRoundState,
+                            })
+                          : undefined;
+                      const trackerPhaseResolutionResult = trackerSnapshot
+                        ? trackerSnapshot.phaseResolutionResult
+                        : trackerResolutionAttackResult
+                          ? getCombatRoundPhaseResolutionResultForAttack({
+                              attackResult: trackerResolutionAttackResult,
+                              state: timelineRoundState,
+                            })
+                          : undefined;
                       const markerKind = getCombatTrackerCellMarkerKind({
-                        attackResultTotal: trackerAttackResult?.lookupTotal,
+                        actionResultStatus: trackerSnapshot?.actionResultStatus,
+                        activeTask: activeCurrentTaskCell,
+                        attackResult: trackerAttackResult,
                         phaseCombatExperienceMarkerRequired,
+                        phaseResolutionResult: trackerPhaseResolutionResult,
                         pendingRoundEndRollCount,
                         initiativeTotal,
                         status: stepStatus,
+                        step,
                       });
                       const marker = getCombatTrackerCellMarker({
-                        attackResultTotal: trackerAttackResult?.lookupTotal,
                         markerKind,
                         pendingRoundEndRollCount,
                         initiativeTotal,
@@ -8281,12 +8456,13 @@ export default function CombatRoundManagerPanel({
                         roundNumber,
                         step,
                         detail: getCombatTrackerCellDetail({
-                          attackResult: trackerAttackResult,
+                          attackResult: trackerAttackPhase ? trackerAttackResult : undefined,
                           declarationResolutionSource,
                           phaseCombatExperienceMarkerRequired,
                           pendingDistanceControlCommitCount,
                           pendingRoundEndRollCount,
                           pendingRoundEndRollDetails,
+                          phaseResolutionResult: trackerPhaseResolutionResult,
                           initiativeResolutionSource,
                           initiativeTotal,
                           status: stepStatus,

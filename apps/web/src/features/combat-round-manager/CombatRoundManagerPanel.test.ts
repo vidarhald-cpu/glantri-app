@@ -60,6 +60,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('marker: "✓"');
     expect(source).toContain('marker: "·"');
     expect(source).toContain('marker: "–"');
+    expect(source).toContain('marker: "H"');
+    expect(source).toContain('marker: "M"');
     expect(source).not.toContain('return "▶";');
     expect(source).not.toContain('return input.current ? "O" : "·";');
     expect(source).toContain("step === roundState.currentStep");
@@ -94,8 +96,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('label: "done"');
     expect(source).toContain('marker: "?"');
     expect(source).toContain('label: "required action/roll"');
-    expect(source).toContain('label: "pending roll count"');
     expect(source).toContain('label: "roll/result value"');
+    expect(source).toContain('label: "attack hit"');
+    expect(source).toContain('label: "attack miss"');
     expect(source).toContain('label: "skipped/not applicable"');
     expect(source).toContain('label: "not reached"');
     expect(source).toContain("phase 1 initiative roll pending.");
@@ -132,15 +135,40 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "trackerLegendMarkerKinds.add(\n          getCombatTrackerCellMarkerKind({",
     );
-    expect(source).toContain(
-      "attackResultTotal: trackerAttackResult?.lookupTotal,\n            phaseCombatExperienceMarkerRequired,\n            pendingRoundEndRollCount,\n            initiativeTotal: getCombatRoundInitiativeTotal(initiative)",
-    );
+    expect(source).toContain("attackResult: trackerAttackResult");
+    expect(source).toContain("phaseResolutionResult: trackerPhaseResolutionResult");
+    expect(source).toContain("actionResultStatus: trackerSnapshot?.actionResultStatus");
     expect(source).toContain("const markerKind = getCombatTrackerCellMarkerKind({");
     expect(source).toContain("const marker = getCombatTrackerCellMarker({");
     expect(source).toContain(
       'if (input.phaseCombatExperienceMarkerRequired) {\n    return "required";',
     );
     expect(source).not.toContain('trackerLegendMarkerKinds.add("required")');
+  });
+
+  it("normalizes attack, parry, and damage markers from stored step facts", () => {
+    const source = readSource();
+
+    expect(source).toContain("return input.attackResult.hit || input.attackResult.grazing");
+    expect(source).toContain('? "attack_hit" : "attack_miss"');
+    expect(source).not.toContain("return String(input.attackResultTotal)");
+    expect(source).toContain('parryStatus === "resolved"');
+    expect(source).toContain('parryStatus === "not_applicable"');
+    expect(source).toContain('parryStatus === "pending"');
+    expect(source).toContain('resolution?.damageProposal.status === "committed"');
+    expect(source).toContain('resolution?.damageRoll.status === "not_required"');
+    expect(source).toContain('return "location/critical/damage review pending."');
+    expect(source).toContain('return parry.success ? "parry succeeded." : "parry failed."');
+    expect(source).toContain('return "parry not needed."');
+    expect(source).toContain("const outcome = input.attackResult.grazing");
+    expect(source).toContain('? "grazing hit"');
+    expect(source).toContain('input.attackResult.hit\n        ? "hit"\n        : "miss"');
+    expect(source).toContain(
+      "trackerSnapshot\n                        ? trackerSnapshot.attackResult",
+    );
+    expect(source).toContain(
+      "trackerSnapshot\n                        ? trackerSnapshot.phaseResolutionResult",
+    );
   });
 
   it("uses precise tracker initiative provenance wording", () => {
@@ -1115,7 +1143,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("showInspectorModifierReviewContextPanel");
     expect(source).toContain("Review generated and manual modifiers before advancing.");
     expect(source).not.toContain("Selected choice:");
-    expect(source).not.toContain("Status:");
+    expect(source).not.toContain(">Status:");
     expect(source).not.toContain("inspectorPhaseInitiativeChoiceStatuses");
     expect(source).not.toContain("Phase initiative choices");
     expect(source).toContain("inspectorCombatExperienceRequired");
