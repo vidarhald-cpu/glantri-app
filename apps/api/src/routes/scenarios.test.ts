@@ -8234,10 +8234,15 @@ describe("scenarios route contract", () => {
       state: initializeCombatRoundState({ encounter: combatEncounter }),
       submittedBy: "gm",
     });
+    const afterAttackWithStaleInspection: CombatRoundState = {
+      ...afterAttack,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "initiative_phase_1",
+    };
 
     setupCombatDeclarationRoute({
       encounter: {
-        combatRoundState: afterAttack,
+        combatRoundState: afterAttackWithStaleInspection,
         participants: encounterParticipants,
       },
       participant: {
@@ -8277,6 +8282,18 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    expect(payload.commandEnvelope).toMatchObject({
+      latestResult: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        defenderParticipantId: "encounter-participant-2",
+        kind: "parry",
+        phase: "phase1",
+      },
+      warnings: [],
+    });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
@@ -8297,6 +8314,162 @@ describe("scenarios route contract", () => {
       parrySourceLabel: "Sword / shield",
       status: "resolved",
     });
+  });
+
+  it("advances current phase resolution through a narrow GM route using canonical cursor", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    const stateWithStaleInspection: CombatRoundState = {
+      ...afterAttack,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithStaleInspection,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          controlledByUserId: "other-player",
+          id: "participant-1",
+        },
+        {
+          controlledByUserId: "player-1",
+          id: "participant-2",
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/advance-current-phase-resolution",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    const updatedState = payload.encounter.combatRoundState as CombatRoundState;
+
+    expect(payload.commandEnvelope).toMatchObject({
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        step: "D1",
+      },
+      warnings: [],
+    });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(updatedState.phaseResolutionCursor).toMatchObject({
+      participantId: "encounter-participant-2",
+      phase: "phase1",
+      substep: "damage",
+    });
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "encounter-participant-2",
+        state: updatedState,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+  });
+
+  it("completes current phase resolution through a narrow GM route using canonical cursor", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const stateWithStaleInspection = {
+      ...makeOpenPhase1AttackRoundState(),
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: 1,
+        step: "A1",
+      },
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        substep: "effects",
+      },
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "initiative_phase_1",
+    } as unknown as CombatRoundState;
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithStaleInspection,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          controlledByUserId: "other-player",
+          id: "participant-1",
+        },
+        {
+          controlledByUserId: "player-1",
+          id: "participant-2",
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/complete-current-phase-resolution",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    const updatedState = payload.encounter.combatRoundState as CombatRoundState;
+
+    expect(payload.commandEnvelope).toMatchObject({
+      warnings: [],
+    });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "encounter-participant-2",
+        state: updatedState,
+        step: "phase_1_actions",
+      }),
+    ).toBe("skipped");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          combatRoundState: expect.any(Object),
+          currentRound: updatedState.roundNumber,
+        }),
+      }),
+    );
   });
 
   it("allows the attacking player to roll hit location for a pending D1 result", async () => {

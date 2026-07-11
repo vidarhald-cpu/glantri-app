@@ -547,6 +547,99 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("rolls GM combat parry and keeps the command envelope summary", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_damage",
+      latestResult: {
+        attackResultId: "1:phase1:attacker:defender",
+        kind: "parry",
+      },
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatParryCommandOnServer({
+        attackResultId: "1:phase1:attacker:defender",
+        encounterId: "encounter-1",
+        modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        attackResultId: "1:phase1:attacker:defender",
+        mainHandParryScore: undefined,
+        modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
+        offHandParryScore: undefined,
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+        usedOffHand: undefined,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+    });
+  });
+
+  it("advances current combat phase resolution through a narrow route", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_damage",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.advanceCurrentCombatPhaseResolutionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-phase-resolution",
+    });
+  });
+
+  it("completes current combat phase resolution through a narrow route", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_actions",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.completeCurrentCombatPhaseResolutionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/complete-current-phase-resolution",
+    });
+  });
+
   it("clears the current combat round step through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",

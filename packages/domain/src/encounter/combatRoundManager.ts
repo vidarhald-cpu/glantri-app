@@ -17020,7 +17020,8 @@ export interface CombatRoundCommandEnvelopeResult {
   attackResultId?: string;
   attackerParticipantId?: string;
   defenderParticipantId?: string;
-  kind: "attack" | "phase_initiative_commit";
+  kind: "attack" | "parry" | "phase_initiative_commit";
+  parryResultId?: string;
   phase?: CombatRoundPhase;
 }
 

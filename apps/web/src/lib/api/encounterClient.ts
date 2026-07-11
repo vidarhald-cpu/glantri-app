@@ -355,6 +355,38 @@ export async function skipCombatRoundCurrentActionOnServer(input: {
   return payload;
 }
 
+export async function advanceCurrentCombatPhaseResolutionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/advance-current-phase-resolution`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function completeCurrentCombatPhaseResolutionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/complete-current-phase-resolution`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;
@@ -449,6 +481,44 @@ export async function rollCombatParryOnServer(input: {
   );
 
   return payload.encounter;
+}
+
+export async function rollCombatParryCommandOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  mainHandParryScore?: number;
+  modifierBreakdown: Array<{ label: string; value: number }>;
+  offHandParryScore?: number;
+  parryBase: number;
+  parrySourceLabel?: string;
+  scenarioParticipantId: string;
+  usedMainHand?: boolean;
+  usedOffHand?: boolean;
+}): Promise<{
+  command?: CombatRoundCommand;
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    command?: CombatRoundCommand;
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-parry`, {
+    body: JSON.stringify({
+      attackResultId: input.attackResultId,
+      mainHandParryScore: input.mainHandParryScore,
+      modifierBreakdown: input.modifierBreakdown,
+      offHandParryScore: input.offHandParryScore,
+      parryBase: input.parryBase,
+      parrySourceLabel: input.parrySourceLabel,
+      scenarioParticipantId: input.scenarioParticipantId,
+      usedMainHand: input.usedMainHand,
+      usedOffHand: input.usedOffHand,
+    }),
+    method: "POST",
+  });
+
+  return payload;
 }
 
 export async function clearCurrentCombatRoundStepOnServer(input: {

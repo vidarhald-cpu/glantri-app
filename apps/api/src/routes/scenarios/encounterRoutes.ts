@@ -16,11 +16,14 @@ import {
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
   buildReactiveAttackPhase2InitiativeModifierEntry,
+  advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
+  combatRoundParticipantHasPhaseAttack,
   commitCombatRoundPhaseInitiativeResolution,
+  completeCombatRoundPhaseResolutionForParticipant,
   continueCombatRoundPhaseAttack,
   canPlayerSubmitCombatDeclaration,
   clearCombatRoundStep,
@@ -40,9 +43,11 @@ import {
   getCombatDeclarationAttackPhases,
   getCombatRoundDistanceEdge,
   getCombatRoundRequiredCombatExperienceTrigger,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getPlayerCombatCurrentRollAction,
   getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseResolutionStatus,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
@@ -56,6 +61,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
+  recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
@@ -3568,6 +3574,264 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  function getCanonicalCurrentPhaseResolutionTarget(
+    roundState: ReturnType<typeof initializeCombatRoundState>,
+  ): {
+    ownerParticipantId: string;
+    phase: "phase1" | "phase2";
+  } {
+    const cursor = roundState.phaseResolutionCursor;
+    const currentCursor = roundState.currentCursor;
+    const visibleParticipantId = cursor?.participantId ?? currentCursor?.participantId;
+    const phase =
+      cursor?.phase ??
+      (currentCursor?.step === "A1" || currentCursor?.step === "P1" || currentCursor?.step === "D1"
+        ? "phase1"
+        : currentCursor?.step === "A2" ||
+            currentCursor?.step === "P2" ||
+            currentCursor?.step === "D2"
+          ? "phase2"
+          : undefined);
+
+    if (!visibleParticipantId || !phase) {
+      throw new Error("No current phase resolution task is open.");
+    }
+
+    const incomingAttackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+      participantId: visibleParticipantId,
+      phase,
+      state: roundState,
+    });
+
+    return {
+      ownerParticipantId: incomingAttackResult?.attackerParticipantId ?? visibleParticipantId,
+      phase,
+    };
+  }
+
+  app.post(
+    "/encounters/:encounterId/combat-round/advance-current-phase-resolution",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can advance combat phase resolution.",
+          });
+        }
+
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
+        const currentOwnerStatus = getCombatRoundPhaseResolutionStatus({
+          participantId: ownerParticipantId,
+          phase,
+          state: roundState,
+        });
+
+        if (currentOwnerStatus.substep === "damage") {
+          throw new Error("Damage review uses the damage-specific command path.");
+        }
+
+        const submittedAt = new Date().toISOString();
+        const advancedRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+          participantId: ownerParticipantId,
+          phase,
+          state: roundState,
+          updatedAt: submittedAt,
+        });
+        const nextOwnerStatus = getCombatRoundPhaseResolutionStatus({
+          participantId: ownerParticipantId,
+          phase,
+          state: advancedRoundState,
+        });
+        const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: ownerParticipantId,
+          phase,
+          state: advancedRoundState,
+        });
+        const damageParticipantId = attackResult?.defenderParticipantId ?? ownerParticipantId;
+        const damageCursorStep: "D1" | "D2" = phase === "phase1" ? "D1" : "D2";
+        const damageReviewStep: "phase_1_damage" | "phase_2_damage" =
+          phase === "phase1" ? "phase_1_damage" : "phase_2_damage";
+        const nextRoundState =
+          nextOwnerStatus.substep === "damage" || nextOwnerStatus.substep === "effects"
+            ? {
+                ...advancedRoundState,
+                currentCursor: {
+                  participantId: damageParticipantId,
+                  roundNumber: advancedRoundState.roundNumber,
+                  step: damageCursorStep,
+                },
+                currentStep: damageReviewStep,
+                phaseResolutionCursor: {
+                  participantId: damageParticipantId,
+                  phase,
+                  substep: nextOwnerStatus.substep,
+                },
+                selectedParticipantId: damageParticipantId,
+                selectedStep: damageReviewStep,
+              }
+            : advancedRoundState;
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({
+          state: nextRoundState,
+        });
+
+        return {
+          commandEnvelope,
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to advance combat phase resolution.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/complete-current-phase-resolution",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({
+            error: "Encounter not found.",
+          });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          {
+            campaignService,
+            scenarioService,
+          },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can complete combat phase resolution.",
+          });
+        }
+
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
+        const submittedAt = new Date().toISOString();
+        const ownerHasPhaseAttack = combatRoundParticipantHasPhaseAttack({
+          participantId: ownerParticipantId,
+          phase,
+          state: roundState,
+        });
+        const nextRoundState = ownerHasPhaseAttack
+          ? completeCombatRoundPhaseResolutionForParticipant({
+              participantId: ownerParticipantId,
+              phase,
+              state: roundState,
+              submittedBy: "gm",
+              updatedAt: submittedAt,
+            })
+          : recordCombatRoundNoAttackPhaseReview({
+              command: {
+                createdAt: submittedAt,
+                createdByUserId: user.id,
+              },
+              participantId: ownerParticipantId,
+              phase,
+              state: roundState,
+              submittedBy: "gm",
+              updatedAt: submittedAt,
+            });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({
+          state: nextRoundState,
+        });
+
+        return {
+          commandEnvelope,
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to complete combat phase resolution.",
+        });
+      }
+    },
+  );
+
   app.post(
     "/encounters/:encounterId/combat-round/commit-phase-initiative-resolution",
     async (request, reply) => {
@@ -4153,8 +4417,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
+      const parryCommand = nextRoundState.commands.at(-1);
+      const parryResultId =
+        typeof parryCommand?.facts?.parryResultId === "string"
+          ? parryCommand.facts.parryResultId
+          : undefined;
+      const commandEnvelope = buildCombatRoundCommandEnvelope({
+        latestResult: {
+          attackResultId: body.attackResultId,
+          defenderParticipantId: attackResult.defenderParticipantId,
+          kind: "parry",
+          parryResultId,
+          phase: attackResult.phase,
+        },
+        state: nextRoundState,
+      });
 
       return {
+        command: parryCommand,
+        commandEnvelope,
         encounter:
           access.mode === "gm"
             ? savedEncounter

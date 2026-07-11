@@ -41,7 +41,6 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
-  advanceCombatRoundPhaseResolutionSubstepForParticipant,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
@@ -52,12 +51,12 @@ import {
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
-  completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundEndReviewPrepared,
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
   getCombatRoundAttackDistanceModifierDetail,
+  getCombatRoundAttackResultId,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
@@ -66,7 +65,6 @@ import {
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
-  getCombatRoundDamageReviewStepForPhase,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseDamageCommitReadiness,
@@ -101,18 +99,14 @@ import {
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
-  recordCombatRoundNoAttackPhaseReview,
-  recordCombatRoundParryResult,
   rollCombatRoundEndHealthCheck,
   rollCombatRoundEndDistanceControl,
-  rollOpenEndedD20,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
   buildCombatStateCharacterInputs,
-  resolveCombatParry,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
@@ -121,13 +115,16 @@ import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import {
   advanceCombatRoundCurrentStepOnServer,
+  advanceCurrentCombatPhaseResolutionOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
+  completeCurrentCombatPhaseResolutionOnServer,
   continuePhaseAttackOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
+  rollCombatParryCommandOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
   skipCombatRoundCurrentActionOnServer,
@@ -7172,65 +7169,56 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    if (!inspectorParryDefenderScenarioParticipant) {
+      setSaveError("Defender scenario participant is required to roll parry.");
+      return;
+    }
+
     const sources = inspectorParryDefenderPhaseSummary?.parrySources;
     const rawModifiers = buildCombatParryRawModifiers({
       attackResult,
       liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
     });
-    const roll = rollOpenEndedD20();
-    const parry = resolveCombatParry({
-      parryBase: inspectorParryBase,
-      rawModifiers,
-      rollTotal: roll.dieResult,
-    });
     const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
     const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
-    const parrySourceLabel = formatSelectedCombatParrySourceName({
-      selection: {
-        usedMainHand,
-        usedOffHand,
-      },
-      sources,
-    });
-    const updatedAt = new Date().toISOString();
-    const parryResolution: CombatRoundParryResolution = {
-      combinedParryScore: parry.parryBase,
-      mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
-      modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
-      modifierAdjustment: parry.modifierAdjustment,
-      modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
-      notes:
-        "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
-      offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
-      openEndedD10s: roll.openEndedD10s,
-      parrySourceLabel,
-      rawModifierTotal: parry.rawModifierTotal,
-      resultLabel: parry.success ? "Parry successful" : "Parry failed",
-      rollD20: roll.rollD20,
-      rollTotal: roll.dieResult,
-      status: "resolved",
-      success: parry.success,
-      targetNumber: parry.targetNumber,
-      total: parry.total,
-      usedMainHand,
-      usedOffHand,
-    };
 
     setSaving(true);
 
     try {
-      const nextRoundState = recordCombatRoundParryResult({
-        attackResult,
-        command: {
-          createdAt: updatedAt,
-        },
-        parryResolution,
-        state: roundState,
-        submittedBy: "gm",
-        updatedAt,
+      const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
+        attackResultId: getCombatRoundAttackResultId({
+          result: attackResult,
+          roundNumber: roundState.roundNumber,
+        }),
+        encounterId: encounter.id,
+        mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
+        modifierBreakdown: rawModifiers,
+        offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
+        parryBase: inspectorParryBase,
+        parrySourceLabel: formatSelectedCombatParrySourceName({
+          selection: {
+            usedMainHand,
+            usedOffHand,
+          },
+          sources,
+        }),
+        scenarioParticipantId: inspectorParryDefenderScenarioParticipant.id,
+        usedMainHand,
+        usedOffHand,
       });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
 
-      await persistRoundState(nextRoundState);
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
@@ -7249,32 +7237,23 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const updatedAt = new Date().toISOString();
-      const ownerHasPhaseAttack = combatRoundParticipantHasPhaseAttack({
-        participantId: ownerParticipantId,
-        phase,
-        state: roundState,
-      });
-      const nextRoundState = ownerHasPhaseAttack
-        ? completeCombatRoundPhaseResolutionForParticipant({
-            participantId: ownerParticipantId,
-            phase,
-            state: roundState,
-            submittedBy: "gm",
-            updatedAt,
-          })
-        : recordCombatRoundNoAttackPhaseReview({
-            command: {
-              createdAt: updatedAt,
-            },
-            participantId: ownerParticipantId,
-            phase,
-            state: roundState,
-            submittedBy: "gm",
-            updatedAt,
-          });
+      const { commandEnvelope, encounter: nextEncounter } =
+        await completeCurrentCombatPhaseResolutionOnServer({
+          encounterId: encounter.id,
+        });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
 
-      await persistRoundState(nextRoundState);
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -7759,37 +7738,28 @@ export default function CombatRoundManagerPanel({
           setSaveError("Hit location roll required.");
           return;
         }
+
+        await persistRoundState(nextRoundState);
       } else {
-        nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
-          participantId: ownerParticipantId,
-          phase,
-          state: roundState,
-          updatedAt,
-        });
+        const { commandEnvelope, encounter: nextEncounter } =
+          await advanceCurrentCombatPhaseResolutionOnServer({
+            encounterId: encounter.id,
+          });
+        const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+          getCombatRoundManagerStateFromCommandEnvelope({
+            commandEnvelope,
+            encounter: nextEncounter,
+          });
+
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+        setInspectionSelection(nextInspectionSelection);
+        setRoundState(nextRoundState);
+        setSelectedRoundNumber(nextRoundState.roundNumber);
+        onEncounterUpdated?.(nextEncounter);
+        focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       }
 
-      const nextOwnerStatus = getCombatRoundPhaseResolutionStatus({
-        participantId: ownerParticipantId,
-        phase,
-        state: nextRoundState,
-      });
-      const defenderParticipantId =
-        inspectorResolutionAttackResult?.defenderParticipantId ?? ownerParticipantId;
-      const defenderOwnedNextRoundState =
-        nextOwnerStatus.substep === "damage" || nextOwnerStatus.substep === "effects"
-          ? {
-              ...nextRoundState,
-              phaseResolutionCursor: {
-                participantId: defenderParticipantId,
-                phase,
-                substep: nextOwnerStatus.substep,
-              },
-              selectedParticipantId: defenderParticipantId,
-              selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
-            }
-          : nextRoundState;
-
-      await persistRoundState(defenderOwnedNextRoundState);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
