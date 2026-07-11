@@ -4249,6 +4249,73 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("lets a GM roll the canonical current distance-control task through a narrow route", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const staleInspectionState = {
+      ...fixture.encounter.combatRoundState,
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "select_actions",
+    } as CombatRoundState;
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: staleInspectionState,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/roll-current-distance-control",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    expect(Object.keys(payload).sort()).toEqual(["commandEnvelope", "encounter"]);
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    const updatedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    const proposal = updatedState.roundEndReview?.proposedDistances[0];
+    expect(proposal?.participantA).toMatchObject({
+      result: expect.objectContaining({
+        rolledBy: "gm_proxy",
+        rolledByUserId: "gm-1",
+      }),
+      status: "rolled",
+    });
+    expect(proposal?.participantB.status).toBe("pending");
+    expect(updatedState.commands.at(-1)).toMatchObject({
+      participantId: "encounter-participant-1",
+      type: "roll_round_end_distance_control",
+    });
+  });
+
+  it("rejects players from the canonical GM distance-control route", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/roll-current-distance-control",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("returns player-safe pending distance-control proposals with own details only", async () => {
     const fixture = makeDistanceControlReviewFixture();
     setupCombatDeclarationRoute({

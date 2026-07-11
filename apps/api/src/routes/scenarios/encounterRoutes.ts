@@ -48,6 +48,7 @@ import {
   getPlayerCombatCurrentRollAction,
   getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getNextCombatRoundEndTask,
   getCombatRoundPhaseResolutionStatus,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
@@ -3037,6 +3038,82 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({
           error:
             error instanceof Error ? error.message : "Unable to roll distance control contest.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-current-distance-control",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can proxy the current distance-control roll.",
+          });
+        }
+
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const currentTask = getNextCombatRoundEndTask({ state: roundState });
+
+        if (currentTask?.kind !== "distance_roll") {
+          throw new Error("No current distance-control roll is open.");
+        }
+
+        const submittedAt = new Date().toISOString();
+        const rolled = rollCombatRoundEndDistanceControl({
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          distanceProposalId: currentTask.distanceProposalId,
+          participantId: currentTask.participantId,
+          rolledBy: "gm_proxy",
+          state: roundState,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({ state: rolled.state });
+
+        return { commandEnvelope, encounter: savedEncounter };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to roll current distance control contest.",
         });
       }
     },

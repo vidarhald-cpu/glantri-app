@@ -89,6 +89,7 @@ export {
   saveCurrentCombatDamageReviewOnServer,
   completeCurrentCombatPhaseResolutionOnServer,
   rollRoundEndDistanceControlOnServer,
+  rollCurrentRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,

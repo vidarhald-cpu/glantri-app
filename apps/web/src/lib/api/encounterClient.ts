@@ -186,6 +186,20 @@ export async function rollRoundEndDistanceControlOnServer(input: {
   return payload;
 }
 
+export async function rollCurrentRoundEndDistanceControlOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-current-distance-control`, {
+    method: "POST",
+  });
+}
+
 export async function rollRoundEndHealthCheckOnServer(input: {
   encounterId: string;
   healthRollId: string;

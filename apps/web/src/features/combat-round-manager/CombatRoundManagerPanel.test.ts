@@ -703,7 +703,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitCombatRoundEndParticipantReview");
     expect(source).toContain("commitCombatRoundEndDistanceControl");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
-    expect(source).toContain("rollCombatRoundEndDistanceControl");
+    expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
     expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
@@ -898,6 +898,27 @@ describe("CombatRoundManagerPanel", () => {
     expect(saveHandler).not.toContain("reviewCombatRoundDamageResult({");
     expect(saveHandler).not.toContain("persistRoundState(");
     expect(saveHandler).not.toContain("updateEncounterOnServer({");
+  });
+
+  it("routes the GM current distance-control roll through a narrow command", () => {
+    const source = readSource();
+    const rollStart = source.indexOf(
+      "async function rollRoundEndDistanceControlFromPrimaryAction()",
+    );
+    const rollEnd = source.indexOf(
+      "async function advanceInspectorPhaseResolutionSubstep",
+      rollStart,
+    );
+    const rollHandler = source.slice(rollStart, rollEnd);
+
+    expect(rollStart).toBeGreaterThan(-1);
+    expect(rollHandler).toContain("await rollCurrentRoundEndDistanceControlOnServer({");
+    expect(rollHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(rollHandler).toContain("setRoundState(nextRoundState)");
+    expect(rollHandler).toContain("onEncounterUpdated?.(nextEncounter)");
+    expect(rollHandler).not.toContain("rollCombatRoundEndDistanceControl({");
+    expect(rollHandler).not.toContain("persistRoundState(");
+    expect(rollHandler).not.toContain("updateEncounterOnServer({");
   });
 
   it("uses canonical current task selection after command-stack Clear", () => {

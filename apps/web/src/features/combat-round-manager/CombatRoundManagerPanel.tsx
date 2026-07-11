@@ -98,7 +98,6 @@ import {
   recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
   rollCombatRoundEndHealthCheck,
-  rollCombatRoundEndDistanceControl,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -124,6 +123,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  rollCurrentRoundEndDistanceControlOnServer,
   saveCurrentCombatDamageReviewOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
@@ -7429,23 +7429,33 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    try {
-      const updatedAt = new Date().toISOString();
-      const rolled = rollCombatRoundEndDistanceControl({
-        command: {
-          createdAt: updatedAt,
-        },
-        distanceProposalId: inspectorRoundEndDistanceAction.option.proposal.id,
-        participantId: inspectorRoundEndDistanceAction.option.participantId,
-        rolledBy: "gm_proxy",
-        state: roundState,
-      });
+    setSaving(true);
 
-      await persistRoundState(rolled.state);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await rollCurrentRoundEndDistanceControlOnServer({
+          encounterId: encounter.id,
+        });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll distance control.",
       );
+    } finally {
+      setSaving(false);
     }
   }
 
