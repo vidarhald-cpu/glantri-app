@@ -4596,6 +4596,49 @@ describe("combat round manager", () => {
           },
         ],
       },
+      phasePanels: {
+        phase1: {
+          attackSummary: {
+            attackMode: "Slash",
+            dmb: "8",
+            initiative: "12",
+            maxCrits: "2",
+            ob: "9",
+            weaponName: "Broadsword",
+          },
+          distanceLabel: "Distance: 2",
+          phaseContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetLocation: "chest",
+            targetParticipantId: "guard",
+          },
+          targetOptions: [{ displayName: "City guard", id: "guard" }],
+        },
+        phase2: {
+          defenseSummary: {
+            db: "14",
+            dm: "2",
+            parry: "11",
+            sourceName: "Broadsword / shield",
+          },
+          phaseContext: {
+            mainHandParryDirection: "left_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            offHandParryDirection: "right_forward",
+          },
+          targetOptions: [{ displayName: "City guard", id: "guard" }],
+        },
+      },
       participantId: "gladiator",
       phase: "phase1",
       phaseContext: {
@@ -4722,6 +4765,49 @@ describe("combat round manager", () => {
           },
         ],
       },
+      phasePanels: {
+        phase1: {
+          attackSummary: {
+            attackMode: "Slash",
+            dmb: "8",
+            initiative: "12",
+            maxCrits: "2",
+            ob: "9",
+            weaponName: "Broadsword",
+          },
+          distanceLabel: "Distance: 2",
+          phaseContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetLocation: "chest",
+            targetParticipantId: "guard",
+          },
+          targetOptions: [{ displayName: "City guard", id: "guard" }],
+        },
+        phase2: {
+          defenseSummary: {
+            db: "14",
+            dm: "2",
+            parry: "11",
+            sourceName: "Broadsword / shield",
+          },
+          phaseContext: {
+            mainHandParryDirection: "left_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            offHandParryDirection: "right_forward",
+          },
+          targetOptions: [{ displayName: "City guard", id: "guard" }],
+        },
+      },
       participantId: "gladiator",
       participantLabel: "The Gladiator",
       roundNumber: 3,
@@ -4729,7 +4815,9 @@ describe("combat round manager", () => {
     });
     const changedLiveFacts = {
       actionId: "other",
+      distanceLabel: "Distance: 8",
       modifierValue: 99,
+      weaponName: "Current weapon",
     };
 
     expect(snapshot.declarationSummary).toMatchObject({
@@ -4752,6 +4840,23 @@ describe("combat round manager", () => {
     });
     expect(snapshot.declarationSummary?.actionId).not.toBe(changedLiveFacts.actionId);
     expect(snapshot.modifierSummary?.rows[0]?.total).not.toBe(changedLiveFacts.modifierValue);
+    expect(snapshot.phasePanels?.phase1).toMatchObject({
+      attackSummary: { weaponName: "Broadsword" },
+      distanceLabel: "Distance: 2",
+      phaseContext: { targetLocation: "chest", targetParticipantId: "guard" },
+      targetOptions: [{ displayName: "City guard", id: "guard" }],
+    });
+    expect(snapshot.phasePanels?.phase2).toMatchObject({
+      defenseSummary: { parry: "11", sourceName: "Broadsword / shield" },
+      phaseContext: {
+        mainHandParryDirection: "left_forward",
+        offHandParryDirection: "right_forward",
+      },
+    });
+    expect(snapshot.phasePanels?.phase1?.attackSummary?.weaponName).not.toBe(
+      changedLiveFacts.weaponName,
+    );
+    expect(snapshot.phasePanels?.phase1?.distanceLabel).not.toBe(changedLiveFacts.distanceLabel);
   });
 
   it("keeps legacy snapshot panel facts identifiable as incomplete", () => {
@@ -4766,6 +4871,7 @@ describe("combat round manager", () => {
 
     expect(legacySnapshot.declarationSummary).toBeUndefined();
     expect(legacySnapshot.modifierSummary).toBeUndefined();
+    expect(legacySnapshot.phasePanels).toBeUndefined();
   });
 
   it("finds the previous combat round step", () => {

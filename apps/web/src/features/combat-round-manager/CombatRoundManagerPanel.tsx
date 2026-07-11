@@ -53,7 +53,6 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
-  getCombatRoundAttackDistanceModifierDetail,
   getCombatRoundAttackResultId,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
@@ -5018,12 +5017,6 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined);
-  const inspectorDisplayAttackDistanceModifierDetail = inspectorDisplayAttackResult
-    ? getCombatRoundAttackDistanceModifierDetail({
-        result: inspectorDisplayAttackResult,
-        state: selectedTimelineRoundState,
-      })
-    : undefined;
   const inspectorCanShowLatestRelevantAttackResult =
     COMBAT_ROUND_STEPS.indexOf(inspector.step) >= COMBAT_ROUND_STEPS.indexOf("phase_1_actions") &&
     inspector.step !== "round_summary";
@@ -5043,12 +5036,6 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined);
-  const inspectorResolutionAttackDistanceModifierDetail = inspectorResolutionAttackResult
-    ? getCombatRoundAttackDistanceModifierDetail({
-        result: inspectorResolutionAttackResult,
-        state: selectedTimelineRoundState,
-      })
-    : undefined;
   const inspectorDisplayPhaseResolutionResult =
     inspectorSnapshot?.phaseResolutionResult ??
     (inspectorResolutionAttackResult
@@ -5951,7 +5938,9 @@ export default function CombatRoundManagerPanel({
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     strengthGm?: number;
     liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
+    mainHandParryItemLabel?: string;
     modifierRows: ReturnType<typeof buildPlayerCombatModifierRows>;
+    offHandParryItemLabel?: string;
     parrySources: CombatParrySourceOptions;
     phaseContext?: ScenarioParticipantCombatContext;
   } {
@@ -6064,7 +6053,9 @@ export default function CombatRoundManagerPanel({
       defenseStats,
       strengthGm: characterCombatInputs?.strengthGm ?? undefined,
       liveModifiers,
+      mainHandParryItemLabel: baseLoadoutSummary.mainHandParryItemLabel,
       modifierRows,
+      offHandParryItemLabel: baseLoadoutSummary.offHandParryItemLabel,
       parrySources,
       phaseContext,
     };
@@ -6097,6 +6088,18 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         roundNumber: stateForSnapshots.roundNumber,
       });
+      const phaseSummaries = {
+        phase1: buildScenarioParticipantPhaseSummary({
+          declaration,
+          phaseKey: "phase1",
+          scenarioParticipant,
+        }),
+        phase2: buildScenarioParticipantPhaseSummary({
+          declaration,
+          phaseKey: "phase2",
+          scenarioParticipant,
+        }),
+      };
       const phaseSummary = buildScenarioParticipantPhaseSummary({
         declaration,
         phaseKey: phase,
@@ -6109,6 +6112,62 @@ export default function CombatRoundManagerPanel({
         total: row.total,
       }));
       const phaseContext = phaseSummary.phaseContext;
+      const targetOptions = getPlayerEncounterOpponentParticipants({
+        allowedParticipantIds: encounterScenarioParticipantIds,
+        isGameMaster: true,
+        participants: effectiveScenarioParticipants,
+        selectedParticipantId: scenarioParticipant?.id,
+      });
+      const buildPhasePanelSnapshot = (phaseKey: PlayerCombatPhaseKey) => {
+        const summary = phaseSummaries[phaseKey];
+        const context = summary.phaseContext ?? draft.phaseContexts[phaseKey];
+        const model = buildPlayerCombatPhasePanelModel({
+          actionId: draft.actionId,
+          attackStats: summary.attackStats,
+          defenseStats: summary.defenseStats,
+          phaseCard: {
+            description: "",
+            phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2",
+            stats: [],
+            title: "",
+          },
+          phaseContext: context,
+          phaseKey,
+          secondaryActionId: draft.secondaryActionId,
+        });
+        const targetScenarioParticipant = effectiveScenarioParticipants.find(
+          (participant) => participant.id === context.targetParticipantId,
+        );
+        const targetEncounterParticipant = context.targetParticipantId
+          ? findEncounterParticipantForScenarioParticipant({
+              encounterParticipants: encounter.participants,
+              scenarioParticipant: targetScenarioParticipant,
+              scenarioParticipantId: context.targetParticipantId,
+            })
+          : undefined;
+        const distanceRow = getCombatDistanceTableRowForParticipants({
+          participantAId: roundParticipant.participantId,
+          participantAAliases: getCombatDistanceParticipantAliases(roundParticipant),
+          participantBId: targetEncounterParticipant?.id,
+          participantBAliases: [
+            ...getCombatDistanceParticipantAliases(targetEncounterParticipant),
+            ...getCombatDistanceParticipantAliases(targetScenarioParticipant),
+          ],
+          rows: combatDistanceRows,
+        });
+
+        return {
+          attackSummary: model.showAttackStats ? (model.attackStats ?? undefined) : undefined,
+          defenseSummary: model.showDefenseContext ? (model.defenseStats ?? undefined) : undefined,
+          distanceLabel: targetEncounterParticipant
+            ? `Distance: ${distanceRow?.edge.distance ?? "—"}`
+            : undefined,
+          mainHandParryItemLabel: summary.mainHandParryItemLabel,
+          offHandParryItemLabel: summary.offHandParryItemLabel,
+          phaseContext: context,
+          targetOptions,
+        };
+      };
       const phaseModel =
         phase && phaseContext
           ? buildPlayerCombatPhasePanelModel({
@@ -6224,6 +6283,10 @@ export default function CombatRoundManagerPanel({
         participantId: roundParticipant.participantId,
         participantLabel: roundParticipant.label,
         phase,
+        phasePanels: {
+          phase1: buildPhasePanelSnapshot("phase1"),
+          phase2: buildPhasePanelSnapshot("phase2"),
+        },
         phaseContext,
         phaseResolutionStatus,
         phaseResolutionResult,
@@ -8321,53 +8384,58 @@ export default function CombatRoundManagerPanel({
                   )}
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
-                    const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey];
+                    const historicalPhasePanel = inspectorSnapshot?.phasePanels?.[phaseKey];
+                    const phaseCombatContext = inspectorSnapshot
+                      ? (historicalPhasePanel?.phaseContext ??
+                        createUnrecordedHistoricalPhaseContext())
+                      : inspectorDisplayDraft.phaseContexts[phaseKey];
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
-                    const phaseTargetScenarioParticipant = effectiveScenarioParticipants.find(
-                      (participant) => participant.id === phaseCombatContext.targetParticipantId,
-                    );
-                    const phaseTargetEncounterParticipant = phaseCombatContext.targetParticipantId
-                      ? findEncounterParticipantForScenarioParticipant({
-                          encounterParticipants: encounter.participants,
-                          scenarioParticipant: phaseTargetScenarioParticipant,
-                          scenarioParticipantId: phaseCombatContext.targetParticipantId,
+                    const phaseTargetScenarioParticipant = !inspectorSnapshot
+                      ? effectiveScenarioParticipants.find(
+                          (participant) =>
+                            participant.id === phaseCombatContext.targetParticipantId,
+                        )
+                      : undefined;
+                    const phaseTargetEncounterParticipant =
+                      !inspectorSnapshot && phaseCombatContext.targetParticipantId
+                        ? findEncounterParticipantForScenarioParticipant({
+                            encounterParticipants: encounter.participants,
+                            scenarioParticipant: phaseTargetScenarioParticipant,
+                            scenarioParticipantId: phaseCombatContext.targetParticipantId,
+                          })
+                        : undefined;
+                    const phaseDistanceRow = !inspectorSnapshot
+                      ? getCombatDistanceTableRowForParticipants({
+                          participantAId: inspector.participant?.participantId,
+                          participantAAliases: getCombatDistanceParticipantAliases(
+                            inspector.participant,
+                          ),
+                          participantBId: phaseTargetEncounterParticipant?.id,
+                          participantBAliases: [
+                            ...getCombatDistanceParticipantAliases(phaseTargetEncounterParticipant),
+                            ...getCombatDistanceParticipantAliases(phaseTargetScenarioParticipant),
+                          ],
+                          rows: combatDistanceRows,
                         })
                       : undefined;
-                    const phaseDistanceRow = getCombatDistanceTableRowForParticipants({
-                      participantAId: inspector.participant?.participantId,
-                      participantAAliases: getCombatDistanceParticipantAliases(
-                        inspector.participant,
-                      ),
-                      participantBId: phaseTargetEncounterParticipant?.id,
-                      participantBAliases: [
-                        ...getCombatDistanceParticipantAliases(phaseTargetEncounterParticipant),
-                        ...getCombatDistanceParticipantAliases(phaseTargetScenarioParticipant),
-                      ],
-                      rows: combatDistanceRows,
-                    });
-                    const snapshotForPhase =
-                      inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
                     const phaseSourceLabel = getCombatInspectorSourceLabel(
                       inspectorSnapshot ? "history" : "current",
                     );
-                    const phaseDistanceLabel = phaseTargetEncounterParticipant
-                      ? inspectorSnapshot
-                        ? `Distance: ${
-                            snapshotForPhase
-                              ? (inspectorDisplayAttackDistanceModifierDetail?.actualDistance ??
-                                inspectorResolutionAttackDistanceModifierDetail?.actualDistance ??
-                                "Not recorded")
-                              : "Not recorded"
-                          }`
-                        : `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
-                      : undefined;
-                    const phaseDefenseStats = buildPlayerCombatDefenseStats({
-                      mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                      offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                      phaseContext: phaseCombatContext,
-                      reference: phaseLoadoutSummary.reference,
-                    });
+                    const phaseDistanceLabel = inspectorSnapshot
+                      ? historicalPhasePanel?.distanceLabel
+                      : phaseTargetEncounterParticipant
+                        ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
+                        : undefined;
+                    const phaseDefenseStats = !inspectorSnapshot
+                      ? buildPlayerCombatDefenseStats({
+                          mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                          offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                          phaseContext: phaseCombatContext,
+                          reference: phaseLoadoutSummary.reference,
+                        })
+                      : null;
                     const selectedResolutionContext =
+                      !inspectorSnapshot &&
                       phaseKey === inspectorResolutionPhase &&
                       inspector.participant?.participantId ===
                         inspectorResolutionAttackResult?.defenderParticipantId &&
@@ -8388,8 +8456,9 @@ export default function CombatRoundManagerPanel({
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
                       attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats,
-                      liveModifiers:
-                        phaseKey === inspectorResolutionPhase
+                      liveModifiers: inspectorSnapshot
+                        ? undefined
+                        : phaseKey === inspectorResolutionPhase
                           ? inspectorParryDefenderPhaseSummary?.liveModifiers
                           : buildEncounterLiveCombatModifierSummary({
                               combatContext: inspectorGeneratedCombatContext,
@@ -8404,8 +8473,8 @@ export default function CombatRoundManagerPanel({
                       secondaryActionId: inspectorDisplayDraft.secondaryActionId,
                       selectedResolutionContext,
                       selectedStep: inspector.step,
-                      snapshotAttackStats: snapshotForPhase?.attackSummary,
-                      snapshotDefenseStats: snapshotForPhase?.defenseSummary,
+                      snapshotAttackStats: historicalPhasePanel?.attackSummary,
+                      snapshotDefenseStats: historicalPhasePanel?.defenseSummary,
                     });
                     const phaseModel = phaseProjection.phaseModel;
 
@@ -8422,15 +8491,15 @@ export default function CombatRoundManagerPanel({
                         phaseCard={phaseCard}
                         sourceLabel={phaseSourceLabel}
                       >
-                        {inspectorSnapshot && !snapshotForPhase ? (
+                        {inspectorSnapshot && !historicalPhasePanel ? (
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            No recorded phase facts.
+                            Historical data was not recorded for this panel.
                           </div>
-                        ) : null}
-                        {phaseModel.showAttackStats && phaseModel.attackStats ? (
+                        ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                         ) : null}
-                        {phaseModel.showAttackLocationSelector ? (
+                        {(!inspectorSnapshot || historicalPhasePanel) &&
+                        phaseModel.showAttackLocationSelector ? (
                           <>
                             <PlayerCombatAttackTargetSelector
                               combatContext={phaseModel.phaseContext}
@@ -8444,7 +8513,9 @@ export default function CombatRoundManagerPanel({
                                   },
                                 })
                               }
-                              targetOptions={inspectorTargetOptions}
+                              targetOptions={
+                                historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
+                              }
                             />
                             <PlayerCombatAttackLocationSelector
                               combatContext={phaseModel.phaseContext}
@@ -8460,14 +8531,22 @@ export default function CombatRoundManagerPanel({
                             />
                           </>
                         ) : null}
-                        {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
+                        {(!inspectorSnapshot || historicalPhasePanel) &&
+                        phaseModel.showDefenseContext &&
+                        phaseModel.defenseStats ? (
                           <>
                             <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
-                              mainHandItemLabel={phaseLoadoutSummary.mainHandParryItemLabel}
-                              offHandItemLabel={phaseLoadoutSummary.offHandParryItemLabel}
+                              mainHandItemLabel={
+                                historicalPhasePanel?.mainHandParryItemLabel ??
+                                phaseLoadoutSummary.mainHandParryItemLabel
+                              }
+                              offHandItemLabel={
+                                historicalPhasePanel?.offHandParryItemLabel ??
+                                phaseLoadoutSummary.offHandParryItemLabel
+                              }
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {

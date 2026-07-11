@@ -1728,6 +1728,39 @@ export const combatRoundParticipantStateSchema = z.object({
   ),
 });
 
+const combatRoundPhasePanelSnapshotSchema = z.object({
+  attackSummary: z
+    .object({
+      attackMode: z.string(),
+      dmb: z.string(),
+      initiative: z.string(),
+      maxCrits: z.string(),
+      ob: z.string(),
+      weaponName: z.string(),
+    })
+    .optional(),
+  defenseSummary: z
+    .object({
+      db: z.string(),
+      dm: z.string(),
+      parry: z.string(),
+      sourceName: z.string(),
+    })
+    .optional(),
+  distanceLabel: z.string().optional(),
+  mainHandParryItemLabel: z.string().optional(),
+  offHandParryItemLabel: z.string().optional(),
+  phaseContext: scenarioParticipantCombatContextSchema,
+  targetOptions: z
+    .array(
+      z.object({
+        displayName: z.string().min(1),
+        id: idSchema,
+      }),
+    )
+    .default([]),
+});
+
 export const combatRoundStepSnapshotSchema = z.object({
   actionResultSummary: z.string().optional(),
   attackResult: combatRoundAttackRollResultSchema.optional(),
@@ -1800,6 +1833,7 @@ export const combatRoundStepSnapshotSchema = z.object({
   participantId: idSchema,
   participantLabel: z.string().min(1),
   phase: combatRoundPhaseSchema.optional(),
+  phasePanels: z.record(combatRoundPhaseSchema, combatRoundPhasePanelSnapshotSchema).optional(),
   phaseContext: scenarioParticipantCombatContextSchema.optional(),
   phaseResolutionStatus: combatRoundPhaseResolutionParticipantStatusSchema.optional(),
   phaseResolutionResult: combatRoundPhaseResolutionResultSchema.optional(),

@@ -317,7 +317,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
-    expect(source).toContain("getCombatRoundAttackDistanceModifierDetail");
+    expect(source).toContain("historicalPhasePanel?.distanceLabel");
+    expect(source).toContain('`Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`');
     expect(source).not.toContain("formatCombatDistanceModifierDetailLine");
     expect(source).not.toContain("buildCombatDistanceModifierSection");
     expect(source).not.toContain("distanceModifierDetail");
@@ -650,8 +651,9 @@ describe("CombatRoundManagerPanel", () => {
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
     );
     expect(source).toContain(
-      "const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey]",
+      "const historicalPhasePanel = inspectorSnapshot?.phasePanels?.[phaseKey]",
     );
+    expect(source).toContain(": inspectorDisplayDraft.phaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
@@ -667,7 +669,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
     expect(source).toContain("getEncounterScenarioParticipantIds");
-    expect(source).toContain("targetOptions={inspectorTargetOptions}");
+    expect(source).toContain("historicalPhasePanel?.targetOptions ?? inspectorTargetOptions");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).toContain("actionId: inspectorDisplayDraft.actionId");
     expect(source).toContain("secondaryActionId: inspectorDisplayDraft.secondaryActionId");
@@ -762,8 +764,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("sourceLabel={inspectorSourceLabel}");
     expect(source).toContain("sourceLabel={phaseSourceLabel}");
     expect(source).toContain("sourceLabel={inspectorModifierSourceLabel}");
-    expect(source).toContain("No recorded phase facts.");
-    expect(source).toContain('"Not recorded"');
+    expect(source).toContain("historicalPhasePanel");
+    expect(source).toContain("inspectorSnapshot?.phasePanels?.[phaseKey]");
+    expect(source).toContain("historicalPhasePanel?.distanceLabel");
+    expect(source).toContain("historicalPhasePanel?.targetOptions ?? inspectorTargetOptions");
+    expect(source).toContain("snapshotAttackStats: historicalPhasePanel?.attackSummary");
+    expect(source).toContain("snapshotDefenseStats: historicalPhasePanel?.defenseSummary");
+    expect(source).toContain("liveModifiers: inspectorSnapshot");
+    expect(source).toContain("? undefined\n                        : phaseKey");
     expect(source).toContain(
       "attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats",
     );
@@ -773,6 +781,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Historical data was not recorded for this panel.");
     expect(source).toContain("inspectorHistoricalSelectorFactsComplete");
     expect(source).toContain("movementPreferenceTargets");
+    expect(source).toContain('phase1: buildPhasePanelSnapshot("phase1")');
+    expect(source).toContain('phase2: buildPhasePanelSnapshot("phase2")');
     expect(source).not.toContain("History · Current reference");
     expect(source).not.toContain("...inspectorDraft,\n        actionId:");
   });
