@@ -1762,6 +1762,7 @@ const combatRoundPhasePanelSnapshotSchema = z.object({
 });
 
 export const combatRoundStepSnapshotSchema = z.object({
+  actionResultStatus: z.enum(["recorded", "no_result", "no_attack", "skipped"]).optional(),
   actionResultSummary: z.string().optional(),
   attackResult: combatRoundAttackRollResultSchema.optional(),
   attackSummary: z

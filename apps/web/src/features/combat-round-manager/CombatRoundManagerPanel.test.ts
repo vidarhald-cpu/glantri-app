@@ -582,6 +582,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorCanShowLatestRelevantAttackResult");
     expect(source).toContain("inspectorLatestRelevantAttackResult");
+    expect(source).toContain(
+      "!inspectorIsHistorical && inspectorCanShowLatestRelevantAttackResult",
+    );
+    expect(source).toContain("buildHistoricalCombatActionResult");
+    expect(source).toContain('interpretedResult: "No recorded result for this step."');
+    expect(source).toContain('snapshot.actionResultStatus === "skipped"');
+    expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
+    expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
+    expect(source).toContain("? inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(

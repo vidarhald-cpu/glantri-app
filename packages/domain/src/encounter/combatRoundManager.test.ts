@@ -13531,6 +13531,7 @@ describe("combat round manager", () => {
     const advanced = advanceCombatRoundStep(state, {
       stepSnapshots: [
         stepSnapshot({
+          actionResultStatus: "recorded",
           actionResultSummary: "Main: Broad sword OB 10 - DB 10 + roll 10 = 10\nResult: Miss",
           attackResult: result,
           participantId: "gladiator",
@@ -13547,6 +13548,7 @@ describe("combat round manager", () => {
         step: "phase_1_actions",
       }),
     ).toMatchObject({
+      actionResultStatus: "recorded",
       attackResult: {
         hit: false,
         lookupTotal: 10,
@@ -14666,6 +14668,7 @@ describe("combat round manager", () => {
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
     const snapshot = stepSnapshot({
+      actionResultStatus: "recorded",
       actionResultSummary:
         "Main: Broad sword OB 10 - DB 10 + roll 12 = 12 · Result: Hit\nParry: Pending · Damage roll: Pending\nProposal: Not ready",
       attackResult: result,
@@ -14683,6 +14686,7 @@ describe("combat round manager", () => {
         step: "review_phase_2_actions",
       }),
     ).toMatchObject({
+      actionResultStatus: "recorded",
       actionResultSummary: expect.stringContaining("Parry: Pending"),
       phaseResolutionResult: {
         damageProposal: { proposedEffects: [], status: "not_ready" },
@@ -14691,6 +14695,73 @@ describe("combat round manager", () => {
       },
       step: "review_phase_2_actions",
     });
+  });
+
+  it("keeps step-specific initiative, attack, and resolution result facts immutable", () => {
+    const initiative = buildCombatRoundInitiativeResult({
+      baseInitiative: 8,
+      roll: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [6, 6],
+        rollTotal: 12,
+        total: 12,
+      },
+    });
+    const initiativeSnapshot = combatRoundStepSnapshotSchema.parse({
+      actionResultStatus: "recorded",
+      committedAt: "2026-01-01T00:02:01.000Z",
+      id: "initiative-history",
+      initiativeRank: { rank: 1, rankTotal: 2, tiedCount: 1 },
+      initiativeResult: initiative,
+      participantId: "gladiator",
+      participantLabel: "The Gladiator",
+      roundNumber: 3,
+      step: "initiative_phase_1",
+    });
+    const attack = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const attackSnapshot = combatRoundStepSnapshotSchema.parse({
+      actionResultStatus: "recorded",
+      attackResult: attack,
+      committedAt: "2026-01-01T00:03:01.000Z",
+      id: "attack-history",
+      participantId: "gladiator",
+      participantLabel: "The Gladiator",
+      roundNumber: 3,
+      step: "phase_1_actions",
+    });
+    const missingSnapshot = combatRoundStepSnapshotSchema.parse({
+      committedAt: "2026-01-01T00:01:00.000Z",
+      id: "legacy-result-history",
+      participantId: "gladiator",
+      participantLabel: "The Gladiator",
+      roundNumber: 3,
+      step: "review_action_modifiers",
+    });
+    const laterAttack = { ...attack, tableResult: "Later phase result" };
+
+    expect(initiativeSnapshot).toMatchObject({
+      actionResultStatus: "recorded",
+      initiativeRank: { rank: 1 },
+      initiativeResult: { rolls: [6, 6], total: 20 },
+    });
+    expect(attackSnapshot.attackResult?.tableResult).toBe(attack.tableResult);
+    expect(attackSnapshot.attackResult?.tableResult).not.toBe(laterAttack.tableResult);
+    expect(missingSnapshot.actionResultStatus).toBeUndefined();
+    expect(missingSnapshot.attackResult).toBeUndefined();
+    expect(missingSnapshot.initiativeResult).toBeUndefined();
+    expect(missingSnapshot.phaseResolutionResult).toBeUndefined();
   });
 
   it("initializes phase1 cursor from initiative order with unrolled participants last", () => {
