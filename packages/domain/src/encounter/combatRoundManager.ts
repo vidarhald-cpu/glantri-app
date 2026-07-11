@@ -7350,7 +7350,7 @@ function buildCombatRoundCriticalRollResult(input: {
     criticalTypeModifier: criticalMetadata.criticalTypeModifier,
     defenderParticipantId: input.attackResult.defenderParticipantId,
     finalCriticalRoll:
-      criticalDiceTotal + criticalMetadata.criticalTypeModifier + armorCriticalModifier,
+      criticalDiceTotal + criticalMetadata.criticalTypeModifier - armorCriticalModifier,
     rolledAt: input.rolledAt,
     rolledByParticipantId: input.rolledByParticipantId,
     rolledByUserId: input.rolledByUserId,

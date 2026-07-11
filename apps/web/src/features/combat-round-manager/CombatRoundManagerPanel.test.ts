@@ -521,6 +521,7 @@ describe("CombatRoundManagerPanel", () => {
       "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
     );
     expect(source).toContain("Critical roll / effect index");
+    expect(source).toContain("} - armor crit mod ${");
     expect(source).toContain(
       "totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()",
     );

@@ -629,7 +629,7 @@ function formatPlayerCombatCriticalCalculationLine(input: {
 
   const rollLine = `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
     effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
-  } + armor crit mod ${
+  } - armor crit mod ${
     effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
   } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
 

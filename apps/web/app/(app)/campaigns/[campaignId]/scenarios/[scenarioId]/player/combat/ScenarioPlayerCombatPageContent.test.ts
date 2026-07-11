@@ -282,6 +282,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("type mod ${formatSignedPlayerCombatNumber");
     expect(source).toContain("armor crit ${formatSignedPlayerCombatNumber");
     expect(source).toContain('`2d8 ${criticalRoll.criticalDice.join(" + ")}');
+    expect(source).toContain("} - armor crit mod ${");
     expect(source).toContain("proposal?.title");
     expect(source).toContain(
       "Recorded damage: ${effectiveDamage.effectiveTotalDamage}${formatPlayerCombatDamageLocationSuffix",

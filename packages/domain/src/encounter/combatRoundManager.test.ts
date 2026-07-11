@@ -530,8 +530,9 @@ function addReactivePhase1IncomingAttacksForDeclarations(
         current,
         participant.declaration.phaseContexts?.phase2?.targetParticipantId,
       ) ??
-      current.participants.find((candidate) => candidate.participantId !== participant.participantId)
-        ?.participantId;
+      current.participants.find(
+        (candidate) => candidate.participantId !== participant.participantId,
+      )?.participantId;
 
     return addPhase1IncomingAttack({
       attackResult: buildTestPhase1AttackResult({
@@ -9240,7 +9241,7 @@ describe("combat round manager", () => {
       },
       criticalDiceTotal: 9,
       criticalTypeModifier: -4,
-      finalCriticalRoll: 6,
+      finalCriticalRoll: 4,
       selectedHitLocation: "chest",
     });
     expect(afterCritical.commands.at(-1)?.facts).toMatchObject({
@@ -9248,6 +9249,46 @@ describe("combat round manager", () => {
       armorCriticalModifierSource: {
         status: "applied",
       },
+    });
+
+    const heavierArmorState = {
+      ...afterDamage,
+      phaseResolutionResults: afterDamage.phaseResolutionResults.map((resolution) =>
+        resolution.damageResult
+          ? {
+              ...resolution,
+              damageResult: {
+                ...resolution.damageResult,
+                armorCoverage: {
+                  ...resolution.damageResult.armorCoverage,
+                  chest: {
+                    ...resolution.damageResult.armorCoverage.chest!,
+                    criticalModifier: 3,
+                  },
+                },
+              },
+            }
+          : resolution,
+      ),
+    };
+    const afterHeavierArmorCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: heavierArmorState,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+
+    expect(afterHeavierArmorCritical.phaseResolutionResults[0]?.criticalRoll).toMatchObject({
+      armorCriticalModifier: 3,
+      criticalDiceTotal: 9,
+      criticalTypeModifier: -4,
+      finalCriticalRoll: 2,
     });
   });
 
