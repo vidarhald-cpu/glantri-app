@@ -8479,6 +8479,79 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("saves the canonical current damage review without committing effects", async () => {
+    const fixture = makeCriticalRollMutationFixture();
+    const stateWithStaleInspection: CombatRoundState = {
+      ...fixture.state,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithStaleInspection,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        review: {
+          additionalEffects: [],
+          notes: "Saved current review",
+          operationalConsequences: [],
+          totalDamageOverride: 7,
+        },
+      },
+      url: "/encounters/encounter-1/combat-round/save-damage-review",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    expect(Object.keys(payload).sort()).toEqual(["commandEnvelope", "encounter"]);
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(payload.commandEnvelope.currentCursor).toMatchObject({
+      participantId: "encounter-participant-2",
+      step: "D1",
+    });
+    const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    const savedResolution = savedState.phaseResolutionResults.find(
+      (result) => result.attackResultId === fixture.attackResultId,
+    );
+    expect(savedResolution?.damageResult?.review).toMatchObject({
+      notes: "Saved current review",
+      reviewedByUserId: "gm-1",
+      totalDamageOverride: 7,
+    });
+    expect(savedResolution?.damageProposal.status).toBe("drafted");
+    expect(savedState.commands.some((command) => command.type === "commit_phase_damage")).toBe(
+      false,
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("rejects player use of the GM damage review save route", async () => {
+    setupCombatDeclarationRoute({ user: mocks.playerUser });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: { review: {} },
+      url: "/encounters/encounter-1/combat-round/save-damage-review",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("rejects player use of the GM phase damage commit route", async () => {
     setupCombatDeclarationRoute({ user: mocks.playerUser });
     const app = await buildScenarioTestApp();

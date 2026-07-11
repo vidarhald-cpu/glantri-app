@@ -3845,6 +3845,91 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post("/encounters/:encounterId/combat-round/save-damage-review", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          error: "Only GM users can save damage reviews.",
+        });
+      }
+
+      const { review } = parseCombatDamageReviewBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
+      const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: ownerParticipantId,
+        phase,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        throw new Error("No current damage proposal is open.");
+      }
+
+      const attackResultId = getCombatRoundAttackResultId({
+        result: attackResult,
+        roundNumber: roundState.roundNumber,
+      });
+      const resolution = roundState.phaseResolutionResults.find(
+        (candidate) => candidate.attackResultId === attackResultId,
+      );
+
+      if (!resolution?.damageResult) {
+        throw new Error("No current damage proposal is open.");
+      }
+
+      const submittedAt = new Date().toISOString();
+      const reviewedState = reviewCombatRoundDamageResult({
+        attackResultId: resolution.damageResult.attackResultId,
+        review,
+        reviewedAt: submittedAt,
+        reviewedByUserId: user.id,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: reviewedState,
+          currentRound: reviewedState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+      const commandEnvelope = buildCombatRoundCommandEnvelope({ state: reviewedState });
+
+      return { commandEnvelope, encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to save damage review.",
+      });
+    }
+  });
+
   app.post("/encounters/:encounterId/combat-round/commit-phase-damage", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 

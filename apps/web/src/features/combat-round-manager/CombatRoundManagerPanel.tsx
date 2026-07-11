@@ -124,6 +124,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  saveCurrentCombatDamageReviewOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
   skipCombatRoundCurrentActionOnServer,
@@ -7205,51 +7206,51 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  function buildRoundStateWithInspectorDamageReview(input: {
-    reviewedAt: string;
-    state: typeof roundState;
-  }): typeof roundState {
+  async function saveInspectorDamageReview() {
     const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
 
-    if (!damageResult) {
-      throw new Error("No damage proposal is available for review.");
-    }
-
-    return reviewCombatRoundDamageResult({
-      attackResultId: damageResult.attackResultId,
-      review: buildCombatDamageReviewFromDraft({
-        criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
-        damageResult,
-        draft: inspectorDamageReviewDraft,
-      }),
-      reviewedAt: input.reviewedAt,
-      state: input.state,
-    });
-  }
-
-  async function saveInspectorDamageReview() {
-    if (!inspectorDamageReviewKey) {
+    if (!inspectorDamageReviewKey || !damageResult) {
       return;
     }
 
-    try {
-      const reviewedAt = new Date().toISOString();
-      const reviewedState = buildRoundStateWithInspectorDamageReview({
-        reviewedAt,
-        state: roundState,
-      });
+    setSaving(true);
 
-      await persistRoundState(reviewedState);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await saveCurrentCombatDamageReviewOnServer({
+          encounterId: encounter.id,
+          review: buildCombatDamageReviewFromDraft({
+            criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+            damageResult,
+            draft: inspectorDamageReviewDraft,
+          }),
+        });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       setDamageReviewDrafts((current) => {
         const rest = { ...current };
         delete rest[inspectorDamageReviewKey];
 
         return rest;
       });
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save damage review.",
       );
+    } finally {
+      setSaving(false);
     }
   }
 

@@ -404,6 +404,22 @@ export async function commitCurrentCombatPhaseDamageOnServer(input: {
   });
 }
 
+export async function saveCurrentCombatDamageReviewOnServer(input: {
+  encounterId: string;
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/save-damage-review`, {
+    body: JSON.stringify({ review: input.review }),
+    method: "POST",
+  });
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;

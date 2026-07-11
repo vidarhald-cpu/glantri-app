@@ -883,6 +883,23 @@ describe("CombatRoundManagerPanel", () => {
     expect(commitHandler).not.toContain("updateScenarioParticipantStateOnServer({");
   });
 
+  it("routes damage review save through a narrow command instead of browser mutation", () => {
+    const source = readSource();
+    const saveStart = source.indexOf("async function saveInspectorDamageReview()");
+    const saveEnd = source.indexOf("async function advanceInspectorRoundEndReview()", saveStart);
+    const saveHandler = source.slice(saveStart, saveEnd);
+
+    expect(saveStart).toBeGreaterThan(-1);
+    expect(saveHandler).toContain("await saveCurrentCombatDamageReviewOnServer({");
+    expect(saveHandler).toContain("review: buildCombatDamageReviewFromDraft({");
+    expect(saveHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(saveHandler).toContain("setRoundState(nextRoundState)");
+    expect(saveHandler).toContain("onEncounterUpdated?.(nextEncounter)");
+    expect(saveHandler).not.toContain("reviewCombatRoundDamageResult({");
+    expect(saveHandler).not.toContain("persistRoundState(");
+    expect(saveHandler).not.toContain("updateEncounterOnServer({");
+  });
+
   it("uses canonical current task selection after command-stack Clear", () => {
     const source = readSource();
 
