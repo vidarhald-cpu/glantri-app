@@ -2,6 +2,7 @@ import type {
   CombatRoundAttackRollResult,
   CombatRoundCommand,
   CombatRoundCommandEnvelope,
+  CombatRoundDamageReview,
   CombatRoundCombatExperienceResult,
   CombatDistanceEdge,
   CombatRoundInitiativeResult,
@@ -385,6 +386,22 @@ export async function completeCurrentCombatPhaseResolutionOnServer(input: {
   });
 
   return payload;
+}
+
+export async function commitCurrentCombatPhaseDamageOnServer(input: {
+  encounterId: string;
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/commit-phase-damage`, {
+    body: JSON.stringify({ review: input.review }),
+    method: "POST",
+  });
 }
 
 export async function rollCombatInitiativeOnServer(input: {

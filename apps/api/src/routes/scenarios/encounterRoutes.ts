@@ -23,6 +23,7 @@ import {
   buildRoleplayCalculationPreview,
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundPhaseInitiativeResolution,
+  commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   continueCombatRoundPhaseAttack,
   canPlayerSubmitCombatDeclaration,
@@ -63,6 +64,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
+  reviewCombatRoundDamageResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
   removeCombatRoundCombatExperienceEffects,
@@ -102,6 +104,7 @@ import type {
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundPhaseResolutionResult,
+  CombatRoundDamageReview,
   CombatRoundStepSnapshot,
   CombatRoundState,
   CombatRoundPhaseContexts,
@@ -670,6 +673,20 @@ function parseCombatAttackerPrivilegedRollBody(body: unknown): {
   return {
     ...parsed,
     attackResultId,
+  };
+}
+
+function parseCombatDamageReviewBody(body: unknown): {
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+} {
+  const value = parseBodyObject(body, "Combat damage review payload");
+
+  if (!value.review || typeof value.review !== "object" || Array.isArray(value.review)) {
+    throw new Error("review is required.");
+  }
+
+  return {
+    review: value.review as Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">,
   };
 }
 
@@ -3725,9 +3742,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error:
-            error instanceof Error
-              ? error.message
-              : "Unable to advance combat phase resolution.",
+            error instanceof Error ? error.message : "Unable to advance combat phase resolution.",
         });
       }
     },
@@ -3824,13 +3839,137 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error:
-            error instanceof Error
-              ? error.message
-              : "Unable to complete combat phase resolution.",
+            error instanceof Error ? error.message : "Unable to complete combat phase resolution.",
         });
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/commit-phase-damage", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          error: "Only GM users can commit phase damage.",
+        });
+      }
+
+      const { review } = parseCombatDamageReviewBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
+      const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: ownerParticipantId,
+        phase,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        throw new Error("No current damage proposal is open.");
+      }
+
+      const attackResultId = getCombatRoundAttackResultId({
+        result: attackResult,
+        roundNumber: roundState.roundNumber,
+      });
+      const resolution = roundState.phaseResolutionResults.find(
+        (candidate) => candidate.attackResultId === attackResultId,
+      );
+
+      if (!resolution?.damageResult) {
+        throw new Error("No current damage proposal is open.");
+      }
+
+      const defenderEncounterParticipant = encounter.participants.find((participant) =>
+        participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
+      );
+      const attackerEncounterParticipant = encounter.participants.find((participant) =>
+        participantAliasesInclude({ id: attackResult.attackerParticipantId, participant }),
+      );
+      const defenderScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: defenderEncounterParticipant,
+        scenarioParticipants,
+      });
+      const attackerScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: attackerEncounterParticipant,
+        scenarioParticipants,
+      });
+
+      if (!defenderScenarioParticipant) {
+        throw new Error("Defender scenario participant state is required to commit damage.");
+      }
+
+      const submittedAt = new Date().toISOString();
+      const reviewedState = reviewCombatRoundDamageResult({
+        attackResultId: resolution.damageResult.attackResultId,
+        review,
+        reviewedAt: submittedAt,
+        reviewedByUserId: user.id,
+        state: roundState,
+      });
+      const committed = commitCombatRoundPhaseDamage({
+        attackResultId: resolution.damageResult.attackResultId,
+        attackerScenarioParticipantId: attackerScenarioParticipant?.id,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        combatEffects: defenderScenarioParticipant.state.combatEffects,
+        defenderScenarioParticipantId: defenderScenarioParticipant.id,
+        encounterId,
+        scenarioId,
+        state: reviewedState,
+      });
+
+      await encounterService.updateScenarioParticipantState({
+        participantId: defenderScenarioParticipant.id,
+        scenarioId,
+        state: {
+          ...defenderScenarioParticipant.state,
+          combatEffects: committed.combatEffects,
+        },
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: committed.state,
+          currentRound: committed.state.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+      const commandEnvelope = buildCombatRoundCommandEnvelope({ state: committed.state });
+
+      return { commandEnvelope, encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to commit phase damage.",
+      });
+    }
+  });
 
   app.post(
     "/encounters/:encounterId/combat-round/commit-phase-initiative-resolution",

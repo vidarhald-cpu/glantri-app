@@ -73,6 +73,7 @@ export {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
+  commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
   createEncounterOnServer,
   loadEncounterById,

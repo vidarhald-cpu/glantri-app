@@ -456,9 +456,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Ready to commit");
     expect(source).toContain("Cannot commit:");
     expect(source).toContain("inspectorDamageCommitValidationMessage");
-    expect(source).toContain(
-      "attackResultId: existingDamageResolution.damageResult.attackResultId",
-    );
+    expect(source).toContain("await commitCurrentCombatPhaseDamageOnServer({");
     expect(source).toContain("App-side rolls:");
     expect(source).toContain("Operational consequences");
     expect(source).toContain("operationalConsequences");
@@ -497,7 +495,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Add note row");
     expect(source).toContain("Save review");
     expect(source).toContain("reviewCombatRoundDamageResult");
-    expect(source).toContain("commitCombatRoundPhaseDamage");
+    expect(source).toContain("commitCurrentCombatPhaseDamageOnServer");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("combatEffects: committed.combatEffects");
     expect(source).toContain(
@@ -868,6 +866,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("participantId: clearedSelection.participantId");
     expect(source).toContain("step: clearedSelection.step");
     expect(source).not.toContain("actionLog:");
+  });
+
+  it("routes phase damage commit through a narrow command instead of browser mutation", () => {
+    const source = readSource();
+    const commitStart = source.indexOf("await commitCurrentCombatPhaseDamageOnServer({");
+    const commitEnd = source.indexOf("setSaveError(undefined);", commitStart);
+    const commitHandler = source.slice(commitStart, commitEnd);
+
+    expect(commitStart).toBeGreaterThan(-1);
+    expect(commitHandler).toContain("review: buildCombatDamageReviewFromDraft({");
+    expect(commitHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(commitHandler).toContain("onEncounterUpdated?.(nextEncounter)");
+    expect(commitHandler).not.toContain("commitCombatRoundPhaseDamage({");
+    expect(commitHandler).not.toContain("updateEncounterOnServer({");
+    expect(commitHandler).not.toContain("updateScenarioParticipantStateOnServer({");
   });
 
   it("uses canonical current task selection after command-stack Clear", () => {

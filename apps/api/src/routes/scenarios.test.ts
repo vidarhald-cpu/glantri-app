@@ -8402,6 +8402,99 @@ describe("scenarios route contract", () => {
     ).toBe("pending");
   });
 
+  it("commits the canonical current damage review through a narrow GM route", async () => {
+    const fixture = makeCriticalRollMutationFixture();
+    const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: fixture.state,
+    });
+
+    expect(attackResult).toBeDefined();
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: attackResult!,
+      command: {
+        createdAt: "2026-01-01T00:05:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "encounter-participant-1",
+      state: fixture.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:45.000Z",
+    });
+    const stateWithStaleInspection: CombatRoundState = {
+      ...afterCritical,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithStaleInspection,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        review: {
+          additionalEffects: [],
+          notes: "Reviewed by GM",
+          operationalConsequences: [],
+        },
+      },
+      url: "/encounters/encounter-1/combat-round/commit-phase-damage",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    expect(Object.keys(payload).sort()).toEqual(["commandEnvelope", "encounter"]);
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(payload.commandEnvelope.currentCursor).not.toEqual(
+      expect.objectContaining({ step: "round_summary" }),
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-2",
+        state: expect.objectContaining({
+          combatEffects: expect.objectContaining({
+            effects: expect.arrayContaining([
+              expect.objectContaining({ targetParticipantId: "participant-2" }),
+            ]),
+          }),
+        }),
+      }),
+    );
+    const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    expect(savedState.commands.at(-1)).toMatchObject({
+      participantId: "encounter-participant-2",
+      type: "commit_phase_damage",
+    });
+  });
+
+  it("rejects player use of the GM phase damage commit route", async () => {
+    setupCombatDeclarationRoute({ user: mocks.playerUser });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: { review: {} },
+      url: "/encounters/encounter-1/combat-round/commit-phase-damage",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("completes current phase resolution through a narrow GM route using canonical cursor", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const stateWithStaleInspection = {

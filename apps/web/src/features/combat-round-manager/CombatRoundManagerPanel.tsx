@@ -49,7 +49,6 @@ import {
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
-  commitCombatRoundPhaseDamage,
   ensureCombatRoundEndReviewPrepared,
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
@@ -118,6 +117,7 @@ import {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
+  commitCurrentCombatPhaseDamageOnServer,
   completeCurrentCombatPhaseResolutionOnServer,
   continuePhaseAttackOnServer,
   rollCombatAttackOnServer,
@@ -7577,59 +7577,26 @@ export default function CombatRoundManagerPanel({
             return;
           }
 
-          const defenderEncounterParticipant = encounter.participants.find(
-            (participant) => participant.id === damageReviewAttackResult.defenderParticipantId,
-          );
-          const defenderScenarioParticipant = defenderEncounterParticipant
-            ? findScenarioParticipantForEncounterParticipant({
-                encounterParticipant: defenderEncounterParticipant,
-                scenarioParticipants: effectiveScenarioParticipants,
-              })
-            : undefined;
-          const attackerEncounterParticipant = encounter.participants.find(
-            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
-          );
-          const attackerScenarioParticipant = attackerEncounterParticipant
-            ? findScenarioParticipantForEncounterParticipant({
-                encounterParticipant: attackerEncounterParticipant,
-                scenarioParticipants: effectiveScenarioParticipants,
-              })
-            : undefined;
+          const { commandEnvelope, encounter: nextEncounter } =
+            await commitCurrentCombatPhaseDamageOnServer({
+              encounterId: encounter.id,
+              review: buildCombatDamageReviewFromDraft({
+                criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+                damageResult: existingDamageResolution.damageResult,
+                draft: inspectorDamageReviewDraft,
+              }),
+            });
+          const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+            getCombatRoundManagerStateFromCommandEnvelope({
+              commandEnvelope,
+              encounter: nextEncounter,
+            });
 
-          if (!defenderScenarioParticipant) {
-            setSaveError("Defender scenario participant state is required to commit damage.");
-            return;
-          }
-
-          const reviewedRoundState = buildRoundStateWithInspectorDamageReview({
-            reviewedAt: updatedAt,
-            state: roundState,
-          });
-          const committed = commitCombatRoundPhaseDamage({
-            attackResultId: existingDamageResolution.damageResult.attackResultId,
-            attackerScenarioParticipantId: attackerScenarioParticipant?.id,
-            command: {
-              createdAt: updatedAt,
-            },
-            combatEffects: defenderScenarioParticipant.state.combatEffects,
-            defenderScenarioParticipantId: defenderScenarioParticipant.id,
-            encounterId: encounter.id,
-            scenarioId: encounter.scenarioId,
-            state: reviewedRoundState,
-          });
-          const updatedParticipant = await updateScenarioParticipantStateOnServer({
-            participantId: defenderScenarioParticipant.id,
-            scenarioId: encounter.scenarioId,
-            state: {
-              ...defenderScenarioParticipant.state,
-              combatEffects: committed.combatEffects,
-            },
-          });
-
-          setScenarioParticipantOverrides((current) => ({
-            ...current,
-            [updatedParticipant.id]: updatedParticipant,
-          }));
+          pendingSelectionRef.current = undefined;
+          manualSelectionRef.current = undefined;
+          setInspectionSelection(nextInspectionSelection);
+          setRoundState(nextRoundState);
+          setSelectedRoundNumber(nextRoundState.roundNumber);
           if (inspectorDamageReviewKey) {
             setDamageReviewDrafts((current) => {
               const rest = { ...current };
@@ -7638,8 +7605,8 @@ export default function CombatRoundManagerPanel({
               return rest;
             });
           }
-          onScenarioParticipantsUpdated?.([updatedParticipant]);
-          await persistRoundState(committed.state);
+          onEncounterUpdated?.(nextEncounter);
+          focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
           setSaveError(undefined);
           return;
         } else {
