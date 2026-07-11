@@ -751,9 +751,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("type CombatInspectorSourceMode =");
-    expect(source).toContain('"snapshot_with_current_reference"');
     expect(source).toContain('return "History";');
-    expect(source).toContain('return "History · Current reference";');
     expect(source).toContain("buildInspectorDisplayDraft({");
     expect(source).toContain("buildHistoricalInspectorPhaseContexts");
     expect(source).toContain("createUnrecordedHistoricalPhaseContext");
@@ -770,8 +768,12 @@ describe("CombatRoundManagerPanel", () => {
       "attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats",
     );
     expect(source).toContain("phaseDefenseStats: inspectorSnapshot ? null : phaseDefenseStats");
-    expect(source).toContain("inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows");
-    expect(source).toContain("inspectorSnapshot.modifierSummary");
+    expect(source).toContain("inspectorSnapshot.modifierSummary?.rows ?? []");
+    expect(source).toContain(": inspectorModifierRows;");
+    expect(source).toContain("Historical data was not recorded for this panel.");
+    expect(source).toContain("inspectorHistoricalSelectorFactsComplete");
+    expect(source).toContain("movementPreferenceTargets");
+    expect(source).not.toContain("History · Current reference");
     expect(source).not.toContain("...inspectorDraft,\n        actionId:");
   });
 

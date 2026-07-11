@@ -177,6 +177,8 @@ import {
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
+  getPlayerEncounterActionLabel,
+  getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
@@ -376,7 +378,7 @@ interface CombatInspectorPhaseContextDrafts {
   phase2: ScenarioParticipantCombatContext;
 }
 
-type CombatInspectorSourceMode = "current" | "history" | "snapshot_with_current_reference";
+type CombatInspectorSourceMode = "current" | "history";
 
 interface CombatParrySourceOption {
   label: string;
@@ -691,8 +693,6 @@ function getCombatInspectorSourceLabel(mode: CombatInspectorSourceMode): string 
       return undefined;
     case "history":
       return "History";
-    case "snapshot_with_current_reference":
-      return "History · Current reference";
   }
 }
 
@@ -4529,6 +4529,44 @@ export default function CombatRoundManagerPanel({
     draft: inspectorDraft,
     snapshot: inspectorSnapshot,
   });
+  const inspectorHistoricalDeclarationSummary = inspectorSnapshot?.declarationSummary;
+  const inspectorHistoricalSelectorFactsComplete = Boolean(
+    inspectorHistoricalDeclarationSummary?.movementLabel &&
+    (!inspectorHistoricalDeclarationSummary.actionId ||
+      inspectorHistoricalDeclarationSummary.actionLabel) &&
+    (!inspectorHistoricalDeclarationSummary.secondaryActionId ||
+      inspectorHistoricalDeclarationSummary.secondaryActionLabel) &&
+    (inspectorHistoricalDeclarationSummary.movementIntent?.distancePreferences ?? []).every(
+      (preference) =>
+        inspectorHistoricalDeclarationSummary.movementPreferenceTargets?.some(
+          (target) => target.id === preference.targetParticipantId,
+        ),
+    ),
+  );
+  const inspectorHistoricalActionOptions =
+    inspectorHistoricalSelectorFactsComplete && inspectorHistoricalDeclarationSummary
+      ? [
+          inspectorHistoricalDeclarationSummary.actionId &&
+          inspectorHistoricalDeclarationSummary.actionLabel
+            ? {
+                label: inspectorHistoricalDeclarationSummary.actionLabel,
+                value: inspectorHistoricalDeclarationSummary.actionId as PlayerEncounterActionId,
+              }
+            : undefined,
+          inspectorHistoricalDeclarationSummary.secondaryActionId &&
+          inspectorHistoricalDeclarationSummary.secondaryActionLabel &&
+          inspectorHistoricalDeclarationSummary.secondaryActionId !==
+            inspectorHistoricalDeclarationSummary.actionId
+            ? {
+                label: inspectorHistoricalDeclarationSummary.secondaryActionLabel,
+                value:
+                  inspectorHistoricalDeclarationSummary.secondaryActionId as PlayerEncounterActionId,
+              }
+            : undefined,
+        ].filter((option): option is { label: string; value: PlayerEncounterActionId } =>
+          Boolean(option),
+        )
+      : undefined;
   const inspectorModifierPhase = getPlayerCombatModifierDisplayPhase({
     actionId: inspectorDisplayDraft.actionId,
     step: inspector.step,
@@ -4592,12 +4630,11 @@ export default function CombatRoundManagerPanel({
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );
-  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
-    inspectorSnapshot?.modifierSummary?.rows ?? inspectorModifierRows;
+  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] = inspectorSnapshot
+    ? (inspectorSnapshot.modifierSummary?.rows ?? [])
+    : inspectorModifierRows;
   const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorSnapshot
-    ? inspectorSnapshot.modifierSummary
-      ? "history"
-      : "snapshot_with_current_reference"
+    ? "history"
     : "current";
   const inspectorModifierSourceLabel = getCombatInspectorSourceLabel(inspectorModifierSourceMode);
   const inspectorTargetValidation = useMemo(
@@ -4942,6 +4979,16 @@ export default function CombatRoundManagerPanel({
     inspectorTargetOptions,
     selectedScenarioParticipant,
   ]);
+  const inspectorDisplayDistancePreferenceOptions = inspectorSnapshot?.declarationSummary
+    ? (inspectorSnapshot.declarationSummary.movementPreferenceTargets ?? []).map((target) => ({
+        defaultDistance:
+          inspectorSnapshot.declarationSummary?.movementIntent?.distancePreferences.find(
+            (preference) => preference.targetParticipantId === target.id,
+          )?.desiredDistance,
+        displayName: target.displayName,
+        id: target.id,
+      }))
+    : inspectorDistancePreferenceOptions;
   const inspectorCurrentInitiativePhase =
     inspector.step === "initiative_phase_1"
       ? "phase1"
@@ -6137,10 +6184,28 @@ export default function CombatRoundManagerPanel({
         committedAt,
         declarationSummary: {
           actionId: draft.actionId || undefined,
+          actionLabel: draft.actionId ? getPlayerEncounterActionLabel(draft.actionId) : undefined,
           additionalActionNotes: draft.additionalActionNotes || undefined,
           movementId: draft.movementId || undefined,
+          movementLabel: getPlayerEncounterMovementLabel(draft.movementId),
           movementIntent: draft.movementIntent,
+          movementPreferenceTargets: draft.movementIntent.distancePreferences.flatMap(
+            (preference) => {
+              const target = effectiveScenarioParticipants.find(
+                (participant) =>
+                  participant.id === preference.targetParticipantId ||
+                  participant.characterId === preference.targetParticipantId,
+              );
+
+              return target
+                ? [{ displayName: target.snapshot.displayName, id: preference.targetParticipantId }]
+                : [];
+            },
+          ),
           secondaryActionId: draft.secondaryActionId || undefined,
+          secondaryActionLabel: draft.secondaryActionId
+            ? getPlayerEncounterActionLabel(draft.secondaryActionId)
+            : undefined,
         },
         defenseSummary:
           phaseModel?.showDefenseContext && phaseModel.defenseStats
@@ -8217,33 +8282,43 @@ export default function CombatRoundManagerPanel({
             {selectedScenarioParticipant ? (
               <>
                 <div style={playerCombatTopPanelRowStyle}>
-                  <PlayerCombatActionSelectorPanel
-                    actionId={inspectorDisplayDraft.actionId}
-                    additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
-                    controlsDisabled={
-                      saving ||
-                      !selectedRoundIsActive ||
-                      Boolean(inspectorSnapshot) ||
-                      inspectorCombatExperienceRequired
-                    }
-                    distancePreferenceOptions={inspectorDistancePreferenceOptions}
-                    movementId={inspectorDisplayDraft.movementId}
-                    movementIntent={inspectorDisplayDraft.movementIntent}
-                    onActionChange={(actionId) => updateInspectorDraft({ actionId })}
-                    onAdditionalActionNotesChange={(additionalActionNotes) =>
-                      updateInspectorDraft({ additionalActionNotes })
-                    }
-                    onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
-                    onMovementIntentChange={(movementIntent) =>
-                      updateInspectorDraft({ movementIntent })
-                    }
-                    onSecondaryActionChange={(secondaryActionId) =>
-                      updateInspectorDraft({ secondaryActionId })
-                    }
-                    roundNumber={selectedRoundNumber}
-                    secondaryActionId={inspectorDisplayDraft.secondaryActionId}
-                    sourceLabel={inspectorSourceLabel}
-                  />
+                  {inspectorSnapshot && !inspectorHistoricalSelectorFactsComplete ? (
+                    <section style={playerCombatPanelCardStyle}>
+                      <strong>Action selector · History</strong>
+                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                        Historical data was not recorded for this panel.
+                      </div>
+                    </section>
+                  ) : (
+                    <PlayerCombatActionSelectorPanel
+                      actionId={inspectorDisplayDraft.actionId}
+                      actionOptions={inspectorHistoricalActionOptions}
+                      additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
+                      controlsDisabled={
+                        saving ||
+                        !selectedRoundIsActive ||
+                        Boolean(inspectorSnapshot) ||
+                        inspectorCombatExperienceRequired
+                      }
+                      distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
+                      movementId={inspectorDisplayDraft.movementId}
+                      movementIntent={inspectorDisplayDraft.movementIntent}
+                      onActionChange={(actionId) => updateInspectorDraft({ actionId })}
+                      onAdditionalActionNotesChange={(additionalActionNotes) =>
+                        updateInspectorDraft({ additionalActionNotes })
+                      }
+                      onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
+                      onMovementIntentChange={(movementIntent) =>
+                        updateInspectorDraft({ movementIntent })
+                      }
+                      onSecondaryActionChange={(secondaryActionId) =>
+                        updateInspectorDraft({ secondaryActionId })
+                      }
+                      roundNumber={selectedRoundNumber}
+                      secondaryActionId={inspectorDisplayDraft.secondaryActionId}
+                      sourceLabel={inspectorSourceLabel}
+                    />
+                  )}
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey];
@@ -8410,35 +8485,44 @@ export default function CombatRoundManagerPanel({
                 </div>
 
                 <div style={playerCombatPanelRowStyle}>
-                  <PlayerCombatModifierPanel
-                    controlsDisabled={saving}
-                    onAddEntry={(bucketKey, entry) =>
-                      updateInspectorModifierBucket(bucketKey, (current) => [
-                        ...current,
-                        entry ?? createModifierEntryDraft(),
-                      ])
-                    }
-                    onRemoveEntry={(bucketKey, entryId) =>
-                      updateInspectorModifierBucket(bucketKey, (current) =>
-                        current.filter((entry) => entry.id !== entryId),
-                      )
-                    }
-                    onUpdateEntry={(bucketKey, entryId, patch) =>
-                      updateInspectorModifierBucket(bucketKey, (current) =>
-                        current.map((entry) =>
-                          entry.id === entryId
-                            ? {
-                                ...entry,
-                                ...patch,
-                              }
-                            : entry,
-                        ),
-                      )
-                    }
-                    readOnly={Boolean(inspectorSnapshot)}
-                    rows={inspectorDisplayModifierRows}
-                    sourceLabel={inspectorModifierSourceLabel}
-                  />
+                  {inspectorSnapshot && !inspectorSnapshot.modifierSummary ? (
+                    <section style={playerCombatPanelCardStyle}>
+                      <strong>Combat modifiers · History</strong>
+                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                        Historical data was not recorded for this panel.
+                      </div>
+                    </section>
+                  ) : (
+                    <PlayerCombatModifierPanel
+                      controlsDisabled={saving}
+                      onAddEntry={(bucketKey, entry) =>
+                        updateInspectorModifierBucket(bucketKey, (current) => [
+                          ...current,
+                          entry ?? createModifierEntryDraft(),
+                        ])
+                      }
+                      onRemoveEntry={(bucketKey, entryId) =>
+                        updateInspectorModifierBucket(bucketKey, (current) =>
+                          current.filter((entry) => entry.id !== entryId),
+                        )
+                      }
+                      onUpdateEntry={(bucketKey, entryId, patch) =>
+                        updateInspectorModifierBucket(bucketKey, (current) =>
+                          current.map((entry) =>
+                            entry.id === entryId
+                              ? {
+                                  ...entry,
+                                  ...patch,
+                                }
+                              : entry,
+                          ),
+                        )
+                      }
+                      readOnly={Boolean(inspectorSnapshot)}
+                      rows={inspectorDisplayModifierRows}
+                      sourceLabel={inspectorModifierSourceLabel}
+                    />
+                  )}
                   <div style={{ display: "grid", gap: "0.75rem" }}>
                     {showInspectorInitiativeContextPanel ? (
                       <section style={playerCombatPanelCardStyle}>

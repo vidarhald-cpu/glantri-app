@@ -307,9 +307,7 @@ export function buildCombatRoundDamageArmorCoverageFromEquipmentState(input: {
     ...(input.fallbackTemplatesById ?? {}),
     ...getCombatRoundEquipmentTemplatesById(input.equipmentState),
   };
-  const armorTemplate = armorItem?.templateId
-    ? templatesById[armorItem.templateId]
-    : undefined;
+  const armorTemplate = armorItem?.templateId ? templatesById[armorItem.templateId] : undefined;
 
   if (!isCombatRoundArmorTemplate(armorTemplate)) {
     return combatRoundDamageArmorCoverageSchema.parse({});
@@ -319,9 +317,7 @@ export function buildCombatRoundDamageArmorCoverageFromEquipmentState(input: {
     Object.fromEntries(
       COMBAT_ROUND_ARMOR_REGION_KEYS.map((region) => {
         const value = roundCombatRoundArmorLocationValue(armorTemplate.locationValues?.[region]);
-        const armorClass = normalizeCombatArmorModifierClass(
-          armorTemplate.locationTypes?.[region],
-        );
+        const armorClass = normalizeCombatArmorModifierClass(armorTemplate.locationTypes?.[region]);
         const criticalModifier = roundCombatRoundArmorLocationValue(
           armorTemplate.criticalModifierByArea?.[region],
         );
@@ -1749,10 +1745,21 @@ export const combatRoundStepSnapshotSchema = z.object({
   declarationSummary: z
     .object({
       actionId: idSchema.optional(),
+      actionLabel: z.string().min(1).optional(),
       additionalActionNotes: z.string().optional(),
       movementId: idSchema.optional(),
+      movementLabel: z.string().min(1).optional(),
       movementIntent: movementIntentSchema.optional(),
       secondaryActionId: idSchema.optional(),
+      secondaryActionLabel: z.string().min(1).optional(),
+      movementPreferenceTargets: z
+        .array(
+          z.object({
+            displayName: z.string().min(1),
+            id: idSchema,
+          }),
+        )
+        .optional(),
     })
     .optional(),
   defenseSummary: z
@@ -9811,15 +9818,13 @@ export type CombatRoundEndTask =
       kind: "round_boundary";
     };
 
-function isAcceptedDistanceProposalPending(
-  proposal: CombatRoundEndDistanceProposal,
-): boolean {
-  return proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls");
+function isAcceptedDistanceProposalPending(proposal: CombatRoundEndDistanceProposal): boolean {
+  return (
+    proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls")
+  );
 }
 
-function isAcceptedDistanceProposalCommitReady(
-  proposal: CombatRoundEndDistanceProposal,
-): boolean {
+function isAcceptedDistanceProposalCommitReady(proposal: CombatRoundEndDistanceProposal): boolean {
   return (
     proposal.accepted &&
     proposal.status !== "pending" &&
@@ -17259,16 +17264,12 @@ function getCombatRoundLatestEventForCommand(input: {
       const skillTotal = getCombatRoundLatestEventFactNumber(facts, "skillTotal") ?? 0;
       const rollTotal = getCombatRoundLatestEventFactNumber(facts, "rollTotal");
       const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
-      const noRollRequired =
-        getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
+      const noRollRequired = getCombatRoundLatestEventFactBoolean(facts, "noRollRequired") ?? false;
       const difficulty =
         getCombatRoundLatestEventFactNumber(facts, "difficulty") ??
         COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
       const modifierValue = getCombatRoundLatestEventFactNumber(facts, "modifierValue") ?? 0;
-      const effectiveTableTotal = getCombatRoundLatestEventFactNumber(
-        facts,
-        "effectiveTableTotal",
-      );
+      const effectiveTableTotal = getCombatRoundLatestEventFactNumber(facts, "effectiveTableTotal");
       const resultText =
         effectiveTableTotal !== undefined && effectiveTableTotal <= 5
           ? "Result: attack cancelled."

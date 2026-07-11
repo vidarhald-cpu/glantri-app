@@ -28,6 +28,7 @@ import {
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
+  type PlayerEncounterOption,
 } from "@/lib/campaigns/playerEncounter";
 import {
   filterCombatModifierEntriesForPhase,
@@ -106,6 +107,7 @@ interface PlayerCombatPhasePanelProps {
 
 interface PlayerCombatActionSelectorPanelProps {
   actionId: PlayerEncounterActionId | "";
+  actionOptions?: readonly PlayerEncounterOption<PlayerEncounterActionId>[];
   additionalActionNotes: string;
   controlsDisabled?: boolean;
   distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
@@ -1070,6 +1072,7 @@ export function PlayerCombatModifierPanel({
 
 export function PlayerCombatActionSelectorPanel({
   actionId,
+  actionOptions = PLAYER_ENCOUNTER_ACTION_OPTIONS,
   additionalActionNotes,
   controlsDisabled = false,
   distancePreferenceOptions = [],
@@ -1139,7 +1142,7 @@ export function PlayerCombatActionSelectorPanel({
           value={actionId}
         >
           <option value="">Choose action</option>
-          {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
+          {actionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -1157,7 +1160,7 @@ export function PlayerCombatActionSelectorPanel({
           value={secondaryActionId}
         >
           <option value="">Open</option>
-          {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
+          {actionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

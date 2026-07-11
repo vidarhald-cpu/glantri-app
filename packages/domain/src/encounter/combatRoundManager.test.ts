@@ -25,6 +25,7 @@ import {
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   combatRoundStateSchema,
+  combatRoundStepSnapshotSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
   combatRoundParticipantWasAttackedInPhase,
@@ -4669,6 +4670,102 @@ describe("combat round manager", () => {
         step: "review_action_modifiers",
       })?.modifierSummary?.dbRaw,
     ).toBe(-4);
+  });
+
+  it("preserves strict action selector and modifier panel facts in step snapshots", () => {
+    const snapshot = combatRoundStepSnapshotSchema.parse({
+      committedAt: "2026-01-01T00:02:00.000Z",
+      declarationSummary: {
+        actionId: "double_attack",
+        actionLabel: "Double Attack",
+        additionalActionNotes: "Press the guard",
+        movementId: "step",
+        movementLabel: "Step",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 2,
+              source: "player_declared",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        movementPreferenceTargets: [{ displayName: "City guard", id: "guard" }],
+        secondaryActionId: "observe_opponent",
+        secondaryActionLabel: "Observe Opponent",
+      },
+      id: "snapshot-selector-modifiers",
+      modifierSummary: {
+        dbRaw: -4,
+        generalFatigueRaw: -1,
+        initiativeRaw: 2,
+        obSkillRaw: -1,
+        rows: [
+          {
+            bucketKey: "situation_db",
+            entries: [
+              {
+                durationRounds: 1,
+                generated: true,
+                id: "double-attack-db",
+                notes: "double attack",
+                scope: "until",
+                sourceActionId: "double_attack",
+                sourcePhase: "phase1",
+                sourceRule: "double-attack-phase1-db-parry",
+                value: -4,
+              },
+            ],
+            label: "DB/Parry",
+            total: -4,
+          },
+        ],
+      },
+      participantId: "gladiator",
+      participantLabel: "The Gladiator",
+      roundNumber: 3,
+      step: "review_action_modifiers",
+    });
+    const changedLiveFacts = {
+      actionId: "other",
+      modifierValue: 99,
+    };
+
+    expect(snapshot.declarationSummary).toMatchObject({
+      actionId: "double_attack",
+      actionLabel: "Double Attack",
+      movementLabel: "Step",
+      secondaryActionLabel: "Observe Opponent",
+    });
+    expect(snapshot.modifierSummary).toMatchObject({
+      dbRaw: -4,
+      generalFatigueRaw: -1,
+      initiativeRaw: 2,
+      obSkillRaw: -1,
+      rows: [
+        expect.objectContaining({
+          entries: [expect.objectContaining({ notes: "double attack", value: -4 })],
+          total: -4,
+        }),
+      ],
+    });
+    expect(snapshot.declarationSummary?.actionId).not.toBe(changedLiveFacts.actionId);
+    expect(snapshot.modifierSummary?.rows[0]?.total).not.toBe(changedLiveFacts.modifierValue);
+  });
+
+  it("keeps legacy snapshot panel facts identifiable as incomplete", () => {
+    const legacySnapshot = combatRoundStepSnapshotSchema.parse({
+      committedAt: "2026-01-01T00:02:00.000Z",
+      id: "legacy-snapshot",
+      participantId: "gladiator",
+      participantLabel: "The Gladiator",
+      roundNumber: 3,
+      step: "review_action_modifiers",
+    });
+
+    expect(legacySnapshot.declarationSummary).toBeUndefined();
+    expect(legacySnapshot.modifierSummary).toBeUndefined();
   });
 
   it("finds the previous combat round step", () => {
