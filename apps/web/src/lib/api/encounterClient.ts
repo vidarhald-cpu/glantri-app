@@ -339,6 +339,22 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
   return payload;
 }
 
+export async function skipCombatRoundCurrentActionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/skip-current-action`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;

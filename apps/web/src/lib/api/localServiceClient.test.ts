@@ -606,6 +606,30 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("skips the current combat round action through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_actions",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.skipCombatRoundCurrentActionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/skip-current-action",
+    });
+  });
+
   it("rolls Combat Experience through the encounter command endpoint", async () => {
     const combatExperience = {
       difficulty: 26,

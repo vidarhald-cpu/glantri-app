@@ -87,6 +87,7 @@ export {
   rollRoundEndHealthCheckOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
+  skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterParticipantsOnServer,

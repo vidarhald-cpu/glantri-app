@@ -55,7 +55,8 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("preActionControls");
-    expect(source).toContain("outcomes for the same pending task should use preActionControls");
+    expect(source).toContain("Alternative outcomes for the same pending");
+    expect(source).toContain("task should use preActionControls");
     expect(source).toContain("{preActionControls ? (");
     expect(source).toContain("secondaryButtonLabel");
   });

@@ -716,7 +716,8 @@ function makeWeaponEquipmentState(input: {
   templateId?: string;
 }) {
   const characterId = input.characterId ?? "character-1";
-  const templateId = input.templateId ?? `template-${input.name.toLowerCase().replace(/\s+/g, "-")}`;
+  const templateId =
+    input.templateId ?? `template-${input.name.toLowerCase().replace(/\s+/g, "-")}`;
   const itemId = `item-${templateId}`;
 
   return {
@@ -1031,7 +1032,9 @@ function setupMutableCombatRouteState(input: {
     status: "active",
   });
   mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
-  mocks.scenarioService.listScenarioParticipants.mockImplementation(async () => currentParticipants);
+  mocks.scenarioService.listScenarioParticipants.mockImplementation(
+    async () => currentParticipants,
+  );
 
   return {
     get encounter() {
@@ -1168,7 +1171,9 @@ function rollDistanceControlFixtureBothSides(input: {
       rollD20: 10,
     },
     rolledBy: "player",
-    state: input.encounter.combatRoundState ?? initializeCombatRoundState({ encounter: input.encounter }),
+    state:
+      input.encounter.combatRoundState ??
+      initializeCombatRoundState({ encounter: input.encounter }),
   });
   const secondRoll = rollCombatRoundEndDistanceControl({
     command: {
@@ -3474,8 +3479,7 @@ describe("scenarios route contract", () => {
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0];
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const persistedCombatContext = updateStateCall.state.combat.combatContext;
-    const persistedDeclaration =
-      updatedEncounter.combatRoundState.participants[1].declaration;
+    const persistedDeclaration = updatedEncounter.combatRoundState.participants[1].declaration;
 
     expect(updateStateCall).toMatchObject({
       participantId: "scenario-scyrian",
@@ -4451,9 +4455,8 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const healthRoll =
-      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
-        "encounter-participant-1"
-      ].proposedHealthRolls[0];
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews["encounter-participant-1"]
+        .proposedHealthRolls[0];
     const updatedParticipantState =
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
 
@@ -4466,9 +4469,8 @@ describe("scenarios route contract", () => {
       status: "rolled",
     });
     expect(
-      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
-        "encounter-participant-1"
-      ].status,
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews["encounter-participant-1"]
+        .status,
     ).toBe("review_ready");
     expect(updatedParticipantState.combatEffects.effects[0]).toMatchObject({
       id: "player-bleed",
@@ -4528,9 +4530,8 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const command = updatedEncounter.combatRoundState.commands.at(-1);
     const healthRoll =
-      updatedEncounter.combatRoundState.roundEndReview.participantReviews[
-        "encounter-participant-1"
-      ].proposedHealthRolls[0];
+      updatedEncounter.combatRoundState.roundEndReview.participantReviews["encounter-participant-1"]
+        .proposedHealthRolls[0];
 
     expect(command).toMatchObject({
       facts: expect.objectContaining({
@@ -5232,6 +5233,82 @@ describe("scenarios route contract", () => {
           }),
         }),
       }),
+    );
+  });
+
+  it("skips the canonical current phase action through a narrow command route", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const openState = {
+      ...makeOpenPhase1AttackRoundState(),
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "round_summary",
+    } as unknown as CombatRoundState;
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        combatRoundState: openState,
+        currentRound: openState.roundNumber,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+          snapshot: { displayName: "The Gladiator" },
+        },
+        {
+          id: "participant-2",
+          snapshot: { displayName: "City guard" },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/skip-current-action",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json();
+    const updatedState = payload.encounter.combatRoundState as CombatRoundState;
+
+    expect(payload).toHaveProperty("encounter");
+    expect(payload.commandEnvelope).toMatchObject({
+      warnings: [],
+    });
+    expect(payload.commandEnvelope).not.toHaveProperty("commands");
+    expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(updatedState.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          facts: expect.objectContaining({
+            phase: "phase1",
+            status: "skipped",
+          }),
+          participantId: "encounter-participant-1",
+          step: "A1",
+          type: "skip_phase_action",
+        }),
+      ]),
+    );
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "encounter-participant-1",
+        state: updatedState,
+        step: "phase_1_actions",
+      }),
+    ).toBe("skipped");
+    expect(updatedState.commands).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          participantId: "encounter-participant-2",
+          type: "skip_phase_action",
+        }),
+      ]),
     );
   });
 
@@ -7003,10 +7080,11 @@ describe("scenarios route contract", () => {
       expect(roundState().currentStep).toBe("review_action_modifiers");
       await commitCurrentStepViaBrowserPut();
       expect(roundState().currentStep).toBe("initiative_phase_1");
-      expect(participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2)
-        .toMatchObject({
-          targetParticipantId: "participant-2",
-        });
+      expect(
+        participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2,
+      ).toMatchObject({
+        targetParticipantId: "participant-2",
+      });
 
       await rollInitiative("participant-1");
       await rollInitiative("participant-2");
@@ -7082,10 +7160,11 @@ describe("scenarios route contract", () => {
 
       await commitCurrentStepViaBrowserPut();
       expect(roundState().currentStep).toBe("initiative_phase_2");
-      expect(participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2)
-        .toMatchObject({
-          targetParticipantId: "participant-2",
-        });
+      expect(
+        participantState("encounter-participant-1")?.declaration?.phaseContexts?.phase2,
+      ).toMatchObject({
+        targetParticipantId: "participant-2",
+      });
       expect(
         combatRoundParticipantHasExecutablePhaseAttack({
           participantId: "encounter-participant-1",
@@ -7551,7 +7630,9 @@ describe("scenarios route contract", () => {
       participantId: "encounter-participant-1",
       type: "roll_attack",
     });
-    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toBeUndefined();
+    expect(
+      updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier,
+    ).toBeUndefined();
     expect(payload.command).toMatchObject({
       facts: expect.objectContaining({
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
@@ -7729,11 +7810,13 @@ describe("scenarios route contract", () => {
       phase: "phase1",
       weaponName: "Broad sword",
     });
-    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject({
-      modifierId: "generated:distance:phase1:ob-skill",
-      notes: "distance: Broad sword preferred 2 · actual 3 · nearest 2 · Skill/OB -2",
-      value: -2,
-    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject(
+      {
+        modifierId: "generated:distance:phase1:ob-skill",
+        notes: "distance: Broad sword preferred 2 · actual 3 · nearest 2 · Skill/OB -2",
+        value: -2,
+      },
+    );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
@@ -7817,11 +7900,13 @@ describe("scenarios route contract", () => {
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
 
     expect(attackResult.ob).toBe(8);
-    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject({
-      createdCombatModifierIds: [],
-      modifierId: "generated:distance:phase1:ob-skill",
-      value: -2,
-    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject(
+      {
+        createdCombatModifierIds: [],
+        modifierId: "generated:distance:phase1:ob-skill",
+        value: -2,
+      },
+    );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
@@ -8519,8 +8604,7 @@ describe("scenarios route contract", () => {
       updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult.armorWarnings,
     ).toEqual([]);
     expect(
-      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult
-        .armorModifierSource,
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult.armorModifierSource,
     ).toMatchObject({
       armorClass: "B",
       status: "applied",

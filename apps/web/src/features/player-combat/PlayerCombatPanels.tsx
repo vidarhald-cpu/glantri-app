@@ -163,8 +163,8 @@ interface PlayerCombatActionButtonPanelProps {
   onDeclareAction?: () => void;
   preActionControls?: ReactNode;
   /**
-   * Reserved for non-primary utility commands such as GM skip controls. Alternative
-   * outcomes for the same pending task should use preActionControls plus one primary action.
+   * Reserved for non-primary utility commands. Alternative outcomes for the same pending
+   * task should use preActionControls plus one primary action.
    */
   onSecondaryAction?: () => void;
   secondaryButtonDisabled?: boolean;
@@ -234,13 +234,7 @@ const panelSourceMarkerStyle = {
   padding: "0.04rem 0.4rem",
 } as const;
 
-function PanelTitleWithSource({
-  label,
-  sourceLabel,
-}: {
-  label: string;
-  sourceLabel?: string;
-}) {
+function PanelTitleWithSource({ label, sourceLabel }: { label: string; sourceLabel?: string }) {
   return (
     <div style={panelTitleWithSourceStyle}>
       <strong>{label}</strong>
@@ -523,11 +517,7 @@ export function formatCombatModifierDisplayLine(input: {
 }
 
 export function isMeaningfulCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
-  return (
-    entry.value !== 0 ||
-    Boolean(entry.notes?.trim()) ||
-    Boolean(entry.sourceRule?.trim())
-  );
+  return entry.value !== 0 || Boolean(entry.notes?.trim()) || Boolean(entry.sourceRule?.trim());
 }
 
 export function sanitizeCombatModifierEntries(
@@ -738,9 +728,7 @@ function formatCombatEffectFallbackLabel(effect: CombatEffect): string {
   return effect.type.replaceAll("_", " ");
 }
 
-function buildCharacterStateModifierEntries(
-  combatEffects?: CombatEffectsState,
-): {
+function buildCharacterStateModifierEntries(combatEffects?: CombatEffectsState): {
   general: PlayerCombatModifierDisplayEntry[];
   situationDb: PlayerCombatModifierDisplayEntry[];
   situationObSkill: PlayerCombatModifierDisplayEntry[];
@@ -854,7 +842,9 @@ function ModifierEditableEntryRow({
   controlsDisabled: boolean;
   entry: ScenarioCombatModifierEntry;
   onRemove: () => void;
-  onUpdate: (patch: Partial<Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "value">>) => void;
+  onUpdate: (
+    patch: Partial<Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "value">>,
+  ) => void;
 }) {
   const scopeLabel = formatCombatModifierScopeLabel(entry);
   const detailsValue = entry.generated
@@ -864,9 +854,7 @@ function ModifierEditableEntryRow({
   return (
     <div style={compactModifierMiniTableEntryRowStyle}>
       <div style={compactModifierEntryTopRowStyle}>
-        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
-          Situational · {scopeLabel}
-        </span>
+        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational · {scopeLabel}</span>
         <input
           aria-label={`${bucketLabel} modifier value`}
           disabled={controlsDisabled}
@@ -895,9 +883,7 @@ function ModifierEditableEntryRow({
         />
       </div>
       <div style={compactModifierEditableDetailsRowStyle}>
-        <span style={{ color: "#1f1b14", fontSize: "0.78rem", fontWeight: 700 }}>
-          Details
-        </span>
+        <span style={{ color: "#1f1b14", fontSize: "0.78rem", fontWeight: 700 }}>Details</span>
         <input
           aria-label={`${bucketLabel} modifier details`}
           disabled={controlsDisabled}
@@ -1219,9 +1205,7 @@ export function PlayerCombatActionSelectorPanel({
                   </span>
                   <select
                     disabled={controlsDisabled}
-                    onChange={(event) =>
-                      updateDistancePreference(option.id, event.target.value)
-                    }
+                    onChange={(event) => updateDistancePreference(option.id, event.target.value)}
                     value={
                       preference?.desiredDistance !== undefined
                         ? String(preference.desiredDistance)
