@@ -488,6 +488,8 @@ describe("CombatRoundManagerPanel", () => {
       "<CombatEventResultList events={inspectorCanonicalActionResultEvents} />",
     );
     expect(source).toContain("Legacy result · canonical event history unavailable");
+    expect(source).toContain(") : inspectorActionResult ? (");
+    expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
       source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
     );
@@ -555,7 +557,7 @@ describe("CombatRoundManagerPanel", () => {
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
     );
     expect(source).toContain(
-      "const historicalPhasePanel = inspectorSnapshot?.phasePanels?.[phaseKey]",
+      "const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey]",
     );
     expect(source).toContain(": inspectorDisplayDraft.phaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
@@ -669,20 +671,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("sourceLabel={phaseSourceLabel}");
     expect(source).toContain("sourceLabel={inspectorModifierSourceLabel}");
     expect(source).toContain("historicalPhasePanel");
-    expect(source).toContain("inspectorSnapshot?.phasePanels?.[phaseKey]");
+    expect(source).toContain("inspectorPanelSnapshot?.phasePanels?.[phaseKey]");
     expect(source).toContain("historicalPhasePanel?.distanceLabel");
     expect(source).toContain("historicalPhasePanel?.targetOptions ?? inspectorTargetOptions");
     expect(source).toContain("snapshotAttackStats: historicalPhasePanel?.attackSummary");
     expect(source).toContain("snapshotDefenseStats: historicalPhasePanel?.defenseSummary");
-    expect(source).toContain("liveModifiers: inspectorSnapshot");
+    expect(source).toContain("liveModifiers: inspectorIsHistorical");
     expect(source).toContain("? undefined\n                        : phaseKey");
     expect(source).toContain(
-      "attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats",
+      "attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats",
     );
-    expect(source).toContain("phaseDefenseStats: inspectorSnapshot ? null : phaseDefenseStats");
-    expect(source).toContain("inspectorSnapshot.modifierSummary?.rows ?? []");
+    expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
+    expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows ?? []");
     expect(source).toContain(": inspectorModifierRows;");
-    expect(source).toContain("Historical data was not recorded for this panel.");
+    expect(source).toContain("No information available for this panel.");
+    expect(source).toContain("resolveCombatHistoryPanelSnapshot");
     expect(source).toContain("inspectorHistoricalSelectorFactsComplete");
     expect(source).toContain("movementPreferenceTargets");
     expect(source).toContain('phase1: buildPhasePanelSnapshot("phase1")');

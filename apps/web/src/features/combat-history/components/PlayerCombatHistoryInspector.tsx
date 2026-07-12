@@ -7,6 +7,7 @@ import type {
 
 import {
   PlayerCombatActionSelectorPanel,
+  PlayerCombatActionButtonPanel,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
@@ -28,7 +29,7 @@ import {
 import { CombatEventResultList } from "./CombatEventResultList";
 
 const noop = () => undefined;
-const historicalDataMissingMessage = "Historical data was not recorded for this panel.";
+const historicalDataMissingMessage = "No information available for this panel.";
 
 function MissingHistoricalPanel(input: { title: string }) {
   return (
@@ -180,6 +181,11 @@ export function PlayerCombatHistoryInspector(input: {
         ) : (
           <MissingHistoricalPanel title="Combat modifiers" />
         )}
+        <PlayerCombatActionButtonPanel
+          buttonLabel="Historical inspection"
+          disabled
+          statusText="No historical action control recorded."
+        />
         <CombatEventResultList emptyMessage={historicalDataMissingMessage} events={input.events} />
       </div>
     </section>

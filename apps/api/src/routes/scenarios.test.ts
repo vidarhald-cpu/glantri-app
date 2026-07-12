@@ -2309,6 +2309,93 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("lets a GM request the selected participant's player-safe history perspective", async () => {
+    const participants = [
+      {
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-1",
+      },
+      {
+        id: "encounter-participant-2",
+        label: "Other player",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        encounterId: "encounter-1",
+        events: [
+          {
+            completeness: "complete",
+            encounterId: "encounter-1",
+            facts: {
+              gmReview: { privateNote: "GM only" },
+              involvedOutcome: { hit: true },
+              publicOutcome: {},
+              rollerPrivate: { rollD20: 19, total: 23 },
+            },
+            id: "other-player-attack",
+            missingFacts: [],
+            occurredAt: "2026-01-01T00:01:00.000Z",
+            rollerParticipantId: "encounter-participant-2",
+            roundNumber: 1,
+            schemaVersion: 1,
+            sequence: 0,
+            source: { kind: "canonical", sourceIds: [] },
+            status: "recorded",
+            step: "phase_1_actions",
+            type: "attack",
+            visibility: {
+              identityRefs: [
+                { participantId: "encounter-participant-2", role: "attacker" },
+                { participantId: "encounter-participant-1", role: "defender" },
+              ],
+              involvedParticipantIds: [
+                "encounter-participant-2",
+                "encounter-participant-1",
+              ],
+              outcomeScope: "involved",
+              rollerParticipantId: "encounter-participant-2",
+            },
+          },
+        ],
+        roundNumber: 1,
+      },
+      participants,
+      roleplayState: {
+        visibility: {
+          "encounter-participant-1": { "encounter-participant-2": true },
+        },
+      },
+    });
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        { controlledByUserId: "player-1", id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history?perspectiveParticipantId=participant-1",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().history.activeRound.events[0].facts).toEqual({
+      involvedOutcome: { hit: true },
+      publicOutcome: {},
+    });
+    expect(JSON.stringify(response.json())).not.toContain("GM only");
+    expect(JSON.stringify(response.json())).not.toContain("rollD20");
+  });
+
   it("filters scenario participants for player workspace access", async () => {
     const scenario = {
       campaignId: "campaign-1",

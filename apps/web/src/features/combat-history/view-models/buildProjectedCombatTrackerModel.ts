@@ -54,6 +54,57 @@ function markerForEvents(input: {
   return { kind: "not_reached", marker: "·" };
 }
 
+function projectedFact(
+  event: ProjectedCombatHistoryEvent,
+  key: string,
+): unknown {
+  return event.facts.involvedOutcome?.[key] ?? event.facts.publicOutcome[key];
+}
+
+export function formatProjectedCombatTrackerHoverDetail(
+  events: readonly ProjectedCombatHistoryEvent[],
+): string | undefined {
+  const skipped = events.find(
+    (event) => event.status === "skipped" || event.status === "not_applicable",
+  );
+  if (skipped) return skipped.status === "skipped" ? "skipped." : "not applicable.";
+
+  const initiative = events.find((event) => event.type === "initiative");
+  const initiativeTotal =
+    initiative &&
+    (projectedFact(initiative, "total") ?? initiative.facts.privateCalculation?.total);
+  if (typeof initiativeTotal === "number") return `initiative total ${initiativeTotal}.`;
+
+  const attack = events.find((event) => event.type === "attack");
+  if (attack) {
+    if (projectedFact(attack, "grazing") === true) return "attack: grazing hit.";
+    return projectedFact(attack, "hit") === true ? "attack: hit." : "attack: miss.";
+  }
+
+  const parry = events.find((event) => event.type === "parry");
+  if (parry) {
+    const status = projectedFact(parry, "status");
+    if (status === "not_required" || status === "not_needed") return "parry not needed.";
+    const success = projectedFact(parry, "success");
+    if (typeof success === "boolean") return success ? "parry succeeded." : "parry failed.";
+    return status === "pending" ? "parry pending." : "parry resolved.";
+  }
+
+  const damage = [...events]
+    .reverse()
+    .find((event) => event.type === "damage_committed" || event.type === "damage_proposed");
+  if (damage) {
+    if (damage.type === "damage_committed" || damage.status === "committed") {
+      return "damage committed.";
+    }
+    return damage.status === "not_applicable" ? "damage not applicable." : "damage pending.";
+  }
+
+  const declaration = events.find((event) => event.type === "declaration");
+  if (declaration) return "action declared.";
+  return undefined;
+}
+
 export function getProjectedCombatHistoryCellEvents(input: {
   history: CombatHistoryProjection;
   selection: CombatHistoryInspectionSelection;
@@ -116,12 +167,14 @@ export function buildProjectedCombatTrackerModel(input: {
         });
         const cellKey = buildCombatTrackerCellKey(selection);
         const inspectable = current || Boolean(snapshot) || cellEvents.length > 0;
+        const hoverDetail = formatProjectedCombatTrackerHoverDetail(cellEvents);
         markerKinds.add(marker.kind);
         cells[cellKey] = {
           cellKey,
           current,
           hoverText: `${row.displayName} · Round ${round.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]}: ${
-            inspectable ? (current ? "current task." : "history available.") : "not reached."
+            hoverDetail ??
+            (inspectable ? (current ? "current task." : "incomplete legacy history.") : "not reached.")
           }`,
           initiativeValue: marker.kind === "roll_result",
           inspectable,

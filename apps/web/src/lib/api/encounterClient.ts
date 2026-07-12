@@ -57,9 +57,15 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   return payload.encounter;
 }
 
-export async function loadCombatHistory(encounterId: string): Promise<CombatHistoryProjection> {
+export async function loadCombatHistory(
+  encounterId: string,
+  input: { perspectiveParticipantId?: string } = {},
+): Promise<CombatHistoryProjection> {
+  const query = input.perspectiveParticipantId
+    ? `?perspectiveParticipantId=${encodeURIComponent(input.perspectiveParticipantId)}`
+    : "";
   const payload = await sendJson<{ history: CombatHistoryProjection }>(
-    `/encounters/${encounterId}/combat-history`,
+    `/encounters/${encounterId}/combat-history${query}`,
     { method: "GET" },
   );
 

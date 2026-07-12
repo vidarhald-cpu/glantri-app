@@ -310,6 +310,11 @@ const compactModifierDisplayRowStyle = {
   paddingTop: "0.3rem",
 } as const;
 
+const compactModifierDisplayHeaderStyle = {
+  ...compactModifierDisplayRowStyle,
+  gridTemplateColumns: compactModifierTopRowColumns,
+} as const;
+
 const compactModifierDisplayTopRowStyle = {
   alignItems: "start",
   display: "grid",
@@ -981,7 +986,7 @@ export function PlayerCombatModifierPanel({
               <div style={compactModifierMiniTableStyle}>
                 {(row.characterStateEntries?.length ?? 0) > 0 ||
                 (!editable && row.entries.length > 0) ? (
-                  <div style={compactModifierDisplayRowStyle}>
+                  <div style={compactModifierDisplayHeaderStyle}>
                     {["Source/scope", "Mod", "Dur"].map((heading) => (
                       <span
                         key={heading}

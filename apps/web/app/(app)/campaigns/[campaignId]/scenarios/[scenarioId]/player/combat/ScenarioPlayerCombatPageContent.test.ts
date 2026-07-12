@@ -29,6 +29,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatParryContextPanel");
+    expect(source).toContain("perspectiveParticipantId: selectedParticipantId");
+    expect(source).toContain("setHistoryInspection(undefined)");
+    expect(source).toContain("resolveProjectedCombatHistoryPanelSnapshot");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatModifierRows");
     expect(source).toContain("buildPlayerCombatPhasePanelModel");

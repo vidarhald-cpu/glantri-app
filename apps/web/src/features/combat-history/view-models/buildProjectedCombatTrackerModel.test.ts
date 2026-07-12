@@ -83,4 +83,40 @@ describe("buildProjectedCombatTrackerModel", () => {
       }).map((entry) => entry.id),
     ).toEqual(["selected"]);
   });
+
+  it("uses projected outcomes for useful hover details without private calculations", () => {
+    const projection = history([
+      event({
+        facts: {
+          involvedOutcome: { hit: true },
+          privateCalculation: { rollD20: 19 },
+          publicOutcome: {},
+        },
+      }),
+    ]);
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+    const hover = model.cells["1:aria:phase_1_actions"].hoverText;
+
+    expect(hover).toContain("attack: hit.");
+    expect(hover).not.toContain("19");
+    expect(hover).not.toContain("history available");
+  });
+
+  it.each([
+    ["initiative", { total: 8 }, "initiative total 8."],
+    ["parry", { success: false, status: "resolved" }, "parry failed."],
+    ["damage_committed", { status: "committed" }, "damage committed."],
+  ] as const)("formats projected %s status in tracker hover", (type, outcome, expected) => {
+    const projection = history([
+      event({
+        facts: { involvedOutcome: outcome, publicOutcome: {} },
+        step: type === "initiative" ? "initiative_phase_1" : "phase_1_damage",
+        type,
+      }),
+    ]);
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+    const step = type === "initiative" ? "initiative_phase_1" : "phase_1_damage";
+
+    expect(model.cells[`1:aria:${step}`].hoverText).toContain(expected);
+  });
 });

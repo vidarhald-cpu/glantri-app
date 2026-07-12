@@ -113,6 +113,7 @@ import {
   buildCombatTrackerModel,
   CombatEventResultList,
   CombatTracker,
+  resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
 } from "@/features/combat-history";
@@ -4185,14 +4186,52 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspector.step,
   });
-  const inspectorIsHistorical = Boolean(inspectorSnapshot) || !selectedRoundIsActive;
-  const inspectorSourceMode: CombatInspectorSourceMode = inspectorSnapshot ? "history" : "current";
+  const inspectorIsHistorical =
+    Boolean(inspectorSnapshot) || !selectedRoundIsActive || !inspectorSelectionIsCurrentTask;
+  const resolveInspectorContextSnapshot = (
+    isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
+  ) =>
+    resolveCombatHistoryPanelSnapshot({
+      getParticipantId: (snapshot) => snapshot.participantId,
+      isValid,
+      participantId: inspector.participant?.participantId ?? "",
+      roundNumber: selectedRoundNumber,
+      selectedStep: inspector.step,
+      snapshots: selectedTimelineRoundState.stepSnapshots,
+    });
+  const inspectorContextBaseSnapshot = inspectorIsHistorical
+    ? resolveInspectorContextSnapshot()
+    : undefined;
+  const inspectorPanelSnapshot = inspectorContextBaseSnapshot
+    ? {
+        ...inspectorContextBaseSnapshot,
+        ...inspectorSnapshot,
+        declarationSummary: resolveInspectorContextSnapshot((snapshot) =>
+          Boolean(snapshot.declarationSummary),
+        )?.declarationSummary,
+        modifierSummary: resolveInspectorContextSnapshot((snapshot) =>
+          Boolean(snapshot.modifierSummary),
+        )?.modifierSummary,
+        phasePanels: {
+          phase1: resolveInspectorContextSnapshot((snapshot) =>
+            Boolean(snapshot.phasePanels?.phase1),
+          )?.phasePanels?.phase1,
+          phase2: resolveInspectorContextSnapshot((snapshot) =>
+            Boolean(snapshot.phasePanels?.phase2),
+          )?.phasePanels?.phase2,
+        },
+        step: inspector.step,
+      }
+    : undefined;
+  const inspectorSourceMode: CombatInspectorSourceMode = inspectorIsHistorical
+    ? "history"
+    : "current";
   const inspectorSourceLabel = getCombatInspectorSourceLabel(inspectorSourceMode);
   const inspectorDisplayDraft = buildInspectorDisplayDraft({
     draft: inspectorDraft,
-    snapshot: inspectorSnapshot,
+    snapshot: inspectorPanelSnapshot,
   });
-  const inspectorHistoricalDeclarationSummary = inspectorSnapshot?.declarationSummary;
+  const inspectorHistoricalDeclarationSummary = inspectorPanelSnapshot?.declarationSummary;
   const inspectorHistoricalSelectorFactsComplete = Boolean(
     inspectorHistoricalDeclarationSummary?.movementLabel &&
     (!inspectorHistoricalDeclarationSummary.actionId ||
@@ -4293,10 +4332,10 @@ export default function CombatRoundManagerPanel({
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );
-  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] = inspectorSnapshot
-    ? (inspectorSnapshot.modifierSummary?.rows ?? [])
+  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] = inspectorIsHistorical
+    ? (inspectorPanelSnapshot?.modifierSummary?.rows ?? [])
     : inspectorModifierRows;
-  const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorSnapshot
+  const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorIsHistorical
     ? "history"
     : "current";
   const inspectorModifierSourceLabel = getCombatInspectorSourceLabel(inspectorModifierSourceMode);
@@ -4642,10 +4681,10 @@ export default function CombatRoundManagerPanel({
     inspectorTargetOptions,
     selectedScenarioParticipant,
   ]);
-  const inspectorDisplayDistancePreferenceOptions = inspectorSnapshot?.declarationSummary
-    ? (inspectorSnapshot.declarationSummary.movementPreferenceTargets ?? []).map((target) => ({
+  const inspectorDisplayDistancePreferenceOptions = inspectorPanelSnapshot?.declarationSummary
+    ? (inspectorPanelSnapshot.declarationSummary.movementPreferenceTargets ?? []).map((target) => ({
         defaultDistance:
-          inspectorSnapshot.declarationSummary?.movementIntent?.distancePreferences.find(
+          inspectorPanelSnapshot.declarationSummary?.movementIntent?.distancePreferences.find(
             (preference) => preference.targetParticipantId === target.id,
           )?.desiredDistance,
         displayName: target.displayName,
@@ -7786,11 +7825,11 @@ export default function CombatRoundManagerPanel({
             {selectedScenarioParticipant ? (
               <>
                 <div style={playerCombatTopPanelRowStyle}>
-                  {inspectorSnapshot && !inspectorHistoricalSelectorFactsComplete ? (
+                  {inspectorIsHistorical && !inspectorHistoricalSelectorFactsComplete ? (
                     <section style={playerCombatPanelCardStyle}>
                       <strong>Action selector · History</strong>
                       <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                        Historical data was not recorded for this panel.
+                        No information available for this panel.
                       </div>
                     </section>
                   ) : (
@@ -7801,7 +7840,7 @@ export default function CombatRoundManagerPanel({
                       controlsDisabled={
                         saving ||
                         !selectedRoundIsActive ||
-                        Boolean(inspectorSnapshot) ||
+                        inspectorIsHistorical ||
                         inspectorCombatExperienceRequired
                       }
                       distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
@@ -7825,27 +7864,27 @@ export default function CombatRoundManagerPanel({
                   )}
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
-                    const historicalPhasePanel = inspectorSnapshot?.phasePanels?.[phaseKey];
-                    const phaseCombatContext = inspectorSnapshot
+                    const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey];
+                    const phaseCombatContext = inspectorIsHistorical
                       ? (historicalPhasePanel?.phaseContext ??
                         createUnrecordedHistoricalPhaseContext())
                       : inspectorDisplayDraft.phaseContexts[phaseKey];
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
-                    const phaseTargetScenarioParticipant = !inspectorSnapshot
+                    const phaseTargetScenarioParticipant = !inspectorIsHistorical
                       ? effectiveScenarioParticipants.find(
                           (participant) =>
                             participant.id === phaseCombatContext.targetParticipantId,
                         )
                       : undefined;
                     const phaseTargetEncounterParticipant =
-                      !inspectorSnapshot && phaseCombatContext.targetParticipantId
+                      !inspectorIsHistorical && phaseCombatContext.targetParticipantId
                         ? findEncounterParticipantForScenarioParticipant({
                             encounterParticipants: encounter.participants,
                             scenarioParticipant: phaseTargetScenarioParticipant,
                             scenarioParticipantId: phaseCombatContext.targetParticipantId,
                           })
                         : undefined;
-                    const phaseDistanceRow = !inspectorSnapshot
+                    const phaseDistanceRow = !inspectorIsHistorical
                       ? getCombatDistanceTableRowForParticipants({
                           participantAId: inspector.participant?.participantId,
                           participantAAliases: getCombatDistanceParticipantAliases(
@@ -7860,14 +7899,14 @@ export default function CombatRoundManagerPanel({
                         })
                       : undefined;
                     const phaseSourceLabel = getCombatInspectorSourceLabel(
-                      inspectorSnapshot ? "history" : "current",
+                      inspectorIsHistorical ? "history" : "current",
                     );
-                    const phaseDistanceLabel = inspectorSnapshot
+                    const phaseDistanceLabel = inspectorIsHistorical
                       ? historicalPhasePanel?.distanceLabel
                       : phaseTargetEncounterParticipant
                         ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
                         : undefined;
-                    const phaseDefenseStats = !inspectorSnapshot
+                    const phaseDefenseStats = !inspectorIsHistorical
                       ? buildPlayerCombatDefenseStats({
                           mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
                           offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
@@ -7876,7 +7915,7 @@ export default function CombatRoundManagerPanel({
                         })
                       : null;
                     const selectedResolutionContext =
-                      !inspectorSnapshot &&
+                      !inspectorIsHistorical &&
                       phaseKey === inspectorResolutionPhase &&
                       inspector.participant?.participantId ===
                         inspectorResolutionAttackResult?.defenderParticipantId &&
@@ -7896,8 +7935,8 @@ export default function CombatRoundManagerPanel({
                         : undefined;
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
-                      attackStats: inspectorSnapshot ? null : phaseLoadoutSummary.attackStats,
-                      liveModifiers: inspectorSnapshot
+                      attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats,
+                      liveModifiers: inspectorIsHistorical
                         ? undefined
                         : phaseKey === inspectorResolutionPhase
                           ? inspectorParryDefenderPhaseSummary?.liveModifiers
@@ -7909,7 +7948,7 @@ export default function CombatRoundManagerPanel({
                       participantId: inspector.participant?.participantId,
                       phaseCard,
                       phaseContext: phaseCombatContext,
-                      phaseDefenseStats: inspectorSnapshot ? null : phaseDefenseStats,
+                      phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats,
                       phaseKey,
                       secondaryActionId: inspectorDisplayDraft.secondaryActionId,
                       selectedResolutionContext,
@@ -7932,19 +7971,19 @@ export default function CombatRoundManagerPanel({
                         phaseCard={phaseCard}
                         sourceLabel={phaseSourceLabel}
                       >
-                        {inspectorSnapshot && !historicalPhasePanel ? (
+                        {inspectorIsHistorical && !historicalPhasePanel ? (
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            Historical data was not recorded for this panel.
+                            No information available for this panel.
                           </div>
                         ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                         ) : null}
-                        {(!inspectorSnapshot || historicalPhasePanel) &&
+                        {(!inspectorIsHistorical || historicalPhasePanel) &&
                         phaseModel.showAttackLocationSelector ? (
                           <>
                             <PlayerCombatAttackTargetSelector
                               combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                              controlsDisabled={saving || inspectorIsHistorical}
                               distanceLabel={phaseDistanceLabel}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
@@ -7960,7 +7999,7 @@ export default function CombatRoundManagerPanel({
                             />
                             <PlayerCombatAttackLocationSelector
                               combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                              controlsDisabled={saving || inspectorIsHistorical}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
@@ -7972,14 +8011,14 @@ export default function CombatRoundManagerPanel({
                             />
                           </>
                         ) : null}
-                        {(!inspectorSnapshot || historicalPhasePanel) &&
+                        {(!inspectorIsHistorical || historicalPhasePanel) &&
                         phaseModel.showDefenseContext &&
                         phaseModel.defenseStats ? (
                           <>
                             <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                              controlsDisabled={saving || inspectorIsHistorical}
                               mainHandItemLabel={
                                 historicalPhasePanel?.mainHandParryItemLabel ??
                                 phaseLoadoutSummary.mainHandParryItemLabel
@@ -8005,11 +8044,11 @@ export default function CombatRoundManagerPanel({
                 </div>
 
                 <div style={playerCombatPanelRowStyle}>
-                  {inspectorSnapshot && !inspectorSnapshot.modifierSummary ? (
+                  {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? (
                     <section style={playerCombatPanelCardStyle}>
                       <strong>Combat modifiers · History</strong>
                       <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                        Historical data was not recorded for this panel.
+                        No information available for this panel.
                       </div>
                     </section>
                   ) : (
@@ -8038,7 +8077,7 @@ export default function CombatRoundManagerPanel({
                           ),
                         )
                       }
-                      readOnly={Boolean(inspectorSnapshot)}
+                      readOnly={inspectorIsHistorical}
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
                     />
@@ -8295,13 +8334,15 @@ export default function CombatRoundManagerPanel({
                   </div>
                   {inspectorHasCanonicalActionResult ? (
                     <CombatEventResultList events={inspectorCanonicalActionResultEvents} />
-                  ) : (
+                  ) : inspectorActionResult ? (
                     <div style={{ display: "grid", gap: "0.3rem" }}>
                       <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
                         Legacy result · canonical event history unavailable
                       </div>
                       <PlayerCombatActionResultPanel result={inspectorActionResult} />
                     </div>
+                  ) : (
+                    <PlayerCombatActionResultPanel result={null} />
                   )}
                 </div>
               </>

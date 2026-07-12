@@ -65,6 +65,7 @@ import {
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
   PlayerCombatHistoryInspector,
+  resolveProjectedCombatHistoryPanelSnapshot,
   type CombatHistoryInspectionSelection,
 } from "@/features/combat-history";
 
@@ -1212,7 +1213,15 @@ export default function ScenarioPlayerCombatPageContent({
               ? loadScenarioParticipants(scenarioId)
               : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
             encounterId ? loadEncounterById(encounterId) : Promise.resolve(undefined),
-            encounterId ? loadCombatHistory(encounterId) : Promise.resolve(undefined),
+            encounterId
+              ? isGameMaster
+                ? selectedParticipantId
+                  ? loadCombatHistory(encounterId, {
+                      perspectiveParticipantId: selectedParticipantId,
+                    })
+                  : Promise.resolve(undefined)
+                : loadCombatHistory(encounterId)
+              : Promise.resolve(undefined),
           ]);
 
         if (cancelled) {
@@ -1269,7 +1278,14 @@ export default function ScenarioPlayerCombatPageContent({
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [currentUser, encounterId, isGameMaster, scenarioId, sessionLoading]);
+  }, [
+    currentUser,
+    encounterId,
+    isGameMaster,
+    scenarioId,
+    selectedParticipantId,
+    sessionLoading,
+  ]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -1358,6 +1374,8 @@ export default function ScenarioPlayerCombatPageContent({
 
   useEffect(() => {
     setActionRollResult(null);
+    setCombatHistory(undefined);
+    setHistoryInspection(undefined);
   }, [selectedParticipantId]);
 
   const selectedParticipant = useMemo(
@@ -1428,12 +1446,13 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const inspectedHistorySnapshot = useMemo(
     () =>
-      historyInspection
-        ? inspectedHistoryRound?.snapshots.find(
-            (snapshot) =>
-              snapshot.participant.participantId === historyInspection.participantId &&
-              snapshot.step === historyInspection.step,
-          )
+      historyInspection && inspectedHistoryRound
+        ? resolveProjectedCombatHistoryPanelSnapshot({
+            participantId: historyInspection.participantId,
+            roundNumber: historyInspection.roundNumber,
+            selectedStep: historyInspection.step,
+            snapshots: inspectedHistoryRound.snapshots,
+          })
         : undefined,
     [historyInspection, inspectedHistoryRound],
   );

@@ -1293,18 +1293,6 @@ function getEncounterParticipantsControlledByUser(input: {
   });
 }
 
-function getEncounterParticipantIdsControlledByUser(input: {
-  encounter: EncounterSession;
-  scenarioParticipants: ScenarioParticipant[];
-  userId: string;
-}): Set<string> {
-  return new Set(
-    getEncounterParticipantsControlledByUser(input).flatMap((participant) =>
-      getCombatDistanceParticipantAliases(participant),
-    ),
-  );
-}
-
 function hasCombatDistanceVisibility(input: {
   target: EncounterSession["participants"][number];
   viewer: EncounterSession["participants"][number];
@@ -1328,21 +1316,42 @@ function buildPlayerSafeCombatScopeForUser(input: {
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
 } {
+  const controlledEncounterParticipants = getEncounterParticipantsControlledByUser(input);
+  return buildPlayerSafeCombatScopeForParticipants({
+    controlledEncounterParticipants,
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+}
+
+function buildPlayerSafeCombatScopeForParticipants(input: {
+  controlledEncounterParticipants: EncounterSession["participants"];
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+}): {
+  controlledEncounterParticipantIds: Set<string>;
+  visibleParticipantIds: Set<string>;
+} {
   const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
   });
-  const controlledEncounterParticipants = getEncounterParticipantsControlledByUser(input);
-  const controlledEncounterParticipantIds = getEncounterParticipantIdsControlledByUser(input);
+  const controlledEncounterParticipantIds = new Set(
+    input.controlledEncounterParticipants.flatMap((participant) =>
+      getCombatDistanceParticipantAliases(participant),
+    ),
+  );
   const visibility = input.encounter.roleplayState?.visibility;
   const hasVisibilityRows = Object.keys(visibility ?? {}).length > 0;
   const visibleParticipantIds = new Set(
     membership.participants
       .filter(
         (participant) =>
-          controlledEncounterParticipants.some((controlled) => controlled.id === participant.id) ||
+          input.controlledEncounterParticipants.some(
+            (controlled) => controlled.id === participant.id,
+          ) ||
           !hasVisibilityRows ||
-          controlledEncounterParticipants.some((viewer) =>
+          input.controlledEncounterParticipants.some((viewer) =>
             hasCombatDistanceVisibility({
               target: participant,
               viewer,
@@ -2003,13 +2012,42 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioParticipants,
         userId: user.id,
       });
+      const requestedPerspectiveParticipantId =
+        request.query && typeof request.query === "object"
+          ? (request.query as Record<string, unknown>).perspectiveParticipantId
+          : undefined;
+      const perspectiveParticipant =
+        access.mode === "gm" && typeof requestedPerspectiveParticipantId === "string"
+          ? membership.participants.find((participant) =>
+              getCombatDistanceParticipantAliases(participant).includes(
+                requestedPerspectiveParticipantId,
+              ),
+            )
+          : undefined;
+      if (
+        access.mode === "gm" &&
+        requestedPerspectiveParticipantId !== undefined &&
+        !perspectiveParticipant
+      ) {
+        return reply.code(404).send({ error: "Participant not found." });
+      }
+      const perspectiveScope = perspectiveParticipant
+        ? buildPlayerSafeCombatScopeForParticipants({
+            controlledEncounterParticipants: [perspectiveParticipant],
+            encounter,
+            scenarioParticipants,
+          })
+        : undefined;
       const viewer =
-        access.mode === "gm"
+        access.mode === "gm" && !perspectiveScope
           ? ({ kind: "gm" } as const)
           : {
-              controlledParticipantIds: playerScope.controlledEncounterParticipantIds,
+              controlledParticipantIds:
+                perspectiveScope?.controlledEncounterParticipantIds ??
+                playerScope.controlledEncounterParticipantIds,
               kind: "player" as const,
-              visibleParticipantIds: playerScope.visibleParticipantIds,
+              visibleParticipantIds:
+                perspectiveScope?.visibleParticipantIds ?? playerScope.visibleParticipantIds,
             };
 
       return {
