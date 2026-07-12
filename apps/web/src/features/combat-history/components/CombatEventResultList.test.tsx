@@ -31,7 +31,7 @@ function event(
 describe("CombatEventResultList", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders identical outcome rows without duplicate React keys", () => {
+  it("renders one concise attack outcome without duplicate React keys", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(
       <CombatEventResultList
@@ -44,27 +44,28 @@ describe("CombatEventResultList", () => {
       />,
     );
 
-    expect(screen.getAllByText("Hit: No")).toHaveLength(2);
+    expect(screen.getAllByText("Result: Miss")).toHaveLength(1);
+    expect(screen.queryByText("Hit: No")).toBeNull();
     expect(
       consoleError.mock.calls.some((call) => String(call[0]).includes("same key")),
     ).toBe(false);
   });
 
-  it("keeps identical facts across events and outcome/calculation sections in chronological order", () => {
+  it("keeps identical attack results across events in chronological order", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(
       <CombatEventResultList
         events={[
           event("attack-later", 2, { publicOutcome: { hit: false } }),
           event("attack-first", 1, {
-            privateCalculation: { hit: false },
+            privateCalculation: { defenderDb: 15, lookupTotal: 3, ob: 10, rollTotal: 8 },
             publicOutcome: { hit: false },
           }),
         ]}
       />,
     );
 
-    expect(screen.getAllByText("Hit: No")).toHaveLength(3);
+    expect(screen.getAllByText("Result: Miss")).toHaveLength(2);
     expect(screen.getAllByText("Attack recorded.")).toHaveLength(2);
     const articles = screen.getAllByRole("article");
     expect(articles[0]?.textContent).toContain("Calculation");

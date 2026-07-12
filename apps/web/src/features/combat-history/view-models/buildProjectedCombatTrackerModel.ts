@@ -77,8 +77,25 @@ export function formatProjectedCombatTrackerHoverDetail(
 
   const attack = events.find((event) => event.type === "attack");
   if (attack) {
-    if (projectedFact(attack, "grazing") === true) return "attack: grazing hit.";
-    return projectedFact(attack, "hit") === true ? "attack: hit." : "attack: miss.";
+    const attacker = attack.identities.find(
+      (identity) => identity.role === "attacker" || identity.role === "actor",
+    )?.displayName;
+    const defender = attack.identities.find(
+      (identity) => identity.role === "defender" || identity.role === "target",
+    )?.displayName;
+    const weapon = projectedFact(attack, "weaponName");
+    const tableResult = projectedFact(attack, "tableResult");
+    const outcome =
+      typeof tableResult === "string"
+        ? tableResult
+        : projectedFact(attack, "grazing") === true
+          ? "Grazing hit"
+          : projectedFact(attack, "hit") === true
+            ? "Hit"
+            : "Miss";
+    return attacker && defender
+      ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with ${weapon}` : ""}: ${outcome}.`
+      : `attack: ${outcome.toLowerCase()}.`;
   }
 
   const parry = events.find((event) => event.type === "parry");

@@ -72,14 +72,56 @@ function identity(event: ProjectedCombatHistoryEvent, role: string): string | un
   return event.identities.find((candidate) => candidate.role === role)?.displayName;
 }
 
+function attackOutcome(event: ProjectedCombatHistoryEvent): string {
+  const involved = event.facts.involvedOutcome;
+  if (typeof involved?.tableResult === "string") return involved.tableResult;
+  const grazing = involved?.grazing ?? event.facts.publicOutcome.grazing;
+  if (grazing === true) return "Grazing hit";
+  const hit = involved?.hit ?? event.facts.publicOutcome.hit;
+  return hit === true ? "Hit" : "Miss";
+}
+
+function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
+  const calculation = event.facts.privateCalculation;
+  if (!calculation) return [];
+  const ob = calculation.ob;
+  const roll = calculation.rollTotal;
+  const db = calculation.defenderDb;
+  const total = calculation.lookupTotal;
+  if (
+    typeof ob === "number" &&
+    typeof roll === "number" &&
+    typeof db === "number" &&
+    typeof total === "number"
+  ) {
+    return [{ key: `${event.id}:calculation:attack-total`, text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}` }];
+  }
+
+  return [
+    ["ob", "OB"],
+    ["rollTotal", "Roll"],
+    ["defenderDb", "DB"],
+    ["lookupTotal", "Total"],
+  ].flatMap(([field, label]) => {
+    const value = calculation[field];
+    return typeof value === "number"
+      ? [{ key: `${event.id}:calculation:attack:${field}`, text: `${label}: ${value}` }]
+      : [];
+  });
+}
+
 function eventSummary(event: ProjectedCombatHistoryEvent): string {
   const attacker = identity(event, "attacker") ?? identity(event, "actor");
   const defender = identity(event, "defender") ?? identity(event, "target");
   const roller = identity(event, "roller") ?? identity(event, "actor");
 
   switch (event.type) {
-    case "attack":
-      return attacker && defender ? `${attacker} attacked ${defender}.` : "Attack recorded.";
+    case "attack": {
+      const weapon = event.facts.involvedOutcome?.weaponName;
+      return attacker && defender
+        ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}.`
+        : "Attack recorded.";
+    }
     case "parry":
       return defender && attacker
         ? `${defender} attempted to parry ${attacker}.`
@@ -125,13 +167,16 @@ export function buildCombatEventResultModel(
             entry.participantId ? [[entry.participantId, entry.displayName] as const] : [],
           ),
         );
+        const attack = event.type === "attack";
         return {
-          calculationRows: factRows(
-            "calculation",
-            event.id,
-            event.facts.privateCalculation,
-            identityById,
-          ),
+          calculationRows: attack
+            ? attackCalculationRows(event)
+            : factRows(
+                "calculation",
+                event.id,
+                event.facts.privateCalculation,
+                identityById,
+              ),
           completenessLabel:
             event.completeness === "complete"
               ? undefined
@@ -139,10 +184,12 @@ export function buildCombatEventResultModel(
                 ? "Legacy-derived history"
                 : "Incomplete history",
           id: event.id,
-          outcomeRows: [
-            ...factRows("public", event.id, event.facts.publicOutcome, identityById),
-            ...factRows("involved", event.id, event.facts.involvedOutcome, identityById),
-          ],
+          outcomeRows: attack
+            ? [{ key: `${event.id}:outcome:attack-result`, text: `Result: ${attackOutcome(event)}` }]
+            : [
+                ...factRows("public", event.id, event.facts.publicOutcome, identityById),
+                ...factRows("involved", event.id, event.facts.involvedOutcome, identityById),
+              ],
           sequence: event.sequence,
           summary: eventSummary(event),
           title: EVENT_TITLES[event.type],

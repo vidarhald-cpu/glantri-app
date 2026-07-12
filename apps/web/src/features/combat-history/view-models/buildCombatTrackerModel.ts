@@ -229,7 +229,11 @@ function cellDetail(input: CombatTrackerCellFacts): string {
       : input.attackResult.hit
         ? "hit"
         : "miss";
-    return `attack ${outcome}: ${input.attackResult.tableResult}; lookup ${input.attackResult.lookupTotal}.`;
+    const identities =
+      input.attackAttackerLabel && input.attackDefenderLabel
+        ? `${input.attackAttackerLabel} attacked ${input.attackDefenderLabel} with ${input.attackResult.weaponName}: `
+        : "attack ";
+    return `${identities}${outcome}; ${input.attackResult.tableResult}.`;
   }
   const parry = input.phaseResolutionResult?.parryResolution;
   if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {

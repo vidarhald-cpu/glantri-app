@@ -42,8 +42,8 @@ describe("buildCombatEventResultModel", () => {
       }),
       event("attack", 1, {
         facts: {
-          involvedOutcome: { tableResult: "Grazing hit" },
-          privateCalculation: { rollD20: 18, total: 24 },
+          involvedOutcome: { tableResult: "Grazing hit", weaponName: "Long sword" },
+          privateCalculation: { defenderDb: 15, lookupTotal: 13, ob: 10, rollTotal: 18 },
           publicOutcome: {},
         },
         identities: [
@@ -62,11 +62,18 @@ describe("buildCombatEventResultModel", () => {
       "critical",
       "damage_committed",
     ]);
-    expect(model.items[0]?.summary).toBe("Scyrian cavalry guy attacked The Gladiator.");
+    expect(model.items[0]?.summary).toBe(
+      "Scyrian cavalry guy attacked The Gladiator with a Long sword.",
+    );
     expect(model.items[1]?.summary).toBe(
       "The Gladiator attempted to parry Scyrian cavalry guy.",
     );
-    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 18");
+    expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
+      "Result: Grazing hit",
+    ]);
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
+      "OB 10 + roll 18 - DB 15 = 13",
+    ]);
     expect(model.items[1]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 8");
   });
 
@@ -98,7 +105,7 @@ describe("buildCombatEventResultModel", () => {
     ]);
   });
 
-  it("assigns contextual keys without collapsing identical rendered facts", () => {
+  it("projects attack semantics once while retaining stable contextual row keys", () => {
     const model = buildCombatEventResultModel([
       event("attack", 1, {
         facts: {
@@ -111,7 +118,10 @@ describe("buildCombatEventResultModel", () => {
     ]);
     const rows = model.items.flatMap((item) => [...item.outcomeRows, ...item.calculationRows]);
 
-    expect(rows.map((row) => row.text)).toEqual(["Hit: No", "Hit: No", "Hit: No", "Hit: No"]);
+    expect(rows.map((row) => row.text)).toEqual([
+      "Result: Miss",
+      "Hit: No",
+    ]);
     expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
     expect(model.items.map((item) => item.type)).toEqual(["attack", "parry"]);
   });

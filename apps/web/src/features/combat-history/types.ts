@@ -37,6 +37,8 @@ export interface CombatTrackerRowView {
 export interface CombatTrackerCellFacts {
   actionResultStatus?: CombatRoundStepSnapshot["actionResultStatus"];
   activeTask: boolean;
+  attackAttackerLabel?: string;
+  attackDefenderLabel?: string;
   attackResult?: CombatRoundAttackRollResult;
   commands: readonly CombatRoundCommand[];
   current: boolean;

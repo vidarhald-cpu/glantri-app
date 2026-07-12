@@ -4186,8 +4186,7 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspector.step,
   });
-  const inspectorIsHistorical =
-    Boolean(inspectorSnapshot) || !selectedRoundIsActive || !inspectorSelectionIsCurrentTask;
+  const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentTask;
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
   ) =>
@@ -7576,15 +7575,14 @@ export default function CombatRoundManagerPanel({
           state: timelineRoundState,
           step,
         });
-        const trackerAttackResult = trackerSnapshot
-          ? trackerSnapshot.attackResult
-          : trackerAttackPhase
-            ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+        const trackerCanonicalAttackResult = trackerAttackPhase
+          ? getCombatRoundOutgoingAttackResultForParticipantPhase({
                 participantId: timelineParticipant.participantId,
                 phase: trackerAttackPhase,
                 state: timelineRoundState,
               })
-            : undefined;
+          : undefined;
+        const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult;
         const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
         const trackerResolutionAttackResult = trackerSnapshot
           ? trackerSnapshot.attackResult
@@ -7609,6 +7607,18 @@ export default function CombatRoundManagerPanel({
             timelineRoundState.roundNumber === roundState.roundNumber &&
             currentTaskSelection?.participantId === timelineParticipant.participantId &&
             currentTaskSelection.step === step,
+          attackAttackerLabel: trackerAttackResult
+            ? timelineRoundState.participants.find(
+                (participant) =>
+                  participant.participantId === trackerAttackResult.attackerParticipantId,
+              )?.label
+            : undefined,
+          attackDefenderLabel: trackerAttackResult
+            ? timelineRoundState.participants.find(
+                (participant) =>
+                  participant.participantId === trackerAttackResult.defenderParticipantId,
+              )?.label
+            : undefined,
           attackResult: trackerAttackResult,
           commands: timelineRoundState.commands,
           current:
