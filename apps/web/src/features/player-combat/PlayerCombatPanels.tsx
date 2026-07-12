@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,

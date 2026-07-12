@@ -290,11 +290,23 @@ describe("combat history projection", () => {
       actionResultStatus: "no_result" as const,
       committedAt: "2026-01-01T00:00:00.000Z",
       id: "snapshot-own",
+      declarationSummary: {
+        actionId: "attack_parry",
+        additionalActionNotes: "Hold the bridge",
+        movementIntent: {
+          distancePreferences: [
+            { desiredDistance: 2, source: "player_declared" as const, targetParticipantId: "borin" },
+            { desiredDistance: 3, source: "player_declared" as const, targetParticipantId: "hidden" },
+          ],
+          mode: "set_distance_preferences" as const,
+        },
+      },
       participantId: "aria",
       participantLabel: "Aria old label",
       phasePanels: {
         phase1: {
-          phaseContext: {},
+          mainHandParryItemLabel: "Long sword",
+          phaseContext: { targetParticipantId: "hidden" },
           targetOptions: [
             { displayName: "Hidden old label", id: "hidden" },
             { displayName: "Borin old label", id: "borin" },
@@ -328,6 +340,17 @@ describe("combat history projection", () => {
       completeness: "incomplete",
       incompleteMessage: "Complete historical result details are unavailable.",
       participant: { displayName: "Aria", participantId: "aria" },
+    });
+    expect(projection.activeRound.snapshots[0]?.panels.actionSelector).toMatchObject({
+      actionId: "attack_parry",
+      additionalActionNotes: "Hold the bridge",
+      movementIntent: {
+        distancePreferences: [{ desiredDistance: 2, targetParticipantId: "borin" }],
+      },
+    });
+    expect(projection.activeRound.snapshots[0]?.panels.phase1).toMatchObject({
+      mainHandParryItemLabel: "Long sword",
+      phaseContext: { targetParticipantId: undefined },
     });
     expect(serialized).toContain("Borin");
     expect(serialized).not.toContain("Hidden old label");

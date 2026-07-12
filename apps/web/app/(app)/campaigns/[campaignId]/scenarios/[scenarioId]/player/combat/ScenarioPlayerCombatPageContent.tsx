@@ -1271,15 +1271,6 @@ export default function ScenarioPlayerCombatPageContent({
     };
   }, [currentUser, encounterId, isGameMaster, scenarioId, sessionLoading]);
 
-  async function refreshCombatHistory() {
-    if (!encounterId) return;
-    try {
-      setCombatHistory(await loadCombatHistory(encounterId));
-    } catch {
-      // The normal polling refresh remains authoritative after a transient history miss.
-    }
-  }
-
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
       return [];
@@ -3790,19 +3781,21 @@ export default function ScenarioPlayerCombatPageContent({
         </div>
       )}
 
-      <section style={{ display: "grid", gap: "1rem" }}>
-        {displayedParticipant ? (
-          hasMountedLoadout ? (
-            <EquipmentLoadoutModule mode="readonly" model={loadoutModel} />
+      {!historyInspection ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {displayedParticipant ? (
+            hasMountedLoadout ? (
+              <EquipmentLoadoutModule mode="readonly" model={loadoutModel} />
+            ) : (
+              <div style={panelStyle}>
+                Character loadout snapshot is not available for this participant yet.
+              </div>
+            )
           ) : (
-            <div style={panelStyle}>
-              Character loadout snapshot is not available for this participant yet.
-            </div>
-          )
-        ) : (
-          <div style={panelStyle}>No accessible participant is available.</div>
-        )}
-      </section>
+            <div style={panelStyle}>No accessible participant is available.</div>
+          )}
+        </section>
+      ) : null}
     </section>
   );
 }

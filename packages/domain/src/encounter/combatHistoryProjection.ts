@@ -51,16 +51,42 @@ export interface ProjectedCombatHistorySnapshot {
   id: string;
   incompleteMessage?: string;
   panels: {
-    actionResult: Record<string, unknown>;
-    actionSelector: Record<string, unknown>;
-    modifiers: Record<string, unknown>;
-    phase1: Record<string, unknown>;
-    phase2: Record<string, unknown>;
+    actionResult: {
+      attackResult?: Record<string, unknown>;
+      initiativeResult?: CombatRoundStepSnapshot["initiativeResult"];
+      status?: CombatRoundStepSnapshot["actionResultStatus"];
+    };
+    actionSelector: {
+      actionId?: string;
+      actionLabel?: string;
+      additionalActionNotes?: string;
+      movementId?: string;
+      movementIntent?: NonNullable<
+        CombatRoundStepSnapshot["declarationSummary"]
+      >["movementIntent"];
+      movementLabel?: string;
+      movementPreferenceTargets?: Array<{ displayName: string; participantId: string }>;
+      secondaryActionId?: string;
+      secondaryActionLabel?: string;
+    };
+    modifiers: NonNullable<CombatRoundStepSnapshot["modifierSummary"]> | Record<string, never>;
+    phase1: ProjectedCombatHistoryPhasePanel;
+    phase2: ProjectedCombatHistoryPhasePanel;
   };
   participant: ProjectedCombatHistoryRow;
   phase?: CombatStepEvent["phase"];
   roundNumber: number;
   step: CombatStepEvent["step"];
+}
+
+export interface ProjectedCombatHistoryPhasePanel {
+  attackSummary?: CombatRoundStepSnapshot["attackSummary"];
+  defenseSummary?: CombatRoundStepSnapshot["defenseSummary"];
+  distanceLabel?: string;
+  mainHandParryItemLabel?: string;
+  offHandParryItemLabel?: string;
+  phaseContext?: CombatRoundStepSnapshot["phaseContext"];
+  targetOptions?: Array<{ displayName: string; participantId: string }>;
 }
 
 // Player history intentionally omits canonical initiative ranks. Filtering hidden
@@ -257,6 +283,39 @@ function projectSnapshot(input: {
       attackSummary: ownsSnapshot ? panel.attackSummary : undefined,
       defenseSummary: ownsSnapshot ? panel.defenseSummary : undefined,
       distanceLabel: panel.distanceLabel,
+      mainHandParryItemLabel: ownsSnapshot ? panel.mainHandParryItemLabel : undefined,
+      offHandParryItemLabel: ownsSnapshot ? panel.offHandParryItemLabel : undefined,
+      phaseContext: ownsSnapshot
+        ? {
+            incomingAttackSide: panel.phaseContext.incomingAttackSide,
+            mainHandParryDirection: panel.phaseContext.mainHandParryDirection,
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            offHandParryDirection: panel.phaseContext.offHandParryDirection,
+            parrySource: panel.phaseContext.parrySource,
+            selectedOpponentId:
+              panel.phaseContext.selectedOpponentId &&
+              isVisible({
+                participantId: panel.phaseContext.selectedOpponentId,
+                viewer: input.viewer,
+              })
+                ? panel.phaseContext.selectedOpponentId
+                : undefined,
+            targetLocation: panel.phaseContext.targetLocation,
+            targetParticipantId:
+              panel.phaseContext.targetParticipantId &&
+              isVisible({
+                participantId: panel.phaseContext.targetParticipantId,
+                viewer: input.viewer,
+              })
+                ? panel.phaseContext.targetParticipantId
+                : undefined,
+          }
+        : undefined,
       targetOptions: targetOptions(panel.targetOptions),
     };
   };
@@ -296,7 +355,21 @@ function projectSnapshot(input: {
         ? {
             actionId: input.snapshot.declarationSummary?.actionId,
             actionLabel: input.snapshot.declarationSummary?.actionLabel,
+            additionalActionNotes: input.snapshot.declarationSummary?.additionalActionNotes,
             movementId: input.snapshot.declarationSummary?.movementId,
+            movementIntent: input.snapshot.declarationSummary?.movementIntent
+              ? {
+                  ...input.snapshot.declarationSummary.movementIntent,
+                  distancePreferences:
+                    input.snapshot.declarationSummary.movementIntent.distancePreferences.filter(
+                      (preference) =>
+                        isVisible({
+                          participantId: preference.targetParticipantId,
+                          viewer: input.viewer,
+                        }),
+                    ),
+                }
+              : undefined,
             movementLabel: input.snapshot.declarationSummary?.movementLabel,
             movementPreferenceTargets: targetOptions(
               input.snapshot.declarationSummary?.movementPreferenceTargets,
