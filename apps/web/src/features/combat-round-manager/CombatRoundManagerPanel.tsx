@@ -23,6 +23,7 @@ import type {
   CombatRoundStepStatus,
   CombatRoundInitiativeRank,
   CombatRoundStepSnapshot,
+  CombatStepEvent,
   CombatDistance,
   CombatDistanceEdge,
   EncounterSession,
@@ -35,6 +36,7 @@ import type {
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
   WeaponTemplate,
+  ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
@@ -92,6 +94,7 @@ import {
   getWeaponPreferredDistances,
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
+  projectCombatHistoryEvent,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
@@ -106,6 +109,10 @@ import {
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
+import {
+  CombatEventResultList,
+  selectCombatEventsForTrackerCell,
+} from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
@@ -1397,6 +1404,42 @@ function buildHistoricalCombatActionResult(input: {
   }
 
   return { interpretedResult: "No recorded result for this step." };
+}
+
+function projectGmCombatEvents(input: {
+  events: readonly CombatStepEvent[];
+  participants: CombatRoundState["participants"];
+}): ProjectedCombatHistoryEvent[] {
+  const participantInputs = input.participants.map((participant) => ({
+    displayName: participant.label,
+    participantId: participant.participantId,
+  }));
+  const labels = new Map(
+    participantInputs.map((participant) => [participant.participantId, participant.displayName]),
+  );
+
+  return input.events.flatMap((event) => {
+    const projected = projectCombatHistoryEvent({
+      event,
+      participants: participantInputs,
+      viewer: { kind: "gm" },
+    });
+    if (!projected) return [];
+
+    const identities = [...projected.identities];
+    for (const [index, participantId] of event.visibility.involvedParticipantIds.entries()) {
+      if (identities.some((identity) => identity.participantId === participantId)) continue;
+      const displayName = labels.get(participantId);
+      if (!displayName) continue;
+      identities.push({
+        displayName,
+        participantId,
+        role: index === 0 ? "actor" : "target",
+        visibility: "visible",
+      });
+    }
+    return [{ ...projected, identities }];
+  });
 }
 
 function formatCombatPhaseResolutionSummary(input: {
@@ -4117,15 +4160,17 @@ function CombatRoundEndDistanceControlPanel(input: {
   participantLabelsById: Record<string, string>;
   roundReview?: CombatRoundEndReview;
 }) {
-  const distanceProposals = input.roundReview?.proposedDistances ?? [];
+  const distanceProposals = (input.roundReview?.proposedDistances ?? []).filter(
+    (proposal) => proposal.status !== "committed",
+  );
+
+  if (input.roundReview && distanceProposals.length === 0) {
+    return null;
+  }
 
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Round-end distance control</strong>
-      <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-        Shared round-level pair review. These controls are not part of the current attack/parry
-        step.
-      </div>
       {!input.roundReview ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
       ) : distanceProposals.length > 0 ? (
@@ -5768,6 +5813,16 @@ export default function CombatRoundManagerPanel({
           resolution: inspectorDisplayPhaseResolutionResult,
         })
       : undefined;
+  const inspectorCanonicalActionResultEvents = projectGmCombatEvents({
+    events: selectCombatEventsForTrackerCell({
+      events: selectedTimelineRoundState.events,
+      participantId: inspector.participant?.participantId,
+      retainLatestWhenEmpty: !inspectorIsHistorical && inspectorSelectionIsCurrentTask,
+      step: inspector.step,
+    }),
+    participants: selectedTimelineRoundState.participants,
+  });
+  const inspectorHasCanonicalActionResult = inspectorCanonicalActionResultEvents.length > 0;
   const inspectorLatestRoundEndDistanceResult =
     selectedRoundIsActive &&
     inspector.step === "round_summary" &&
@@ -9105,7 +9160,16 @@ export default function CombatRoundManagerPanel({
                       validationMessage={inspectorActionValidationMessage}
                     />
                   </div>
-                  <PlayerCombatActionResultPanel result={inspectorActionResult} />
+                  {inspectorHasCanonicalActionResult ? (
+                    <CombatEventResultList events={inspectorCanonicalActionResultEvents} />
+                  ) : (
+                    <div style={{ display: "grid", gap: "0.3rem" }}>
+                      <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
+                        Legacy result · canonical event history unavailable
+                      </div>
+                      <PlayerCombatActionResultPanel result={inspectorActionResult} />
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

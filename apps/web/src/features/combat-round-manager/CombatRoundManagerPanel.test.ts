@@ -621,6 +621,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("? inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");
+    expect(source).toContain("selectCombatEventsForTrackerCell");
+    expect(source).toContain("projectGmCombatEvents");
+    expect(source).toContain("inspectorCanonicalActionResultEvents");
+    expect(source).toContain("inspectorHasCanonicalActionResult");
+    expect(source).toContain("<CombatEventResultList events={inspectorCanonicalActionResultEvents} />");
+    expect(source).toContain("Legacy result · canonical event history unavailable");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
       source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
     );
@@ -751,7 +757,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
     expect(source).toContain("inspectorRoundEndDistanceControls");
     expect(source).toContain("Round-end distance control");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "Shared round-level pair review. These controls are not part of the current attack/parry",
     );
     expect(source).toContain("Participant review");
@@ -842,6 +848,8 @@ describe("CombatRoundManagerPanel", () => {
       "proposedDistances",
     );
     expect(distancePanelSource).toContain("const distanceProposals");
+    expect(distancePanelSource).toContain('proposal.status !== "committed"');
+    expect(distancePanelSource).toContain("if (input.roundReview && distanceProposals.length === 0)");
     expect(distancePanelSource.match(/distanceProposals\.map/g) ?? []).toHaveLength(1);
     expect(distancePanelSource).not.toContain("<button");
     expect(distancePanelSource).not.toContain("<select");
