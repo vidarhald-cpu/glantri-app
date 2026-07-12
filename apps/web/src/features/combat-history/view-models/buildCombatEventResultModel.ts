@@ -1,14 +1,19 @@
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 export interface CombatEventResultItemModel {
-  calculationLines: string[];
+  calculationRows: CombatEventResultFactRow[];
   completenessLabel?: string;
   id: string;
-  outcomeLines: string[];
+  outcomeRows: CombatEventResultFactRow[];
   sequence: number;
   summary: string;
   title: string;
   type: ProjectedCombatHistoryEvent["type"];
+}
+
+export interface CombatEventResultFactRow {
+  key: string;
+  text: string;
 }
 
 export interface CombatEventResultModel {
@@ -50,14 +55,17 @@ function formatValue(value: unknown, identityById: ReadonlyMap<string, string>):
   return typeof value === "string" ? (identityById.get(value) ?? value) : String(value);
 }
 
-function factLines(
+function factRows(
+  category: "calculation" | "involved" | "public",
+  eventId: string,
   facts: Record<string, unknown> | undefined,
   identityById: ReadonlyMap<string, string>,
-): string[] {
+): CombatEventResultFactRow[] {
   if (!facts) return [];
-  return Object.entries(facts).map(
-    ([key, value]) => `${humanize(key)}: ${formatValue(value, identityById)}`,
-  );
+  return Object.entries(facts).map(([fieldKey, value], index) => ({
+    key: `${eventId}:${category}:${fieldKey}:${index}`,
+    text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
+  }));
 }
 
 function identity(event: ProjectedCombatHistoryEvent, role: string): string | undefined {
@@ -118,7 +126,12 @@ export function buildCombatEventResultModel(
           ),
         );
         return {
-          calculationLines: factLines(event.facts.privateCalculation, identityById),
+          calculationRows: factRows(
+            "calculation",
+            event.id,
+            event.facts.privateCalculation,
+            identityById,
+          ),
           completenessLabel:
             event.completeness === "complete"
               ? undefined
@@ -126,9 +139,9 @@ export function buildCombatEventResultModel(
                 ? "Legacy-derived history"
                 : "Incomplete history",
           id: event.id,
-          outcomeLines: [
-            ...factLines(event.facts.publicOutcome, identityById),
-            ...factLines(event.facts.involvedOutcome, identityById),
+          outcomeRows: [
+            ...factRows("public", event.id, event.facts.publicOutcome, identityById),
+            ...factRows("involved", event.id, event.facts.involvedOutcome, identityById),
           ],
           sequence: event.sequence,
           summary: eventSummary(event),

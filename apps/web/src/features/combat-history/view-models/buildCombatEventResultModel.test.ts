@@ -66,8 +66,8 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[1]?.summary).toBe(
       "The Gladiator attempted to parry Scyrian cavalry guy.",
     );
-    expect(model.items[0]?.calculationLines).toContain("Roll D20: 18");
-    expect(model.items[1]?.calculationLines).toContain("Roll D20: 8");
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 18");
+    expect(model.items[1]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 8");
   });
 
   it("orders distance rolls before result and applied distance", () => {
@@ -96,5 +96,23 @@ describe("buildCombatEventResultModel", () => {
       "Incomplete history",
       "Legacy-derived history",
     ]);
+  });
+
+  it("assigns contextual keys without collapsing identical rendered facts", () => {
+    const model = buildCombatEventResultModel([
+      event("attack", 1, {
+        facts: {
+          involvedOutcome: { hit: false },
+          privateCalculation: { hit: false },
+          publicOutcome: { hit: false },
+        },
+      }),
+      event("parry", 2, { facts: { publicOutcome: { hit: false } } }),
+    ]);
+    const rows = model.items.flatMap((item) => [...item.outcomeRows, ...item.calculationRows]);
+
+    expect(rows.map((row) => row.text)).toEqual(["Hit: No", "Hit: No", "Hit: No", "Hit: No"]);
+    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
+    expect(model.items.map((item) => item.type)).toEqual(["attack", "parry"]);
   });
 });

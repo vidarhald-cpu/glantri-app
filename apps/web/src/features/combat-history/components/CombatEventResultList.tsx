@@ -1,3 +1,4 @@
+import React from "react";
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 import { buildCombatEventResultModel } from "../view-models/buildCombatEventResultModel";
@@ -29,12 +30,12 @@ export function CombatEventResultList(input: {
               <article style={{ display: "grid", gap: "0.2rem" }}>
                 <strong style={{ fontSize: "0.9rem" }}>{item.title}</strong>
                 <div>{item.summary}</div>
-                {item.outcomeLines.map((line) => (
-                  <div key={`outcome:${line}`} style={{ fontSize: "0.88rem" }}>
-                    {line}
+                {item.outcomeRows.map((row) => (
+                  <div key={row.key} style={{ fontSize: "0.88rem" }}>
+                    {row.text}
                   </div>
                 ))}
-                {item.calculationLines.length ? (
+                {item.calculationRows.length ? (
                   <div
                     style={{
                       background: "#f6f5ef",
@@ -47,8 +48,8 @@ export function CombatEventResultList(input: {
                     }}
                   >
                     <strong>Calculation</strong>
-                    {item.calculationLines.map((line) => (
-                      <div key={`calculation:${line}`}>{line}</div>
+                    {item.calculationRows.map((row) => (
+                      <div key={row.key}>{row.text}</div>
                     ))}
                   </div>
                 ) : null}
