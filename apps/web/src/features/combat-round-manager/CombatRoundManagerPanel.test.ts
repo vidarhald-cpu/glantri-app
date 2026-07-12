@@ -49,6 +49,9 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("buildCombatTrackerModel({");
+    expect(source).toContain(
+      "const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult",
+    );
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("model={trackerModel}");
     expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
@@ -57,7 +60,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("activeCurrentCellRef.current = node");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
-    expect(source).toContain("const trackerAttackResult = trackerSnapshot");
     expect(source).toContain("const trackerPhaseResolutionResult = trackerSnapshot");
     expect(source).not.toContain("commitCurrentStep(participant.participantId");
   });
@@ -477,6 +479,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('snapshot.actionResultStatus === "skipped"');
     expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
     expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
+    expect(source).toContain(
+      "const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentTask",
+    );
+    expect(source).toContain("readOnly={inspectorIsHistorical}");
     expect(source).toContain("? inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");

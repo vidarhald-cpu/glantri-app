@@ -54,15 +54,18 @@ describe("buildCombatTrackerModel", () => {
     expect(result.selectedCellKey).toBe(key);
   });
 
-  it("preserves attack markers and snapshot-supplied hover facts", () => {
+  it("preserves attack markers and stored identity/result hover facts", () => {
     const attackResult = {
       grazing: true,
       hit: false,
       lookupTotal: 37,
       tableResult: "Grazing hit",
+      weaponName: "Long sword",
     } as CombatRoundAttackRollResult;
     const result = model([
       facts({
+        attackAttackerLabel: "Aldren",
+        attackDefenderLabel: "Bera",
         attackResult,
         status: "complete",
         step: "phase_1_actions",
@@ -72,7 +75,29 @@ describe("buildCombatTrackerModel", () => {
 
     expect(cell.marker).toBe("H");
     expect(cell.markerKind).toBe("attack_hit");
-    expect(cell.hoverText).toContain("attack grazing hit: Grazing hit; lookup 37");
+    expect(cell.hoverText).toContain(
+      "Aldren attacked Bera with Long sword: grazing hit; Grazing hit.",
+    );
+  });
+
+  it("renders a stored attack miss as M even when the step status is incomplete", () => {
+    const result = model([
+      facts({
+        attackResult: {
+          grazing: false,
+          hit: false,
+          tableResult: "Miss",
+          weaponName: "Long sword",
+        } as CombatRoundAttackRollResult,
+        status: "pending",
+        step: "phase_1_actions",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:phase_1_actions"]).toMatchObject({
+      marker: "M",
+      markerKind: "attack_miss",
+    });
   });
 
   it("renders initiative totals and pending markers with the existing legend meanings", () => {

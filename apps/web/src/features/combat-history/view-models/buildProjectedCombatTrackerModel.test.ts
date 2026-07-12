@@ -88,16 +88,20 @@ describe("buildProjectedCombatTrackerModel", () => {
     const projection = history([
       event({
         facts: {
-          involvedOutcome: { hit: true },
+          involvedOutcome: { hit: true, tableResult: "Hit", weaponName: "Long sword" },
           privateCalculation: { rollD20: 19 },
           publicOutcome: {},
         },
+        identities: [
+          { displayName: "Aria", participantId: "aria", role: "attacker", visibility: "visible" },
+          { displayName: "Borin", participantId: "borin", role: "defender", visibility: "visible" },
+        ],
       }),
     ]);
     const model = buildProjectedCombatTrackerModel({ history: projection });
     const hover = model.cells["1:aria:phase_1_actions"].hoverText;
 
-    expect(hover).toContain("attack: hit.");
+    expect(hover).toContain("Aria attacked Borin with Long sword: Hit.");
     expect(hover).not.toContain("19");
     expect(hover).not.toContain("history available");
   });

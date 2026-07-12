@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PlayerCombatModifierPanel } from "./PlayerCombatPanels";
@@ -45,11 +45,14 @@ describe("PlayerCombatModifierPanel", () => {
   });
 
   it("keeps editable modifier details on a full-width row", () => {
+    const onAddEntry = vi.fn();
+    const onRemoveEntry = vi.fn();
+    const onUpdateEntry = vi.fn();
     render(
       <PlayerCombatModifierPanel
-        onAddEntry={vi.fn()}
-        onRemoveEntry={vi.fn()}
-        onUpdateEntry={vi.fn()}
+        onAddEntry={onAddEntry}
+        onRemoveEntry={onRemoveEntry}
+        onUpdateEntry={onUpdateEntry}
         rows={[
           {
             bucketKey: "situation_db",
@@ -78,5 +81,42 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText("Details")).toBeInTheDocument();
     expect(screen.getByText("Situational · P1")).toBeInTheDocument();
     expect(screen.getByLabelText("DB/Parry modifier details")).toHaveValue("single attack");
+    expect(screen.getByLabelText("DB/Parry modifier value")).not.toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("DB/Parry modifier value"), {
+      target: { value: "-3" },
+    });
+    fireEvent.change(screen.getByLabelText("DB/Parry modifier duration"), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText("DB/Parry modifier details"), {
+      target: { value: "updated" },
+    });
+    fireEvent.click(screen.getByLabelText("Remove modifier"));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getAllByLabelText("DB/Parry modifier value").at(-1)!, {
+      target: { value: "1" },
+    });
+
+    expect(onUpdateEntry).toHaveBeenCalledWith(
+      "situation_db",
+      "generated:attack-parry:phase1:db-parry",
+      { value: -3 },
+    );
+    expect(onUpdateEntry).toHaveBeenCalledWith(
+      "situation_db",
+      "generated:attack-parry:phase1:db-parry",
+      { durationRounds: 2 },
+    );
+    expect(onUpdateEntry).toHaveBeenCalledWith(
+      "situation_db",
+      "generated:attack-parry:phase1:db-parry",
+      { notes: "updated" },
+    );
+    expect(onRemoveEntry).toHaveBeenCalledWith(
+      "situation_db",
+      "generated:attack-parry:phase1:db-parry",
+    );
+    expect(onAddEntry).toHaveBeenCalledWith("situation_db", expect.any(Object));
   });
 });
