@@ -89,6 +89,25 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("requests a selected participant perspective for GM Player Combat history", async () => {
+    const history = {
+      activeRound: { events: [], roundNumber: 1, snapshots: [] },
+      archivedRounds: [],
+      rows: [],
+    };
+    const fetchMock = stubFetch({ history });
+    const client = await loadClient();
+
+    await client.loadCombatHistory("encounter-1", {
+      perspectiveParticipantId: "participant/one",
+    });
+
+    expectFetchCall(fetchMock, {
+      method: "GET",
+      url: "https://api.example.test/encounters/encounter-1/combat-history?perspectiveParticipantId=participant%2Fone",
+    });
+  });
+
   it("uses the configured API base URL for auth session lookup", async () => {
     const fetchMock = stubFetch({
       user: {
