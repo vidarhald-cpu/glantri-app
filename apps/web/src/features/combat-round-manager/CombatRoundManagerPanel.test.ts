@@ -4,8 +4,19 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "CombatRoundManagerPanel.tsx");
+const combatHistoryPath = join(dirname(fileURLToPath(import.meta.url)), "../combat-history");
 
 function readSource(): string {
+  return [
+    sourcePath,
+    join(combatHistoryPath, "components/CombatTracker.tsx"),
+    join(combatHistoryPath, "view-models/buildCombatTrackerModel.ts"),
+  ]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
+}
+
+function readPanelSource(): string {
   return readFileSync(sourcePath, "utf8");
 }
 
@@ -34,193 +45,41 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("latestCombatEventSummary.summaryText");
   });
 
-  it("renders participants as rows and round steps as timeline columns", () => {
+  it("delegates tracker presentation while retaining GM inspection orchestration", () => {
     const source = readSource();
 
-    expect(source).toContain("Combat round timeline grid");
+    expect(source).toContain("buildCombatTrackerModel({");
+    expect(source).toContain("<CombatTracker");
+    expect(source).toContain("model={trackerModel}");
+    expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
+    expect(source).toContain("onKeyDown={handleTimelineKeyDown}");
+    expect(source).toContain("timelineCellRefs.current[cellKey] = node");
+    expect(source).toContain("activeCurrentCellRef.current = node");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
-    expect(source).toContain("timelineRoundStates");
-    expect(source).toContain("timelineRoundNumbers");
-    expect(source).toContain("Round {roundNumber}");
-    expect(source).toContain("COMBAT_ROUND_STEPS.map");
-    expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[step]");
-    expect(source).toContain("COMBAT_ROUND_STEP_LABELS[step]");
-    expect(source).toContain("Participant");
-    expect(source).not.toContain("Set active");
-    expect(source).not.toContain("▶ Active");
-    expect(source).toContain("getStatusMarker");
-    expect(source).toContain("roundParticipant.stepStatuses[step]");
-    expect(source).toContain("getParticipantDeclarationStatus");
-    expect(source).toContain("roundParticipant.initiatives.phase1");
-    expect(source).toContain("roundParticipant.initiatives.phase2");
-    expect(source).toContain('color: initiativeTotal !== undefined ? "#1f7a4d" : undefined');
-    expect(source).toContain('case "submitted":');
-    expect(source).toContain('case "gmEdited":');
-    expect(source).toContain("COMBAT_TRACKER_MARKER_MEANINGS");
-    expect(source).toContain('marker: "✓"');
-    expect(source).toContain('marker: "·"');
-    expect(source).toContain('marker: "–"');
-    expect(source).toContain('marker: "H"');
-    expect(source).toContain('marker: "M"');
-    expect(source).not.toContain('return "▶";');
-    expect(source).not.toContain('return input.current ? "O" : "·";');
-    expect(source).toContain("step === roundState.currentStep");
-    expect(source).toContain('overflowX: "auto"');
-    expect(source).toContain("tableContainerRef");
-    expect(source).toContain("activeCurrentCellRef");
-    expect(source).toContain("timelineCellRefs");
-    expect(source).toContain("getCombatRoundTimelineCellKey");
-    expect(source).toContain("scrollCombatRoundTimelineCellIntoView");
-    expect(source).toContain("scrollActiveCurrentCellIntoView");
-    expect(source).toContain("activeCurrentTaskCell");
-    expect(source).toContain('scrollMode: "center"');
-    expect(source).toContain("roundBoundaryStartBorder");
-    expect(source).toContain('"round-boundary-start"');
-    expect(source).toContain("handleTimelineKeyDown");
-    expect(source).toContain("ArrowRight");
-    expect(source).toContain("ArrowDown");
-    expect(source).toContain("focusRoundTable");
-  });
-
-  it("renders a compact tracker legend and explicit marker titles", () => {
-    const source = readSource();
-
-    expect(source).toContain("Tracker legend");
-    expect(source).toContain("trackerLegendItems");
-    expect(source).toContain("trackerLegendMarkerKinds");
-    expect(source).toContain("getCombatTrackerMarkerMeaning");
-    expect(source).toContain("getCombatTrackerCellMarkerKind");
-    expect(source).toContain("getCombatTrackerCellMarker");
-    expect(source).toContain("getCombatTrackerCellDetail");
-    expect(source).toContain("formatCombatTrackerCellTitle");
-    expect(source).toContain('label: "done"');
-    expect(source).toContain('marker: "?"');
-    expect(source).toContain('label: "required action/roll"');
-    expect(source).toContain('label: "roll/result value"');
-    expect(source).toContain('label: "attack hit"');
-    expect(source).toContain('label: "attack miss"');
-    expect(source).toContain('label: "skipped/not applicable"');
-    expect(source).toContain('label: "not reached"');
-    expect(source).toContain("phase 1 initiative roll pending.");
-    expect(source).toContain("phase 2 initiative roll pending.");
-    expect(source).toContain("declaration pending.");
-    expect(source).toContain("attack skipped.");
-    expect(source).toContain("not reached.");
-    expect(source).toContain("phase CE required.");
-    expect(source).toContain("round-end roll${");
-    expect(source).toContain(
-      "initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix",
-    );
-    expect(source).toContain("distance-control commit${");
-    expect(source).toContain("getRoundEndDistanceCommitPendingCount");
-    expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
-    expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
-    expect(source).not.toContain('label: "action/roll required"');
-    expect(source).not.toContain("getCombatTrackerStatusDetail");
-    expect(source).not.toContain("joinTrackerTitleParts");
-    expect(source).not.toContain("formatCombatTrackerStatusSuffix");
-    expect(source).not.toContain("${markerMeaning.marker} = ${markerMeaning.label}.");
-    expect(source).not.toContain("Recorded initiative result ${initiativeTotal}.");
-    expect(source).not.toContain("Previous round history.");
-    expect(source).toContain("title={buttonTitle}");
-    expect(source).toContain("aria-label={buttonTitle}");
-    expect(source).toContain("onClick={() =>");
-    expect(source).toContain("selectInspector(participant.participantId, step, roundNumber)");
+    expect(source).toContain("getCombatRoundStepSnapshot");
+    expect(source).toContain("const trackerAttackResult = trackerSnapshot");
+    expect(source).toContain("const trackerPhaseResolutionResult = trackerSnapshot");
     expect(source).not.toContain("commitCurrentStep(participant.participantId");
   });
 
-  it("derives tracker legend entries from the same marker kind as rendered cells", () => {
+  it("keeps the extracted tracker model and component presentation-only", () => {
     const source = readSource();
 
-    expect(source).toContain(
-      "trackerLegendMarkerKinds.add(\n          getCombatTrackerCellMarkerKind({",
-    );
-    expect(source).toContain("attackResult: trackerAttackResult");
-    expect(source).toContain("phaseResolutionResult: trackerPhaseResolutionResult");
-    expect(source).toContain("actionResultStatus: trackerSnapshot?.actionResultStatus");
-    expect(source).toContain("const markerKind = getCombatTrackerCellMarkerKind({");
-    expect(source).toContain("const marker = getCombatTrackerCellMarker({");
-    expect(source).toContain(
-      'if (input.phaseCombatExperienceMarkerRequired) {\n    return "required";',
-    );
-    expect(source).not.toContain('trackerLegendMarkerKinds.add("required")');
-  });
-
-  it("normalizes attack, parry, and damage markers from stored step facts", () => {
-    const source = readSource();
-
-    expect(source).toContain("return input.attackResult.hit || input.attackResult.grazing");
-    expect(source).toContain('? "attack_hit" : "attack_miss"');
-    expect(source).not.toContain("return String(input.attackResultTotal)");
-    expect(source).toContain('parryStatus === "resolved"');
-    expect(source).toContain('parryStatus === "not_applicable"');
-    expect(source).toContain('parryStatus === "pending"');
-    expect(source).toContain('resolution?.damageProposal.status === "committed"');
-    expect(source).toContain('resolution?.damageRoll.status === "not_required"');
-    expect(source).toContain('return "location/critical/damage review pending."');
-    expect(source).toContain('return parry.success ? "parry succeeded." : "parry failed."');
-    expect(source).toContain('return "parry not needed."');
-    expect(source).toContain("const outcome = input.attackResult.grazing");
-    expect(source).toContain('? "grazing hit"');
-    expect(source).toContain('input.attackResult.hit\n        ? "hit"\n        : "miss"');
-    expect(source).toContain(
-      "trackerSnapshot\n                        ? trackerSnapshot.attackResult",
-    );
-    expect(source).toContain(
-      "trackerSnapshot\n                        ? trackerSnapshot.phaseResolutionResult",
-    );
-  });
-
-  it("uses precise tracker initiative provenance wording", () => {
-    const source = readSource();
-
-    expect(source).toContain("getCombatTrackerInitiativeResolutionSource");
-    expect(source).toContain('getCombatTrackerCommandFactString(command, "source")');
-    expect(source).toContain('getCombatTrackerCommandFactString(command, "status")');
-    expect(source).toContain('commandSource === "gm_override" || commandStatus === "gm_override"');
-    expect(source).toContain('return "gm_override";');
-    expect(source).toContain('commandSource === "player" || commandStatus === "submitted"');
-    expect(source).toContain('commandSource === "gm_proxy" || commandStatus === "gmEdited"');
-    expect(source).toContain('return "rolled_by_gm";');
-    expect(source).toContain('return command ? undefined : "resolved_by_gm";');
-    expect(source).toContain('return ", rolled by GM";');
-    expect(source).toContain('return ", GM override";');
-    expect(source).toContain('return ", resolved by GM";');
-    expect(source).toContain("initiativeResolutionSource");
-    expect(source).toContain("commands: timelineRoundState.commands");
-    expect(source).toContain(
-      "initiative ${input.initiativeTotal}${formatCombatTrackerInitiativeSuffix",
-    );
-    expect(source).toContain("getCombatTrackerDeclarationResolutionSource");
-    expect(source).toContain("formatCombatTrackerDeclarationDetail");
-    expect(source).toContain("declared by player.");
-    expect(source).toContain("declared by GM.");
-    expect(source).toContain('return "";');
-    expect(source).not.toContain(
-      'commandSource === "gm_proxy" || commandStatus === "gmEdited" || command',
-    );
-    expect(source).not.toContain('return ", GM edited";');
-    expect(source).not.toContain(
-      "initiative ${input.initiativeTotal}${formatCombatTrackerStatusSuffix",
-    );
-  });
-
-  it("keeps tracker tooltips concise and non-repetitive", () => {
-    const source = readSource();
-
-    expect(source).toContain("formatCombatTrackerCellTitle({");
-    expect(source).toContain("participantLabel: participant.label");
-    expect(source).toContain("Round ${input.roundNumber}");
-    expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[input.step]");
-    expect(source).toContain("phase CE required.");
-    expect(source).toContain("round-end roll${");
-    expect(source).toContain("attack skipped.");
-    expect(source).toContain("damage/effects");
-    expect(source).not.toContain("Step not reached. Step not reached");
-    expect(source).not.toContain("Step not reached yet. Step not reached");
-    expect(source).not.toContain("status ${stepStatus}");
-    expect(source).not.toContain("marker: step has been handled");
-    expect(source).not.toContain("stepNoun}, GM edited.");
+    expect(source).toContain("CombatTrackerModel");
+    expect(source).toContain("input.model.legend");
+    expect(source).toContain("input.model.rows");
+    expect(source).toContain("input.model.rounds");
+    expect(source).toContain("input.model.cells[cellKey]");
+    expect(source).toContain("COMBAT_TRACKER_MARKER_MEANINGS");
+    expect(source).toContain('marker: "H"');
+    expect(source).toContain('marker: "M"');
+    expect(source).toContain('marker: "✓"');
+    expect(source).toContain('marker: "–"');
+    expect(source).toContain('marker: "?"');
+    expect(source).toContain('marker: "·"');
+    expect(source).toContain("const markerKind = getCombatTrackerCellMarkerKind(facts)");
+    expect(source).toContain("hoverText:");
+    expect(source).toContain("onClick={() => input.onInspect(cell)}");
   });
 
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
@@ -230,7 +89,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseCombatExperienceMarkerRequired");
     expect(source).toContain("phase CE required.");
     expect(source).toContain('marker: "?"');
-    expect(source).toContain("return getCombatTrackerMarkerMeaning(input.markerKind).marker;");
+    expect(source).toContain('return "required"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(source).toContain("Phase Combat Experience");
     expect(source).toContain("CE roll required — attacked while attacking.");
@@ -246,7 +105,7 @@ describe("CombatRoundManagerPanel", () => {
   });
 
   it("renders compact GM distance matrix controls below the inspector", () => {
-    const source = readSource();
+    const source = readPanelSource();
 
     expect(source).toContain("Distance matrix");
     expect(source).toContain("Round-level distance matrix");
@@ -625,7 +484,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("projectGmCombatEvents");
     expect(source).toContain("inspectorCanonicalActionResultEvents");
     expect(source).toContain("inspectorHasCanonicalActionResult");
-    expect(source).toContain("<CombatEventResultList events={inspectorCanonicalActionResultEvents} />");
+    expect(source).toContain(
+      "<CombatEventResultList events={inspectorCanonicalActionResultEvents} />",
+    );
     expect(source).toContain("Legacy result · canonical event history unavailable");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
       source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
@@ -849,7 +710,9 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(distancePanelSource).toContain("const distanceProposals");
     expect(distancePanelSource).toContain('proposal.status !== "committed"');
-    expect(distancePanelSource).toContain("if (input.roundReview && distanceProposals.length === 0)");
+    expect(distancePanelSource).toContain(
+      "if (input.roundReview && distanceProposals.length === 0)",
+    );
     expect(distancePanelSource.match(/distanceProposals\.map/g) ?? []).toHaveLength(1);
     expect(distancePanelSource).not.toContain("<button");
     expect(distancePanelSource).not.toContain("<select");
