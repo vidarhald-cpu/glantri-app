@@ -12334,6 +12334,22 @@ describe("combat round manager", () => {
         state: gladiatorRolled.state,
       }),
     ).toBe(1);
+    expect(gladiatorRolled.state.events.filter((event) => event.type === "distance_control_roll"))
+      .toHaveLength(1);
+    expect(gladiatorRolled.state.events.at(-1)).toMatchObject({
+      distanceProposalId: proposal?.id,
+      ownerParticipantId: "gladiator",
+      rollerParticipantId: "gladiator",
+      type: "distance_control_roll",
+      visibility: {
+        involvedParticipantIds: ["gladiator", "guard"],
+      },
+    });
+    expect(gladiatorRolled.state.events.at(-1)?.facts.publicOutcome).toEqual({});
+    expect(gladiatorRolled.state.events.at(-1)?.facts.rollerPrivate).toMatchObject({
+      finalTotal: 17,
+      rollD20: 10,
+    });
 
     const rolled = rollCombatRoundEndDistanceControl({
       command: {
@@ -12371,6 +12387,28 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "SU",
     });
+    expect(rolled.state.events.map((event) => event.type)).toEqual([
+      "distance_control_roll",
+      "distance_control_roll",
+      "distance_control_result",
+    ]);
+    expect(new Set(rolled.state.events.map((event) => event.id)).size).toBe(3);
+    expect(rolled.state.events[1]).toMatchObject({
+      ownerParticipantId: "guard",
+      rollerParticipantId: "guard",
+    });
+    expect(rolled.state.events[2]).toMatchObject({
+      distanceProposalId: proposal?.id,
+      facts: {
+        involvedOutcome: {
+          outcome: "participant_a_wins",
+          proposedDistance: 3,
+          winnerParticipantId: "gladiator",
+        },
+      },
+      type: "distance_control_result",
+    });
+    expect(rolled.state.events.map((event) => event.sequence)).toEqual([0, 1, 2]);
     expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
       "Round 3, SU: City guard rolled distance control 16 for The Gladiator ↔ City guard.",
     );
@@ -12387,6 +12425,7 @@ describe("combat round manager", () => {
     });
     expect(unrolled.roundEndReview?.proposedDistances[0]?.participantA.result).toBeDefined();
     expect(unrolled.roundEndReview?.proposedDistances[0]?.participantB.result).toBeUndefined();
+    expect(unrolled.events.map((event) => event.type)).toEqual(["distance_control_roll"]);
 
     const committed = commitCombatRoundEndDistanceControl({
       command: {
@@ -12411,6 +12450,23 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "SU",
     });
+    expect(committed.state.events.map((event) => event.type)).toEqual([
+      "distance_control_roll",
+      "distance_control_roll",
+      "distance_control_result",
+      "distance_control_applied",
+    ]);
+    expect(committed.state.events.at(-1)).toMatchObject({
+      distanceProposalId: proposal?.id,
+      facts: {
+        involvedOutcome: {
+          appliedDistance: 3,
+          previousDistance: 2,
+          status: "committed",
+        },
+      },
+      status: "committed",
+    });
     expect(getLatestCombatEventSummary(committed.state)?.summaryText).toBe(
       "Round 3, SU: Distance control applied for The Gladiator ↔ City guard: distance 3 next round.",
     );
@@ -12422,6 +12478,11 @@ describe("combat round manager", () => {
       status: "rolled",
     });
     expect(undone.roundEndReview?.proposedDistances[0]?.appliedDistance).toBeUndefined();
+    expect(undone.events.map((event) => event.type)).toEqual([
+      "distance_control_roll",
+      "distance_control_roll",
+      "distance_control_result",
+    ]);
   });
 
   it("builds SU duration proposals for active round-based effects", () => {
@@ -12973,9 +13034,23 @@ describe("combat round manager", () => {
       rolledBy: "player",
       success: true,
     });
+    expect(rolled.state.events.at(-1)).toMatchObject({
+      combatEffectIds: ["external-bleed"],
+      healthRollId: "round-end:10:gladiator:external-bleed:external-bleed:health",
+      ownerParticipantId: "gladiator",
+      rollerParticipantId: "gladiator",
+      type: "health_check",
+    });
+    expect(rolled.state.events.at(-1)?.facts.rollerPrivate).toMatchObject({
+      difficulty: 21,
+      rollD20: 20,
+      rollTotal: 21,
+    });
+    expect(rolled.state.events.at(-1)?.facts.publicOutcome).toEqual({});
     expect(restoredState.roundEndReview?.participantReviews.gladiator?.status).toBe(
       "health_roll_pending",
     );
+    expect(restoredState.events.some((event) => event.type === "health_check")).toBe(false);
     expect(
       restoredEffects.effects.find((effect) => effect.id === "external-bleed")?.modifierValue,
     ).toBe(3);
@@ -13134,10 +13209,25 @@ describe("combat round manager", () => {
     expect(bleedEffect?.bleedState?.accumulatedTenths).toBe(0);
     expect(bleedDamage).toBeDefined();
     expect(committed.state.roundEndReview?.participantReviews.gladiator?.status).toBe("complete");
+    expect(committed.state.events.at(-1)).toMatchObject({
+      combatEffectEventId: committed.command.facts.createdCombatEffectEventId,
+      ownerParticipantId: "gladiator",
+      status: "committed",
+      type: "participant_su_review",
+    });
+    expect(committed.state.events.at(-1)?.facts.publicOutcome).toEqual({});
+    expect(committed.state.events.at(-1)?.facts.gmReview).toMatchObject({
+      acceptedDamageProposalIds: expect.any(Array),
+      updatedEffects: expect.any(Array),
+    });
 
     const restoredEffects = removeCombatRoundEndParticipantReviewEffects({
       combatEffects: committed.combatEffects,
       command: committed.command,
+    });
+    const restoredState = clearCombatRoundStep({
+      state: committed.state,
+      step: "round_summary",
     });
 
     expect(restoredEffects.effects.find((effect) => effect.id === "bleed-1")?.duration).toBe(
@@ -13152,6 +13242,9 @@ describe("combat round manager", () => {
         (effect) => effect.type === "general_damage" && effect.generalDamage === 1,
       ),
     ).toBe(false);
+    expect(restoredState.events.some((event) => event.type === "participant_su_review")).toBe(
+      false,
+    );
   });
 
   it("rolls SU health checks with open-ended d20 plus health stat", () => {

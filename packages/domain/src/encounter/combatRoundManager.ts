@@ -10932,7 +10932,7 @@ export function prepareCombatRoundEndReview(input: {
       })
     : undefined;
 
-  return combatRoundStateSchema.parse({
+  let nextState = combatRoundStateSchema.parse({
     ...normalized,
     commands: command ? [...normalized.commands, command] : normalized.commands,
     currentCursor: afterCursor,
@@ -10941,6 +10941,40 @@ export function prepareCombatRoundEndReview(input: {
     selectedParticipantId: afterCursor.participantId,
     selectedStep: "round_summary",
   });
+
+  if (command) {
+    for (const proposal of roundEndReview.proposedDistances) {
+      if (proposal.requiresContest || proposal.status !== "review_ready") {
+        continue;
+      }
+
+      nextState = appendCombatRoundEventForCommand({
+        command,
+        draft: {
+          actorParticipantId: command.participantId,
+          distanceProposalId: proposal.id,
+          facts: {
+            involvedOutcome: {
+              outcome: proposal.outcome,
+              proposedDistance: proposal.proposedDistance,
+              winnerParticipantId: proposal.winnerParticipantId,
+            },
+          },
+          involvedParticipantIds: [proposal.participantAId, proposal.participantBId],
+          outcomeScope: "involved",
+          ownerParticipantId: command.participantId,
+          sourceIds: [proposal.id, proposal.pairKey],
+          sourceToken: proposal.id,
+          status: "recorded",
+          step: "round_summary",
+          type: "distance_control_result",
+        },
+        state: nextState,
+      });
+    }
+  }
+
+  return nextState;
 }
 
 export function ensureCombatRoundEndReviewPrepared(input: {
@@ -11304,7 +11338,60 @@ export function commitCombatRoundEndParticipantReview(input: {
   return {
     combatEffects: effectApplication.combatEffects,
     command,
-    state: combatRoundStateSchema.parse({
+    state: appendCombatRoundEventForCommand({
+      command,
+      draft: {
+        actorParticipantId: input.participantId,
+        combatEffectEventId: effectApplication.createdCombatEffectEventId,
+        combatEffectIds: effectApplication.createdCombatEffectIds,
+        facts: {
+          gmReview: {
+            acceptedDamageProposalIds: command.facts.acceptedDamageProposalIds,
+            acceptedDurationProposalIds: command.facts.acceptedDurationProposalIds,
+            acceptedHealthRollIds: command.facts.acceptedHealthRollIds,
+            acceptedRemovalProposalIds: command.facts.acceptedRemovalProposalIds,
+            updatedEffects: command.facts.updatedEffects,
+          },
+          involvedOutcome: {
+            damageApplied: participantReview.proposedDamage
+              .filter((proposal) => proposal.accepted && proposal.amount > 0)
+              .map((proposal) => ({
+                amount: proposal.amount,
+                bleedType: proposal.bleedType,
+                proposalId: proposal.id,
+                sourceEffectId: proposal.sourceEffectId,
+              })),
+            durationChanges: participantReview.proposedEffects
+              .filter((proposal) => proposal.accepted)
+              .map((proposal) => ({
+                effectId: proposal.effectId,
+                nextDuration: proposal.nextDuration,
+                nextExpiresAtRound: proposal.nextExpiresAtRound,
+                proposalId: proposal.id,
+              })),
+            removals: participantReview.proposedRemovals
+              .filter((proposal) => proposal.accepted)
+              .map((proposal) => ({
+                effectId: proposal.effectId,
+                proposalId: proposal.id,
+              })),
+            status: nextStatus,
+          },
+        },
+        involvedParticipantIds: [input.participantId],
+        outcomeScope: "involved",
+        ownerParticipantId: input.participantId,
+        sourceIds: [
+          ...effectApplication.createdCombatEffectIds,
+          ...(effectApplication.createdCombatEffectEventId
+            ? [effectApplication.createdCombatEffectEventId]
+            : []),
+        ],
+        status: "committed",
+        step: "round_summary",
+        type: "participant_su_review",
+      },
+      state: combatRoundStateSchema.parse({
       ...normalized,
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -11323,6 +11410,7 @@ export function commitCombatRoundEndParticipantReview(input: {
       roundEndReview: nextRoundEndReview,
       selectedParticipantId: afterCursor.participantId,
       selectedStep: "round_summary",
+      }),
     }),
   };
 }
@@ -11563,7 +11651,39 @@ export function rollCombatRoundEndHealthCheck(input: {
   return {
     combatEffects: nextCombatEffects,
     command,
-    state: combatRoundStateSchema.parse({
+    state: appendCombatRoundEventForCommand({
+      command,
+      draft: {
+        actorParticipantId: input.participantId,
+        combatEffectIds: [healthRoll.sourceEffectId],
+        facts: {
+          involvedOutcome: {
+            bleedReduced: command.facts.bleedReduced,
+            bleedType: healthRoll.bleedType,
+            nextBleedRate: result.success ? nextBleedRate : undefined,
+            previousBleedRate,
+            success: result.success,
+          },
+          rollerPrivate: {
+            difficulty,
+            finalTotal,
+            healthStat: healthRoll.healthStat,
+            openEndedD10s: roll.openEndedD10s,
+            rollD20: roll.rollD20,
+            rollTotal: roll.dieResult,
+          },
+        },
+        healthRollId: healthRoll.id,
+        involvedParticipantIds: [input.participantId],
+        outcomeScope: "involved",
+        ownerParticipantId: input.participantId,
+        rollerParticipantId: input.participantId,
+        sourceIds: [healthRoll.id, healthRoll.sourceEffectId],
+        status: "recorded",
+        step: "round_summary",
+        type: "health_check",
+      },
+      state: combatRoundStateSchema.parse({
       ...normalized,
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -11582,6 +11702,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       roundEndReview: nextRoundEndReview,
       selectedParticipantId: afterCursor.participantId,
       selectedStep: "round_summary",
+      }),
     }),
   };
 }
@@ -11795,8 +11916,41 @@ export function rollCombatRoundEndDistanceControl(input: {
     type: commandType,
   });
 
-  return {
+  const stateWithRollEvent = appendCombatRoundEventForCommand({
     command,
+    draft: {
+      actorParticipantId: input.participantId,
+      distanceProposalId: distanceProposal.id,
+      facts: {
+        involvedOutcome: {
+          rollRecorded: true,
+        },
+        rollerPrivate: {
+          dodgeSkillTotal: participantResult.dodgeSkillTotal,
+          finalTotal: participantResult.finalTotal,
+          generalFatigueModifier: participantResult.generalFatigueModifier,
+          openEndedD10s: participantResult.openEndedD10s,
+          rollD20: participantResult.rollD20,
+          rollTotal: participantResult.rollTotal,
+        },
+      },
+      involvedParticipantIds: [
+        distanceProposal.participantAId,
+        distanceProposal.participantBId,
+      ],
+      outcomeScope: "involved",
+      ownerParticipantId: input.participantId,
+      rollerParticipantId: input.participantId,
+      sourceIds: [distanceProposal.id, distanceProposal.pairKey],
+      sourceToken: input.participantId,
+      status: "recorded",
+      step: "round_summary",
+      targetParticipantId:
+        input.participantId === distanceProposal.participantAId
+          ? distanceProposal.participantBId
+          : distanceProposal.participantAId,
+      type: "distance_control_roll",
+    },
     state: combatRoundStateSchema.parse({
       ...normalized,
       commands: [...normalized.commands, command],
@@ -11817,6 +11971,37 @@ export function rollCombatRoundEndDistanceControl(input: {
       selectedParticipantId: afterCursor.participantId,
       selectedStep: "round_summary",
     }),
+  });
+  const stateWithResultEvent =
+    nextProposal.requiresContest && nextProposal.status === "rolled"
+      ? appendCombatRoundEventForCommand({
+          command,
+          draft: {
+            actorParticipantId: input.participantId,
+            distanceProposalId: nextProposal.id,
+            facts: {
+              involvedOutcome: {
+                outcome: nextProposal.outcome,
+                proposedDistance: nextProposal.proposedDistance,
+                winnerParticipantId: nextProposal.winnerParticipantId,
+              },
+            },
+            involvedParticipantIds: [nextProposal.participantAId, nextProposal.participantBId],
+            outcomeScope: "involved",
+            ownerParticipantId: input.participantId,
+            sourceIds: [nextProposal.id, nextProposal.pairKey],
+            sourceToken: nextProposal.id,
+            status: "recorded",
+            step: "round_summary",
+            type: "distance_control_result",
+          },
+          state: stateWithRollEvent,
+        })
+      : stateWithRollEvent;
+
+  return {
+    command,
+    state: stateWithResultEvent,
   };
 }
 
@@ -11952,9 +12137,7 @@ export function commitCombatRoundEndDistanceControl(input: {
     type: commandType,
   });
 
-  return {
-    command,
-    state: combatRoundStateSchema.parse({
+  let stateWithEvents = combatRoundStateSchema.parse({
       ...normalized,
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -11963,7 +12146,40 @@ export function commitCombatRoundEndDistanceControl(input: {
       roundEndReview: nextRoundEndReview,
       selectedParticipantId: afterCursor.participantId,
       selectedStep: "round_summary",
-    }),
+    });
+  stateWithEvents = appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: commandParticipantId,
+      distanceProposalId: distanceProposal.id,
+      facts: {
+        gmReview: {
+          gmOverrideDistance: nextProposal.gmOverrideDistance,
+        },
+        involvedOutcome: {
+          appliedDistance,
+          previousDistance: previousEdge?.distance ?? distanceProposal.currentDistance,
+          status: nextProposal.status,
+        },
+      },
+      involvedParticipantIds: [
+        distanceProposal.participantAId,
+        distanceProposal.participantBId,
+      ],
+      outcomeScope: "involved",
+      ownerParticipantId: commandParticipantId,
+      sourceIds: [distanceProposal.id, distanceProposal.pairKey],
+      sourceToken: distanceProposal.id,
+      status: "committed",
+      step: "round_summary",
+      type: "distance_control_applied",
+    },
+    state: stateWithEvents,
+  });
+
+  return {
+    command,
+    state: stateWithEvents,
   };
 }
 

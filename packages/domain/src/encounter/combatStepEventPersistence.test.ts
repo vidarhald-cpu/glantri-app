@@ -98,4 +98,33 @@ describe("persisted CombatStepEvents", () => {
     expect(remaining).toEqual(first);
     expect(remaining[0]?.sequence).toBe(0);
   });
+
+  it("uses stable source tokens for multiple same-type events from one command", () => {
+    const inputCommand = command("command-paired", "2026-01-01T00:03:00.000Z");
+    const appendRoll = (events: Parameters<typeof appendCanonicalCombatStepEventForCommand>[0]["events"], participantId: string) =>
+      appendCanonicalCombatStepEventForCommand({
+        command: inputCommand,
+        draft: {
+          distanceProposalId: "distance-proposal-1",
+          facts: { involvedOutcome: { rollRecorded: true } },
+          ownerParticipantId: participantId,
+          rollerParticipantId: participantId,
+          sourceToken: participantId,
+          status: "recorded",
+          step: "round_summary",
+          type: "distance_control_roll",
+        },
+        encounterId: "encounter-1",
+        events,
+      });
+    const first = appendRoll([], "attacker");
+    const paired = appendRoll(first, "defender");
+    const retry = appendRoll(paired, "defender");
+
+    expect(paired.map((event) => event.id)).toEqual([
+      "combat-step-event:command-paired:distance_control_roll:attacker",
+      "combat-step-event:command-paired:distance_control_roll:defender",
+    ]);
+    expect(retry).toEqual(paired);
+  });
 });

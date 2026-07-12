@@ -34,6 +34,7 @@ export type CanonicalCombatStepEventDraft = Omit<
   combatEffectIds?: string[];
   involvedParticipantIds?: string[];
   outcomeScope?: CombatStepEventOutcomeScope;
+  sourceToken?: string;
   sourceIds?: string[];
 };
 
@@ -63,9 +64,12 @@ function identityRefs(input: CanonicalCombatStepEventDraft): CombatStepEventIden
 
 export function buildCanonicalCombatStepEventId(input: {
   commandId: string;
+  sourceToken?: string;
   type: CombatStepEventType;
 }): string {
-  return `combat-step-event:${input.commandId}:${input.type}`;
+  return ["combat-step-event", input.commandId, input.type, input.sourceToken]
+    .filter(Boolean)
+    .join(":");
 }
 
 export function appendCanonicalCombatStepEventForCommand(input: {
@@ -76,6 +80,7 @@ export function appendCanonicalCombatStepEventForCommand(input: {
 }): CombatStepEvent[] {
   const id = buildCanonicalCombatStepEventId({
     commandId: input.command.id,
+    sourceToken: input.draft.sourceToken,
     type: input.draft.type,
   });
 
@@ -83,7 +88,9 @@ export function appendCanonicalCombatStepEventForCommand(input: {
     input.events.some(
       (event) =>
         event.id === id ||
-        (event.commandId === input.command.id && event.type === input.draft.type),
+        (event.commandId === input.command.id &&
+          event.type === input.draft.type &&
+          (!input.draft.sourceToken || event.source.sourceIds.includes(input.draft.sourceToken))),
     )
   ) {
     return [...input.events];
@@ -121,7 +128,11 @@ export function appendCanonicalCombatStepEventForCommand(input: {
     source: {
       commandType: input.command.type,
       kind: "canonical",
-      sourceIds: unique([input.command.id, ...(input.draft.sourceIds ?? [])]),
+      sourceIds: unique([
+        input.command.id,
+        input.draft.sourceToken,
+        ...(input.draft.sourceIds ?? []),
+      ]),
     },
     visibility: {
       identityRefs: identityRefs(input.draft),
