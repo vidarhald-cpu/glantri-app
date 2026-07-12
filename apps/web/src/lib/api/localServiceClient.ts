@@ -77,6 +77,7 @@ export {
   continuePhaseAttackOnServer,
   createEncounterOnServer,
   loadEncounterById,
+  loadCombatHistory,
   loadScenarioEncounters,
   advanceCurrentCombatPhaseResolutionOnServer,
   rollCombatAttackOnServer,

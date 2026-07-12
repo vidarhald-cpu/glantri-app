@@ -1,4 +1,5 @@
 import type {
+  CombatHistoryProjection,
   CombatRoundAttackRollResult,
   CombatRoundCommand,
   CombatRoundCommandEnvelope,
@@ -54,6 +55,15 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   });
 
   return payload.encounter;
+}
+
+export async function loadCombatHistory(encounterId: string): Promise<CombatHistoryProjection> {
+  const payload = await sendJson<{ history: CombatHistoryProjection }>(
+    `/encounters/${encounterId}/combat-history`,
+    { method: "GET" },
+  );
+
+  return payload.history;
 }
 
 export async function updateEncounterOnServer(input: {

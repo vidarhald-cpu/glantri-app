@@ -54,6 +54,7 @@ describe("combat history projection", () => {
     const attack = event({
       attackerParticipantId: "aria",
       defenderParticipantId: "borin",
+      ownerParticipantId: "aria",
       rollerParticipantId: "aria",
       type: "attack",
       visibility: {
@@ -93,6 +94,7 @@ describe("combat history projection", () => {
       visibility: "visible",
     });
     expect(uninvolved).toBeUndefined();
+    expect(roller?.ownerParticipantId).toBe("aria");
   });
 
   it("shows parry outcome to the attacker without defender calculation", () => {
@@ -117,12 +119,15 @@ describe("combat history projection", () => {
 
     expect(projection?.facts.involvedOutcome).toEqual({ outcome: "hit" });
     expect(projection?.facts.privateCalculation).toBeUndefined();
-    expect(projection?.identities.some((identity) => identity.participantId === "borin")).toBe(true);
+    expect(projection?.identities.some((identity) => identity.participantId === "borin")).toBe(
+      true,
+    );
   });
 
   it("sanitizes a perceived hidden attacker without exposing its id or row", () => {
     const attack = event({
       defenderParticipantId: "aria",
+      ownerParticipantId: "hidden",
       rollerParticipantId: "hidden",
       type: "attack",
       visibility: {
@@ -153,6 +158,7 @@ describe("combat history projection", () => {
       role: "attacker",
       visibility: "unseen",
     });
+    expect(projection.activeRound.events[0]?.ownerParticipantId).toBeUndefined();
     expect(serialized).not.toContain("hidden");
     expect(serialized).not.toContain("Unknown participant");
   });
@@ -221,7 +227,10 @@ describe("combat history projection", () => {
     ).toBeUndefined();
     expect(
       projectCombatHistoryEvent({
-        event: { ...roll, visibility: { ...roll.visibility, involvedParticipantIds: ["aria", "hidden"] } },
+        event: {
+          ...roll,
+          visibility: { ...roll.visibility, involvedParticipantIds: ["aria", "hidden"] },
+        },
         participants,
         viewer: player(["aria"], ["aria"]),
       }),
@@ -269,9 +278,9 @@ describe("combat history projection", () => {
     });
 
     expect(projection.activeRound.events[0]?.facts.privateCalculation).toBeDefined();
-    expect(
-      projection.activeRound.snapshots[0]?.panels.actionResult.initiativeResult,
-    ).toMatchObject({ rolls: [6, 6], total: 18 });
+    expect(projection.activeRound.snapshots[0]?.panels.actionResult.initiativeResult).toMatchObject(
+      { rolls: [6, 6], total: 18 },
+    );
     expect(JSON.stringify(projection)).not.toContain("initiativeRank");
     expect(JSON.stringify(projection)).not.toContain("rankTotal");
   });

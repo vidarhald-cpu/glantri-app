@@ -32,6 +32,7 @@ export interface ProjectedCombatHistoryEvent {
   identities: CombatHistoryParticipantIdentity[];
   missingFacts: string[];
   occurredAt: string | null;
+  ownerParticipantId?: string;
   phase?: CombatStepEvent["phase"];
   roundNumber: number;
   sequence: number;
@@ -87,21 +88,15 @@ function hasFacts(facts: Record<string, unknown>): boolean {
   return Object.keys(facts).length > 0;
 }
 
-function isVisible(input: {
-  participantId: string;
-  viewer: CombatHistoryViewer;
-}): boolean {
+function isVisible(input: { participantId: string; viewer: CombatHistoryViewer }): boolean {
   return input.viewer.kind === "gm" || input.viewer.visibleParticipantIds.has(input.participantId);
 }
 
-function isControlled(input: {
-  participantId?: string;
-  viewer: CombatHistoryViewer;
-}): boolean {
+function isControlled(input: { participantId?: string; viewer: CombatHistoryViewer }): boolean {
   return Boolean(
     input.participantId &&
-      input.viewer.kind === "player" &&
-      input.viewer.controlledParticipantIds.has(input.participantId),
+    input.viewer.kind === "player" &&
+    input.viewer.controlledParticipantIds.has(input.participantId),
   );
 }
 
@@ -118,26 +113,29 @@ function projectEventIdentities(input: {
   labels: ReadonlyMap<string, string>;
   viewer: CombatHistoryViewer;
 }): CombatHistoryParticipantIdentity[] {
-  return input.event.visibility.identityRefs.reduce<CombatHistoryParticipantIdentity[]>((result, ref) => {
-    if (isVisible({ participantId: ref.participantId, viewer: input.viewer })) {
-      const displayName = input.labels.get(ref.participantId);
+  return input.event.visibility.identityRefs.reduce<CombatHistoryParticipantIdentity[]>(
+    (result, ref) => {
+      if (isVisible({ participantId: ref.participantId, viewer: input.viewer })) {
+        const displayName = input.labels.get(ref.participantId);
+        if (displayName) {
+          result.push({
+            displayName,
+            participantId: ref.participantId,
+            role: ref.role,
+            visibility: "visible",
+          });
+        }
+        return result;
+      }
+
+      const displayName = getIdentityFallback(ref.hiddenIdentityFallback);
       if (displayName) {
-        result.push({
-          displayName,
-          participantId: ref.participantId,
-          role: ref.role,
-          visibility: "visible",
-        });
+        result.push({ displayName, role: ref.role, visibility: "unseen" });
       }
       return result;
-    }
-
-    const displayName = getIdentityFallback(ref.hiddenIdentityFallback);
-    if (displayName) {
-      result.push({ displayName, role: ref.role, visibility: "unseen" });
-    }
-    return result;
-  }, []);
+    },
+    [],
+  );
 }
 
 function shouldProjectPlayerEvent(input: {
@@ -189,14 +187,17 @@ export function projectCombatHistoryEvent(input: {
     return undefined;
   }
 
-  const labels = new Map(input.participants.map((participant) => [participant.participantId, participant.displayName]));
+  const labels = new Map(
+    input.participants.map((participant) => [participant.participantId, participant.displayName]),
+  );
   const gm = input.viewer.kind === "gm";
   const involved =
     gm ||
     input.event.visibility.involvedParticipantIds.some((participantId) =>
       isControlled({ participantId, viewer: input.viewer }),
     );
-  const ownRoll = gm || isControlled({ participantId: input.event.rollerParticipantId, viewer: input.viewer });
+  const ownRoll =
+    gm || isControlled({ participantId: input.event.rollerParticipantId, viewer: input.viewer });
 
   return {
     completeness: input.event.completeness,
@@ -216,6 +217,11 @@ export function projectCombatHistoryEvent(input: {
     identities: projectEventIdentities({ event: input.event, labels, viewer: input.viewer }),
     missingFacts: input.event.missingFacts,
     occurredAt: input.event.occurredAt,
+    ownerParticipantId:
+      input.event.ownerParticipantId &&
+      isVisible({ participantId: input.event.ownerParticipantId, viewer: input.viewer })
+        ? input.event.ownerParticipantId
+        : undefined,
     phase: input.event.phase,
     roundNumber: input.event.roundNumber,
     sequence: input.event.sequence,
@@ -230,7 +236,8 @@ function projectSnapshot(input: {
   snapshot: CombatRoundStepSnapshot;
   viewer: CombatHistoryViewer;
 }): ProjectedCombatHistorySnapshot | undefined {
-  if (!isVisible({ participantId: input.snapshot.participantId, viewer: input.viewer })) return undefined;
+  if (!isVisible({ participantId: input.snapshot.participantId, viewer: input.viewer }))
+    return undefined;
   const displayName = input.labels.get(input.snapshot.participantId);
   if (!displayName) return undefined;
 
@@ -276,7 +283,9 @@ function projectSnapshot(input: {
   return {
     completeness: incomplete ? "incomplete" : "complete",
     id: input.snapshot.id,
-    incompleteMessage: incomplete ? "Complete historical result details are unavailable." : undefined,
+    incompleteMessage: incomplete
+      ? "Complete historical result details are unavailable."
+      : undefined,
     panels: {
       actionResult: {
         attackResult: safeAttackResult,
@@ -317,7 +326,13 @@ function projectRound(input: {
 }): ProjectedCombatHistoryRound {
   return {
     events: input.events
-      .map((event) => projectCombatHistoryEvent({ event, participants: input.participants, viewer: input.viewer }))
+      .map((event) =>
+        projectCombatHistoryEvent({
+          event,
+          participants: input.participants,
+          viewer: input.viewer,
+        }),
+      )
       .filter((event): event is ProjectedCombatHistoryEvent => Boolean(event)),
     roundNumber: input.roundNumber,
     snapshots: input.snapshots
@@ -334,7 +349,9 @@ export function projectCombatHistory(input: {
   const visibleParticipants = input.participants.filter((participant) =>
     isVisible({ participantId: participant.participantId, viewer: input.viewer }),
   );
-  const labels = new Map(visibleParticipants.map((participant) => [participant.participantId, participant.displayName]));
+  const labels = new Map(
+    visibleParticipants.map((participant) => [participant.participantId, participant.displayName]),
+  );
   const archivedRounds = input.state.rounds.map((round: CompletedCombatRound) =>
     projectRound({
       events: round.events,

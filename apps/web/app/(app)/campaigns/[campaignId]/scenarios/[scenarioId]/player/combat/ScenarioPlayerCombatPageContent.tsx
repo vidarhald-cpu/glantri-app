@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatHistoryProjection,
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
@@ -60,6 +61,14 @@ import {
 } from "@glantri/domain";
 
 import {
+  buildProjectedCombatTrackerModel,
+  CombatTracker,
+  getProjectedCombatHistoryCellEvents,
+  PlayerCombatHistoryInspector,
+  type CombatHistoryInspectionSelection,
+} from "@/features/combat-history";
+
+import {
   buildEquipmentLoadoutModuleModel,
   EquipmentLoadoutModule,
 } from "@/features/equipment/loadoutModule";
@@ -113,6 +122,7 @@ import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   backOutPhaseAttackOnServer,
   continuePhaseAttackOnServer,
+  loadCombatHistory,
   loadCharacterEquipmentState,
   loadEncounterById,
   loadScenarioMyParticipant,
@@ -1120,6 +1130,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
+  const [combatHistory, setCombatHistory] = useState<CombatHistoryProjection>();
+  const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
       Record<
@@ -1192,14 +1204,16 @@ export default function ScenarioPlayerCombatPageContent({
       }
 
       try {
-        const [nextProjection, nextContent, nextParticipants, nextEncounter] = await Promise.all([
-          loadScenarioPlayerProjection(scenarioId),
-          loadCanonicalContent(),
-          isGameMaster
-            ? loadScenarioParticipants(scenarioId)
-            : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
-          encounterId ? loadEncounterById(encounterId) : Promise.resolve(undefined),
-        ]);
+        const [nextProjection, nextContent, nextParticipants, nextEncounter, nextHistory] =
+          await Promise.all([
+            loadScenarioPlayerProjection(scenarioId),
+            loadCanonicalContent(),
+            isGameMaster
+              ? loadScenarioParticipants(scenarioId)
+              : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
+            encounterId ? loadEncounterById(encounterId) : Promise.resolve(undefined),
+            encounterId ? loadCombatHistory(encounterId) : Promise.resolve(undefined),
+          ]);
 
         if (cancelled) {
           return;
@@ -1209,6 +1223,7 @@ export default function ScenarioPlayerCombatPageContent({
         setContent(nextContent);
         setSelectableParticipants(nextParticipants);
         setEncounterSession(nextEncounter);
+        setCombatHistory(nextHistory);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -1255,6 +1270,15 @@ export default function ScenarioPlayerCombatPageContent({
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
   }, [currentUser, encounterId, isGameMaster, scenarioId, sessionLoading]);
+
+  async function refreshCombatHistory() {
+    if (!encounterId) return;
+    try {
+      setCombatHistory(await loadCombatHistory(encounterId));
+    } catch {
+      // The normal polling refresh remains authoritative after a transient history miss.
+    }
+  }
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -1379,6 +1403,58 @@ export default function ScenarioPlayerCombatPageContent({
           )
         : undefined,
     [combatRoundState, selectedEncounterParticipant],
+  );
+  const playerCombatCurrentTask = useMemo<CombatHistoryInspectionSelection | undefined>(
+    () =>
+      combatRoundState && selectedRoundParticipant
+        ? {
+            participantId: selectedRoundParticipant.participantId,
+            roundNumber: combatRoundState.roundNumber,
+            step: combatRoundState.currentStep,
+          }
+        : undefined,
+    [combatRoundState, selectedRoundParticipant],
+  );
+  const playerCombatTrackerModel = useMemo(
+    () =>
+      combatHistory
+        ? buildProjectedCombatTrackerModel({
+            currentTask: playerCombatCurrentTask,
+            history: combatHistory,
+            selected: historyInspection,
+          })
+        : undefined,
+    [combatHistory, historyInspection, playerCombatCurrentTask],
+  );
+  const inspectedHistoryRound = useMemo(
+    () =>
+      historyInspection && combatHistory
+        ? [...combatHistory.archivedRounds, combatHistory.activeRound].find(
+            (round) => round.roundNumber === historyInspection.roundNumber,
+          )
+        : undefined,
+    [combatHistory, historyInspection],
+  );
+  const inspectedHistorySnapshot = useMemo(
+    () =>
+      historyInspection
+        ? inspectedHistoryRound?.snapshots.find(
+            (snapshot) =>
+              snapshot.participant.participantId === historyInspection.participantId &&
+              snapshot.step === historyInspection.step,
+          )
+        : undefined,
+    [historyInspection, inspectedHistoryRound],
+  );
+  const inspectedHistoryEvents = useMemo(
+    () =>
+      historyInspection && combatHistory
+        ? getProjectedCombatHistoryCellEvents({
+            history: combatHistory,
+            selection: historyInspection,
+          })
+        : [],
+    [combatHistory, historyInspection],
   );
   const roundParticipantLabelsById = useMemo(
     () =>
@@ -2504,15 +2580,14 @@ export default function ScenarioPlayerCombatPageContent({
       : undefined;
   const selectedReactiveAttackNeedsTargetAdjudication = Boolean(
     selectedReactiveAttackPhase2TargetParticipant &&
-      selectedReactivePhase1IncomingAttacks.some(
-        (attack) =>
-          attack.attackerParticipantId !==
-          selectedReactiveAttackPhase2TargetParticipant.participantId,
-      ),
+    selectedReactivePhase1IncomingAttacks.some(
+      (attack) =>
+        attack.attackerParticipantId !==
+        selectedReactiveAttackPhase2TargetParticipant.participantId,
+    ),
   );
   const selectedReactiveAttackPhase2StatusText =
-    selectedRoundDeclaration?.actionId === "parry_attack" &&
-    currentCombatStep === "phase_2_actions"
+    selectedRoundDeclaration?.actionId === "parry_attack" && currentCombatStep === "phase_2_actions"
       ? selectedReactivePhase1IncomingAttacks.length === 0
         ? "Reactive attack: no phase 1 attack received, so no phase 2 attack opens."
         : `Reactive attack: phase 2 opens because a phase 1 attack was received${
@@ -2721,14 +2796,14 @@ export default function ScenarioPlayerCombatPageContent({
         }
       : currentRollAction?.kind === "critical" &&
           selectedAttackerPrivilegedDamageSubstate === "critical_pending"
-          ? {
-              disabled: false,
-              kind: "critical" as const,
-              label: selectedAttackerCriticalContext
-                ? `Roll critical as attacker: ${selectedAttackerCriticalContext}`
-                : "Roll critical as attacker",
-              statusContext: selectedAttackerCriticalStatusContext,
-            }
+        ? {
+            disabled: false,
+            kind: "critical" as const,
+            label: selectedAttackerCriticalContext
+              ? `Roll critical as attacker: ${selectedAttackerCriticalContext}`
+              : "Roll critical as attacker",
+            statusContext: selectedAttackerCriticalStatusContext,
+          }
         : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
           ? {
               disabled: true,
@@ -3157,30 +3232,30 @@ export default function ScenarioPlayerCombatPageContent({
                     ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
                     : selectedReactiveAttackPhase2StatusText
                       ? `Current step: ${currentCombatStepLabel}. ${selectedReactiveAttackPhase2StatusText}`
-                    : attackerPrivilegedAction
-                      ? attackerPrivilegedAction.disabled
-                        ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
-                        : `Current step: ${currentCombatStepLabel}. ${
-                            attackerPrivilegedAction.statusContext
-                              ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
-                              : "The attacker rolls; the defender receives the damage/effects review."
-                          }`
-                      : currentAttackAction
-                        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                        : currentAttackSourceValidationMessage
-                          ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
-                          : declarationIncomplete
-                            ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-                            : selectedModifierReviewComplete
-                              ? `Current step: ${currentCombatStepLabel}. Reviewed.`
-                              : currentStepIsModifierReview
-                                ? `Current step: ${currentCombatStepLabel}.`
-                                : selectedParticipantHasDeclared
-                                  ? `Current step: ${currentCombatStepLabel}. Declared.`
-                                  : declarationStepOpen &&
-                                      selectedDeclarationStepStatus === "pending"
-                                    ? `Current step: ${currentCombatStepLabel}.`
-                                    : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+                      : attackerPrivilegedAction
+                        ? attackerPrivilegedAction.disabled
+                          ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
+                          : `Current step: ${currentCombatStepLabel}. ${
+                              attackerPrivilegedAction.statusContext
+                                ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
+                                : "The attacker rolls; the defender receives the damage/effects review."
+                            }`
+                        : currentAttackAction
+                          ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                          : currentAttackSourceValidationMessage
+                            ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
+                            : declarationIncomplete
+                              ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
+                              : selectedModifierReviewComplete
+                                ? `Current step: ${currentCombatStepLabel}. Reviewed.`
+                                : currentStepIsModifierReview
+                                  ? `Current step: ${currentCombatStepLabel}.`
+                                  : selectedParticipantHasDeclared
+                                    ? `Current step: ${currentCombatStepLabel}. Declared.`
+                                    : declarationStepOpen &&
+                                        selectedDeclarationStepStatus === "pending"
+                                      ? `Current step: ${currentCombatStepLabel}.`
+                                      : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
   const combatExperienceValidationMessage: string | undefined = undefined;
   const selectedPhaseAttackChoiceControls = selectedPhaseAttackChoiceSelectorAvailable ? (
     <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
@@ -3313,7 +3388,44 @@ export default function ScenarioPlayerCombatPageContent({
         ) : null}
       </div>
 
-      {displayedParticipant ? (
+      {playerCombatTrackerModel ? (
+        <section style={panelStyle}>
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "0.75rem",
+              justifyContent: "space-between",
+            }}
+          >
+            <strong>Combat history</strong>
+            <button
+              disabled={!historyInspection}
+              onClick={() => setHistoryInspection(undefined)}
+              type="button"
+            >
+              Current task
+            </button>
+          </div>
+          <CombatTracker
+            model={playerCombatTrackerModel}
+            onInspect={(cell) =>
+              setHistoryInspection({
+                participantId: cell.participantId,
+                roundNumber: cell.roundNumber,
+                step: cell.step,
+              })
+            }
+          />
+        </section>
+      ) : null}
+
+      {historyInspection ? (
+        <PlayerCombatHistoryInspector
+          events={inspectedHistoryEvents}
+          snapshot={inspectedHistorySnapshot}
+        />
+      ) : displayedParticipant ? (
         <section style={panelStyle}>
           <div style={playerCombatTopPanelRowStyle}>
             <PlayerCombatActionSelectorPanel

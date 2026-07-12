@@ -73,6 +73,22 @@ describe("localServiceClient wire contract", () => {
     vi.resetModules();
   });
 
+  it("loads the projected combat-history payload", async () => {
+    const history = {
+      activeRound: { events: [], roundNumber: 2, snapshots: [] },
+      archivedRounds: [],
+      rows: [],
+    };
+    const fetchMock = stubFetch({ history });
+    const client = await loadClient();
+
+    await expect(client.loadCombatHistory("encounter-1")).resolves.toEqual(history);
+    expectFetchCall(fetchMock, {
+      method: "GET",
+      url: "https://api.example.test/encounters/encounter-1/combat-history",
+    });
+  });
+
   it("uses the configured API base URL for auth session lookup", async () => {
     const fetchMock = stubFetch({
       user: {

@@ -203,6 +203,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Roll phase 2 attack");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("visibilitychange");
+    expect(source).toContain("loadCombatHistory(encounterId)");
+    expect(source).toContain("buildProjectedCombatTrackerModel");
+    expect(source).toContain("<CombatTracker");
+    expect(source).toContain("setHistoryInspection({");
+    expect(source).toContain("setHistoryInspection(undefined)");
+    expect(source).toContain("PlayerCombatHistoryInspector");
+    expect(source).toContain("historyInspection ? (");
+    expect(source).not.toContain("commitCurrentCombatPhaseDamageOnServer");
     expect(source).toContain("combatDeclarationDraftDirty");
     expect(source).toContain("buildPlayerCombatDeclarationDraftKey");
     expect(source).toContain("buildPlayerCombatDeclarationDraft");
