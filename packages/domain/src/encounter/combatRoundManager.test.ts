@@ -118,6 +118,7 @@ import {
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
 } from "./combatRoundManager";
+import { combatStepEventSchema } from "./combatStepEventSchema";
 import {
   applyCombatActionGeneratedModifiers,
   DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
@@ -5701,6 +5702,15 @@ describe("combat round manager", () => {
       state: initiativePhase1,
       submittedBy: "gm",
     });
+    expect(rolledPhase1.events).toEqual([
+      expect.objectContaining({
+        ownerParticipantId: "gladiator",
+        rollerParticipantId: "gladiator",
+        sequence: 0,
+        step: "initiative_phase_1",
+        type: "initiative",
+      }),
+    ]);
     const reviewPhase2 = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
       "review_phase_2_modifiers",
@@ -6715,6 +6725,15 @@ describe("combat round manager", () => {
     expect(nextState.currentStep).toBe("review_phase_2_actions");
     expect(nextState.selectedParticipantId).toBe("guard");
     expect(nextState.selectedStep).toBe("review_phase_2_actions");
+    expect(nextState.events.at(-1)).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      attackerParticipantId: "gladiator",
+      defenderParticipantId: "guard",
+      ownerParticipantId: "gladiator",
+      rollerParticipantId: "gladiator",
+      step: "phase_1_actions",
+      type: "attack",
+    });
   });
 
   it("records A1 miss attack commands with the next actor A1 as the explicit after cursor", () => {
@@ -7046,6 +7065,14 @@ describe("combat round manager", () => {
       success: true,
     });
     expect(afterParry.phaseResolutionResults[0]?.damageRoll.status).toBe("not_required");
+    expect(afterParry.events.at(-1)).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      ownerParticipantId: "guard",
+      parryResultId: "3:phase1:gladiator:guard:parry",
+      rollerParticipantId: "guard",
+      step: "review_phase_2_actions",
+      type: "parry",
+    });
 
     const withSnapshots = {
       ...afterParry,
@@ -7725,6 +7752,18 @@ describe("combat round manager", () => {
     });
     expect(afterDamage.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
     expect(afterDamage.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+    expect(afterLocation.events.at(-1)).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      ownerParticipantId: "guard",
+      rollerParticipantId: "gladiator",
+      type: "hit_location",
+    });
+    expect(afterDamage.events.at(-1)).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      damageResultId: "3:phase1:gladiator:guard:damage",
+      ownerParticipantId: "guard",
+      type: "damage_proposed",
+    });
     expect(
       getCombatRoundParticipantPhaseStepStatus({
         participantId: "guard",
@@ -8059,6 +8098,19 @@ describe("combat round manager", () => {
       }),
       type: "roll_critical",
     });
+    expect(afterCritical.events.at(-1)).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      ownerParticipantId: "guard",
+      rollerParticipantId: "gladiator",
+      type: "critical",
+    });
+    expect(afterCriticalUndo.events.map((event) => event.type)).not.toContain("critical");
+    expect(afterCriticalUndo.events.map((event) => event.type)).toEqual([
+      "attack",
+      "parry",
+      "hit_location",
+      "damage_proposed",
+    ]);
     expect(
       afterCritical.phaseResolutionResults[0]?.damageResult?.review?.criticalEffectProposal,
     ).toMatchObject({
@@ -10242,6 +10294,17 @@ describe("combat round manager", () => {
         totalDamage: 2,
       }),
       type: "commit_phase_damage",
+    });
+    expect(committed.state.events.at(-1)).toMatchObject({
+      attackResultId: damageResult.attackResultId,
+      commandId: "commit-by-attack-id",
+      damageResultId: `${damageResult.attackResultId}:damage`,
+      ownerParticipantId: "guard",
+      type: "damage_committed",
+    });
+    expect(committed.state.events.at(-1)?.facts.gmReview).toBeDefined();
+    expect(committed.state.events.at(-1)?.facts.publicOutcome).toEqual({
+      status: "committed",
     });
     expect(committed.state.phaseResolutionResults[0]?.damageProposal.status).toBe("committed");
   });
@@ -13240,12 +13303,51 @@ describe("combat round manager", () => {
       "round_summary",
     );
     const reviewedRoundSummaryState = completeCleanRoundEndReview(roundSummaryState);
-    const completed = advanceCombatRoundStep(reviewedRoundSummaryState, {
+    const seededEvent = combatStepEventSchema.parse({
+      actorParticipantId: "gladiator",
+      combatEffectIds: [],
+      commandId: "seed-command",
+      completeness: "complete",
+      encounterId: "encounter-1",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: { total: 9 },
+        rollerPrivate: { rolls: [5] },
+      },
+      id: "seed-event",
+      missingFacts: [],
+      occurredAt: "2026-01-01T00:09:00.000Z",
+      ownerParticipantId: "gladiator",
+      phase: "phase1",
+      rollerParticipantId: "gladiator",
+      roundNumber: reviewedRoundSummaryState.roundNumber,
+      schemaVersion: 1,
+      sequence: 0,
+      source: {
+        commandType: "roll_initiative_phase1",
+        kind: "canonical",
+        sourceIds: ["seed-command"],
+      },
+      status: "recorded",
+      step: "initiative_phase_1",
+      type: "initiative",
+      visibility: {
+        identityRefs: [{ participantId: "gladiator", role: "roller" }],
+        involvedParticipantIds: ["gladiator"],
+        outcomeScope: "involved",
+        rollerParticipantId: "gladiator",
+      },
+    });
+    const completed = advanceCombatRoundStep(
+      { ...reviewedRoundSummaryState, events: [seededEvent] },
+      {
       command: {
         createdAt: "2026-01-01T00:10:00.000Z",
         createdByUserId: "gm-1",
       },
-    });
+      },
+    );
     const clearedAtNewRoundStart = clearCombatRoundStep({
       state: completed,
       step: "select_actions",
@@ -13257,6 +13359,7 @@ describe("combat round manager", () => {
     expect(completed.currentStep).toBe("select_actions");
     expect(completed.roundNumber).toBe(roundSummaryState.roundNumber + 1);
     expect(completed.commands).toEqual([]);
+    expect(completed.events).toEqual([]);
     expect(completed.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: roundSummaryState.roundNumber + 1,
@@ -13282,6 +13385,7 @@ describe("combat round manager", () => {
     expect(
       archivedRound?.participants.map((participant) => participant.stepStatuses.round_summary),
     ).toEqual(["complete", "complete"]);
+    expect(archivedRound?.events).toEqual([seededEvent]);
     expect(clearedAtNewRoundStart).toEqual(completed);
   });
 

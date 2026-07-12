@@ -57,6 +57,13 @@ import {
   type CombatEffectType,
   type CombatEffectsState,
 } from "./combatEffects";
+import {
+  appendCanonicalCombatStepEventForCommand,
+  getCombatStepEventPhaseStep,
+  removeCanonicalCombatStepEventsForCommand,
+  type CanonicalCombatStepEventDraft,
+} from "./combatStepEventPersistence";
+import { combatStepEventSchema, type CombatStepEvent } from "./combatStepEventSchema";
 import { lookupCombatCriticalModifier } from "./critical";
 import {
   buildCriticalEffectProposalFromDamageResult,
@@ -79,6 +86,11 @@ import { lookupCombatToHitDamageMetadata, resolveCombatToHit } from "./toHitTabl
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
+const combatStepEventArraySchema: z.ZodType<
+  CombatStepEvent[],
+  z.ZodTypeDef,
+  unknown
+> = z.array(combatStepEventSchema);
 const COMBAT_ROUND_STRENGTH_GM_MAX_DAMAGE_NOTE = "max damage: 17 + GM STR when relevant";
 const COMBAT_ROUND_BLEED_HEALTH_CHECK_INTERVAL_ROUNDS = 10;
 const COMBAT_ROUND_EXTERNAL_BLEED_HEALTH_DIFFICULTY = 21;
@@ -1852,6 +1864,7 @@ export const completedCombatRoundSchema = z.object({
   currentStep: combatRoundStepSchema.default("round_summary"),
   distanceState: combatDistanceStateSchema.optional(),
   encounterId: idSchema.optional(),
+  events: combatStepEventArraySchema.default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
@@ -1863,7 +1876,34 @@ export const completedCombatRoundSchema = z.object({
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
 });
 
-export const combatRoundStateSchema = z.object({
+export type CompletedCombatRound = z.infer<typeof completedCombatRoundSchema>;
+
+export interface CombatRoundState {
+  activeParticipantId?: string;
+  combatExperienceDifficulty?: number;
+  commands: z.infer<typeof combatRoundCommandSchema>[];
+  currentCursor?: z.infer<typeof combatRoundCursorSchema>;
+  currentStep: z.infer<typeof combatRoundStepSchema>;
+  distanceState: CombatDistanceState;
+  encounterId?: string;
+  events: CombatStepEvent[];
+  phaseResolutionCursor?: z.infer<typeof combatRoundPhaseResolutionCursorSchema>;
+  phaseResolutionResults: z.infer<typeof combatRoundPhaseResolutionResultSchema>[];
+  phaseResolutionStatuses: z.infer<typeof combatRoundPhaseResolutionStatusesSchema>;
+  participants: z.infer<typeof combatRoundParticipantStateSchema>[];
+  roundEndReview?: z.infer<typeof combatRoundEndReviewSchema>;
+  roundNumber: number;
+  rounds: CompletedCombatRound[];
+  selectedParticipantId?: string;
+  selectedStep?: z.infer<typeof combatRoundStepSchema>;
+  stepSnapshots: z.infer<typeof combatRoundStepSnapshotSchema>[];
+}
+
+export const combatRoundStateSchema: z.ZodType<
+  CombatRoundState,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
@@ -1871,6 +1911,7 @@ export const combatRoundStateSchema = z.object({
   currentStep: combatRoundStepSchema.default("select_actions"),
   distanceState: combatDistanceStateSchema.default({ edges: {} }),
   encounterId: idSchema.optional(),
+  events: combatStepEventArraySchema.default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
@@ -1907,8 +1948,44 @@ export type CombatRoundPhaseResolutionStatuses = z.infer<
 >;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
-export type CompletedCombatRound = z.infer<typeof completedCombatRoundSchema>;
-export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
+
+function appendCombatRoundEventForCommand(input: {
+  command: CombatRoundCommand;
+  draft: CanonicalCombatStepEventDraft;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (!normalized.encounterId) {
+    return normalized;
+  }
+
+  return {
+    ...normalized,
+    events: appendCanonicalCombatStepEventForCommand({
+      command: input.command,
+      draft: input.draft,
+      encounterId: normalized.encounterId,
+      events: normalized.events,
+    }),
+  };
+}
+
+function removeCombatRoundEventsForCommand(input: {
+  commandId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return {
+    ...normalized,
+    events: removeCanonicalCombatStepEventsForCommand({
+      commandId: input.commandId,
+      events: normalized.events,
+    }),
+  };
+}
+
 export interface CombatRoundInitiativeRank {
   rank: number;
   rankTotal: number;
@@ -7208,7 +7285,7 @@ function recordCombatRoundParryCommand(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return {
+  const stateWithCommand = {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
@@ -7216,6 +7293,52 @@ function recordCombatRoundParryCommand(input: {
     selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
   };
+
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.attackResult.defenderParticipantId,
+      attackResultId,
+      attackerParticipantId: input.attackResult.attackerParticipantId,
+      defenderParticipantId: input.attackResult.defenderParticipantId,
+      facts: {
+        involvedOutcome: {
+          resultLabel: input.parryResolution.resultLabel,
+          status: input.parryResolution.status,
+          success: input.parryResolution.success,
+        },
+        publicOutcome: {
+          status: input.parryResolution.status,
+          success: input.parryResolution.success,
+        },
+        rollerPrivate: {
+          combinedParryScore: input.parryResolution.combinedParryScore,
+          modifierAdjustment: input.parryResolution.modifierAdjustment,
+          modifierBreakdown: input.parryResolution.modifierBreakdown,
+          openEndedD10s: input.parryResolution.openEndedD10s,
+          rollD20: input.parryResolution.rollD20,
+          rollTotal: input.parryResolution.rollTotal,
+          total: input.parryResolution.total,
+        },
+      },
+      ownerParticipantId: input.attackResult.defenderParticipantId,
+      parryResultId: `${attackResultId}:parry`,
+      phase: input.attackResult.phase,
+      rollerParticipantId: input.attackResult.defenderParticipantId,
+      sourceIds: [attackResultId, `${attackResultId}:parry`],
+      status:
+        input.parryResolution.status === "not_applicable" ? "not_applicable" : "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "parry", phase: input.attackResult.phase }),
+      targetParticipantId: input.attackResult.attackerParticipantId,
+      type: "parry",
+    },
+    state: stateWithCommand,
+  });
 }
 
 export function recordCombatRoundParryResult(input: {
@@ -8355,7 +8478,7 @@ function recordCombatRoundResolveDamageCommand(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return {
+  const stateWithCommand = {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
@@ -8363,6 +8486,45 @@ function recordCombatRoundResolveDamageCommand(input: {
     selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
   };
+
+  const damageResultId = getCombatRoundDamageResultId({
+    attackResultId: input.damageResult.attackResultId,
+  });
+
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.attackResult.attackerParticipantId,
+      attackResultId: input.damageResult.attackResultId,
+      attackerParticipantId: input.attackResult.attackerParticipantId,
+      damageResultId,
+      defenderParticipantId: input.attackResult.defenderParticipantId,
+      facts: {
+        gmReview: input.damageResult.review ?? {},
+        involvedOutcome: {
+          criticalGrade: input.damageResult.criticalGrade,
+          selectedHitLocation: input.damageResult.selectedHitLocation,
+          totalDamage: input.damageResult.totalDamage,
+        },
+        rollerPrivate: {
+          armorModifier: input.damageResult.armorModifier,
+          damageLookupTotal: input.damageResult.damageLookupTotal,
+          damageRoll: input.damageResult.damageRoll,
+          defenderDm: input.damageResult.defenderDm,
+          dmb: input.damageResult.dmb,
+          hitLookupTotal: input.damageResult.hitLookupTotal,
+        },
+      },
+      ownerParticipantId: input.attackResult.defenderParticipantId,
+      phase: input.attackResult.phase,
+      sourceIds: [input.damageResult.attackResultId, damageResultId],
+      status: "proposed",
+      step: getCombatStepEventPhaseStep({ kind: "damage", phase: input.attackResult.phase }),
+      targetParticipantId: input.attackResult.defenderParticipantId,
+      type: "damage_proposed",
+    },
+    state: stateWithCommand,
+  });
 }
 
 function recordCombatRoundHitLocationRollCommand(input: {
@@ -8415,7 +8577,7 @@ function recordCombatRoundHitLocationRollCommand(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return {
+  const stateWithCommand = {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
@@ -8423,6 +8585,41 @@ function recordCombatRoundHitLocationRollCommand(input: {
     selectedParticipantId: input.attackResult.defenderParticipantId,
     selectedStep,
   };
+
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.attackResult.attackerParticipantId,
+      attackResultId,
+      attackerParticipantId: input.attackResult.attackerParticipantId,
+      defenderParticipantId: input.attackResult.defenderParticipantId,
+      facts: {
+        involvedOutcome: {
+          selectedHitLocation: input.hitLocationRoll.selectedHitLocation,
+          targetLocation: input.hitLocationRoll.targetLocation,
+        },
+        rollerPrivate: {
+          hitLocationRolls: input.hitLocationRoll.hitLocationRolls,
+          selectedHitLocationRoll: input.hitLocationRoll.selectedHitLocationRoll,
+          selectionReason: input.hitLocationRoll.selectionReason,
+        },
+      },
+      ownerParticipantId: input.attackResult.defenderParticipantId,
+      phase: input.attackResult.phase,
+      rollerParticipantId: input.hitLocationRoll.rolledByParticipantId,
+      sourceIds: [attackResultId],
+      status: "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "damage", phase: input.attackResult.phase }),
+      targetParticipantId: input.attackResult.defenderParticipantId,
+      type: "hit_location",
+    },
+    state: stateWithCommand,
+  });
 }
 
 export function recordCombatRoundHitLocationRoll(input: {
@@ -8767,7 +8964,7 @@ function recordCombatRoundCriticalRollCommand(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return {
+  const stateWithCommand = {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
@@ -8775,6 +8972,43 @@ function recordCombatRoundCriticalRollCommand(input: {
     selectedParticipantId: input.attackResult.defenderParticipantId,
     selectedStep,
   };
+
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.attackResult.attackerParticipantId,
+      attackResultId,
+      attackerParticipantId: input.attackResult.attackerParticipantId,
+      defenderParticipantId: input.attackResult.defenderParticipantId,
+      facts: {
+        involvedOutcome: {
+          criticalGrade: input.criticalRoll.criticalGrade,
+          selectedHitLocation: input.criticalRoll.selectedHitLocation,
+        },
+        rollerPrivate: {
+          armorCriticalModifier: input.criticalRoll.armorCriticalModifier,
+          criticalDice: input.criticalRoll.criticalDice,
+          criticalDiceTotal: input.criticalRoll.criticalDiceTotal,
+          criticalTypeModifier: input.criticalRoll.criticalTypeModifier,
+          finalCriticalRoll: input.criticalRoll.finalCriticalRoll,
+        },
+      },
+      ownerParticipantId: input.attackResult.defenderParticipantId,
+      phase: input.attackResult.phase,
+      rollerParticipantId: input.criticalRoll.rolledByParticipantId,
+      sourceIds: [attackResultId],
+      status: "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "damage", phase: input.attackResult.phase }),
+      targetParticipantId: input.attackResult.defenderParticipantId,
+      type: "critical",
+    },
+    state: stateWithCommand,
+  });
 }
 
 export function recordCombatRoundCriticalRoll(input: {
@@ -12173,11 +12407,51 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
   };
+  const stateWithCommitEvent = appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.damageResult.attackerParticipantId,
+      attackResultId: input.damageResult.attackResultId,
+      attackerParticipantId: input.damageResult.attackerParticipantId,
+      combatEffectEventId: rows.eventId,
+      combatEffectIds: rows.effectIds,
+      damageResultId,
+      defenderParticipantId: input.damageResult.defenderParticipantId,
+      facts: {
+        gmReview: {
+          additionalEffects: command.facts.additionalEffects,
+          cancelledActions: command.facts.cancelledActions,
+          computedCriticalGrade: command.facts.computedCriticalGrade,
+          operationalConsequences: command.facts.operationalConsequences,
+          review: command.facts.review,
+        },
+        involvedOutcome: {
+          criticalGrade: command.facts.criticalGrade,
+          finalCommittedDamage: command.facts.finalCommittedDamage,
+          hitLocation: command.facts.effectiveHitLocation,
+        },
+        publicOutcome: { status: "committed" },
+      },
+      ownerParticipantId: input.damageResult.defenderParticipantId,
+      phase: input.damageResult.phase,
+      sourceIds: [
+        input.damageResult.attackResultId,
+        damageResultId,
+        rows.eventId,
+        ...rows.effectIds,
+      ],
+      status: "committed",
+      step: getCombatStepEventPhaseStep({ kind: "damage", phase: input.damageResult.phase }),
+      targetParticipantId: input.damageResult.defenderParticipantId,
+      type: "damage_committed",
+    },
+    state: combatRoundStateSchema.parse(stateWithCommittedProposal),
+  });
 
   return {
     combatEffects: rows.nextCombatEffects,
     command,
-    state: combatRoundStateSchema.parse(stateWithCommittedProposal),
+    state: stateWithCommitEvent,
   };
 }
 
@@ -13068,6 +13342,7 @@ function buildCompletedCombatRound(input: {
     currentStep: normalized.currentStep,
     distanceState: normalized.distanceState,
     encounterId: normalized.encounterId,
+    events: normalized.events,
     phaseResolutionCursor: normalized.phaseResolutionCursor,
     phaseResolutionResults: normalized.phaseResolutionResults,
     phaseResolutionStatuses: normalized.phaseResolutionStatuses,
@@ -13263,6 +13538,9 @@ export function initializeCombatRoundState(input: {
       (!command.beforeCursor.participantId ||
         participantIds.has(command.beforeCursor.participantId)) &&
       (!command.afterCursor.participantId || participantIds.has(command.afterCursor.participantId)),
+  );
+  const events = (existing?.events ?? []).filter(
+    (event) => event.roundNumber === roundNumber && event.encounterId === input.encounter.id,
   );
   const phaseResolutionResults = (existing?.phaseResolutionResults ?? []).filter(
     (result) =>
@@ -13476,6 +13754,7 @@ export function initializeCombatRoundState(input: {
             : undefined,
     distanceState,
     encounterId: input.encounter.id,
+    events,
     currentStep,
     phaseResolutionCursor: fallbackPhaseResolutionCursor
       ? fallbackPhaseResolutionCursor
@@ -13768,6 +14047,7 @@ export function advanceCombatRoundStep(
       }),
       currentStep: "select_actions",
       distanceState: completedRoundState.distanceState,
+      events: [],
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
       phaseResolutionStatuses: {},
@@ -13989,6 +14269,47 @@ export function getCombatRoundModifierPhaseForStep(
   return undefined;
 }
 
+function appendCombatRoundInitiativeEvent(input: {
+  command: CombatRoundCommand;
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const initiative = normalized.participants.find(
+    (participant) => participant.participantId === input.participantId,
+  )?.initiatives[input.phase];
+
+  if (!initiative) {
+    return normalized;
+  }
+
+  return appendCombatRoundEventForCommand({
+    command: input.command,
+    draft: {
+      actorParticipantId: input.participantId,
+      facts: {
+        publicOutcome: { total: initiative.total },
+        rollerPrivate: {
+          baseInitiative: initiative.baseInitiative,
+          modifierAdjustment: initiative.modifierAdjustment,
+          rolls: initiative.rolls,
+          rollTotal: initiative.rollTotal,
+          total: initiative.total,
+        },
+      },
+      involvedParticipantIds: [input.participantId],
+      ownerParticipantId: input.participantId,
+      phase: input.phase,
+      rollerParticipantId: input.participantId,
+      status: "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "initiative", phase: input.phase }),
+      type: "initiative",
+    },
+    state: normalized,
+  });
+}
+
 export function recordCombatRoundInitiative(input: {
   command?: {
     commandId?: string;
@@ -14022,7 +14343,7 @@ export function recordCombatRoundInitiative(input: {
   }
 
   if (!isCombatRoundPhaseInitiativeComplete({ phase: input.phase, state: withStatus })) {
-    return recordCombatRoundGlobalParticipantCommand({
+    const stateWithCommand = recordCombatRoundGlobalParticipantCommand({
       ...input.command,
       facts: {
         phase: input.phase,
@@ -14033,6 +14354,16 @@ export function recordCombatRoundInitiative(input: {
       step: initiativeStep,
       type: input.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
     });
+    const command = stateWithCommand.commands[stateWithCommand.commands.length - 1];
+
+    return command
+      ? appendCombatRoundInitiativeEvent({
+          command,
+          participantId: input.participantId,
+          phase: input.phase,
+          state: stateWithCommand,
+        })
+      : stateWithCommand;
   }
 
   const commandType =
@@ -14072,7 +14403,7 @@ export function recordCombatRoundInitiative(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return combatRoundStateSchema.parse({
+  const stateWithCommand = combatRoundStateSchema.parse({
     ...stateAfterCompletedInitiative,
     commands: [...withStatus.commands, command],
     currentCursor: command.afterCursor,
@@ -14080,6 +14411,13 @@ export function recordCombatRoundInitiative(input: {
     selectedParticipantId:
       command.afterCursor.participantId ?? stateAfterCompletedInitiative.selectedParticipantId,
     selectedStep,
+  });
+
+  return appendCombatRoundInitiativeEvent({
+    command,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: stateWithCommand,
   });
 }
 
@@ -14166,7 +14504,7 @@ function recordCombatRoundAttackCommand(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return {
+  const stateWithCommand = {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
@@ -14174,6 +14512,47 @@ function recordCombatRoundAttackCommand(input: {
     selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
   };
+
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.result,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.result.attackerParticipantId,
+      attackResultId,
+      attackerParticipantId: input.result.attackerParticipantId,
+      defenderParticipantId: input.result.defenderParticipantId,
+      facts: {
+        involvedOutcome: {
+          grazing: input.result.grazing,
+          hit: input.result.hit,
+          tableResult: input.result.tableResult,
+          weaponName: input.result.weaponName,
+        },
+        publicOutcome: { grazing: input.result.grazing, hit: input.result.hit },
+        rollerPrivate: {
+          defenderDb: input.result.defenderDb,
+          lookupTotal: input.result.lookupTotal,
+          ob: input.result.ob,
+          openEndedD10s: input.result.openEndedD10s,
+          rollD20: input.result.rollD20,
+          rollTotal: input.result.rollTotal,
+        },
+      },
+      ownerParticipantId: input.result.attackerParticipantId,
+      phase: input.result.phase,
+      rollerParticipantId: input.result.attackerParticipantId,
+      sourceIds: [attackResultId],
+      status: "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "attack", phase: input.result.phase }),
+      targetParticipantId: input.result.defenderParticipantId,
+      type: "attack",
+    },
+    state: stateWithCommand,
+  });
 }
 
 export function recordCombatRoundAttackResult(input: {
@@ -14772,10 +15151,14 @@ export function undoLatestCombatRoundGlobalParticipantCommand(input: {
     return undefined;
   }
 
-  return undoCombatRoundGlobalCommandAtIndex({
+  const undone = undoCombatRoundGlobalCommandAtIndex({
     commandIndex,
     state: normalized,
   });
+
+  return undone
+    ? removeCombatRoundEventsForCommand({ commandId: command.id, state: undone })
+    : undefined;
 }
 
 function getCombatRoundAttackCommandPhase(
@@ -16206,10 +16589,15 @@ export function undoLatestCombatRoundGlobalCommand(input: {
     state: normalized,
   });
 
-  return undoCombatRoundGlobalCommandAtIndex({
+  const command = normalized.commands[commandIndex];
+  const undone = undoCombatRoundGlobalCommandAtIndex({
     commandIndex,
     state: normalized,
   });
+
+  return undone && command
+    ? removeCombatRoundEventsForCommand({ commandId: command.id, state: undone })
+    : undone;
 }
 
 function undoCombatRoundCommandAtIndex(input: {
@@ -16367,10 +16755,15 @@ export function undoLatestCombatRoundCommand(input: {
     state: normalized,
   });
 
-  return undoCombatRoundCommandAtIndex({
+  const command = normalized.commands[commandIndex];
+  const undone = undoCombatRoundCommandAtIndex({
     commandIndex,
     state: normalized,
   });
+
+  return undone && command
+    ? removeCombatRoundEventsForCommand({ commandId: command.id, state: undone })
+    : undone;
 }
 
 function combatRoundSelectedStepHasClearableState(input: {
@@ -17777,6 +18170,7 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
         currentCursor: round.currentCursor,
         currentStep: round.currentStep,
         encounterId: round.encounterId ?? normalized.encounterId,
+        events: round.events,
         phaseResolutionCursor: round.phaseResolutionCursor,
         phaseResolutionResults: round.phaseResolutionResults,
         phaseResolutionStatuses: round.phaseResolutionStatuses,
