@@ -88,6 +88,7 @@ import {
   isDistanceGeneratedObSkillModifier,
   movementIntentSchema,
   normalizeMovementIntent,
+  projectCombatHistory,
   removeDistanceGeneratedObSkillModifiers,
   scenarioParticipantCombatContextSchema,
   setCombatRoundCombatExperienceDifficulty,
@@ -1621,6 +1622,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     distanceState: {
       edges: safeDistanceEdges,
     },
+    events: [],
     participants: roundState.participants.map((participant) =>
       controlledEncounterParticipantIds.has(participant.participantId)
         ? participant
@@ -1636,6 +1638,8 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           },
     ),
     roundEndReview: safeRoundEndReview,
+    rounds: [],
+    stepSnapshots: [],
   };
 
   return sanitizePlayerSafeCurrentCombatResultsState({
@@ -1947,6 +1951,73 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load encounter.",
+      });
+    }
+  });
+
+  app.get("/encounters/:encounterId/combat-history", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const state = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const participants = membership.participants.map((participant) => ({
+        displayName: participant.label,
+        participantId: participant.id,
+      }));
+      const playerScope = buildPlayerSafeCombatScopeForUser({
+        encounter,
+        scenarioParticipants,
+        userId: user.id,
+      });
+      const viewer =
+        access.mode === "gm"
+          ? ({ kind: "gm" } as const)
+          : {
+              controlledParticipantIds: playerScope.controlledEncounterParticipantIds,
+              kind: "player" as const,
+              visibleParticipantIds: playerScope.visibleParticipantIds,
+            };
+
+      return {
+        history: projectCombatHistory({ participants, state, viewer }),
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load combat history.",
       });
     }
   });

@@ -2139,6 +2139,176 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("Hidden spy detail");
   });
 
+  it("returns projected combat history without raw events or hidden participant ids", async () => {
+    const encounterParticipants = [
+      {
+        id: "encounter-participant-1",
+        label: "Player hero",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-1",
+      },
+      {
+        id: "encounter-participant-2",
+        label: "Visible guard",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-2",
+      },
+      {
+        id: "encounter-participant-hidden",
+        label: "Hidden spy",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-hidden",
+      },
+    ];
+    const canonicalEvent = {
+      completeness: "complete",
+      encounterId: "encounter-1",
+      facts: {
+        gmReview: { privateNote: "secret override" },
+        involvedOutcome: { outcome: "hit" },
+        publicOutcome: {},
+        rollerPrivate: { rollD20: 18, total: 22 },
+      },
+      id: "event-attack",
+      missingFacts: [],
+      occurredAt: "2026-01-01T00:01:00.000Z",
+      rollerParticipantId: "encounter-participant-hidden",
+      roundNumber: 1,
+      schemaVersion: 1,
+      sequence: 0,
+      source: { kind: "canonical", sourceIds: [] },
+      status: "recorded",
+      step: "phase_1_actions",
+      type: "attack",
+      visibility: {
+        identityRefs: [
+          {
+            hiddenIdentityFallback: "unseen_attacker",
+            participantId: "encounter-participant-hidden",
+            role: "attacker",
+          },
+          { participantId: "encounter-participant-1", role: "defender" },
+        ],
+        involvedParticipantIds: [
+          "encounter-participant-hidden",
+          "encounter-participant-1",
+        ],
+        outcomeScope: "perceived",
+        rollerParticipantId: "encounter-participant-hidden",
+      },
+    };
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        encounterId: "encounter-1",
+        events: [canonicalEvent],
+        roundNumber: 1,
+      },
+      participants: encounterParticipants,
+      roleplayState: {
+        visibility: {
+          "encounter-participant-1": {
+            "encounter-participant-2": true,
+          },
+        },
+      },
+    });
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        { controlledByUserId: "player-1", id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+        { controlledByUserId: "other-player", id: "participant-hidden" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    const encounterResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().history.rows).toEqual([
+      { displayName: "Player hero", participantId: "encounter-participant-1" },
+      { displayName: "Visible guard", participantId: "encounter-participant-2" },
+    ]);
+    expect(response.json().history.activeRound.events[0]).toMatchObject({
+      facts: { involvedOutcome: { outcome: "hit" }, publicOutcome: {} },
+      identities: expect.arrayContaining([
+        { displayName: "an unseen attacker", role: "attacker", visibility: "unseen" },
+      ]),
+    });
+    const serialized = JSON.stringify(response.json());
+    expect(serialized).not.toContain("secret override");
+    expect(serialized).not.toContain("rollD20");
+    expect(serialized).not.toContain("encounter-participant-hidden");
+    expect(response.json()).not.toHaveProperty("encounter");
+    expect(encounterResponse.json().encounter.combatRoundState).toMatchObject({
+      events: [],
+      rounds: [],
+      stepSnapshots: [],
+    });
+    expect(JSON.stringify(encounterResponse.json())).not.toContain("secret override");
+  });
+
+  it("returns the full projected fact groups to a GM combat-history reader", async () => {
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        encounterId: "encounter-1",
+        events: [
+          {
+            completeness: "complete",
+            encounterId: "encounter-1",
+            facts: {
+              gmReview: { privateNote: "GM fact" },
+              involvedOutcome: { outcome: "hit" },
+              publicOutcome: {},
+              rollerPrivate: { rollD20: 18 },
+            },
+            id: "event-gm",
+            missingFacts: [],
+            occurredAt: "2026-01-01T00:01:00.000Z",
+            rollerParticipantId: "encounter-participant-1",
+            roundNumber: 1,
+            schemaVersion: 1,
+            sequence: 0,
+            source: { kind: "canonical", sourceIds: [] },
+            status: "recorded",
+            step: "initiative_phase_1",
+            type: "initiative",
+            visibility: {
+              identityRefs: [{ participantId: "encounter-participant-1", role: "roller" }],
+              involvedParticipantIds: ["encounter-participant-1"],
+              outcomeScope: "involved",
+              rollerParticipantId: "encounter-participant-1",
+            },
+          },
+        ],
+        roundNumber: 1,
+      },
+    });
+    setupCombatDeclarationRoute({ encounter, user: mocks.adminUser });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().history.activeRound.events[0].facts).toMatchObject({
+      gmReview: { privateNote: "GM fact" },
+      privateCalculation: { rollD20: 18 },
+    });
+  });
+
   it("filters scenario participants for player workspace access", async () => {
     const scenario = {
       campaignId: "campaign-1",
