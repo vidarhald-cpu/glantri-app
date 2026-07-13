@@ -1348,7 +1348,7 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
   const modifierAdjustment =
     initiative.modifierAdjustment ?? initiative.total - baseInitiative - rollTotal;
 
-  return `Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
+  return `Main: I ${baseInitiative} + Initiative ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {

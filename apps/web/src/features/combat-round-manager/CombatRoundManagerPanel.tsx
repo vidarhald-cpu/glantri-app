@@ -5451,7 +5451,8 @@ export default function CombatRoundManagerPanel({
   }, [inspector.participant]);
   const inspectorInitiativeCalculation = buildEncounterInitiativeModifierCalculation({
     baseInitiative: inspectorLoadoutSummary.passiveInitiative,
-    liveModifiers: inspectorLiveModifiers,
+    combatContext: inspectorGeneratedCombatContext,
+    phaseKey: inspectorModifierPhase,
   });
   useEffect(() => {
     const encounterChanged = encounterScopeRef.current !== encounter.id;
@@ -8106,7 +8107,7 @@ export default function CombatRoundManagerPanel({
                         >
                           <div>Base initiative {inspectorInitiativeCalculation.baseInitiative}</div>
                           <div>
-                            Gen/Fatigue + Initiative modifiers{" "}
+                            Initiative modifiers{" "}
                             {inspectorInitiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
                             {inspectorInitiativeCalculation.rawModifierTotal}
                           </div>

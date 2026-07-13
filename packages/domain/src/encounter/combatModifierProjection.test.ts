@@ -8,6 +8,7 @@ import {
 import { applyCombatActionGeneratedModifiers } from "./combatActionModifiers";
 import type { CombatEffect, CombatEffectsState } from "./combatEffects";
 import {
+  getMergedCombatInitiativeModifierTotal,
   getMergedCombatModifierTotals,
   mergePersistentCombatEffectModifiers,
   projectPersistentCombatEffectModifiers,
@@ -519,5 +520,58 @@ describe("persistent combat modifier refresh lifecycle", () => {
     });
 
     expect(historicalRows).toEqual(context().modifierBuckets);
+  });
+
+  it("provides the phase-aware canonical initiative total after source changes", () => {
+    const initial = refresh({
+      combatEffects: effects(
+        effect({ combatModifierBucket: "initiative", id: "initiative-1", modifierValue: 2 }),
+        effect({ combatModifierBucket: "initiative", id: "initiative-2", modifierValue: 3 }),
+        effect({ combatModifierBucket: "general", id: "general", modifierValue: 99 }),
+        effect({ combatModifierBucket: undefined, id: "legacy", modifierValue: 50 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatInitiativeModifierTotal({
+        combatContext: initial.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(5);
+
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(
+        effect({ combatModifierBucket: "initiative", id: "initiative-1", modifierValue: 4 }),
+        effect({
+          combatModifierBucket: "initiative",
+          id: "initiative-2",
+          modifierValue: 3,
+          status: "resolved",
+        }),
+        effect({ combatModifierBucket: "general", id: "general", modifierValue: 99 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatInitiativeModifierTotal({
+        combatContext: changed.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(4);
+
+    const moved = refresh({
+      combatContext: changed.combat.combatContext,
+      combatEffects: effects(
+        effect({ combatModifierBucket: "skill_ob", id: "initiative-1", modifierValue: 4 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatInitiativeModifierTotal({
+        combatContext: moved.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(0);
   });
 });

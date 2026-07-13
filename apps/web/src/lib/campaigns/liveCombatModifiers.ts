@@ -4,6 +4,7 @@ import type {
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
+import { getMergedCombatInitiativeModifierTotal } from "@glantri/domain";
 import {
   calculateWorkbookPercentageAdjustmentTrace,
   lookupWorkbookPercentageAdjustment,
@@ -140,7 +141,9 @@ export function buildEncounterLiveCombatModifierSummary(input: {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
     dbRaw: effectSums.db + contextTotals.situationDbTotal,
     generalFatigueRaw: effectSums.generalFatigue,
-    initiativeRaw: contextTotals.situationInitiativeTotal,
+    initiativeRaw: getMergedCombatInitiativeModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
     modifierNoteLabels: [
       "Gen/Fatigue",
       "Initiative",
@@ -184,10 +187,13 @@ export function applyLiveRawModifierToCombatValue(input: {
 
 export function buildEncounterInitiativeModifierCalculation(input: {
   baseInitiative: number;
-  liveModifiers?: EncounterLiveCombatModifierSummary;
+  combatContext?: ScenarioParticipantCombatContext;
+  phaseKey?: EncounterCombatPhaseKey;
 }): EncounterInitiativeModifierCalculation {
-  const rawModifierTotal =
-    (input.liveModifiers?.generalFatigueRaw ?? 0) + (input.liveModifiers?.initiativeRaw ?? 0);
+  const rawModifierTotal = getMergedCombatInitiativeModifierTotal({
+    combatContext: input.combatContext,
+    phase: input.phaseKey,
+  });
   const modifiedInitiative = applyLiveRawModifierToCombatValue({
     baseValue: input.baseInitiative,
     rawModifier: rawModifierTotal,

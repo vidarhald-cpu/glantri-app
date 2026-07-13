@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPlayerCombatModifierRows,
+  formatCombatInitiativeFormula,
   formatCombatModifierDetailsLabel,
   formatCombatModifierDisplayLine,
   formatCombatModifierScopeLabel,
@@ -19,6 +20,18 @@ function readSource(): string {
 }
 
 describe("PlayerCombatPanels", () => {
+  it("formats recorded initiative modifier facts without recalculating current context", () => {
+    expect(
+      formatCombatInitiativeFormula({
+        baseInitiative: 8,
+        modifierAdjustment: 2,
+        rolls: [4],
+        rollTotal: 4,
+        total: 14,
+      }),
+    ).toBe("Main: I 8 + Initiative 2 + roll 4 = 14");
+  });
+
   it("exposes reusable combat modifier rows with the shared player combat buckets", () => {
     const source = readSource();
 
@@ -568,7 +581,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain(
-      "Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
+      "Main: I ${baseInitiative} + Initiative ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
     );
     expect(source).toContain("rankLabel");
     expect(source).toContain("resultLabel");

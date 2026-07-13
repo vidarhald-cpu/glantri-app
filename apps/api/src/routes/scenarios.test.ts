@@ -7597,6 +7597,24 @@ describe("scenarios route contract", () => {
       participant: {
         state: {
           combat: {
+            combatContext: {
+              modifierBuckets: {
+                general: [{ id: "general-not-initiative", scope: "until", value: -99 }],
+                situationDb: [],
+                situationInitiative: [
+                  {
+                    id: "import:character_effect:initiative-penalty:initiative",
+                    imported: true,
+                    readOnly: true,
+                    scope: "until",
+                    sourceEffectId: "initiative-penalty",
+                    sourceType: "character_effect",
+                    value: -1,
+                  },
+                ],
+                situationObSkill: [],
+              },
+            },
             lastDeclaredActionId: "attack_parry",
             lastDeclaredRoundNumber: 1,
           },
@@ -7652,6 +7670,11 @@ describe("scenarios route contract", () => {
       participantId: "encounter-participant-1",
       type: "roll_initiative_phase1",
     });
+    expect(updatedEncounter.combatRoundState.events[0].facts.rollerPrivate).toMatchObject({
+      baseInitiative: 3,
+      modifierAdjustment: -1,
+      total: response.json().initiative.total,
+    });
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
@@ -7685,6 +7708,50 @@ describe("scenarios route contract", () => {
           roundNumber: 1,
         },
       },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                general: [{ id: "general-not-initiative", scope: "until", value: -99 }],
+                situationDb: [],
+                situationInitiative: [
+                  {
+                    id: "import:character_effect:initiative-bonus:initiative",
+                    imported: true,
+                    readOnly: true,
+                    scope: "until",
+                    sourceEffectId: "initiative-bonus",
+                    sourceType: "character_effect",
+                    value: 2,
+                  },
+                  {
+                    generated: true,
+                    id: "generated-phase2",
+                    scope: "until",
+                    sourcePhase: "phase2",
+                    value: 3,
+                  },
+                  { id: "manual-initiative", scope: "until", value: 1 },
+                  {
+                    generated: true,
+                    id: "generated-phase1",
+                    scope: "until",
+                    sourcePhase: "phase1",
+                    value: 99,
+                  },
+                ],
+                situationObSkill: [],
+              },
+            },
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
       user: mocks.adminUser,
     });
     const app = await buildScenarioTestApp();
@@ -7692,6 +7759,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        initiativeBase: 10,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-initiative",
@@ -7700,6 +7768,10 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().initiative).toMatchObject({
+      baseInitiative: 10,
+      modifierAdjustment: 6,
+    });
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase2).toMatchObject({
       rolls: response.json().initiative.rolls,

@@ -37,6 +37,7 @@ import {
   encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
+  getMergedCombatInitiativeModifierTotal,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
   getCombatRoundCombatExperienceDifficulty,
@@ -119,6 +120,7 @@ import type {
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
+  calculateWorkbookPercentageAdjustmentTrace,
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
   resolveRoleplaySkillRollModifiers,
@@ -2626,9 +2628,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const initiativeRoll = rollOpenEndedD6();
+      const initiativeBase = body.initiativeBase ?? 0;
+      const initiativeRawModifier = getMergedCombatInitiativeModifierTotal({
+        combatContext: scenarioParticipant.state.combat.combatContext,
+        phase,
+      });
+      const initiativeModifierTrace = calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: initiativeBase,
+        rawModifiers: [{ label: "Initiative", value: initiativeRawModifier }],
+      });
       const rolledInitiative = buildCombatRoundInitiativeResult({
-        baseInitiative: body.initiativeBase,
-        modifierAdjustment: body.initiativeModifierAdjustment,
+        baseInitiative: initiativeBase,
+        modifierAdjustment:
+          (initiativeModifierTrace?.finalValue ?? initiativeBase) - initiativeBase,
         roll: initiativeRoll,
       });
       const submittedAt = new Date().toISOString();

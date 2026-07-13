@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CombatEffectsState } from "@glantri/domain";
+import type { CombatEffectsState, ScenarioParticipantCombatContext } from "@glantri/domain";
 import {
   calculateWorkbookDefensePair,
   lookupWorkbookPercentageAdjustment,
@@ -492,57 +492,96 @@ describe("live combat modifiers", () => {
       });
   });
 
-  it("applies General/Fatigue and Initiative raw modifiers to initiative through the workbook table", () => {
+  it("applies only canonical initiative-bucket rows through the workbook table", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [{ id: "general", scope: "until", value: -99 }],
+        situationDb: [],
+        situationInitiative: [
+          {
+            id: "import:character_effect:initiative-1:initiative",
+            imported: true,
+            readOnly: true,
+            scope: "until",
+            sourceEffectId: "initiative-1",
+            sourceType: "character_effect",
+            value: 1,
+          },
+          { id: "manual", scope: "until", value: 2 },
+        ],
+        situationObSkill: [],
+      },
+    };
     const calculation = buildEncounterInitiativeModifierCalculation({
       baseInitiative: 12,
-      liveModifiers: {
-        dbRaw: 99,
-        generalFatigueRaw: -1,
-        initiativeRaw: 3,
-        modifierNoteLabels: [],
-        obSkillRaw: 99,
-      },
+      combatContext,
     });
-    const expectedAdjustment = lookupWorkbookPercentageAdjustment(12, 2);
+    const expectedAdjustment = lookupWorkbookPercentageAdjustment(12, 3);
 
-    expect(calculation.rawModifierTotal).toBe(2);
+    expect(calculation.rawModifierTotal).toBe(3);
     expect(calculation.modifierAdjustment).toBe(expectedAdjustment);
     expect(calculation.modifiedInitiative).toBe(12 + expectedAdjustment!);
   });
 
-  it("does not apply Skill/OB to initiative", () => {
+  it("sums imported, generated, manual, and legacy initiative rows exactly once by phase", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [
+          {
+            id: "import:character_effect:initiative-1:initiative",
+            imported: true,
+            readOnly: true,
+            scope: "until",
+            sourceEffectId: "initiative-1",
+            sourceType: "character_effect",
+            value: 2,
+          },
+          {
+            id: "import:character_effect:initiative-2:initiative",
+            imported: true,
+            readOnly: true,
+            scope: "until",
+            sourceEffectId: "initiative-2",
+            sourceType: "character_effect",
+            value: -1,
+          },
+          { generated: true, id: "generated", scope: "until", sourcePhase: "phase2", value: 6 },
+          { id: "manual", scope: "until", value: -2 },
+          { id: "legacy", scope: "until", value: 1 },
+          { generated: true, id: "other-phase", scope: "until", sourcePhase: "phase1", value: 99 },
+        ],
+        situationObSkill: [],
+      },
+    };
+
+    expect(
+      buildEncounterInitiativeModifierCalculation({
+        baseInitiative: 10,
+        combatContext,
+        phaseKey: "phase2",
+      }).rawModifierTotal,
+    ).toBe(6);
+  });
+
+  it("leaves initiative unchanged when no initiative rows exist", () => {
     expect(
       buildEncounterInitiativeModifierCalculation({
         baseInitiative: 0,
-        liveModifiers: {
-          dbRaw: 0,
-          generalFatigueRaw: 0,
-          initiativeRaw: 0,
-          modifierNoteLabels: [],
-          obSkillRaw: 100,
+        combatContext: {
+          modifierBuckets: {
+            general: [{ id: "general", scope: "until", value: -4 }],
+            situationDb: [{ id: "db", scope: "until", value: -4 }],
+            situationInitiative: [],
+            situationObSkill: [{ id: "skill", scope: "until", value: 100 }],
+          },
         },
       }),
     ).toMatchObject({
       modifiedInitiative: 0,
       modifierAdjustment: 0,
       rawModifierTotal: 0,
-    });
-
-    expect(
-      buildEncounterInitiativeModifierCalculation({
-        baseInitiative: 0,
-        liveModifiers: {
-          dbRaw: 0,
-          generalFatigueRaw: -1,
-          initiativeRaw: 0,
-          modifierNoteLabels: [],
-          obSkillRaw: 100,
-        },
-      }),
-    ).toMatchObject({
-      modifiedInitiative: -1,
-      modifierAdjustment: -1,
-      rawModifierTotal: -1,
     });
   });
 });

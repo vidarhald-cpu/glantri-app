@@ -2488,9 +2488,10 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       buildEncounterInitiativeModifierCalculation({
         baseInitiative: combatLoadoutSummary.passiveInitiative,
-        liveModifiers: liveCombatModifiers,
+        combatContext: sanitizePlayerCombatModifierContext(projectedCombatContextDraft),
+        phaseKey: currentModifierPhase,
       }),
-    [combatLoadoutSummary.passiveInitiative, liveCombatModifiers],
+    [combatLoadoutSummary.passiveInitiative, currentModifierPhase, projectedCombatContextDraft],
   );
 
   const phaseCards = useMemo(() => {
@@ -3577,7 +3578,7 @@ export default function ScenarioPlayerCombatPageContent({
                   <div style={{ color: "#4f5f57", display: "grid", gap: "0.2rem" }}>
                     <div>Base initiative {initiativeCalculation.baseInitiative}</div>
                     <div>
-                      Gen/Fatigue + Initiative modifiers{" "}
+                      Initiative modifiers{" "}
                       {initiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
                       {initiativeCalculation.rawModifierTotal}
                     </div>
