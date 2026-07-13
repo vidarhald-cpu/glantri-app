@@ -645,6 +645,7 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  includeAllPhases?: boolean;
   liveModifiers?: EncounterLiveCombatModifierSummary;
   phaseKey?: EncounterCombatPhaseKey;
 }): PlayerCombatModifierBucketView[] {
@@ -652,27 +653,20 @@ export function buildPlayerCombatModifierRows(input: {
     combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     combatEffects: input.combatEffects,
   });
+  const entriesForDisplay = (entries: ScenarioCombatModifierEntry[]) =>
+    input.includeAllPhases ? entries : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
   const filteredModifierBuckets = {
     general: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.general, input.phaseKey),
+      entriesForDisplay(combatContext.modifierBuckets.general),
     ),
     situationDb: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationDb,
-        input.phaseKey,
-      ),
+      entriesForDisplay(combatContext.modifierBuckets.situationDb),
     ),
     situationInitiative: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationInitiative,
-        input.phaseKey,
-      ),
+      entriesForDisplay(combatContext.modifierBuckets.situationInitiative),
     ),
     situationObSkill: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationObSkill,
-        input.phaseKey,
-      ),
+      entriesForDisplay(combatContext.modifierBuckets.situationObSkill),
     ),
   };
   const filteredContext = {
@@ -897,7 +891,8 @@ export function PlayerCombatModifierPanel({
           ...importedEntries.map(buildImportedModifierDisplayEntry),
         ];
         const hasVisibleRows =
-          persistentDisplayEntries.length > 0 || situationalEntries.length > 0 ||
+          persistentDisplayEntries.length > 0 ||
+          situationalEntries.length > 0 ||
           Boolean(draftEntry);
 
         return (

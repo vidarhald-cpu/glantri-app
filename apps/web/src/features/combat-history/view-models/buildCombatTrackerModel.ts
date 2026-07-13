@@ -90,6 +90,7 @@ export function getCombatTrackerCellMarkerKind(
     input.pendingDistanceControlRollCount + input.pendingHealthCheckRollCount;
   if (input.phaseCombatExperienceMarkerRequired || pendingRoundEndRollCount > 0) return "required";
   if (input.initiativeTotal !== undefined) return "roll_result";
+  if (input.stepOutcome) return "skipped";
   if (attackPhase(input.step)) {
     if (input.attackResult)
       return input.attackResult.hit || input.attackResult.grazing ? "attack_hit" : "attack_miss";
@@ -223,6 +224,7 @@ function cellDetail(input: CombatTrackerCellFacts): string {
     return `${input.pendingDistanceControlCommitCount} distance-control commit${input.pendingDistanceControlCommitCount === 1 ? "" : "s"} pending.`;
   if (input.initiativeTotal !== undefined)
     return `initiative ${input.initiativeTotal}${initiativeSource(input)}.`;
+  if (input.stepOutcome) return input.stepOutcome.message;
   if (input.attackResult) {
     const outcome = input.attackResult.grazing
       ? "grazing hit"
@@ -291,11 +293,9 @@ export function buildCombatTrackerModel(input: {
   for (const facts of input.cellFacts) {
     const markerKind = getCombatTrackerCellMarkerKind(facts);
     const marker =
-      markerKind === "required" || markerKind === "attack_hit" || markerKind === "attack_miss"
-        ? markerMeaning(markerKind).marker
-        : facts.initiativeTotal !== undefined
-          ? String(facts.initiativeTotal)
-          : markerMeaning(statusKind(facts.status)).marker;
+      facts.initiativeTotal !== undefined
+        ? String(facts.initiativeTotal)
+        : markerMeaning(markerKind).marker;
     const cellKey = buildCombatTrackerCellKey(facts);
     markerKinds.add(markerKind);
     cells[cellKey] = {

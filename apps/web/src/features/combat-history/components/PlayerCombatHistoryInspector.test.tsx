@@ -111,18 +111,14 @@ describe("PlayerCombatHistoryInspector", () => {
       "Dur",
     ]);
     expect(headingRow.style.display).toBe("grid");
-    expect(headingRow.style.gridTemplateColumns).toBe(
-      "minmax(7rem, 1fr) 3.75rem 4.25rem",
-    );
+    expect(headingRow.style.gridTemplateColumns).toBe("minmax(7rem, 1fr) 3.75rem 4.25rem");
 
-    const modifierRows = screen.getAllByText("Situational").map(
-      (source) => source.parentElement as HTMLElement,
-    );
+    const modifierRows = screen
+      .getAllByText("Situational")
+      .map((source) => source.parentElement as HTMLElement);
     expect(modifierRows).toHaveLength(2);
     for (const row of modifierRows) {
-      expect(row.style.gridTemplateColumns).toBe(
-        "minmax(7rem, 1fr) 3.75rem 4.25rem",
-      );
+      expect(row.style.gridTemplateColumns).toBe("minmax(7rem, 1fr) 3.75rem 4.25rem");
       const detailsRow = row.nextElementSibling as HTMLElement;
       expect(detailsRow.textContent).toContain("Details");
       expect(detailsRow.style.gridTemplateColumns).toBe("4.25rem minmax(0, 1fr)");
@@ -157,9 +153,27 @@ describe("PlayerCombatHistoryInspector", () => {
     empty.panels.modifiers = {};
     render(<PlayerCombatHistoryInspector events={[]} snapshot={empty} />);
 
-    expect(screen.getAllByText("No information available for this panel.").length).toBeGreaterThanOrEqual(3);
+    expect(
+      screen.getAllByText("No information available for this panel.").length,
+    ).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText("Action Label")).toBeNull();
     expect(screen.queryByText("Attack Summary")).toBeNull();
+  });
+
+  it("explains a recorded non-required historical step without a legacy warning", () => {
+    const nonRequired = snapshot();
+    nonRequired.step = "review_phase_2_actions";
+    nonRequired.stepOutcome = {
+      category: "not_required",
+      message: "No parry required. The incoming attack missed.",
+      reason: "incoming_attack_missed",
+    };
+    const { container } = render(
+      <PlayerCombatHistoryInspector events={[]} snapshot={nonRequired} />,
+    );
+
+    expect(screen.getByText("No parry required. The incoming attack missed.")).toBeTruthy();
+    expect(container.textContent).not.toContain("canonical event history");
   });
 
   it("does not render identities absent from the projected snapshot", () => {

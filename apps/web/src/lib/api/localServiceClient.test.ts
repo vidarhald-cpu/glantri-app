@@ -726,6 +726,22 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("prepares round-end review without uploading encounter history", async () => {
+    const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.prepareCombatRoundEndReviewOnServer({ encounterId: "encounter-1" }),
+    ).resolves.toEqual({ encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/prepare-round-end-review",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+  });
+
   it("skips the current combat round action through the encounter command endpoint", async () => {
     const encounter = {
       id: "encounter-1",

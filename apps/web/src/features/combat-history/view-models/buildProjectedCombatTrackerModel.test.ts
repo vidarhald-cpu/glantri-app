@@ -28,7 +28,9 @@ function event(overrides: Partial<ProjectedCombatHistoryEvent> = {}): ProjectedC
   };
 }
 
-function snapshot(): ProjectedCombatHistorySnapshot {
+function snapshot(
+  overrides: Partial<ProjectedCombatHistorySnapshot> = {},
+): ProjectedCombatHistorySnapshot {
   return {
     completeness: "complete",
     id: "snapshot-1",
@@ -36,6 +38,7 @@ function snapshot(): ProjectedCombatHistorySnapshot {
     participant: { displayName: "Aria", participantId: "aria" },
     roundNumber: 1,
     step: "phase_1_actions",
+    ...overrides,
   };
 }
 
@@ -70,6 +73,29 @@ describe("buildProjectedCombatTrackerModel", () => {
 
     expect(serialized).not.toContain("hidden-participant");
     expect(serialized).not.toContain("Hidden foe");
+  });
+
+  it("uses projected not-applicable and not-required reasons for compact dash cells", () => {
+    const projection = history([]);
+    projection.activeRound.snapshots = [
+      snapshot({
+        step: "review_phase_2_actions",
+        stepOutcome: {
+          category: "not_required",
+          message: "No parry required. The incoming attack missed.",
+          reason: "incoming_attack_missed",
+        },
+      }),
+    ];
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(model.cells["1:aria:review_phase_2_actions"]).toMatchObject({
+      marker: "–",
+      markerKind: "skipped",
+    });
+    expect(model.cells["1:aria:review_phase_2_actions"].hoverText).toContain(
+      "No parry required. The incoming attack missed.",
+    );
   });
 
   it("selects only events owned by the inspected projected cell", () => {

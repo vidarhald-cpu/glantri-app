@@ -27,6 +27,7 @@ import {
   completeCombatRoundPhaseResolutionForParticipant,
   continueCombatRoundPhaseAttack,
   canPlayerSubmitCombatDeclaration,
+  characterBuildSchema,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
@@ -36,6 +37,7 @@ import {
   encounterSessionSchema,
   encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
+  ensureCombatRoundEndReviewPrepared,
   getCombatRoundInitiativePhaseForStep,
   getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
@@ -184,6 +186,88 @@ async function getCombatExperienceSkillLookupForScenarioParticipant(
     ...participant,
     sheetSummary,
   });
+}
+
+function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipant): {
+  dodgeSkillTotal?: number;
+  healthStat?: number;
+} {
+  const build = characterBuildSchema.safeParse(participant.snapshot.build);
+  if (!build.success) return {};
+
+  const sheet = buildCharacterSheetSummary({
+    build: build.data,
+    content: defaultCanonicalContent,
+  });
+
+  return {
+    dodgeSkillTotal:
+      typeof sheet.combat.dodge === "number" && Number.isFinite(sheet.combat.dodge)
+        ? Math.round(sheet.combat.dodge)
+        : undefined,
+    healthStat: build.data.profile.rolledStats.health,
+  };
+}
+
+// Round-end distance control still uses the established direct General/Fatigue
+// effect interpretation. Migrating that calculation is a separate rules slice.
+function getLegacyRoundEndGeneralFatigueModifier(participant: ScenarioParticipant): number {
+  return (participant.state.combatEffects?.effects ?? [])
+    .filter(
+      (effect) =>
+        effect.status === "active" &&
+        effect.type !== "physical_damage" &&
+        effect.type !== "general_damage" &&
+        effect.type !== "bleed" &&
+        effect.type !== "internal_bleed" &&
+        (effect.type === "fatigue" ||
+          effect.effectGroup === "fatigue" ||
+          effect.effectGroup === "general"),
+    )
+    .reduce(
+      (total, effect) =>
+        total +
+        (effect.modifierValue ?? (effect.damage !== 0 ? effect.damage : effect.generalDamage)),
+      0,
+    );
+}
+
+function buildRoundEndParticipantInputs(input: {
+  encounter: EncounterSession;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}) {
+  return Object.fromEntries(
+    input.roundState.participants.flatMap((roundParticipant) => {
+      const encounterParticipant = input.encounter.participants.find((candidate) =>
+        participantAliasesInclude({ id: roundParticipant.participantId, participant: candidate }),
+      );
+      const scenarioParticipant = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant,
+        scenarioParticipants: input.scenarioParticipants,
+      });
+      if (!scenarioParticipant) return [];
+
+      const sheetFacts = getScenarioParticipantRoundEndSheetFacts(scenarioParticipant);
+      return [
+        [
+          roundParticipant.participantId,
+          {
+            combatEffects: scenarioParticipant.state.combatEffects,
+            distanceControl: {
+              dodgeSkillTotal: sheetFacts.dodgeSkillTotal,
+              generalFatigueModifier: getLegacyRoundEndGeneralFatigueModifier(scenarioParticipant),
+              warnings:
+                sheetFacts.dodgeSkillTotal === undefined
+                  ? ["Dodge total unavailable in participant snapshot."]
+                  : [],
+            },
+            healthStat: sheetFacts.healthStat,
+          },
+        ],
+      ];
+    }),
+  );
 }
 
 function parseRollFields(
@@ -3606,6 +3690,67 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post(
+    "/encounters/:encounterId/combat-round/prepare-round-end-review",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can prepare combat round-end review.",
+          });
+        }
+
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const submittedAt = new Date().toISOString();
+        const nextRoundState = ensureCombatRoundEndReviewPrepared({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          participantInputs: buildRoundEndParticipantInputs({
+            encounter,
+            roundState,
+            scenarioParticipants,
+          }),
+          state: roundState,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return { encounter: savedEncounter };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to prepare round-end review.",
+        });
+      }
+    },
+  );
+
   app.post("/encounters/:encounterId/combat-round/advance-current-step", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -4811,9 +4956,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const rawModifiers = [
-        ...(canonicalDbParryRaw !== 0
-          ? [{ label: "DB/Parry", value: canonicalDbParryRaw }]
-          : []),
+        ...(canonicalDbParryRaw !== 0 ? [{ label: "DB/Parry", value: canonicalDbParryRaw }] : []),
         ...(attackResult.defenderParryModifier !== 0
           ? [{ label: "Attack result", value: attackResult.defenderParryModifier }]
           : []),

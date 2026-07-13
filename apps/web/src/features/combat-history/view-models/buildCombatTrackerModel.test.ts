@@ -125,6 +125,25 @@ describe("buildCombatTrackerModel", () => {
     expect(result.legend.map((item) => item.kind)).toEqual(["required", "roll_result"]);
   });
 
+  it("explains automatic non-required steps without calling them skipped", () => {
+    const result = model([
+      facts({
+        status: "pending",
+        step: "review_phase_2_actions",
+        stepOutcome: {
+          category: "not_required",
+          message: "No parry required. The incoming attack missed.",
+          reason: "incoming_attack_missed",
+        },
+      }),
+    ]);
+    const cell = result.cells["1:participant-a:review_phase_2_actions"];
+
+    expect(cell.marker).toBe("–");
+    expect(cell.hoverText).toContain("No parry required. The incoming attack missed.");
+    expect(cell.hoverText).not.toContain("skipped");
+  });
+
   it("keeps inspectability in the projected model", () => {
     const result = model([facts({ inspectable: false })]);
 

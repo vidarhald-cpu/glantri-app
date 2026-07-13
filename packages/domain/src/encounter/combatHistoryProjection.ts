@@ -61,9 +61,7 @@ export interface ProjectedCombatHistorySnapshot {
       actionLabel?: string;
       additionalActionNotes?: string;
       movementId?: string;
-      movementIntent?: NonNullable<
-        CombatRoundStepSnapshot["declarationSummary"]
-      >["movementIntent"];
+      movementIntent?: NonNullable<CombatRoundStepSnapshot["declarationSummary"]>["movementIntent"];
       movementLabel?: string;
       movementPreferenceTargets?: Array<{ displayName: string; participantId: string }>;
       secondaryActionId?: string;
@@ -77,6 +75,21 @@ export interface ProjectedCombatHistorySnapshot {
   phase?: CombatStepEvent["phase"];
   roundNumber: number;
   step: CombatStepEvent["step"];
+  stepOutcome?: CombatHistoryStepOutcome;
+}
+
+export type CombatHistoryStepOutcomeReason =
+  | "action_explicitly_skipped"
+  | "damage_not_required"
+  | "incoming_attack_missed"
+  | "no_declared_attack"
+  | "no_incoming_attack"
+  | "parry_not_required";
+
+export interface CombatHistoryStepOutcome {
+  category: "not_applicable" | "not_required" | "skipped";
+  message: string;
+  reason: CombatHistoryStepOutcomeReason;
 }
 
 export interface ProjectedCombatHistoryPhasePanel {
@@ -108,6 +121,74 @@ export interface CombatHistoryProjection {
 export interface CombatHistoryParticipantInput {
   displayName: string;
   participantId: string;
+}
+
+/**
+ * Explains why an immutable historical cell has no roll/result. This is derived
+ * only from recorded snapshot facts and never from the live combat cursor.
+ */
+export function deriveCombatHistoryStepOutcome(
+  snapshot: CombatRoundStepSnapshot | undefined,
+): CombatHistoryStepOutcome | undefined {
+  if (!snapshot) return undefined;
+
+  const parryStep =
+    snapshot.step === "review_phase_2_actions" || snapshot.step === "review_phase_2_damage";
+  const damageStep = snapshot.step === "phase_1_damage" || snapshot.step === "phase_2_damage";
+  const attackStep = snapshot.step === "phase_1_actions" || snapshot.step === "phase_2_actions";
+  const resolution = snapshot.phaseResolutionResult;
+
+  if (parryStep && resolution?.parryResolution.status === "not_applicable") {
+    if (snapshot.attackResult && !snapshot.attackResult.hit && !snapshot.attackResult.grazing) {
+      return {
+        category: "not_required",
+        message: "No parry required. The incoming attack missed.",
+        reason: "incoming_attack_missed",
+      };
+    }
+    return {
+      category: "not_required",
+      message: "No parry required.",
+      reason: "parry_not_required",
+    };
+  }
+
+  if (damageStep && resolution?.damageRoll.status === "not_required") {
+    return {
+      category: "not_required",
+      message:
+        snapshot.attackResult && !snapshot.attackResult.hit && !snapshot.attackResult.grazing
+          ? "No damage resolution required. No hit was recorded."
+          : "No damage resolution required.",
+      reason: "damage_not_required",
+    };
+  }
+
+  if (attackStep && snapshot.actionResultStatus === "no_attack") {
+    return {
+      category: "not_applicable",
+      message: `Not applicable. No ${snapshot.phase === "phase2" ? "phase-2" : "phase-1"} attack was declared.`,
+      reason: "no_declared_attack",
+    };
+  }
+
+  if (parryStep && snapshot.actionResultStatus === "no_attack") {
+    return {
+      category: "not_applicable",
+      message: "Not applicable. No incoming attack was recorded.",
+      reason: "no_incoming_attack",
+    };
+  }
+
+  if (snapshot.actionResultStatus === "skipped") {
+    return {
+      category: "skipped",
+      message: "Skipped. The eligible action was explicitly skipped.",
+      reason: "action_explicitly_skipped",
+    };
+  }
+
+  return undefined;
 }
 
 function hasFacts(facts: Record<string, unknown>): boolean {
@@ -386,6 +467,7 @@ function projectSnapshot(input: {
     phase: input.snapshot.phase,
     roundNumber: input.snapshot.roundNumber,
     step: input.snapshot.step,
+    stepOutcome: deriveCombatHistoryStepOutcome(input.snapshot),
   };
 }
 

@@ -79,6 +79,7 @@ export {
   loadEncounterById,
   loadCombatHistory,
   loadScenarioEncounters,
+  prepareCombatRoundEndReviewOnServer,
   advanceCurrentCombatPhaseResolutionOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,

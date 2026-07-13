@@ -51,6 +51,7 @@ import {
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
+  deriveCombatHistoryStepOutcome,
   ensureCombatRoundEndReviewPrepared,
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
@@ -112,6 +113,7 @@ import {
 
 import {
   buildCombatTrackerModel,
+  buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatTracker,
   resolveCombatHistoryPanelSnapshot,
@@ -140,6 +142,7 @@ import {
   setPairDistanceOnServer,
   skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
+  prepareCombatRoundEndReviewOnServer,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
 import {
@@ -4122,16 +4125,24 @@ export default function CombatRoundManagerPanel({
     }
 
     roundEndAutoPrepareAttemptRef.current = attemptKey;
-
-    try {
-      void persistRoundState(autoPrepareRoundEndReviewState(roundState));
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to prepare round-end review automatically.",
-      );
-    }
+    setSaving(true);
+    void prepareCombatRoundEndReviewOnServer({ encounterId: encounter.id })
+      .then(({ encounter: nextEncounter }) => {
+        const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+        setRoundState(nextRoundState);
+        setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+        setSelectedRoundNumber(nextRoundState.roundNumber);
+        onEncounterUpdated?.(nextEncounter);
+        setSaveError(undefined);
+      })
+      .catch((caughtError: unknown) => {
+        setSaveError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to prepare round-end review automatically.",
+        );
+      })
+      .finally(() => setSaving(false));
   }, [encounter.id, roundState, saving, selectedRoundIsActive]);
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
     inspector.participant?.declaration,
@@ -4159,6 +4170,7 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspector.step,
   });
+  const inspectorHistoricalStepOutcome = deriveCombatHistoryStepOutcome(inspectorSnapshot);
   const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentTask;
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
@@ -4255,37 +4267,34 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
     selectedScenarioParticipant?.snapshot.equipmentState,
   ]);
-  const inspectorGeneratedCombatContext = useMemo(
-    () => {
-      if (inspectorHasLocalModifierEdits) {
-        return inspectorDraft.combatContext;
-      }
+  const inspectorGeneratedCombatContext = useMemo(() => {
+    if (inspectorHasLocalModifierEdits) {
+      return inspectorDraft.combatContext;
+    }
 
-      return projectCombatActionGeneratedModifiers({
-        actionId: inspectorDraft.actionId || undefined,
-        combatContext: inspectorDraft.combatContext,
-        encounterParticipant: selectedEncounterParticipant,
-        movementIntent: inspectorDraft.movementIntent,
-        phaseContexts: inspectorDraft.phaseContexts,
-        resolvedEquipmentState: inspectorEquipmentState ?? undefined,
-        roundState: selectedTimelineRoundState,
-        scenarioParticipant: selectedScenarioParticipant,
-        secondaryActionId: inspectorDraft.secondaryActionId || undefined,
-      });
-    },
-    [
-      inspectorDraft.actionId,
-      inspectorDraft.combatContext,
-      inspectorDraft.movementIntent,
-      inspectorDraft.phaseContexts,
-      inspectorDraft.secondaryActionId,
-      inspectorEquipmentState,
-      inspectorHasLocalModifierEdits,
-      selectedEncounterParticipant,
-      selectedScenarioParticipant,
-      selectedTimelineRoundState,
-    ],
-  );
+    return projectCombatActionGeneratedModifiers({
+      actionId: inspectorDraft.actionId || undefined,
+      combatContext: inspectorDraft.combatContext,
+      encounterParticipant: selectedEncounterParticipant,
+      movementIntent: inspectorDraft.movementIntent,
+      phaseContexts: inspectorDraft.phaseContexts,
+      resolvedEquipmentState: inspectorEquipmentState ?? undefined,
+      roundState: selectedTimelineRoundState,
+      scenarioParticipant: selectedScenarioParticipant,
+      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+    });
+  }, [
+    inspectorDraft.actionId,
+    inspectorDraft.combatContext,
+    inspectorDraft.movementIntent,
+    inspectorDraft.phaseContexts,
+    inspectorDraft.secondaryActionId,
+    inspectorEquipmentState,
+    inspectorHasLocalModifierEdits,
+    selectedEncounterParticipant,
+    selectedScenarioParticipant,
+    selectedTimelineRoundState,
+  ]);
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
@@ -4310,9 +4319,10 @@ export default function CombatRoundManagerPanel({
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );
-  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] = inspectorIsHistorical
-    ? (inspectorPanelSnapshot?.modifierSummary?.rows ?? [])
-    : inspectorModifierRows;
+  const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
+    inspectorIsHistorical
+      ? (inspectorPanelSnapshot?.modifierSummary?.rows ?? [])
+      : inspectorModifierRows;
   const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorIsHistorical
     ? "history"
     : "current";
@@ -5290,6 +5300,15 @@ export default function CombatRoundManagerPanel({
     participants: selectedTimelineRoundState.participants,
   });
   const inspectorHasCanonicalActionResult = inspectorCanonicalActionResultEvents.length > 0;
+  const inspectorShowsLegacyResultFallback = Boolean(
+    inspectorIsHistorical &&
+    !inspectorHistoricalStepOutcome &&
+    inspectorSnapshot &&
+    (inspectorSnapshot.actionResultStatus === "recorded" ||
+      inspectorSnapshot.attackResult ||
+      inspectorSnapshot.initiativeResult ||
+      inspectorSnapshot.actionResultSummary),
+  );
   const inspectorLatestRoundEndDistanceResult =
     selectedRoundIsActive &&
     inspector.step === "round_summary" &&
@@ -5309,10 +5328,12 @@ export default function CombatRoundManagerPanel({
         }
       : undefined;
   const inspectorHistoricalActionResult = inspectorIsHistorical
-    ? buildHistoricalCombatActionResult({
-        participantId: inspector.participant?.participantId,
-        snapshot: inspectorSnapshot,
-      })
+    ? inspectorHistoricalStepOutcome
+      ? { interpretedResult: inspectorHistoricalStepOutcome.message }
+      : buildHistoricalCombatActionResult({
+          participantId: inspector.participant?.participantId,
+          snapshot: inspectorSnapshot,
+        })
     : undefined;
   const inspectorActionResult = inspectorIsHistorical
     ? inspectorHistoricalActionResult
@@ -5374,6 +5395,13 @@ export default function CombatRoundManagerPanel({
                       ? inspectorLatestRoundEndDistanceResult
                       : null;
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
+  const inspectorHistoricalStatusLabel = inspectorHistoricalStepOutcome
+    ? inspectorHistoricalStepOutcome.category === "not_required"
+      ? "Not required"
+      : inspectorHistoricalStepOutcome.category === "not_applicable"
+        ? "Not applicable"
+        : "Skipped"
+    : undefined;
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
@@ -5809,7 +5837,13 @@ export default function CombatRoundManagerPanel({
         phaseKey: phase,
         scenarioParticipant,
       });
-      const modifierRows = phaseSummary.modifierRows.map((row) => ({
+      // Snapshot rows describe everything recorded at this point in the round.
+      // Phase filtering belongs to calculation totals, not historical visibility.
+      const recordedModifierRows = buildRecordedCombatModifierRows({
+        combatContext: draft.combatContext,
+        combatEffects: scenarioParticipant?.state.combatEffects,
+      });
+      const modifierRows = recordedModifierRows.map((row) => ({
         bucketKey: row.bucketKey,
         entries: row.entries,
         label: row.label,
@@ -6961,8 +6995,7 @@ export default function CombatRoundManagerPanel({
           roundNumber: roundState.roundNumber,
         }),
         dbParryRaw: getMergedCombatDbParryModifierTotal({
-          combatContext:
-            inspectorParryDefenderScenarioParticipant.state.combat.combatContext,
+          combatContext: inspectorParryDefenderScenarioParticipant.state.combat.combatContext,
           phase,
         }),
         encounterId: encounter.id,
@@ -7581,10 +7614,10 @@ export default function CombatRoundManagerPanel({
         });
         const trackerCanonicalAttackResult = trackerAttackPhase
           ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-                participantId: timelineParticipant.participantId,
-                phase: trackerAttackPhase,
-                state: timelineRoundState,
-              })
+              participantId: timelineParticipant.participantId,
+              phase: trackerAttackPhase,
+              state: timelineRoundState,
+            })
           : undefined;
         const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult;
         const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
@@ -7648,6 +7681,7 @@ export default function CombatRoundManagerPanel({
             inspectionSelection.step === step,
           status: stepStatus,
           step,
+          stepOutcome: deriveCombatHistoryStepOutcome(trackerSnapshot),
         });
       }
     }
@@ -7816,7 +7850,10 @@ export default function CombatRoundManagerPanel({
                   {COMBAT_ROUND_STEP_LABELS[inspector.step]}
                 </h3>
                 <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} · {formatStepStatus(inspector.status)}
+                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} ·{" "}
+                  {inspectorIsHistorical && inspectorHistoricalStatusLabel
+                    ? inspectorHistoricalStatusLabel
+                    : formatStepStatus(inspector.status)}
                   {inspectorSnapshot ? " · Committed" : ""}
                 </div>
               </div>
@@ -8340,9 +8377,16 @@ export default function CombatRoundManagerPanel({
                       }
                       preActionControls={inspectorPreActionControls}
                       saving={saving}
-                      statusText={`Current step: ${getPlayerCombatStepLabel(
-                        inspector.step,
-                      )}.${inspectorStatusSuffix}`}
+                      statusText={
+                        inspectorIsHistorical
+                          ? `Historical step: ${
+                              inspectorHistoricalStepOutcome?.message ??
+                              `${getPlayerCombatStepLabel(inspector.step)}.`
+                            }`
+                          : `Current step: ${getPlayerCombatStepLabel(
+                              inspector.step,
+                            )}.${inspectorStatusSuffix}`
+                      }
                       validationMessage={inspectorActionValidationMessage}
                     />
                   </div>
@@ -8350,9 +8394,11 @@ export default function CombatRoundManagerPanel({
                     <CombatEventResultList events={inspectorCanonicalActionResultEvents} />
                   ) : inspectorActionResult ? (
                     <div style={{ display: "grid", gap: "0.3rem" }}>
-                      <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
-                        Legacy result · canonical event history unavailable
-                      </div>
+                      {inspectorShowsLegacyResultFallback ? (
+                        <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
+                          Some historical result details are unavailable.
+                        </div>
+                      ) : null}
                       <PlayerCombatActionResultPanel result={inspectorActionResult} />
                     </div>
                   ) : (

@@ -5,6 +5,7 @@ import type {
   CombatRoundStep,
   CombatRoundStepSnapshot,
   CombatRoundStepStatus,
+  CombatHistoryStepOutcome,
 } from "@glantri/domain";
 
 export type CombatTrackerMarkerKind =
@@ -56,6 +57,7 @@ export interface CombatTrackerCellFacts {
   selected: boolean;
   status: CombatRoundStepStatus;
   step: CombatRoundStep;
+  stepOutcome?: CombatHistoryStepOutcome;
 }
 
 export interface CombatTrackerCellView {

@@ -266,7 +266,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Modifiers declared");
     expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).toContain('" Initiative rolled."');
-    expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
+    expect(source).toContain("Historical step:");
+    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInspectorPhaseAttack");
@@ -495,7 +497,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "<CombatEventResultList events={inspectorCanonicalActionResultEvents} />",
     );
-    expect(source).toContain("Legacy result · canonical event history unavailable");
+    expect(source).not.toContain("Legacy result · canonical event history unavailable");
+    expect(source).toContain("Some historical result details are unavailable.");
+    expect(source).toContain("deriveCombatHistoryStepOutcome");
     expect(source).toContain(") : inspectorActionResult ? (");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
     expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
@@ -691,6 +695,10 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
     expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows ?? []");
+    expect(source).toContain("const recordedModifierRows = buildRecordedCombatModifierRows({");
+    expect(source).toContain(
+      "Phase filtering belongs to calculation totals, not historical visibility.",
+    );
     expect(source).toContain(": inspectorModifierRows;");
     expect(source).toContain("No information available for this panel.");
     expect(source).toContain("resolveCombatHistoryPanelSnapshot");
@@ -777,6 +785,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
+    expect(source).toContain("prepareCombatRoundEndReviewOnServer");
     expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain("stepSnapshots,");
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
@@ -899,7 +908,9 @@ describe("CombatRoundManagerPanel", () => {
       "const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep",
     );
     expect(source).toContain("getAdvanceButtonLabel(currentTaskStep)");
-    expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
+    expect(source).toContain("Historical step:");
+    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("inspector.step,");
     expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");
     expect(source).not.toContain('roundState.currentStep === "review_action_modifiers" &&');

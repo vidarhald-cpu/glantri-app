@@ -370,6 +370,15 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
   return payload;
 }
 
+export async function prepareCombatRoundEndReviewOnServer(input: {
+  encounterId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/prepare-round-end-review`,
+    { method: "POST" },
+  );
+}
+
 export async function skipCombatRoundCurrentActionOnServer(input: {
   encounterId: string;
 }): Promise<{

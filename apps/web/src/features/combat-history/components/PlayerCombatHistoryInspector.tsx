@@ -35,9 +35,7 @@ function MissingHistoricalPanel(input: { title: string }) {
   return (
     <section aria-label={input.title} style={playerCombatPanelCardStyle}>
       <strong>{input.title}</strong>
-      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-        {historicalDataMissingMessage}
-      </div>
+      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{historicalDataMissingMessage}</div>
     </section>
   );
 }
@@ -90,9 +88,7 @@ function HistoricalPhasePanel(input: {
         </>
       ) : null}
       {!input.panel.attackSummary && !input.panel.defenseSummary ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-          {historicalDataMissingMessage}
-        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{historicalDataMissingMessage}</div>
       ) : null}
     </PlayerCombatPhasePanel>
   );
@@ -161,14 +157,8 @@ export function PlayerCombatHistoryInspector(input: {
         ) : (
           <MissingHistoricalPanel title="Action selector" />
         )}
-        <HistoricalPhasePanel
-          panel={input.snapshot?.panels.phase1 ?? {}}
-          phaseLabel="Phase 1"
-        />
-        <HistoricalPhasePanel
-          panel={input.snapshot?.panels.phase2 ?? {}}
-          phaseLabel="Phase 2"
-        />
+        <HistoricalPhasePanel panel={input.snapshot?.panels.phase1 ?? {}} phaseLabel="Phase 1" />
+        <HistoricalPhasePanel panel={input.snapshot?.panels.phase2 ?? {}} phaseLabel="Phase 2" />
       </div>
       <div style={playerCombatPanelRowStyle}>
         {modifierRows ? (
@@ -186,7 +176,10 @@ export function PlayerCombatHistoryInspector(input: {
           disabled
           statusText="No historical action control recorded."
         />
-        <CombatEventResultList emptyMessage={historicalDataMissingMessage} events={input.events} />
+        <CombatEventResultList
+          emptyMessage={input.snapshot?.stepOutcome?.message ?? historicalDataMissingMessage}
+          events={input.events}
+        />
       </div>
     </section>
   );

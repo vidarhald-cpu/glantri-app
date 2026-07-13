@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   combatRoundStateSchema,
   combatStepEventSchema,
+  buildCombatRoundAttackRollResult,
+  buildCombatRoundPhaseResolutionResult,
+  deriveCombatHistoryStepOutcome,
   projectCombatHistory,
   projectCombatHistoryEvent,
   type CombatStepEvent,
@@ -50,6 +53,70 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("distinguishes historical non-applicability, non-required resolution, and explicit skips", () => {
+    const miss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "aria",
+      defenderDb: 12,
+      defenderParticipantId: "borin",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 2,
+      rollTotal: 2,
+      rolledAt: "2026-01-01T00:01:00.000Z",
+      weaponName: "Long sword",
+    });
+    const resolution = buildCombatRoundPhaseResolutionResult({
+      attackResult: miss,
+      roundNumber: 1,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const base = {
+      committedAt: "2026-01-01T00:03:00.000Z",
+      id: "snapshot-outcome",
+      participantId: "borin",
+      participantLabel: "Borin",
+      roundNumber: 1,
+    };
+
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        actionResultStatus: "no_attack",
+        phase: "phase1",
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({ category: "not_applicable", reason: "no_declared_attack" });
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        attackResult: miss,
+        phase: "phase1",
+        phaseResolutionResult: resolution,
+        step: "review_phase_2_actions",
+      }),
+    ).toEqual({
+      category: "not_required",
+      message: "No parry required. The incoming attack missed.",
+      reason: "incoming_attack_missed",
+    });
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        attackResult: miss,
+        phase: "phase1",
+        phaseResolutionResult: resolution,
+        step: "phase_1_damage",
+      }),
+    ).toMatchObject({ category: "not_required", reason: "damage_not_required" });
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        actionResultStatus: "skipped",
+        step: "phase_2_actions",
+      }),
+    ).toMatchObject({ category: "skipped", reason: "action_explicitly_skipped" });
+  });
   it("shows attack calculation only to the roller and involved outcome to the defender", () => {
     const attack = event({
       attackerParticipantId: "aria",
@@ -295,8 +362,16 @@ describe("combat history projection", () => {
         additionalActionNotes: "Hold the bridge",
         movementIntent: {
           distancePreferences: [
-            { desiredDistance: 2, source: "player_declared" as const, targetParticipantId: "borin" },
-            { desiredDistance: 3, source: "player_declared" as const, targetParticipantId: "hidden" },
+            {
+              desiredDistance: 2,
+              source: "player_declared" as const,
+              targetParticipantId: "borin",
+            },
+            {
+              desiredDistance: 3,
+              source: "player_declared" as const,
+              targetParticipantId: "hidden",
+            },
           ],
           mode: "set_distance_preferences" as const,
         },

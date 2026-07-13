@@ -3,6 +3,7 @@ export * from "./components/CombatTracker";
 export * from "./components/PlayerCombatHistoryInspector";
 export * from "./types";
 export * from "./view-models/buildCombatEventResultModel";
+export * from "./view-models/buildRecordedCombatModifierRows";
 export * from "./view-models/selectCombatEventsForTrackerCell";
 export * from "./view-models/buildCombatTrackerModel";
 export * from "./view-models/buildProjectedCombatTrackerModel";

@@ -29,6 +29,7 @@ function markerForEvents(input: {
   current: boolean;
   events: readonly ProjectedCombatHistoryEvent[];
   hasSnapshot: boolean;
+  stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
   const initiative = input.events.find((event) => event.type === "initiative");
   const initiativeTotal =
@@ -49,15 +50,13 @@ function markerForEvents(input: {
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
   if (skipped) return { kind: "skipped", marker: "–" };
+  if (input.stepOutcome) return { kind: "skipped", marker: "–" };
   if (input.events.length || input.hasSnapshot) return { kind: "complete", marker: "✓" };
   if (input.current) return { kind: "required", marker: "?" };
   return { kind: "not_reached", marker: "·" };
 }
 
-function projectedFact(
-  event: ProjectedCombatHistoryEvent,
-  key: string,
-): unknown {
+function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown {
   return event.facts.involvedOutcome?.[key] ?? event.facts.publicOutcome[key];
 }
 
@@ -181,17 +180,23 @@ export function buildProjectedCombatTrackerModel(input: {
           current,
           events: cellEvents,
           hasSnapshot: Boolean(snapshot),
+          stepOutcome: snapshot?.stepOutcome,
         });
         const cellKey = buildCombatTrackerCellKey(selection);
         const inspectable = current || Boolean(snapshot) || cellEvents.length > 0;
-        const hoverDetail = formatProjectedCombatTrackerHoverDetail(cellEvents);
+        const hoverDetail =
+          snapshot?.stepOutcome?.message ?? formatProjectedCombatTrackerHoverDetail(cellEvents);
         markerKinds.add(marker.kind);
         cells[cellKey] = {
           cellKey,
           current,
           hoverText: `${row.displayName} · Round ${round.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]}: ${
             hoverDetail ??
-            (inspectable ? (current ? "current task." : "incomplete legacy history.") : "not reached.")
+            (inspectable
+              ? current
+                ? "current task."
+                : "incomplete legacy history."
+              : "not reached.")
           }`,
           initiativeValue: marker.kind === "roll_result",
           inspectable,

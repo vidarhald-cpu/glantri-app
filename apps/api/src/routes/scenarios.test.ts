@@ -2230,10 +2230,7 @@ describe("scenarios route contract", () => {
           },
           { participantId: "encounter-participant-1", role: "defender" },
         ],
-        involvedParticipantIds: [
-          "encounter-participant-hidden",
-          "encounter-participant-1",
-        ],
+        involvedParticipantIds: ["encounter-participant-hidden", "encounter-participant-1"],
         outcomeScope: "perceived",
         rollerParticipantId: "encounter-participant-hidden",
       },
@@ -2394,10 +2391,7 @@ describe("scenarios route contract", () => {
                 { participantId: "encounter-participant-2", role: "attacker" },
                 { participantId: "encounter-participant-1", role: "defender" },
               ],
-              involvedParticipantIds: [
-                "encounter-participant-2",
-                "encounter-participant-1",
-              ],
+              involvedParticipantIds: ["encounter-participant-2", "encounter-participant-1"],
               outcomeScope: "involved",
               rollerParticipantId: "encounter-participant-2",
             },
@@ -5595,6 +5589,59 @@ describe("scenarios route contract", () => {
         session: expect.objectContaining({
           combatRoundState: expect.objectContaining({
             currentStep: "initiative_phase_1",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("prepares round-end review from persisted state without a request payload", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const summaryState: CombatRoundState = {
+      ...baseState,
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: baseState.roundNumber,
+        step: "SU",
+      },
+      currentStep: "round_summary",
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    };
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        combatRoundState: summaryState,
+        currentRound: summaryState.roundNumber,
+        participants: encounterParticipants,
+      },
+      participants: [
+        { id: "participant-1", snapshot: { displayName: "The Gladiator" } },
+        { id: "participant-2", snapshot: { displayName: "City guard" } },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/prepare-round-end-review",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.combatRoundState.roundEndReview).toMatchObject({
+      roundNumber: summaryState.roundNumber,
+    });
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          combatRoundState: expect.objectContaining({
+            roundEndReview: expect.objectContaining({ roundNumber: summaryState.roundNumber }),
           }),
         }),
       }),
