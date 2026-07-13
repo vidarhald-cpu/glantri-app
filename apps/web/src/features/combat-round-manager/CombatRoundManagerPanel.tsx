@@ -59,6 +59,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
+  getMergedCombatSkillObModifierTotal,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -6882,6 +6883,10 @@ export default function CombatRoundManagerPanel({
         defenderScenarioParticipantId: targetScenarioParticipant.id,
         encounterId: encounter.id,
         ob,
+        obSkillRaw: getMergedCombatSkillObModifierTotal({
+          combatContext: inspectorGeneratedCombatContext,
+          phase,
+        }),
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
         weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,

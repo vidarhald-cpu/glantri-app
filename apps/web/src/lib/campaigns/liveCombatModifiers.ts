@@ -4,7 +4,10 @@ import type {
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
-import { getMergedCombatInitiativeModifierTotal } from "@glantri/domain";
+import {
+  getMergedCombatInitiativeModifierTotal,
+  getMergedCombatSkillObModifierTotal,
+} from "@glantri/domain";
 import {
   calculateWorkbookPercentageAdjustmentTrace,
   lookupWorkbookPercentageAdjustment,
@@ -152,7 +155,9 @@ export function buildEncounterLiveCombatModifierSummary(input: {
       "Enc",
       "Equipment",
     ],
-    obSkillRaw: effectSums.obSkill + contextTotals.situationObSkillTotal,
+    obSkillRaw: getMergedCombatSkillObModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
   };
 }
 

@@ -239,6 +239,13 @@ describe("combatStatePanel throwing row reliability", () => {
     expect(source).toContain("input.liveCombatModifiers");
     expect(source).toContain('Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}');
     expect(source).toContain("attack: liveObSkillRaw");
+    expect(source).toContain(
+      "const liveObSkillRaw = input.liveCombatModifiers?.obSkillRaw ?? 0;",
+    );
+    expect(source).toContain('{ label: "OB/Skill", value: liveObSkillRaw }');
+    expect(source).not.toContain(
+      "(input.liveCombatModifiers?.generalFatigueRaw ?? 0) +\n    (input.liveCombatModifiers?.obSkillRaw ?? 0)",
+    );
     expect(source).toContain("defense: liveDbRaw");
     expect(source).toContain("getWorkbookLiveSkillTotal");
     expect(source).toContain("getWorkbookLiveSkillEncumberedTotal");

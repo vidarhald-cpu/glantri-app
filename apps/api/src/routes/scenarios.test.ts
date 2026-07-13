@@ -709,6 +709,47 @@ function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) 
   };
 }
 
+function makeCanonicalAttackModifierParticipantState() {
+  return {
+    ...makeCombatScenarioParticipant().state,
+    combat: {
+      combatContext: {
+        modifierBuckets: {
+          general: [{ id: "general-not-ob", scope: "until", value: 99 }],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [
+            {
+              id: "import:character_effect:skill-ob:skill_ob",
+              imported: true,
+              readOnly: true,
+              scope: "until",
+              sourceEffectId: "skill-ob",
+              sourceType: "character_effect",
+              value: 2,
+            },
+            {
+              generated: true,
+              id: "generated-phase1-ob",
+              scope: "until",
+              sourcePhase: "phase1",
+              value: -1,
+            },
+            { id: "manual-ob", scope: "until", value: 1 },
+            {
+              generated: true,
+              id: "other-phase-ob",
+              scope: "until",
+              sourcePhase: "phase2",
+              value: 99,
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
 function makeWeaponEquipmentState(input: {
   characterId?: string;
   name: string;
@@ -8061,6 +8102,97 @@ describe("scenarios route contract", () => {
       defenderParticipantId: "encounter-participant-2",
       phase: "phase1",
     });
+  });
+
+  it.each([
+    ["player", mocks.playerUser],
+    ["GM proxy", mocks.adminUser],
+  ])("uses canonical Skill/OB for a %s attack", async (_label, user) => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const attackerState = makeCanonicalAttackModifierParticipantState();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: makeOpenPhase1AttackRoundState({ snapshotOb: "10" }),
+        participants: encounterParticipants,
+      },
+      participants: [
+        { id: "participant-1", state: attackerState },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+      user,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 14,
+        obSkillRaw: 2,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
+      ob: 14,
+      phase: "phase1",
+    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: {
+        obSkillRaw: 2,
+      },
+      type: "roll_attack",
+    });
+    expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.rollerPrivate).toMatchObject({
+      ob: 14,
+    });
+  });
+
+  it("rejects a live attack when the submitted Skill/OB total is stale", async () => {
+    const attackerState = makeCanonicalAttackModifierParticipantState();
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: makeOpenPhase1AttackRoundState(),
+        participants: makeTwoCombatEncounterParticipants(),
+      },
+      participants: [
+        { id: "participant-1", state: attackerState },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 14,
+        obSkillRaw: 1,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Attack modifiers changed. Refresh combat before rolling.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("uses the existing generated distance Skill/OB row for the current player phase 1 attack", async () => {

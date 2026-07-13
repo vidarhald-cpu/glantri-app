@@ -2246,6 +2246,7 @@ export default function ScenarioPlayerCombatPageContent({
         defenderScenarioParticipantId,
         encounterId,
         ob,
+        obSkillRaw: liveCombatModifiers.obSkillRaw,
         phase: currentAttackPhase,
         scenarioParticipantId: selectedParticipant.id,
         weaponCriticalCode: phaseAttackStats.weaponCriticalCode,

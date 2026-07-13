@@ -206,7 +206,7 @@ describe("live combat modifiers", () => {
     }
   });
 
-  it("adds manual OB/Skill and DB context totals while keeping General/Fatigue effect-owned", () => {
+  it("uses canonical OB/Skill rows without separately adding raw persistent effects", () => {
     const summary = buildEncounterLiveCombatModifierSummary({
       combatContext: {
         modifierBuckets: {
@@ -229,7 +229,7 @@ describe("live combat modifiers", () => {
 
     expect(summary.generalFatigueRaw).toBe(-6);
     expect(summary.initiativeRaw).toBe(5);
-    expect(summary.obSkillRaw).toBe(4);
+    expect(summary.obSkillRaw).toBe(3);
     expect(summary.dbRaw).toBe(1);
     expect(summary.modifierNoteLabels).toEqual([
       "Gen/Fatigue",
@@ -239,6 +239,44 @@ describe("live combat modifiers", () => {
       "Enc",
       "Equipment",
     ]);
+  });
+
+  it("sums imported, generated, manual, and legacy Skill/OB rows exactly once by phase", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [{ id: "general-not-ob", scope: "until", value: -99 }],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [
+          {
+            id: "import:character_effect:skill-1:skill_ob",
+            imported: true,
+            readOnly: true,
+            scope: "until",
+            sourceEffectId: "skill-1",
+            sourceType: "character_effect",
+            value: 2,
+          },
+          {
+            id: "import:character_effect:skill-2:skill_ob",
+            imported: true,
+            readOnly: true,
+            scope: "until",
+            sourceEffectId: "skill-2",
+            sourceType: "character_effect",
+            value: -1,
+          },
+          { generated: true, id: "generated", scope: "until", sourcePhase: "phase1", value: -2 },
+          { id: "manual", scope: "until", value: 1 },
+          { id: "legacy", scope: "until", value: 3 },
+          { generated: true, id: "other-phase", scope: "until", sourcePhase: "phase2", value: 99 },
+        ],
+      },
+    };
+
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).obSkillRaw,
+    ).toBe(3);
   });
 
   it("traces DB/Parry from General/Fatigue plus DB/Parry only", () => {

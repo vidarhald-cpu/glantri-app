@@ -78,19 +78,20 @@ Final DB = apply workbook percentage adjustment once
 OB, parry, and encounter-context combat/encumbrance-dependent skill rows now use the same rule for
 the live modifier sources currently wired through the app:
 
-- OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, General/Fatigue,
-  and OB/Skill before one percentage lookup.
+- OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, and the
+  canonical phase Skill/OB bucket before one percentage lookup. General/Fatigue rows do not enter
+  attack OB merely because they are general rows.
 - Parry/P uses the workbook raw parry as the base value and sums armor activity, weapon/shield
   parry, General/Fatigue, and DB/Parry before one percentage lookup. Combined parry also keeps the
   workbook minimum-1 primary/off-hand contribution rule before summing the live raw modifiers.
 - Encounter-context combat skill rows use the unencumbered skill total as the base value. Their
-  live skill value sums General/Fatigue and OB/Skill before one percentage lookup. Their encumbered
-  live value adds the existing encumbrance movement modifier as an `Enc` raw modifier into the same
-  lookup.
-- Initiative uses the panel/passive initiative as the base value. Its live initiative value sums
-  General/Fatigue and Initiative raw modifiers before one percentage lookup, then adds the
-  open-ended d6 roll. OB/Skill and DB/Parry are intentionally not part of initiative unless a later
-  spreadsheet-backed rule adds them.
+  live skill value uses the canonical phase Skill/OB bucket before one percentage lookup. Their
+  encumbered live value adds the existing encumbrance movement modifier as an `Enc` raw modifier
+  into the same lookup.
+- Initiative uses the panel/passive initiative as the base value. Its live initiative value uses
+  the canonical phase Initiative bucket before one percentage lookup, then adds the open-ended d6
+  roll. General/Fatigue, OB/Skill, and DB/Parry are not part of initiative merely because they are
+  present in their own buckets.
 
 DB/Parry does not include Skill/OB or Initiative. The encounter read model uses:
 
@@ -243,12 +244,12 @@ Theoretical raw modifiers = Broad sword OB +2
 Theoretical percentage adjustment = lookupWorkbookPercentageAdjustment(10, 2) = 2
 Theoretical final OB = 12
 
-Encounter raw modifiers = Broad sword OB +2 + General/Fatigue -1 = +1
+Encounter raw modifiers = Broad sword OB +2 + Skill/OB -1 = +1
 Encounter percentage adjustment = lookupWorkbookPercentageAdjustment(10, 1) = 1
 Encounter final OB = 11
 ```
 
-So theoretical OB `12` with live General/Fatigue `-1` should display as `11`, not `10`. A result of
+So theoretical OB `12` with live Skill/OB `-1` should display as `11`, not `10`. A result of
 `10` means the live modifier was both included in the raw modifier sum and then applied again as a
 flat post-adjustment subtraction. Applying the percentage table directly to the displayed `12` is
 also not the canonical path, because `12` is already a final workbook value rather than the raw OB

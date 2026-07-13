@@ -250,3 +250,23 @@ export function getMergedCombatInitiativeModifierTotal(input: {
     },
   }).initiative;
 }
+
+/** Returns the canonical Skill/OB-bucket total for one live combat phase. */
+export function getMergedCombatSkillObModifierTotal(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  phase?: "phase1" | "phase2";
+}): number {
+  if (!input.combatContext || !input.phase) {
+    return getMergedCombatModifierTotals(input.combatContext).skillOb;
+  }
+
+  return getMergedCombatModifierTotals({
+    ...input.combatContext,
+    modifierBuckets: {
+      ...input.combatContext.modifierBuckets,
+      situationObSkill: input.combatContext.modifierBuckets.situationObSkill.filter(
+        (entry) => !entry.sourcePhase || entry.sourcePhase === input.phase,
+      ),
+    },
+  }).skillOb;
+}

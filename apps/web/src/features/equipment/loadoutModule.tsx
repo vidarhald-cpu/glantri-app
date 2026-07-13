@@ -209,7 +209,7 @@ function applyWorkbookRawModifiersToSkillValue(input: {
 function getLiveSkillRawModifiers(liveObSkillRaw: number): WorkbookRawModifier[] {
   return liveObSkillRaw === 0
     ? []
-    : [{ label: "Gen/Fatigue + OB/Skill", value: liveObSkillRaw }];
+    : [{ label: "OB/Skill", value: liveObSkillRaw }];
 }
 
 function getWorkbookLiveSkillTotal(input: {
@@ -421,9 +421,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
   }
 
   const combatAllocationInputs = input.combatAllocationInputs ?? defaultCombatAllocationState;
-  const liveObSkillRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.obSkillRaw ?? 0);
+  const liveObSkillRaw = input.liveCombatModifiers?.obSkillRaw ?? 0;
   const liveDbRaw =
     (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
     (input.liveCombatModifiers?.dbRaw ?? 0);

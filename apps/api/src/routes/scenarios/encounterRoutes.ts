@@ -38,6 +38,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
   getMergedCombatInitiativeModifierTotal,
+  getMergedCombatSkillObModifierTotal,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
   getCombatRoundCombatExperienceDifficulty,
@@ -550,6 +551,7 @@ function parseCombatAttackBody(body: unknown): {
   defenderDb?: number;
   defenderScenarioParticipantId: string;
   ob?: number;
+  obSkillRaw?: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   weaponCriticalCode?: string;
@@ -586,6 +588,7 @@ function parseCombatAttackBody(body: unknown): {
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderScenarioParticipantId,
     ob: parseOptionalInteger(value.ob, "ob"),
+    obSkillRaw: parseOptionalInteger(value.obSkillRaw, "obSkillRaw"),
     phase,
     weaponCriticalCode,
     weaponDamageClass,
@@ -4589,6 +4592,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
+      const canonicalObSkillRaw = getMergedCombatSkillObModifierTotal({
+        combatContext: attackerCombatContext,
+        phase: body.phase,
+      });
+
+      if (body.obSkillRaw !== undefined && body.obSkillRaw !== canonicalObSkillRaw) {
+        return reply.code(409).send({
+          error: "Attack modifiers changed. Refresh combat before rolling.",
+        });
+      }
+
       const distanceModifierDetail = buildDistanceModifierDetailFromExistingEntry(
         findExistingDistanceModifierEntry({
           combatContext: attackerCombatContext,
@@ -4606,7 +4620,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot: latestAttackerSnapshot,
           })
         : persistedDistanceModifierValue;
-      const ob = snapshotOb + persistedDistanceModifierValue - snapshotDistanceModifierValue;
+      const ob =
+        body.ob !== undefined && body.obSkillRaw !== undefined
+          ? body.ob
+          : snapshotOb + persistedDistanceModifierValue - snapshotDistanceModifierValue;
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
@@ -4630,6 +4647,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdByUserId: user.id,
           facts: {
             ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
+            obSkillRaw: canonicalObSkillRaw,
           },
         },
         participantId: encounterParticipant.id,

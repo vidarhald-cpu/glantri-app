@@ -458,6 +458,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
+    expect(source).toContain("obSkillRaw: getMergedCombatSkillObModifierTotal({");
     expect(source).toContain(
       "weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)",
     );

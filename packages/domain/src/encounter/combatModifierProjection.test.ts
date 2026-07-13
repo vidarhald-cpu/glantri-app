@@ -10,6 +10,7 @@ import type { CombatEffect, CombatEffectsState } from "./combatEffects";
 import {
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatModifierTotals,
+  getMergedCombatSkillObModifierTotal,
   mergePersistentCombatEffectModifiers,
   projectPersistentCombatEffectModifiers,
   refreshScenarioParticipantPersistentCombatModifiers,
@@ -573,5 +574,57 @@ describe("persistent combat modifier refresh lifecycle", () => {
         phase: "phase1",
       }),
     ).toBe(0);
+  });
+
+  it("provides the phase-aware canonical Skill/OB total after source changes", () => {
+    const initial = refresh({
+      combatEffects: effects(
+        effect({ combatModifierBucket: "skill_ob", id: "skill-1", modifierValue: 2 }),
+        effect({ combatModifierBucket: "skill_ob", id: "skill-2", modifierValue: 3 }),
+        effect({ combatModifierBucket: "general", id: "general", modifierValue: 99 }),
+        effect({ combatModifierBucket: undefined, id: "legacy-effect", modifierValue: 50 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatSkillObModifierTotal({
+        combatContext: initial.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(4);
+
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(
+        effect({ combatModifierBucket: "skill_ob", id: "skill-1", modifierValue: 4 }),
+        effect({
+          combatModifierBucket: "skill_ob",
+          id: "skill-2",
+          modifierValue: 3,
+          status: "resolved",
+        }),
+      ),
+    });
+
+    expect(
+      getMergedCombatSkillObModifierTotal({
+        combatContext: changed.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(3);
+
+    const moved = refresh({
+      combatContext: changed.combat.combatContext,
+      combatEffects: effects(
+        effect({ combatModifierBucket: "db_parry", id: "skill-1", modifierValue: 4 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatSkillObModifierTotal({
+        combatContext: moved.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(-1);
   });
 });
