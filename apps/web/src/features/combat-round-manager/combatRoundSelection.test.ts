@@ -122,6 +122,54 @@ describe("combat round manager selection", () => {
     ]);
   });
 
+  it("keeps resolved initiative order through modifier review and reactive execution", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const withPhase1Initiative = {
+      ...existing,
+      currentStep: "review_phase_2_modifiers" as const,
+      participants: existing.participants.map((participant, index) => ({
+        ...participant,
+        initiatives: {
+          phase1: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [index + 4],
+            rollTotal: index + 4,
+            total: index + 4,
+          },
+        },
+      })),
+    };
+    const withPhase2Initiative = {
+      ...withPhase1Initiative,
+      currentStep: "phase_2_actions" as const,
+      participants: withPhase1Initiative.participants.map((participant, index) => ({
+        ...participant,
+        initiatives: {
+          ...participant.initiatives,
+          phase2: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [index + 3],
+            rollTotal: index + 7,
+            total: index + 7,
+          },
+        },
+      })),
+    };
+
+    expect(getCombatRoundManagerDisplayParticipantIds(withPhase1Initiative)).toEqual([
+      "bottom",
+      "middle",
+      "top",
+    ]);
+    expect(getCombatRoundManagerDisplayParticipantIds(withPhase2Initiative)).toEqual([
+      "bottom",
+      "middle",
+      "top",
+    ]);
+  });
+
   it("maps the current cursor to the current task selection", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const state = {

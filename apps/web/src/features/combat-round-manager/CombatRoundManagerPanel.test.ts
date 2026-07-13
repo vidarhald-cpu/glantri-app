@@ -710,7 +710,7 @@ describe("CombatRoundManagerPanel", () => {
     const renderDistancePanel = source.indexOf("<CombatRoundEndDistanceControlPanel");
     const distancePanelSource = source.slice(
       distancePanelStart,
-      source.indexOf("function shouldSortByInitiative"),
+      source.indexOf("function resolveCombatRoundInspectionSelection", distancePanelStart),
     );
 
     expect(participantPanelStart).toBeGreaterThan(-1);

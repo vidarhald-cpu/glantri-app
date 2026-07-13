@@ -57,35 +57,34 @@ export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boole
   );
 }
 
-function getInitiativeSortPhase(step: CombatRoundStep): "phase1" | "phase2" | undefined {
-  if (step === "phase_1_actions" || step === "review_phase_2_actions") {
-    return "phase1";
-  }
+function getInitiativeSortPhase(state: CombatRoundState): "phase1" | "phase2" | undefined {
+  const phase2Complete = state.participants.every(
+    (participant) => participant.initiatives.phase2 !== undefined,
+  );
 
-  if (step === "phase_2_actions" || step === "review_phase_2_damage") {
+  if (phase2Complete) {
     return "phase2";
   }
 
-  return undefined;
+  const phase1Complete = state.participants.every(
+    (participant) => participant.initiatives.phase1 !== undefined,
+  );
+
+  return phase1Complete ? "phase1" : undefined;
 }
 
 export function getCombatRoundManagerDisplayParticipantIds(
   state: CombatRoundState,
 ): string[] {
-  const phase = getInitiativeSortPhase(state.currentStep);
+  const phase = getInitiativeSortPhase(state);
 
   if (!phase) {
     return state.participants.map((participant) => participant.participantId);
   }
 
-  const hasCompleteInitiative = state.participants.every(
-    (participant) => participant.initiatives[phase] !== undefined,
+  return sortCombatRoundParticipantsByInitiative({ phase, state }).map(
+    (participant) => participant.participantId,
   );
-
-  return (hasCompleteInitiative
-    ? sortCombatRoundParticipantsByInitiative({ phase, state })
-    : state.participants
-  ).map((participant) => participant.participantId);
 }
 
 export function getNextCombatRoundParticipantSelection(input: {

@@ -355,6 +355,11 @@ describe("deriveLegacyCombatStepEvents", () => {
       attackerParticipantId: ATTACKER_ID,
       commandId: "command-attack",
       defenderParticipantId: DEFENDER_ID,
+      facts: {
+        involvedOutcome: {
+          actionId: "single_attack",
+        },
+      },
       ownerParticipantId: ATTACKER_ID,
     });
     expect(byType.parry).toMatchObject({

@@ -7160,13 +7160,29 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("allows a GM to review phase 2 modifiers without entering modifier values", async () => {
+  it("allows a GM to review and override generated phase 2 modifiers", async () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
           currentStep: "review_phase_2_modifiers",
           participants: [
             {
+              declaration: {
+                actionId: "parry_attack",
+                combatContext: {
+                  modifierBuckets: {
+                    general: [],
+                    situationDb: [parryAttackDbParryModifierEntry],
+                    situationInitiative: [],
+                    situationObSkill: [],
+                  },
+                },
+                phaseContexts: {
+                  phase2: testCombatPhaseContext("encounter-target-1"),
+                },
+                roundNumber: 1,
+                submittedBy: "gm",
+              },
               initiatives: {},
               label: "The Gladiator",
               participantId: "encounter-participant-1",
@@ -7194,12 +7210,28 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        actionId: "parry_attack",
         combatContext: {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [
+              {
+                generated: true,
+                id: "generated:parry-attack:phase2:initiative",
+                notes: "GM reviewed reactive attack",
+                scope: "until",
+                sourceActionId: "parry_attack",
+                sourcePhase: "phase2",
+                sourceRule: "parry-attack-phase2-initiative",
+                value: 5,
+              },
+            ],
             situationObSkill: [],
           },
+        },
+        phaseContexts: {
+          phase2: testCombatPhaseContext("encounter-target-1"),
         },
         scenarioParticipantId: "participant-1",
       },
@@ -7213,6 +7245,16 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.review_phase_2_modifiers,
     ).toBe("gmEdited");
+    expect(
+      updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
+        .situationInitiative,
+    ).toEqual([
+      expect.objectContaining({
+        id: "generated:parry-attack:phase2:initiative",
+        notes: "GM reviewed reactive attack",
+        value: 5,
+      }),
+    ]);
     expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
       afterCursor: {
         participantId: "encounter-participant-1",
@@ -7440,7 +7482,6 @@ describe("scenarios route contract", () => {
           value: 6,
         }),
       ]);
-
       await commitCurrentStepViaBrowserPut();
       expect(roundState().currentStep).toBe("review_action_modifiers");
       await commitCurrentStepViaBrowserPut();
@@ -7524,6 +7565,36 @@ describe("scenarios route contract", () => {
           value: 6,
         }),
       ]);
+
+      expect(roundState().currentStep).toBe("review_phase_2_modifiers");
+      for (const [scenarioParticipantId, roundParticipantId] of [
+        ["participant-1", "encounter-participant-1"],
+        ["participant-2", "encounter-participant-2"],
+      ] as const) {
+        const declaration = participantState(roundParticipantId)?.declaration;
+        const reviewResponse = await app.inject({
+          method: "POST",
+          payload: {
+            actionId: declaration?.actionId,
+            combatContext: declaration?.combatContext ?? emptyCombatContext,
+            movementId: declaration?.movementId,
+            movementIntent: declaration?.movementIntent,
+            phaseContexts: declaration?.phaseContexts,
+            scenarioParticipantId,
+            secondaryActionId: declaration?.secondaryActionId,
+          },
+          url: "/encounters/encounter-1/combat-declaration",
+        });
+
+        expect(reviewResponse.statusCode, JSON.stringify(reviewResponse.json())).toBe(200);
+        expect(
+          getCombatRoundOutgoingAttackResultForParticipantPhase({
+            participantId: "encounter-participant-2",
+            phase: "phase1",
+            state: roundState(),
+          }),
+        ).toMatchObject({ hit: false });
+      }
 
       await commitCurrentStepViaBrowserPut();
       expect(roundState().currentStep).toBe("initiative_phase_2");

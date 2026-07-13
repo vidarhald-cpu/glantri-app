@@ -102,7 +102,6 @@ import {
   recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
   rollCombatRoundEndHealthCheck,
-  sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -199,6 +198,7 @@ import {
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   getCombatRoundManagerInspectionSelection,
+  getCombatRoundManagerDisplayParticipantIds,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
@@ -3703,18 +3703,6 @@ function CombatRoundEndDistanceControlPanel(input: {
   );
 }
 
-function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | undefined {
-  if (step === "phase_1_actions" || step === "review_phase_2_actions") {
-    return "phase1";
-  }
-
-  if (step === "phase_2_actions" || step === "review_phase_2_damage") {
-    return "phase2";
-  }
-
-  return undefined;
-}
-
 function resolveCombatRoundInspectionSelection(input: {
   manualSelection?: CombatRoundSelectionTarget;
   pendingSelection?: CombatRoundSelectionTarget;
@@ -3780,6 +3768,9 @@ export default function CombatRoundManagerPanel({
   const [inspectorDrafts, setInspectorDrafts] = useState<
     Record<string, CombatInspectorDeclarationDraft>
   >({});
+  const [inspectorModifierEditedDraftKeys, setInspectorModifierEditedDraftKeys] = useState<
+    Record<string, true>
+  >({});
   const [parrySourceSelections, setParrySourceSelections] = useState<
     Record<string, CombatParrySourceSelection>
   >({});
@@ -3832,7 +3823,6 @@ export default function CombatRoundManagerPanel({
       ),
     [scenarioParticipantOverrides, scenarioParticipants],
   );
-  const initiativeSortPhase = shouldSortByInitiative(roundState.currentStep);
   const phase1Ranks = useMemo(
     () => getCombatRoundInitiativeRanks({ phase: "phase1", state: roundState }),
     [roundState],
@@ -3854,21 +3844,16 @@ export default function CombatRoundManagerPanel({
     roundState;
   const selectedRoundIsActive = selectedTimelineRoundState.roundNumber === roundState.roundNumber;
   const displayParticipants = useMemo(() => {
-    if (!initiativeSortPhase) {
-      return roundState.participants;
-    }
-
-    const hasCompleteInitiative = roundState.participants.every(
-      (participant) => participant.initiatives[initiativeSortPhase] !== undefined,
+    const participantById = new Map(
+      roundState.participants.map((participant) => [participant.participantId, participant]),
     );
 
-    return hasCompleteInitiative
-      ? sortCombatRoundParticipantsByInitiative({
-          phase: initiativeSortPhase,
-          state: roundState,
-        })
-      : roundState.participants;
-  }, [initiativeSortPhase, roundState]);
+    return getCombatRoundManagerDisplayParticipantIds(roundState)
+      .map((participantId) => participantById.get(participantId))
+      .filter((participant): participant is CombatRoundState["participants"][number] =>
+        Boolean(participant),
+      );
+  }, [roundState]);
   const combatDistanceRows = useMemo(
     () =>
       buildCombatDistanceTableRows({
@@ -4157,8 +4142,12 @@ export default function CombatRoundManagerPanel({
     declaration: selectedRoundDeclaration,
     participantId: selectedScenarioParticipant?.id,
   });
+  const inspectorHasLocalDraft = Boolean(inspectorDraftKey && inspectorDrafts[inspectorDraftKey]);
+  const inspectorHasLocalModifierEdits = Boolean(
+    inspectorDraftKey && inspectorModifierEditedDraftKeys[inspectorDraftKey],
+  );
   const inspectorDraft =
-    inspectorDraftKey && inspectorDrafts[inspectorDraftKey]
+    inspectorHasLocalDraft && inspectorDraftKey
       ? inspectorDrafts[inspectorDraftKey]
       : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration, {
           encounterId: encounter.id,
@@ -4267,8 +4256,12 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.snapshot.equipmentState,
   ]);
   const inspectorGeneratedCombatContext = useMemo(
-    () =>
-      projectCombatActionGeneratedModifiers({
+    () => {
+      if (inspectorHasLocalModifierEdits) {
+        return inspectorDraft.combatContext;
+      }
+
+      return projectCombatActionGeneratedModifiers({
         actionId: inspectorDraft.actionId || undefined,
         combatContext: inspectorDraft.combatContext,
         encounterParticipant: selectedEncounterParticipant,
@@ -4278,7 +4271,8 @@ export default function CombatRoundManagerPanel({
         roundState: selectedTimelineRoundState,
         scenarioParticipant: selectedScenarioParticipant,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
-      }),
+      });
+    },
     [
       inspectorDraft.actionId,
       inspectorDraft.combatContext,
@@ -4286,6 +4280,7 @@ export default function CombatRoundManagerPanel({
       inspectorDraft.phaseContexts,
       inspectorDraft.secondaryActionId,
       inspectorEquipmentState,
+      inspectorHasLocalModifierEdits,
       selectedEncounterParticipant,
       selectedScenarioParticipant,
       selectedTimelineRoundState,
@@ -5448,6 +5443,7 @@ export default function CombatRoundManagerPanel({
       setSelectedRoundNumber(initialRoundState.roundNumber);
       setDamageReviewDrafts({});
       setInspectorDrafts({});
+      setInspectorModifierEditedDraftKeys({});
       setParrySourceSelections({});
       setRoundEndHealthDifficultyDrafts({});
       setSaveError(undefined);
@@ -6307,6 +6303,14 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    if (Object.keys(patch).some((key) => key !== "combatContext")) {
+      setInspectorModifierEditedDraftKeys((current) => {
+        const next = { ...current };
+        delete next[inspectorDraftKey];
+        return next;
+      });
+    }
+
     setInspectorDrafts((current) => ({
       ...current,
       [inspectorDraftKey]: {
@@ -6321,6 +6325,13 @@ export default function CombatRoundManagerPanel({
     updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
   ) {
     const bucketKey = getModifierBucketContextKey(bucket);
+
+    if (inspectorDraftKey) {
+      setInspectorModifierEditedDraftKeys((current) => ({
+        ...current,
+        [inspectorDraftKey]: true,
+      }));
+    }
 
     updateInspectorDraft({
       combatContext: {

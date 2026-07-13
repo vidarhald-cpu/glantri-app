@@ -83,6 +83,8 @@ describe("buildCombatTrackerModel", () => {
   it("renders a stored attack miss as M even when the step status is incomplete", () => {
     const result = model([
       facts({
+        attackAttackerLabel: "Aldren",
+        attackDefenderLabel: "Bera",
         attackResult: {
           grazing: false,
           hit: false,
@@ -98,6 +100,9 @@ describe("buildCombatTrackerModel", () => {
       marker: "M",
       markerKind: "attack_miss",
     });
+    expect(result.cells["1:participant-a:phase_1_actions"].hoverText).toContain(
+      "Aldren attacked Bera with Long sword: miss; Miss.",
+    );
   });
 
   it("renders initiative totals and pending markers with the existing legend meanings", () => {

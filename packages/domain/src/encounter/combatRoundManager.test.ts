@@ -15899,6 +15899,106 @@ describe("combat round manager", () => {
     });
   });
 
+  it("keeps a triggering miss and Reactive A2 eligibility when phase-two modifiers are reviewed", () => {
+    const withDeclarations = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "guard",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+    const withIncomingAttack = addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({ hit: false }),
+      state: withDeclarations,
+    });
+    const atPhase2Review = combatRoundStateSchema.parse({
+      ...withIncomingAttack,
+      currentStep: "review_phase_2_modifiers",
+      selectedParticipantId: "guard",
+      selectedStep: "review_phase_2_modifiers",
+    });
+    const guardDeclaration = atPhase2Review.participants.find(
+      (participant) => participant.participantId === "guard",
+    )?.declaration;
+    const reviewed = recordCombatRoundDeclaration({
+      declaration: guardDeclaration,
+      participantId: "guard",
+      state: atPhase2Review,
+      submittedBy: "gm",
+    });
+
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "guard",
+        phase: "phase1",
+        state: reviewed,
+      }),
+    ).toMatchObject({ hit: false });
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: reviewed,
+      }),
+    ).toMatchObject({
+      category: "no_hit_no_parry_needed",
+      value: 6,
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: reviewed,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not open Reactive A2 for an incoming attack from a different target", () => {
+    const participants = [
+      participant({ id: "gladiator", label: "The Gladiator" }),
+      participant({ id: "guard", label: "City guard" }),
+      participant({ id: "archer", label: "Archer" }),
+    ];
+    const baseState = initializeCombatRoundState({
+      encounter: encounter({ participants }),
+    });
+    const withDeclaration = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "parry_attack",
+        phaseContexts: {
+          phase2: testPhaseContext("guard"),
+        },
+        roundNumber: baseState.roundNumber,
+      },
+      participantId: "gladiator",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const attackedByArcher = addPhase1IncomingAttack({
+      attackResult: buildTestPhase1AttackResult({
+        attackerParticipantId: "archer",
+        defenderParticipantId: "gladiator",
+        hit: false,
+      }),
+      state: withDeclaration,
+    });
+
+    expect(
+      getReactiveAttackPhase2InitiativeModifier({
+        participantId: "gladiator",
+        state: attackedByArcher,
+      }),
+    ).toBeUndefined();
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: attackedByArcher,
+      }),
+    ).toBe(false);
+  });
+
   it("keeps persisted Single attack vs Reactive attack on Scyrian A2 after A1 is recorded", () => {
     const encounterParticipants = [
       participant({ id: "gladiator", label: "The Gladiator" }),

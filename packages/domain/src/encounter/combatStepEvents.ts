@@ -439,6 +439,7 @@ function attackCandidates(input: {
           defenderParticipantId: attack.defenderParticipantId,
           facts: {
             involvedOutcome: {
+              actionId: attack.actionId,
               grazing: attack.grazing,
               hit: attack.hit,
               tableResult: attack.tableResult,

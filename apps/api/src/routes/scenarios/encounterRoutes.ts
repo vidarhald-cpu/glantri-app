@@ -2354,17 +2354,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             existingContext: existingCombatContext,
             requestedContext: body.combatContext,
           });
-      const submittedCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
-        actionId: body.actionId,
-        combatContext: baseSubmittedCombatContext,
-        encounterParticipant,
-        movementIntent: body.movementIntent,
-        phaseContexts: submittedPhaseContexts,
-        phaseWeaponNames: body.phaseWeaponNames,
-        roundState,
-        scenarioParticipant,
-        secondaryActionId: body.secondaryActionId,
-      });
+      const gmModifierReviewOperation =
+        gmAuthorizedOperation &&
+        roundState.participants.some(
+          (participant) =>
+            participant.participantId === encounterParticipant.id &&
+            participant.declaration?.actionId === body.actionId,
+        ) &&
+        (roundState.currentStep === "review_action_modifiers" ||
+          roundState.currentStep === "review_phase_2_modifiers");
+      // Generated rows are derived when the declaration is created and refreshed by domain
+      // result transitions. During GM modifier review, the submitted rows are the reviewed
+      // overrides and must not be regenerated back to their default values.
+      const submittedCombatContext = gmModifierReviewOperation
+        ? baseSubmittedCombatContext
+        : applyGeneratedCombatActionModifiersForDeclaration({
+            actionId: body.actionId,
+            combatContext: baseSubmittedCombatContext,
+            encounterParticipant,
+            movementIntent: body.movementIntent,
+            phaseContexts: submittedPhaseContexts,
+            phaseWeaponNames: body.phaseWeaponNames,
+            roundState,
+            scenarioParticipant,
+            secondaryActionId: body.secondaryActionId,
+          });
 
       if (!gmAuthorizedOperation) {
         if (

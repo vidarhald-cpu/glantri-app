@@ -4931,14 +4931,21 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
   );
   const targetParticipantId =
     participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+  const targetParticipant = getCombatRoundParticipantByTargetId({
+    state: normalized,
+    targetParticipantId,
+  });
   const reactiveAttackIsOpen =
     participant?.declaration?.actionId !== "parry_attack" ||
     input.phase !== "phase2" ||
-    combatRoundParticipantWasAttackedInPhase({
+    getCombatRoundIncomingAttackResultsForParticipantPhase({
       participantId: input.participantId,
       phase: "phase1",
       state: normalized,
-    });
+    }).some(
+      (attackResult) =>
+        targetParticipant && attackResult.attackerParticipantId === targetParticipant.participantId,
+    );
 
   return Boolean(
     combatRoundParticipantHasPhaseAttack({
@@ -4947,11 +4954,7 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       state: normalized,
     }) &&
     reactiveAttackIsOpen &&
-    targetParticipantId &&
-    getCombatRoundParticipantByTargetId({
-      state: normalized,
-      targetParticipantId,
-    }),
+    targetParticipant,
   );
 }
 
@@ -6961,11 +6964,22 @@ export function getReactiveAttackPhase2InitiativeModifier(input: {
     return undefined;
   }
 
+  const targetParticipant = getCombatRoundParticipantByTargetId({
+    state: normalized,
+    targetParticipantId: participant.declaration.phaseContexts?.phase2?.targetParticipantId,
+  });
+
+  if (!targetParticipant) {
+    return undefined;
+  }
+
   const incomingAttacks = getCombatRoundIncomingAttackResultsForParticipantPhase({
     participantId: input.participantId,
     phase: "phase1",
     state: normalized,
-  });
+  }).filter(
+    (attackResult) => attackResult.attackerParticipantId === targetParticipant.participantId,
+  );
 
   if (incomingAttacks.length === 0) {
     return undefined;
@@ -14386,10 +14400,15 @@ export function recordCombatRoundDeclaration(input: {
     throw new RangeError("Roll Combat Experience before declaring an action.");
   }
 
-  const withoutStaleResolution = clearCombatRoundParticipantOutgoingResolutionState({
-    participantId: input.participantId,
-    state: normalizedInput,
-  });
+  // Replacing a declaration during DE invalidates its outgoing resolution chain. Later
+  // declaration saves are modifier-review commits and must not erase completed A/P/D facts.
+  const withoutStaleResolution =
+    normalizedInput.currentStep === "select_actions"
+      ? clearCombatRoundParticipantOutgoingResolutionState({
+          participantId: input.participantId,
+          state: normalizedInput,
+        })
+      : normalizedInput;
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: withoutStaleResolution,
@@ -14754,6 +14773,7 @@ function recordCombatRoundAttackCommand(input: {
       defenderParticipantId: input.result.defenderParticipantId,
       facts: {
         involvedOutcome: {
+          actionId: input.result.actionId,
           grazing: input.result.grazing,
           hit: input.result.hit,
           tableResult: input.result.tableResult,
