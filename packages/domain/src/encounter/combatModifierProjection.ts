@@ -270,3 +270,23 @@ export function getMergedCombatSkillObModifierTotal(input: {
     },
   }).skillOb;
 }
+
+/** Returns the canonical DB/Parry-bucket total for one live combat phase. */
+export function getMergedCombatDbParryModifierTotal(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  phase?: "phase1" | "phase2";
+}): number {
+  if (!input.combatContext || !input.phase) {
+    return getMergedCombatModifierTotals(input.combatContext).dbParry;
+  }
+
+  return getMergedCombatModifierTotals({
+    ...input.combatContext,
+    modifierBuckets: {
+      ...input.combatContext.modifierBuckets,
+      situationDb: input.combatContext.modifierBuckets.situationDb.filter(
+        (entry) => !entry.sourcePhase || entry.sourcePhase === input.phase,
+      ),
+    },
+  }).dbParry;
+}

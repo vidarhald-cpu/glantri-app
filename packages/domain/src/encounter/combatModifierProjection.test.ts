@@ -8,6 +8,7 @@ import {
 import { applyCombatActionGeneratedModifiers } from "./combatActionModifiers";
 import type { CombatEffect, CombatEffectsState } from "./combatEffects";
 import {
+  getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatModifierTotals,
   getMergedCombatSkillObModifierTotal,
@@ -626,5 +627,56 @@ describe("persistent combat modifier refresh lifecycle", () => {
         phase: "phase1",
       }),
     ).toBe(-1);
+  });
+
+  it("provides the phase-aware canonical DB/Parry total without General/Fatigue", () => {
+    const initial = refresh({
+      combatContext: {
+        modifierBuckets: {
+          general: [{ id: "general-not-defense", scope: "until", value: 99 }],
+          situationDb: [
+            { generated: true, id: "generated", scope: "until", sourcePhase: "phase1", value: -2 },
+            { id: "manual", scope: "until", value: 1 },
+            { id: "legacy", scope: "until", value: 3 },
+            { generated: true, id: "other-phase", scope: "until", sourcePhase: "phase2", value: 50 },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: effects(
+        effect({ combatModifierBucket: "db_parry", id: "defense-1", modifierValue: 2 }),
+        effect({ combatModifierBucket: "db_parry", id: "defense-2", modifierValue: -1 }),
+        effect({ combatModifierBucket: undefined, id: "legacy-effect", modifierValue: 50 }),
+      ),
+    });
+
+    expect(
+      getMergedCombatDbParryModifierTotal({
+        combatContext: initial.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(3);
+    expect(
+      getMergedCombatDbParryModifierTotal({
+        combatContext: initial.combat.combatContext,
+        phase: "phase2",
+      }),
+    ).toBe(55);
+
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(
+        effect({ combatModifierBucket: "db_parry", id: "defense-1", modifierValue: 4 }),
+        effect({ combatModifierBucket: "db_parry", id: "defense-2", modifierValue: -1, status: "resolved" }),
+      ),
+    });
+
+    expect(
+      getMergedCombatDbParryModifierTotal({
+        combatContext: changed.combat.combatContext,
+        phase: "phase1",
+      }),
+    ).toBe(6);
   });
 });

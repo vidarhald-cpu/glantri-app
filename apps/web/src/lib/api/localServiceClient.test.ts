@@ -547,12 +547,8 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatParryOnServer({
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         encounterId: "encounter-1",
-        modifierBreakdown: [
-          { label: "General/Fatigue", value: 0 },
-          { label: "DB/Parry", value: -4 },
-          { label: "attack result", value: -2 },
-        ],
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
         scenarioParticipantId: "participant-2",
@@ -564,12 +560,8 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         mainHandParryScore: undefined,
-        modifierBreakdown: [
-          { label: "General/Fatigue", value: 0 },
-          { label: "DB/Parry", value: -4 },
-          { label: "attack result", value: -2 },
-        ],
         offHandParryScore: undefined,
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
@@ -601,8 +593,8 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatParryCommandOnServer({
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         encounterId: "encounter-1",
-        modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
         scenarioParticipantId: "participant-2",
@@ -613,8 +605,8 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         mainHandParryScore: undefined,
-        modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
         offHandParryScore: undefined,
         parryBase: 13,
         parrySourceLabel: "Sword / shield",

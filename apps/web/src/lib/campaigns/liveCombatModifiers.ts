@@ -5,6 +5,7 @@ import type {
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
 import {
+  getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatSkillObModifierTotal,
 } from "@glantri/domain";
@@ -13,8 +14,6 @@ import {
   lookupWorkbookPercentageAdjustment,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
-
-import { getPlayerEncounterCombatModifierTotals } from "./playerEncounter";
 
 export interface EncounterCombatEffectModifierSums {
   db: number;
@@ -138,11 +137,11 @@ export function buildEncounterLiveCombatModifierSummary(input: {
         },
       }
     : undefined;
-  const contextTotals = getPlayerEncounterCombatModifierTotals(phaseAwareCombatContext);
-
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw: effectSums.db + contextTotals.situationDbTotal,
+    dbRaw: getMergedCombatDbParryModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
     generalFatigueRaw: effectSums.generalFatigue,
     initiativeRaw: getMergedCombatInitiativeModifierTotal({
       combatContext: phaseAwareCombatContext,
@@ -218,10 +217,6 @@ export function buildEncounterDbParryModifierCalculation(input: {
   liveModifiers?: EncounterLiveCombatModifierSummary;
 }): EncounterDbParryModifierCalculation | null {
   const rawModifiers: WorkbookRawModifier[] = [
-    {
-      label: "General/Fatigue",
-      value: input.liveModifiers?.generalFatigueRaw ?? 0,
-    },
     {
       label: "DB/Parry",
       value: input.liveModifiers?.dbRaw ?? 0,

@@ -7473,6 +7473,7 @@ describe("scenarios route contract", () => {
         method: "POST",
         payload: {
           defenderDb: 99,
+          defenderDbParryRaw: 0,
           defenderScenarioParticipantId: "participant-1",
           ob: 0,
           obSkillRaw: 0,
@@ -8645,6 +8646,13 @@ describe("scenarios route contract", () => {
                 sourceName: "Sword / shield",
               },
               id: "snapshot-defense-phase-2",
+              modifierSummary: {
+                dbRaw: -2,
+                generalFatigueRaw: 0,
+                initiativeRaw: 0,
+                obSkillRaw: 0,
+                rows: [],
+              },
               participantId: "encounter-participant-2",
               participantLabel: "City guard",
               phase: "phase2",
@@ -8660,6 +8668,29 @@ describe("scenarios route contract", () => {
         {
           controlledByUserId: "other-player",
           id: "participant-2",
+          state: {
+            ...makeCombatScenarioParticipant().state,
+            combat: {
+              combatContext: {
+                modifierBuckets: {
+                  general: [{ id: "general-not-defense", scope: "until", value: 99 }],
+                  situationDb: [
+                    {
+                      id: "import:character_effect:defense-2:db_parry",
+                      imported: true,
+                      readOnly: true,
+                      scope: "until",
+                      sourceEffectId: "defense-2",
+                      sourceType: "character_effect",
+                      value: -2,
+                    },
+                  ],
+                  situationInitiative: [],
+                  situationObSkill: [],
+                },
+              },
+            },
+          },
         },
       ],
     });
@@ -8826,6 +8857,37 @@ describe("scenarios route contract", () => {
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "initiative_phase_1",
     };
+    const canonicalDefenderState = {
+      ...makeCombatScenarioParticipant().state,
+      combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [{ id: "general-not-defense", scope: "until", value: 99 }],
+            situationDb: [
+              {
+                id: "import:character_effect:defense-1:db_parry",
+                imported: true,
+                readOnly: true,
+                scope: "until",
+                sourceEffectId: "defense-1",
+                sourceType: "character_effect",
+                value: -2,
+              },
+              {
+                generated: true,
+                id: "generated-defense",
+                scope: "until",
+                sourcePhase: "phase1",
+                value: -1,
+              },
+              { id: "manual-defense", scope: "until", value: 1 },
+            ],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+      },
+    };
 
     setupCombatDeclarationRoute({
       encounter: {
@@ -8834,6 +8896,7 @@ describe("scenarios route contract", () => {
       },
       participant: {
         id: "participant-2",
+        state: canonicalDefenderState,
       },
       participants: [
         {
@@ -8843,31 +8906,44 @@ describe("scenarios route contract", () => {
         {
           controlledByUserId: "player-1",
           id: "participant-2",
+          state: canonicalDefenderState,
         },
       ],
     });
     const app = await buildScenarioTestApp();
 
+    const parryPayload = {
+      attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+      parryBase: 13,
+      parrySourceLabel: "Sword / shield",
+      scenarioParticipantId: "participant-2",
+      usedMainHand: true,
+      usedOffHand: true,
+    };
+    const missingRawResponse = await app.inject({
+      method: "POST",
+      payload: parryPayload,
+      url: "/encounters/encounter-1/combat-round/roll-parry",
+    });
+    const staleRawResponse = await app.inject({
+      method: "POST",
+      payload: { ...parryPayload, dbParryRaw: -3 },
+      url: "/encounters/encounter-1/combat-round/roll-parry",
+    });
+
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
-        modifierBreakdown: [
-          { label: "General/Fatigue", value: 0 },
-          { label: "DB/Parry", value: -4 },
-          { label: "attack result", value: -2 },
-        ],
-        parryBase: 13,
-        parrySourceLabel: "Sword / shield",
-        scenarioParticipantId: "participant-2",
-        usedMainHand: true,
-        usedOffHand: true,
+        ...parryPayload,
+        dbParryRaw: -2,
       },
       url: "/encounters/encounter-1/combat-round/roll-parry",
     });
 
     await app.close();
 
+    expect(missingRawResponse.statusCode).toBe(400);
+    expect(staleRawResponse.statusCode).toBe(409);
     expect(response.statusCode).toBe(200);
     const payload = response.json();
     expect(payload.commandEnvelope).toMatchObject({
@@ -8894,10 +8970,7 @@ describe("scenarios route contract", () => {
       updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution,
     ).toMatchObject({
       combinedParryScore: 13,
-      modifierBreakdown: [
-        { label: "DB/Parry", value: -4 },
-        { label: "attack result", value: -2 },
-      ],
+      modifierBreakdown: [{ label: "DB/Parry", value: -2 }],
       parrySourceLabel: "Sword / shield",
       status: "resolved",
     });
@@ -9806,7 +9879,7 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
-        modifierBreakdown: [],
+        dbParryRaw: 0,
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
         scenarioParticipantId: "participant-2",

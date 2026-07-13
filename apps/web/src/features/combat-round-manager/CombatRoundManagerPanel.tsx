@@ -59,6 +59,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
+  getMergedCombatDbParryModifierTotal,
   getMergedCombatSkillObModifierTotal,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseCombatExperienceRequirement,
@@ -184,7 +185,6 @@ import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
-  type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -2706,23 +2706,6 @@ function buildCombatAttackResultParryModifiers(
           value: attackResultModifier,
         },
       ];
-}
-
-function buildCombatParryRawModifiers(input: {
-  attackResult?: CombatRoundAttackRollResult;
-  liveModifiers?: EncounterLiveCombatModifierSummary;
-}): WorkbookRawModifier[] {
-  return [
-    {
-      label: "General/Fatigue",
-      value: input.liveModifiers?.generalFatigueRaw ?? 0,
-    },
-    {
-      label: "DB/Parry",
-      value: input.liveModifiers?.dbRaw ?? 0,
-    },
-    ...buildCombatAttackResultParryModifiers(input.attackResult),
-  ];
 }
 
 function CombatParryResolutionPanel(input: {
@@ -6852,8 +6835,8 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    let ob: number;
     let defenderDb: number;
+    let ob: number;
 
     try {
       ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
@@ -6880,6 +6863,10 @@ export default function CombatRoundManagerPanel({
       } = await rollCombatAttackOnServer({
         actionId: inspectorDraft.actionId || `${phase}_attack`,
         defenderDb,
+        defenderDbParryRaw: getMergedCombatDbParryModifierTotal({
+          combatContext: targetScenarioParticipant.state.combat.combatContext,
+          phase,
+        }),
         defenderScenarioParticipantId: targetScenarioParticipant.id,
         encounterId: encounter.id,
         ob,
@@ -6951,10 +6938,6 @@ export default function CombatRoundManagerPanel({
     }
 
     const sources = inspectorParryDefenderPhaseSummary?.parrySources;
-    const rawModifiers = buildCombatParryRawModifiers({
-      attackResult,
-      liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
-    });
     const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
     const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
 
@@ -6966,9 +6949,13 @@ export default function CombatRoundManagerPanel({
           result: attackResult,
           roundNumber: roundState.roundNumber,
         }),
+        dbParryRaw: getMergedCombatDbParryModifierTotal({
+          combatContext:
+            inspectorParryDefenderScenarioParticipant.state.combat.combatContext,
+          phase,
+        }),
         encounterId: encounter.id,
         mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
-        modifierBreakdown: rawModifiers,
         offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
         parryBase: inspectorParryBase,
         parrySourceLabel: formatSelectedCombatParrySourceName({

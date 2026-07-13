@@ -37,6 +37,7 @@ import {
   encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
   getCombatRoundInitiativePhaseForStep,
+  getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatSkillObModifierTotal,
   getCombatRoundAttackResultById,
@@ -549,6 +550,7 @@ function parseNonEmptyString(value: unknown, label: string): string {
 function parseCombatAttackBody(body: unknown): {
   actionId?: string;
   defenderDb?: number;
+  defenderDbParryRaw?: number;
   defenderScenarioParticipantId: string;
   ob: number;
   obSkillRaw: number;
@@ -586,6 +588,7 @@ function parseCombatAttackBody(body: unknown): {
     ...parsed,
     actionId,
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
+    defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
     defenderScenarioParticipantId,
     ob: parseInteger(value.ob, "ob"),
     obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
@@ -608,35 +611,10 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
   return value;
 }
 
-function parseCombatParryModifierBreakdown(
-  value: unknown,
-): Array<{ label: string; value: number }> {
-  if (value === undefined) {
-    return [];
-  }
-
-  if (!Array.isArray(value)) {
-    throw new Error("modifierBreakdown must be an array.");
-  }
-
-  return value.map((entry, index) => {
-    if (!entry || typeof entry !== "object") {
-      throw new Error(`modifierBreakdown[${index}] must be an object.`);
-    }
-
-    const candidate = entry as Record<string, unknown>;
-
-    return {
-      label: parseNonEmptyString(candidate.label, `modifierBreakdown[${index}].label`),
-      value: parseInteger(candidate.value, `modifierBreakdown[${index}].value`),
-    };
-  });
-}
-
 function parseCombatParryBody(body: unknown): {
   attackResultId: string;
+  dbParryRaw: number;
   mainHandParryScore?: number;
-  modifierBreakdown: Array<{ label: string; value: number }>;
   offHandParryScore?: number;
   parryBase: number;
   parrySourceLabel?: string;
@@ -655,8 +633,8 @@ function parseCombatParryBody(body: unknown): {
   return {
     ...parsed,
     attackResultId,
+    dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
     mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
-    modifierBreakdown: parseCombatParryModifierBreakdown(value.modifierBreakdown),
     offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
     parryBase: parseInteger(value.parryBase, "parryBase"),
     parrySourceLabel,
@@ -4582,6 +4560,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
+      const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
+        defenderScenarioParticipant.state.combat.combatContext ?? {},
+      );
+      const canonicalDefenderDbParryRaw = getMergedCombatDbParryModifierTotal({
+        combatContext: defenderCombatContext,
+        phase: body.phase,
+      });
+      const recordedDefenderDbParryRaw = latestDefenderSnapshot
+        ? (latestDefenderSnapshot.modifierSummary?.dbRaw ?? 0)
+        : body.defenderDbParryRaw;
+
+      if (
+        recordedDefenderDbParryRaw === undefined ||
+        recordedDefenderDbParryRaw !== canonicalDefenderDbParryRaw
+      ) {
+        return reply.code(409).send({
+          error: "Defender modifiers changed. Refresh combat before rolling.",
+        });
+      }
       const canonicalObSkillRaw = getMergedCombatSkillObModifierTotal({
         combatContext: attackerCombatContext,
         phase: body.phase,
@@ -4785,11 +4782,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
+        scenarioParticipant.state.combat.combatContext ?? {},
+      );
+      const canonicalDbParryRaw = getMergedCombatDbParryModifierTotal({
+        combatContext: defenderCombatContext,
+        phase: attackResult.phase,
+      });
+
+      if (body.dbParryRaw !== canonicalDbParryRaw) {
+        return reply.code(409).send({
+          error: "Parry modifiers changed. Refresh combat before rolling.",
+        });
+      }
+
+      const rawModifiers = [
+        ...(canonicalDbParryRaw !== 0
+          ? [{ label: "DB/Parry", value: canonicalDbParryRaw }]
+          : []),
+        ...(attackResult.defenderParryModifier !== 0
+          ? [{ label: "Attack result", value: attackResult.defenderParryModifier }]
+          : []),
+      ];
+
       const submittedAt = new Date().toISOString();
       const roll = rollOpenEndedD20();
       const parry = resolveCombatParry({
         parryBase: body.parryBase,
-        rawModifiers: body.modifierBreakdown,
+        rawModifiers,
         rollTotal: roll.dieResult,
       });
       const parryResolution = {

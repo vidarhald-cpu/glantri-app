@@ -422,9 +422,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 
   const combatAllocationInputs = input.combatAllocationInputs ?? defaultCombatAllocationState;
   const liveObSkillRaw = input.liveCombatModifiers?.obSkillRaw ?? 0;
-  const liveDbRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.dbRaw ?? 0);
+  const liveDbRaw = input.liveCombatModifiers?.dbRaw ?? 0;
   const effectiveCombatAllocationInputs = input.liveCombatModifiers
     ? {
         ...combatAllocationInputs,

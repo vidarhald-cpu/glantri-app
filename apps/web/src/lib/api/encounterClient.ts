@@ -474,6 +474,7 @@ export async function rollCombatInitiativeOnServer(input: {
 export async function rollCombatAttackOnServer(input: {
   actionId?: string;
   defenderDb?: number;
+  defenderDbParryRaw?: number;
   defenderScenarioParticipantId: string;
   encounterId: string;
   ob: number;
@@ -500,6 +501,7 @@ export async function rollCombatAttackOnServer(input: {
     body: JSON.stringify({
       actionId: input.actionId,
       defenderDb: input.defenderDb,
+      defenderDbParryRaw: input.defenderDbParryRaw,
       defenderScenarioParticipantId: input.defenderScenarioParticipantId,
       ob: input.ob,
       obSkillRaw: input.obSkillRaw,
@@ -517,9 +519,9 @@ export async function rollCombatAttackOnServer(input: {
 
 export async function rollCombatParryOnServer(input: {
   attackResultId: string;
+  dbParryRaw: number;
   encounterId: string;
   mainHandParryScore?: number;
-  modifierBreakdown: Array<{ label: string; value: number }>;
   offHandParryScore?: number;
   parryBase: number;
   parrySourceLabel?: string;
@@ -532,8 +534,8 @@ export async function rollCombatParryOnServer(input: {
     {
       body: JSON.stringify({
         attackResultId: input.attackResultId,
+        dbParryRaw: input.dbParryRaw,
         mainHandParryScore: input.mainHandParryScore,
-        modifierBreakdown: input.modifierBreakdown,
         offHandParryScore: input.offHandParryScore,
         parryBase: input.parryBase,
         parrySourceLabel: input.parrySourceLabel,
@@ -550,9 +552,9 @@ export async function rollCombatParryOnServer(input: {
 
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
+  dbParryRaw: number;
   encounterId: string;
   mainHandParryScore?: number;
-  modifierBreakdown: Array<{ label: string; value: number }>;
   offHandParryScore?: number;
   parryBase: number;
   parrySourceLabel?: string;
@@ -571,8 +573,8 @@ export async function rollCombatParryCommandOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-parry`, {
     body: JSON.stringify({
       attackResultId: input.attackResultId,
+      dbParryRaw: input.dbParryRaw,
       mainHandParryScore: input.mainHandParryScore,
-      modifierBreakdown: input.modifierBreakdown,
       offHandParryScore: input.offHandParryScore,
       parryBase: input.parryBase,
       parrySourceLabel: input.parrySourceLabel,

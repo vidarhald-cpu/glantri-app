@@ -93,6 +93,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
     expect(source).toContain("obSkillRaw: liveCombatModifiers.obSkillRaw");
     expect(source).toContain("rollCombatParryOnServer");
+    expect(source).toContain("dbParryRaw: getMergedCombatDbParryModifierTotal({");
+    expect(source).toContain("baseDefenseStats: buildPlayerCombatDefenseStats({");
+    expect(source).toContain(".baseDefenseStats?.parry");
+    expect(source).not.toContain("modifierBreakdown: currentParryModifierBreakdown");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInitiative");
     expect(source).toContain("rollPhaseAttack");

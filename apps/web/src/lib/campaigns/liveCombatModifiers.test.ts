@@ -73,6 +73,24 @@ describe("live combat modifiers", () => {
 
   it("keeps committed phase-one combat action effects live for phase-two modifiers", () => {
     const summary = buildEncounterLiveCombatModifierSummary({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              id: "import:character_effect:commit-d1:combat-effect:additional-manual-db:db_parry",
+              imported: true,
+              readOnly: true,
+              scope: "until",
+              sourceEffectId: "commit-d1:combat-effect:additional-manual-db",
+              sourceType: "character_effect",
+              value: -2,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
       combatEffects: {
         effects: [
           effect({
@@ -230,7 +248,7 @@ describe("live combat modifiers", () => {
     expect(summary.generalFatigueRaw).toBe(-6);
     expect(summary.initiativeRaw).toBe(5);
     expect(summary.obSkillRaw).toBe(3);
-    expect(summary.dbRaw).toBe(1);
+    expect(summary.dbRaw).toBe(2);
     expect(summary.modifierNoteLabels).toEqual([
       "Gen/Fatigue",
       "Initiative",
@@ -279,7 +297,7 @@ describe("live combat modifiers", () => {
     ).toBe(3);
   });
 
-  it("traces DB/Parry from General/Fatigue plus DB/Parry only", () => {
+  it("traces DB/Parry only from the canonical DB/Parry bucket", () => {
     const calculation = buildEncounterDbParryModifierCalculation({
       baseValue: 10,
       liveModifiers: {
@@ -293,13 +311,10 @@ describe("live combat modifiers", () => {
 
     expect(calculation).toMatchObject({
       baseValue: 10,
-      rawModifierTotal: -5,
-      percentageAdjustment: lookupWorkbookPercentageAdjustment(10, 5),
-      finalValue: 10 - lookupWorkbookPercentageAdjustment(10, 5)!,
-      rawModifiers: [
-        { label: "General/Fatigue", value: -1 },
-        { label: "DB/Parry", value: -4 },
-      ],
+      rawModifierTotal: -4,
+      percentageAdjustment: lookupWorkbookPercentageAdjustment(10, 4),
+      finalValue: 10 - lookupWorkbookPercentageAdjustment(10, 4)!,
+      rawModifiers: [{ label: "DB/Parry", value: -4 }],
     });
   });
 

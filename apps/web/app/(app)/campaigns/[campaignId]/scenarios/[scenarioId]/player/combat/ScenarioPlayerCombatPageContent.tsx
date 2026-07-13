@@ -39,6 +39,7 @@ import {
   getCombatDistanceParticipantAliases,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
+  getMergedCombatDbParryModifierTotal,
   getCombatRoundResolutionPhaseForStep,
   getHitLocationFullLabel,
   getPlayerCombatCurrentRollAction,
@@ -1081,32 +1082,6 @@ function parsePlayerCombatDisplayInteger(value: string | undefined): number | un
 
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : undefined;
-}
-
-function buildPlayerCombatParryModifierBreakdown(input: {
-  attackResult?: CombatRoundAttackRollResult;
-  liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
-}): Array<{ label: string; value: number }> {
-  const attackResultModifier = input.attackResult?.defenderParryModifier ?? 0;
-
-  return [
-    {
-      label: "General/Fatigue",
-      value: input.liveModifiers.generalFatigueRaw,
-    },
-    {
-      label: "DB/Parry",
-      value: input.liveModifiers.dbRaw,
-    },
-    ...(attackResultModifier === 0
-      ? []
-      : [
-          {
-            label: "attack result",
-            value: attackResultModifier,
-          },
-        ]),
-  ];
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -2303,8 +2278,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const encounter = await rollCombatParryOnServer({
         attackResultId: currentRollAction.attackResultId,
+        dbParryRaw: getMergedCombatDbParryModifierTotal({
+          combatContext: selectedParticipant.state.combat.combatContext,
+          phase: currentResolutionPhase,
+        }),
         encounterId,
-        modifierBreakdown: currentParryModifierBreakdown,
         parryBase: currentParryBase,
         parrySourceLabel: currentParryDefenseStats?.sourceName,
         scenarioParticipantId: selectedParticipant.id,
@@ -2435,13 +2413,43 @@ export default function ScenarioPlayerCombatPageContent({
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       });
-
-      return buildPlayerCombatLoadoutSummary({
+      const basePhaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && controlledBuild
+            ? {
+                content,
+                record: {
+                  build: controlledBuild,
+                },
+              }
+            : null,
+        characterId: displayedParticipant?.characterId ?? "",
+        combatAllocationInputs,
+        state: controlledEquipmentState,
+        throwingWeaponItemId: null,
+      });
+      const liveSummary = buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         secondaryActionId: selectedSecondaryActionId,
       });
+      const baseSummary = buildPlayerCombatLoadoutSummary({
+        actionId: selectedActionId,
+        loadoutModel: basePhaseLoadoutModel,
+        phaseKey,
+        secondaryActionId: selectedSecondaryActionId,
+      });
+
+      return {
+        ...liveSummary,
+        baseDefenseStats: buildPlayerCombatDefenseStats({
+          mainHandParryItemLabel: baseSummary.mainHandParryItemLabel,
+          offHandParryItemLabel: baseSummary.offHandParryItemLabel,
+          phaseContext: phaseCombatContextDrafts[phaseKey],
+          reference: baseSummary.reference,
+        }),
+      };
     };
 
     return {
@@ -2454,6 +2462,7 @@ export default function ScenarioPlayerCombatPageContent({
     controlledBuild,
     controlledEquipmentState,
     displayedParticipant?.characterId,
+    phaseCombatContextDrafts,
     projectedCombatContextDraft,
     selectedActionId,
     selectedParticipant?.state.combatEffects,
@@ -2721,11 +2730,11 @@ export default function ScenarioPlayerCombatPageContent({
         reference: phaseCombatLoadoutSummaries[currentResolutionPhase].reference,
       })
     : null;
-  const currentParryBase = parsePlayerCombatDisplayInteger(currentParryDefenseStats?.parry);
-  const currentParryModifierBreakdown = buildPlayerCombatParryModifierBreakdown({
-    attackResult: selectedCurrentResolutionAttackResult,
-    liveModifiers: liveCombatModifiers,
-  });
+  const currentParryBase = currentResolutionPhase
+    ? parsePlayerCombatDisplayInteger(
+        phaseCombatLoadoutSummaries[currentResolutionPhase].baseDefenseStats?.parry,
+      )
+    : undefined;
   const selectedAttackerPrivilegedResolution =
     combatRoundState &&
     (currentRollAction?.kind === "hit_location" || currentRollAction?.kind === "critical")

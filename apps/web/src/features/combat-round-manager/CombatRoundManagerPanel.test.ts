@@ -312,7 +312,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("extraRawModifiers: inspectorParryExtraRawModifiers");
     expect(source).toContain("loadoutModel: baseLoadoutModel");
     expect(source).toContain("parrySourceLabel");
-    expect(source).toContain("modifierBreakdown: rawModifiers");
+    expect(source).toContain("dbParryRaw: getMergedCombatDbParryModifierTotal({");
+    expect(source).not.toContain("modifierBreakdown: rawModifiers");
     expect(source).toContain('Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}');
     expect(source).toContain('Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}');
     expect(source).not.toContain("Resolve damage");
