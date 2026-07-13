@@ -119,4 +119,59 @@ describe("PlayerCombatModifierPanel", () => {
     );
     expect(onAddEntry).toHaveBeenCalledWith("situation_db", expect.any(Object));
   });
+
+  it("renders imported persistent rows read-only beside editable situational rows", () => {
+    const onRemoveEntry = vi.fn();
+    const onUpdateEntry = vi.fn();
+
+    render(
+      <PlayerCombatModifierPanel
+        onAddEntry={vi.fn()}
+        onRemoveEntry={onRemoveEntry}
+        onUpdateEntry={onUpdateEntry}
+        rows={[
+          {
+            bucketKey: "situation_initiative",
+            entries: [
+              {
+                generated: false,
+                id: "import:character_effect:haste:initiative",
+                imported: true,
+                notes: "Haste",
+                readOnly: true,
+                scope: "until",
+                sourceDuration: "2 rounds",
+                sourceEffectId: "haste",
+                sourceType: "character_effect",
+                value: 2,
+              },
+              {
+                id: "manual-initiative",
+                notes: "GM adjustment",
+                scope: "until",
+                value: 1,
+              },
+            ],
+            label: "Initiative",
+            total: 3,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Character/state")).toBeInTheDocument();
+    expect(screen.getByText("Haste")).toBeInTheDocument();
+    expect(screen.getByText("2 rounds")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Initiative modifier value", { selector: "input[value='2']" }))
+      .not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("1")).not.toBeDisabled();
+
+    fireEvent.change(screen.getByDisplayValue("1"), { target: { value: "3" } });
+    fireEvent.click(screen.getByLabelText("Remove modifier"));
+
+    expect(onUpdateEntry).toHaveBeenCalledWith("situation_initiative", "manual-initiative", {
+      value: 3,
+    });
+    expect(onRemoveEntry).toHaveBeenCalledWith("situation_initiative", "manual-initiative");
+  });
 });

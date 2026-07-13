@@ -23,13 +23,12 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("buildPlayerCombatModifierRows");
-    expect(source).toContain("getPlayerEncounterCombatModifierTotals");
+    expect(source).toContain("getMergedCombatModifierTotals");
+    expect(source).toContain("mergePersistentCombatEffectModifiers");
     expect(source).toContain("filterCombatModifierEntriesForPhase");
     expect(source).toContain("phaseKey?: EncounterCombatPhaseKey");
     expect(source).toContain("General/Fatigue");
-    expect(source).toContain("liveModifiers?.generalFatigueRaw");
     expect(source).toContain("Initiative");
-    expect(source).toContain("liveModifiers?.initiativeRaw");
     expect(source).toContain("Skill/OB");
     expect(source).toContain("DB/Parry");
     expect(source.indexOf('label: "General/Fatigue"')).toBeLessThan(
@@ -325,6 +324,7 @@ describe("PlayerCombatPanels", () => {
       combatEffects: {
         effects: [
           {
+            combatModifierBucket: "general",
             createdAt: "2026-01-01T00:00:00.000Z",
             damage: 0,
             duration: "2 rounds",
@@ -355,11 +355,13 @@ describe("PlayerCombatPanels", () => {
     const generalRow = rows.find((row) => row.bucketKey === "general");
     const dbRow = rows.find((row) => row.bucketKey === "situation_db");
 
-    expect(generalRow?.characterStateEntries).toEqual([
+    expect(generalRow?.entries).toEqual([
       expect.objectContaining({
-        details: "Combat Experience",
-        scopeLabel: "2 rounds",
-        sourceLabel: "Character/state",
+        imported: true,
+        notes: "Combat Experience",
+        readOnly: true,
+        sourceDuration: "2 rounds",
+        sourceType: "character_effect",
         value: -1,
       }),
     ]);

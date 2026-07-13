@@ -97,6 +97,7 @@ export const scenarioParticipantConditionSchema = z.object({
 });
 
 export const scenarioCombatModifierScopeSchema = z.enum(["until", "save"]);
+export const scenarioCombatModifierSourceTypeSchema = z.enum(["character_effect"]);
 export const scenarioCombatModifierBucketSchema = z.enum([
   "general",
   "situation_initiative",
@@ -127,13 +128,19 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 
 export const scenarioCombatModifierEntrySchema = z.object({
   durationRounds: z.number().int().positive().optional(),
+  expiresAtRound: z.number().int().positive().optional(),
   generated: z.boolean().optional(),
   id: idSchema,
+  imported: z.boolean().optional(),
   notes: z.string().optional(),
+  readOnly: z.boolean().optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
   sourceActionId: idSchema.optional(),
+  sourceDuration: z.string().optional(),
+  sourceEffectId: idSchema.optional(),
   sourcePhase: z.enum(["phase1", "phase2"]).optional(),
   sourceRule: z.string().optional(),
+  sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
   value: z.number().default(0),
 });
 
@@ -382,6 +389,9 @@ export type ScenarioParticipantPosition = z.infer<typeof scenarioParticipantPosi
 export type ScenarioParticipantModifier = z.infer<typeof scenarioParticipantModifierSchema>;
 export type ScenarioParticipantCondition = z.infer<typeof scenarioParticipantConditionSchema>;
 export type ScenarioCombatModifierScope = z.infer<typeof scenarioCombatModifierScopeSchema>;
+export type ScenarioCombatModifierSourceType = z.infer<
+  typeof scenarioCombatModifierSourceTypeSchema
+>;
 export type ScenarioCombatModifierBucket = z.infer<typeof scenarioCombatModifierBucketSchema>;
 export type ScenarioParticipantIncomingAttackSide = z.infer<
   typeof scenarioParticipantIncomingAttackSideSchema

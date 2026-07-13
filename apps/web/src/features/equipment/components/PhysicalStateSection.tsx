@@ -1,10 +1,16 @@
 import { useState, type FormEvent } from "react";
 
-import type { CombatEffectGroup, CombatEffectStatus, CombatEffectType } from "@glantri/domain";
+import type {
+  CombatEffectGroup,
+  CombatEffectModifierBucket,
+  CombatEffectStatus,
+  CombatEffectType,
+} from "@glantri/domain";
 
 import type { CharacterPhysicalStateView, HitLogEntryView } from "@/lib/characters/physicalState";
 
 export interface CombatEffectEditorDraft {
+  combatModifierBucket?: CombatEffectModifierBucket;
   damage: number;
   description?: string;
   duration?: string;
@@ -82,6 +88,17 @@ const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
   { label: "Bleed", value: "bleed" },
   { label: "Fatigue", value: "fatigue" },
   { label: "Special", value: "special" },
+];
+
+const combatModifierBuckets: Array<{
+  label: string;
+  value: CombatEffectModifierBucket | "";
+}> = [
+  { label: "Not a combat modifier", value: "" },
+  { label: "General/Fatigue", value: "general" },
+  { label: "Initiative", value: "initiative" },
+  { label: "Skill/OB", value: "skill_ob" },
+  { label: "DB/Parry", value: "db_parry" },
 ];
 
 const combatEffectStatuses: Array<{ label: string; value: CombatEffectStatus }> = [
@@ -222,6 +239,7 @@ function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
   ].filter((value): value is string => Boolean(value));
 
   return createBlankDraft({
+    combatModifierBucket: entry.combatModifierBucket,
     damage: entry.location ? entry.damage : entry.generalDamage,
     description: entry.specialEffects || undefined,
     duration: parseRoundDurationValue(entry.duration),
@@ -553,7 +571,7 @@ function CombatEffectsPanel({
               display: "grid",
               gap: "0.45rem",
               gridTemplateColumns:
-                "7rem minmax(22rem, 1.6fr) 3.75rem 6.5rem 3.75rem 5rem 5rem minmax(10rem, 1fr)",
+                "7rem minmax(22rem, 1.6fr) 3.75rem 6.5rem 3.75rem 7rem 5rem 5rem minmax(10rem, 1fr)",
             }}
           >
             <label style={{ display: "grid", gap: "0.2rem" }}>
@@ -663,6 +681,26 @@ function CombatEffectsPanel({
                 type="number"
                 value={draft.modifierValue ?? ""}
               />
+            </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Combat bucket</span>
+              <select
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    combatModifierBucket:
+                      (event.target.value as CombatEffectModifierBucket) || undefined,
+                  }))
+                }
+                style={compactInputStyle}
+                value={draft.combatModifierBucket ?? ""}
+              >
+                {combatModifierBuckets.map((option) => (
+                  <option key={option.value || "none"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Dur</span>

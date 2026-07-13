@@ -142,5 +142,8 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("locationHeaderCellStyle");
     expect(source).toContain("locationCheckboxCellStyle");
     expect(source).not.toContain('label: "None", value: ""');
+    expect(source).toContain("Combat bucket");
+    expect(source).toContain('value: "initiative"');
+    expect(source).toContain("Not a combat modifier");
   });
 });

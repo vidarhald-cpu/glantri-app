@@ -248,6 +248,7 @@ export default function CharacterLoadoutView({
       return {
         checkRequired: reusableExistingEffect?.checkRequired,
         checkSkillOrStat: reusableExistingEffect?.checkSkillOrStat,
+        combatModifierBucket: draft.combatModifierBucket,
         createdAt: reusableExistingEffect?.createdAt ?? now,
         damage: isBodyLocation ? draft.damage : 0,
         description: draft.description,

@@ -4196,6 +4196,7 @@ export function rollCombatRoundCombatExperience(input: {
           effects: [
             ...currentCombatEffects.effects,
             combatEffectSchema.parse({
+              combatModifierBucket: "general",
               createdAt: input.command.createdAt,
               damage: 0,
               description: result.note,
@@ -9586,6 +9587,7 @@ function formatCombatRoundCriticalReference(input: {
 function getCombatRoundDamageReviewEffectRowShape(
   effect: CombatRoundDamageReviewAdditionalEffect,
 ): {
+  combatModifierBucket?: CombatEffect["combatModifierBucket"];
   effectGroup: CombatEffectGroup;
   modifierValue?: number;
   type: CombatEffectType;
@@ -9608,6 +9610,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
   if (effect.rowCategory === "fatigue") {
     return {
+      combatModifierBucket: "general",
       effectGroup: "fatigue",
       modifierValue: effect.modifierValue,
       type: "fatigue",
@@ -9616,6 +9619,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
   if (effect.rowCategory === "general_modifier") {
     return {
+      combatModifierBucket: "general",
       effectGroup: "general",
       modifierValue: effect.modifierValue,
       type: "general_modifier",
@@ -9624,6 +9628,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
   if (effect.rowCategory === "ob_skill_modifier") {
     return {
+      combatModifierBucket: "skill_ob",
       effectGroup: "obSkill",
       modifierValue: effect.modifierValue,
       type: "ob_skill_modifier",
@@ -9632,6 +9637,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
   if (effect.rowCategory === "db_parry_modifier") {
     return {
+      combatModifierBucket: "db_parry",
       effectGroup: "db",
       modifierValue: effect.modifierValue,
       type: "db_modifier",
@@ -9652,6 +9658,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
   if (effect.kind === "fatigue") {
     return {
+      combatModifierBucket: "general",
       effectGroup: "fatigue",
       modifierValue: effect.modifierValue,
       type: "fatigue",
@@ -9661,6 +9668,7 @@ function getCombatRoundDamageReviewEffectRowShape(
   if (effect.kind === "modifier") {
     if (effect.modifierBucket === "obSkill") {
       return {
+        combatModifierBucket: "skill_ob",
         effectGroup: "obSkill",
         modifierValue: effect.modifierValue,
         type: "ob_skill_modifier",
@@ -9669,6 +9677,7 @@ function getCombatRoundDamageReviewEffectRowShape(
 
     if (effect.modifierBucket === "db") {
       return {
+        combatModifierBucket: "db_parry",
         effectGroup: "db",
         modifierValue: effect.modifierValue,
         type: "db_modifier",
@@ -9676,6 +9685,7 @@ function getCombatRoundDamageReviewEffectRowShape(
     }
 
     return {
+      combatModifierBucket: "general",
       effectGroup: "general",
       modifierValue: effect.modifierValue,
       type: "general_modifier",
@@ -9970,6 +9980,7 @@ function buildCombatRoundDamageCommitRows(input: {
     const rowShape = getCombatRoundDamageReviewEffectRowShape(effect);
 
     return combatEffectSchema.parse({
+      combatModifierBucket: rowShape.combatModifierBucket,
       createdAt: input.command.createdAt,
       damage: 0,
       description: formatCombatRoundDamageReviewEffectCommittedDescription(effect),

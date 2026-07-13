@@ -4,7 +4,6 @@ import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
-  type CombatEffect,
   type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
@@ -16,6 +15,9 @@ import {
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
   getHitLocationFullLabel,
+  getMergedCombatModifierTotals,
+  isPersistentCombatModifierEntry,
+  mergePersistentCombatEffectModifiers,
 } from "@glantri/domain";
 
 import {
@@ -24,7 +26,6 @@ import {
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
-  getPlayerEncounterCombatModifierTotals,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
@@ -647,7 +648,10 @@ export function buildPlayerCombatModifierRows(input: {
   liveModifiers?: EncounterLiveCombatModifierSummary;
   phaseKey?: EncounterCombatPhaseKey;
 }): PlayerCombatModifierBucketView[] {
-  const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
+  const combatContext = mergePersistentCombatEffectModifiers({
+    combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
+    combatEffects: input.combatEffects,
+  });
   const filteredModifierBuckets = {
     general: sanitizeCombatModifierEntries(
       filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.general, input.phaseKey),
@@ -671,124 +675,53 @@ export function buildPlayerCombatModifierRows(input: {
       ),
     ),
   };
-  const totals = getPlayerEncounterCombatModifierTotals({
+  const filteredContext = {
     ...combatContext,
     modifierBuckets: filteredModifierBuckets,
-  });
-  const characterStateEntries = buildCharacterStateModifierEntries(input.combatEffects);
+  };
+  const totals = getMergedCombatModifierTotals(filteredContext);
 
   return [
     {
       bucketKey: "general",
-      characterStateEntries: characterStateEntries.general,
-      entries: [],
+      entries: filteredModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
-      total: input.liveModifiers?.generalFatigueRaw ?? 0,
+      total: totals.generalFatigue,
     },
     {
       bucketKey: "situation_initiative",
       entries: filteredModifierBuckets.situationInitiative,
       label: "Initiative",
-      total: input.liveModifiers?.initiativeRaw ?? totals.situationInitiativeTotal,
+      total: totals.initiative,
     },
     {
       bucketKey: "situation_ob_skill",
-      characterStateEntries: characterStateEntries.situationObSkill,
       entries: filteredModifierBuckets.situationObSkill,
       label: "Skill/OB",
-      total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
+      total: totals.skillOb,
     },
     {
       bucketKey: "situation_db",
-      characterStateEntries: characterStateEntries.situationDb,
       entries: filteredModifierBuckets.situationDb,
       label: "DB/Parry",
-      total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
+      total: totals.dbParry,
     },
   ];
 }
 
-function isActiveModifierCombatEffect(effect: CombatEffect): boolean {
-  return (
-    effect.status === "active" &&
-    effect.type !== "physical_damage" &&
-    effect.type !== "general_damage" &&
-    effect.type !== "bleed" &&
-    effect.type !== "internal_bleed"
-  );
-}
-
-function getCombatEffectModifierValue(effect: CombatEffect): number {
-  if (effect.modifierValue != null) {
-    return effect.modifierValue;
-  }
-
-  if (effect.damage !== 0) {
-    return effect.damage;
-  }
-
-  return effect.generalDamage;
-}
-
-function formatCombatEffectFallbackLabel(effect: CombatEffect): string {
-  return effect.type.replaceAll("_", " ");
-}
-
-function buildCharacterStateModifierEntries(combatEffects?: CombatEffectsState): {
-  general: PlayerCombatModifierDisplayEntry[];
-  situationDb: PlayerCombatModifierDisplayEntry[];
-  situationObSkill: PlayerCombatModifierDisplayEntry[];
-} {
-  const eventsById = new Map(
-    (combatEffects?.events ?? []).map((event) => [event.id, event] as const),
-  );
-  const result = {
-    general: [] as PlayerCombatModifierDisplayEntry[],
-    situationDb: [] as PlayerCombatModifierDisplayEntry[],
-    situationObSkill: [] as PlayerCombatModifierDisplayEntry[],
+function buildImportedModifierDisplayEntry(
+  entry: ScenarioCombatModifierEntry,
+): PlayerCombatModifierDisplayEntry {
+  return {
+    details: entry.notes,
+    id: entry.id,
+    scopeLabel:
+      entry.sourceDuration?.trim() ??
+      (entry.expiresAtRound ? `until RD ${entry.expiresAtRound}` : "until SU"),
+    sourceLabel: "Character/state",
+    value: entry.value,
   };
-
-  for (const effect of combatEffects?.effects ?? []) {
-    if (!isActiveModifierCombatEffect(effect)) {
-      continue;
-    }
-
-    const value = getCombatEffectModifierValue(effect);
-
-    if (value === 0) {
-      continue;
-    }
-
-    const event = eventsById.get(effect.sourceEventId);
-    const details =
-      event?.sourceLabel && event.sourceLabel !== "Manual combat effect"
-        ? event.sourceLabel
-        : (effect.description?.trim() ??
-          event?.description?.trim() ??
-          formatCombatEffectFallbackLabel(effect));
-    const entry = {
-      details,
-      id: effect.id,
-      scopeLabel:
-        effect.duration?.trim() ??
-        (effect.expiresAtRound ? `until RD ${effect.expiresAtRound}` : "until SU"),
-      sourceLabel: "Character/state" as const,
-      value,
-    };
-
-    if (effect.type === "fatigue" || effect.effectGroup === "fatigue") {
-      result.general.push(entry);
-    } else if (effect.effectGroup === "general") {
-      result.general.push(entry);
-    } else if (effect.effectGroup === "obSkill") {
-      result.situationObSkill.push(entry);
-    } else if (effect.effectGroup === "db") {
-      result.situationDb.push(entry);
-    }
-  }
-
-  return result;
 }
 
 function buildSituationalModifierDisplayEntry(
@@ -955,9 +888,16 @@ export function PlayerCombatModifierPanel({
       <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
       {rows.map((row) => {
         const draftEntry = draftEntries[row.bucketKey];
+        const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
+        const situationalEntries = row.entries.filter(
+          (entry) => !isPersistentCombatModifierEntry(entry),
+        );
+        const persistentDisplayEntries = [
+          ...(row.characterStateEntries ?? []),
+          ...importedEntries.map(buildImportedModifierDisplayEntry),
+        ];
         const hasVisibleRows =
-          (row.characterStateEntries?.length ?? 0) > 0 ||
-          row.entries.length > 0 ||
+          persistentDisplayEntries.length > 0 || situationalEntries.length > 0 ||
           Boolean(draftEntry);
 
         return (
@@ -984,8 +924,8 @@ export function PlayerCombatModifierPanel({
 
             {hasVisibleRows ? (
               <div style={compactModifierMiniTableStyle}>
-                {(row.characterStateEntries?.length ?? 0) > 0 ||
-                (!editable && row.entries.length > 0) ? (
+                {persistentDisplayEntries.length > 0 ||
+                (!editable && situationalEntries.length > 0) ? (
                   <div style={compactModifierDisplayHeaderStyle}>
                     {["Source/scope", "Mod", "Dur"].map((heading) => (
                       <span
@@ -1001,7 +941,7 @@ export function PlayerCombatModifierPanel({
                     ))}
                   </div>
                 ) : null}
-                {row.characterStateEntries?.map((entry) => (
+                {persistentDisplayEntries.map((entry) => (
                   <ModifierDisplayEntryRow
                     bucketLabel={row.label}
                     entry={entry}
@@ -1010,7 +950,7 @@ export function PlayerCombatModifierPanel({
                 ))}
                 {editable && !row.locked ? (
                   <>
-                    {row.entries.length > 0 || draftEntry ? (
+                    {situationalEntries.length > 0 || draftEntry ? (
                       <div style={compactModifierMiniTableHeaderStyle}>
                         {["Source/scope", "Mod", "Dur"].map((heading) => (
                           <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
@@ -1019,7 +959,7 @@ export function PlayerCombatModifierPanel({
                         ))}
                       </div>
                     ) : null}
-                    {row.entries.map((entry) => (
+                    {situationalEntries.map((entry) => (
                       <ModifierEditableEntryRow
                         bucketLabel={row.label}
                         controlsDisabled={controlsDisabled}
@@ -1058,7 +998,7 @@ export function PlayerCombatModifierPanel({
                     ) : null}
                   </>
                 ) : (
-                  row.entries.map((entry) => (
+                  situationalEntries.map((entry) => (
                     <ModifierDisplayEntryRow
                       bucketLabel={row.label}
                       entry={buildSituationalModifierDisplayEntry(entry)}

@@ -58,6 +58,37 @@ describe("combat action generated modifiers", () => {
     ).toHaveLength(1);
   });
 
+  it("preserves imported persistent rows while recomputing generated rows", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          situationDb: [
+            {
+              generated: false,
+              id: "import:character_effect:defense:db_parry",
+              imported: true,
+              notes: "Persistent defense",
+              readOnly: true,
+              sourceEffectId: "defense",
+              sourceType: "character_effect",
+              value: 2,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: "import:character_effect:defense:db_parry",
+        sourceType: "character_effect",
+        value: 2,
+      }),
+      expect.objectContaining({ id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID }),
+    ]);
+  });
+
   it("creates one phase 2 DB/Parry modifier for Reactive attack", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "parry_attack",
