@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { ScenarioParticipantCombatContext } from "../campaign/scenario";
+import {
+  scenarioParticipantStateSchema,
+  type ScenarioParticipantCombatContext,
+  type ScenarioParticipantState,
+} from "../campaign/scenario";
+import { applyCombatActionGeneratedModifiers } from "./combatActionModifiers";
 import type { CombatEffect, CombatEffectsState } from "./combatEffects";
 import {
   getMergedCombatModifierTotals,
   mergePersistentCombatEffectModifiers,
   projectPersistentCombatEffectModifiers,
+  refreshScenarioParticipantPersistentCombatModifiers,
 } from "./combatModifierProjection";
 
 function effect(overrides: Partial<CombatEffect> = {}): CombatEffect {
@@ -78,6 +84,30 @@ function context(): ScenarioParticipantCombatContext {
       ],
     },
   };
+}
+
+function participantState(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
+}): ScenarioParticipantState {
+  return scenarioParticipantStateSchema.parse({
+    combat: { combatContext: input.combatContext ?? context() },
+    combatEffects: input.combatEffects,
+    equipment: {},
+    health: {},
+    resources: {},
+  });
+}
+
+function refresh(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
+  currentRound?: number;
+}): ScenarioParticipantState {
+  return refreshScenarioParticipantPersistentCombatModifiers({
+    currentRound: input.currentRound,
+    state: participantState(input),
+  });
 }
 
 describe("persistent combat modifier projection", () => {
@@ -223,5 +253,271 @@ describe("persistent combat modifier projection", () => {
       initiative: 9,
       skillOb: 1,
     });
+  });
+});
+
+describe("persistent combat modifier refresh lifecycle", () => {
+  it("adds one deterministic row and remains idempotent", () => {
+    const first = refresh({ combatEffects: effects(effect()) });
+    const second = refresh({
+      combatContext: first.combat.combatContext,
+      combatEffects: first.combatEffects,
+    });
+
+    expect(first.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({
+        id: "manual-general",
+      }),
+      expect.objectContaining({
+        id: "import:character_effect:effect-1:general",
+        sourceEffectId: "effect-1",
+      }),
+    ]);
+    expect(second).toEqual(first);
+  });
+
+  it("updates source fields without duplicating the imported row", () => {
+    const initial = refresh({
+      combatEffects: effects(effect({ duration: "2 rounds", expiresAtRound: 3 })),
+    });
+    const changedEffects = effects(
+      effect({
+        description: "Changed details",
+        duration: "1 round",
+        expiresAtRound: 4,
+        modifierValue: -5,
+      }),
+    );
+    changedEffects.events[0] = {
+      ...changedEffects.events[0]!,
+      sourceLabel: "Changed source",
+    };
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: changedEffects,
+    });
+    const imported = changed.combat.combatContext.modifierBuckets.general.filter(
+      (entry) => entry.sourceEffectId === "effect-1",
+    );
+
+    expect(imported).toEqual([
+      expect.objectContaining({
+        expiresAtRound: 4,
+        id: "import:character_effect:effect-1:general",
+        notes: "Changed source",
+        sourceDuration: "1 round",
+        value: -5,
+      }),
+    ]);
+  });
+
+  it("moves a changed explicit bucket and removes the old deterministic row", () => {
+    const initial = refresh({ combatEffects: effects(effect()) });
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(effect({ combatModifierBucket: "initiative" })),
+    });
+
+    expect(changed.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+    ]);
+    expect(changed.combat.combatContext.modifierBuckets.situationInitiative).toEqual([
+      expect.objectContaining({
+        id: "generated:reactive-attack:phase2:initiative",
+      }),
+      expect.objectContaining({
+        id: "import:character_effect:effect-1:initiative",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["explicit bucket removed", effect({ combatModifierBucket: undefined })],
+    ["effect resolved", effect({ status: "resolved" })],
+    ["effect expired", effect({ status: "expired" })],
+    ["effect removed", undefined],
+  ] as const)("removes a stale imported row when the %s", (_label, nextEffect) => {
+    const initial = refresh({ combatEffects: effects(effect()) });
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(...(nextEffect ? [nextEffect] : [])),
+    });
+
+    expect(changed.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+    ]);
+  });
+
+  it("replaces a superseded effect with its active successor", () => {
+    const initial = refresh({ combatEffects: effects(effect()) });
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(
+        effect({ status: "superseded" }),
+        effect({ id: "effect-2", modifierValue: -3 }),
+      ),
+    });
+
+    expect(changed.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+      expect.objectContaining({
+        id: "import:character_effect:effect-2:general",
+        value: -3,
+      }),
+    ]);
+  });
+
+  it("drops an active effect when its explicit expiry round passes", () => {
+    const initial = refresh({
+      combatEffects: effects(effect({ expiresAtRound: 2 })),
+      currentRound: 2,
+    });
+    const expired = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: initial.combatEffects,
+      currentRound: 3,
+    });
+
+    expect(expired.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+    ]);
+  });
+
+  it("preserves generated, manual, unknown, and legacy non-imported rows", () => {
+    const legacyContext = context();
+    legacyContext.modifierBuckets.general.push({
+      id: "legacy-general",
+      notes: "legacy",
+      scope: "until",
+      value: 2,
+    });
+    const refreshed = refresh({
+      combatContext: legacyContext,
+      combatEffects: effects(effect()),
+    });
+
+    expect(refreshed.combat.combatContext.modifierBuckets.general).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "manual-general" }),
+        expect.objectContaining({ id: "legacy-general" }),
+        expect.objectContaining({ id: "import:character_effect:effect-1:general" }),
+      ]),
+    );
+    expect(refreshed.combat.combatContext.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "generated:attack-parry:phase1:db-parry" }),
+      ]),
+    );
+  });
+
+  it("preserves imported and generated rows in either recomputation order", () => {
+    const generatedFirst = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantStateSchema.parse(
+        participantState({ combatContext: undefined }),
+      ).combat.combatContext,
+    });
+    const refreshedAfterGenerated = refresh({
+      combatContext: generatedFirst,
+      combatEffects: effects(effect({ combatModifierBucket: "db_parry" })),
+    });
+    const refreshedFirst = refresh({
+      combatContext: scenarioParticipantStateSchema.parse(
+        participantState({ combatContext: undefined }),
+      ).combat.combatContext,
+      combatEffects: effects(effect({ combatModifierBucket: "db_parry" })),
+    });
+    const generatedAfterRefresh = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: refreshedFirst.combat.combatContext,
+    });
+
+    for (const combatContext of [
+      refreshedAfterGenerated.combat.combatContext,
+      generatedAfterRefresh,
+    ]) {
+      expect(combatContext.modifierBuckets.situationDb).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "generated:attack-parry:phase1:db-parry" }),
+          expect.objectContaining({ id: "import:character_effect:effect-1:db_parry" }),
+        ]),
+      );
+    }
+  });
+
+  it("imports explicit Combat Experience and committed critical modifier effects", () => {
+    const refreshed = refresh({
+      combatEffects: effects(
+        effect({
+          combatModifierBucket: "general",
+          id: "combat-experience",
+          modifierValue: -2,
+          type: "general_modifier",
+        }),
+        effect({
+          combatModifierBucket: "db_parry",
+          effectGroup: "db",
+          id: "critical-defense",
+          modifierValue: -4,
+          type: "db_modifier",
+        }),
+      ),
+    });
+
+    expect(refreshed.combat.combatContext.modifierBuckets.general).toContainEqual(
+      expect.objectContaining({ sourceEffectId: "combat-experience", value: -2 }),
+    );
+    expect(refreshed.combat.combatContext.modifierBuckets.situationDb).toContainEqual(
+      expect.objectContaining({ sourceEffectId: "critical-defense", value: -4 }),
+    );
+  });
+
+  it("restores imported rows when undo restores effects and removes them for creation undo", () => {
+    const before = refresh({ combatEffects: effects(effect()) });
+    const afterCreationUndo = refresh({
+      combatContext: before.combat.combatContext,
+      combatEffects: effects(),
+    });
+    const afterRestoreUndo = refresh({
+      combatContext: afterCreationUndo.combat.combatContext,
+      combatEffects: before.combatEffects,
+    });
+
+    expect(afterCreationUndo.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+    ]);
+    expect(afterRestoreUndo.combat.combatContext.modifierBuckets.general).toContainEqual(
+      expect.objectContaining({ id: "import:character_effect:effect-1:general" }),
+    );
+  });
+
+  it("classifies unsupported active effects without a row and removes a formerly supported row", () => {
+    const initial = refresh({ combatEffects: effects(effect()) });
+    const unsupportedEffects = effects(
+      effect({ combatModifierBucket: undefined, modifierValue: undefined, type: "special" }),
+    );
+    const changed = refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: unsupportedEffects,
+    });
+    const projection = projectPersistentCombatEffectModifiers({
+      combatEffects: unsupportedEffects,
+    });
+
+    expect(projection.specialEffectIds).toEqual(["effect-1"]);
+    expect(changed.combat.combatContext.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "manual-general" }),
+    ]);
+  });
+
+  it("does not rewrite previously captured historical modifier rows", () => {
+    const historicalRows = structuredClone(context().modifierBuckets);
+    const initial = refresh({ combatEffects: effects(effect({ modifierValue: -2 })) });
+    refresh({
+      combatContext: initial.combat.combatContext,
+      combatEffects: effects(effect({ modifierValue: -8 })),
+    });
+
+    expect(historicalRows).toEqual(context().modifierBuckets);
   });
 });

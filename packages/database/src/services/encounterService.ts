@@ -1,4 +1,10 @@
-import type { EncounterSession, Scenario, ScenarioParticipant, ScenarioParticipantState } from "@glantri/domain";
+import {
+  refreshScenarioParticipantPersistentCombatModifiers,
+  type EncounterSession,
+  type Scenario,
+  type ScenarioParticipant,
+  type ScenarioParticipantState,
+} from "@glantri/domain";
 
 import {
   createPrismaEncounterRepository,
@@ -135,16 +141,19 @@ export class EncounterService {
     scenarioId: string;
     state: ScenarioParticipantState;
   }): Promise<ScenarioParticipant> {
+    // This is the shared persisted-state boundary for participant effect mutations from
+    // combat commands, undo, round-end duration changes, and direct GM effect editing.
+    const state = refreshScenarioParticipantPersistentCombatModifiers({ state: input.state });
     const participant = await this.scenarioRepository.updateScenarioParticipantState(
       input.participantId,
-      input.state,
+      state,
     );
     const scenario = await this.scenarioRepository.getScenarioById(input.scenarioId);
 
     await this.scenarioRepository.createScenarioEventLog({
       eventType: "participant_state_updated",
       participantId: input.participantId,
-      payload: input.state,
+      payload: state,
       phase: scenario?.liveState?.phase,
       roundNumber: scenario?.liveState?.roundNumber,
       scenarioId: input.scenarioId,

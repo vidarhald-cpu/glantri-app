@@ -131,6 +131,7 @@ import { encounterSessionSchema } from "./session";
 import { getDistanceBetween, makeDistancePairKey, setDistanceBetween } from "./combatDistance";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
 import type { CombatEffectsState } from "./combatEffects";
+import { mergePersistentCombatEffectModifiers } from "./combatModifierProjection";
 
 function participant(input: {
   id: string;
@@ -4034,11 +4035,25 @@ describe("combat round manager", () => {
           command,
         })
       : rolled.combatEffects;
+    const contextWithImportedEffect = mergePersistentCombatEffectModifiers({
+      combatEffects: rolled.combatEffects,
+    });
+    const contextAfterUndo = mergePersistentCombatEffectModifiers({
+      combatContext: contextWithImportedEffect,
+      combatEffects: clearedEffects,
+    });
 
     expect(clearedState.participants[0]?.combatExperience).toBeUndefined();
     expect(clearedState.currentStep).toBe("select_actions");
     expect(clearedState.commands).toHaveLength(0);
     expect(clearedEffects.effects.map((effect) => effect.id)).toEqual(["existing-modifier"]);
+    expect(contextWithImportedEffect.modifierBuckets.general).toContainEqual(
+      expect.objectContaining({
+        sourceEffectId: rolled.combatEffects.effects[1]?.id,
+        sourceType: "character_effect",
+      }),
+    );
+    expect(contextAfterUndo.modifierBuckets.general).toEqual([]);
   });
 
   it("clears no-roll Combat Experience confirmation without removing unrelated effects", () => {
@@ -11049,6 +11064,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
+        combatModifierBucket: "general",
         description: "Stunned: critical stun manual. Until cleared.",
         duration: "2",
         effectGroup: "general",
@@ -11058,6 +11074,17 @@ describe("combat round manager", () => {
         status: "active",
         targetParticipantId: "scenario-guard",
         type: "general_modifier",
+      }),
+    );
+    expect(
+      mergePersistentCombatEffectModifiers({
+        combatEffects: committed.combatEffects,
+      }).modifierBuckets.general,
+    ).toContainEqual(
+      expect.objectContaining({
+        id: `import:character_effect:${expectedStunEffectId}:general`,
+        sourceEffectId: expectedStunEffectId,
+        value: -4,
       }),
     );
     expect(committed.combatEffects.effects).toContainEqual(

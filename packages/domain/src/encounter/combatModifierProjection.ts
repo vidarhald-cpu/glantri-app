@@ -2,6 +2,7 @@ import type {
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
+  ScenarioParticipantState,
 } from "../campaign/scenario";
 import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "./combatEffects";
 
@@ -187,6 +188,28 @@ export function mergePersistentCombatEffectModifiers(input: {
         current.modifierBuckets.situationObSkill,
         projected.modifierBuckets.situationObSkill,
       ),
+    },
+  };
+}
+
+/**
+ * Refreshes the disposable persistent-effect rows in a live scenario participant state.
+ * The participant's combatEffects collection remains the source of truth; recorded combat
+ * history snapshots are intentionally outside this boundary and are never rewritten here.
+ */
+export function refreshScenarioParticipantPersistentCombatModifiers(input: {
+  currentRound?: number;
+  state: ScenarioParticipantState;
+}): ScenarioParticipantState {
+  return {
+    ...input.state,
+    combat: {
+      ...input.state.combat,
+      combatContext: mergePersistentCombatEffectModifiers({
+        combatContext: input.state.combat.combatContext,
+        combatEffects: input.state.combatEffects,
+        currentRound: input.currentRound,
+      }),
     },
   };
 }
