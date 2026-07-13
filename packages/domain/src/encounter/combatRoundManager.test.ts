@@ -14714,6 +14714,12 @@ describe("combat round manager", () => {
       state,
       submittedBy: "gm",
     });
+    const reparsedHistoricalAttack = combatRoundStateSchema.parse(afterAttack);
+
+    expect(reparsedHistoricalAttack.commands.at(-1)?.type).toBe("roll_attack");
+    expect(reparsedHistoricalAttack.commands.at(-1)?.facts).not.toHaveProperty("obSkillRaw");
+    expect(reparsedHistoricalAttack.participants[0]?.attackResults.phase1?.ob).toBe(10);
+
     const cleared = clearCombatRoundStep({
       state: {
         ...afterAttack,

@@ -476,8 +476,8 @@ export async function rollCombatAttackOnServer(input: {
   defenderDb?: number;
   defenderScenarioParticipantId: string;
   encounterId: string;
-  ob?: number;
-  obSkillRaw?: number;
+  ob: number;
+  obSkillRaw: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   weaponCriticalCode?: string;

@@ -7475,6 +7475,7 @@ describe("scenarios route contract", () => {
           defenderDb: 99,
           defenderScenarioParticipantId: "participant-1",
           ob: 0,
+          obSkillRaw: 0,
           phase: "phase1",
           scenarioParticipantId: "participant-2",
           weaponName: "Broad sword",
@@ -8040,6 +8041,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 0,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },
@@ -8063,6 +8066,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        obSkillRaw: 0,
       },
       participantId: "encounter-participant-1",
       type: "roll_attack",
@@ -8102,6 +8106,38 @@ describe("scenarios route contract", () => {
       defenderParticipantId: "encounter-participant-2",
       phase: "phase1",
     });
+  });
+
+  it("rejects a new live attack that omits the required Skill/OB total", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: makeOpenPhase1AttackRoundState(),
+        participants: makeTwoCombatEncounterParticipants(),
+      },
+      participants: [
+        { id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 999,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "obSkillRaw must be an integer." });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -8208,6 +8244,19 @@ describe("scenarios route contract", () => {
       sourceRule: "distance-ob-skill-phase1",
       value: -4,
     };
+    const participantState = {
+      ...makeCombatScenarioParticipant().state,
+      combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [distanceModifierEntry],
+          },
+        },
+      },
+    };
 
     setupCombatDeclarationRoute({
       encounter: {
@@ -8219,7 +8268,7 @@ describe("scenarios route contract", () => {
         participants: encounterParticipants,
       },
       participants: [
-        { id: "participant-1" },
+        { id: "participant-1", state: participantState },
         {
           controlledByUserId: "other-player",
           id: "participant-2",
@@ -8232,6 +8281,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 6,
+        obSkillRaw: -4,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },
@@ -8321,6 +8372,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: -2,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },
@@ -8415,6 +8468,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 8,
+        obSkillRaw: -2,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },
@@ -8614,6 +8669,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 9,
+        obSkillRaw: 0,
         phase: "phase2",
         scenarioParticipantId: "participant-1",
       },
@@ -8715,6 +8772,8 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 0,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },

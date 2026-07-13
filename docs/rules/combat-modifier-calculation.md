@@ -93,6 +93,13 @@ the live modifier sources currently wired through the app:
   roll. General/Fatigue, OB/Skill, and DB/Parry are not part of initiative merely because they are
   present in their own buckets.
 
+Live combat-round attack requests must include both the client-computed final `ob` and the raw
+`obSkillRaw` used by that calculation. The server validates `obSkillRaw` against the participant's
+current persisted, phase-filtered canonical Skill/OB rows before accepting the final OB. The final
+workbook OB remains client-derived for now; reconstructing it authoritatively requires a broader
+server-side contract containing the weapon, equipment, total skill XP, characteristic, armor, and
+percentage-adjustment inputs. Snapshot OB is not used as a missing-field fallback for new attacks.
+
 DB/Parry does not include Skill/OB or Initiative. The encounter read model uses:
 
 ```text

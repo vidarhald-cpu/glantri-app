@@ -2229,10 +2229,17 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    let ob: number | undefined;
+    let ob: number;
 
     try {
-      ob = parsePlayerCombatInteger(phaseAttackStats.ob, "Attack OB");
+      const parsedOb = parsePlayerCombatInteger(phaseAttackStats.ob, "Attack OB");
+
+      if (parsedOb === undefined) {
+        setError("Attack OB is not available.");
+        return;
+      }
+
+      ob = parsedOb;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Attack OB is not available.");
       return;

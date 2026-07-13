@@ -550,8 +550,8 @@ function parseCombatAttackBody(body: unknown): {
   actionId?: string;
   defenderDb?: number;
   defenderScenarioParticipantId: string;
-  ob?: number;
-  obSkillRaw?: number;
+  ob: number;
+  obSkillRaw: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   weaponCriticalCode?: string;
@@ -587,8 +587,8 @@ function parseCombatAttackBody(body: unknown): {
     actionId,
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderScenarioParticipantId,
-    ob: parseOptionalInteger(value.ob, "ob"),
-    obSkillRaw: parseOptionalInteger(value.obSkillRaw, "obSkillRaw"),
+    ob: parseInteger(value.ob, "ob"),
+    obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
     phase,
     weaponCriticalCode,
     weaponDamageClass,
@@ -1149,13 +1149,6 @@ function buildDistanceModifierDetailFromExistingEntry(
     preferredDistances: [],
     value: entry.value,
   };
-}
-
-function getDistanceModifierValueFromSnapshot(input: {
-  phase: "phase1" | "phase2";
-  snapshot: CombatRoundState["stepSnapshots"][number] | undefined;
-}): number {
-  return findExistingDistanceModifierEntryFromSnapshot(input)?.value ?? 0;
 }
 
 function applyGeneratedCombatActionModifiersForDeclaration(input: {
@@ -4572,15 +4565,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.defenseSummary,
         );
-      const snapshotOb =
-        parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.ob, "Attacker OB") ??
-        body.ob;
       const weaponName = latestAttackerSnapshot?.attackSummary?.weaponName ?? body.weaponName;
       const defenderDb =
         parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
         body.defenderDb;
 
-      if (snapshotOb === undefined || !weaponName || defenderDb === undefined) {
+      if (!weaponName || defenderDb === undefined) {
         return reply.code(409).send({
           error: "Attack or defender combat summary is not available.",
         });
@@ -4597,7 +4587,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         phase: body.phase,
       });
 
-      if (body.obSkillRaw !== undefined && body.obSkillRaw !== canonicalObSkillRaw) {
+      if (body.obSkillRaw !== canonicalObSkillRaw) {
         return reply.code(409).send({
           error: "Attack modifiers changed. Refresh combat before rolling.",
         });
@@ -4613,24 +4603,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot: latestAttackerSnapshot,
           }),
       );
-      const persistedDistanceModifierValue = distanceModifierDetail?.value ?? 0;
-      const snapshotDistanceModifierValue = latestAttackerSnapshot
-        ? getDistanceModifierValueFromSnapshot({
-            phase: body.phase,
-            snapshot: latestAttackerSnapshot,
-          })
-        : persistedDistanceModifierValue;
-      const ob =
-        body.ob !== undefined && body.obSkillRaw !== undefined
-          ? body.ob
-          : snapshotOb + persistedDistanceModifierValue - snapshotDistanceModifierValue;
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
         attackerParticipantId: encounterParticipant.id,
         defenderDb,
         defenderParticipantId: defenderEncounterParticipant.id,
-        ob,
+        ob: body.ob,
         openEndedD10s: roll.openEndedD10s,
         phase: body.phase,
         rollD20: roll.rollD20,
