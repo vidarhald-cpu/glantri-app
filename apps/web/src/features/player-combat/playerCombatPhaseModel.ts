@@ -1,4 +1,6 @@
 import type {
+  CombatAttackSourceRef,
+  CombatAttackSourceSlot,
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
@@ -44,6 +46,7 @@ export interface PlayerCombatLoadoutReference {
   selectedWeapon: string;
   sourceAttackModeId?: string;
   sourceItemId?: string;
+  sourceSlot?: Exclude<CombatAttackSourceSlot, "virtual">;
   sourceTemplateId?: string;
 }
 
@@ -150,6 +153,122 @@ export function isEquipmentFeatureState(value: unknown): value is EquipmentFeatu
   );
 }
 
+export function normalizeCombatEquipmentFeatureState(value: unknown): EquipmentFeatureState | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const nestedTemplates =
+    candidate.templates && typeof candidate.templates === "object"
+      ? (candidate.templates as Record<string, unknown>).templatesById
+      : undefined;
+  const templatesById = nestedTemplates ?? candidate.templatesById;
+  if (
+    !candidate.itemsById ||
+    typeof candidate.itemsById !== "object" ||
+    !candidate.activeLoadoutByCharacterId ||
+    typeof candidate.activeLoadoutByCharacterId !== "object" ||
+    !templatesById ||
+    typeof templatesById !== "object"
+  ) {
+    return null;
+  }
+
+  return {
+    activeLoadoutByCharacterId:
+      candidate.activeLoadoutByCharacterId as EquipmentFeatureState["activeLoadoutByCharacterId"],
+    itemsById: candidate.itemsById as EquipmentFeatureState["itemsById"],
+    locationsById:
+      candidate.locationsById && typeof candidate.locationsById === "object"
+        ? (candidate.locationsById as EquipmentFeatureState["locationsById"])
+        : {},
+    templates: {
+      templatesById: templatesById as EquipmentFeatureState["templates"]["templatesById"],
+    },
+  };
+}
+
+export function resolveCombatEquipmentCharacterId(input: {
+  characterId?: string;
+  state: EquipmentFeatureState | null;
+}): string | undefined {
+  if (!input.state) return undefined;
+  if (input.characterId && input.state.activeLoadoutByCharacterId[input.characterId]) {
+    return input.characterId;
+  }
+  const loadoutOwnerIds = Object.keys(input.state.activeLoadoutByCharacterId);
+  return loadoutOwnerIds.length === 1 ? loadoutOwnerIds[0] : undefined;
+}
+
+export interface ScenarioCombatEquipmentStatus {
+  kind: "ready" | "unarmed" | "stale" | "incomplete";
+  message?: string;
+}
+
+function getReadyEquipmentItemIds(state: EquipmentFeatureState, characterId: string): string[] {
+  const loadout = state.activeLoadoutByCharacterId[characterId];
+  if (!loadout) return [];
+  return [
+    loadout.activePrimaryWeaponItemId,
+    loadout.activeSecondaryWeaponItemId,
+    loadout.activeMissileWeaponItemId,
+    loadout.readyShieldItemId,
+    loadout.wornArmorItemId,
+  ].filter((itemId): itemId is string => Boolean(itemId));
+}
+
+/** Diagnoses scenario-owned equipment without substituting mutable character item identities. */
+export function getScenarioCombatEquipmentStatus(input: {
+  characterId?: string;
+  resolvedEquipmentState?: unknown;
+  scenarioEquipmentState?: unknown;
+}): ScenarioCombatEquipmentStatus {
+  const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
+  if (!scenarioState) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment data is unavailable. Ask the GM to refresh it.",
+    };
+  }
+  const scenarioCharacterId = resolveCombatEquipmentCharacterId({
+    characterId: input.characterId,
+    state: scenarioState,
+  });
+  if (!scenarioCharacterId) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment loadout is unavailable. Ask the GM to refresh it.",
+    };
+  }
+  const scenarioReadyIds = getReadyEquipmentItemIds(scenarioState, scenarioCharacterId);
+  const missingMetadata = scenarioReadyIds.some((itemId) => {
+    const item = scenarioState.itemsById[itemId];
+    return !item || !scenarioState.templates.templatesById[item.templateId];
+  });
+  if (missingMetadata) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment metadata is incomplete. Ask the GM to refresh it.",
+    };
+  }
+  if (scenarioReadyIds.length > 0) return { kind: "ready" };
+
+  const resolvedState = normalizeCombatEquipmentFeatureState(input.resolvedEquipmentState);
+  const resolvedCharacterId = resolveCombatEquipmentCharacterId({
+    characterId: input.characterId,
+    state: resolvedState,
+  });
+  if (
+    resolvedState &&
+    resolvedCharacterId &&
+    getReadyEquipmentItemIds(resolvedState, resolvedCharacterId).length > 0
+  ) {
+    return {
+      kind: "stale",
+      message: "Committed equipment is out of date. Ask the GM to refresh it.",
+    };
+  }
+  return { kind: "unarmed" };
+}
+
 /**
  * Combat declarations use the committed scenario participant's item and loadout IDs.
  * Current equipment data may only enrich matching template definitions (for example,
@@ -159,12 +278,8 @@ export function resolveScenarioCombatEquipmentState(input: {
   resolvedEquipmentState?: unknown;
   scenarioEquipmentState?: unknown;
 }): EquipmentFeatureState | null {
-  const scenarioState = isEquipmentFeatureState(input.scenarioEquipmentState)
-    ? input.scenarioEquipmentState
-    : null;
-  const resolvedState = isEquipmentFeatureState(input.resolvedEquipmentState)
-    ? input.resolvedEquipmentState
-    : null;
+  const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
+  const resolvedState = normalizeCombatEquipmentFeatureState(input.resolvedEquipmentState);
 
   if (!scenarioState) return resolvedState;
   if (!resolvedState) return scenarioState;
@@ -186,8 +301,48 @@ export function resolveScenarioCombatEquipmentState(input: {
   };
 }
 
+export function buildCombatAttackSourceRef(input: {
+  phaseKey: PlayerCombatPhaseKey;
+  reference: PlayerCombatLoadoutReference | null;
+  unarmedTemplateId: string;
+}): CombatAttackSourceRef | undefined {
+  const opportunitySlot = input.phaseKey === "phase1" ? "attack_1" : "attack_2";
+  if (
+    input.reference?.sourceItemId &&
+    input.reference.sourceTemplateId &&
+    input.reference.sourceAttackModeId &&
+    input.reference.sourceSlot
+  ) {
+    return {
+      attackModeId: input.reference.sourceAttackModeId,
+      opportunitySlot,
+      scenarioItemId: input.reference.sourceItemId,
+      slot: input.reference.sourceSlot,
+      sourceKind: "weapon",
+      templateId: input.reference.sourceTemplateId,
+    };
+  }
+
+  if (
+    input.reference?.sourceItemId ||
+    input.reference?.sourceTemplateId ||
+    input.reference?.sourceAttackModeId
+  ) {
+    return undefined;
+  }
+
+  return {
+    attackModeId: "mode-1",
+    opportunitySlot,
+    slot: "virtual",
+    sourceKind: "unarmed",
+    templateId: input.unarmedTemplateId,
+  };
+}
+
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
+  allowUnarmedFallback?: boolean;
   loadoutModel: EquipmentLoadoutModuleModel;
   phaseKey?: PlayerCombatPhaseKey;
   selectedAttackModeId?: string;
@@ -237,8 +392,23 @@ export function buildPlayerCombatLoadoutSummary(input: {
   const preferredWeaponLabels = preferredFieldIds
     .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
     .filter((value): value is string => Boolean(value) && value !== "None");
-  if (input.actionId === "double_attack" && preferredWeaponLabels.length === 0) {
+  if (
+    input.actionId === "double_attack" &&
+    input.allowUnarmedFallback !== false &&
+    preferredWeaponLabels.length === 0
+  ) {
     preferredWeaponLabels.push(input.phaseKey === "phase2" ? "Kick" : "Punch");
+  }
+  if (input.allowUnarmedFallback === false && preferredItemIds.length === 0) {
+    return {
+      attackStats: null,
+      attackModeOptions: [],
+      mainHandParryItemLabel,
+      offHandParryItemLabel,
+      passiveInitiative: 0,
+      reference: null,
+      selectedAttackModeUsedFallback: false,
+    };
   }
   const referenceRow =
     preferredItemIds
@@ -345,8 +515,22 @@ export function buildPlayerCombatLoadoutSummary(input: {
     (row) =>
       row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
   );
+  if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
+    return {
+      attackStats: null,
+      attackModeOptions: [],
+      mainHandParryItemLabel,
+      offHandParryItemLabel,
+      passiveInitiative: 0,
+      reference: null,
+      selectedAttackModeUsedFallback: false,
+    };
+  }
   const primaryItemId = loadoutFieldDisplayMap.get("primary")?.value;
   const selectedSourceItemId = rawReferenceRow?.itemId;
+  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find(
+    (fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value === selectedSourceItemId,
+  );
   const requireRepeatedRoundAttack = Boolean(
     input.actionId === "double_attack" &&
       input.phaseKey === "phase2" &&
@@ -482,6 +666,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
     selectedWeapon: referenceWeaponLabel,
     sourceAttackModeId: modeResolution.mode?.id ?? rawReferenceRow?.attackMode1Id,
     sourceItemId: rawReferenceRow?.itemId,
+    sourceSlot:
+      sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,
   };
 

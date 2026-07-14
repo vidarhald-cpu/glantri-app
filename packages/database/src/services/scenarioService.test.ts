@@ -9,6 +9,103 @@ import {
 } from "./scenarioService.testHelpers";
 
 describe("ScenarioService controller assignment", () => {
+  it("explicitly refreshes committed equipment while preserving live participant state", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+    let equipmentState: Record<string, unknown> = {
+      activeLoadoutByCharacterId: { "character-1": { activeAmmoItemIds: [] } },
+      itemsById: {},
+      locationsById: {},
+      templatesById: {},
+    };
+    const service = new ScenarioService(
+      repository,
+      { getCharacterById: async () => character } as never,
+      { getCharacterEquipmentState: async () => equipmentState } as never,
+    );
+    const original = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+    await repository.updateScenarioParticipantState(original.id, {
+      ...original.state,
+      health: { ...original.state.health, currentHp: 4 },
+    });
+    equipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": {
+          activeAmmoItemIds: [],
+          activeMissileWeaponItemId: "scenario-bow-1",
+          activePrimaryWeaponItemId: "scenario-sword-1",
+          activeSecondaryWeaponItemId: "scenario-dagger-1",
+          characterId: "character-1",
+          id: "loadout-1",
+          isActive: true,
+          name: "Combat",
+          quickAccessItemIds: [],
+          readyShieldItemId: "scenario-shield-1",
+          wornArmorItemId: "scenario-armor-1",
+        },
+      },
+      itemsById: {
+        "scenario-sword-1": {
+          characterId: "character-1",
+          id: "scenario-sword-1",
+          isEquipped: true,
+          templateId: "sword-template",
+        },
+        "scenario-dagger-1": {
+          characterId: "character-1",
+          id: "scenario-dagger-1",
+          isEquipped: true,
+          templateId: "dagger-template",
+        },
+        "scenario-bow-1": {
+          characterId: "character-1",
+          id: "scenario-bow-1",
+          isEquipped: true,
+          templateId: "bow-template",
+        },
+        "scenario-shield-1": {
+          characterId: "character-1",
+          id: "scenario-shield-1",
+          isEquipped: true,
+          templateId: "shield-template",
+        },
+        "scenario-armor-1": {
+          characterId: "character-1",
+          id: "scenario-armor-1",
+          isEquipped: true,
+          templateId: "armor-template",
+        },
+      },
+      locationsById: {},
+      templatesById: {
+        "armor-template": { category: "armor", id: "armor-template" },
+        "bow-template": { category: "weapon", id: "bow-template" },
+        "dagger-template": { category: "weapon", id: "dagger-template" },
+        "shield-template": { category: "shield", id: "shield-template" },
+        "sword-template": { category: "weapon", id: "sword-template" },
+      },
+    };
+
+    const refreshed = await service.refreshCharacterParticipantEquipmentSnapshot({
+      participantId: original.id,
+      scenarioId: "scenario-1",
+    });
+
+    expect(refreshed.snapshot.equipmentState).toEqual(equipmentState);
+    expect(refreshed.state.equipment.readyItemIds).toEqual([
+      "scenario-armor-1",
+      "scenario-shield-1",
+      "scenario-sword-1",
+      "scenario-dagger-1",
+      "scenario-bow-1",
+    ]);
+    expect(refreshed.state.health.currentHp).toBe(4);
+  });
+
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
     const { repository } = createScenarioRepositoryStub();
     const characters = new Map([

@@ -311,6 +311,40 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post(
+    "/scenarios/:scenarioId/participants/:participantId/refresh-character-equipment",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+        const participantId = parseId(request.params, "participantId", "Participant id");
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(404).send({ error: "Scenario not found." });
+        }
+
+        const participant = await scenarioService.refreshCharacterParticipantEquipmentSnapshot({
+          participantId,
+          scenarioId,
+        });
+        return { participant };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to refresh participant equipment.",
+        });
+      }
+    },
+  );
+
   app.put(
     "/scenarios/:scenarioId/participants/:participantId/metadata",
     async (request, reply) => {

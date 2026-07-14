@@ -746,6 +746,35 @@ export const combatRoundPhaseContextsSchema = z.object({
   phase2: scenarioParticipantCombatContextSchema.optional(),
 });
 
+export const combatAttackSourceSlotSchema = z.enum([
+  "primary",
+  "secondary",
+  "throwing",
+  "other",
+  "virtual",
+]);
+export type CombatAttackSourceSlot = z.infer<typeof combatAttackSourceSlotSchema>;
+
+/** Canonical live declaration reference; template identity never proves readiness. */
+export const combatAttackSourceRefSchema = z.discriminatedUnion("sourceKind", [
+  z.object({
+    attackModeId: idSchema,
+    opportunitySlot: z.enum(["attack_1", "attack_2"]),
+    scenarioItemId: idSchema,
+    slot: z.enum(["primary", "secondary", "throwing", "other"]),
+    sourceKind: z.literal("weapon"),
+    templateId: idSchema,
+  }),
+  z.object({
+    attackModeId: idSchema,
+    opportunitySlot: z.enum(["attack_1", "attack_2"]),
+    slot: z.literal("virtual"),
+    sourceKind: z.literal("unarmed"),
+    templateId: idSchema,
+  }),
+]);
+export type CombatAttackSourceRef = z.infer<typeof combatAttackSourceRefSchema>;
+
 export const combatRoundAttackOpportunitySchema = z.object({
   attackModeId: idSchema.optional(),
   cancelledAt: z.string().datetime().optional(),

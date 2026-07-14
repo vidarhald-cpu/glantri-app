@@ -1,4 +1,5 @@
 import type {
+  CombatAttackSourceRef,
   CombatHistoryProjection,
   CombatRoundAttackRollResult,
   CombatRoundCommand,
@@ -134,10 +135,7 @@ export async function submitCombatDeclarationOnServer(input: {
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseAttackSources?: Partial<
-    Record<
-      "phase1" | "phase2",
-      { attackModeId?: string; itemId?: string; sourceKind: "weapon" | "unarmed" }
-    >
+    Record<"phase1" | "phase2", CombatAttackSourceRef>
   >;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;

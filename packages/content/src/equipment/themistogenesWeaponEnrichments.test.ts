@@ -62,6 +62,7 @@ describe("themistogenes weapon enrichments", () => {
   it("marks only explicit melee thrust modes as eligible for same-source Double Attack", () => {
     for (const id of [
       "weapon-template-dagger",
+      "weapon-template-fencing-sword",
       "weapon-template-rapier",
       "weapon-template-1-h-spear",
       "weapon-template-2-h-javelin",

@@ -166,6 +166,49 @@ export class ScenarioService {
     return participant;
   }
 
+  /** Explicitly recommits current character equipment into the scenario-owned snapshot. */
+  async refreshCharacterParticipantEquipmentSnapshot(input: {
+    participantId: string;
+    scenarioId: string;
+  }): Promise<ScenarioParticipant> {
+    const participant = await this.repository.getScenarioParticipantById(
+      input.participantId,
+      input.scenarioId
+    );
+
+    if (!participant?.characterId || participant.sourceType !== "character") {
+      throw new Error("Character-backed scenario participant not found.");
+    }
+
+    const character = await this.characterService.getCharacterById(participant.characterId);
+
+    if (!character) {
+      throw new Error("Character not found.");
+    }
+
+    const equipmentState = await this.equipmentService.getCharacterEquipmentState(
+      participant.characterId
+    );
+    const refreshed = createParticipantSnapshotFromCharacter({
+      build: character.build,
+      equipmentState,
+      sourceUpdatedAt: character.updatedAt
+    });
+
+    return this.repository.updateScenarioParticipantSnapshotAndState(
+      participant.id,
+      {
+        ...participant.snapshot,
+        equipmentState: refreshed.snapshot.equipmentState,
+        sourceUpdatedAt: refreshed.snapshot.sourceUpdatedAt
+      },
+      {
+        ...participant.state,
+        equipment: refreshed.state.equipment
+      }
+    );
+  }
+
   async addEntityParticipant(input: {
     entityId?: string;
     entityInput?: {

@@ -4,11 +4,15 @@ import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerE
 
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   DEFAULT_MAIN_HAND_PARRY_DIRECTION,
   DEFAULT_OFF_HAND_PARRY_DIRECTION,
+  getScenarioCombatEquipmentStatus,
+  normalizeCombatEquipmentFeatureState,
+  resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
 } from "./playerCombatPhaseModel";
@@ -56,6 +60,7 @@ const reference: PlayerCombatLoadoutReference = {
 
 function buildLoadoutModel(input: {
   rows: Array<Array<string | number>>;
+  sourceItemId?: string;
   valueLabel?: string;
   weaponRows?: Array<Record<string, unknown>>;
 }): Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"] {
@@ -98,7 +103,7 @@ function buildLoadoutModel(input: {
         id: "primary",
         label: "Primary weapon",
         options: [],
-        value: "primary-weapon",
+        value: input.sourceItemId ?? "primary-weapon",
         valueLabel: input.valueLabel ?? "Long sword",
       },
     ],
@@ -119,10 +124,8 @@ describe("player combat phase model", () => {
         },
       },
       locationsById: {},
-      templates: {
-        templatesById: {
-          "weapon-template-javelin": { category: "weapon", id: "weapon-template-javelin" },
-        },
+      templatesById: {
+        "weapon-template-javelin": { category: "weapon", id: "weapon-template-javelin" },
       },
     };
     const resolvedEquipmentState = {
@@ -160,6 +163,118 @@ describe("player combat phase model", () => {
     expect(result?.templates.templatesById["weapon-template-javelin"]).toMatchObject({
       attackModes: [{ id: "thrust", allowsRepeatedRoundAttack: true }],
     });
+  });
+
+  it("builds declaration references from committed scenario IDs rather than hydrated IDs", () => {
+    const reference = buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel: buildLoadoutModel({
+          rows: [
+            ["Primary", "Fencing sword", "2", "Thrust", "10", "4", "A", "—", "A"],
+          ],
+          sourceItemId: "scenario-fencing-sword",
+          valueLabel: "Fencing sword",
+          weaponRows: [
+            {
+              attackModes: [
+                {
+                  allowsRepeatedRoundAttack: true,
+                  canonicalMeleeMode: "thrust",
+                  id: "mode-1",
+                  isPrimaryAttack: true,
+                  label: "Thrust",
+                  order: 0,
+                },
+              ],
+              attackMode1Id: "mode-1",
+              currentItemLabel: "Fencing sword",
+              itemId: "scenario-fencing-sword",
+              modeLabel: "Primary",
+              templateId: "weapon-template-fencing-sword",
+            },
+          ],
+        }),
+        phaseKey: "phase1",
+        secondaryActionId: "",
+      }).reference;
+
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toEqual({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_1",
+      scenarioItemId: "scenario-fencing-sword",
+      slot: "primary",
+      sourceKind: "weapon",
+      templateId: "weapon-template-fencing-sword",
+    });
+  });
+
+  it("normalizes flat legacy snapshots and resolves their sole committed loadout owner", () => {
+    const state = normalizeCombatEquipmentFeatureState({
+      activeLoadoutByCharacterId: {
+        "base-character-id": { activePrimaryWeaponItemId: "scenario-sword" },
+      },
+      itemsById: {
+        "scenario-sword": { id: "scenario-sword", templateId: "sword-template" },
+      },
+      templatesById: { "sword-template": { category: "weapon", id: "sword-template" } },
+    });
+
+    expect(state?.locationsById).toEqual({});
+    expect(
+      resolveCombatEquipmentCharacterId({ characterId: "scenario-participant-id", state }),
+    ).toBe("base-character-id");
+  });
+
+  it("diagnoses a stale committed loadout without substituting hydrated item IDs", () => {
+    const scenarioEquipmentState = {
+      activeLoadoutByCharacterId: { "character-1": { activeAmmoItemIds: [] } },
+      itemsById: {},
+      locationsById: {},
+      templatesById: {},
+    };
+    const resolvedEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "external-sword" },
+      },
+      itemsById: {
+        "external-sword": { id: "external-sword", templateId: "sword-template" },
+      },
+      locationsById: {},
+      templatesById: { "sword-template": { category: "weapon", id: "sword-template" } },
+    };
+
+    expect(
+      getScenarioCombatEquipmentStatus({
+        characterId: "character-1",
+        resolvedEquipmentState,
+        scenarioEquipmentState,
+      }),
+    ).toMatchObject({ kind: "stale" });
+    expect(
+      resolveScenarioCombatEquipmentState({
+        resolvedEquipmentState,
+        scenarioEquipmentState,
+      })?.itemsById,
+    ).toEqual({});
+  });
+
+  it("does not silently replace incomplete committed equipment with Punch or Kick", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      allowUnarmedFallback: false,
+      loadoutModel: buildLoadoutModel({ rows: [["Unarmed", "Punch", "0", "Strike", "0"]] }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.attackStats).toBeNull();
+    expect(summary.reference).toBeNull();
   });
 
   it("maps Single attack into phase 1 attack/defense and phase 2 defense", () => {

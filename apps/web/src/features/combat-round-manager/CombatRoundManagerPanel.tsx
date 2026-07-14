@@ -122,7 +122,10 @@ import {
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
-import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
+import {
+  refreshScenarioParticipantEquipmentOnServer,
+  updateScenarioParticipantStateOnServer,
+} from "@/lib/api/scenarioClient";
 import {
   advanceCombatRoundCurrentStepOnServer,
   advanceCurrentCombatPhaseResolutionOnServer,
@@ -179,10 +182,13 @@ import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/pl
 import { getLatestRelevantPlayerCombatAttackResult } from "@/features/player-combat/playerCombatResultSelection";
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
+  getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
+  resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
@@ -4275,6 +4281,25 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
     selectedScenarioParticipant?.snapshot.equipmentState,
   ]);
+  const inspectorEquipmentCharacterId = useMemo(
+    () =>
+      resolveCombatEquipmentCharacterId({
+        characterId: selectedScenarioParticipant?.characterId,
+        state: inspectorEquipmentState,
+      }) ?? "",
+    [inspectorEquipmentState, selectedScenarioParticipant?.characterId],
+  );
+  const inspectorEquipmentStatus = useMemo(
+    () =>
+      getScenarioCombatEquipmentStatus({
+        characterId: selectedScenarioParticipant?.characterId,
+        resolvedEquipmentState:
+          resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
+            ?.equipmentState,
+        scenarioEquipmentState: selectedScenarioParticipant?.snapshot.equipmentState,
+      }),
+    [resolvedCharacterStateByParticipantId, selectedScenarioParticipant],
+  );
   const inspectorGeneratedCombatContext = useMemo(() => {
     if (inspectorHasLocalModifierEdits) {
       return inspectorDraft.combatContext;
@@ -4581,7 +4606,7 @@ export default function CombatRoundManagerPanel({
                 },
               }
             : null,
-        characterId: selectedScenarioParticipant?.characterId ?? "",
+        characterId: inspectorEquipmentCharacterId,
         liveCombatModifiers: inspectorLiveModifiers,
         state: inspectorEquipmentState,
         throwingWeaponItemId: null,
@@ -4591,13 +4616,16 @@ export default function CombatRoundManagerPanel({
       inspectorBuild,
       inspectorEquipmentState,
       inspectorLiveModifiers,
-      selectedScenarioParticipant?.characterId,
+      inspectorEquipmentCharacterId,
     ],
   );
   const inspectorLoadoutSummary = useMemo(
     () =>
       buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
+        allowUnarmedFallback:
+          inspectorEquipmentStatus.kind === "ready" ||
+          inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: inspectorLoadoutModel,
         secondaryActionId: inspectorDraft.secondaryActionId,
       }),
@@ -4634,7 +4662,7 @@ export default function CombatRoundManagerPanel({
                 },
               }
             : null,
-        characterId: selectedScenarioParticipant?.characterId ?? "",
+        characterId: inspectorEquipmentCharacterId,
         liveCombatModifiers: phaseLiveModifiers,
         state: inspectorEquipmentState,
         throwingWeaponItemId: null,
@@ -4642,6 +4670,9 @@ export default function CombatRoundManagerPanel({
 
       return buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
+        allowUnarmedFallback:
+          inspectorEquipmentStatus.kind === "ready" ||
+          inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
@@ -4660,7 +4691,7 @@ export default function CombatRoundManagerPanel({
     inspectorGeneratedCombatContext,
     inspectorDraft.secondaryActionId,
     inspectorEquipmentState,
-    selectedScenarioParticipant?.characterId,
+    inspectorEquipmentCharacterId,
     selectedScenarioParticipant?.state.combatEffects,
   ]);
   const inspectorDistancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
@@ -5757,11 +5788,15 @@ export default function CombatRoundManagerPanel({
             }),
           )
         : undefined;
-    const equipmentStateCandidate =
-      resolvedCharacterState?.equipmentState ?? input.scenarioParticipant?.snapshot.equipmentState;
-    const equipmentState = isEquipmentFeatureState(equipmentStateCandidate)
-      ? equipmentStateCandidate
-      : null;
+    const equipmentState = resolveScenarioCombatEquipmentState({
+      resolvedEquipmentState: resolvedCharacterState?.equipmentState,
+      scenarioEquipmentState: input.scenarioParticipant?.snapshot.equipmentState,
+    });
+    const equipmentCharacterId =
+      resolveCombatEquipmentCharacterId({
+        characterId: input.scenarioParticipant?.characterId,
+        state: equipmentState,
+      }) ?? "";
     const loadoutModel = buildEquipmentLoadoutModuleModel({
       characterContext:
         content && buildResult.success
@@ -5772,7 +5807,7 @@ export default function CombatRoundManagerPanel({
               },
             }
           : null,
-      characterId: input.scenarioParticipant?.characterId ?? "",
+      characterId: equipmentCharacterId,
       liveCombatModifiers: liveModifiers,
       state: equipmentState,
       throwingWeaponItemId: null,
@@ -5787,7 +5822,7 @@ export default function CombatRoundManagerPanel({
               },
             }
           : null,
-      characterId: input.scenarioParticipant?.characterId ?? "",
+      characterId: equipmentCharacterId,
       state: equipmentState,
       throwingWeaponItemId: null,
     });
@@ -6115,6 +6150,31 @@ export default function CombatRoundManagerPanel({
         step,
       };
     });
+  }
+
+  async function refreshInspectorEquipment() {
+    if (!encounter.scenarioId || !selectedScenarioParticipant?.characterId) return;
+    setSaving(true);
+    try {
+      const participant = await refreshScenarioParticipantEquipmentOnServer({
+        participantId: selectedScenarioParticipant.id,
+        scenarioId: encounter.scenarioId,
+      });
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [participant.id]: participant,
+      }));
+      onScenarioParticipantsUpdated?.([participant]);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to refresh participant equipment.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function commitCurrentStep() {
@@ -6532,25 +6592,21 @@ export default function CombatRoundManagerPanel({
         movementIntent: inspectorDraft.movementIntent,
         phaseContexts: inspectorDraft.phaseContexts,
         phaseAttackSources: {
-          phase1: inspectorPhaseLoadoutSummaries.phase1.reference?.sourceItemId
-            ? {
-                attackModeId:
-                  inspectorPhaseLoadoutSummaries.phase1.reference.sourceAttackModeId,
-                itemId: inspectorPhaseLoadoutSummaries.phase1.reference.sourceItemId,
-                sourceKind: "weapon",
-              }
-            : inspectorDraft.actionId === "double_attack"
-              ? { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" }
+          phase1:
+            inspectorDraft.actionId === "double_attack"
+              ? buildCombatAttackSourceRef({
+                  phaseKey: "phase1",
+                  reference: inspectorPhaseLoadoutSummaries.phase1.reference,
+                  unarmedTemplateId: "virtual-weapon-template-punch",
+                })
               : undefined,
-          phase2: inspectorPhaseLoadoutSummaries.phase2.reference?.sourceItemId
-            ? {
-                attackModeId:
-                  inspectorPhaseLoadoutSummaries.phase2.reference.sourceAttackModeId,
-                itemId: inspectorPhaseLoadoutSummaries.phase2.reference.sourceItemId,
-                sourceKind: "weapon",
-              }
-            : inspectorDraft.actionId === "double_attack"
-              ? { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" }
+          phase2:
+            inspectorDraft.actionId === "double_attack"
+              ? buildCombatAttackSourceRef({
+                  phaseKey: "phase2",
+                  reference: inspectorPhaseLoadoutSummaries.phase2.reference,
+                  unarmedTemplateId: "virtual-weapon-template-kick",
+                })
               : undefined,
         },
         phaseWeaponNames: {
@@ -7910,6 +7966,28 @@ export default function CombatRoundManagerPanel({
           }}
         >
           {saveError}
+        </div>
+      ) : null}
+
+      {inspectorEquipmentStatus.message && selectedScenarioParticipant ? (
+        <div
+          role="alert"
+          style={{
+            background: "#fff8e7",
+            border: "1px solid #d9c79b",
+            borderRadius: 8,
+            display: "flex",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            padding: "0.75rem",
+          }}
+        >
+          <span>{inspectorEquipmentStatus.message}</span>
+          {selectedScenarioParticipant.characterId ? (
+            <button disabled={saving} onClick={() => void refreshInspectorEquipment()} type="button">
+              {saving ? "Refreshing..." : "Refresh participant equipment"}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

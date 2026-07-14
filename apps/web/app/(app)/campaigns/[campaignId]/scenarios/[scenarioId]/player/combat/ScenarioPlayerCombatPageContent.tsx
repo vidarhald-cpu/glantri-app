@@ -97,10 +97,13 @@ import {
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
+  getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
+  resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
@@ -111,6 +114,7 @@ import {
 } from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -1759,6 +1763,23 @@ export default function ScenarioPlayerCombatPageContent({
       scenarioEquipmentState: selectedParticipant?.snapshot.equipmentState,
     });
   }, [displayedParticipant?.equipmentState, selectedParticipant?.snapshot.equipmentState]);
+  const controlledEquipmentCharacterId = useMemo(
+    () =>
+      resolveCombatEquipmentCharacterId({
+        characterId: selectedParticipant?.characterId,
+        state: controlledEquipmentState,
+      }) ?? "",
+    [controlledEquipmentState, selectedParticipant?.characterId],
+  );
+  const controlledEquipmentStatus = useMemo(
+    () =>
+      getScenarioCombatEquipmentStatus({
+        characterId: selectedParticipant?.characterId,
+        resolvedEquipmentState: displayedParticipant?.equipmentState,
+        scenarioEquipmentState: selectedParticipant?.snapshot.equipmentState,
+      }),
+    [displayedParticipant?.equipmentState, selectedParticipant],
+  );
 
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
   const currentRollAction =
@@ -1846,7 +1867,7 @@ export default function ScenarioPlayerCombatPageContent({
                   },
                 }
               : null,
-          characterId: displayedParticipant?.characterId ?? "",
+          characterId: controlledEquipmentCharacterId,
           state: controlledEquipmentState,
           throwingWeaponItemId: null,
         }).fields.map((field) => [field.id, field.value]),
@@ -1910,7 +1931,7 @@ export default function ScenarioPlayerCombatPageContent({
                 },
               }
             : null,
-        characterId: displayedParticipant?.characterId ?? "",
+        characterId: controlledEquipmentCharacterId,
         combatAllocationInputs,
         liveCombatModifiers,
         state: controlledEquipmentState,
@@ -1967,23 +1988,21 @@ export default function ScenarioPlayerCombatPageContent({
         movementIntent: selectedMovementIntent,
         phaseContexts: phaseCombatContextDrafts,
         phaseAttackSources: {
-          phase1: phaseCombatLoadoutSummaries.phase1.reference?.sourceItemId
-            ? {
-                attackModeId: phaseCombatLoadoutSummaries.phase1.reference.sourceAttackModeId,
-                itemId: phaseCombatLoadoutSummaries.phase1.reference.sourceItemId,
-                sourceKind: "weapon",
-              }
-            : selectedActionId === "double_attack"
-              ? { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" }
+          phase1:
+            selectedActionId === "double_attack"
+              ? buildCombatAttackSourceRef({
+                  phaseKey: "phase1",
+                  reference: phaseCombatLoadoutSummaries.phase1.reference,
+                  unarmedTemplateId: "virtual-weapon-template-punch",
+                })
               : undefined,
-          phase2: phaseCombatLoadoutSummaries.phase2.reference?.sourceItemId
-            ? {
-                attackModeId: phaseCombatLoadoutSummaries.phase2.reference.sourceAttackModeId,
-                itemId: phaseCombatLoadoutSummaries.phase2.reference.sourceItemId,
-                sourceKind: "weapon",
-              }
-            : selectedActionId === "double_attack"
-              ? { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" }
+          phase2:
+            selectedActionId === "double_attack"
+              ? buildCombatAttackSourceRef({
+                  phaseKey: "phase2",
+                  reference: phaseCombatLoadoutSummaries.phase2.reference,
+                  unarmedTemplateId: "virtual-weapon-template-kick",
+                })
               : undefined,
         },
         phaseWeaponNames: {
@@ -2402,11 +2421,37 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
+        allowUnarmedFallback:
+          controlledEquipmentStatus.kind === "ready" ||
+          controlledEquipmentStatus.kind === "unarmed",
         loadoutModel,
         secondaryActionId: selectedSecondaryActionId,
       }),
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
+
+  async function refreshCommittedEquipment() {
+    if (!isGameMaster || !selectedParticipant) return;
+    setSavingCombatContext(true);
+    try {
+      const participant = await refreshScenarioParticipantEquipmentOnServer({
+        participantId: selectedParticipant.id,
+        scenarioId,
+      });
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to refresh participant equipment.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
   const playerPerspectiveVisibleParticipants = useMemo<ScenarioPlayerVisibleParticipant[]>(() => {
     if (!isGameMaster) {
       return projection?.visibleParticipants ?? [];
@@ -2464,7 +2509,7 @@ export default function ScenarioPlayerCombatPageContent({
                 },
               }
             : null,
-        characterId: displayedParticipant?.characterId ?? "",
+        characterId: controlledEquipmentCharacterId,
         combatAllocationInputs,
         liveCombatModifiers: phaseLiveCombatModifiers,
         state: controlledEquipmentState,
@@ -2480,13 +2525,16 @@ export default function ScenarioPlayerCombatPageContent({
                 },
               }
             : null,
-        characterId: displayedParticipant?.characterId ?? "",
+        characterId: controlledEquipmentCharacterId,
         combatAllocationInputs,
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       });
       const liveSummary = buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
+        allowUnarmedFallback:
+          controlledEquipmentStatus.kind === "ready" ||
+          controlledEquipmentStatus.kind === "unarmed",
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
@@ -2494,6 +2542,9 @@ export default function ScenarioPlayerCombatPageContent({
       });
       const baseSummary = buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
+        allowUnarmedFallback:
+          controlledEquipmentStatus.kind === "ready" ||
+          controlledEquipmentStatus.kind === "unarmed",
         loadoutModel: basePhaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
@@ -3929,6 +3980,20 @@ export default function ScenarioPlayerCombatPageContent({
 
       {!historyInspection ? (
         <section style={{ display: "grid", gap: "1rem" }}>
+          {controlledEquipmentStatus.message ? (
+            <div role="alert" style={panelStyle}>
+              <p>{controlledEquipmentStatus.message}</p>
+              {isGameMaster && selectedParticipant?.characterId ? (
+                <button
+                  disabled={savingCombatContext}
+                  onClick={() => void refreshCommittedEquipment()}
+                  type="button"
+                >
+                  {savingCombatContext ? "Refreshing..." : "Refresh participant equipment"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {displayedParticipant ? (
             hasMountedLoadout ? (
               <EquipmentLoadoutModule mode="readonly" model={loadoutModel} />

@@ -74,6 +74,7 @@ const mocks = vi.hoisted(() => {
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
     recordScenarioEvent: vi.fn(),
+    refreshCharacterParticipantEquipmentSnapshot: vi.fn(),
     updateScenario: vi.fn(),
     userHasPlayerScenarioAccess: vi.fn(),
   };
@@ -851,10 +852,78 @@ function makeDoubleAttackWeaponParticipant(templateId = "weapon-template-dagger"
           [`unready-${itemId}`]: { id: `unready-${itemId}`, templateId },
         },
         locationsById: {},
-        templates: { templatesById: { [templateId]: template } },
+        templatesById: { [templateId]: template },
       },
     },
   });
+}
+
+function makeDoubleAttackTwoWeaponParticipant() {
+  const templateIds = ["weapon-template-fencing-sword", "weapon-template-main-gauche"] as const;
+  const templates = Object.fromEntries(
+    templateIds.map((templateId) => {
+      const template = weaponTemplates.find((candidate) => candidate.id === templateId);
+      if (!template) throw new Error(`Missing weapon fixture ${templateId}.`);
+      return [templateId, template];
+    }),
+  );
+
+  return makeCombatScenarioParticipant({
+    characterId: "character-1",
+    snapshot: {
+      displayName: "The Gladiator",
+      equipmentState: {
+        activeLoadoutByCharacterId: {
+          "character-1": {
+            activePrimaryWeaponItemId: "scenario-fencing-sword",
+            activeSecondaryWeaponItemId: "scenario-main-gauche",
+          },
+        },
+        itemsById: {
+          "scenario-fencing-sword": {
+            id: "scenario-fencing-sword",
+            templateId: templateIds[0],
+          },
+          "scenario-main-gauche": {
+            id: "scenario-main-gauche",
+            templateId: templateIds[1],
+          },
+        },
+        locationsById: {},
+        templatesById: templates,
+      },
+    },
+  });
+}
+
+function makeWeaponAttackSourceRef(input: {
+  attackModeId?: string;
+  itemId: string;
+  opportunitySlot: "attack_1" | "attack_2";
+  slot?: "primary" | "secondary" | "throwing" | "other";
+  templateId: string;
+}) {
+  return {
+    attackModeId: input.attackModeId ?? "mode-1",
+    opportunitySlot: input.opportunitySlot,
+    scenarioItemId: input.itemId,
+    slot: input.slot ?? "primary",
+    sourceKind: "weapon",
+    templateId: input.templateId,
+  } as const;
+}
+
+function makeUnarmedAttackSourceRef(input: {
+  opportunitySlot: "attack_1" | "attack_2";
+  templateId: string;
+}) {
+  return {
+    attackModeId: "mode-1",
+    opportunitySlot: input.opportunitySlot,
+    slot: "virtual",
+    sourceKind: "unarmed",
+    templateId: input.templateId,
+  } as const;
 }
 
 function makeCombatExperienceCharacterBuild(overrides: Record<string, unknown> = {}) {
@@ -2042,6 +2111,35 @@ describe("scenarios route contract", () => {
       error: "This character is not currently assigned to a campaign.",
     });
     expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
+  });
+
+  it("lets the scenario GM explicitly refresh a character participant equipment snapshot", async () => {
+    const participant = { characterId: "character-1", id: "participant-1" };
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.refreshCharacterParticipantEquipmentSnapshot.mockResolvedValue(
+      participant,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/scenarios/scenario-1/participants/participant-1/refresh-character-equipment",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ participant });
+    expect(
+      mocks.scenarioService.refreshCharacterParticipantEquipmentSnapshot,
+    ).toHaveBeenCalledWith({ participantId: "participant-1", scenarioId: "scenario-1" });
   });
 
   it("lists encounters for a player with scenario workspace access", async () => {
@@ -6587,8 +6685,14 @@ describe("scenarios route contract", () => {
       payload: {
         actionId: "double_attack",
         phaseAttackSources: {
-          phase1: { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" },
-          phase2: { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" },
+          phase1: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_1",
+            templateId: "virtual-weapon-template-punch",
+          }),
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-kick",
+          }),
         },
         combatContext: {
           modifierBuckets: {
@@ -6748,8 +6852,14 @@ describe("scenarios route contract", () => {
       payload: {
         actionId: "double_attack",
         phaseAttackSources: {
-          phase1: { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" },
-          phase2: { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" },
+          phase1: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_1",
+            templateId: "virtual-weapon-template-punch",
+          }),
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-kick",
+          }),
         },
         combatContext: {
           modifierBuckets: {
@@ -6842,8 +6952,16 @@ describe("scenarios route contract", () => {
         actionId: "double_attack",
         combatContext: { modifierBuckets: emptyModifierBuckets() },
         phaseAttackSources: {
-          phase1: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
-          phase2: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
+          phase1: makeWeaponAttackSourceRef({
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-dagger",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-dagger",
+          }),
         },
         phaseContexts: {
           phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
@@ -6870,6 +6988,97 @@ describe("scenarios route contract", () => {
   });
 
   it.each([
+    ["distinct committed weapons", "scenario-main-gauche", "secondary"],
+    ["the same committed repeated-thrust weapon", "scenario-fencing-sword", "primary"],
+  ] as const)(
+    "accepts browser-equivalent scenario source references for %s",
+    async (_label, phase2ItemId, phase2Slot) => {
+      setupCombatDeclarationRoute({ participant: makeDoubleAttackTwoWeaponParticipant() });
+      const app = await buildScenarioTestApp();
+      const phase2TemplateId =
+        phase2ItemId === "scenario-fencing-sword"
+          ? "weapon-template-fencing-sword"
+          : "weapon-template-main-gauche";
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "double_attack",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          phaseAttackSources: {
+            phase1: makeWeaponAttackSourceRef({
+              itemId: "scenario-fencing-sword",
+              opportunitySlot: "attack_1",
+              slot: "primary",
+              templateId: "weapon-template-fencing-sword",
+            }),
+            phase2: makeWeaponAttackSourceRef({
+              attackModeId:
+                phase2ItemId === "scenario-main-gauche" ? "mode-2" : "mode-1",
+              itemId: phase2ItemId,
+              opportunitySlot: "attack_2",
+              slot: phase2Slot,
+              templateId: phase2TemplateId,
+            }),
+          },
+          phaseContexts: {
+            phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+            phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+      await app.close();
+      expect(response.statusCode).toBe(200);
+      expect(
+        mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+          .participants[0].declaration.attackOpportunities,
+      ).toEqual([
+        expect.objectContaining({ itemId: "scenario-fencing-sword", slot: "attack_1" }),
+        expect.objectContaining({ itemId: phase2ItemId, slot: "attack_2" }),
+      ]);
+    },
+  );
+
+  it("rejects an external or template ID submitted in place of a scenario item ID", async () => {
+    setupCombatDeclarationRoute({ participant: makeDoubleAttackTwoWeaponParticipant() });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "weapon-template-fencing-sword",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-fencing-sword",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            itemId: "scenario-main-gauche",
+            opportunitySlot: "attack_2",
+            slot: "secondary",
+            templateId: "weapon-template-main-gauche",
+          }),
+        },
+        phaseContexts: {
+          phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "The selected Phase 1 weapon source is missing.",
+    });
+  });
+
+  it.each([
     ["1-h Javelin", "weapon-template-1-h-javelin"],
     ["Rapier", "weapon-template-rapier"],
   ])(
@@ -6885,8 +7094,16 @@ describe("scenarios route contract", () => {
           actionId: "double_attack",
           combatContext: { modifierBuckets: emptyModifierBuckets() },
           phaseAttackSources: {
-            phase1: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
-            phase2: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
+            phase1: makeWeaponAttackSourceRef({
+              itemId,
+              opportunitySlot: "attack_1",
+              templateId,
+            }),
+            phase2: makeWeaponAttackSourceRef({
+              itemId,
+              opportunitySlot: "attack_2",
+              templateId,
+            }),
           },
           phaseContexts: {
             phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
@@ -6926,8 +7143,11 @@ describe("scenarios route contract", () => {
       payload: {
         ...basePayload,
         phaseAttackSources: {
-          phase1: { attackModeId: "mode-1", sourceKind: "weapon" },
-          phase2: { attackModeId: "mode-1", sourceKind: "weapon" },
+          phase2: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-dagger",
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-dagger",
+          }),
         },
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -6941,16 +7161,16 @@ describe("scenarios route contract", () => {
       payload: {
         ...basePayload,
         phaseAttackSources: {
-          phase1: {
-            attackModeId: "mode-1",
+          phase1: makeWeaponAttackSourceRef({
             itemId: "unready-item-weapon-template-dagger",
-            sourceKind: "weapon",
-          },
-          phase2: {
-            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-dagger",
+          }),
+          phase2: makeWeaponAttackSourceRef({
             itemId: "unready-item-weapon-template-dagger",
-            sourceKind: "weapon",
-          },
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-dagger",
+          }),
         },
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -6958,14 +7178,14 @@ describe("scenarios route contract", () => {
     await unreadySourceApp.close();
 
     expect(missingSource.json()).toEqual({
-      error: "Select an equipped weapon source for Phase 1.",
+      error: "Double Attack requires an attack source for both phases.",
     });
     expect(unreadySource.json()).toEqual({
       error: "The selected Phase 1 weapon is not ready.",
     });
   });
 
-  it("rejects a Double Attack weapon source without an explicit attack mode", async () => {
+  it("distinguishes an invalid Double Attack mode from source readiness", async () => {
     setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant() });
     const app = await buildScenarioTestApp();
     const itemId = "item-weapon-template-dagger";
@@ -6976,8 +7196,19 @@ describe("scenarios route contract", () => {
         actionId: "double_attack",
         combatContext: { modifierBuckets: emptyModifierBuckets() },
         phaseAttackSources: {
-          phase1: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
-          phase2: { itemId, sourceKind: "weapon" },
+          phase1: makeWeaponAttackSourceRef({
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-dagger",
+          }),
+          phase2: {
+            ...makeWeaponAttackSourceRef({
+              itemId,
+              opportunitySlot: "attack_2",
+              templateId: "weapon-template-dagger",
+            }),
+            attackModeId: "missing-mode",
+          },
         },
         phaseContexts: {
           phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
@@ -6990,7 +7221,9 @@ describe("scenarios route contract", () => {
 
     await app.close();
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "Select an eligible attack mode for Phase 2." });
+    expect(response.json()).toEqual({
+      error: "Dagger does not have the selected Phase 2 attack mode.",
+    });
   });
 
   it("creates phase 1 and phase 2 DB/Parry modifiers when a player declares Adjust Range - Attack", async () => {

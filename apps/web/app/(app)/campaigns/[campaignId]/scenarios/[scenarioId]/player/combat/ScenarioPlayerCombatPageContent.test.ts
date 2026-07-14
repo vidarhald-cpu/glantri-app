@@ -37,6 +37,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
     expect(source).toContain("resolveScenarioCombatEquipmentState");
+    expect(source).toContain("getScenarioCombatEquipmentStatus");
+    expect(source).toContain("Refresh participant equipment");
+    expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
+    expect(source).toContain("buildCombatAttackSourceRef");
+    expect(source).not.toContain("itemId: phaseCombatLoadoutSummaries");
     expect(source).toContain(
       'currentCombatStep === "select_actions" && selectedActionId === "double_attack"',
     );

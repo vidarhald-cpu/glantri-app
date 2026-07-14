@@ -69,6 +69,7 @@ const shotMode1Ids = [
 
 const repeatedThrustMode1Ids = [
   "weapon-template-dagger",
+  "weapon-template-fencing-sword",
   "weapon-template-rapier",
   "weapon-template-1-h-spear",
   "weapon-template-2-h-javelin",

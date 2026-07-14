@@ -410,7 +410,7 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.submitCombatDeclarationOnServer({
-        actionId: "attack_parry",
+        actionId: "double_attack",
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -449,6 +449,24 @@ describe("localServiceClient wire contract", () => {
             },
           },
         },
+        phaseAttackSources: {
+          phase1: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            scenarioItemId: "scenario-fencing-sword",
+            slot: "primary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-fencing-sword",
+          },
+          phase2: {
+            attackModeId: "mode-2",
+            opportunitySlot: "attack_2",
+            scenarioItemId: "scenario-main-gauche",
+            slot: "secondary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-main-gauche",
+          },
+        },
         phaseWeaponNames: {
           phase1: "Broad sword",
         },
@@ -458,7 +476,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
-        actionId: "attack_parry",
+        actionId: "double_attack",
         additionalActionNotes: undefined,
         combatContext: {
           modifierBuckets: {
@@ -495,6 +513,24 @@ describe("localServiceClient wire contract", () => {
               situationInitiative: [],
               situationObSkill: [],
             },
+          },
+        },
+        phaseAttackSources: {
+          phase1: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            scenarioItemId: "scenario-fencing-sword",
+            slot: "primary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-fencing-sword",
+          },
+          phase2: {
+            attackModeId: "mode-2",
+            opportunitySlot: "attack_2",
+            scenarioItemId: "scenario-main-gauche",
+            slot: "secondary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-main-gauche",
           },
         },
         phaseWeaponNames: {
