@@ -49,9 +49,24 @@ import type { EquipmentFeatureState } from "./types";
 
 export type { DerivedCombatValue } from "@glantri/rules-engine";
 
+export interface DerivedCombatAttackMode {
+  allowsRepeatedRoundAttack: boolean;
+  armorModifier: DerivedCombatValue;
+  canonicalMeleeMode?: WeaponAttackMode["canonicalMeleeMode"];
+  crit: DerivedCombatValue;
+  damageClass?: string | null;
+  dmb: DerivedCombatValue;
+  id: string;
+  isPrimaryAttack: boolean;
+  label: string;
+  ob: DerivedCombatValue;
+  order: number;
+  secondCrit: DerivedCombatValue;
+}
+
 export interface DerivedCombatWeaponRow {
+  attackModes?: DerivedCombatAttackMode[];
   attackMode1Id?: string;
-  attackMode1AllowsRepeatedRoundAttack?: boolean;
   slotLabel: string;
   modeLabel: string;
   currentItemLabel: string;
@@ -460,10 +475,42 @@ function buildWeaponRow(input: {
   });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
   const mode3 = getAttackMode(input.template, "mode-3");
+  const attackModes: DerivedCombatAttackMode[] = (input.template?.attackModes ?? []).map(
+    (mode, index) => ({
+      allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
+      armorModifier: getArmorModifierValue(mode),
+      canonicalMeleeMode: mode.canonicalMeleeMode,
+      crit: mode.crit ?? "—",
+      damageClass: mode.damageClass,
+      dmb: getDerivedDmbValue({
+        armorTemplate: input.armorTemplate,
+        characterInputs: input.characterInputs,
+        mode,
+        template: input.template,
+      }),
+      id: mode.id,
+      isPrimaryAttack:
+        mode.isPrimaryAttack === true ||
+        (!(input.template?.attackModes ?? []).some(
+          (candidate) => candidate.isPrimaryAttack === true,
+        ) &&
+          index === 0),
+      label: String(getAttackLabel(mode)),
+      ob: getDerivedObValue({
+        allocationInputs: input.allocationInputs,
+        armorTemplate: input.armorTemplate,
+        characterInputs: input.characterInputs,
+        mode,
+        template: input.template,
+      }),
+      order: mode.order ?? index,
+      secondCrit: mode.secondCrit ?? (index === 0 ? input.template?.secondCrit : undefined) ?? "—",
+    }),
+  );
 
   return {
+    attackModes,
     attackMode1Id: mode1?.id,
-    attackMode1AllowsRepeatedRoundAttack: mode1?.allowsRepeatedRoundAttack === true,
     slotLabel: input.slotLabel,
     modeLabel: getCombatRowModeLabel(input.slotLabel),
     currentItemLabel:

@@ -94,6 +94,7 @@ export interface CombatHistoryStepOutcome {
 }
 
 export interface ProjectedCombatHistoryPhasePanel {
+  attackModeLabel?: string;
   attackSummary?: CombatRoundStepSnapshot["attackSummary"];
   defenseSummary?: CombatRoundStepSnapshot["defenseSummary"];
   distanceLabel?: string;
@@ -370,6 +371,7 @@ function projectSnapshot(input: {
     const panel = input.snapshot.phasePanels?.[phase];
     if (!panel) return {};
     return {
+      attackModeLabel: ownsSnapshot ? panel.attackModeLabel : undefined,
       attackSummary: ownsSnapshot ? panel.attackSummary : undefined,
       defenseSummary: ownsSnapshot ? panel.defenseSummary : undefined,
       distanceLabel: panel.distanceLabel,
@@ -378,6 +380,7 @@ function projectSnapshot(input: {
       phaseContext: ownsSnapshot
         ? {
             incomingAttackSide: panel.phaseContext.incomingAttackSide,
+            attackModeId: panel.phaseContext.attackModeId,
             mainHandParryDirection: panel.phaseContext.mainHandParryDirection,
             modifierBuckets: {
               general: [],

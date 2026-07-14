@@ -136,6 +136,27 @@ describe("weaponCatalogTables", () => {
     expect(buildMissileWeaponCatalogTable(characterRows).columns).toEqual(buildMissileWeaponCatalogTable(adminRows).columns);
   });
 
+  it("exposes explicit mode ordering, melee type, and Double Attack capability", () => {
+    const state = createState();
+    const rows = getCharacterWeaponCatalogRows({
+      characterId,
+      items: Object.values(state.itemsById),
+      state,
+    });
+    const table = buildMeleeWeaponCatalogTable(rows);
+    const dagger = table.rows.find((row) => row[0] === "Dagger");
+
+    expect(table.columns.slice(-4)).toEqual([
+      "Main mode",
+      "Mode order",
+      "Mode types",
+      "Double Attack modes",
+    ]);
+    expect(dagger?.[table.columns.indexOf("Main mode")]).toBe("Thrust");
+    expect(dagger?.[table.columns.indexOf("Mode types")]).toContain("Thrust: thrust");
+    expect(dagger?.[table.columns.indexOf("Double Attack modes")]).toBe("Thrust");
+  });
+
   it("truncates long notes cleanly for compact table display", () => {
     expect(
       truncateWeaponCatalogNote(

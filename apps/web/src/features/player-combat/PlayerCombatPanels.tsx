@@ -152,6 +152,13 @@ interface PlayerCombatAttackLocationSelectorProps {
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
 }
 
+interface PlayerCombatAttackModeSelectorProps {
+  controlsDisabled?: boolean;
+  onChange: (attackModeId: string) => void;
+  options: readonly { id: string; label: string }[];
+  selectedAttackModeId?: string;
+}
+
 interface PlayerCombatAttackTargetSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
@@ -1520,6 +1527,43 @@ export function PlayerCombatAttackLocationSelector({
         </select>
       </label>
     </div>
+  );
+}
+
+export function PlayerCombatAttackModeSelector({
+  controlsDisabled = false,
+  onChange,
+  options,
+  selectedAttackModeId,
+}: PlayerCombatAttackModeSelectorProps) {
+  if (options.length === 0) {
+    return null;
+  }
+
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.35rem",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
+      }}
+    >
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack mode</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={compactPhaseContextSelectStyle}
+        value={selectedAttackModeId ?? ""}
+      >
+        {!selectedAttackModeId ? <option value="">Select mode</option> : null}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

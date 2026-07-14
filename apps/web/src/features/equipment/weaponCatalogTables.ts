@@ -48,6 +48,10 @@ export const CANONICAL_MELEE_WEAPON_TABLE_COLUMNS = [
   "Handling",
   "Range",
   "Encumbrance",
+  "Main mode",
+  "Mode order",
+  "Mode types",
+  "Double Attack modes",
 ] as const;
 
 export const CANONICAL_MISSILE_WEAPON_TABLE_COLUMNS = [
@@ -69,6 +73,10 @@ export const CANONICAL_MISSILE_WEAPON_TABLE_COLUMNS = [
   "Class",
   "Handling",
   "Encumbrance",
+  "Main mode",
+  "Mode order",
+  "Mode types",
+  "Double Attack modes",
 ] as const;
 
 export function truncateWeaponCatalogNote(value: string): string {
@@ -135,6 +143,32 @@ function buildThrownCells(template: WeaponTemplate): string[] {
     formatOptionalDisplayValue(thrownMode?.crit),
     formatOptionalDisplayValue(thrownMode?.armorModifier),
     formatRange(template.range),
+  ];
+}
+
+function buildModeCapabilityCells(template: WeaponTemplate): string[] {
+  const modes = [...(template.attackModes ?? [])].sort(
+    (left, right) =>
+      (left.order ?? template.attackModes?.indexOf(left) ?? 0) -
+      (right.order ?? template.attackModes?.indexOf(right) ?? 0),
+  );
+  const main = modes.find((mode) => mode.isPrimaryAttack === true) ?? modes[0];
+  const label = (mode: WeaponAttackMode) => mode.label ?? mode.id;
+
+  return [
+    main ? label(main) : "—",
+    modes.length > 0 ? modes.map((mode) => `${mode.order ?? "legacy"}: ${label(mode)}`).join("; ") : "—",
+    modes.length > 0
+      ? modes
+          .map((mode) => `${label(mode)}: ${mode.canonicalMeleeMode ?? "non-melee"}`)
+          .join("; ")
+      : "—",
+    modes.some((mode) => mode.allowsRepeatedRoundAttack === true)
+      ? modes
+          .filter((mode) => mode.allowsRepeatedRoundAttack === true)
+          .map(label)
+          .join(", ")
+      : "—",
   ];
 }
 
@@ -235,6 +269,7 @@ export function buildMeleeWeaponCatalogTable(rows: WeaponCatalogOptionRow[]): We
           formatLabel(row.template.handlingClass),
           formatRange(row.template.range),
           row.encumbrance,
+          ...buildModeCapabilityCells(row.template),
         ];
       }),
   };
@@ -259,6 +294,7 @@ export function buildMissileWeaponCatalogTable(rows: WeaponCatalogOptionRow[]): 
           formatLabel(row.template.weaponClass),
           formatLabel(row.template.handlingClass),
           row.encumbrance,
+          ...buildModeCapabilityCells(row.template),
         ];
       }),
   };

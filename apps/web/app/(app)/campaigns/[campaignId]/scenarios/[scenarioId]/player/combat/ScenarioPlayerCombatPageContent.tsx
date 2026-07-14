@@ -80,6 +80,7 @@ import {
   getPlayerCombatStepLabel,
   formatCombatInitiativeFormula,
   PlayerCombatAttackLocationSelector,
+  PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatActionButtonPanel,
@@ -2481,12 +2482,14 @@ export default function ScenarioPlayerCombatPageContent({
         actionId: selectedActionId,
         loadoutModel: phaseLoadoutModel,
         phaseKey,
+        selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
         secondaryActionId: selectedSecondaryActionId,
       });
       const baseSummary = buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
         loadoutModel: basePhaseLoadoutModel,
         phaseKey,
+        selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
         secondaryActionId: selectedSecondaryActionId,
       });
 
@@ -3638,6 +3641,21 @@ export default function ScenarioPlayerCombatPageContent({
                             [phaseKey]: combatContext,
                           }));
                         }}
+                      />
+                      <PlayerCombatAttackModeSelector
+                        controlsDisabled={declarationControlsDisabled}
+                        onChange={(attackModeId) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseCombatContextDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: {
+                              ...current[phaseKey],
+                              attackModeId,
+                            },
+                          }));
+                        }}
+                        options={phaseLoadoutSummary.attackModeOptions}
+                        selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
                       />
                     </>
                   ) : null}

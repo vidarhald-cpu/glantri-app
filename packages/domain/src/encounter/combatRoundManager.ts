@@ -782,6 +782,7 @@ export type CombatRoundPhaseResolutionSubstep = z.infer<
 export const combatRoundAttackRollResultSchema = z
   .object({
     actionId: idSchema,
+    attackModeId: idSchema.optional(),
     attackOpportunityId: idSchema.optional(),
     attackSlot: z.enum(["attack_1", "attack_2"]).optional(),
     attackerParticipantId: idSchema,
@@ -1764,6 +1765,7 @@ export const combatRoundParticipantStateSchema = z.object({
 });
 
 const combatRoundPhasePanelSnapshotSchema = z.object({
+  attackModeLabel: z.string().optional(),
   attackSummary: z
     .object({
       attackMode: z.string(),
@@ -14983,6 +14985,7 @@ function recordCombatRoundAttackCommand(input: {
     facts: {
       ...(input.command.facts ?? {}),
       attackOpportunityId: input.result.attackOpportunityId,
+      attackModeId: input.result.attackModeId,
       attackResultId: getCombatRoundAttackResultId({
         result: input.result,
         roundNumber: normalized.roundNumber,
@@ -15041,6 +15044,7 @@ function recordCombatRoundAttackCommand(input: {
       facts: {
         involvedOutcome: {
           actionId: input.result.actionId,
+          attackModeId: input.result.attackModeId,
           attackOpportunityId: input.result.attackOpportunityId,
           attackSlot: input.result.attackSlot,
           grazing: input.result.grazing,
@@ -15091,6 +15095,7 @@ export function recordCombatRoundAttackResult(input: {
   }).find((candidate) => candidate.participantId === input.participantId);
   const recordedResult = combatRoundAttackRollResultSchema.parse({
     ...input.result,
+    attackModeId: input.result.attackModeId ?? opportunity?.attackModeId,
     attackOpportunityId:
       input.result.attackOpportunityId ??
       (opportunity?.origin === "double_attack" ? opportunity.id : undefined),

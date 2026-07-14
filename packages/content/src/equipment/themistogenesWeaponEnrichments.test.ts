@@ -64,11 +64,15 @@ describe("themistogenes weapon enrichments", () => {
       "weapon-template-dagger",
       "weapon-template-rapier",
       "weapon-template-1-h-spear",
+      "weapon-template-2-h-javelin",
       "weapon-template-1-h-javelin",
+      "weapon-template-spear",
     ]) {
       expect(enrichedById[id]?.attackModes?.[0]).toMatchObject({
         allowsRepeatedRoundAttack: true,
         canonicalMeleeMode: "thrust",
+        isPrimaryAttack: true,
+        order: 0,
       });
     }
     expect(

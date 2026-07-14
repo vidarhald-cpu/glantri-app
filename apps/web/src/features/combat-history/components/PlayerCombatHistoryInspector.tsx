@@ -9,6 +9,7 @@ import {
   PlayerCombatActionSelectorPanel,
   PlayerCombatActionButtonPanel,
   PlayerCombatAttackLocationSelector,
+  PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
@@ -72,6 +73,21 @@ function HistoricalPhasePanel(input: {
             combatContext={context}
             controlsDisabled
             onCombatContextChange={noop}
+          />
+          <PlayerCombatAttackModeSelector
+            controlsDisabled
+            onChange={noop}
+            options={
+              context.attackModeId
+                ? [
+                    {
+                      id: context.attackModeId,
+                      label: input.panel.attackModeLabel ?? context.attackModeId,
+                    },
+                  ]
+                : []
+            }
+            selectedAttackModeId={context.attackModeId}
           />
         </>
       ) : null}

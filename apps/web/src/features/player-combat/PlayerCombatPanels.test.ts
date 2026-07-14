@@ -484,6 +484,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source).toContain("PlayerCombatAttackModeSelector");
     expect(source).toContain("distanceLabel?: string");
     expect(source).toContain("distanceLabel");
     expect(source).toContain("compactPhaseTargetRowStyle");
@@ -507,6 +508,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("{distanceLabel}");
     expect(source).toContain('whiteSpace: "nowrap"');
     expect(source).toContain("Attack location");
+    expect(source).toContain("Attack mode");
     expect(source).toContain("No target");
     expect(source).toContain("HIT_LOCATIONS.map");
     expect(source).toContain("getHitLocationFullLabel(location)");

@@ -21,8 +21,11 @@ function getMergedThrownMode(template: WeaponTemplate): WeaponAttackMode | null 
 
   return {
     ...thrownMode,
+    allowsRepeatedRoundAttack: false,
+    canonicalMeleeMode: null,
     id: "mode-3",
     isPrimaryAttack: false,
+    order: 2,
     notes: [thrownMode.notes, buildMergedThrownModeNote(template)].filter(Boolean).join(" | ") || null,
   };
 }
@@ -93,4 +96,3 @@ export function mergeThemistogenesThrownWeaponTemplates(
     ];
   });
 }
-

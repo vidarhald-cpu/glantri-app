@@ -114,6 +114,8 @@ export interface WeaponDurabilityProfile {
 export interface WeaponAttackMode {
   id: string;
   label?: string | null;
+  /** Canonical display/default resolution order; legacy data falls back to array order. */
+  order?: number | null;
   canonicalMeleeMode?: CanonicalMeleeMode | null;
   /** Explicit rules capability; absent legacy data is conservatively ineligible. */
   allowsRepeatedRoundAttack?: boolean | null;

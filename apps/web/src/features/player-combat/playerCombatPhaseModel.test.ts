@@ -56,12 +56,7 @@ const reference: PlayerCombatLoadoutReference = {
 function buildLoadoutModel(input: {
   rows: Array<Array<string | number>>;
   valueLabel?: string;
-  weaponRows?: Array<{
-    currentItemLabel: string;
-    damageClass1?: string | null;
-    damageClass2?: string | null;
-    modeLabel: string;
-  }>;
+  weaponRows?: Array<Record<string, unknown>>;
 }): Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"] {
   return {
     armorSummary: null,
@@ -141,6 +136,7 @@ describe("player combat phase model", () => {
     expect(phase1.showAttackStats).toBe(true);
     expect(phase1.showAttackLocationSelector).toBe(true);
     expect(phase1.showDefenseContext).toBe(true);
+    expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(false);
     expect(phase2.showAttackLocationSelector).toBe(false);
     expect(phase2.showDefenseContext).toBe(true);
@@ -180,6 +176,96 @@ describe("player combat phase model", () => {
     expect(phase2.showAttackStats).toBe(true);
     expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.showDefenseContext).toBe(true);
+    expect(phase2.showDefenseContext).toBe(true);
+  });
+
+  it("resolves independent Double Attack modes and uses an eligible same-source fallback", () => {
+    const loadoutModel = buildLoadoutModel({
+      rows: [
+        [
+          "Primary",
+          "Dagger",
+          "2",
+          "Slash",
+          "7",
+          "3",
+          "A",
+          "—",
+          "A",
+          "10",
+          "0",
+          "4",
+          "Thrust",
+          "8",
+          "4",
+          "B",
+          "B",
+        ],
+      ],
+      valueLabel: "Dagger",
+      weaponRows: [
+        {
+          attackModes: [
+            {
+              allowsRepeatedRoundAttack: false,
+              armorModifier: "A",
+              canonicalMeleeMode: "slash",
+              crit: "A",
+              damageClass: "edged",
+              dmb: 3,
+              id: "slash",
+              isPrimaryAttack: true,
+              label: "Slash",
+              ob: 7,
+              order: 0,
+              secondCrit: "—",
+            },
+            {
+              allowsRepeatedRoundAttack: true,
+              armorModifier: "B",
+              canonicalMeleeMode: "thrust",
+              crit: "B",
+              damageClass: "pointed",
+              dmb: 4,
+              id: "thrust",
+              isPrimaryAttack: false,
+              label: "Thrust",
+              ob: 8,
+              order: 1,
+              secondCrit: "—",
+            },
+          ],
+          attackMode1Id: "slash",
+          currentItemLabel: "Dagger",
+          itemId: "primary-weapon",
+          modeLabel: "Primary",
+          templateId: "weapon-template-dagger",
+        },
+      ],
+    });
+
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "slash",
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+      selectedAttackModeId: "slash",
+    });
+
+    expect(phase1.selectedAttackModeId).toBe("slash");
+    expect(phase1.attackModeOptions.map((mode) => mode.id)).toEqual(["slash", "thrust"]);
+    expect(phase1.attackStats).toMatchObject({ ob: "7", weaponDamageClass: "edged" });
+    expect(phase2.selectedAttackModeId).toBe("thrust");
+    expect(phase2.selectedAttackModeUsedFallback).toBe(true);
+    expect(phase2.attackModeOptions.map((mode) => mode.id)).toEqual(["thrust"]);
+    expect(phase2.attackStats).toMatchObject({ ob: "8", weaponDamageClass: "pointed" });
   });
 
   it("maps Double Attack into phase 1 and phase 2 attacks", () => {

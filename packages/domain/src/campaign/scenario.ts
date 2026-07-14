@@ -145,6 +145,7 @@ export const scenarioCombatModifierEntrySchema = z.object({
 });
 
 export const scenarioParticipantCombatContextSchema = z.object({
+  attackModeId: idSchema.optional(),
   incomingAttackSide: scenarioParticipantIncomingAttackSideSchema.optional(),
   mainHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   modifierBuckets: z

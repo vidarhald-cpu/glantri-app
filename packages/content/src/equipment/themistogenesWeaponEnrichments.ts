@@ -299,9 +299,16 @@ export function applyThemistogenesWeaponEnrichments(
       canonicallyMappedTemplate.attackModes,
       enrichment,
     );
+    const orderedAttackModes = attackModes?.map((mode, index) => ({
+      ...mode,
+      isPrimaryAttack:
+        mode.isPrimaryAttack ??
+        (attackModes.some((candidate) => candidate.isPrimaryAttack === true) ? false : index === 0),
+      order: mode.order ?? index,
+    }));
     const enrichedTemplateWithModes: WeaponTemplate = {
       ...canonicallyMappedTemplate,
-      attackModes,
+      attackModes: orderedAttackModes,
     };
     const resolvedWarnings = (template.importWarnings ?? []).filter((warning) =>
       isWarningResolvedByOverride(warning, enrichedTemplateWithModes, overrides),
@@ -321,12 +328,12 @@ export function applyThemistogenesWeaponEnrichments(
           }
         : null;
 
-    const primaryMode = attackModes?.find((mode) => mode.id === "mode-1");
-    const secondaryMode = attackModes?.find((mode) => mode.id === "mode-2");
+    const primaryMode = orderedAttackModes?.find((mode) => mode.id === "mode-1");
+    const secondaryMode = orderedAttackModes?.find((mode) => mode.id === "mode-2");
 
     return {
       ...template,
-      attackModes,
+      attackModes: orderedAttackModes,
       primeAttackType,
       primaryAttackType: primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,
       secondaryAttackType: secondaryMode?.label ?? template.secondaryAttackType ?? null,

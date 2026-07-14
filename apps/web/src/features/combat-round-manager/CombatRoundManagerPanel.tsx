@@ -161,6 +161,7 @@ import {
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatAttackLocationSelector,
+  PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
@@ -4635,6 +4636,8 @@ export default function CombatRoundManagerPanel({
       return buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
         loadoutModel: phaseLoadoutModel,
+        phaseKey,
+        selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
         secondaryActionId: inspectorDraft.secondaryActionId,
       });
     };
@@ -5705,6 +5708,7 @@ export default function CombatRoundManagerPanel({
     scenarioParticipant?: ScenarioParticipant;
   }): {
     armorCoverage: CombatRoundDamageArmorCoverage;
+    attackModeLabel?: string;
     attackStats: ReturnType<typeof buildPlayerCombatLoadoutSummary>["attackStats"];
     baseDefenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
@@ -5784,12 +5788,18 @@ export default function CombatRoundManagerPanel({
       actionId: draft.actionId,
       loadoutModel,
       phaseKey: input.phaseKey,
+      selectedAttackModeId: input.phaseKey
+        ? draft.phaseContexts[input.phaseKey].attackModeId
+        : undefined,
       secondaryActionId: draft.secondaryActionId,
     });
     const baseLoadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
       loadoutModel: baseLoadoutModel,
       phaseKey: input.phaseKey,
+      selectedAttackModeId: input.phaseKey
+        ? draft.phaseContexts[input.phaseKey].attackModeId
+        : undefined,
       secondaryActionId: draft.secondaryActionId,
     });
     const parrySources = buildCombatParrySourceOptions({
@@ -5820,6 +5830,9 @@ export default function CombatRoundManagerPanel({
         characterId: input.scenarioParticipant?.characterId,
         equipmentState,
       }),
+      attackModeLabel: loadoutSummary.attackModeOptions.find(
+        (mode) => mode.id === loadoutSummary.selectedAttackModeId,
+      )?.label,
       attackStats: loadoutSummary.attackStats,
       baseDefenseStats,
       defenseStats,
@@ -5935,6 +5948,7 @@ export default function CombatRoundManagerPanel({
         });
 
         return {
+          attackModeLabel: summary.attackModeLabel,
           attackSummary: model.showAttackStats ? (model.attackStats ?? undefined) : undefined,
           defenseSummary: model.showDefenseContext ? (model.defenseStats ?? undefined) : undefined,
           distanceLabel: targetEncounterParticipant
@@ -8165,6 +8179,39 @@ export default function CombatRoundManagerPanel({
                                     [phaseKey]: combatContext,
                                   },
                                 })
+                              }
+                            />
+                            <PlayerCombatAttackModeSelector
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              onChange={(attackModeId) =>
+                                updateInspectorDraft({
+                                  phaseContexts: {
+                                    ...inspectorDraft.phaseContexts,
+                                    [phaseKey]: {
+                                      ...inspectorDraft.phaseContexts[phaseKey],
+                                      attackModeId,
+                                    },
+                                  },
+                                })
+                              }
+                              options={
+                                inspectorIsHistorical
+                                  ? phaseCombatContext.attackModeId
+                                    ? [
+                                        {
+                                          id: phaseCombatContext.attackModeId,
+                                          label:
+                                            historicalPhasePanel?.attackModeLabel ??
+                                            phaseCombatContext.attackModeId,
+                                        },
+                                      ]
+                                    : []
+                                  : phaseLoadoutSummary.attackModeOptions
+                              }
+                              selectedAttackModeId={
+                                inspectorIsHistorical
+                                  ? phaseCombatContext.attackModeId
+                                  : phaseLoadoutSummary.selectedAttackModeId
                               }
                             />
                           </>

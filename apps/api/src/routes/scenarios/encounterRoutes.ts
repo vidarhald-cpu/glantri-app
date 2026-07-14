@@ -950,9 +950,23 @@ function getEquipmentItemTemplate(input: {
 function resolveDeclaredWeaponSource(input: {
   attackModeId?: string;
   itemId?: string;
+  phaseLabel: "Phase 1" | "Phase 2";
   participant: ScenarioParticipant;
-}): { attackModeId?: string; itemId: string; weaponTemplateId: string; repeatEligible: boolean } | undefined {
-  if (!input.itemId) return undefined;
+}):
+  | {
+      ok: true;
+      source: {
+        attackModeId: string;
+        itemId: string;
+        repeatEligible: boolean;
+        weaponName: string;
+        weaponTemplateId: string;
+      };
+    }
+  | { error: string; ok: false } {
+  if (!input.itemId) {
+    return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
+  }
   const equipmentState = getSnapshotEquipmentState(input.participant);
   const itemsById = isRecord(equipmentState?.["itemsById"])
     ? (equipmentState?.["itemsById"] as Record<string, unknown>)
@@ -962,23 +976,37 @@ function resolveDeclaredWeaponSource(input: {
     ...getScenarioParticipantReadyItemIds(input.participant),
   ]);
   if (!itemsById || !usableItemIds.has(input.itemId)) {
-    return undefined;
+    return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
   }
   const template = getEquipmentItemTemplate({
     itemId: input.itemId,
     itemsById,
     templatesById: getEquipmentTemplatesById(equipmentState),
   });
-  if (!template) return undefined;
+  if (!template) {
+    return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
+  }
+  if (!input.attackModeId) {
+    return { error: `Select an eligible attack mode for ${input.phaseLabel}.`, ok: false };
+  }
   const mode = template.attackModes?.find(
-    (candidate) => candidate.id === (input.attackModeId ?? "mode-1"),
+    (candidate) => candidate.id === input.attackModeId,
   );
-  if (!mode) return undefined;
+  if (!mode || mode.canonicalMeleeMode == null) {
+    return {
+      error: `${template.name} does not have the selected ${input.phaseLabel} attack mode.`,
+      ok: false,
+    };
+  }
   return {
-    attackModeId: mode.id,
-    itemId: input.itemId,
-    repeatEligible: canRepeatWeaponAttackInRound(mode),
-    weaponTemplateId: template.id,
+    ok: true,
+    source: {
+      attackModeId: mode.id,
+      itemId: input.itemId,
+      repeatEligible: canRepeatWeaponAttackInRound(mode),
+      weaponName: template.name,
+      weaponTemplateId: template.id,
+    },
   };
 }
 
@@ -2588,6 +2616,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       let attackOpportunities;
+      let declarationPhaseContexts = submittedPhaseContexts;
       if (body.actionId === "double_attack") {
         const phase1Source = body.phaseAttackSources?.phase1;
         const phase2Source = body.phaseAttackSources?.phase2;
@@ -2596,32 +2625,48 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error: "Double Attack requires an attack source for both phases.",
           });
         }
-        const phase1Weapon =
+        const phase1WeaponResolution =
           phase1Source.sourceKind === "weapon"
-            ? resolveDeclaredWeaponSource({ ...phase1Source, participant: scenarioParticipant })
+            ? resolveDeclaredWeaponSource({
+                ...phase1Source,
+                participant: scenarioParticipant,
+                phaseLabel: "Phase 1",
+              })
             : undefined;
-        const phase2Weapon =
+        const phase2WeaponResolution =
           phase2Source.sourceKind === "weapon"
-            ? resolveDeclaredWeaponSource({ ...phase2Source, participant: scenarioParticipant })
+            ? resolveDeclaredWeaponSource({
+                ...phase2Source,
+                participant: scenarioParticipant,
+                phaseLabel: "Phase 2",
+              })
             : undefined;
         const legalUnarmedSourceIds = new Set([punchTemplate.id, kickTemplate.id]);
+        if (phase1WeaponResolution && !phase1WeaponResolution.ok) {
+          return reply.code(400).send({ error: phase1WeaponResolution.error });
+        }
+        if (phase2WeaponResolution && !phase2WeaponResolution.ok) {
+          return reply.code(400).send({ error: phase2WeaponResolution.error });
+        }
+        const phase1Weapon = phase1WeaponResolution?.source;
+        const phase2Weapon = phase2WeaponResolution?.source;
         if (
-          (phase1Source.sourceKind === "weapon" && !phase1Weapon) ||
-          (phase2Source.sourceKind === "weapon" && !phase2Weapon) ||
           (phase1Source.sourceKind === "unarmed" &&
             !legalUnarmedSourceIds.has(phase1Source.attackModeId ?? "")) ||
           (phase2Source.sourceKind === "unarmed" &&
             !legalUnarmedSourceIds.has(phase2Source.attackModeId ?? ""))
         ) {
-          return reply.code(400).send({ error: "Double Attack source is not ready or legal." });
+          return reply.code(400).send({ error: "Select a legal unarmed source for both phases." });
         }
         const phase1Identity =
           phase1Weapon?.itemId ?? `${phase1Source.sourceKind}:${phase1Source.attackModeId ?? ""}`;
         const phase2Identity =
           phase2Weapon?.itemId ?? `${phase2Source.sourceKind}:${phase2Source.attackModeId ?? ""}`;
-        if (phase1Identity === phase2Identity && !phase1Weapon?.repeatEligible) {
+        if (phase1Identity === phase2Identity && !phase2Weapon?.repeatEligible) {
           return reply.code(400).send({
-            error: "The same source may be used twice only with an eligible melee thrust mode.",
+            error: phase2Weapon
+              ? `${phase2Weapon.weaponName} has no attack mode eligible for Attack 2. Thrust is required to attack twice with the same weapon.`
+              : "The same unarmed source cannot be used for both Double Attack opportunities.",
           });
         }
         attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
@@ -2646,6 +2691,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 },
           },
         });
+        declarationPhaseContexts = {
+          phase1: submittedPhaseContexts?.phase1
+            ? {
+                ...submittedPhaseContexts.phase1,
+                attackModeId: phase1Weapon?.attackModeId ?? "mode-1",
+              }
+            : undefined,
+          phase2: submittedPhaseContexts?.phase2
+            ? {
+                ...submittedPhaseContexts.phase2,
+                attackModeId: phase2Weapon?.attackModeId ?? "mode-1",
+              }
+            : undefined,
+        };
       }
 
       const submittedAt = new Date().toISOString();
@@ -2684,7 +2743,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatContext: submittedCombatContext,
           movementId: body.movementId,
           movementIntent: submittedMovementIntent,
-          phaseContexts: submittedPhaseContexts,
+          phaseContexts: declarationPhaseContexts,
           roundNumber: roundState.roundNumber,
           secondaryActionId: body.secondaryActionId,
           submittedAt,

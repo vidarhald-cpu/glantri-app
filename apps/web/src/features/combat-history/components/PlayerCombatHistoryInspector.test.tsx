@@ -55,6 +55,7 @@ function snapshot(): ProjectedCombatHistorySnapshot {
         ],
       },
       phase1: {
+        attackModeLabel: "Thrust",
         attackSummary: {
           attackMode: "C",
           dmb: "8",
@@ -65,7 +66,10 @@ function snapshot(): ProjectedCombatHistorySnapshot {
         },
         defenseSummary: { db: "13", dm: "0", parry: "9", sourceName: "Sword / shield" },
         distanceLabel: "Distance: 3",
-        phaseContext: createEmptyPlayerEncounterCombatContext(),
+        phaseContext: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          attackModeId: "mode-thrust",
+        },
         targetOptions: [{ displayName: "Visible opponent", participantId: "visible" }],
       },
       phase2: {
@@ -91,6 +95,10 @@ describe("PlayerCombatHistoryInspector", () => {
       "Hold the bridge",
     );
     expect(screen.getByText("Long sword")).toBeTruthy();
+    expect((screen.getByLabelText("Attack mode") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Attack mode") as HTMLSelectElement).value).toBe(
+      "mode-thrust",
+    );
     expect(screen.getAllByText("Sword / shield")).toHaveLength(2);
     expect(screen.getByText("General/Fatigue")).toBeTruthy();
     expect(screen.getByText("Current action")).toBeTruthy();
