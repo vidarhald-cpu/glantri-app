@@ -59,6 +59,21 @@ describe("combat declaration target validation", () => {
     });
   });
 
+  it("requires Double Attack to use the same opponent in both phases", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "double_attack",
+        phaseContexts: {
+          phase1: { ...phaseContexts.phase1, targetParticipantId: "opponent-1" },
+          phase2: { ...phaseContexts.phase2, targetParticipantId: "opponent-2" },
+        },
+      }),
+    ).toMatchObject({
+      message: "Double Attack must target the same opponent in both phases.",
+      valid: false,
+    });
+  });
+
   it("requires a Phase 2 target for Reactive attack", () => {
     expect(
       validateCombatDeclarationTargets({
@@ -145,7 +160,7 @@ describe("combat declaration target validation", () => {
           },
           phase2: {
             ...phaseContexts.phase2,
-            targetParticipantId: "goblin",
+            targetParticipantId: "guard",
           },
         },
       }),

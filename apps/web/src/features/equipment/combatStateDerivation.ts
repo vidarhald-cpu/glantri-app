@@ -50,9 +50,13 @@ import type { EquipmentFeatureState } from "./types";
 export type { DerivedCombatValue } from "@glantri/rules-engine";
 
 export interface DerivedCombatWeaponRow {
+  attackMode1Id?: string;
+  attackMode1AllowsRepeatedRoundAttack?: boolean;
   slotLabel: string;
   modeLabel: string;
   currentItemLabel: string;
+  itemId?: string;
+  templateId?: string;
   damageClass1?: string | null;
   damageClass2?: string | null;
   damageClass3?: string | null;
@@ -458,6 +462,8 @@ function buildWeaponRow(input: {
   const mode3 = getAttackMode(input.template, "mode-3");
 
   return {
+    attackMode1Id: mode1?.id,
+    attackMode1AllowsRepeatedRoundAttack: mode1?.allowsRepeatedRoundAttack === true,
     slotLabel: input.slotLabel,
     modeLabel: getCombatRowModeLabel(input.slotLabel),
     currentItemLabel:
@@ -466,6 +472,8 @@ function buildWeaponRow(input: {
         : input.template
           ? getItemLabel(input.state, input.item)
           : "None",
+    itemId: input.item?.id,
+    templateId: input.template?.id,
     damageClass1: mode1?.damageClass,
     damageClass2: mode2?.damageClass,
     damageClass3: mode3?.damageClass,

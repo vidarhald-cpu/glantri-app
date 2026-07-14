@@ -12,6 +12,8 @@ import {
   PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
   REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
   applyCombatActionGeneratedModifiers,
+  cancelDoubleAttackPhase2GeneratedModifiers,
+  continueDoubleAttackPhase2GeneratedModifiers,
   buildReactiveAttackPhase2GeneratedInitiativeModifier,
   getSingleAttackDeclaredDistanceForPenalty,
   isAdjustRangeAttackGeneratedDbParryModifier,
@@ -679,6 +681,42 @@ describe("combat action generated modifiers", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 }),
         expect.objectContaining({ id: "generated:distance:phase2:ob-skill", value: -4 }),
+      ]),
+    );
+  });
+
+  it("cancels and restores only Double Attack's phase 2 generated rows", () => {
+    const manual = { id: "manual-db", notes: "GM", scope: "until" as const, value: 3 };
+    const committed = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: { situationDb: [manual] },
+      }),
+    });
+    const cancelled = cancelDoubleAttackPhase2GeneratedModifiers(committed);
+
+    expect(cancelled.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID, value: -1 }),
+    ]);
+    expect(cancelled.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        manual,
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID, value: -4 }),
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -2 }),
+      ]),
+    );
+
+    const restored = continueDoubleAttackPhase2GeneratedModifiers(cancelled);
+    expect(restored.modifierBuckets.situationObSkill).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID, value: -1 }),
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID, value: -1 }),
+      ]),
+    );
+    expect(restored.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        manual,
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -4 }),
       ]),
     );
   });

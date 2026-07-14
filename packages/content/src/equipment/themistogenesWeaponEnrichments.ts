@@ -10,6 +10,7 @@ import {
 } from "@glantri/domain";
 
 export interface WeaponAttackModeEnrichment {
+  allowsRepeatedRoundAttack?: boolean;
   label?: string | null;
   note?: string | null;
 }
@@ -66,7 +67,24 @@ const shotMode1Ids = [
   "weapon-template-ballista",
 ];
 
+const repeatedThrustMode1Ids = [
+  "weapon-template-dagger",
+  "weapon-template-rapier",
+  "weapon-template-1-h-spear",
+  "weapon-template-2-h-javelin",
+  "weapon-template-1-h-javelin",
+  "weapon-template-spear",
+];
+
 export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrichment> = {
+  ...fromIds(repeatedThrustMode1Ids, {
+    attackModes: {
+      "mode-1": {
+        allowsRepeatedRoundAttack: true,
+        note: "Manual rules enrichment: this melee thrust mode may be used twice in one round.",
+      },
+    },
+  }),
   ...fromIds(throwMode1Ids, {
     attackModes: {
       "mode-1": {
@@ -211,6 +229,17 @@ function applyAttackModeEnrichment(
 
     const fields: string[] = [];
     let nextMode = mode;
+
+    if (
+      modeEnrichment.allowsRepeatedRoundAttack !== undefined &&
+      modeEnrichment.allowsRepeatedRoundAttack !== mode.allowsRepeatedRoundAttack
+    ) {
+      nextMode = {
+        ...nextMode,
+        allowsRepeatedRoundAttack: modeEnrichment.allowsRepeatedRoundAttack,
+      };
+      fields.push("allowsRepeatedRoundAttack");
+    }
 
     if (modeEnrichment.label !== undefined && modeEnrichment.label !== mode.label) {
       nextMode = {

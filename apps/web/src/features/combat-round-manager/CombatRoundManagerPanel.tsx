@@ -132,6 +132,7 @@ import {
   commitCurrentCombatPhaseDamageOnServer,
   completeCurrentCombatPhaseResolutionOnServer,
   continuePhaseAttackOnServer,
+  decideDoubleAttackPhase2OnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -230,6 +231,7 @@ interface CombatRoundManagerPanelProps {
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
+type DoubleAttackPhase2Decision = "continue" | "cancel";
 
 type InspectorCurrentActionOutcomeSelection = "normal" | "skip";
 
@@ -3794,6 +3796,8 @@ export default function CombatRoundManagerPanel({
   const [roundEndDistanceCommitProposalId, setRoundEndDistanceCommitProposalId] = useState("");
   const [inspectorPhaseAttackChoiceSelection, setInspectorPhaseAttackChoiceSelection] =
     useState<PhaseAttackChoiceSelection>("continue");
+  const [inspectorDoubleAttackDecision, setInspectorDoubleAttackDecision] =
+    useState<DoubleAttackPhase2Decision>("continue");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("normal");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -4538,6 +4542,19 @@ export default function CombatRoundManagerPanel({
   const inspectorPhaseAttackChoiceIsBackOut =
     inspectorPhaseAttackChoiceSelectorAvailable &&
     inspectorPhaseAttackChoiceSelection === "back_out";
+  const inspectorDoubleAttackDecisionAvailable = Boolean(
+    !inspectorIsInspectionOnly &&
+      inspector.participant?.declaration?.actionId === "double_attack" &&
+      inspector.step === "review_phase_2_modifiers" &&
+      inspector.participant.attackResults.phase1 &&
+      !inspector.participant.attackResults.phase2 &&
+      !roundState.commands.some(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.participantId === inspector.participant?.participantId &&
+          command.type === "decide_double_attack_phase2",
+      ),
+  );
   const combatExperienceDifficultyControlsDisabled =
     saving ||
     !inspectorCombatExperienceIsCombatStart ||
@@ -5018,6 +5035,10 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
+    : inspectorDoubleAttackDecisionAvailable
+      ? inspectorDoubleAttackDecision === "cancel"
+        ? "Cancel Attack 2"
+        : "Continue Attack 2"
     : inspectorPhaseInitiativeChoiceSubmitted
       ? "Phase choice submitted"
       : inspectorPhaseAttackChoiceIsBackOut
@@ -5091,7 +5112,9 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeSelection === "skip";
   const inspectorActionButtonDisabled =
     saving ||
-    (inspectorPhaseAttackChoiceIsBackOut
+    (inspectorDoubleAttackDecisionAvailable
+      ? false
+      : inspectorPhaseAttackChoiceIsBackOut
       ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
       : (inspectorIsInspectionOnly &&
           inspector.step !== "select_actions" &&
@@ -5146,6 +5169,21 @@ export default function CombatRoundManagerPanel({
             ? "Back out of attack (-2 DB/Parry penalty)"
             : "Back out of attack (no CE roll)"}
         </option>
+      </select>
+    </label>
+  ) : null;
+  const inspectorDoubleAttackDecisionControls = inspectorDoubleAttackDecisionAvailable ? (
+    <label style={compactFieldLabelStyle}>
+      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Attack 2</span>
+      <select
+        disabled={saving || Boolean(inspectorSnapshot)}
+        onChange={(event) =>
+          setInspectorDoubleAttackDecision(event.target.value as DoubleAttackPhase2Decision)
+        }
+        value={inspectorDoubleAttackDecision}
+      >
+        <option value="continue">Continue Attack 2 (-1 OB, -4 DB)</option>
+        <option value="cancel">Cancel Attack 2 (phase-2 DB becomes -2)</option>
       </select>
     </label>
   ) : null;
@@ -5243,11 +5281,13 @@ export default function CombatRoundManagerPanel({
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
+    inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
     inspectorRoundEndDistanceControls ? (
       <>
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
+        {inspectorDoubleAttackDecisionControls}
         {inspectorPhaseAttackChoiceControls}
         {inspectorRoundEndDistanceControls}
       </>
@@ -5979,8 +6019,20 @@ export default function CombatRoundManagerPanel({
           : (attackPhase || (phase && resolutionStepKind)) && !attackResult
             ? "no_attack"
             : "no_result";
+      const actionResultReason =
+        step === "phase_2_actions" &&
+        draft.actionId === "double_attack" &&
+        roundParticipant.declaration?.attackOpportunities?.some(
+          (opportunity) =>
+            opportunity.origin === "double_attack" &&
+            opportunity.phase === "phase2" &&
+            opportunity.status === "cancelled",
+        )
+          ? "double_attack_cancelled"
+          : undefined;
 
       return {
+        actionResultReason,
         actionResultStatus,
         actionResultSummary,
         attackResult,
@@ -6458,6 +6510,28 @@ export default function CombatRoundManagerPanel({
         movementId: inspectorDraft.movementId || undefined,
         movementIntent: inspectorDraft.movementIntent,
         phaseContexts: inspectorDraft.phaseContexts,
+        phaseAttackSources: {
+          phase1: inspectorPhaseLoadoutSummaries.phase1.reference?.sourceItemId
+            ? {
+                attackModeId:
+                  inspectorPhaseLoadoutSummaries.phase1.reference.sourceAttackModeId,
+                itemId: inspectorPhaseLoadoutSummaries.phase1.reference.sourceItemId,
+                sourceKind: "weapon",
+              }
+            : inspectorDraft.actionId === "double_attack"
+              ? { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" }
+              : undefined,
+          phase2: inspectorPhaseLoadoutSummaries.phase2.reference?.sourceItemId
+            ? {
+                attackModeId:
+                  inspectorPhaseLoadoutSummaries.phase2.reference.sourceAttackModeId,
+                itemId: inspectorPhaseLoadoutSummaries.phase2.reference.sourceItemId,
+                sourceKind: "weapon",
+              }
+            : inspectorDraft.actionId === "double_attack"
+              ? { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" }
+              : undefined,
+        },
         phaseWeaponNames: {
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
@@ -6632,6 +6706,39 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to continue attack.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function decideInspectorDoubleAttackPhase2() {
+    if (!selectedScenarioParticipant || !selectedEncounterParticipant) return;
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter, participant } = await decideDoubleAttackPhase2OnServer({
+        decision: inspectorDoubleAttackDecision,
+        encounterId: encounter.id,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+      });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [participant.id]: participant,
+      }));
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      onScenarioParticipantsUpdated?.([participant]);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to record Double Attack decision.",
       );
     } finally {
       setSaving(false);
@@ -8327,7 +8434,9 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (inspectorPhaseAttackChoiceIsBackOut
+                        void (inspectorDoubleAttackDecisionAvailable
+                          ? decideInspectorDoubleAttackPhase2()
+                          : inspectorPhaseAttackChoiceIsBackOut
                           ? backOutInspectorPhaseAttack()
                           : inspectorSkipActionSelected
                             ? skipInspectorCurrentPhaseAction()

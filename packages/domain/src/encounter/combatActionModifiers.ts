@@ -24,6 +24,8 @@ export const DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID = "generated:double-attac
 export const DOUBLE_ATTACK_PHASE1_DB_PARRY_SOURCE_RULE = "double-attack-db-parry-phase1";
 export const DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID = "generated:double-attack:phase2:db-parry";
 export const DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE = "double-attack-db-parry-phase2";
+export const DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE =
+  "double-attack-cancelled-db-parry-phase2";
 export const ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID =
   "generated:adjust-range-attack:phase1:db-parry";
 export const ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE = "adjust-range-phase1-db-parry";
@@ -545,6 +547,64 @@ export function buildDoubleAttackGeneratedDbParryModifiers(): ScenarioCombatModi
       value: -4,
     },
   ];
+}
+
+/**
+ * Applies the rule consequence of cancelling Double Attack's second attack after phase 1.
+ * Phase-1 rows are recorded facts and remain untouched; only the phase-2 attack penalty is
+ * removed and the phase-2 defensive penalty is reduced from -4 to -2.
+ */
+export function cancelDoubleAttackPhase2GeneratedModifiers(
+  combatContext: ScenarioParticipantCombatContext,
+): ScenarioParticipantCombatContext {
+  return scenarioParticipantCombatContextSchema.parse({
+    ...combatContext,
+    modifierBuckets: {
+      ...combatContext.modifierBuckets,
+      situationDb: combatContext.modifierBuckets.situationDb.map((entry) =>
+        entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID
+          ? {
+              ...entry,
+              notes: "double attack cancelled after Attack 1",
+              sourceRule: DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE,
+              value: -2,
+            }
+          : entry,
+      ),
+      situationObSkill: combatContext.modifierBuckets.situationObSkill.filter(
+        (entry) => entry.id !== DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
+      ),
+    },
+  });
+}
+
+/** Restores the committed phase-2 Double Attack rows without touching unrelated rows. */
+export function continueDoubleAttackPhase2GeneratedModifiers(
+  combatContext: ScenarioParticipantCombatContext,
+): ScenarioParticipantCombatContext {
+  const dbRows = buildDoubleAttackGeneratedDbParryModifiers();
+  const obRows = buildDoubleAttackGeneratedObSkillModifiers();
+  const phase2Db = dbRows.find((entry) => entry.sourcePhase === "phase2");
+  const phase2Ob = obRows.find((entry) => entry.sourcePhase === "phase2");
+
+  return scenarioParticipantCombatContextSchema.parse({
+    ...combatContext,
+    modifierBuckets: {
+      ...combatContext.modifierBuckets,
+      situationDb: [
+        ...combatContext.modifierBuckets.situationDb.filter(
+          (entry) => entry.id !== DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
+        ),
+        ...(phase2Db ? [phase2Db] : []),
+      ],
+      situationObSkill: [
+        ...combatContext.modifierBuckets.situationObSkill.filter(
+          (entry) => entry.id !== DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
+        ),
+        ...(phase2Ob ? [phase2Ob] : []),
+      ],
+    },
+  });
 }
 
 export function buildAdjustRangeAttackGeneratedDbParryModifiers(): ScenarioCombatModifierEntry[] {

@@ -116,6 +116,19 @@ describe("combat history projection", () => {
         step: "phase_2_actions",
       }),
     ).toMatchObject({ category: "skipped", reason: "action_explicitly_skipped" });
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        actionResultReason: "double_attack_cancelled",
+        actionResultStatus: "skipped",
+        phase: "phase2",
+        step: "phase_2_actions",
+      }),
+    ).toEqual({
+      category: "skipped",
+      message: "Attack 2 was cancelled after Attack 1.",
+      reason: "double_attack_cancelled",
+    });
   });
   it("shows attack calculation only to the roller and involved outcome to the defender", () => {
     const attack = event({

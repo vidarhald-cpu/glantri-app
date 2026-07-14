@@ -124,6 +124,7 @@ import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   backOutPhaseAttackOnServer,
   continuePhaseAttackOnServer,
+  decideDoubleAttackPhase2OnServer,
   loadCombatHistory,
   loadCharacterEquipmentState,
   loadEncounterById,
@@ -169,6 +170,7 @@ interface ScenarioPlayerCombatPageContentProps {
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
+type DoubleAttackPhase2Decision = "continue" | "cancel";
 
 type PlayerCombatActionResultSectionView = {
   calculationLines: readonly string[];
@@ -1144,6 +1146,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [savingCombatContext, setSavingCombatContext] = useState(false);
   const [phaseAttackChoiceSelection, setPhaseAttackChoiceSelection] =
     useState<PhaseAttackChoiceSelection>("continue");
+  const [doubleAttackPhase2Decision, setDoubleAttackPhase2Decision] =
+    useState<DoubleAttackPhase2Decision>("continue");
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
     phaseLabel?: string;
@@ -1954,6 +1958,26 @@ export default function ScenarioPlayerCombatPageContent({
         movementId: selectedMovementId || undefined,
         movementIntent: selectedMovementIntent,
         phaseContexts: phaseCombatContextDrafts,
+        phaseAttackSources: {
+          phase1: phaseCombatLoadoutSummaries.phase1.reference?.sourceItemId
+            ? {
+                attackModeId: phaseCombatLoadoutSummaries.phase1.reference.sourceAttackModeId,
+                itemId: phaseCombatLoadoutSummaries.phase1.reference.sourceItemId,
+                sourceKind: "weapon",
+              }
+            : selectedActionId === "double_attack"
+              ? { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" }
+              : undefined,
+          phase2: phaseCombatLoadoutSummaries.phase2.reference?.sourceItemId
+            ? {
+                attackModeId: phaseCombatLoadoutSummaries.phase2.reference.sourceAttackModeId,
+                itemId: phaseCombatLoadoutSummaries.phase2.reference.sourceItemId,
+                sourceKind: "weapon",
+              }
+            : selectedActionId === "double_attack"
+              ? { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" }
+              : undefined,
+        },
         phaseWeaponNames: {
           phase1: phaseCombatLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName,
@@ -2178,6 +2202,31 @@ export default function ScenarioPlayerCombatPageContent({
       setError(undefined);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to continue attack.");
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function decideDoubleAttackPhase2() {
+    if (readOnlyInspection || !selectedParticipant || !encounterId) return;
+    setSavingCombatContext(true);
+    try {
+      const { encounter, participant } = await decideDoubleAttackPhase2OnServer({
+        decision: doubleAttackPhase2Decision,
+        encounterId,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to record Double Attack decision.",
+      );
     } finally {
       setSavingCombatContext(false);
     }
@@ -3150,6 +3199,19 @@ export default function ScenarioPlayerCombatPageContent({
 
   const selectedPhaseAttackChoiceIsBackOut =
     selectedPhaseAttackChoiceSelectorAvailable && phaseAttackChoiceSelection === "back_out";
+  const selectedDoubleAttackDecisionAvailable = Boolean(
+    !readOnlyInspection &&
+      selectedRoundParticipant?.declaration?.actionId === "double_attack" &&
+      currentCombatStep === "review_phase_2_modifiers" &&
+      selectedRoundParticipant.attackResults.phase1 &&
+      !selectedRoundParticipant.attackResults.phase2 &&
+      !combatRoundState?.commands.some(
+        (command) =>
+          command.roundNumber === combatRoundState.roundNumber &&
+          command.participantId === selectedRoundParticipant.participantId &&
+          command.type === "decide_double_attack_phase2",
+      ),
+  );
   const declarationTargetValidationMessage =
     !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
   const declareActionDisabled =
@@ -3171,6 +3233,10 @@ export default function ScenarioPlayerCombatPageContent({
     ? "Roll health check"
     : selectedDistanceControlActionAvailable
       ? "Roll distance control"
+      : selectedDoubleAttackDecisionAvailable
+        ? doubleAttackPhase2Decision === "cancel"
+          ? "Cancel Attack 2"
+          : "Continue Attack 2"
       : selectedPhaseAttackChoiceIsBackOut
         ? "Back out of attack"
         : selectedCombatExperienceRequired
@@ -3191,6 +3257,8 @@ export default function ScenarioPlayerCombatPageContent({
     ? controlsDisabled || savingCombatContext
     : selectedDistanceControlActionAvailable
       ? controlsDisabled || savingCombatContext
+      : selectedDoubleAttackDecisionAvailable
+        ? controlsDisabled || savingCombatContext
       : selectedPhaseAttackChoiceIsBackOut
         ? controlsDisabled || savingCombatContext || !selectedPhaseCombatExperienceBackOutAvailable
         : attackerPrivilegedAction
@@ -3285,7 +3353,21 @@ export default function ScenarioPlayerCombatPageContent({
                                       ? `Current step: ${currentCombatStepLabel}.`
                                       : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
   const combatExperienceValidationMessage: string | undefined = undefined;
-  const selectedPhaseAttackChoiceControls = selectedPhaseAttackChoiceSelectorAvailable ? (
+  const selectedPhaseAttackChoiceControls = selectedDoubleAttackDecisionAvailable ? (
+    <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
+      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Attack 2</span>
+      <select
+        disabled={controlsDisabled || savingCombatContext}
+        onChange={(event) =>
+          setDoubleAttackPhase2Decision(event.target.value as DoubleAttackPhase2Decision)
+        }
+        value={doubleAttackPhase2Decision}
+      >
+        <option value="continue">Continue Attack 2 (-1 OB, -4 DB)</option>
+        <option value="cancel">Cancel Attack 2 (phase-2 DB becomes -2)</option>
+      </select>
+    </label>
+  ) : selectedPhaseAttackChoiceSelectorAvailable ? (
     <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
       <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Phase choice</span>
       <select
@@ -3765,7 +3847,9 @@ export default function ScenarioPlayerCombatPageContent({
                   void (selectedHealthCheckActionAvailable
                     ? rollHealthCheck()
                     : selectedDistanceControlActionAvailable
-                      ? rollDistanceControl()
+                    ? rollDistanceControl()
+                    : selectedDoubleAttackDecisionAvailable
+                      ? decideDoubleAttackPhase2()
                       : selectedPhaseAttackChoiceIsBackOut
                         ? backOutPhaseAttack()
                         : selectedCombatExperienceRequired

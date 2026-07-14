@@ -22,6 +22,7 @@ import {
 } from "./armorModifier";
 import {
   buildReactiveAttackPhase2GeneratedInitiativeModifier,
+  cancelDoubleAttackPhase2GeneratedModifiers,
   isReactiveAttackGeneratedInitiativeModifier,
   restoreCombatActionGeneratedBackOutModifiers,
   softenCombatActionGeneratedBackOutModifier,
@@ -359,6 +360,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_parry",
   "roll_hit_location",
   "roll_critical",
+  "decide_double_attack_phase2",
   "skip_phase_action",
   "back_out_phase_attack",
   "submit_phase_initiative_choice",
@@ -744,6 +746,24 @@ export const combatRoundPhaseContextsSchema = z.object({
   phase2: scenarioParticipantCombatContextSchema.optional(),
 });
 
+export const combatRoundAttackOpportunitySchema = z.object({
+  attackModeId: idSchema.optional(),
+  cancelledAt: z.string().datetime().optional(),
+  cancelledByUserId: idSchema.optional(),
+  id: idSchema,
+  itemId: idSchema.optional(),
+  origin: z.enum(["declared", "double_attack", "reactive_attack"]),
+  phase: combatRoundPhaseSchema,
+  slot: z.enum(["attack_1", "attack_2"]),
+  sourceKind: z.enum(["weapon", "unarmed"]).optional(),
+  status: z.enum(["committed", "cancelled"]).default("committed"),
+  targetParticipantId: idSchema.optional(),
+  weaponTemplateId: idSchema.optional(),
+});
+export type CombatRoundAttackOpportunity = z.infer<
+  typeof combatRoundAttackOpportunitySchema
+>;
+
 export const combatRoundPhaseResolutionSubstepSchema = z.enum([
   "attack",
   "parry",
@@ -762,6 +782,8 @@ export type CombatRoundPhaseResolutionSubstep = z.infer<
 export const combatRoundAttackRollResultSchema = z
   .object({
     actionId: idSchema,
+    attackOpportunityId: idSchema.optional(),
+    attackSlot: z.enum(["attack_1", "attack_2"]).optional(),
     attackerParticipantId: idSchema,
     defenderParticipantId: idSchema,
     defenderDb: z.number().int(),
@@ -1713,6 +1735,7 @@ export const combatRoundPhaseResolutionResultSchema = z.object({
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
+  attackOpportunities: z.array(combatRoundAttackOpportunitySchema).optional(),
   combatContext: scenarioParticipantCombatContextSchema.optional(),
   movementId: z.string().min(1).optional(),
   movementIntent: movementIntentSchema.optional(),
@@ -1774,6 +1797,7 @@ const combatRoundPhasePanelSnapshotSchema = z.object({
 });
 
 export const combatRoundStepSnapshotSchema = z.object({
+  actionResultReason: z.enum(["double_attack_cancelled"]).optional(),
   actionResultStatus: z.enum(["recorded", "no_result", "no_attack", "skipped"]).optional(),
   actionResultSummary: z.string().optional(),
   attackResult: combatRoundAttackRollResultSchema.optional(),
@@ -4312,6 +4336,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "roll_parry" ||
     type === "roll_hit_location" ||
     type === "roll_critical" ||
+    type === "decide_double_attack_phase2" ||
     type === "skip_phase_action" ||
     type === "back_out_phase_attack" ||
     type === "submit_phase_initiative_choice" ||
@@ -4900,24 +4925,101 @@ function getCombatRoundPhaseParryStepForPhase(phase: CombatRoundPhase): CombatRo
   return phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
 }
 
+function buildCombatRoundAttackOpportunityId(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  roundNumber: number;
+  slot: "attack_1" | "attack_2";
+}): string {
+  return `round:${input.roundNumber}:participant:${input.participantId}:${input.phase}:${input.slot}`;
+}
+
+export function buildCombatRoundDeclaredAttackOpportunities(input: {
+  actionId?: string;
+  participantId: string;
+  phaseContexts?: CombatRoundPhaseContexts;
+  roundNumber: number;
+  secondaryActionId?: string;
+  sources?: Partial<
+    Record<
+      CombatRoundPhase,
+      Pick<
+        CombatRoundAttackOpportunity,
+        "attackModeId" | "itemId" | "sourceKind" | "weaponTemplateId"
+      >
+    >
+  >;
+}): CombatRoundAttackOpportunity[] {
+  return getCombatDeclarationAttackPhases({
+    actionId: input.actionId,
+    secondaryActionId: input.secondaryActionId,
+  }).flatMap((phase) => {
+    const targetParticipantId = input.phaseContexts?.[phase]?.targetParticipantId;
+    const slot = phase === "phase1" ? "attack_1" : "attack_2";
+    return [
+      combatRoundAttackOpportunitySchema.parse({
+        ...input.sources?.[phase],
+        id: buildCombatRoundAttackOpportunityId({
+          participantId: input.participantId,
+          phase,
+          roundNumber: input.roundNumber,
+          slot,
+        }),
+        origin:
+          input.actionId === "double_attack"
+            ? "double_attack"
+            : input.actionId === "parry_attack"
+              ? "reactive_attack"
+              : "declared",
+        phase,
+        slot,
+        status: "committed",
+        targetParticipantId,
+      }),
+    ];
+  });
+}
+
+/** One canonical source for phase attack existence, ordering, and CE candidacy. */
+export function getCombatRoundPhaseAttackCandidates(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): Array<CombatRoundAttackOpportunity & { participantId: string }> {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return normalized.participants.flatMap((participant) => {
+    if (!participant.declaration) {
+      return [];
+    }
+    const explicit = (participant.declaration.attackOpportunities ?? []).filter(
+      (opportunity) => opportunity.phase === input.phase && opportunity.status === "committed",
+    );
+    const opportunities =
+      (participant.declaration.attackOpportunities?.length ?? 0) > 0
+        ? explicit
+        : buildCombatRoundDeclaredAttackOpportunities({
+            actionId: participant.declaration.actionId,
+            participantId: participant.participantId,
+            phaseContexts: participant.declaration.phaseContexts,
+            roundNumber: normalized.roundNumber,
+            secondaryActionId: participant.declaration.secondaryActionId,
+          });
+
+    return opportunities
+      .filter((opportunity) => opportunity.phase === input.phase)
+      .map((opportunity) => ({ ...opportunity, participantId: participant.participantId }));
+  });
+}
+
 export function combatRoundParticipantHasPhaseAttack(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const participant = normalized.participants.find(
-    (entry) => entry.participantId === input.participantId,
+  return getCombatRoundPhaseAttackCandidates({ phase: input.phase, state: normalized }).some(
+    (candidate) => candidate.participantId === input.participantId,
   );
-
-  if (!participant?.declaration) {
-    return false;
-  }
-
-  return getCombatDeclarationAttackPhases({
-    actionId: participant.declaration.actionId,
-    secondaryActionId: participant.declaration.secondaryActionId,
-  }).includes(input.phase);
 }
 
 export function combatRoundParticipantHasExecutablePhaseAttack(input: {
@@ -4929,8 +5031,11 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
-  const targetParticipantId =
-    participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+  const candidate = getCombatRoundPhaseAttackCandidates({
+    phase: input.phase,
+    state: normalized,
+  }).find((entry) => entry.participantId === input.participantId);
+  const targetParticipantId = candidate?.targetParticipantId;
   const targetParticipant = getCombatRoundParticipantByTargetId({
     state: normalized,
     targetParticipantId,
@@ -13259,14 +13364,28 @@ function combatRoundCursorHasValidPhaseAttackTarget(input: {
     (entry) => entry.participantId === input.cursor.participantId,
   );
   const declaration = participant?.declaration;
-  const targetParticipantId = declaration?.phaseContexts?.[input.cursor.phase]?.targetParticipantId;
+  const explicitOpportunities = declaration?.attackOpportunities;
+  const explicitOpportunity = explicitOpportunities?.find(
+    (opportunity) =>
+      opportunity.phase === input.cursor.phase && opportunity.status === "committed",
+  );
+  const targetParticipantId =
+    explicitOpportunity?.targetParticipantId ??
+    declaration?.phaseContexts?.[input.cursor.phase]?.targetParticipantId;
+  const hasPhaseAttack =
+    (explicitOpportunities?.length ?? 0) > 0
+      ? Boolean(explicitOpportunity)
+      : Boolean(
+          declaration &&
+            getCombatDeclarationAttackPhases({
+              actionId: declaration.actionId,
+              secondaryActionId: declaration.secondaryActionId,
+            }).includes(input.cursor.phase),
+        );
 
   return Boolean(
     declaration &&
-    getCombatDeclarationAttackPhases({
-      actionId: declaration.actionId,
-      secondaryActionId: declaration.secondaryActionId,
-    }).includes(input.cursor.phase) &&
+    hasPhaseAttack &&
     targetParticipantId &&
     input.validTargetIds.has(targetParticipantId),
   );
@@ -14134,6 +14253,24 @@ export function advanceCombatRoundStep(
   const advanceCommand = input.command;
   const startsNextRound = normalized.currentStep === "round_summary";
 
+  if (advanceCommand && normalized.currentStep === "review_phase_2_modifiers") {
+    const unresolvedDoubleAttack = normalized.participants.find(
+      (participant) =>
+        participant.declaration?.actionId === "double_attack" &&
+        Boolean(participant.attackResults.phase1) &&
+        !participant.attackResults.phase2 &&
+        !getCombatRoundDoubleAttackPhase2Decision({
+          participantId: participant.participantId,
+          state: normalized,
+        }),
+    );
+    if (unresolvedDoubleAttack) {
+      throw new RangeError(
+        `${unresolvedDoubleAttack.label} must continue or cancel Attack 2 before phase-2 ordering.`,
+      );
+    }
+  }
+
   if (advanceCommand && normalized.currentStep === "select_actions") {
     const combatExperienceParticipantId =
       getFirstCombatStartExperienceRequiredParticipantId(normalized);
@@ -14465,6 +14602,134 @@ export function recordCombatRoundDeclaration(input: {
     : withDeclaration;
 }
 
+export function getCombatRoundDoubleAttackPhase2Decision(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): "continue" | "cancel" | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  for (let index = normalized.commands.length - 1; index >= 0; index -= 1) {
+    const command = normalized.commands[index];
+    if (
+      command?.roundNumber === normalized.roundNumber &&
+      command.participantId === input.participantId &&
+      command.type === "decide_double_attack_phase2"
+    ) {
+      return command.facts.decision === "cancel" ? "cancel" : "continue";
+    }
+  }
+  return undefined;
+}
+
+export function decideCombatRoundDoubleAttackPhase2(input: {
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  decision: "continue" | "cancel";
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const declaration = participant?.declaration;
+  if (!participant || declaration?.actionId !== "double_attack") {
+    throw new RangeError("Double Attack phase-2 decision requires a Double Attack declaration.");
+  }
+  if (normalized.currentStep !== "review_phase_2_modifiers") {
+    throw new RangeError("Double Attack phase-2 decision is only available during phase-2 review.");
+  }
+  if (!participant.attackResults.phase1) {
+    throw new RangeError("Resolve Attack 1 before deciding whether to continue Double Attack.");
+  }
+  if (participant.attackResults.phase2 || getCombatRoundDoubleAttackPhase2Decision(input)) {
+    throw new RangeError("Double Attack phase-2 decision has already been recorded.");
+  }
+
+  const beforeCursor =
+    normalized.currentCursor ??
+    getDefaultCombatRoundCursor({
+      participantId: input.participantId,
+      roundNumber: normalized.roundNumber,
+      step: "review_phase_2_modifiers",
+    });
+  const updateContext = (context: ScenarioParticipantCombatContext | undefined) => {
+    const normalizedContext = scenarioParticipantCombatContextSchema.parse(context ?? {});
+    return input.decision === "cancel"
+      ? cancelDoubleAttackPhase2GeneratedModifiers(normalizedContext)
+      : normalizedContext;
+  };
+  const declarationOpportunities =
+    (declaration.attackOpportunities?.length ?? 0) > 0
+      ? (declaration.attackOpportunities ?? [])
+      : buildCombatRoundDeclaredAttackOpportunities({
+          actionId: declaration.actionId,
+          participantId: input.participantId,
+          phaseContexts: declaration.phaseContexts,
+          roundNumber: normalized.roundNumber,
+          secondaryActionId: declaration.secondaryActionId,
+        });
+  const nextOpportunities = declarationOpportunities.map((opportunity) =>
+    opportunity.phase === "phase2" && opportunity.origin === "double_attack"
+      ? combatRoundAttackOpportunitySchema.parse({
+          ...opportunity,
+          cancelledAt: input.decision === "cancel" ? input.command.createdAt : undefined,
+          cancelledByUserId:
+            input.decision === "cancel" ? input.command.createdByUserId : undefined,
+          status: input.decision === "cancel" ? "cancelled" : "committed",
+        })
+      : opportunity,
+  );
+  const nextDeclaration = combatRoundDeclarationSchema.parse({
+    ...declaration,
+    attackOpportunities: nextOpportunities,
+    combatContext: updateContext(declaration.combatContext),
+    phaseContexts: {
+      ...declaration.phaseContexts,
+      phase2: updateContext(declaration.phaseContexts?.phase2),
+    },
+  });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      decision: input.decision,
+      opportunityId: nextOpportunities.find((entry) => entry.phase === "phase2")?.id,
+      previousDeclaration: declaration,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: normalized,
+        type: "decide_double_attack_phase2",
+      }),
+    participantId: input.participantId,
+    phase: "phase2",
+    roundNumber: normalized.roundNumber,
+    step: "M2",
+    type: "decide_double_attack_phase2",
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: [...normalized.commands, command],
+    participants: normalized.participants.map((entry) =>
+      entry.participantId === input.participantId
+        ? {
+            ...entry,
+            declaration: nextDeclaration,
+            stepStatuses:
+              input.decision === "cancel"
+                ? { ...entry.stepStatuses, phase_2_actions: "skipped" }
+                : entry.stepStatuses,
+          }
+        : entry,
+    ),
+  });
+}
+
 export function getCombatRoundInitiativePhaseForStep(
   step: CombatRoundStep,
 ): "phase1" | "phase2" | undefined {
@@ -14717,10 +14982,12 @@ function recordCombatRoundAttackCommand(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       ...(input.command.facts ?? {}),
+      attackOpportunityId: input.result.attackOpportunityId,
       attackResultId: getCombatRoundAttackResultId({
         result: input.result,
         roundNumber: normalized.roundNumber,
       }),
+      attackSlot: input.result.attackSlot,
       defenderParticipantId: input.result.defenderParticipantId,
       defenderParryModifier: input.result.defenderParryModifier,
       grazing: input.result.grazing,
@@ -14774,6 +15041,8 @@ function recordCombatRoundAttackCommand(input: {
       facts: {
         involvedOutcome: {
           actionId: input.result.actionId,
+          attackOpportunityId: input.result.attackOpportunityId,
+          attackSlot: input.result.attackSlot,
           grazing: input.result.grazing,
           hit: input.result.hit,
           tableResult: input.result.tableResult,
@@ -14816,6 +15085,19 @@ export function recordCombatRoundAttackResult(input: {
 }): CombatRoundState {
   const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const normalized = combatRoundStateSchema.parse(input.state);
+  const opportunity = getCombatRoundPhaseAttackCandidates({
+    phase: input.result.phase,
+    state: normalized,
+  }).find((candidate) => candidate.participantId === input.participantId);
+  const recordedResult = combatRoundAttackRollResultSchema.parse({
+    ...input.result,
+    attackOpportunityId:
+      input.result.attackOpportunityId ??
+      (opportunity?.origin === "double_attack" ? opportunity.id : undefined),
+    attackSlot:
+      input.result.attackSlot ??
+      (opportunity?.origin === "double_attack" ? opportunity.slot : undefined),
+  });
   const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
     participantId: input.participantId,
     phase: input.result.phase,
@@ -14834,7 +15116,7 @@ export function recordCombatRoundAttackResult(input: {
             ...participant,
             attackResults: {
               ...participant.attackResults,
-              [input.result.phase]: input.result,
+              [recordedResult.phase]: recordedResult,
             },
           }
         : participant,
@@ -14844,9 +15126,9 @@ export function recordCombatRoundAttackResult(input: {
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: recordCombatRoundPhaseResolutionAttackDone({
-      attackResult: input.result,
+      attackResult: recordedResult,
       state: withResult,
-      updatedAt: input.result.rolledAt,
+      updatedAt: recordedResult.rolledAt,
     }),
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: attackStep,
@@ -14858,7 +15140,7 @@ export function recordCombatRoundAttackResult(input: {
     ? recordCombatRoundAttackCommand({
         command: input.command,
         participantId: input.participantId,
-        result: input.result,
+        result: recordedResult,
         state: withReactiveModifiers,
       })
     : withReactiveModifiers;
@@ -15523,6 +15805,44 @@ function undoCombatRoundAttackCommandAtIndex(input: {
     selectedParticipantId: participantId,
     selectedStep,
   };
+}
+
+function undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "decide_double_attack_phase2"
+  ) {
+    return undefined;
+  }
+  const previousDeclaration = combatRoundDeclarationSchema.safeParse(
+    command.facts.previousDeclaration,
+  );
+  if (!previousDeclaration.success) {
+    return undefined;
+  }
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "review_phase_2_modifiers",
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === command.participantId
+        ? {
+            ...participant,
+            declaration: previousDeclaration.data,
+            stepStatuses: { ...participant.stepStatuses, phase_2_actions: "pending" },
+          }
+        : participant,
+    ),
+    selectedParticipantId: command.participantId,
+    selectedStep: "review_phase_2_modifiers",
+  });
 }
 
 function undoCombatRoundCombatExperienceCommandAtIndex(input: {
@@ -16860,6 +17180,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_attack") {
     return undoCombatRoundAttackCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "decide_double_attack_phase2") {
+    return undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

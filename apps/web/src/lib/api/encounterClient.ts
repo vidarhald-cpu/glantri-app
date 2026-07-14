@@ -133,6 +133,12 @@ export async function submitCombatDeclarationOnServer(input: {
   movementId?: string;
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
+  phaseAttackSources?: Partial<
+    Record<
+      "phase1" | "phase2",
+      { attackModeId?: string; itemId?: string; sourceKind: "weapon" | "unarmed" }
+    >
+  >;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
@@ -147,6 +153,7 @@ export async function submitCombatDeclarationOnServer(input: {
         movementId: input.movementId,
         movementIntent: input.movementIntent,
         phaseContexts: input.phaseContexts,
+        phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
@@ -156,6 +163,23 @@ export async function submitCombatDeclarationOnServer(input: {
   );
 
   return payload;
+}
+
+export async function decideDoubleAttackPhase2OnServer(input: {
+  decision: "continue" | "cancel";
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+  return sendJson(
+    `/encounters/${input.encounterId}/combat-round/double-attack-phase2-decision`,
+    {
+      body: JSON.stringify({
+        decision: input.decision,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
 }
 
 export async function rollCombatExperienceOnServer(input: {

@@ -42,6 +42,9 @@ export interface PlayerCombatLoadoutReference {
   parry: string;
   secondCrit: string;
   selectedWeapon: string;
+  sourceAttackModeId?: string;
+  sourceItemId?: string;
+  sourceTemplateId?: string;
 }
 
 export interface PlayerCombatLoadoutSummary {
@@ -170,13 +173,22 @@ export function buildPlayerCombatLoadoutSummary(input: {
     };
   }
 
+  const doubleAttackFieldId =
+    input.actionId === "double_attack" && input.phaseKey === "phase2"
+      ? secondaryLoadoutLabel && secondaryLoadoutLabel !== "None"
+        ? ("secondary" as const)
+        : ("primary" as const)
+      : undefined;
   const preferredFieldIds = [
-    getRelevantLoadoutFieldId(input.actionId),
+    doubleAttackFieldId ?? getRelevantLoadoutFieldId(input.actionId),
     getRelevantLoadoutFieldId(input.secondaryActionId),
   ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
   const preferredWeaponLabels = preferredFieldIds
     .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
     .filter((value): value is string => Boolean(value) && value !== "None");
+  if (input.actionId === "double_attack" && preferredWeaponLabels.length === 0) {
+    preferredWeaponLabels.push(input.phaseKey === "phase2" ? "Kick" : "Punch");
+  }
   const referenceRow =
     preferredWeaponLabels
       .map(
@@ -362,6 +374,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
       row: referenceRow,
     }),
     selectedWeapon: referenceWeaponLabel,
+    sourceAttackModeId: rawReferenceRow?.attackMode1Id,
+    sourceItemId: rawReferenceRow?.itemId,
+    sourceTemplateId: rawReferenceRow?.templateId,
   };
 
   return {
@@ -378,7 +393,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
 
 export function buildPlayerCombatAttackStats(
   reference: PlayerCombatLoadoutReference | null,
-  input: {
+  _input: {
     actionId?: PlayerEncounterActionId | "";
     phaseKey?: PlayerCombatPhaseKey;
   } = {},
@@ -387,14 +402,10 @@ export function buildPlayerCombatAttackStats(
     return null;
   }
 
-  const useSecondAttack =
-    input.actionId === "double_attack" &&
-    input.phaseKey === "phase2" &&
-    (hasDisplayValue(reference.attackMode2) ||
-      hasDisplayValue(reference.ob2) ||
-      hasDisplayValue(reference.dmb2) ||
-      hasDisplayValue(reference.am2) ||
-      hasDisplayValue(reference.crit2));
+  // Double Attack's second attack is a separate source/opportunity, not a template's
+  // optional "Attack 2" alternate mode. Same-source repetition remains mode 1 and is
+  // validated from explicit weapon capability by the API/domain boundary.
+  const useSecondAttack = false;
   const attackMode = useSecondAttack ? reference.am2 : reference.am;
   const crit = useSecondAttack ? reference.crit2 : reference.crit;
   const damageClass = useSecondAttack ? reference.damageClass2 : reference.damageClass;

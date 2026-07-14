@@ -75,6 +75,7 @@ export {
   commitPhaseInitiativeResolutionOnServer,
   commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
+  decideDoubleAttackPhase2OnServer,
   createEncounterOnServer,
   loadEncounterById,
   loadCombatHistory,

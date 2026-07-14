@@ -219,6 +219,15 @@ This phase 2 row modifies phase 2 DB and Parry/P, but does not modify phase 1 DB
 
 Declaring `Double Attack` creates generated modifiers in both combat phases:
 
+- Attack 1 and Attack 2 are distinct opportunities against the same opponent.
+- Each committed phase has Skill/OB `-1` and DB/Parry `-4`.
+- Attack 2 uses the shared phase-2 candidate/CE/initiative ordering; it has no separate scheduler.
+- Cancelling Attack 2 after phase 1 removes phase-2 Skill/OB `-1` and changes phase-2
+  DB/Parry from `-4` to `-2`; phase-1 recorded facts are unchanged.
+- Repeating one weapon requires an explicit `allowsRepeatedRoundAttack` melee-thrust mode.
+  Dagger, rapier-type thrust, spear, and melee-javelin modes are enriched explicitly; thrown
+  javelin modes are not eligible, and absent legacy capability defaults to false.
+
 ```text
 Stored bucket key = situationObSkill
 Value = -1

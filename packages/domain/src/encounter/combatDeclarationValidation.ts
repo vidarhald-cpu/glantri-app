@@ -95,10 +95,18 @@ export function validateCombatDeclarationTargets(input: {
     const targetParticipantId = input.phaseContexts?.[phaseKey]?.targetParticipantId;
     return !targetParticipantId || targetParticipantId.trim().length === 0;
   });
+  const doubleAttackTargetsDiffer =
+    input.actionId === "double_attack" &&
+    Boolean(input.phaseContexts?.phase1?.targetParticipantId) &&
+    Boolean(input.phaseContexts?.phase2?.targetParticipantId) &&
+    input.phaseContexts?.phase1?.targetParticipantId !==
+      input.phaseContexts?.phase2?.targetParticipantId;
 
   return {
     missingPhases,
-    message: formatMissingTargetMessage(missingPhases),
-    valid: missingPhases.length === 0,
+    message: doubleAttackTargetsDiffer
+      ? "Double Attack must target the same opponent in both phases."
+      : formatMissingTargetMessage(missingPhases),
+    valid: missingPhases.length === 0 && !doubleAttackTargetsDiffer,
   };
 }

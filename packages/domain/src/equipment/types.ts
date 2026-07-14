@@ -115,6 +115,8 @@ export interface WeaponAttackMode {
   id: string;
   label?: string | null;
   canonicalMeleeMode?: CanonicalMeleeMode | null;
+  /** Explicit rules capability; absent legacy data is conservatively ineligible. */
+  allowsRepeatedRoundAttack?: boolean | null;
   isPrimaryAttack?: boolean | null;
   damageClass?: WeaponDamageClass | null;
   ob?: number | null;

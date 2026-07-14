@@ -81,6 +81,7 @@ export interface ProjectedCombatHistorySnapshot {
 export type CombatHistoryStepOutcomeReason =
   | "action_explicitly_skipped"
   | "damage_not_required"
+  | "double_attack_cancelled"
   | "incoming_attack_missed"
   | "no_declared_attack"
   | "no_incoming_attack"
@@ -131,6 +132,14 @@ export function deriveCombatHistoryStepOutcome(
   snapshot: CombatRoundStepSnapshot | undefined,
 ): CombatHistoryStepOutcome | undefined {
   if (!snapshot) return undefined;
+
+  if (snapshot.actionResultReason === "double_attack_cancelled") {
+    return {
+      category: "skipped",
+      message: "Attack 2 was cancelled after Attack 1.",
+      reason: "double_attack_cancelled",
+    };
+  }
 
   const parryStep =
     snapshot.step === "review_phase_2_actions" || snapshot.step === "review_phase_2_damage";

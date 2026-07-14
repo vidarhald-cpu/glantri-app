@@ -6552,6 +6552,10 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         actionId: "double_attack",
+        phaseAttackSources: {
+          phase1: { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" },
+          phase2: { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" },
+        },
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -6709,6 +6713,10 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         actionId: "double_attack",
+        phaseAttackSources: {
+          phase1: { attackModeId: "virtual-weapon-template-punch", sourceKind: "unarmed" },
+          phase2: { attackModeId: "virtual-weapon-template-kick", sourceKind: "unarmed" },
+        },
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -6735,7 +6743,7 @@ describe("scenarios route contract", () => {
               situationInitiative: [],
               situationObSkill: [],
             },
-            targetParticipantId: "encounter-target-2",
+            targetParticipantId: "encounter-target-1",
           },
         },
         scenarioParticipantId: "participant-1",

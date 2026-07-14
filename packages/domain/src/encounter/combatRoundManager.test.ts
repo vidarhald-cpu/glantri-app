@@ -15,6 +15,7 @@ import {
   buildCombatRoundCommandEnvelope,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDeclaredAttackOpportunities,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
   canBackOutCombatRoundPhaseAttack,
@@ -29,6 +30,7 @@ import {
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
   combatRoundParticipantWasAttackedInPhase,
+  decideCombatRoundDoubleAttackPhase2,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   combatRoundAttackRollResultSchema,
@@ -117,6 +119,7 @@ import {
   setCombatRoundParticipantStepStatus,
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
+  undoLatestCombatRoundCommand,
 } from "./combatRoundManager";
 import { combatStepEventSchema } from "./combatStepEventSchema";
 import {
@@ -17596,5 +17599,76 @@ describe("combat round manager", () => {
 
     expect(nextSession.actionLog).toEqual(session.actionLog);
     expect(nextSession.combatRoundState?.currentStep).toBe("review_action_modifiers");
+  });
+
+  it("cancels and undoes Double Attack 2 without creating a second phase-2 scheduler", () => {
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: { modifierBuckets: { general: [], situationDb: [], situationInitiative: [], situationObSkill: [] } },
+    });
+    const phaseContexts = {
+      phase1: { ...combatContext, targetParticipantId: "guard" },
+      phase2: { ...combatContext, targetParticipantId: "guard" },
+    };
+    const state = combatRoundStateSchema.parse({
+      currentStep: "review_phase_2_modifiers",
+      currentCursor: { participantId: "hero", roundNumber: 1, step: "M2" },
+      participants: [
+        {
+          attackResults: {
+            phase1: buildCombatRoundAttackRollResult({
+              actionId: "double_attack",
+              attackerParticipantId: "hero",
+              defenderDb: 10,
+              defenderParticipantId: "guard",
+              ob: 10,
+              phase: "phase1",
+              roll: 5,
+              rolledAt: "2026-01-01T00:00:00.000Z",
+              weaponName: "Dagger",
+            }),
+          },
+          declaration: {
+            actionId: "double_attack",
+            attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+              actionId: "double_attack",
+              participantId: "hero",
+              phaseContexts,
+              roundNumber: 1,
+            }),
+            combatContext,
+            phaseContexts,
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "Hero",
+          participantId: "hero",
+        },
+        { label: "Guard", participantId: "guard" },
+      ],
+      roundNumber: 1,
+    });
+
+    const cancelled = decideCombatRoundDoubleAttackPhase2({
+      command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "user-1" },
+      decision: "cancel",
+      participantId: "hero",
+      state,
+    });
+    const hero = cancelled.participants[0];
+    expect(combatRoundParticipantHasPhaseAttack({ participantId: "hero", phase: "phase2", state: cancelled })).toBe(false);
+    expect(hero?.declaration?.combatContext?.modifierBuckets.situationObSkill).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2" })]),
+    );
+    expect(hero?.declaration?.combatContext?.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2", value: -2 })]),
+    );
+
+    const restored = undoLatestCombatRoundCommand({ state: cancelled });
+    expect(restored).toBeDefined();
+    expect(combatRoundParticipantHasPhaseAttack({ participantId: "hero", phase: "phase2", state: restored! })).toBe(true);
+    expect(restored?.participants[0]?.declaration?.combatContext?.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2", value: -4 })]),
+    );
   });
 });

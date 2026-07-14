@@ -229,7 +229,7 @@ describe("player combat phase model", () => {
     expect(phase2.phaseContext.targetLocation).toBe("rightArm");
   });
 
-  it("selects Attack 1 for Double Attack phase 1 and Attack 2 for phase 2 when available", () => {
+  it("does not reinterpret a weapon's alternate mode as Double Attack's second opportunity", () => {
     const loadoutModel = buildLoadoutModel({
       rows: [
         [
@@ -286,11 +286,11 @@ describe("player combat phase model", () => {
     });
     expect(phase2.attackStats).toMatchObject({
       attackMode: "C",
-      dmb: "6",
-      maxCrits: "E",
-      ob: "8",
-      weaponCriticalCode: "E",
-      weaponDamageClass: "pointed",
+      dmb: "8",
+      maxCrits: "F / S",
+      ob: "9",
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
       weaponName: "Long sword",
     });
   });

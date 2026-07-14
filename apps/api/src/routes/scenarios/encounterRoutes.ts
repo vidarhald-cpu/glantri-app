@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { defaultCanonicalContent, equipmentTemplatesById, weaponTemplates } from "@glantri/content";
+import {
+  defaultCanonicalContent,
+  equipmentTemplatesById,
+  kickTemplate,
+  punchTemplate,
+  weaponTemplates,
+} from "@glantri/content";
 import {
   CampaignService,
   CharacterService,
@@ -13,6 +19,7 @@ import {
   backOutCombatRoundPhaseAttack,
   buildCombatRoundCommandEnvelope,
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDeclaredAttackOpportunities,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
   buildReactiveAttackPhase2InitiativeModifierEntry,
@@ -26,6 +33,8 @@ import {
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   continueCombatRoundPhaseAttack,
+  decideCombatRoundDoubleAttackPhase2,
+  canRepeatWeaponAttackInRound,
   canPlayerSubmitCombatDeclaration,
   characterBuildSchema,
   clearCombatRoundStep,
@@ -340,6 +349,31 @@ function parseCombatDeclarationPhaseWeaponNames(
   return phase1 || phase2 ? { phase1, phase2 } : undefined;
 }
 
+function parseCombatDeclarationPhaseAttackSources(value: unknown):
+  | Partial<
+      Record<
+        "phase1" | "phase2",
+        { attackModeId?: string; itemId?: string; sourceKind: "weapon" | "unarmed" }
+      >
+    >
+  | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const parseSource = (
+    source: unknown,
+  ): { attackModeId?: string; itemId?: string; sourceKind: "weapon" | "unarmed" } | undefined => {
+    if (!source || typeof source !== "object") return undefined;
+    const candidate = source as Record<string, unknown>;
+    const sourceKind = candidate.sourceKind === "unarmed" ? "unarmed" : "weapon";
+    const itemId = parseOptionalDeclarationString(candidate.itemId);
+    const attackModeId = parseOptionalDeclarationString(candidate.attackModeId);
+    return sourceKind === "unarmed" || itemId ? { attackModeId, itemId, sourceKind } : undefined;
+  };
+  const phase1 = parseSource(record.phase1);
+  const phase2 = parseSource(record.phase2);
+  return phase1 || phase2 ? { phase1, phase2 } : undefined;
+}
+
 function parseCombatDeclarationBody(body: unknown): {
   actionId?: string;
   additionalActionNotes?: string;
@@ -347,6 +381,7 @@ function parseCombatDeclarationBody(body: unknown): {
   movementId?: string;
   movementIntent?: MovementIntent;
   phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
+  phaseAttackSources?: ReturnType<typeof parseCombatDeclarationPhaseAttackSources>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
@@ -369,6 +404,7 @@ function parseCombatDeclarationBody(body: unknown): {
       value.phaseContexts === undefined
         ? undefined
         : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
+    phaseAttackSources: parseCombatDeclarationPhaseAttackSources(value.phaseAttackSources),
     phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
     scenarioParticipantId,
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
@@ -873,6 +909,23 @@ function getScenarioParticipantReadyItemIds(participant: ScenarioParticipant): s
   );
 }
 
+function getScenarioParticipantActiveWeaponItemIds(participant: ScenarioParticipant): string[] {
+  const equipmentState = getSnapshotEquipmentState(participant);
+  const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
+  const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
+  const characterId =
+    participant.characterId ??
+    (activeLoadouts ? Object.keys(activeLoadouts).find((key) => key.trim().length > 0) : undefined);
+  const activeLoadoutValue = characterId ? activeLoadouts?.[characterId] : undefined;
+  const activeLoadout = isRecord(activeLoadoutValue) ? activeLoadoutValue : undefined;
+
+  return [
+    activeLoadout?.["activePrimaryWeaponItemId"],
+    activeLoadout?.["activeSecondaryWeaponItemId"],
+    activeLoadout?.["activeMissileWeaponItemId"],
+  ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+}
+
 function getEquipmentItemTemplate(input: {
   itemId: string;
   itemsById: Record<string, unknown>;
@@ -894,20 +947,44 @@ function getEquipmentItemTemplate(input: {
   return isWeaponTemplateLike(contentTemplate) ? contentTemplate : undefined;
 }
 
+function resolveDeclaredWeaponSource(input: {
+  attackModeId?: string;
+  itemId?: string;
+  participant: ScenarioParticipant;
+}): { attackModeId?: string; itemId: string; weaponTemplateId: string; repeatEligible: boolean } | undefined {
+  if (!input.itemId) return undefined;
+  const equipmentState = getSnapshotEquipmentState(input.participant);
+  const itemsById = isRecord(equipmentState?.["itemsById"])
+    ? (equipmentState?.["itemsById"] as Record<string, unknown>)
+    : undefined;
+  const usableItemIds = new Set([
+    ...getScenarioParticipantActiveWeaponItemIds(input.participant),
+    ...getScenarioParticipantReadyItemIds(input.participant),
+  ]);
+  if (!itemsById || !usableItemIds.has(input.itemId)) {
+    return undefined;
+  }
+  const template = getEquipmentItemTemplate({
+    itemId: input.itemId,
+    itemsById,
+    templatesById: getEquipmentTemplatesById(equipmentState),
+  });
+  if (!template) return undefined;
+  const mode = template.attackModes?.find(
+    (candidate) => candidate.id === (input.attackModeId ?? "mode-1"),
+  );
+  if (!mode) return undefined;
+  return {
+    attackModeId: mode.id,
+    itemId: input.itemId,
+    repeatEligible: canRepeatWeaponAttackInRound(mode),
+    weaponTemplateId: template.id,
+  };
+}
+
 function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
   const equipmentState = getSnapshotEquipmentState(participant);
-  const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
-  const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
-  const characterId =
-    participant.characterId ??
-    (activeLoadouts ? Object.keys(activeLoadouts).find((key) => key.trim().length > 0) : undefined);
-  const activeLoadoutValue = characterId ? activeLoadouts?.[characterId] : undefined;
-  const activeLoadout = isRecord(activeLoadoutValue) ? activeLoadoutValue : undefined;
-  const activeWeaponItemIds = [
-    activeLoadout?.["activePrimaryWeaponItemId"],
-    activeLoadout?.["activeSecondaryWeaponItemId"],
-    activeLoadout?.["activeMissileWeaponItemId"],
-  ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+  const activeWeaponItemIds = getScenarioParticipantActiveWeaponItemIds(participant);
   const readyItemIds = getScenarioParticipantReadyItemIds(participant);
   const candidateWeaponItemIds = [...new Set([...activeWeaponItemIds, ...readyItemIds])];
   const itemsValue = equipmentState?.["itemsById"];
@@ -2510,6 +2587,67 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      let attackOpportunities;
+      if (body.actionId === "double_attack") {
+        const phase1Source = body.phaseAttackSources?.phase1;
+        const phase2Source = body.phaseAttackSources?.phase2;
+        if (!phase1Source || !phase2Source) {
+          return reply.code(400).send({
+            error: "Double Attack requires an attack source for both phases.",
+          });
+        }
+        const phase1Weapon =
+          phase1Source.sourceKind === "weapon"
+            ? resolveDeclaredWeaponSource({ ...phase1Source, participant: scenarioParticipant })
+            : undefined;
+        const phase2Weapon =
+          phase2Source.sourceKind === "weapon"
+            ? resolveDeclaredWeaponSource({ ...phase2Source, participant: scenarioParticipant })
+            : undefined;
+        const legalUnarmedSourceIds = new Set([punchTemplate.id, kickTemplate.id]);
+        if (
+          (phase1Source.sourceKind === "weapon" && !phase1Weapon) ||
+          (phase2Source.sourceKind === "weapon" && !phase2Weapon) ||
+          (phase1Source.sourceKind === "unarmed" &&
+            !legalUnarmedSourceIds.has(phase1Source.attackModeId ?? "")) ||
+          (phase2Source.sourceKind === "unarmed" &&
+            !legalUnarmedSourceIds.has(phase2Source.attackModeId ?? ""))
+        ) {
+          return reply.code(400).send({ error: "Double Attack source is not ready or legal." });
+        }
+        const phase1Identity =
+          phase1Weapon?.itemId ?? `${phase1Source.sourceKind}:${phase1Source.attackModeId ?? ""}`;
+        const phase2Identity =
+          phase2Weapon?.itemId ?? `${phase2Source.sourceKind}:${phase2Source.attackModeId ?? ""}`;
+        if (phase1Identity === phase2Identity && !phase1Weapon?.repeatEligible) {
+          return reply.code(400).send({
+            error: "The same source may be used twice only with an eligible melee thrust mode.",
+          });
+        }
+        attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+          actionId: body.actionId,
+          participantId: encounterParticipant.id,
+          phaseContexts: submittedPhaseContexts,
+          roundNumber: roundState.roundNumber,
+          sources: {
+            phase1: phase1Weapon
+              ? { ...phase1Weapon, sourceKind: "weapon" }
+              : {
+                  attackModeId: "mode-1",
+                  sourceKind: "unarmed",
+                  weaponTemplateId: phase1Source.attackModeId,
+                },
+            phase2: phase2Weapon
+              ? { ...phase2Weapon, sourceKind: "weapon" }
+              : {
+                  attackModeId: "mode-1",
+                  sourceKind: "unarmed",
+                  weaponTemplateId: phase2Source.attackModeId,
+                },
+          },
+        });
+      }
+
       const submittedAt = new Date().toISOString();
       const participant = await encounterService.updateScenarioParticipantState({
         participantId: scenarioParticipant.id,
@@ -2542,6 +2680,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         declaration: {
           actionId: body.actionId,
           additionalActionNotes: body.additionalActionNotes,
+          attackOpportunities,
           combatContext: submittedCombatContext,
           movementId: body.movementId,
           movementIntent: submittedMovementIntent,
@@ -2593,6 +2732,75 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
     }
   });
+
+  app.post(
+    "/encounters/:encounterId/combat-round/double-attack-phase2-decision",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const body = parseBodyObject(request.body, "Double Attack decision payload");
+        const scenarioParticipantId = parseOptionalDeclarationString(body.scenarioParticipantId);
+        const decision = body.decision === "cancel" ? "cancel" : body.decision === "continue" ? "continue" : undefined;
+        if (!scenarioParticipantId || !decision) throw new Error("Participant and decision are required.");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+        const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId);
+        if (!scenarioParticipant?.isActive) return reply.code(403).send({ error: "Participant is not active." });
+        if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) {
+          return reply.code(403).send({ error: "Player does not control this participant." });
+        }
+        const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+        const encounterParticipant = membership.participants.find(
+          (entry) =>
+            entry.scenarioParticipantId === scenarioParticipant.id ||
+            entry.id === scenarioParticipant.id ||
+            (scenarioParticipant.characterId && entry.characterId === scenarioParticipant.characterId),
+        );
+        if (!encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+        const createdAt = new Date().toISOString();
+        const nextRoundState = decideCombatRoundDoubleAttackPhase2({
+          command: { createdAt, createdByUserId: user.id },
+          decision,
+          participantId: encounterParticipant.id,
+          state: roundState,
+        });
+        const nextDeclaration = nextRoundState.participants.find(
+          (entry) => entry.participantId === encounterParticipant.id,
+        )?.declaration;
+        const participant = await encounterService.updateScenarioParticipantState({
+          participantId: scenarioParticipant.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...scenarioParticipant.state,
+            combat: {
+              ...scenarioParticipant.state.combat,
+              combatContext: nextDeclaration?.combatContext ?? scenarioParticipant.state.combat.combatContext,
+            },
+          },
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+        });
+        return { encounter: savedEncounter, participant };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to record Double Attack decision.",
+        });
+      }
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-initiative", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -5538,6 +5746,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "back_out_phase_attack" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedDoubleAttackDecisionCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "decide_double_attack_phase2" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedAttackCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -5594,6 +5808,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         declarationClearEncounterParticipantIds.size > 0 ||
         removedCombatExperienceCommands.length > 0 ||
         removedBackOutPhaseAttackCommands.length > 0 ||
+        removedDoubleAttackDecisionCommands.length > 0 ||
         removedAttackCommands.length > 0 ||
         removedPhaseInitiativeResolutionCommitCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
@@ -5655,6 +5870,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                         }),
                       },
                     };
+                  }
+
+                  for (const command of removedDoubleAttackDecisionCommands) {
+                    if (command.participantId !== encounterParticipant.id) continue;
+                    const restoredContext = nextRoundState.participants.find(
+                      (entry) => entry.participantId === encounterParticipant.id,
+                    )?.declaration?.combatContext;
+                    if (restoredContext) {
+                      nextState = {
+                        ...nextState,
+                        combat: { ...nextState.combat, combatContext: restoredContext },
+                      };
+                    }
                   }
 
                   for (const command of removedAttackCommands) {
