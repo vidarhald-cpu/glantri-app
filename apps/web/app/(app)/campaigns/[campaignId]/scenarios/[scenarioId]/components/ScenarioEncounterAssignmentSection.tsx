@@ -14,6 +14,11 @@ interface ScenarioEncounterAssignmentSectionProps {
   assignmentParticipants: ScenarioParticipant[];
   concreteParticipants: ScenarioParticipant[];
   expandedAssignmentParticipantIds: string[];
+  equipmentRefreshResult?: {
+    kind: "error" | "success";
+    message: string;
+    participantId: string;
+  };
   formatUserLabel: (userId: string | undefined) => string;
   isParticipantInEncounter: (encounter: EncounterSession, participant: ScenarioParticipant) => boolean;
   nonArchivedEncounters: EncounterSession[];
@@ -25,6 +30,7 @@ interface ScenarioEncounterAssignmentSectionProps {
     member: boolean
   ) => void;
   onParticipantActiveToggle: (participant: ScenarioParticipant, isActive: boolean) => void;
+  onRefreshParticipantEquipment: (participant: ScenarioParticipant) => void;
   onParticipantCivilizationFilterChange: (value: string) => void;
   onParticipantProfessionFilterChange: (value: string) => void;
   onParticipantSearchChange: (value: string) => void;
@@ -39,6 +45,7 @@ interface ScenarioEncounterAssignmentSectionProps {
   participantSkillGroupOptions: string[];
   participantTypeFilter: ScenarioParticipantTypeFilter;
   participantTypeFilterOptions: ScenarioParticipantTypeFilterOption[];
+  refreshingEquipmentParticipantId?: string;
   selectedAssignmentParticipantIds: string[];
   selectedBulkEncounterId: string;
   setExpandedAssignmentParticipantIds: Dispatch<SetStateAction<string[]>>;
@@ -49,6 +56,7 @@ export function ScenarioEncounterAssignmentSection({
   assignmentParticipants,
   concreteParticipants,
   expandedAssignmentParticipantIds,
+  equipmentRefreshResult,
   formatUserLabel,
   isParticipantInEncounter,
   nonArchivedEncounters,
@@ -56,6 +64,7 @@ export function ScenarioEncounterAssignmentSection({
   onBulkEncounterIdChange,
   onEncounterParticipantToggle,
   onParticipantActiveToggle,
+  onRefreshParticipantEquipment,
   onParticipantCivilizationFilterChange,
   onParticipantProfessionFilterChange,
   onParticipantSearchChange,
@@ -70,6 +79,7 @@ export function ScenarioEncounterAssignmentSection({
   participantSkillGroupOptions,
   participantTypeFilter,
   participantTypeFilterOptions,
+  refreshingEquipmentParticipantId,
   selectedAssignmentParticipantIds,
   selectedBulkEncounterId,
   setExpandedAssignmentParticipantIds,
@@ -326,7 +336,30 @@ export function ScenarioEncounterAssignmentSection({
                                 </label>
                                 <span>Controller: {formatUserLabel(participant.controlledByUserId)}</span>
                                 <span>Status: {participant.isActive ? "Active" : "Inactive"}</span>
+                                {participant.sourceType === "character" && participant.characterId ? (
+                                  <button
+                                    disabled={refreshingEquipmentParticipantId === participant.id}
+                                    onClick={() => onRefreshParticipantEquipment(participant)}
+                                    title="Replace this participant’s committed scenario equipment with the character’s current equipment. Health, effects, combat state, and other participant state are preserved."
+                                    type="button"
+                                  >
+                                    {refreshingEquipmentParticipantId === participant.id
+                                      ? "Refreshing…"
+                                      : "Refresh equipment"}
+                                  </button>
+                                ) : null}
                               </div>
+                              {equipmentRefreshResult?.participantId === participant.id ? (
+                                <div
+                                  role={equipmentRefreshResult.kind === "error" ? "alert" : "status"}
+                                  style={{
+                                    color:
+                                      equipmentRefreshResult.kind === "error" ? "#8b3a1a" : "#184f3d",
+                                  }}
+                                >
+                                  {equipmentRefreshResult.message}
+                                </div>
+                              ) : null}
                               {joinedEncounters.length > 0 ? (
                                 joinedEncounters.map((encounter) => (
                                   <div key={encounter.id}>

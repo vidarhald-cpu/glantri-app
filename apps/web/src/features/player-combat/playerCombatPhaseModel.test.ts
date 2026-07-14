@@ -10,6 +10,7 @@ import {
   buildPlayerCombatPhasePanelModel,
   DEFAULT_MAIN_HAND_PARRY_DIRECTION,
   DEFAULT_OFF_HAND_PARRY_DIRECTION,
+  formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   normalizeCombatEquipmentFeatureState,
   resolveCombatEquipmentCharacterId,
@@ -262,6 +263,29 @@ describe("player combat phase model", () => {
         scenarioEquipmentState,
       })?.itemsById,
     ).toEqual({});
+  });
+
+  it("directs GM and player equipment recovery to the scenario assignment grid", () => {
+    const status = { kind: "stale" as const, message: "stale" };
+
+    expect(
+      formatScenarioCombatEquipmentDiagnostic({
+        isGameMaster: true,
+        participantName: "Scyrian",
+        status,
+      }),
+    ).toBe(
+      "Scyrian’s scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.",
+    );
+    expect(
+      formatScenarioCombatEquipmentDiagnostic({
+        isGameMaster: false,
+        participantName: "Scyrian",
+        status,
+      }),
+    ).toBe(
+      "Scyrian’s scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.",
+    );
   });
 
   it("does not silently replace incomplete committed equipment with Punch or Kick", () => {

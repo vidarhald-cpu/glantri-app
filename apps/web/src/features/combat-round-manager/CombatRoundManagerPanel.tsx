@@ -122,10 +122,7 @@ import {
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
-import {
-  refreshScenarioParticipantEquipmentOnServer,
-  updateScenarioParticipantStateOnServer,
-} from "@/lib/api/scenarioClient";
+import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import {
   advanceCombatRoundCurrentStepOnServer,
   advanceCurrentCombatPhaseResolutionOnServer,
@@ -186,6 +183,7 @@ import {
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
+  formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatEquipmentCharacterId,
@@ -4300,6 +4298,11 @@ export default function CombatRoundManagerPanel({
       }),
     [resolvedCharacterStateByParticipantId, selectedScenarioParticipant],
   );
+  const inspectorEquipmentDiagnostic = formatScenarioCombatEquipmentDiagnostic({
+    isGameMaster: true,
+    participantName: selectedScenarioParticipant?.snapshot.displayName,
+    status: inspectorEquipmentStatus,
+  });
   const inspectorGeneratedCombatContext = useMemo(() => {
     if (inspectorHasLocalModifierEdits) {
       return inspectorDraft.combatContext;
@@ -6152,31 +6155,6 @@ export default function CombatRoundManagerPanel({
     });
   }
 
-  async function refreshInspectorEquipment() {
-    if (!encounter.scenarioId || !selectedScenarioParticipant?.characterId) return;
-    setSaving(true);
-    try {
-      const participant = await refreshScenarioParticipantEquipmentOnServer({
-        participantId: selectedScenarioParticipant.id,
-        scenarioId: encounter.scenarioId,
-      });
-      setScenarioParticipantOverrides((current) => ({
-        ...current,
-        [participant.id]: participant,
-      }));
-      onScenarioParticipantsUpdated?.([participant]);
-      setSaveError(undefined);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to refresh participant equipment.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function commitCurrentStep() {
     if (isSequentialResolutionStep(roundState.currentStep)) {
       return;
@@ -7969,25 +7947,17 @@ export default function CombatRoundManagerPanel({
         </div>
       ) : null}
 
-      {inspectorEquipmentStatus.message && selectedScenarioParticipant ? (
+      {inspectorEquipmentDiagnostic && selectedScenarioParticipant ? (
         <div
           role="alert"
           style={{
             background: "#fff8e7",
             border: "1px solid #d9c79b",
             borderRadius: 8,
-            display: "flex",
-            gap: "0.75rem",
-            justifyContent: "space-between",
             padding: "0.75rem",
           }}
         >
-          <span>{inspectorEquipmentStatus.message}</span>
-          {selectedScenarioParticipant.characterId ? (
-            <button disabled={saving} onClick={() => void refreshInspectorEquipment()} type="button">
-              {saving ? "Refreshing..." : "Refresh participant equipment"}
-            </button>
-          ) : null}
+          {inspectorEquipmentDiagnostic}
         </div>
       ) : null}
 

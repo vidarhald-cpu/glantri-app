@@ -21,6 +21,7 @@ const encounter = {
 } as unknown as EncounterSession;
 
 const participant = {
+  characterId: "character-1",
   controlledByUserId: "player-1",
   createdAt: "2026-07-10T10:00:00.000Z",
   id: "participant-1",
@@ -38,12 +39,20 @@ const participant = {
 } as unknown as ScenarioParticipant;
 
 function renderAssignmentSection(input: {
+  assignmentParticipants?: ScenarioParticipant[];
+  equipmentRefreshResult?: {
+    kind: "error" | "success";
+    message: string;
+    participantId: string;
+  };
   onBulkEncounterAssignment?: (member: boolean) => void;
   onEncounterParticipantToggle?: (
     nextEncounter: EncounterSession,
     nextParticipant: ScenarioParticipant,
     member: boolean
   ) => void;
+  onRefreshParticipantEquipment?: (participant: ScenarioParticipant) => void;
+  refreshingEquipmentParticipantId?: string;
 } = {}) {
   function AssignmentHarness() {
     const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<string[]>([]);
@@ -52,9 +61,10 @@ function renderAssignmentSection(input: {
 
     return (
       <ScenarioEncounterAssignmentSection
-        assignmentParticipants={[participant]}
-        concreteParticipants={[participant]}
+        assignmentParticipants={input.assignmentParticipants ?? [participant]}
+        concreteParticipants={input.assignmentParticipants ?? [participant]}
         expandedAssignmentParticipantIds={expandedAssignmentParticipantIds}
+        equipmentRefreshResult={input.equipmentRefreshResult}
         formatUserLabel={(userId) => userId ?? "Unassigned"}
         isParticipantInEncounter={() => false}
         nonArchivedEncounters={[encounter]}
@@ -62,6 +72,7 @@ function renderAssignmentSection(input: {
         onBulkEncounterIdChange={setSelectedBulkEncounterId}
         onEncounterParticipantToggle={input.onEncounterParticipantToggle ?? vi.fn()}
         onParticipantActiveToggle={vi.fn()}
+        onRefreshParticipantEquipment={input.onRefreshParticipantEquipment ?? vi.fn()}
         onParticipantCivilizationFilterChange={vi.fn()}
         onParticipantProfessionFilterChange={vi.fn()}
         onParticipantSearchChange={vi.fn()}
@@ -76,6 +87,7 @@ function renderAssignmentSection(input: {
         participantSkillGroupOptions={[]}
         participantTypeFilter="all"
         participantTypeFilterOptions={[{ id: "all", label: "All types" }]}
+        refreshingEquipmentParticipantId={input.refreshingEquipmentParticipantId}
         selectedAssignmentParticipantIds={selectedAssignmentParticipantIds}
         selectedBulkEncounterId={selectedBulkEncounterId}
         setExpandedAssignmentParticipantIds={setExpandedAssignmentParticipantIds}
@@ -150,5 +162,73 @@ describe("scenario encounter controls", () => {
     );
 
     expect(onEncounterParticipantToggle).toHaveBeenCalledWith(encounter, participant, true);
+  });
+
+  it("offers equipment refresh for character rows and calls it with that participant", async () => {
+    const user = userEvent.setup();
+    const onRefreshParticipantEquipment = vi.fn();
+    renderAssignmentSection({ onRefreshParticipantEquipment });
+
+    await user.click(
+      screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
+    );
+    const refreshButton = screen.getByRole("button", { name: "Refresh equipment" });
+    expect(refreshButton).toHaveAttribute(
+      "title",
+      expect.stringContaining("Health, effects, combat state, and other participant state are preserved"),
+    );
+    await user.click(refreshButton);
+
+    expect(onRefreshParticipantEquipment).toHaveBeenCalledWith(participant);
+  });
+
+  it("shows a disabled pending state and row-scoped refresh feedback", async () => {
+    const user = userEvent.setup();
+    renderAssignmentSection({
+      equipmentRefreshResult: {
+        kind: "success",
+        message: "The Gladiator’s scenario equipment was refreshed.",
+        participantId: participant.id,
+      },
+      refreshingEquipmentParticipantId: participant.id,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The Gladiator’s scenario equipment was refreshed.",
+    );
+  });
+
+  it("shows normalized failures and omits refresh for non-character rows", async () => {
+    const user = userEvent.setup();
+    renderAssignmentSection({
+      equipmentRefreshResult: {
+        kind: "error",
+        message: "Committed character equipment could not be loaded.",
+        participantId: participant.id,
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Committed character equipment could not be loaded.",
+    );
+
+    cleanup();
+    const entityParticipant = {
+      ...participant,
+      characterId: undefined,
+      entityId: "entity-1",
+      sourceType: "entity",
+    } as ScenarioParticipant;
+    renderAssignmentSection({ assignmentParticipants: [entityParticipant] });
+    await user.click(
+      screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
+    );
+    expect(screen.queryByRole("button", { name: "Refresh equipment" })).not.toBeInTheDocument();
   });
 });

@@ -35,6 +35,7 @@ import {
   updateScenarioParticipantMetadataOnServer,
   updateScenarioOnServer
 } from "@/lib/api/localServiceClient";
+import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
 import {
   buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
@@ -114,6 +115,12 @@ export default function ScenarioDetailPageContent({
   const [bulkEncounterId, setBulkEncounterId] = useState("");
   const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<string[]>([]);
   const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<string[]>([]);
+  const [refreshingEquipmentParticipantId, setRefreshingEquipmentParticipantId] = useState<string>();
+  const [equipmentRefreshResult, setEquipmentRefreshResult] = useState<{
+    kind: "error" | "success";
+    message: string;
+    participantId: string;
+  }>();
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
@@ -838,6 +845,41 @@ export default function ScenarioDetailPageContent({
     }
   }
 
+  async function handleRefreshParticipantEquipment(participant: ScenarioParticipant) {
+    if (participant.sourceType !== "character" || !participant.characterId) return;
+    setError(undefined);
+    setEquipmentRefreshResult(undefined);
+    setRefreshingEquipmentParticipantId(participant.id);
+    try {
+      const refreshedParticipant = await refreshScenarioParticipantEquipmentOnServer({
+        participantId: participant.id,
+        scenarioId,
+      });
+      setParticipants((current) =>
+        current.map((entry) =>
+          entry.id === refreshedParticipant.id ? refreshedParticipant : entry,
+        ),
+      );
+      await refreshScenario();
+      setEquipmentRefreshResult({
+        kind: "success",
+        message: `${refreshedParticipant.snapshot.displayName}’s scenario equipment was refreshed.`,
+        participantId: refreshedParticipant.id,
+      });
+    } catch (caughtError) {
+      setEquipmentRefreshResult({
+        kind: "error",
+        message:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to refresh scenario participant equipment.",
+        participantId: participant.id,
+      });
+    } finally {
+      setRefreshingEquipmentParticipantId(undefined);
+    }
+  }
+
   if (loading) {
     return <section>Loading scenario...</section>;
   }
@@ -927,6 +969,7 @@ export default function ScenarioDetailPageContent({
         assignmentParticipants={assignmentParticipants}
         concreteParticipants={concreteParticipants}
         expandedAssignmentParticipantIds={expandedAssignmentParticipantIds}
+        equipmentRefreshResult={equipmentRefreshResult}
         formatUserLabel={formatUserLabel}
         isParticipantInEncounter={isParticipantInEncounter}
         nonArchivedEncounters={nonArchivedEncounters}
@@ -937,6 +980,9 @@ export default function ScenarioDetailPageContent({
         }
         onParticipantActiveToggle={(participant, isActive) =>
           void handleParticipantActiveToggle(participant, isActive)
+        }
+        onRefreshParticipantEquipment={(participant) =>
+          void handleRefreshParticipantEquipment(participant)
         }
         onParticipantCivilizationFilterChange={setParticipantCivilizationFilter}
         onParticipantProfessionFilterChange={setParticipantProfessionFilter}
@@ -952,6 +998,7 @@ export default function ScenarioDetailPageContent({
         participantSkillGroupOptions={participantSkillGroupOptions}
         participantTypeFilter={participantTypeFilter}
         participantTypeFilterOptions={participantTypeFilterOptions}
+        refreshingEquipmentParticipantId={refreshingEquipmentParticipantId}
         selectedAssignmentParticipantIds={selectedAssignmentParticipantIds}
         selectedBulkEncounterId={selectedBulkEncounterId}
         setExpandedAssignmentParticipantIds={setExpandedAssignmentParticipantIds}

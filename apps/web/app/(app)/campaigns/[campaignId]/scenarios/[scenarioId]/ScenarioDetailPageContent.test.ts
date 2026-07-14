@@ -36,6 +36,18 @@ function readScenarioDetailSources(): string {
 }
 
 describe("ScenarioDetailPageContent GM scenario manager UI", () => {
+  it("owns explicit character equipment refresh in the participant assignment grid", () => {
+    const source = readScenarioDetailSources();
+
+    expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
+    expect(source).toContain("handleRefreshParticipantEquipment");
+    expect(source).toContain("Refresh equipment");
+    expect(source).toContain("Refreshing…");
+    expect(source).toContain("participant.sourceType === \"character\"");
+    expect(source).toContain("await refreshScenario()");
+    expect(source).toContain("scenario equipment was refreshed");
+  });
+
   it("uses compact roster sources instead of a separate concrete participant section", () => {
     const source = readScenarioDetailSources();
 

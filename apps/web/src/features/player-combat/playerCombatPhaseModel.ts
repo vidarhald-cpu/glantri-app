@@ -203,6 +203,19 @@ export interface ScenarioCombatEquipmentStatus {
   message?: string;
 }
 
+export function formatScenarioCombatEquipmentDiagnostic(input: {
+  isGameMaster: boolean;
+  participantName?: string;
+  status: ScenarioCombatEquipmentStatus;
+}): string | undefined {
+  if (!input.status.message) return undefined;
+  const participantName = input.participantName?.trim() || "This participant";
+  const possessive = participantName === "This participant" ? "This participant’s" : `${participantName}’s`;
+  return input.isGameMaster
+    ? `${possessive} scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.`
+    : `${possessive} scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.`;
+}
+
 function getReadyEquipmentItemIds(state: EquipmentFeatureState, characterId: string): string[] {
   const loadout = state.activeLoadoutByCharacterId[characterId];
   if (!loadout) return [];

@@ -101,6 +101,7 @@ import {
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
+  formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatEquipmentCharacterId,
@@ -114,7 +115,6 @@ import {
 } from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -1780,6 +1780,11 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [displayedParticipant?.equipmentState, selectedParticipant],
   );
+  const controlledEquipmentDiagnostic = formatScenarioCombatEquipmentDiagnostic({
+    isGameMaster,
+    participantName: selectedParticipant?.snapshot.displayName,
+    status: controlledEquipmentStatus,
+  });
 
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
   const currentRollAction =
@@ -2430,28 +2435,6 @@ export default function ScenarioPlayerCombatPageContent({
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
 
-  async function refreshCommittedEquipment() {
-    if (!isGameMaster || !selectedParticipant) return;
-    setSavingCombatContext(true);
-    try {
-      const participant = await refreshScenarioParticipantEquipmentOnServer({
-        participantId: selectedParticipant.id,
-        scenarioId,
-      });
-      setSelectableParticipants((current) =>
-        current.map((entry) => (entry.id === participant.id ? participant : entry)),
-      );
-      setError(undefined);
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to refresh participant equipment.",
-      );
-    } finally {
-      setSavingCombatContext(false);
-    }
-  }
   const playerPerspectiveVisibleParticipants = useMemo<ScenarioPlayerVisibleParticipant[]>(() => {
     if (!isGameMaster) {
       return projection?.visibleParticipants ?? [];
@@ -3980,18 +3963,9 @@ export default function ScenarioPlayerCombatPageContent({
 
       {!historyInspection ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {controlledEquipmentStatus.message ? (
+          {controlledEquipmentDiagnostic ? (
             <div role="alert" style={panelStyle}>
-              <p>{controlledEquipmentStatus.message}</p>
-              {isGameMaster && selectedParticipant?.characterId ? (
-                <button
-                  disabled={savingCombatContext}
-                  onClick={() => void refreshCommittedEquipment()}
-                  type="button"
-                >
-                  {savingCombatContext ? "Refreshing..." : "Refresh participant equipment"}
-                </button>
-              ) : null}
+              {controlledEquipmentDiagnostic}
             </div>
           ) : null}
           {displayedParticipant ? (
