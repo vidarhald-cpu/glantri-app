@@ -101,6 +101,7 @@ import {
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   isEquipmentFeatureState,
+  resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
@@ -1753,9 +1754,11 @@ export default function ScenarioPlayerCombatPageContent({
   );
 
   const controlledEquipmentState = useMemo(() => {
-    const candidate = displayedParticipant?.equipmentState;
-    return isEquipmentFeatureState(candidate) ? candidate : null;
-  }, [displayedParticipant]);
+    return resolveScenarioCombatEquipmentState({
+      resolvedEquipmentState: displayedParticipant?.equipmentState,
+      scenarioEquipmentState: selectedParticipant?.snapshot.equipmentState,
+    });
+  }, [displayedParticipant?.equipmentState, selectedParticipant?.snapshot.equipmentState]);
 
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
   const currentRollAction =
@@ -1815,13 +1818,17 @@ export default function ScenarioPlayerCombatPageContent({
       buildPlayerCombatModifierRows({
         combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
+        includeAllPhases:
+          currentCombatStep === "select_actions" && selectedActionId === "double_attack",
         liveModifiers: liveCombatModifiers,
         phaseKey: currentModifierPhase,
       }),
     [
+      currentCombatStep,
       currentModifierPhase,
       liveCombatModifiers,
       projectedCombatContextDraft,
+      selectedActionId,
       selectedParticipant?.state.combatEffects,
     ],
   );

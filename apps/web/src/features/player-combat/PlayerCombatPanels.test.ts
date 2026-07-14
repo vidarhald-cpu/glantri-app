@@ -130,17 +130,35 @@ describe("PlayerCombatPanels", () => {
     const noPhaseRows = buildPlayerCombatModifierRows({
       combatContext,
     });
+    const declarationPreviewRows = buildPlayerCombatModifierRows({
+      combatContext,
+      includeAllPhases: true,
+    });
     const phase1DbRow = phase1Rows.find((row) => row.bucketKey === "situation_db");
     const phase2DbRow = phase2Rows.find((row) => row.bucketKey === "situation_db");
     const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
     const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
     const noPhaseDbRow = noPhaseRows.find((row) => row.bucketKey === "situation_db");
     const noPhaseObRow = noPhaseRows.find((row) => row.bucketKey === "situation_ob_skill");
+    const previewDbRow = declarationPreviewRows.find((row) => row.bucketKey === "situation_db");
+    const previewObRow = declarationPreviewRows.find(
+      (row) => row.bucketKey === "situation_ob_skill",
+    );
 
     expect(noPhaseDbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-db"]);
     expect(noPhaseDbRow?.total).toBe(-1);
     expect(noPhaseObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-ob"]);
     expect(noPhaseObRow?.total).toBe(2);
+    expect(previewDbRow?.entries.map((entry) => [entry.id, entry.value])).toEqual([
+      ["manual-db", -1],
+      ["generated:attack-parry:phase1:db-parry", -4],
+      ["generated:parry-attack:phase2:db-parry", -4],
+    ]);
+    expect(previewObRow?.entries.map((entry) => [entry.id, entry.value])).toEqual([
+      ["manual-ob", 2],
+      ["generated:double-attack:phase1:ob-skill", -1],
+      ["generated:double-attack:phase2:ob-skill", -1],
+    ]);
     expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
       "single attack",

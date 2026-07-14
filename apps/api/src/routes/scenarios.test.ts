@@ -846,7 +846,10 @@ function makeDoubleAttackWeaponParticipant(templateId = "weapon-template-dagger"
         activeLoadoutByCharacterId: {
           "character-1": { activePrimaryWeaponItemId: itemId },
         },
-        itemsById: { [itemId]: { id: itemId, templateId } },
+        itemsById: {
+          [itemId]: { id: itemId, templateId },
+          [`unready-${itemId}`]: { id: `unready-${itemId}`, templateId },
+        },
         locationsById: {},
         templates: { templatesById: { [templateId]: template } },
       },
@@ -6853,8 +6856,9 @@ describe("scenarios route contract", () => {
 
     await app.close();
     expect(response.statusCode).toBe(200);
-    const declaration = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
-      .combatRoundState.participants[0].declaration;
+    const declaration =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .participants[0].declaration;
     expect(declaration.phaseContexts).toMatchObject({
       phase1: { attackModeId: "mode-1" },
       phase2: { attackModeId: "mode-1" },
@@ -6863,6 +6867,102 @@ describe("scenarios route contract", () => {
       expect.objectContaining({ attackModeId: "mode-1", itemId, slot: "attack_1" }),
       expect.objectContaining({ attackModeId: "mode-1", itemId, slot: "attack_2" }),
     ]);
+  });
+
+  it.each([
+    ["1-h Javelin", "weapon-template-1-h-javelin"],
+    ["Rapier", "weapon-template-rapier"],
+  ])(
+    "accepts the committed ready %s source for both Double Attack phases",
+    async (_label, templateId) => {
+      setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant(templateId) });
+      const app = await buildScenarioTestApp();
+      const itemId = `item-${templateId}`;
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "double_attack",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          phaseAttackSources: {
+            phase1: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
+            phase2: { attackModeId: "mode-1", itemId, sourceKind: "weapon" },
+          },
+          phaseContexts: {
+            phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+            phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+      await app.close();
+      expect(response.statusCode).toBe(200);
+      expect(
+        mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+          .participants[0].declaration.attackOpportunities,
+      ).toEqual([
+        expect.objectContaining({ attackModeId: "mode-1", itemId, slot: "attack_1" }),
+        expect.objectContaining({ attackModeId: "mode-1", itemId, slot: "attack_2" }),
+      ]);
+    },
+  );
+
+  it("distinguishes a missing Double Attack source from an unready equipped item", async () => {
+    setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant() });
+    const missingSourceApp = await buildScenarioTestApp();
+    const basePayload = {
+      actionId: "double_attack",
+      combatContext: { modifierBuckets: emptyModifierBuckets() },
+      phaseContexts: {
+        phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+        phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+      },
+      scenarioParticipantId: "participant-1",
+    };
+    const missingSource = await missingSourceApp.inject({
+      method: "POST",
+      payload: {
+        ...basePayload,
+        phaseAttackSources: {
+          phase1: { attackModeId: "mode-1", sourceKind: "weapon" },
+          phase2: { attackModeId: "mode-1", sourceKind: "weapon" },
+        },
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await missingSourceApp.close();
+
+    setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant() });
+    const unreadySourceApp = await buildScenarioTestApp();
+    const unreadySource = await unreadySourceApp.inject({
+      method: "POST",
+      payload: {
+        ...basePayload,
+        phaseAttackSources: {
+          phase1: {
+            attackModeId: "mode-1",
+            itemId: "unready-item-weapon-template-dagger",
+            sourceKind: "weapon",
+          },
+          phase2: {
+            attackModeId: "mode-1",
+            itemId: "unready-item-weapon-template-dagger",
+            sourceKind: "weapon",
+          },
+        },
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await unreadySourceApp.close();
+
+    expect(missingSource.json()).toEqual({
+      error: "Select an equipped weapon source for Phase 1.",
+    });
+    expect(unreadySource.json()).toEqual({
+      error: "The selected Phase 1 weapon is not ready.",
+    });
   });
 
   it("rejects a Double Attack weapon source without an explicit attack mode", async () => {

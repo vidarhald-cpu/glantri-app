@@ -215,6 +215,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
+    expect(source).toContain("resolveScenarioCombatEquipmentState");
+    expect(source).toContain(
+      'inspector.step === "select_actions" && inspectorDraft.actionId === "double_attack"',
+    );
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("loadCanonicalContent");
     expect(source).toContain("buildEquipmentLoadoutModuleModel");

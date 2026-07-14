@@ -183,6 +183,7 @@ import {
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   isEquipmentFeatureState,
+  resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import {
@@ -4263,10 +4264,12 @@ export default function CombatRoundManagerPanel({
     step: inspector.step,
   });
   const inspectorEquipmentState = useMemo(() => {
-    const candidate =
-      resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
-        ?.equipmentState ?? selectedScenarioParticipant?.snapshot.equipmentState;
-    return isEquipmentFeatureState(candidate) ? candidate : null;
+    return resolveScenarioCombatEquipmentState({
+      resolvedEquipmentState:
+        resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
+          ?.equipmentState,
+      scenarioEquipmentState: selectedScenarioParticipant?.snapshot.equipmentState,
+    });
   }, [
     resolvedCharacterStateByParticipantId,
     selectedScenarioParticipant?.id,
@@ -4314,6 +4317,8 @@ export default function CombatRoundManagerPanel({
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        includeAllPhases:
+          inspector.step === "select_actions" && inspectorDraft.actionId === "double_attack",
         liveModifiers: inspectorLiveModifiers,
         phaseKey: inspectorModifierPhase,
       }),
@@ -4321,6 +4326,8 @@ export default function CombatRoundManagerPanel({
       inspectorGeneratedCombatContext,
       inspectorLiveModifiers,
       inspectorModifierPhase,
+      inspector.step,
+      inspectorDraft.actionId,
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );

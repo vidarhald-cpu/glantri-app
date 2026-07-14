@@ -150,6 +150,42 @@ export function isEquipmentFeatureState(value: unknown): value is EquipmentFeatu
   );
 }
 
+/**
+ * Combat declarations use the committed scenario participant's item and loadout IDs.
+ * Current equipment data may only enrich matching template definitions (for example,
+ * attack-mode capabilities added after an older scenario snapshot was recorded).
+ */
+export function resolveScenarioCombatEquipmentState(input: {
+  resolvedEquipmentState?: unknown;
+  scenarioEquipmentState?: unknown;
+}): EquipmentFeatureState | null {
+  const scenarioState = isEquipmentFeatureState(input.scenarioEquipmentState)
+    ? input.scenarioEquipmentState
+    : null;
+  const resolvedState = isEquipmentFeatureState(input.resolvedEquipmentState)
+    ? input.resolvedEquipmentState
+    : null;
+
+  if (!scenarioState) return resolvedState;
+  if (!resolvedState) return scenarioState;
+
+  const templatesById = { ...scenarioState.templates.templatesById };
+  for (const item of Object.values(scenarioState.itemsById)) {
+    const resolvedTemplate = resolvedState.templates.templatesById[item.templateId];
+    if (resolvedTemplate) {
+      templatesById[item.templateId] = resolvedTemplate;
+    }
+  }
+
+  return {
+    ...scenarioState,
+    templates: {
+      ...scenarioState.templates,
+      templatesById,
+    },
+  };
+}
+
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
   loadoutModel: EquipmentLoadoutModuleModel;

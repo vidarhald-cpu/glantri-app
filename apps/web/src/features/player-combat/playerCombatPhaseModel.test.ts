@@ -9,6 +9,7 @@ import {
   buildPlayerCombatPhasePanelModel,
   DEFAULT_MAIN_HAND_PARRY_DIRECTION,
   DEFAULT_OFF_HAND_PARRY_DIRECTION,
+  resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
 } from "./playerCombatPhaseModel";
 
@@ -105,6 +106,62 @@ function buildLoadoutModel(input: {
 }
 
 describe("player combat phase model", () => {
+  it("keeps committed scenario item identities while enriching matching attack modes", () => {
+    const scenarioEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "scenario-javelin" },
+      },
+      itemsById: {
+        "scenario-javelin": {
+          characterId: "character-1",
+          id: "scenario-javelin",
+          templateId: "weapon-template-javelin",
+        },
+      },
+      locationsById: {},
+      templates: {
+        templatesById: {
+          "weapon-template-javelin": { category: "weapon", id: "weapon-template-javelin" },
+        },
+      },
+    };
+    const resolvedEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "external-javelin" },
+      },
+      itemsById: {
+        "external-javelin": {
+          characterId: "character-1",
+          id: "external-javelin",
+          templateId: "weapon-template-javelin",
+        },
+      },
+      locationsById: {},
+      templates: {
+        templatesById: {
+          "weapon-template-javelin": {
+            attackModes: [{ id: "thrust", allowsRepeatedRoundAttack: true }],
+            category: "weapon",
+            id: "weapon-template-javelin",
+          },
+        },
+      },
+    };
+
+    const result = resolveScenarioCombatEquipmentState({
+      resolvedEquipmentState,
+      scenarioEquipmentState,
+    });
+
+    expect(result?.activeLoadoutByCharacterId["character-1"]?.activePrimaryWeaponItemId).toBe(
+      "scenario-javelin",
+    );
+    expect(Object.keys(result?.itemsById ?? {})).toEqual(["scenario-javelin"]);
+    expect(result?.templates.templatesById["weapon-template-javelin"]).toMatchObject({
+      attackModes: [{ id: "thrust", allowsRepeatedRoundAttack: true }],
+    });
+  });
+
   it("maps Single attack into phase 1 attack/defense and phase 2 defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({

@@ -367,7 +367,7 @@ function parseCombatDeclarationPhaseAttackSources(value: unknown):
     const sourceKind = candidate.sourceKind === "unarmed" ? "unarmed" : "weapon";
     const itemId = parseOptionalDeclarationString(candidate.itemId);
     const attackModeId = parseOptionalDeclarationString(candidate.attackModeId);
-    return sourceKind === "unarmed" || itemId ? { attackModeId, itemId, sourceKind } : undefined;
+    return { attackModeId, itemId, sourceKind };
   };
   const phase1 = parseSource(record.phase1);
   const phase2 = parseSource(record.phase2);
@@ -935,15 +935,19 @@ function getEquipmentItemTemplate(input: {
   const templateId = isRecord(item) ? item["templateId"] : undefined;
   const template = typeof templateId === "string" ? input.templatesById?.[templateId] : undefined;
 
-  if (isWeaponTemplateLike(template)) {
-    return template;
-  }
-
   const contentTemplate =
     typeof templateId === "string"
       ? weaponTemplates.find((candidate) => candidate.id === templateId)
       : undefined;
 
+  if (isWeaponTemplateLike(template) && isWeaponTemplateLike(contentTemplate)) {
+    return {
+      ...template,
+      attackModes: contentTemplate.attackModes ?? template.attackModes,
+    };
+  }
+
+  if (isWeaponTemplateLike(template)) return template;
   return isWeaponTemplateLike(contentTemplate) ? contentTemplate : undefined;
 }
 
@@ -965,7 +969,7 @@ function resolveDeclaredWeaponSource(input: {
     }
   | { error: string; ok: false } {
   if (!input.itemId) {
-    return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
+    return { error: `Select an equipped weapon source for ${input.phaseLabel}.`, ok: false };
   }
   const equipmentState = getSnapshotEquipmentState(input.participant);
   const itemsById = isRecord(equipmentState?.["itemsById"])
@@ -975,7 +979,10 @@ function resolveDeclaredWeaponSource(input: {
     ...getScenarioParticipantActiveWeaponItemIds(input.participant),
     ...getScenarioParticipantReadyItemIds(input.participant),
   ]);
-  if (!itemsById || !usableItemIds.has(input.itemId)) {
+  if (!itemsById || !itemsById[input.itemId]) {
+    return { error: `The selected ${input.phaseLabel} weapon source is missing.`, ok: false };
+  }
+  if (!usableItemIds.has(input.itemId)) {
     return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
   }
   const template = getEquipmentItemTemplate({
@@ -984,7 +991,7 @@ function resolveDeclaredWeaponSource(input: {
     templatesById: getEquipmentTemplatesById(equipmentState),
   });
   if (!template) {
-    return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
+    return { error: `The selected ${input.phaseLabel} weapon source is missing.`, ok: false };
   }
   if (!input.attackModeId) {
     return { error: `Select an eligible attack mode for ${input.phaseLabel}.`, ok: false };
