@@ -4343,10 +4343,9 @@ export default function CombatRoundManagerPanel({
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
-        includeAllPhases:
-          inspector.step === "select_actions" && inspectorDraft.actionId === "double_attack",
         liveModifiers: inspectorLiveModifiers,
         phaseKey: inspectorModifierPhase,
+        visibleAtStep: inspector.step,
       }),
     [
       inspectorGeneratedCombatContext,
@@ -5938,6 +5937,7 @@ export default function CombatRoundManagerPanel({
       const recordedModifierRows = buildRecordedCombatModifierRows({
         combatContext: draft.combatContext,
         combatEffects: scenarioParticipant?.state.combatEffects,
+        step,
       });
       const modifierRows = recordedModifierRows.map((row) => ({
         bucketKey: row.bucketKey,

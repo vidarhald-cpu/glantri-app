@@ -33,6 +33,7 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import {
   filterCombatModifierEntriesForPhase,
+  getCombatModifierRowsVisibleAtStep,
   type EncounterCombatPhaseKey,
   type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
@@ -655,14 +656,19 @@ export function buildPlayerCombatModifierRows(input: {
   includeAllPhases?: boolean;
   liveModifiers?: EncounterLiveCombatModifierSummary;
   phaseKey?: EncounterCombatPhaseKey;
+  visibleAtStep?: CombatRoundStep;
 }): PlayerCombatModifierBucketView[] {
   const combatContext = mergePersistentCombatEffectModifiers({
     combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     combatEffects: input.combatEffects,
   });
   const entriesForDisplay = (entries: ScenarioCombatModifierEntry[]) =>
-    input.includeAllPhases ? entries : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
-  const filteredModifierBuckets = {
+    input.includeAllPhases
+      ? entries
+      : input.visibleAtStep
+        ? getCombatModifierRowsVisibleAtStep(entries, input.visibleAtStep)
+        : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
+  const displayModifierBuckets = {
     general: sanitizeCombatModifierEntries(
       entriesForDisplay(combatContext.modifierBuckets.general),
     ),
@@ -676,35 +682,58 @@ export function buildPlayerCombatModifierRows(input: {
       entriesForDisplay(combatContext.modifierBuckets.situationObSkill),
     ),
   };
-  const filteredContext = {
-    ...combatContext,
-    modifierBuckets: filteredModifierBuckets,
+  const applicableModifierBuckets = {
+    general: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.general, input.phaseKey),
+    ),
+    situationDb: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationDb,
+        input.phaseKey,
+      ),
+    ),
+    situationInitiative: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationInitiative,
+        input.phaseKey,
+      ),
+    ),
+    situationObSkill: sanitizeCombatModifierEntries(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationObSkill,
+        input.phaseKey,
+      ),
+    ),
   };
-  const totals = getMergedCombatModifierTotals(filteredContext);
+  const applicableContext = {
+    ...combatContext,
+    modifierBuckets: applicableModifierBuckets,
+  };
+  const totals = getMergedCombatModifierTotals(applicableContext);
 
   return [
     {
       bucketKey: "general",
-      entries: filteredModifierBuckets.general,
+      entries: displayModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
       total: totals.generalFatigue,
     },
     {
       bucketKey: "situation_initiative",
-      entries: filteredModifierBuckets.situationInitiative,
+      entries: displayModifierBuckets.situationInitiative,
       label: "Initiative",
       total: totals.initiative,
     },
     {
       bucketKey: "situation_ob_skill",
-      entries: filteredModifierBuckets.situationObSkill,
+      entries: displayModifierBuckets.situationObSkill,
       label: "Skill/OB",
       total: totals.skillOb,
     },
     {
       bucketKey: "situation_db",
-      entries: filteredModifierBuckets.situationDb,
+      entries: displayModifierBuckets.situationDb,
       label: "DB/Parry",
       total: totals.dbParry,
     },

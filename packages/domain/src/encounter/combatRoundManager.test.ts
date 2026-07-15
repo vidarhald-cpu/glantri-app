@@ -40,6 +40,7 @@ import {
   evaluateCombatExperienceResult,
   getCombatRoundPhaseResolutionOrder,
   getCombatRoundPhaseResolutionStatus,
+  getCombatRoundPhaseAttackCandidates,
   getPlayerCombatCurrentRollAction,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundModifierPhaseForStep,
@@ -8223,18 +8224,39 @@ describe("combat round manager", () => {
     expect(afterLocationUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("pending");
   });
 
-  it("proposes and commits critical drop/cancel consequences for a pending same-round attack", () => {
+  it("preserves a committed Double Attack A2 after drop-only critical damage and reload", () => {
     const declared = declareRoundAction({
       actionId: "attack_parry",
       participantId: "gladiator",
       state: declareRoundAction({
-        actionId: "parry_attack",
+        actionId: "double_attack",
         participantId: "guard",
         state: initializeCombatRoundState({ encounter: encounter() }),
       }),
     });
+    const guardPhase1Attack = buildCombatRoundAttackRollResult({
+      actionId: "double_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 2,
+      rollTotal: 2,
+      rolledAt: "2026-01-01T00:01:00.000Z",
+      weaponName: "Broad sword",
+    });
     const withSnapshot = combatRoundStateSchema.parse({
       ...declared,
+      participants: declared.participants.map((participant) =>
+        participant.participantId === "guard"
+          ? {
+              ...participant,
+              attackResults: { ...participant.attackResults, phase1: guardPhase1Attack },
+              stepStatuses: { ...participant.stepStatuses, phase_1_actions: "gmEdited" },
+            }
+          : participant,
+      ),
       stepSnapshots: [
         stepSnapshot({
           attackSummary: {
@@ -8375,14 +8397,10 @@ describe("combat round manager", () => {
           kind: "drop_item",
           sourceEffectKey: "sharp|arm|01|02",
         }),
-        expect.objectContaining({
-          accepted: true,
-          itemLabel: "Broad sword",
-          kind: "cancel_pending_action",
-          phase: "phase2",
-          step: "A2",
-        }),
       ]),
+    );
+    expect(operationalConsequences).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "cancel_pending_action" })]),
     );
 
     const committed = commitCombatRoundPhaseDamage({
@@ -8410,19 +8428,9 @@ describe("combat round manager", () => {
     });
 
     expect(committed.command.facts).toMatchObject({
-      cancelledActions: [
-        expect.objectContaining({
-          participantId: "guard",
-          phase: "phase2",
-          previousStepStatus: "pending",
-          step: "A2",
-        }),
-      ],
+      cancelledActions: [],
       createdOperationalCombatEffectIds: [dropEffectId],
-      operationalConsequences: expect.arrayContaining([
-        expect.objectContaining({ kind: "drop_item" }),
-        expect.objectContaining({ kind: "cancel_pending_action" }),
-      ]),
+      operationalConsequences: expect.arrayContaining([expect.objectContaining({ kind: "drop_item" })]),
     });
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
@@ -8440,19 +8448,19 @@ describe("combat round manager", () => {
         state: committed.state,
         step: "phase_2_actions",
       }),
-    ).toBe("skipped");
+    ).toBe("pending");
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "guard",
         phase: "phase2",
         state: committed.state,
       }).substep,
-    ).toBe("done");
+    ).toBe("pending");
     expect(
       committed.state.participants.find((participant) => participant.participantId === "guard")
         ?.declaration,
     ).toMatchObject({
-      actionId: "parry_attack",
+      actionId: "double_attack",
     });
     expect(cleanedCombatEffects.effects).not.toContainEqual(
       expect.objectContaining({ id: dropEffectId }),
@@ -8474,6 +8482,43 @@ describe("combat round manager", () => {
     expect(
       clearedCommitState.phaseResolutionResults[0]?.damageResult?.review?.operationalConsequences,
     ).toEqual(operationalConsequences);
+
+    const continued = decideCombatRoundDoubleAttackPhase2({
+      command: { createdAt: "2026-01-01T00:06:30.000Z", createdByUserId: "gm-1" },
+      decision: "continue",
+      participantId: "guard",
+      state: committed.state,
+    });
+    const reloaded = combatRoundStateSchema.parse(JSON.parse(JSON.stringify(continued)));
+    const withPhase2Initiative = setCombatRoundParticipantInitiative({
+      initiative: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [5],
+        rollTotal: 5,
+        total: 5,
+      },
+      participantId: "guard",
+      phase: "phase2",
+      state: reloaded,
+    });
+    const phase2 = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: withPhase2Initiative,
+      updatedAt: "2026-01-01T00:07:00.000Z",
+    });
+
+    expect(getCombatRoundPhaseAttackCandidates({ phase: "phase2", state: phase2 })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ origin: "double_attack", participantId: "guard", status: "committed" }),
+      ]),
+    );
+    expect(phase2.currentCursor).toMatchObject({ participantId: "guard", step: "A2" });
+    expect(combatRoundParticipantHasExecutablePhaseAttack({
+      participantId: "guard",
+      phase: "phase2",
+      state: phase2,
+    })).toBe(true);
   });
 
   it("raises committed damage to critical minimum and cancels pending no-action attacks", () => {

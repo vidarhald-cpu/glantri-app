@@ -1573,28 +1573,32 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
       });
     }
 
-    addConsequence({
-      accepted: true,
-      hand,
-      id: `critical-operational-${sanitizeCombatRoundReviewIdPart(
-        actionBlockingEffect?.effectKey ?? primaryEffect?.effectKey ?? criticalResult.critKey,
-      )}-cancel-${candidate.phase}-${candidate.step}`,
-      itemLabel: candidate.itemLabel,
-      kind: "cancel_pending_action",
-      label: `Cancel pending ${candidate.phase === "phase1" ? "phase 1" : "phase 2"} attack${
-        candidate.itemLabel ? `: ${candidate.itemLabel} attack` : ""
-      }`,
-      participantId,
-      phase: candidate.phase,
-      reason: actionBlockingEffect
-        ? "Critical effect prevents combat action for this pending same-round attack."
-        : "Critical effect prevents using the item/limb for this pending same-round attack.",
-      sourceCritKey: criticalResult.critKey,
-      sourceEffectKey: actionBlockingEffect?.effectKey ?? primaryEffect?.effectKey,
-      sourceText,
-      step: candidate.step,
-      targetActionId: candidate.actionId,
-    });
+    // Damage, a dropped item, or a loss-of-use row does not by itself cancel a committed
+    // attack opportunity. Only an explicit action-blocking critical effect may produce the
+    // canonical cancellation command fact. Source legality can be handled separately when a
+    // concrete combat rule exists; it must not be inferred here from the damage refresh.
+    if (actionBlockingEffect) {
+      addConsequence({
+        accepted: true,
+        hand,
+        id: `critical-operational-${sanitizeCombatRoundReviewIdPart(
+          actionBlockingEffect.effectKey,
+        )}-cancel-${candidate.phase}-${candidate.step}`,
+        itemLabel: candidate.itemLabel,
+        kind: "cancel_pending_action",
+        label: `Cancel pending ${candidate.phase === "phase1" ? "phase 1" : "phase 2"} attack${
+          candidate.itemLabel ? `: ${candidate.itemLabel} attack` : ""
+        }`,
+        participantId,
+        phase: candidate.phase,
+        reason: "Critical effect prevents combat action for this pending same-round attack.",
+        sourceCritKey: criticalResult.critKey,
+        sourceEffectKey: actionBlockingEffect.effectKey,
+        sourceText,
+        step: candidate.step,
+        targetActionId: candidate.actionId,
+      });
+    }
   }
 
   if (actionBlockingEffect) {

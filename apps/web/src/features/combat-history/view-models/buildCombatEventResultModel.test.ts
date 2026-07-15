@@ -31,9 +31,9 @@ describe("buildCombatEventResultModel", () => {
       event("damage_committed", 5),
       event("parry", 2, {
         facts: {
-          involvedOutcome: { success: false },
+          involvedOutcome: { resultLabel: "Parry failed", status: "resolved", success: false },
           privateCalculation: { rollD20: 8, total: 17 },
-          publicOutcome: {},
+          publicOutcome: { status: "resolved", success: false },
         },
         identities: [
           { displayName: "Scyrian cavalry guy", participantId: "attacker", role: "attacker", visibility: "visible" },
@@ -51,8 +51,14 @@ describe("buildCombatEventResultModel", () => {
           { displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" },
         ],
       }),
-      event("critical", 4),
-      event("hit_location", 3),
+      event("critical", 4, {
+        facts: { involvedOutcome: { criticalGrade: "e" }, publicOutcome: {} },
+        identities: [{ displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" }],
+      }),
+      event("hit_location", 3, {
+        facts: { involvedOutcome: { selectedHitLocation: "abdomen" }, publicOutcome: {} },
+        identities: [{ displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" }],
+      }),
     ]);
 
     expect(model.items.map((item) => item.type)).toEqual([
@@ -68,6 +74,11 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[1]?.summary).toBe(
       "The Gladiator attempted to parry Scyrian cavalry guy.",
     );
+    expect(model.items[1]?.outcomeRows.map((row) => row.text)).toEqual([
+      "Result: Parry failed",
+    ]);
+    expect(model.items[2]?.summary).toBe("The Gladiator was hit in the abdomen.");
+    expect(model.items[3]?.summary).toBe("Critical E against The Gladiator.");
     expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
       "Result: Grazing hit",
     ]);
@@ -118,11 +129,51 @@ describe("buildCombatEventResultModel", () => {
     ]);
     const rows = model.items.flatMap((item) => [...item.outcomeRows, ...item.calculationRows]);
 
-    expect(rows.map((row) => row.text)).toEqual([
-      "Result: Miss",
-      "Hit: No",
-    ]);
+    expect(rows.map((row) => row.text)).toEqual(["Result: Miss"]);
     expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
     expect(model.items.map((item) => item.type)).toEqual(["attack", "parry"]);
+  });
+
+  it("whitelists concise parry and damage outcomes instead of flattening internal facts", () => {
+    const model = buildCombatEventResultModel([
+      event("parry", 1, {
+        facts: {
+          involvedOutcome: {
+            damageRollRequired: false,
+            resultLabel: "Parry failed",
+            status: "resolved",
+            success: false,
+          },
+          publicOutcome: { status: "resolved", success: false },
+        },
+      }),
+      event("damage_proposed", 2, {
+        facts: {
+          involvedOutcome: { criticalGrade: "e", selectedHitLocation: "abdomen", totalDamage: 11 },
+          publicOutcome: {},
+        },
+        identities: [{ displayName: "The Gladiator", participantId: "target", role: "defender", visibility: "visible" }],
+      }),
+      event("damage_committed", 3, {
+        facts: {
+          involvedOutcome: { criticalGrade: "e", finalCommittedDamage: 11, hitLocation: "abdomen" },
+          publicOutcome: { status: "committed" },
+        },
+        identities: [{ displayName: "The Gladiator", participantId: "target", role: "defender", visibility: "visible" }],
+      }),
+    ]);
+    const displayedText = model.items.flatMap((item) => [
+      item.summary,
+      ...item.outcomeRows.map((row) => row.text),
+    ]);
+
+    expect(displayedText).toEqual([
+      "Defender attempted to parry.",
+      "Result: Parry failed",
+      "Proposed damage to The Gladiator: 11 · Critical E.",
+      "The Gladiator received 11 damage to the abdomen.",
+      "Critical E committed.",
+    ]);
+    expect(displayedText.join(" ")).not.toMatch(/Status:|Success:|Required: No|damageRollRequired/);
   });
 });

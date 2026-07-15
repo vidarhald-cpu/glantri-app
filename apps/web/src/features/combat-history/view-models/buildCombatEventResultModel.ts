@@ -52,20 +52,32 @@ function formatValue(value: unknown, identityById: ReadonlyMap<string, string>):
   }
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (value === undefined || value === null || value === "") return "—";
-  return typeof value === "string" ? (identityById.get(value) ?? value) : String(value);
+  return typeof value === "string"
+    ? (identityById.get(value) ?? (value.includes("_") ? humanize(value) : value))
+    : String(value);
 }
 
-function factRows(
-  category: "calculation" | "involved" | "public",
+function isMeaningfulCalculationValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === "" || value === false) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+function calculationFactRows(
   eventId: string,
   facts: Record<string, unknown> | undefined,
   identityById: ReadonlyMap<string, string>,
 ): CombatEventResultFactRow[] {
   if (!facts) return [];
-  return Object.entries(facts).map(([fieldKey, value], index) => ({
-    key: `${eventId}:${category}:${fieldKey}:${index}`,
-    text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
-  }));
+  return Object.entries(facts).flatMap(([fieldKey, value], index) =>
+    isMeaningfulCalculationValue(value)
+      ? [{
+          key: `${eventId}:calculation:${fieldKey}:${index}`,
+          text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
+        }]
+      : [],
+  );
 }
 
 function identity(event: ProjectedCombatHistoryEvent, role: string): string | undefined {
@@ -110,7 +122,38 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
   });
 }
 
-function eventSummary(event: ProjectedCombatHistoryEvent): string {
+function factValue(
+  event: ProjectedCombatHistoryEvent,
+  ...keys: string[]
+): unknown {
+  for (const key of keys) {
+    const involved = event.facts.involvedOutcome?.[key];
+    if (involved !== undefined && involved !== null && involved !== "") return involved;
+    const publicValue = event.facts.publicOutcome[key];
+    if (publicValue !== undefined && publicValue !== null && publicValue !== "") return publicValue;
+  }
+  return undefined;
+}
+
+function factLabel(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    return value.includes("_") ? humanize(value) : value;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return factLabel(record.label) ?? factLabel(record.name) ?? factLabel(record.id);
+  }
+  return typeof value === "number" ? String(value) : undefined;
+}
+
+function resultRow(event: ProjectedCombatHistoryEvent, text?: string): CombatEventResultFactRow[] {
+  return text ? [{ key: `${event.id}:outcome:result`, text }] : [];
+}
+
+function eventPresentation(event: ProjectedCombatHistoryEvent): {
+  outcomeRows: CombatEventResultFactRow[];
+  summary: string;
+} {
   const attacker = identity(event, "attacker") ?? identity(event, "actor");
   const defender = identity(event, "defender") ?? identity(event, "target");
   const roller = identity(event, "roller") ?? identity(event, "actor");
@@ -118,40 +161,131 @@ function eventSummary(event: ProjectedCombatHistoryEvent): string {
   switch (event.type) {
     case "attack": {
       const weapon = event.facts.involvedOutcome?.weaponName;
-      return attacker && defender
-        ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}.`
-        : "Attack recorded.";
+      return {
+        outcomeRows: resultRow(event, `Result: ${attackOutcome(event)}`),
+        summary:
+          attacker && defender
+            ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}.`
+            : "Attack recorded.",
+      };
     }
-    case "parry":
-      return defender && attacker
-        ? `${defender} attempted to parry ${attacker}.`
-        : `${roller ?? "Defender"} attempted to parry.`;
-    case "hit_location":
-      return attacker && defender
-        ? `Hit location resolved for ${attacker}'s attack on ${defender}.`
-        : "Hit location resolved.";
-    case "critical":
-      return defender ? `Critical result resolved against ${defender}.` : "Critical result resolved.";
-    case "damage_proposed":
-      return defender ? `Damage proposed for ${defender}.` : "Damage proposed.";
-    case "damage_committed":
-      return defender ? `Damage committed against ${defender}.` : "Damage committed.";
-    case "distance_control_roll":
-      return roller && defender
-        ? `${roller} rolled distance control against ${defender}.`
-        : `${roller ?? "Participant"} rolled distance control.`;
-    case "distance_control_result":
-      return "Distance-control pair result resolved.";
-    case "distance_control_applied":
-      return "The next-round distance was applied.";
-    case "health_check":
-      return `${roller ?? "Participant"} made a health check.`;
+    case "parry": {
+      const resultLabel = factLabel(factValue(event, "resultLabel"));
+      const success = factValue(event, "success");
+      const result = resultLabel ?? (success === true ? "Parry succeeded" : success === false ? "Parry failed" : undefined);
+      return {
+        outcomeRows: resultRow(event, result ? `Result: ${result}` : undefined),
+        summary:
+          defender && attacker
+            ? `${defender} attempted to parry ${attacker}.`
+            : `${roller ?? "Defender"} attempted to parry.`,
+      };
+    }
+    case "hit_location": {
+      const location = factLabel(factValue(event, "selectedHitLocation", "hitLocation"));
+      return {
+        outcomeRows: [],
+        summary:
+          defender && location
+            ? `${defender} was hit in the ${location.toLowerCase()}.`
+            : location
+              ? `Hit location: ${location}.`
+              : "Hit location resolved.",
+      };
+    }
+    case "critical": {
+      const grade = factLabel(factValue(event, "criticalGrade"))?.toUpperCase();
+      const result = factLabel(factValue(event, "resultLabel", "effectLabel", "title"));
+      return {
+        outcomeRows: resultRow(event, result ? `Result: ${result}` : undefined),
+        summary: grade
+          ? `Critical ${grade}${defender ? ` against ${defender}` : ""}.`
+          : defender
+            ? `Critical result against ${defender}.`
+            : "Critical result resolved.",
+      };
+    }
+    case "damage_proposed": {
+      const total = factLabel(factValue(event, "totalDamage", "proposedDamage"));
+      const grade = factLabel(factValue(event, "criticalGrade"))?.toUpperCase();
+      const details = [total, grade ? `Critical ${grade}` : undefined].filter(Boolean).join(" · ");
+      return {
+        outcomeRows: [],
+        summary: defender
+          ? `Proposed damage to ${defender}${details ? `: ${details}` : ""}.`
+          : details
+            ? `Proposed damage: ${details}.`
+            : "Damage proposed.",
+      };
+    }
+    case "damage_committed": {
+      const total = factLabel(factValue(event, "finalCommittedDamage", "totalDamage"));
+      const location = factLabel(factValue(event, "hitLocation", "selectedHitLocation"));
+      const grade = factLabel(factValue(event, "criticalGrade"))?.toUpperCase();
+      return {
+        outcomeRows: resultRow(event, grade ? `Critical ${grade} committed.` : undefined),
+        summary: defender && total
+          ? `${defender} received ${total} damage${location ? ` to the ${location.toLowerCase()}` : ""}.`
+          : defender
+            ? `Damage committed against ${defender}.`
+            : "Damage committed.",
+      };
+    }
+    case "distance_control_roll": {
+      const total = factLabel(factValue(event, "total"));
+      return {
+        outcomeRows: resultRow(event, total ? `Total: ${total}` : undefined),
+        summary:
+          roller && defender
+            ? `${roller} rolled distance control against ${defender}.`
+            : `${roller ?? "Participant"} rolled distance control.`,
+      };
+    }
+    case "distance_control_result": {
+      const result = factLabel(factValue(event, "resultLabel", "outcome"));
+      const distance = factLabel(factValue(event, "proposedDistance"));
+      return {
+        outcomeRows: [
+          ...resultRow(event, result ? `Result: ${result}` : undefined),
+          ...(distance ? [{ key: `${event.id}:outcome:distance`, text: `Proposed distance: ${distance}` }] : []),
+        ],
+        summary: "Distance-control pair result resolved.",
+      };
+    }
+    case "distance_control_applied": {
+      const applied = factLabel(factValue(event, "appliedDistance"));
+      const previous = factLabel(factValue(event, "previousDistance"));
+      return {
+        outcomeRows: [
+          ...(applied ? [{ key: `${event.id}:outcome:applied`, text: `Applied distance: ${applied}` }] : []),
+          ...(previous ? [{ key: `${event.id}:outcome:previous`, text: `Previous distance: ${previous}` }] : []),
+        ],
+        summary: "The next-round distance was applied.",
+      };
+    }
+    case "health_check": {
+      const result = factLabel(factValue(event, "resultLabel", "outcome"));
+      return {
+        outcomeRows: resultRow(event, result ? `Result: ${result}` : undefined),
+        summary: `${roller ?? "Participant"} made a health check.`,
+      };
+    }
     case "participant_su_review":
-      return `${attacker ?? "Participant"} completed SU review.`;
-    case "initiative":
-      return `${roller ?? "Participant"} rolled initiative.`;
-    case "declaration":
-      return `${attacker ?? "Participant"} declared an action.`;
+      return { outcomeRows: [], summary: `${attacker ?? "Participant"} completed SU review.` };
+    case "initiative": {
+      const total = factLabel(factValue(event, "total"));
+      return {
+        outcomeRows: resultRow(event, total ? `Total: ${total}` : undefined),
+        summary: `${roller ?? "Participant"} rolled initiative.`,
+      };
+    }
+    case "declaration": {
+      const action = factLabel(factValue(event, "actionLabel"));
+      return {
+        outcomeRows: resultRow(event, action ? `Action: ${action}` : undefined),
+        summary: `${attacker ?? "Participant"} declared an action.`,
+      };
+    }
   }
 }
 
@@ -168,15 +302,11 @@ export function buildCombatEventResultModel(
           ),
         );
         const attack = event.type === "attack";
+        const presentation = eventPresentation(event);
         return {
           calculationRows: attack
             ? attackCalculationRows(event)
-            : factRows(
-                "calculation",
-                event.id,
-                event.facts.privateCalculation,
-                identityById,
-              ),
+            : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
           completenessLabel:
             event.completeness === "complete"
               ? undefined
@@ -184,14 +314,9 @@ export function buildCombatEventResultModel(
                 ? "Legacy-derived history"
                 : "Incomplete history",
           id: event.id,
-          outcomeRows: attack
-            ? [{ key: `${event.id}:outcome:attack-result`, text: `Result: ${attackOutcome(event)}` }]
-            : [
-                ...factRows("public", event.id, event.facts.publicOutcome, identityById),
-                ...factRows("involved", event.id, event.facts.involvedOutcome, identityById),
-              ],
+          outcomeRows: presentation.outcomeRows,
           sequence: event.sequence,
-          summary: eventSummary(event),
+          summary: presentation.summary,
           title: EVENT_TITLES[event.type],
           type: event.type,
         };

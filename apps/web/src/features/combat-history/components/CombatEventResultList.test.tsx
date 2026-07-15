@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
@@ -73,5 +73,40 @@ describe("CombatEventResultList", () => {
     expect(
       consoleError.mock.calls.some((call) => String(call[0]).includes("same key")),
     ).toBe(false);
+  });
+
+  it("keeps each event calculation independently collapsed by default", () => {
+    render(
+      <CombatEventResultList
+        events={[
+          event("attack-first", 1, {
+            privateCalculation: { defenderDb: 15, lookupTotal: 3, ob: 10, rollTotal: 8 },
+            publicOutcome: { hit: false },
+          }),
+          event("attack-second", 2, {
+            privateCalculation: { defenderDb: 12, lookupTotal: 6, ob: 11, rollTotal: 7 },
+            publicOutcome: { hit: true },
+          }),
+        ]}
+      />,
+    );
+
+    const articles = screen.getAllByRole("article");
+    const firstToggle = within(articles[0]!).getByRole("button", { name: "Calculation" });
+    const secondToggle = within(articles[1]!).getByRole("button", { name: "Calculation" });
+
+    expect(firstToggle).toHaveAttribute("aria-expanded", "false");
+    expect(secondToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
+
+    fireEvent.click(firstToggle);
+    expect(firstToggle).toHaveAttribute("aria-expanded", "true");
+    expect(secondToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("OB 10 + roll 8 - DB 15 = 3")).toBeTruthy();
+    expect(screen.queryByText("OB 11 + roll 7 - DB 12 = 6")).toBeNull();
+
+    fireEvent.click(firstToggle);
+    expect(firstToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
   });
 });

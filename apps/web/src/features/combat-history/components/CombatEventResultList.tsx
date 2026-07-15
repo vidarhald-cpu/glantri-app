@@ -8,6 +8,18 @@ export function CombatEventResultList(input: {
   events: readonly ProjectedCombatHistoryEvent[];
 }) {
   const model = buildCombatEventResultModel(input.events);
+  const [expandedCalculationIds, setExpandedCalculationIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleCalculation = (eventId: string) => {
+    setExpandedCalculationIds((current) => {
+      const next = new Set(current);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  };
 
   return (
     <section
@@ -47,10 +59,31 @@ export function CombatEventResultList(input: {
                       padding: "0.35rem 0.45rem",
                     }}
                   >
-                    <strong>Calculation</strong>
-                    {item.calculationRows.map((row) => (
-                      <div key={row.key}>{row.text}</div>
-                    ))}
+                    <button
+                      aria-controls={`${item.id}:calculation`}
+                      aria-expanded={expandedCalculationIds.has(item.id)}
+                      onClick={() => toggleCalculation(item.id)}
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        color: "inherit",
+                        cursor: "pointer",
+                        font: "inherit",
+                        fontWeight: 700,
+                        justifySelf: "start",
+                        padding: 0,
+                      }}
+                      type="button"
+                    >
+                      Calculation
+                    </button>
+                    {expandedCalculationIds.has(item.id) ? (
+                      <div id={`${item.id}:calculation`} style={{ display: "grid", gap: "0.12rem" }}>
+                        {item.calculationRows.map((row) => (
+                          <div key={row.key}>{row.text}</div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {item.completenessLabel ? (
@@ -70,4 +103,3 @@ export function CombatEventResultList(input: {
     </section>
   );
 }
-

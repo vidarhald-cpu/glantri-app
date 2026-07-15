@@ -1844,10 +1844,9 @@ export default function ScenarioPlayerCombatPageContent({
       buildPlayerCombatModifierRows({
         combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
-        includeAllPhases:
-          currentCombatStep === "select_actions" && selectedActionId === "double_attack",
         liveModifiers: liveCombatModifiers,
         phaseKey: currentModifierPhase,
+        visibleAtStep: currentCombatStep,
       }),
     [
       currentCombatStep,

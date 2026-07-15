@@ -1,6 +1,7 @@
 import type {
   CombatEffect,
   CombatEffectsState,
+  CombatRoundStep,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
@@ -167,6 +168,44 @@ export function filterCombatModifierEntriesForPhase(
   return entries.filter(
     (entry) => !entry.sourcePhase || (phaseKey != null && entry.sourcePhase === phaseKey),
   );
+}
+
+/** Rows applied to a calculation. Future-phase rows are deliberately excluded. */
+export const getCombatModifierRowsApplicableToPhase = filterCombatModifierEntriesForPhase;
+
+/**
+ * Rows visible for review at a combat step. M1 and the phase-1 resolution chain show the
+ * participant's complete remaining round commitment; M2 and phase 2 hide expired P1 rows.
+ * This display projection must not be used to calculate phase totals.
+ */
+export function getCombatModifierRowsVisibleAtStep(
+  entries: ScenarioCombatModifierEntry[],
+  step?: CombatRoundStep,
+): ScenarioCombatModifierEntry[] {
+  if (!step) return entries;
+
+  const phase1AndFutureSteps: CombatRoundStep[] = [
+    "select_actions",
+    "review_action_modifiers",
+    "initiative_phase_1",
+    "phase_1_actions",
+    "review_phase_2_actions",
+    "phase_1_damage",
+  ];
+  if (phase1AndFutureSteps.includes(step)) return entries;
+
+  const phase2Steps: CombatRoundStep[] = [
+    "review_phase_2_modifiers",
+    "initiative_phase_2",
+    "phase_2_actions",
+    "review_phase_2_damage",
+    "phase_2_damage",
+  ];
+  if (phase2Steps.includes(step)) {
+    return entries.filter((entry) => entry.sourcePhase !== "phase1");
+  }
+
+  return entries.filter((entry) => !entry.sourcePhase);
 }
 
 export function applyLiveRawModifierToCombatValue(input: {

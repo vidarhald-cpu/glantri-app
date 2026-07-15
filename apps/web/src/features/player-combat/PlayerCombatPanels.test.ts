@@ -200,6 +200,46 @@ describe("PlayerCombatPanels", () => {
     ).toBe("Skill/OB -1 · P1 · double attack");
   });
 
+  it("shows future Double Attack rows at M1 without applying them to phase-1 totals", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [
+          { id: "double-db-p1", scope: "until" as const, sourcePhase: "phase1" as const, value: -4 },
+          { id: "double-db-p2", scope: "until" as const, sourcePhase: "phase2" as const, value: -4 },
+        ],
+        situationInitiative: [],
+        situationObSkill: [
+          { id: "double-ob-p1", scope: "until" as const, sourcePhase: "phase1" as const, value: -1 },
+          { id: "double-ob-p2", scope: "until" as const, sourcePhase: "phase2" as const, value: -1 },
+        ],
+      },
+    };
+    const m1Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase1",
+      visibleAtStep: "review_action_modifiers",
+    });
+    const m2Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase2",
+      visibleAtStep: "review_phase_2_modifiers",
+    });
+    const m1Ob = m1Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const m1Db = m1Rows.find((row) => row.bucketKey === "situation_db");
+    const m2Ob = m2Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const m2Db = m2Rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(m1Ob?.entries.map((entry) => entry.id)).toEqual(["double-ob-p1", "double-ob-p2"]);
+    expect(m1Db?.entries.map((entry) => entry.id)).toEqual(["double-db-p1", "double-db-p2"]);
+    expect(m1Ob?.total).toBe(-1);
+    expect(m1Db?.total).toBe(-4);
+    expect(m2Ob?.entries.map((entry) => entry.id)).toEqual(["double-ob-p2"]);
+    expect(m2Db?.entries.map((entry) => entry.id)).toEqual(["double-db-p2"]);
+    expect(m2Ob?.total).toBe(-1);
+    expect(m2Db?.total).toBe(-4);
+  });
+
   it("shows generated distance modifiers in the phase Skill/OB bucket", () => {
     const combatContext = {
       modifierBuckets: {
