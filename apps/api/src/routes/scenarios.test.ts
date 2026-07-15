@@ -5,6 +5,7 @@ import {
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
   combatRoundParticipantHasExecutablePhaseAttack,
+  combatRoundParticipantHasPhaseAttack,
   combatRoundParticipantWasAttackedInPhase,
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
@@ -3540,6 +3541,130 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
+  });
+
+  it("lets a GM recommit the canonical declaration during DE without duplicate phase attacks", async () => {
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: makeTwoCombatEncounterParticipants(),
+    });
+    const participants = [
+      makeCombatScenarioParticipant(),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-2",
+        id: "participant-2",
+        snapshot: { displayName: "City guard" },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const combatContext = makeCombatScenarioParticipant().state.combat.combatContext;
+    const app = await buildScenarioTestApp();
+    const submit = (input: {
+      actionId: "attack_parry" | "parry_attack";
+      additionalActionNotes: string;
+      phase: "phase1" | "phase2";
+    }) =>
+      app.inject({
+        method: "POST",
+        payload: {
+          actionId: input.actionId,
+          additionalActionNotes: input.additionalActionNotes,
+          combatContext,
+          movementId: "hold",
+          phaseContexts: {
+            [input.phase]: testCombatPhaseContext("participant-2"),
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+    const first = await submit({
+      actionId: "attack_parry",
+      additionalActionNotes: "First draft",
+      phase: "phase1",
+    });
+    const corrected = await submit({
+      actionId: "parry_attack",
+      additionalActionNotes: "Corrected draft",
+      phase: "phase2",
+    });
+
+    await app.close();
+
+    expect(first.statusCode, JSON.stringify(first.json())).toBe(200);
+    expect(corrected.statusCode, JSON.stringify(corrected.json())).toBe(200);
+    const state = mutable.encounter.combatRoundState!;
+    const declaration = state.participants.find(
+      (participant) => participant.participantId === "encounter-participant-1",
+    )?.declaration;
+    expect(state.currentStep).toBe("select_actions");
+    expect(declaration).toMatchObject({
+      actionId: "parry_attack",
+      additionalActionNotes: "Corrected draft",
+      submittedBy: "gm",
+    });
+    expect(state.commands.filter((command) => command.type === "declare_action")).toHaveLength(2);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(false);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "encounter-participant-1",
+        phase: "phase2",
+        state,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps a valid player declaration single-submit while GM progression remains at DE", async () => {
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: makeTwoCombatEncounterParticipants(),
+    });
+    const participants = [
+      makeCombatScenarioParticipant(),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-2",
+        id: "participant-2",
+        snapshot: { displayName: "City guard" },
+      }),
+    ];
+    setupMutableCombatRouteState({ encounter, participants, user: mocks.playerUser });
+    const combatContext = makeCombatScenarioParticipant().state.combat.combatContext;
+    const app = await buildScenarioTestApp();
+    const payload = {
+      actionId: "attack_parry",
+      combatContext,
+      movementId: "hold",
+      phaseContexts: {
+        phase1: testCombatPhaseContext("participant-2"),
+      },
+      scenarioParticipantId: "participant-1",
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      payload,
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    const retry = await app.inject({
+      method: "POST",
+      payload: { ...payload, additionalActionNotes: "Player retry" },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(first.statusCode, JSON.stringify(first.json())).toBe(200);
+    expect(retry.statusCode).toBe(409);
+    expect(retry.json()).toMatchObject({ error: "Declaration is closed for this round." });
   });
 
   it("persists player-declared distance movement intent from the combat declaration route", async () => {

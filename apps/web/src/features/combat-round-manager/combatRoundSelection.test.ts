@@ -8,6 +8,7 @@ import {
   getCombatRoundManagerDisplayParticipantIds,
   getCombatRoundManagerInspectionSelection,
   getNextCombatRoundParticipantSelection,
+  isSelectedCombatRoundStepCurrentForGm,
   isSelectedCombatRoundStepExecutable,
 } from "./combatRoundSelection";
 
@@ -227,6 +228,85 @@ describe("combat round manager selection", () => {
         participantId: "bottom",
         state,
         step: "phase_2_actions",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps every active-round DE row current for GM editing until progression advances", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "DE" as const,
+      },
+      currentStep: "select_actions" as const,
+      participants: existing.participants.map((participant) =>
+        participant.participantId === "top"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "attack_parry",
+                roundNumber: existing.roundNumber,
+                submittedBy: "gm" as const,
+              },
+              stepStatuses: {
+                ...participant.stepStatuses,
+                select_actions: "gmEdited" as const,
+              },
+            }
+          : participant,
+      ),
+    };
+
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "top",
+        state,
+        step: "select_actions",
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedCombatRoundStepCurrentForGm({
+        participantId: "top",
+        state,
+        step: "select_actions",
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedCombatRoundStepCurrentForGm({
+        participantId: "middle",
+        state,
+        step: "select_actions",
+      }),
+    ).toBe(true);
+  });
+
+  it("makes DE historical after progression advances and never opens missing participants", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const advanced = {
+      ...existing,
+      currentCursor: {
+        participantId: "top",
+        roundNumber: existing.roundNumber,
+        step: "M1" as const,
+      },
+      currentStep: "review_action_modifiers" as const,
+    };
+
+    expect(
+      isSelectedCombatRoundStepCurrentForGm({
+        participantId: "top",
+        state: advanced,
+        step: "select_actions",
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedCombatRoundStepCurrentForGm({
+        participantId: "future-participant",
+        state: existing,
+        step: "select_actions",
       }),
     ).toBe(false);
   });

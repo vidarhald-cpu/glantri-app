@@ -493,7 +493,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
     expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
     expect(source).toContain(
-      "const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentTask",
+      "!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression",
     );
     expect(source).toContain("readOnly={inspectorIsHistorical}");
     expect(source).toContain("? inspectorHistoricalActionResult");
@@ -902,6 +902,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const [inspectionSelection, setInspectionSelection]");
+    expect(source).toContain("isSelectedCombatRoundStepCurrentForGm");
+    expect(source).toContain("inspectorSelectionIsCurrentProgression");
     expect(source).toContain(
       'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',
     );

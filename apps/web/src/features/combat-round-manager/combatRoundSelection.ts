@@ -46,6 +46,31 @@ export function isSelectedCombatRoundStepExecutable(input: {
   );
 }
 
+/**
+ * GM declaration editing stays open for every participant while the active round is still in
+ * DE. Recording one declaration advances the row cursor for data-entry convenience, but does not
+ * advance canonical combat progression beyond select_actions. Other steps remain bound to the
+ * exact current task cursor.
+ */
+export function isSelectedCombatRoundStepCurrentForGm(input: {
+  participantId?: string;
+  state: CombatRoundState;
+  step?: CombatRoundStep;
+}): boolean {
+  if (
+    input.step === "select_actions" &&
+    input.state.currentStep === "select_actions" &&
+    input.participantId &&
+    input.state.participants.some(
+      (participant) => participant.participantId === input.participantId,
+    )
+  ) {
+    return true;
+  }
+
+  return isSelectedCombatRoundStepExecutable(input);
+}
+
 export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boolean {
   return (
     step === "select_actions" ||

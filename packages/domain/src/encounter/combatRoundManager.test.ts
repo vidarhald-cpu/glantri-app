@@ -5558,6 +5558,71 @@ describe("combat round manager", () => {
     ]);
   });
 
+  it("lets GM declaration recommits supersede the active DE declaration without duplicate attacks", () => {
+    const initial = initializeCombatRoundState({ encounter: encounter() });
+    const declare = (
+      state: typeof initial,
+      actionId: "attack_parry" | "double_attack" | "parry_attack",
+      createdAt: string,
+    ) =>
+      recordCombatRoundDeclaration({
+        command: { createdAt, createdByUserId: "gm-1" },
+        declaration: {
+          actionId,
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+              targetParticipantId: "guard",
+            },
+            phase2: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+              targetParticipantId: "guard",
+            },
+          },
+          roundNumber: initial.roundNumber,
+        },
+        participantId: "gladiator",
+        state,
+        submittedBy: "gm",
+      });
+    const first = declare(initial, "attack_parry", "2026-01-01T00:01:00.000Z");
+    const second = declare(first, "double_attack", "2026-01-01T00:02:00.000Z");
+    const corrected = declare(second, "attack_parry", "2026-01-01T00:03:00.000Z");
+
+    expect(corrected.currentStep).toBe("select_actions");
+    expect(corrected.participants[0]?.declaration).toMatchObject({
+      actionId: "attack_parry",
+      submittedBy: "gm",
+    });
+    expect(corrected.commands.filter((command) => command.type === "declare_action")).toHaveLength(
+      3,
+    );
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: corrected,
+      }),
+    ).toBe(true);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: corrected,
+      }),
+    ).toBe(false);
+  });
+
   it("undoes the latest DE command even when an older DE cell is selected", () => {
     const threeParticipantEncounter = encounter({
       participants: [

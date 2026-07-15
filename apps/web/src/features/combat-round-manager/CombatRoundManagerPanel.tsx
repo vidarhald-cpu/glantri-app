@@ -212,7 +212,7 @@ import {
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
-  isSelectedCombatRoundStepExecutable,
+  isSelectedCombatRoundStepCurrentForGm,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
@@ -3899,9 +3899,9 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspectionSelection.step,
   });
-  const inspectorSelectionIsCurrentTask =
+  const inspectorSelectionIsCurrentProgression =
     selectedRoundIsActive &&
-    isSelectedCombatRoundStepExecutable({
+    isSelectedCombatRoundStepCurrentForGm({
       participantId: inspector.participant?.participantId,
       state: roundState,
       step: inspector.step,
@@ -4181,7 +4181,8 @@ export default function CombatRoundManagerPanel({
     step: inspector.step,
   });
   const inspectorHistoricalStepOutcome = deriveCombatHistoryStepOutcome(inspectorSnapshot);
-  const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentTask;
+  const inspectorIsHistorical =
+    !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
   ) =>
@@ -4399,7 +4400,7 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorCanExecuteSelectedStep =
     selectedRoundIsActive &&
-    (inspectorSelectionIsCurrentTask ||
+    (inspectorSelectionIsCurrentProgression ||
       (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
@@ -5378,7 +5379,7 @@ export default function CombatRoundManagerPanel({
     events: selectCombatEventsForTrackerCell({
       events: selectedTimelineRoundState.events,
       participantId: inspector.participant?.participantId,
-      retainLatestWhenEmpty: !inspectorIsHistorical && inspectorSelectionIsCurrentTask,
+      retainLatestWhenEmpty: !inspectorIsHistorical && inspectorSelectionIsCurrentProgression,
       step: inspector.step,
     }),
     participants: selectedTimelineRoundState.participants,
