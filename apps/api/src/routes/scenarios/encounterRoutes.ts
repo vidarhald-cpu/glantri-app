@@ -58,6 +58,7 @@ import {
   getCombatDistanceParticipantAliases,
   getCombatDeclarationAttackPhases,
   getCombatRoundDistanceEdge,
+  getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getPlayerCombatCurrentRollAction,
@@ -1626,7 +1627,7 @@ function buildPlayerSafeDistanceControlProposalForUser(input: {
     }),
   } satisfies CombatRoundEndDistanceProposal;
 
-  if (input.proposal.status === "committed") {
+  if (getCombatRoundEndDistanceProposalLifecycle(input.proposal) === "applied") {
     return safeProposal;
   }
 

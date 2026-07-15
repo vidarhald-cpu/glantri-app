@@ -67,6 +67,7 @@ import {
   getCombatRoundPhaseInitiativeChoiceStatuses,
   getReactiveAttackPhase2InitiativeModifier,
   getCombatRoundEndDistanceControlPendingRollCount,
+  getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundEndHealthCheckPendingRollCount,
   getCombatRoundEndHealthCheckPendingRolls,
   getNextCombatRoundEndTask,
@@ -12264,7 +12265,126 @@ describe("combat round manager", () => {
       pairKey: proposal?.pairKey,
       participantId: "gladiator",
     });
-    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBe("Distance control commit pending.");
+    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBe(
+      "Distance control for The Gladiator ↔ City guard must be applied before starting the next round.",
+    );
+  });
+
+  it("keeps a same-distance application complete through persisted reload and starts one next round", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 3,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const gladiatorDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "gm_proxy",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "gm",
+    });
+    const bothDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 3,
+              source: "gm_proxy",
+              targetParticipantId: "gladiator",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "guard",
+      state: gladiatorDeclared,
+      submittedBy: "gm",
+    });
+    const prepared = prepareCombatRoundEndReview({
+      command: { createdAt: "2026-01-01T00:09:00.000Z", createdByUserId: "gm-1" },
+      state: {
+        ...bothDeclared,
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      },
+    });
+    const proposalId = prepared.roundEndReview?.proposedDistances[0]?.id ?? "missing";
+    const applied = commitCombatRoundEndDistanceControl({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      distanceProposalId: proposalId,
+      state: prepared,
+    }).state;
+    const gladiatorComplete = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:11:00.000Z", createdByUserId: "gm-1" },
+      combatEffects: combatEffectsWith([]),
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: applied,
+    }).state;
+    const roundComplete = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:12:00.000Z", createdByUserId: "gm-1" },
+      combatEffects: combatEffectsWith([]),
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: gladiatorComplete,
+    }).state;
+    const persistedWithLegacyStatus = combatRoundStateSchema.parse({
+      ...JSON.parse(JSON.stringify(roundComplete)),
+      currentCursor: { roundNumber: 3, step: "SU" },
+      roundEndReview: {
+        ...roundComplete.roundEndReview,
+        proposedDistances: roundComplete.roundEndReview?.proposedDistances.map((proposal) => ({
+          ...proposal,
+          // Reproduces the persisted conflict: the apply fact survived while this status was stale.
+          status: "review_ready",
+        })),
+      },
+      selectedParticipantId: "guard",
+      selectedStep: "select_actions",
+    });
+
+    expect(getCombatRoundEndDistanceProposalLifecycle(
+      persistedWithLegacyStatus.roundEndReview!.proposedDistances[0]!,
+    )).toBe("applied");
+    expect(getCombatRoundStartNextRoundBlocker(persistedWithLegacyStatus)).toBeUndefined();
+
+    const reloaded = initializeCombatRoundState({
+      encounter: encounter({ combatRoundState: persistedWithLegacyStatus, currentRound: 3 }),
+    });
+
+    expect(reloaded.roundEndReview?.proposedDistances[0]).toMatchObject({
+      appliedDistance: 3,
+      currentDistance: 3,
+      status: "committed",
+    });
+    expect(getNextCombatRoundEndTask({ state: reloaded })).toEqual({ kind: "round_boundary" });
+    expect(isCombatRoundEndReviewComplete(reloaded)).toBe(true);
+
+    const nextRound = advanceCombatRoundStep(reloaded, {
+      command: { createdAt: "2026-01-01T00:13:00.000Z", createdByUserId: "gm-1" },
+    });
+
+    expect(nextRound.roundNumber).toBe(4);
+    expect(nextRound.rounds.map((round) => round.roundNumber)).toEqual([3]);
+    expect(getDistanceBetween(nextRound.distanceState, "gladiator", "guard")).toBe(3);
+    expect(nextRound.roundEndReview).toBeUndefined();
   });
 
   it("rolls conflicting Dodge distance control and commits the winner for the next round", () => {
@@ -12573,6 +12693,12 @@ describe("combat round manager", () => {
       status: "rolled",
     });
     expect(undone.roundEndReview?.proposedDistances[0]?.appliedDistance).toBeUndefined();
+    expect(getNextCombatRoundEndTask({ state: undone })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_commit",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
     expect(undone.events.map((event) => event.type)).toEqual([
       "distance_control_roll",
       "distance_control_roll",

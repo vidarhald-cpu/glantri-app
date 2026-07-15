@@ -737,7 +737,9 @@ describe("CombatRoundManagerPanel", () => {
       "proposedDistances",
     );
     expect(distancePanelSource).toContain("const distanceProposals");
-    expect(distancePanelSource).toContain('proposal.status !== "committed"');
+    expect(distancePanelSource).toContain(
+      'getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied"',
+    );
     expect(distancePanelSource).toContain(
       "if (input.roundReview && distanceProposals.length === 0)",
     );
@@ -752,6 +754,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_roll"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_commit"');
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
+    expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
+    expect(source).toContain(
+      'roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState)',
+    );
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
     expect(source).toContain("commitRoundEndDistanceControl(");

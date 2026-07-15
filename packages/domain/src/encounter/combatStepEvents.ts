@@ -6,6 +6,7 @@ import {
   combatRoundStepSnapshotSchema,
   getCombatRoundAttackResultId,
   getCombatRoundDamageResultId,
+  getCombatRoundEndDistanceProposalLifecycle,
   type CombatRoundCommand,
   type CombatRoundCommandType,
   type CombatRoundEndReview,
@@ -835,7 +836,8 @@ function distanceCandidates(input: {
       );
     });
 
-    const resultKnown = proposal.status === "rolled" || proposal.status === "review_ready" || proposal.status === "committed";
+    const lifecycle = getCombatRoundEndDistanceProposalLifecycle(proposal);
+    const resultKnown = lifecycle === "resolved" || lifecycle === "applied";
     if (resultKnown) {
       const commitCommand = input.commands.find(
         ({ value }) =>
@@ -873,7 +875,7 @@ function distanceCandidates(input: {
       );
     }
 
-    if (proposal.status === "committed") {
+    if (lifecycle === "applied") {
       const command = input.commands.find(
         ({ value }) =>
           value.type === "commit_round_end_distance_control" &&

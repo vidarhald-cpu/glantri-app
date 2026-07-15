@@ -566,6 +566,37 @@ export const combatRoundEndDistanceProposalSchema = z.object({
 });
 export type CombatRoundEndDistanceProposal = z.infer<typeof combatRoundEndDistanceProposalSchema>;
 
+export type CombatRoundEndDistanceProposalLifecycle = "pending_rolls" | "resolved" | "applied";
+
+/**
+ * Canonical lifecycle used by round-end task selection, review completion, and round advancement.
+ * `appliedDistance` is retained as compatibility evidence for persisted proposals written by the
+ * apply command before every caller consistently retained the matching `committed` status.
+ */
+export function getCombatRoundEndDistanceProposalLifecycle(
+  proposal: CombatRoundEndDistanceProposal,
+): CombatRoundEndDistanceProposalLifecycle {
+  if (proposal.status === "committed" || proposal.appliedDistance !== undefined) {
+    return "applied";
+  }
+
+  if (proposal.status === "pending" || proposal.status === "pending_rolls") {
+    return "pending_rolls";
+  }
+
+  return "resolved";
+}
+
+function normalizeCombatRoundEndDistanceProposalLifecycle(
+  proposal: CombatRoundEndDistanceProposal,
+): CombatRoundEndDistanceProposal {
+  return proposal.accepted &&
+    proposal.status !== "committed" &&
+    proposal.appliedDistance !== undefined
+    ? combatRoundEndDistanceProposalSchema.parse({ ...proposal, status: "committed" })
+    : proposal;
+}
+
 export const combatRoundEndParticipantReviewSchema = z.object({
   committedAt: z.string().datetime().optional(),
   committedByUserId: idSchema.optional(),
@@ -10249,18 +10280,11 @@ export type CombatRoundEndTask =
     };
 
 function isAcceptedDistanceProposalPending(proposal: CombatRoundEndDistanceProposal): boolean {
-  return (
-    proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls")
-  );
+  return proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "pending_rolls";
 }
 
 function isAcceptedDistanceProposalCommitReady(proposal: CombatRoundEndDistanceProposal): boolean {
-  return (
-    proposal.accepted &&
-    proposal.status !== "pending" &&
-    proposal.status !== "pending_rolls" &&
-    proposal.status !== "committed"
-  );
+  return proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved";
 }
 
 function getRoundEndReviewParticipantTaskId(input: {
@@ -10365,7 +10389,8 @@ function getCombatRoundEndTaskCursor(input: {
 
 function hasUncommittedAcceptedDistanceProposal(roundEndReview: CombatRoundEndReview): boolean {
   return roundEndReview.proposedDistances.some(
-    (proposal) => proposal.accepted && proposal.status !== "committed",
+    (proposal) =>
+      proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied",
   );
 }
 
@@ -10886,7 +10911,8 @@ export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean
 
   if (
     review.proposedDistances.some(
-      (proposal) => proposal.accepted && proposal.status !== "committed",
+      (proposal) =>
+        proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied",
     )
   ) {
     return false;
@@ -10960,7 +10986,7 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
 
   const pendingDistanceProposal = review.proposedDistances.find(
     (proposal) =>
-      proposal.accepted && (proposal.status === "pending" || proposal.status === "pending_rolls"),
+      proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "pending_rolls",
   );
 
   if (pendingDistanceProposal) {
@@ -10968,11 +10994,21 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
   }
 
   const uncommittedDistanceProposal = review.proposedDistances.find(
-    (proposal) => proposal.accepted && proposal.status !== "committed",
+    (proposal) =>
+      proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved",
   );
 
   if (uncommittedDistanceProposal) {
-    return "Distance control commit pending.";
+    const participantALabel =
+      normalized.participants.find(
+        (participant) => participant.participantId === uncommittedDistanceProposal.participantAId,
+      )?.label ?? uncommittedDistanceProposal.participantAId;
+    const participantBLabel =
+      normalized.participants.find(
+        (participant) => participant.participantId === uncommittedDistanceProposal.participantBId,
+      )?.label ?? uncommittedDistanceProposal.participantBId;
+
+    return `Distance control for ${participantALabel} ↔ ${participantBLabel} must be applied before starting the next round.`;
   }
 
   for (const participant of normalized.participants) {
@@ -12199,7 +12235,7 @@ export function commitCombatRoundEndDistanceControl(input: {
     throw new RangeError("Round-end distance control roll must be resolved before committing.");
   }
 
-  if (distanceProposal.status === "committed") {
+  if (getCombatRoundEndDistanceProposalLifecycle(distanceProposal) === "applied") {
     throw new RangeError("Round-end distance control proposal is already committed.");
   }
 
@@ -13956,6 +13992,9 @@ export function initializeCombatRoundState(input: {
             Object.entries(existing.roundEndReview.participantReviews).filter(([participantId]) =>
               participantIds.has(participantId),
             ),
+          ),
+          proposedDistances: existing.roundEndReview.proposedDistances.map(
+            normalizeCombatRoundEndDistanceProposalLifecycle,
           ),
         })
       : undefined;

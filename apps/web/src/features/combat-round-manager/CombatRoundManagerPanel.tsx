@@ -80,6 +80,7 @@ import {
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundEndDistanceControlPendingRollCount,
+  getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundEndHealthCheckPendingRollCount,
   getNextCombatRoundEndTask,
   getCombatRoundModifierPhaseForStep,
@@ -866,12 +867,7 @@ function buildRoundEndDistanceRollOptionKey(input: {
 }
 
 function isRoundEndDistanceCommitReady(proposal: CombatRoundEndDistanceProposal): boolean {
-  return (
-    proposal.accepted &&
-    proposal.status !== "pending" &&
-    proposal.status !== "pending_rolls" &&
-    proposal.status !== "committed"
-  );
+  return proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved";
 }
 
 function getRoundEndDistancePendingRollOptions(input: {
@@ -3607,7 +3603,7 @@ function CombatRoundEndDistanceControlPanel(input: {
   roundReview?: CombatRoundEndReview;
 }) {
   const distanceProposals = (input.roundReview?.proposedDistances ?? []).filter(
-    (proposal) => proposal.status !== "committed",
+    (proposal) => getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied",
   );
 
   if (input.roundReview && distanceProposals.length === 0) {
@@ -4044,7 +4040,8 @@ export default function CombatRoundManagerPanel({
   const inspectorRoundEndDistanceControlComplete = Boolean(
     selectedTimelineRoundState.roundEndReview &&
     !selectedTimelineRoundState.roundEndReview.proposedDistances.some(
-      (proposal) => proposal.accepted && proposal.status !== "committed",
+      (proposal) =>
+        proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied",
     ),
   );
   const buildRoundEndParticipantInputs = (

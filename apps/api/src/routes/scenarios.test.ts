@@ -4798,6 +4798,109 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("reloads an applied contested distance and starts the next round exactly once", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    const appliedState = commitDistanceControlFixture({
+      proposalId: fixture.proposalId,
+      state: rolledState,
+    });
+    const firstReview = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:13:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-1",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-1",
+      state: appliedState,
+    }).state;
+    const completedState = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:14:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-2",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-2",
+      state: firstReview,
+    }).state;
+    const persistedState = {
+      ...JSON.parse(JSON.stringify(completedState)),
+      currentCursor: { roundNumber: completedState.roundNumber, step: "SU" },
+      roundEndReview: {
+        ...completedState.roundEndReview,
+        proposedDistances: completedState.roundEndReview?.proposedDistances.map((proposal) => ({
+          ...proposal,
+          // Browser reproduction: apply/event facts persisted, but this lifecycle field was stale.
+          status: "rolled",
+        })),
+      },
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "select_actions",
+    } as CombatRoundState;
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: persistedState,
+        currentRound: persistedState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: { stepSnapshots: [] },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const nextState = response.json().encounter.combatRoundState as CombatRoundState;
+    expect(nextState.roundNumber).toBe(completedState.roundNumber + 1);
+    expect(nextState.rounds).toHaveLength(1);
+    expect(nextState.rounds[0]?.roundNumber).toBe(completedState.roundNumber);
+    expect(getDistanceBetween(
+      nextState.distanceState,
+      "encounter-participant-1",
+      "encounter-participant-2",
+    )).toBe(3);
+    expect(lifecycle.encounter.combatRoundState?.roundNumber).toBe(completedState.roundNumber + 1);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects starting the next round while a resolved distance still awaits apply", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    setupMutableCombatRouteState({
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: rolledState,
+        currentRound: rolledState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: { stepSnapshots: [] },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe(
+      "Distance control for The Gladiator ↔ City guard must be applied before starting the next round.",
+    );
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("lets a GM roll the canonical current distance-control task through a narrow route", async () => {
     const fixture = makeDistanceControlReviewFixture();
     const staleInspectionState = {
