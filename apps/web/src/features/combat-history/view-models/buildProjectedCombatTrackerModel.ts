@@ -63,6 +63,9 @@ function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown
 export function formatProjectedCombatTrackerHoverDetail(
   events: readonly ProjectedCombatHistoryEvent[],
 ): string | undefined {
+  if (events.some((event) => event.type === "feint_impossible")) {
+    return "feint ruled impossible; no roll required.";
+  }
   const skipped = events.find(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
@@ -114,6 +117,24 @@ export function formatProjectedCombatTrackerHoverDetail(
       return "damage committed.";
     }
     return damage.status === "not_applicable" ? "damage not applicable." : "damage pending.";
+  }
+
+  const feint = [...events]
+    .reverse()
+    .find((event) =>
+      [
+        "feint_committed",
+        "feint_impossible",
+        "feint_result",
+        "feint_roll",
+        "feint_feasibility",
+      ].includes(event.type),
+    );
+  if (feint) {
+    if (feint.type === "feint_committed") return "feint result committed.";
+    if (feint.type === "feint_result") return "feint result awaiting GM review.";
+    if (feint.type === "feint_roll") return "feint opposed roll in progress.";
+    return "feint permitted; opposed rolls pending.";
   }
 
   const declaration = events.find((event) => event.type === "declaration");

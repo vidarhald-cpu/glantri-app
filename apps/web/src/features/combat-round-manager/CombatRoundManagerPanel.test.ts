@@ -21,6 +21,20 @@ function readPanelSource(): string {
 }
 
 describe("CombatRoundManagerPanel", () => {
+  it("keeps Feint-Attack GM adjudication inside the canonical current-action flow", () => {
+    const source = readSource();
+
+    expect(source).toContain("Feint method");
+    expect(source).toContain("Possible with adjustment");
+    expect(source).toContain("Commit feint result");
+    expect(source).toContain("reviewCombatFeintFeasibilityOnServer");
+    expect(source).toContain("rollCombatFeintOnServer");
+    expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
+    expect(source).toContain("commitCombatFeintOnServer");
+    expect(source).toContain("inspectorFeintExpectedParticipantId");
+    expect(source).toContain("isCombatFeintResistanceSkill");
+  });
+
   it("renders the GM round manager orchestration controls", () => {
     const source = readSource();
 
@@ -490,9 +504,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('snapshot.actionResultStatus === "skipped"');
     expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
     expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
-    expect(source).toContain(
-      "!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression",
-    );
+    expect(source).toContain("!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression");
     expect(source).toContain("readOnly={inspectorIsHistorical}");
     expect(source).toContain("? inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");

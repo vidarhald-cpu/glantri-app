@@ -17,6 +17,7 @@ export * from "./encounter/combatStepEvents";
 export * from "./encounter/combatDistance";
 export * from "./encounter/combatMovementIntent";
 export * from "./encounter/combatEffects";
+export * from "./encounter/combatFeint";
 export * from "./encounter/combatModifierProjection";
 export * from "./encounter/combatActionModifiers";
 export * from "./encounter/combatDeclarationValidation";

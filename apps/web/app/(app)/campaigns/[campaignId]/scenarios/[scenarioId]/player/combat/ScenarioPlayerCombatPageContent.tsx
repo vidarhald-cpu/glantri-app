@@ -104,6 +104,7 @@ import {
   formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
+  resolveCombatFeintDeclarationRequestTarget,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
@@ -115,7 +116,11 @@ import {
 } from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
+import {
+  buildCharacterSheetSummary,
+  isCombatFeintResistanceSkill,
+  type CombatAllocationState,
+} from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
@@ -144,6 +149,7 @@ import {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollCombatFeintOnServer,
   rollRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   submitCombatDeclarationOnServer,
@@ -1129,6 +1135,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectableParticipants, setSelectableParticipants] = useState<ScenarioParticipant[]>([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("");
+  const [feintMethod, setFeintMethod] = useState<"movement" | "weapon">("movement");
+  const [feintSkillId, setFeintSkillId] = useState("dodge");
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
@@ -1263,14 +1271,7 @@ export default function ScenarioPlayerCombatPageContent({
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [
-    currentUser,
-    encounterId,
-    isGameMaster,
-    scenarioId,
-    selectedParticipantId,
-    sessionLoading,
-  ]);
+  }, [currentUser, encounterId, isGameMaster, scenarioId, selectedParticipantId, sessionLoading]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -1560,6 +1561,8 @@ export default function ScenarioPlayerCombatPageContent({
     setSelectedMovementId(nextDraft.movementId);
     setSelectedMovementIntent(nextDraft.movementIntent);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
+    setFeintMethod(selectedRoundDeclaration?.feint?.method ?? "movement");
+    setFeintSkillId(selectedRoundDeclaration?.feint?.attackerSkillId ?? "dodge");
     setCombatContextDraft(nextDraft.combatContext);
     setPhaseCombatContextDrafts(nextDraft.phaseContexts);
     setCombatDeclarationDraftDirty(false);
@@ -1794,6 +1797,13 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
+  const selectedFeintProposal = combatRoundState?.feintProposals.find((proposal) => {
+    if (!selectedRoundParticipant || proposal.status !== "awaiting_rolls") return false;
+    const expectedParticipantId = proposal.attackerRollRecorded
+      ? proposal.defenderParticipantId
+      : proposal.attackerParticipantId;
+    return expectedParticipantId === selectedRoundParticipant.participantId;
+  });
   const currentModifierPhase = getPlayerCombatModifierDisplayPhase({
     actionId: selectedActionId,
     step: currentCombatStep,
@@ -1965,9 +1975,23 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
+    const feintTargetResolution =
+      selectedActionId === "feint_attack"
+        ? resolveCombatFeintDeclarationRequestTarget({
+            encounterParticipants: encounterSession?.participants ?? [],
+            phaseContexts: phaseCombatContextDrafts,
+          })
+        : undefined;
+    if (feintTargetResolution && !feintTargetResolution.ok) {
+      setError(feintTargetResolution.message);
+      return;
+    }
+    const requestPhaseContexts = feintTargetResolution?.ok
+      ? feintTargetResolution.phaseContexts
+      : phaseCombatContextDrafts;
     const targetValidation = validateCombatDeclarationTargets({
       actionId: selectedActionId || undefined,
-      phaseContexts: phaseCombatContextDrafts,
+      phaseContexts: requestPhaseContexts,
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
 
@@ -1988,12 +2012,21 @@ export default function ScenarioPlayerCombatPageContent({
         additionalActionNotes,
         combatContext: projectedCombatContextDraft,
         encounterId,
+        feint:
+          selectedActionId === "feint_attack" && feintTargetResolution?.ok
+            ? {
+                attackerSkillId: feintMethod === "movement" ? "dodge" : feintSkillId,
+                method: feintMethod,
+                targetParticipantId: feintTargetResolution.targetParticipantId,
+              }
+            : undefined,
         movementId: selectedMovementId || undefined,
         movementIntent: selectedMovementIntent,
-        phaseContexts: phaseCombatContextDrafts,
+        phaseContexts: requestPhaseContexts,
         phaseAttackSources: {
           phase1:
-            selectedActionId === "double_attack"
+            selectedActionId === "double_attack" ||
+            (selectedActionId === "feint_attack" && feintMethod === "weapon")
               ? buildCombatAttackSourceRef({
                   phaseKey: "phase1",
                   reference: phaseCombatLoadoutSummaries.phase1.reference,
@@ -2001,7 +2034,7 @@ export default function ScenarioPlayerCombatPageContent({
                 })
               : undefined,
           phase2:
-            selectedActionId === "double_attack"
+            selectedActionId === "double_attack" || selectedActionId === "feint_attack"
               ? buildCombatAttackSourceRef({
                   phaseKey: "phase2",
                   reference: phaseCombatLoadoutSummaries.phase2.reference,
@@ -2027,6 +2060,26 @@ export default function ScenarioPlayerCombatPageContent({
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to save combat context.",
       );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function rollFeint() {
+    if (readOnlyInspection || !selectedParticipant || !encounterId || !selectedFeintProposal) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const { encounter } = await rollCombatFeintOnServer({
+        encounterId,
+        proposalId: selectedFeintProposal.id,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll the feint.");
     } finally {
       setSavingCombatContext(false);
     }
@@ -3244,26 +3297,33 @@ export default function ScenarioPlayerCombatPageContent({
     selectedPhaseAttackChoiceSelectorAvailable && phaseAttackChoiceSelection === "back_out";
   const selectedDoubleAttackDecisionAvailable = Boolean(
     !readOnlyInspection &&
-      selectedRoundParticipant?.declaration?.actionId === "double_attack" &&
-      currentCombatStep === "review_phase_2_modifiers" &&
-      selectedRoundParticipant.attackResults.phase1 &&
-      !selectedRoundParticipant.attackResults.phase2 &&
-      !combatRoundState?.commands.some(
-        (command) =>
-          command.roundNumber === combatRoundState.roundNumber &&
-          command.participantId === selectedRoundParticipant.participantId &&
-          command.type === "decide_double_attack_phase2",
-      ),
+    selectedRoundParticipant?.declaration?.actionId === "double_attack" &&
+    currentCombatStep === "review_phase_2_modifiers" &&
+    selectedRoundParticipant.attackResults.phase1 &&
+    !selectedRoundParticipant.attackResults.phase2 &&
+    !combatRoundState?.commands.some(
+      (command) =>
+        command.roundNumber === combatRoundState.roundNumber &&
+        command.participantId === selectedRoundParticipant.participantId &&
+        command.type === "decide_double_attack_phase2",
+    ),
   );
   const declarationTargetValidationMessage =
-    !currentInitiativePhase && declarationIncomplete ? targetValidation.message : undefined;
+    selectedActionId === "feint_attack" && feintMethod === "weapon" && !feintSkillId
+      ? "Select a skill for the feint."
+      : !currentInitiativePhase && declarationIncomplete
+        ? targetValidation.message
+        : undefined;
   const declareActionDisabled =
     controlsDisabled ||
     savingCombatContext ||
     !displayedParticipant ||
     (currentInitiativePhase
       ? !canUseInitiativeButton
-      : playerDeclarationLocked || !hasMeaningfulDeclaration || !targetValidation.valid);
+      : playerDeclarationLocked ||
+        !hasMeaningfulDeclaration ||
+        !targetValidation.valid ||
+        (selectedActionId === "feint_attack" && feintMethod === "weapon" && !feintSkillId));
   const declarationButtonLabel =
     currentCombatStep === "select_actions" && (!playerDeclarationLocked || declarationIncomplete)
       ? "Declare action"
@@ -3274,60 +3334,68 @@ export default function ScenarioPlayerCombatPageContent({
         });
   const playerActionButtonLabel = selectedHealthCheckActionAvailable
     ? "Roll health check"
-    : selectedDistanceControlActionAvailable
-      ? "Roll distance control"
-      : selectedDoubleAttackDecisionAvailable
-        ? doubleAttackPhase2Decision === "cancel"
-          ? "Cancel Attack 2"
-          : "Continue Attack 2"
-      : selectedPhaseAttackChoiceIsBackOut
-        ? "Back out of attack"
-        : selectedCombatExperienceRequired
-          ? !selectedCombatExperienceWindowOpen
-            ? "Waiting for GM"
-            : selectedCombatExperienceNoRollAvailable
-              ? "Confirm Combat Experience"
-              : "Roll Combat Experience"
-          : selectedPhaseInitiativeChoice
-            ? "Phase choice submitted"
-            : selectedPhaseContinueAvailable
-              ? "Continue attack"
-              : (attackerPrivilegedAction?.label ??
-                currentParryAction?.label ??
-                currentAttackAction?.label ??
-                declarationButtonLabel);
+    : selectedFeintProposal
+      ? selectedFeintProposal.attackerRollRecorded
+        ? "Roll feint resistance"
+        : "Roll feint"
+      : selectedDistanceControlActionAvailable
+        ? "Roll distance control"
+        : selectedDoubleAttackDecisionAvailable
+          ? doubleAttackPhase2Decision === "cancel"
+            ? "Cancel Attack 2"
+            : "Continue Attack 2"
+          : selectedPhaseAttackChoiceIsBackOut
+            ? "Back out of attack"
+            : selectedCombatExperienceRequired
+              ? !selectedCombatExperienceWindowOpen
+                ? "Waiting for GM"
+                : selectedCombatExperienceNoRollAvailable
+                  ? "Confirm Combat Experience"
+                  : "Roll Combat Experience"
+              : selectedPhaseInitiativeChoice
+                ? "Phase choice submitted"
+                : selectedPhaseContinueAvailable
+                  ? "Continue attack"
+                  : (attackerPrivilegedAction?.label ??
+                    currentParryAction?.label ??
+                    currentAttackAction?.label ??
+                    declarationButtonLabel);
   const playerActionButtonDisabled = selectedHealthCheckActionAvailable
     ? controlsDisabled || savingCombatContext
-    : selectedDistanceControlActionAvailable
+    : selectedFeintProposal
       ? controlsDisabled || savingCombatContext
-      : selectedDoubleAttackDecisionAvailable
+      : selectedDistanceControlActionAvailable
         ? controlsDisabled || savingCombatContext
-      : selectedPhaseAttackChoiceIsBackOut
-        ? controlsDisabled || savingCombatContext || !selectedPhaseCombatExperienceBackOutAvailable
-        : attackerPrivilegedAction
-          ? selectedCombatExperienceRequired ||
-            controlsDisabled ||
-            savingCombatContext ||
-            attackerPrivilegedAction.disabled
-          : currentParryAction
-            ? selectedCombatExperienceRequired ||
-              controlsDisabled ||
+        : selectedDoubleAttackDecisionAvailable
+          ? controlsDisabled || savingCombatContext
+          : selectedPhaseAttackChoiceIsBackOut
+            ? controlsDisabled ||
               savingCombatContext ||
-              currentParryAction.disabled
-            : currentAttackAction
+              !selectedPhaseCombatExperienceBackOutAvailable
+            : attackerPrivilegedAction
               ? selectedCombatExperienceRequired ||
                 controlsDisabled ||
                 savingCombatContext ||
-                currentAttackAction.disabled
-              : selectedCombatExperienceRequired
-                ? controlsDisabled ||
+                attackerPrivilegedAction.disabled
+              : currentParryAction
+                ? selectedCombatExperienceRequired ||
+                  controlsDisabled ||
                   savingCombatContext ||
-                  !selectedCombatExperienceActionAvailable
-                : selectedPhaseInitiativeChoice
-                  ? true
-                  : selectedPhaseContinueAvailable
-                    ? controlsDisabled || savingCombatContext
-                    : declareActionDisabled;
+                  currentParryAction.disabled
+                : currentAttackAction
+                  ? selectedCombatExperienceRequired ||
+                    controlsDisabled ||
+                    savingCombatContext ||
+                    currentAttackAction.disabled
+                  : selectedCombatExperienceRequired
+                    ? controlsDisabled ||
+                      savingCombatContext ||
+                      !selectedCombatExperienceActionAvailable
+                    : selectedPhaseInitiativeChoice
+                      ? true
+                      : selectedPhaseContinueAvailable
+                        ? controlsDisabled || savingCombatContext
+                        : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -3591,6 +3659,10 @@ export default function ScenarioPlayerCombatPageContent({
               onActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedActionId(actionId);
+                if (actionId === "feint_attack") {
+                  setFeintMethod("movement");
+                  setFeintSkillId("dodge");
+                }
               }}
               onAdditionalActionNotesChange={(notes) => {
                 markCombatDeclarationDraftDirty();
@@ -3649,11 +3721,8 @@ export default function ScenarioPlayerCombatPageContent({
 
               return (
                 <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
-                  {phaseModel.showAttackStats && phaseModel.attackStats ? (
-                    <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                  ) : null}
-                  {phaseModel.showAttackLocationSelector ? (
-                    <>
+                  {selectedActionId === "feint_attack" && phaseKey === "phase1" ? (
+                    <div style={{ display: "grid", gap: "0.65rem" }}>
                       <PlayerCombatAttackTargetSelector
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
@@ -3665,9 +3734,106 @@ export default function ScenarioPlayerCombatPageContent({
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({
-                            ...current,
-                            [phaseKey]: combatContext,
+                            phase1: combatContext,
+                            phase2: {
+                              ...current.phase2,
+                              targetParticipantId: combatContext.targetParticipantId,
+                            },
                           }));
+                        }}
+                        targetOptions={targetOptions}
+                      />
+                      <label style={{ display: "grid", gap: "0.25rem" }}>
+                        <strong>Feint method</strong>
+                        <select
+                          disabled={declarationControlsDisabled}
+                          onChange={(event) => {
+                            markCombatDeclarationDraftDirty();
+                            const method = event.target.value === "weapon" ? "weapon" : "movement";
+                            setFeintMethod(method);
+                            setFeintSkillId(method === "movement" ? "dodge" : "");
+                          }}
+                          value={feintMethod}
+                        >
+                          <option value="movement">Movement</option>
+                          <option value="weapon">Weapon</option>
+                        </select>
+                      </label>
+                      <label style={{ display: "grid", gap: "0.25rem" }}>
+                        <strong>Attacking skill</strong>
+                        <select
+                          disabled={declarationControlsDisabled || feintMethod === "movement"}
+                          onChange={(event) => {
+                            markCombatDeclarationDraftDirty();
+                            setFeintSkillId(event.target.value);
+                          }}
+                          value={feintMethod === "movement" ? "dodge" : feintSkillId}
+                        >
+                          {feintMethod === "movement" ? <option value="dodge">Dodge</option> : null}
+                          {feintMethod === "weapon" ? (
+                            <option value="">Select combat skill</option>
+                          ) : null}
+                          {feintMethod === "weapon"
+                            ? (content?.skills ?? [])
+                                .filter(isCombatFeintResistanceSkill)
+                                .map((skill) => (
+                                  <option key={skill.id} value={skill.id}>
+                                    {skill.name}
+                                  </option>
+                                ))
+                            : null}
+                        </select>
+                      </label>
+                      <div>Characteristic: Dexterity</div>
+                      <div>
+                        Defender resists with their highest close-combat skill · Intelligence.
+                      </div>
+                      <div>Feasibility: GM review required before opposed rolls.</div>
+                      {feintMethod === "weapon" && phaseModel.attackStats ? (
+                        <>
+                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                          <PlayerCombatAttackModeSelector
+                            controlsDisabled={declarationControlsDisabled}
+                            onChange={(attackModeId) => {
+                              markCombatDeclarationDraftDirty();
+                              setPhaseCombatContextDrafts((current) => ({
+                                ...current,
+                                phase1: { ...current.phase1, attackModeId },
+                              }));
+                            }}
+                            options={phaseLoadoutSummary.attackModeOptions}
+                            selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
+                          />
+                        </>
+                      ) : null}
+                    </div>
+                  ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
+                    <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                  ) : null}
+                  {phaseModel.showAttackLocationSelector &&
+                  !(selectedActionId === "feint_attack" && phaseKey === "phase1") ? (
+                    <>
+                      <PlayerCombatAttackTargetSelector
+                        combatContext={phaseModel.phaseContext}
+                        controlsDisabled={declarationControlsDisabled}
+                        distanceLabel={
+                          targetRoundParticipant
+                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                            : undefined
+                        }
+                        onCombatContextChange={(combatContext) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseCombatContextDrafts((current) =>
+                            selectedActionId === "feint_attack" && phaseKey === "phase2"
+                              ? {
+                                  phase1: {
+                                    ...current.phase1,
+                                    targetParticipantId: combatContext.targetParticipantId,
+                                  },
+                                  phase2: combatContext,
+                                }
+                              : { ...current, [phaseKey]: combatContext },
+                          );
                         }}
                         targetOptions={targetOptions}
                       />
@@ -3735,8 +3901,7 @@ export default function ScenarioPlayerCombatPageContent({
                   <div style={{ color: "#4f5f57", display: "grid", gap: "0.2rem" }}>
                     <div>Base initiative {initiativeCalculation.baseInitiative}</div>
                     <div>
-                      Initiative modifiers{" "}
-                      {initiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
+                      Initiative modifiers {initiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
                       {initiativeCalculation.rawModifierTotal}
                     </div>
                     <div>
@@ -3904,27 +4069,29 @@ export default function ScenarioPlayerCombatPageContent({
                 onDeclareAction={() =>
                   void (selectedHealthCheckActionAvailable
                     ? rollHealthCheck()
-                    : selectedDistanceControlActionAvailable
-                    ? rollDistanceControl()
-                    : selectedDoubleAttackDecisionAvailable
-                      ? decideDoubleAttackPhase2()
-                      : selectedPhaseAttackChoiceIsBackOut
-                        ? backOutPhaseAttack()
-                        : selectedCombatExperienceRequired
-                          ? selectedCombatExperienceWindowOpen
-                            ? rollCombatExperience()
-                            : undefined
-                          : selectedPhaseContinueAvailable
-                            ? continuePhaseAttack()
-                            : attackerPrivilegedAction?.kind
-                              ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                              : currentParryAction
-                                ? rollCurrentParry()
-                                : currentAttackAction
-                                  ? rollPhaseAttack()
-                                  : currentInitiativePhase
-                                    ? rollInitiative()
-                                    : saveCombatContext())
+                    : selectedFeintProposal
+                      ? rollFeint()
+                      : selectedDistanceControlActionAvailable
+                        ? rollDistanceControl()
+                        : selectedDoubleAttackDecisionAvailable
+                          ? decideDoubleAttackPhase2()
+                          : selectedPhaseAttackChoiceIsBackOut
+                            ? backOutPhaseAttack()
+                            : selectedCombatExperienceRequired
+                              ? selectedCombatExperienceWindowOpen
+                                ? rollCombatExperience()
+                                : undefined
+                              : selectedPhaseContinueAvailable
+                                ? continuePhaseAttack()
+                                : attackerPrivilegedAction?.kind
+                                  ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                                  : currentParryAction
+                                    ? rollCurrentParry()
+                                    : currentAttackAction
+                                      ? rollPhaseAttack()
+                                      : currentInitiativePhase
+                                        ? rollInitiative()
+                                        : saveCombatContext())
                 }
                 preActionControls={selectedPhaseAttackChoiceControls}
                 saving={savingCombatContext}

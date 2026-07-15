@@ -17,7 +17,8 @@ describe("CharacterWorkspacePanel", () => {
     expect(source).toContain("physicalStateGeneralHitpoints");
     expect(source).toContain("physicalStateCurrentRoundNumber={currentRoundNumber}");
     expect(source).toContain("selectedCandidate.scenarioParticipant.state.health.maxHp");
-    expect(source).toContain("physicalStateCombatContext={selectedCandidate.scenarioParticipant.state.combat.combatContext}");
+    expect(source).toContain("physicalStateCombatContext={");
+    expect(source).toContain("selectedCandidate.scenarioParticipant.state.combat.combatContext");
     expect(source).toContain("preferCurrentCharacterRecord");
     expect(source).not.toContain("Combat arena");
   });
@@ -40,5 +41,17 @@ describe("CharacterWorkspacePanel", () => {
     expect(source).toContain(
       "onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}",
     );
+  });
+
+  it("recommits explicit GM loadout edits through the canonical scenario equipment operation", () => {
+    const source = readSource();
+
+    expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
+    expect(source).toContain("refreshSelectedScenarioEquipment");
+    expect(source).toContain(
+      "onEquipmentStateChange={isGameMaster ? refreshSelectedScenarioEquipment : undefined}",
+    );
+    expect(source).toContain("onScenarioParticipantUpdated?.(participant)");
+    expect(source).toContain("scenario equipment was refreshed");
   });
 });

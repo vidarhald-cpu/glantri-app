@@ -34,6 +34,11 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   initiative: "Initiative",
   parry: "Parry",
   participant_su_review: "Participant SU review",
+  feint_feasibility: "Feint ruling",
+  feint_roll: "Feint roll",
+  feint_result: "Opposed result",
+  feint_committed: "Feint committed",
+  feint_impossible: "Feint ruling",
 };
 
 function humanize(key: string): string {
@@ -44,7 +49,8 @@ function humanize(key: string): string {
 }
 
 function formatValue(value: unknown, identityById: ReadonlyMap<string, string>): string {
-  if (Array.isArray(value)) return value.map((entry) => formatValue(entry, identityById)).join(", ");
+  if (Array.isArray(value))
+    return value.map((entry) => formatValue(entry, identityById)).join(", ");
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
       .map(([key, nested]) => `${humanize(key)} ${formatValue(nested, identityById)}`)
@@ -72,10 +78,12 @@ function calculationFactRows(
   if (!facts) return [];
   return Object.entries(facts).flatMap(([fieldKey, value], index) =>
     isMeaningfulCalculationValue(value)
-      ? [{
-          key: `${eventId}:calculation:${fieldKey}:${index}`,
-          text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
-        }]
+      ? [
+          {
+            key: `${eventId}:calculation:${fieldKey}:${index}`,
+            text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
+          },
+        ]
       : [],
   );
 }
@@ -106,7 +114,12 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
     typeof db === "number" &&
     typeof total === "number"
   ) {
-    return [{ key: `${event.id}:calculation:attack-total`, text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}` }];
+    return [
+      {
+        key: `${event.id}:calculation:attack-total`,
+        text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}`,
+      },
+    ];
   }
 
   return [
@@ -122,10 +135,7 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
   });
 }
 
-function factValue(
-  event: ProjectedCombatHistoryEvent,
-  ...keys: string[]
-): unknown {
+function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
   for (const key of keys) {
     const involved = event.facts.involvedOutcome?.[key];
     if (involved !== undefined && involved !== null && involved !== "") return involved;
@@ -172,7 +182,9 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     case "parry": {
       const resultLabel = factLabel(factValue(event, "resultLabel"));
       const success = factValue(event, "success");
-      const result = resultLabel ?? (success === true ? "Parry succeeded" : success === false ? "Parry failed" : undefined);
+      const result =
+        resultLabel ??
+        (success === true ? "Parry succeeded" : success === false ? "Parry failed" : undefined);
       return {
         outcomeRows: resultRow(event, result ? `Result: ${result}` : undefined),
         summary:
@@ -224,11 +236,12 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const grade = factLabel(factValue(event, "criticalGrade"))?.toUpperCase();
       return {
         outcomeRows: resultRow(event, grade ? `Critical ${grade} committed.` : undefined),
-        summary: defender && total
-          ? `${defender} received ${total} damage${location ? ` to the ${location.toLowerCase()}` : ""}.`
-          : defender
-            ? `Damage committed against ${defender}.`
-            : "Damage committed.",
+        summary:
+          defender && total
+            ? `${defender} received ${total} damage${location ? ` to the ${location.toLowerCase()}` : ""}.`
+            : defender
+              ? `Damage committed against ${defender}.`
+              : "Damage committed.",
       };
     }
     case "distance_control_roll": {
@@ -247,7 +260,9 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       return {
         outcomeRows: [
           ...resultRow(event, result ? `Result: ${result}` : undefined),
-          ...(distance ? [{ key: `${event.id}:outcome:distance`, text: `Proposed distance: ${distance}` }] : []),
+          ...(distance
+            ? [{ key: `${event.id}:outcome:distance`, text: `Proposed distance: ${distance}` }]
+            : []),
         ],
         summary: "Distance-control pair result resolved.",
       };
@@ -257,8 +272,12 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const previous = factLabel(factValue(event, "previousDistance"));
       return {
         outcomeRows: [
-          ...(applied ? [{ key: `${event.id}:outcome:applied`, text: `Applied distance: ${applied}` }] : []),
-          ...(previous ? [{ key: `${event.id}:outcome:previous`, text: `Previous distance: ${previous}` }] : []),
+          ...(applied
+            ? [{ key: `${event.id}:outcome:applied`, text: `Applied distance: ${applied}` }]
+            : []),
+          ...(previous
+            ? [{ key: `${event.id}:outcome:previous`, text: `Previous distance: ${previous}` }]
+            : []),
         ],
         summary: "The next-round distance was applied.",
       };
@@ -284,6 +303,81 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       return {
         outcomeRows: resultRow(event, action ? `Action: ${action}` : undefined),
         summary: `${attacker ?? "Participant"} declared an action.`,
+      };
+    }
+    case "feint_feasibility":
+    case "feint_impossible": {
+      const feasibility = factLabel(factValue(event, "feasibility"));
+      const method = factLabel(factValue(event, "method"))?.toLowerCase();
+      return {
+        outcomeRows: resultRow(
+          event,
+          event.type === "feint_impossible"
+            ? "Feint ruled impossible."
+            : feasibility
+              ? `Feint ${feasibility.toLowerCase()}.`
+              : "Feint permitted.",
+        ),
+        summary:
+          attacker && defender
+            ? `${attacker} attempted a ${method ?? ""} feint against ${defender}.`.replace(
+                "a  feint",
+                "a feint",
+              )
+            : "Feint feasibility reviewed.",
+      };
+    }
+    case "feint_roll": {
+      const side = factLabel(factValue(event, "side"));
+      return {
+        outcomeRows: [],
+        summary:
+          side?.toLowerCase() === "defender"
+            ? `${roller ?? defender ?? "Defender"} rolled feint resistance.`
+            : `${roller ?? attacker ?? "Attacker"} rolled the feint.`,
+      };
+    }
+    case "feint_result": {
+      const difference = factValue(event, "difference");
+      return {
+        outcomeRows:
+          typeof difference === "number"
+            ? resultRow(
+                event,
+                difference > 0
+                  ? `${attacker ?? "Attacker"} won the feint contest by ${difference}.`
+                  : difference < 0
+                    ? `${defender ?? "Defender"} won the feint contest by ${Math.abs(difference)}.`
+                    : "The feint contest was tied.",
+              )
+            : [],
+        summary: "The opposed feint result was resolved.",
+      };
+    }
+    case "feint_committed": {
+      const skillOb = factValue(event, "defenderPhase2SkillObModifier");
+      const dbParry = factValue(event, "defenderPhase2DbParryModifier");
+      const attackerDb = factValue(event, "attackerPhase1DbParryModifier");
+      return {
+        outcomeRows: [
+          ...(typeof attackerDb === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:attacker-db`,
+                  text: `${attacker ?? "Attacker"} DB/Parry ${attackerDb >= 0 ? "+" : ""}${attackerDb} in Phase 1.`,
+                },
+              ]
+            : []),
+          ...(typeof skillOb === "number" && typeof dbParry === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:defender-modifiers`,
+                  text: `${defender ?? "Defender"} receives Skill/OB ${skillOb >= 0 ? "+" : ""}${skillOb} and DB/Parry ${dbParry >= 0 ? "+" : ""}${dbParry} in Phase 2.`,
+                },
+              ]
+            : []),
+        ],
+        summary: "The GM committed the feint result.",
       };
     }
   }

@@ -14,7 +14,7 @@ import type { CombatEffectEditorDraft } from "@/features/equipment/components/Ph
 import { getEquipmentTemplateById } from "@/features/equipment/equipmentSelectors";
 import {
   buildEquipmentLoadoutModuleModel,
-  EquipmentLoadoutModule
+  EquipmentLoadoutModule,
 } from "@/features/equipment/loadoutModule";
 import { PhysicalStateSection } from "@/features/equipment/components/PhysicalStateSection";
 import { isValidLoadoutThrowingWeaponItem } from "@/features/equipment/loadoutWeaponOptions";
@@ -25,7 +25,7 @@ import {
   setCharacterActivePrimaryWeaponOnServer,
   setCharacterActiveSecondaryWeaponOnServer,
   setCharacterReadyShieldOnServer,
-  setCharacterWornArmorOnServer
+  setCharacterWornArmorOnServer,
 } from "@/lib/api/localServiceClient";
 import {
   loadCurrentCharacterContext,
@@ -38,6 +38,7 @@ interface CharacterLoadoutViewProps {
   canEditCombatEffects?: boolean;
   characterId: string;
   onCombatEffectsChange?: (nextState: CombatEffectsState) => Promise<void> | void;
+  onEquipmentStateChange?: (nextState: EquipmentFeatureState) => Promise<void> | void;
   physicalStateCombatContext?: ScenarioParticipantCombatContext;
   physicalStateCombatEffects?: CombatEffectsState;
   physicalStateEncounterId?: string;
@@ -57,7 +58,10 @@ function getCharacterName(name: string | undefined): string {
   return name?.trim() || "Unnamed character";
 }
 
-function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
+function isBowOrTwoHandedTemplate(
+  templateId: string | null,
+  state: EquipmentFeatureState,
+): boolean {
   if (!templateId) {
     return false;
   }
@@ -75,6 +79,7 @@ export default function CharacterLoadoutView({
   canEditCombatEffects = false,
   characterId,
   onCombatEffectsChange,
+  onEquipmentStateChange,
   physicalStateCombatContext,
   physicalStateCombatEffects,
   physicalStateCurrentRoundNumber,
@@ -97,7 +102,7 @@ export default function CharacterLoadoutView({
     missile: undefined,
     primary: undefined,
     secondary: undefined,
-    shield: undefined
+    shield: undefined,
   });
 
   useEffect(() => {
@@ -126,7 +131,7 @@ export default function CharacterLoadoutView({
         setPageError(
           message === "Character not found."
             ? "Character not found or not accessible from this account."
-            : message
+            : message,
         );
       })
       .finally(() => {
@@ -149,48 +154,45 @@ export default function CharacterLoadoutView({
     if (
       !isValidLoadoutThrowingWeaponItem({
         item: selectedThrowingWeaponItem,
-        state
+        state,
       })
     ) {
       setThrowingWeaponItemId("");
     }
   }, [state, throwingWeaponItemId]);
 
-  const model = useMemo(
-    () => {
-      const liveCombatModifiers = showPhysicalState
-        ? buildEncounterLiveCombatModifierSummary({
-            combatContext: physicalStateCombatContext,
-            combatEffects: physicalStateCombatEffects,
-          })
-        : undefined;
+  const model = useMemo(() => {
+    const liveCombatModifiers = showPhysicalState
+      ? buildEncounterLiveCombatModifierSummary({
+          combatContext: physicalStateCombatContext,
+          combatEffects: physicalStateCombatEffects,
+        })
+      : undefined;
 
-      return buildEquipmentLoadoutModuleModel({
-        characterContext:
-          characterContext?.record && characterContext.content
-            ? {
-                content: characterContext.content,
-                record: characterContext.record
-              }
-            : null,
-        characterId,
-        errors,
-        liveCombatModifiers,
-        state,
-        throwingWeaponItemId
-      });
-    },
-    [
-      characterContext,
-      errors,
+    return buildEquipmentLoadoutModuleModel({
+      characterContext:
+        characterContext?.record && characterContext.content
+          ? {
+              content: characterContext.content,
+              record: characterContext.record,
+            }
+          : null,
       characterId,
-      physicalStateCombatContext,
-      physicalStateCombatEffects,
-      showPhysicalState,
+      errors,
+      liveCombatModifiers,
       state,
       throwingWeaponItemId,
-    ]
-  );
+    });
+  }, [
+    characterContext,
+    errors,
+    characterId,
+    physicalStateCombatContext,
+    physicalStateCombatEffects,
+    showPhysicalState,
+    state,
+    throwingWeaponItemId,
+  ]);
   const physicalStateModel = useMemo(
     () =>
       showPhysicalState
@@ -311,7 +313,7 @@ export default function CharacterLoadoutView({
         : [...currentCombatEffects.effects, ...nextEffectsFromDraft],
       events: existingEvent
         ? currentCombatEffects.events.map((event) =>
-            event.id === existingEvent.id ? nextEvent : event
+            event.id === existingEvent.id ? nextEvent : event,
           )
         : [...currentCombatEffects.events, nextEvent],
     });
@@ -345,7 +347,7 @@ export default function CharacterLoadoutView({
         missile: currentLoadout?.activeMissileWeaponItemId ?? null,
         primary: currentLoadout?.activePrimaryWeaponItemId ?? null,
         secondary: currentLoadout?.activeSecondaryWeaponItemId ?? null,
-        shield: currentLoadout?.readyShieldItemId ?? null
+        shield: currentLoadout?.readyShieldItemId ?? null,
       };
 
       nextSelection[input.kind] = input.itemId;
@@ -360,7 +362,7 @@ export default function CharacterLoadoutView({
 
       const selectedWeaponTemplateId =
         input.kind === "primary" || input.kind === "secondary" || input.kind === "missile"
-          ? state.itemsById[input.itemId ?? ""]?.templateId ?? null
+          ? (state.itemsById[input.itemId ?? ""]?.templateId ?? null)
           : null;
 
       if (
@@ -378,7 +380,8 @@ export default function CharacterLoadoutView({
       }
 
       if (input.itemId && (input.kind === "shield" || input.kind === "secondary")) {
-        const currentPrimaryTemplateId = state.itemsById[nextSelection.primary ?? ""]?.templateId ?? null;
+        const currentPrimaryTemplateId =
+          state.itemsById[nextSelection.primary ?? ""]?.templateId ?? null;
         if (currentPrimaryTemplateId && isBowOrTwoHandedTemplate(currentPrimaryTemplateId, state)) {
           nextSelection.primary = null;
         }
@@ -388,18 +391,18 @@ export default function CharacterLoadoutView({
 
       const queueOperation = (
         kind: "armor" | "primary" | "secondary" | "missile" | "shield",
-        itemId: string | null
+        itemId: string | null,
       ) => {
         const currentValue = currentLoadout
           ? kind === "armor"
-            ? currentLoadout.wornArmorItemId ?? null
+            ? (currentLoadout.wornArmorItemId ?? null)
             : kind === "shield"
-              ? currentLoadout.readyShieldItemId ?? null
+              ? (currentLoadout.readyShieldItemId ?? null)
               : kind === "primary"
-                ? currentLoadout.activePrimaryWeaponItemId ?? null
+                ? (currentLoadout.activePrimaryWeaponItemId ?? null)
                 : kind === "secondary"
-                  ? currentLoadout.activeSecondaryWeaponItemId ?? null
-                  : currentLoadout.activeMissileWeaponItemId ?? null
+                  ? (currentLoadout.activeSecondaryWeaponItemId ?? null)
+                  : (currentLoadout.activeMissileWeaponItemId ?? null)
           : null;
 
         if (currentValue === itemId) {
@@ -415,7 +418,7 @@ export default function CharacterLoadoutView({
                 ? setCharacterActivePrimaryWeaponOnServer({ characterId, itemId })
                 : kind === "secondary"
                   ? setCharacterActiveSecondaryWeaponOnServer({ characterId, itemId })
-                  : setCharacterActiveMissileWeaponOnServer({ characterId, itemId })
+                  : setCharacterActiveMissileWeaponOnServer({ characterId, itemId }),
         );
       };
 
@@ -431,15 +434,16 @@ export default function CharacterLoadoutView({
       }
 
       setState(nextState);
+      await onEquipmentStateChange?.(nextState);
       setErrors((current) => ({
         ...current,
-        [input.kind]: undefined
+        [input.kind]: undefined,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update loadout.";
       setErrors((current) => ({
         ...current,
-        [input.kind]: message
+        [input.kind]: message,
       }));
     }
   }
@@ -460,7 +464,7 @@ export default function CharacterLoadoutView({
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           Loading loadout...
@@ -474,7 +478,7 @@ export default function CharacterLoadoutView({
             border: "1px solid #e4b9a7",
             borderRadius: 12,
             color: "#8b3a1a",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           {pageError}
@@ -504,7 +508,7 @@ export default function CharacterLoadoutView({
 
             void applySelection({
               itemId,
-              kind: fieldId
+              kind: fieldId,
             });
           }}
           stickyControls

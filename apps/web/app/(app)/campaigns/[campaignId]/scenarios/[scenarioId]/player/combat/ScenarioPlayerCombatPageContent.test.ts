@@ -13,6 +13,22 @@ function readSource(): string {
 }
 
 describe("ScenarioPlayerCombatPageContent", () => {
+  it("uses the shared Feint-Attack declaration and owned-roll controls", () => {
+    const source = readSource();
+
+    expect(source).toContain('selectedActionId === "feint_attack"');
+    expect(source).toContain("Feint method");
+    expect(source).toContain("Characteristic: Dexterity");
+    expect(source).toContain("Defender resists with their highest close-combat skill");
+    expect(source).toContain("isCombatFeintResistanceSkill");
+    expect(source).toContain("rollCombatFeintOnServer");
+    expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
+    expect(source).toContain("Roll feint");
+    expect(source).toContain("Roll feint resistance");
+    expect(source).not.toContain("reviewCombatFeintFeasibilityOnServer");
+    expect(source).not.toContain("commitCombatFeintResultOnServer");
+  });
+
   it("keeps the recovered combat panel importable without future placeholder panels", () => {
     const source = readSource();
 

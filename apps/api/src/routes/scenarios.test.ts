@@ -2138,9 +2138,9 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ participant });
-    expect(
-      mocks.scenarioService.refreshCharacterParticipantEquipmentSnapshot,
-    ).toHaveBeenCalledWith({ participantId: "participant-1", scenarioId: "scenario-1" });
+    expect(mocks.scenarioService.refreshCharacterParticipantEquipmentSnapshot).toHaveBeenCalledWith(
+      { participantId: "participant-1", scenarioId: "scenario-1" },
+    );
   });
 
   it("lists encounters for a player with scenario workspace access", async () => {
@@ -4861,11 +4861,13 @@ describe("scenarios route contract", () => {
     expect(nextState.roundNumber).toBe(completedState.roundNumber + 1);
     expect(nextState.rounds).toHaveLength(1);
     expect(nextState.rounds[0]?.roundNumber).toBe(completedState.roundNumber);
-    expect(getDistanceBetween(
-      nextState.distanceState,
-      "encounter-participant-1",
-      "encounter-participant-2",
-    )).toBe(3);
+    expect(
+      getDistanceBetween(
+        nextState.distanceState,
+        "encounter-participant-1",
+        "encounter-participant-2",
+      ),
+    ).toBe(3);
     expect(lifecycle.encounter.combatRoundState?.roundNumber).toBe(completedState.roundNumber + 1);
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
   });
@@ -6964,6 +6966,132 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it("normalizes the browser scenario-participant Feint target into the encounter command identity", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participants: [
+        { id: "participant-1" },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: {
+            displayName: "City guard",
+            sheetSummary: {
+              adjustedStats: { dex: 9, int: 12 },
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 6,
+                    name: "Brawling",
+                    skillId: "brawling",
+                    totalSkill: 18,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "feint_attack",
+        additionalActionNotes: "A quick change of footing.",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        feint: {
+          attackerSkillId: "dodge",
+          method: "movement",
+          targetParticipantId: "participant-2",
+        },
+        phaseAttackSources: {
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-punch",
+          }),
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const declaration = updatedEncounter.combatRoundState.participants[0].declaration;
+    expect(declaration).toMatchObject({
+      actionId: "feint_attack",
+      attackOpportunities: [
+        expect.objectContaining({
+          origin: "feint_attack",
+          phase: "phase2",
+          slot: "attack_2",
+          targetParticipantId: "encounter-participant-2",
+        }),
+      ],
+      feint: {
+        attackerSkillId: "dodge",
+        defenderSkillId: "brawling",
+        method: "movement",
+        targetParticipantId: "encounter-participant-2",
+      },
+      phaseContexts: {
+        phase1: expect.objectContaining({
+          targetParticipantId: "encounter-participant-2",
+        }),
+        phase2: expect.objectContaining({
+          targetParticipantId: "encounter-participant-2",
+        }),
+      },
+    });
+    expect(updatedEncounter.combatRoundState.feintProposals).toEqual([
+      expect.objectContaining({
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        method: "movement",
+        status: "awaiting_feasibility",
+      }),
+    ]);
+  });
+
+  it("rejects a genuinely missing Feint target with the player-facing target error", async () => {
+    setupCombatDeclarationRoute({ user: mocks.adminUser });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "feint_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        feint: {
+          attackerSkillId: "dodge",
+          method: "movement",
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("encounter-participant-2"),
+          phase2: testCombatPhaseContext("encounter-participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Select a target for the feint." });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("rejects Adjust Range - Attack without a Phase 2 target", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
@@ -7241,8 +7369,7 @@ describe("scenarios route contract", () => {
               templateId: "weapon-template-fencing-sword",
             }),
             phase2: makeWeaponAttackSourceRef({
-              attackModeId:
-                phase2ItemId === "scenario-main-gauche" ? "mode-2" : "mode-1",
+              attackModeId: phase2ItemId === "scenario-main-gauche" ? "mode-2" : "mode-1",
               itemId: phase2ItemId,
               opportunitySlot: "attack_2",
               slot: phase2Slot,

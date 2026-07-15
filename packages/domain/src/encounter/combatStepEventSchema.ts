@@ -17,6 +17,11 @@ export const combatStepEventTypeSchema = z.enum([
   "distance_control_applied",
   "health_check",
   "participant_su_review",
+  "feint_feasibility",
+  "feint_roll",
+  "feint_result",
+  "feint_committed",
+  "feint_impossible",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -35,9 +40,7 @@ export const combatStepEventOutcomeScopeSchema = z.enum([
   "perceived",
   "gm_only",
 ]);
-export type CombatStepEventOutcomeScope = z.infer<
-  typeof combatStepEventOutcomeScopeSchema
->;
+export type CombatStepEventOutcomeScope = z.infer<typeof combatStepEventOutcomeScopeSchema>;
 
 export const combatStepEventIdentityRoleSchema = z.enum([
   "actor",
@@ -46,9 +49,7 @@ export const combatStepEventIdentityRoleSchema = z.enum([
   "defender",
   "roller",
 ]);
-export type CombatStepEventIdentityRole = z.infer<
-  typeof combatStepEventIdentityRoleSchema
->;
+export type CombatStepEventIdentityRole = z.infer<typeof combatStepEventIdentityRoleSchema>;
 
 export const combatStepEventHiddenIdentityFallbackSchema = z.enum([
   "omit",
@@ -72,9 +73,7 @@ export const combatStepEventCompletenessSchema = z.enum([
   "legacy_derived",
   "incomplete",
 ]);
-export type CombatStepEventCompleteness = z.infer<
-  typeof combatStepEventCompletenessSchema
->;
+export type CombatStepEventCompleteness = z.infer<typeof combatStepEventCompletenessSchema>;
 
 export const combatStepEventFactsSchema = z.object({
   gmReview: factRecordSchema.default({}),
@@ -89,9 +88,7 @@ export const combatStepEventIdentityRefSchema = z.object({
   participantId: idSchema,
   role: combatStepEventIdentityRoleSchema,
 });
-export type CombatStepEventIdentityRef = z.infer<
-  typeof combatStepEventIdentityRefSchema
->;
+export type CombatStepEventIdentityRef = z.infer<typeof combatStepEventIdentityRefSchema>;
 
 export const combatStepEventVisibilitySchema = z.object({
   identityRefs: z.array(combatStepEventIdentityRefSchema).default([]),
@@ -127,6 +124,9 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "roll_round_end_distance_control",
   "commit_round_end_distance_control",
   "complete_round",
+  "review_feint_feasibility",
+  "roll_feint",
+  "commit_feint_result",
 ]);
 
 export const combatStepEventSourceSchema = z.object({

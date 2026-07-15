@@ -204,6 +204,75 @@ describe("combat history projection", () => {
     );
   });
 
+  it("keeps each feint roll private to its roller while sharing the opposed outcome", () => {
+    const attackerRoll = event({
+      actorParticipantId: "aria",
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      targetParticipantId: "borin",
+      type: "feint_roll",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+    const committed = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: { notes: "private ruling" },
+        involvedOutcome: {
+          defenderPhase2DbParryModifier: -2,
+          defenderPhase2SkillObModifier: -2,
+        },
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      ownerParticipantId: "aria",
+      targetParticipantId: "borin",
+      type: "feint_committed",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+      },
+    });
+
+    const attacker = projectCombatHistoryEvent({
+      event: attackerRoll,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const defender = projectCombatHistoryEvent({
+      event: attackerRoll,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+    const defenderOutcome = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(attacker?.facts.privateCalculation).toEqual({
+      calculation: "18 + 4",
+      rollD20: 18,
+    });
+    expect(defender?.facts.privateCalculation).toBeUndefined();
+    expect(defenderOutcome?.facts.involvedOutcome).toEqual({
+      defenderPhase2DbParryModifier: -2,
+      defenderPhase2SkillObModifier: -2,
+    });
+    expect(defenderOutcome?.facts.gmReview).toBeUndefined();
+  });
+
   it("sanitizes a perceived hidden attacker without exposing its id or row", () => {
     const attack = event({
       defenderParticipantId: "aria",

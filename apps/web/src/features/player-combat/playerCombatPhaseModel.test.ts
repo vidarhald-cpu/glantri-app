@@ -13,6 +13,7 @@ import {
   formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   normalizeCombatEquipmentFeatureState,
+  resolveCombatFeintDeclarationRequestTarget,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
@@ -168,36 +169,34 @@ describe("player combat phase model", () => {
 
   it("builds declaration references from committed scenario IDs rather than hydrated IDs", () => {
     const reference = buildPlayerCombatLoadoutSummary({
-        actionId: "double_attack",
-        loadoutModel: buildLoadoutModel({
-          rows: [
-            ["Primary", "Fencing sword", "2", "Thrust", "10", "4", "A", "—", "A"],
-          ],
-          sourceItemId: "scenario-fencing-sword",
-          valueLabel: "Fencing sword",
-          weaponRows: [
-            {
-              attackModes: [
-                {
-                  allowsRepeatedRoundAttack: true,
-                  canonicalMeleeMode: "thrust",
-                  id: "mode-1",
-                  isPrimaryAttack: true,
-                  label: "Thrust",
-                  order: 0,
-                },
-              ],
-              attackMode1Id: "mode-1",
-              currentItemLabel: "Fencing sword",
-              itemId: "scenario-fencing-sword",
-              modeLabel: "Primary",
-              templateId: "weapon-template-fencing-sword",
-            },
-          ],
-        }),
-        phaseKey: "phase1",
-        secondaryActionId: "",
-      }).reference;
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Fencing sword", "2", "Thrust", "10", "4", "A", "—", "A"]],
+        sourceItemId: "scenario-fencing-sword",
+        valueLabel: "Fencing sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                allowsRepeatedRoundAttack: true,
+                canonicalMeleeMode: "thrust",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Thrust",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Fencing sword",
+            itemId: "scenario-fencing-sword",
+            modeLabel: "Primary",
+            templateId: "weapon-template-fencing-sword",
+          },
+        ],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    }).reference;
 
     expect(
       buildCombatAttackSourceRef({
@@ -748,5 +747,89 @@ describe("player combat phase model", () => {
     expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetParticipantId).toBe(
       "target-phase-2",
     );
+  });
+
+  it("serializes the visible scenario Feint target as one canonical encounter target", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        {
+          characterId: "character-defender",
+          id: "encounter-defender",
+          scenarioParticipantId: "scenario-defender",
+        },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+        phase2: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      phaseContexts: {
+        phase1: expect.objectContaining({ targetParticipantId: "encounter-defender" }),
+        phase2: expect.objectContaining({ targetParticipantId: "encounter-defender" }),
+      },
+      targetParticipantId: "encounter-defender",
+    });
+  });
+
+  it("lets the current visible Feint target fill an older empty paired phase", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        { id: "encounter-defender", scenarioParticipantId: "scenario-defender" },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      phaseContexts: {
+        phase1: { targetParticipantId: "encounter-defender" },
+        phase2: { targetParticipantId: "encounter-defender" },
+      },
+    });
+  });
+
+  it("rejects different visible Feint and Phase 2 targets", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        { id: "encounter-a", scenarioParticipantId: "scenario-a" },
+        { id: "encounter-b", scenarioParticipantId: "scenario-b" },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-a",
+        },
+        phase2: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-b",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      message: "Feint and Phase 2 attack must target the same opponent.",
+      ok: false,
+    });
   });
 });

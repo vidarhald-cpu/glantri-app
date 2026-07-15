@@ -15,6 +15,7 @@ import {
 } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  applyCommittedCombatFeintModifiers,
   applyCombatActionGeneratedModifiers,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundCommandEnvelope,
@@ -76,6 +77,9 @@ import {
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
+  reviewCombatRoundFeintFeasibility,
+  recordCombatRoundFeintRoll,
+  commitCombatRoundFeintResult,
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
@@ -107,6 +111,9 @@ import {
   projectCombatHistory,
   removeDistanceGeneratedObSkillModifiers,
   scenarioParticipantCombatContextSchema,
+  combatFeintMethodSchema,
+  combatFeintProposalSchema,
+  combatFeintRollResultSchema,
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundPairDistance,
   setCombatRoundSelection,
@@ -137,8 +144,12 @@ import type {
 import {
   buildCharacterSheetSummary,
   calculateWorkbookPercentageAdjustmentTrace,
+  isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
+  resolveCombatFeintSkillProfile,
+  resolveCombatFeintTable,
+  resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
 } from "@glantri/rules-engine";
 
@@ -198,6 +209,24 @@ async function getCombatExperienceSkillLookupForScenarioParticipant(
     ...participant,
     sheetSummary,
   });
+}
+
+function getScenarioParticipantFeintSkillInput(participant: ScenarioParticipant) {
+  const build = characterBuildSchema.safeParse(participant.snapshot.build);
+  const sheetSummary = build.success
+    ? buildCharacterSheetSummary({
+        build: build.data,
+        content: defaultCanonicalContent,
+      })
+    : participant.snapshot.sheetSummary;
+
+  return {
+    build: build.success ? build.data : participant.snapshot,
+    content: defaultCanonicalContent,
+    participantId: participant.id,
+    participantName: participant.snapshot.displayName,
+    sheetSummary,
+  };
 }
 
 function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipant): {
@@ -338,6 +367,13 @@ function parseOptionalDeclarationString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
+function parseFeintTargetParticipantId(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("Select a target for the feint.");
+  }
+  return value.trim();
+}
+
 function parseCombatDeclarationPhaseWeaponNames(
   value: unknown,
 ): Partial<Record<"phase1" | "phase2", string | undefined>> | undefined {
@@ -375,6 +411,11 @@ function parseCombatDeclarationBody(body: unknown): {
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
+  feint?: {
+    attackerSkillId: string;
+    method: "movement" | "weapon";
+    targetParticipantId: string;
+  };
 } {
   const value = parseBodyObject(body, "Combat declaration payload");
   const scenarioParticipantId = value.scenarioParticipantId;
@@ -398,6 +439,19 @@ function parseCombatDeclarationBody(body: unknown): {
     phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
     scenarioParticipantId,
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
+    feint:
+      value.feint && typeof value.feint === "object"
+        ? {
+            attackerSkillId: parseNonEmptyString(
+              (value.feint as Record<string, unknown>).attackerSkillId,
+              "feint.attackerSkillId",
+            ),
+            method: combatFeintMethodSchema.parse((value.feint as Record<string, unknown>).method),
+            targetParticipantId: parseFeintTargetParticipantId(
+              (value.feint as Record<string, unknown>).targetParticipantId,
+            ),
+          }
+        : undefined,
   };
 }
 
@@ -1745,6 +1799,16 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
 }): CombatRoundCommand | undefined {
+  // Feint command facts retain undo provenance, including both raw rolls and GM notes.
+  // Player live state uses the separately sanitized proposal and projected event history.
+  if (
+    input.command.type === "review_feint_feasibility" ||
+    input.command.type === "roll_feint" ||
+    input.command.type === "commit_feint_result"
+  ) {
+    return undefined;
+  }
+
   if (
     input.command.type === "submit_phase_initiative_choice" &&
     !input.controlledEncounterParticipantIds.has(input.command.participantId)
@@ -1826,6 +1890,35 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       edges: safeDistanceEdges,
     },
     events: [],
+    feintProposals: roundState.feintProposals
+      .filter((proposal) =>
+        isPlayerVisibleCombatRoundResultPair({
+          attackerParticipantId: proposal.attackerParticipantId,
+          controlledEncounterParticipantIds,
+          defenderParticipantId: proposal.defenderParticipantId,
+          visibleParticipantIds,
+        }),
+      )
+      .map((proposal) => {
+        const viewerIsAttacker = controlledEncounterParticipantIds.has(
+          proposal.attackerParticipantId,
+        );
+        const viewerIsDefender = controlledEncounterParticipantIds.has(
+          proposal.defenderParticipantId,
+        );
+        const committed = proposal.status === "committed" || proposal.status === "impossible";
+        return combatFeintProposalSchema.parse({
+          ...proposal,
+          attackerRoll: viewerIsAttacker ? proposal.attackerRoll : undefined,
+          committedByUserId: undefined,
+          defenderRoll: viewerIsDefender ? proposal.defenderRoll : undefined,
+          difference: committed ? proposal.difference : undefined,
+          feasibilityNote: undefined,
+          review:
+            committed && proposal.review ? { ...proposal.review, notes: undefined } : undefined,
+          tableResult: committed ? proposal.tableResult : undefined,
+        });
+      }),
     participants: roundState.participants.map((participant) =>
       controlledEncounterParticipantIds.has(participant.participantId)
         ? participant
@@ -2646,7 +2739,158 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       let attackOpportunities;
       let declarationPhaseContexts = submittedPhaseContexts;
-      if (body.actionId === "double_attack") {
+      let declarationFeint;
+      if (body.actionId === "feint_attack") {
+        if (!body.feint) {
+          return reply.code(400).send({ error: "Select a feint method." });
+        }
+        const resolveEncounterTarget = (targetId: string | undefined) =>
+          targetId
+            ? membership.participants.find(
+                (participant) =>
+                  participant.id === targetId ||
+                  participant.scenarioParticipantId === targetId ||
+                  participant.characterId === targetId,
+              )
+            : undefined;
+        const targetEncounterParticipant = resolveEncounterTarget(body.feint.targetParticipantId);
+        if (!targetEncounterParticipant) {
+          return reply.code(400).send({
+            error: "The selected target is no longer in this encounter.",
+          });
+        }
+        const phase1TargetParticipant = resolveEncounterTarget(
+          submittedPhaseContexts?.phase1?.targetParticipantId,
+        );
+        const phase2TargetParticipant = resolveEncounterTarget(
+          submittedPhaseContexts?.phase2?.targetParticipantId,
+        );
+        if (
+          phase1TargetParticipant?.id !== targetEncounterParticipant.id ||
+          phase2TargetParticipant?.id !== targetEncounterParticipant.id
+        ) {
+          return reply.code(400).send({
+            error: "Feint and Phase 2 attack must target the same opponent.",
+          });
+        }
+        const targetScenarioParticipant = scenarioParticipants.find(
+          (participant) =>
+            participant.id === targetEncounterParticipant?.scenarioParticipantId ||
+            participant.id === targetEncounterParticipant?.id,
+        );
+        if (!targetScenarioParticipant) {
+          return reply.code(400).send({
+            error: "The selected target is no longer in this encounter.",
+          });
+        }
+        const canonicalTargetParticipantId = targetEncounterParticipant.id;
+        const feintPhaseContexts = {
+          ...submittedPhaseContexts,
+          phase1: submittedPhaseContexts?.phase1
+            ? {
+                ...submittedPhaseContexts.phase1,
+                targetParticipantId: canonicalTargetParticipantId,
+              }
+            : undefined,
+          phase2: submittedPhaseContexts?.phase2
+            ? {
+                ...submittedPhaseContexts.phase2,
+                targetParticipantId: canonicalTargetParticipantId,
+              }
+            : undefined,
+        };
+        const attackerSkill = defaultCanonicalContent.skills.find(
+          (skill) => skill.id === body.feint?.attackerSkillId,
+        );
+        if (!attackerSkill) {
+          return reply.code(400).send({ error: "Select a skill for the feint." });
+        }
+        if (body.feint.method === "movement" && attackerSkill.id !== "dodge") {
+          return reply.code(400).send({ error: "Movement feints use the Dodge skill." });
+        }
+        if (body.feint.method === "weapon" && !isCombatFeintResistanceSkill(attackerSkill)) {
+          return reply.code(400).send({
+            error: "Select a relevant close-combat skill for the weapon feint.",
+          });
+        }
+        const defenderProfile = resolveHighestCombatFeintResistanceProfile({
+          ...getScenarioParticipantFeintSkillInput(targetScenarioParticipant),
+          skills: defaultCanonicalContent.skills,
+        });
+        if (!defenderProfile) {
+          return reply.code(400).send({
+            error: "The defender has no relevant close-combat resistance skill.",
+          });
+        }
+        const phase1Source = body.phaseAttackSources?.phase1;
+        let feintWeaponSource: CombatAttackSourceRef | undefined;
+        if (body.feint.method === "weapon") {
+          if (!phase1Source || phase1Source.sourceKind !== "weapon") {
+            return reply.code(400).send({ error: "Select a weapon for the weapon feint." });
+          }
+          const resolution = resolveDeclaredWeaponSource({
+            participant: scenarioParticipant,
+            phaseLabel: "Phase 1",
+            source: phase1Source,
+          });
+          if (!resolution.ok) return reply.code(400).send({ error: resolution.error });
+          feintWeaponSource = phase1Source;
+        }
+        const phase2Source = body.phaseAttackSources?.phase2;
+        if (!phase2Source) {
+          return reply.code(400).send({ error: "Select an attack source for Phase 2." });
+        }
+        const phase2WeaponResolution =
+          phase2Source.sourceKind === "weapon"
+            ? resolveDeclaredWeaponSource({
+                participant: scenarioParticipant,
+                phaseLabel: "Phase 2",
+                source: phase2Source,
+              })
+            : undefined;
+        if (phase2WeaponResolution && !phase2WeaponResolution.ok) {
+          return reply.code(400).send({ error: phase2WeaponResolution.error });
+        }
+        if (
+          phase2Source.sourceKind === "unarmed" &&
+          !new Set([punchTemplate.id, kickTemplate.id]).has(phase2Source.templateId)
+        ) {
+          return reply.code(400).send({ error: "Select a legal Phase 2 attack source." });
+        }
+        attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+          actionId: body.actionId,
+          participantId: encounterParticipant.id,
+          phaseContexts: feintPhaseContexts,
+          roundNumber: roundState.roundNumber,
+          sources: {
+            phase2: phase2WeaponResolution?.source
+              ? { ...phase2WeaponResolution.source, sourceKind: "weapon" }
+              : {
+                  attackModeId: "mode-1",
+                  sourceKind: "unarmed",
+                  weaponTemplateId: phase2Source.templateId,
+                },
+          },
+        });
+        declarationPhaseContexts = {
+          ...feintPhaseContexts,
+          phase2: feintPhaseContexts.phase2
+            ? {
+                ...feintPhaseContexts.phase2,
+                attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
+              }
+            : undefined,
+        };
+        declarationFeint = {
+          attackerSkillId: attackerSkill.id,
+          attackerSkillLabel: attackerSkill.name,
+          defenderSkillId: defenderProfile.skillId,
+          defenderSkillLabel: defenderProfile.skillName,
+          method: body.feint.method,
+          targetParticipantId: canonicalTargetParticipantId,
+          weaponSource: feintWeaponSource,
+        };
+      } else if (body.actionId === "double_attack") {
         const phase1Source = body.phaseAttackSources?.phase1;
         const phase2Source = body.phaseAttackSources?.phase2;
         if (!phase1Source || !phase2Source) {
@@ -2778,6 +3022,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           additionalActionNotes: body.additionalActionNotes,
           attackOpportunities,
           combatContext: submittedCombatContext,
+          feint: declarationFeint,
           movementId: body.movementId,
           movementIntent: submittedMovementIntent,
           phaseContexts: declarationPhaseContexts,
@@ -2838,8 +3083,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const encounterId = parseId(request.params, "encounterId", "Encounter id");
         const body = parseBodyObject(request.body, "Double Attack decision payload");
         const scenarioParticipantId = parseOptionalDeclarationString(body.scenarioParticipantId);
-        const decision = body.decision === "cancel" ? "cancel" : body.decision === "continue" ? "continue" : undefined;
-        if (!scenarioParticipantId || !decision) throw new Error("Participant and decision are required.");
+        const decision =
+          body.decision === "cancel"
+            ? "cancel"
+            : body.decision === "continue"
+              ? "continue"
+              : undefined;
+        if (!scenarioParticipantId || !decision)
+          throw new Error("Participant and decision are required.");
         const encounter = await encounterService.getEncounterById(encounterId);
         if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
         const access = await resolveScenarioWorkspaceAccess(
@@ -2847,21 +3098,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
         );
         if (!access) return reply.code(404).send({ error: "Encounter not found." });
-        const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
-        const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId);
-        if (!scenarioParticipant?.isActive) return reply.code(403).send({ error: "Participant is not active." });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(
+          encounter.scenarioId,
+        );
+        const scenarioParticipant = scenarioParticipants.find(
+          (entry) => entry.id === scenarioParticipantId,
+        );
+        if (!scenarioParticipant?.isActive)
+          return reply.code(403).send({ error: "Participant is not active." });
         if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) {
           return reply.code(403).send({ error: "Player does not control this participant." });
         }
-        const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
         const encounterParticipant = membership.participants.find(
           (entry) =>
             entry.scenarioParticipantId === scenarioParticipant.id ||
             entry.id === scenarioParticipant.id ||
-            (scenarioParticipant.characterId && entry.characterId === scenarioParticipant.characterId),
+            (scenarioParticipant.characterId &&
+              entry.characterId === scenarioParticipant.characterId),
         );
-        if (!encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
-        const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+        if (!encounterParticipant)
+          return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
         const createdAt = new Date().toISOString();
         const nextRoundState = decideCombatRoundDoubleAttackPhase2({
           command: { createdAt, createdByUserId: user.id },
@@ -2879,7 +3143,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             ...scenarioParticipant.state,
             combat: {
               ...scenarioParticipant.state.combat,
-              combatContext: nextDeclaration?.combatContext ?? scenarioParticipant.state.combat.combatContext,
+              combatContext:
+                nextDeclaration?.combatContext ?? scenarioParticipant.state.combat.combatContext,
             },
           },
         });
@@ -2892,11 +3157,305 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return { encounter: savedEncounter, participant };
       } catch (error) {
         return reply.code(400).send({
-          error: error instanceof Error ? error.message : "Unable to record Double Attack decision.",
+          error:
+            error instanceof Error ? error.message : "Unable to record Double Attack decision.",
         });
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/feint-feasibility", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Feint feasibility payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const feasibility =
+        body.feasibility === "possible" ||
+        body.feasibility === "possible_with_adjustment" ||
+        body.feasibility === "impossible"
+          ? body.feasibility
+          : undefined;
+      if (!feasibility) throw new Error("Select a feint feasibility ruling.");
+      const adjustment =
+        body.adjustment === undefined ? 0 : parseInteger(body.adjustment, "adjustment");
+      const note = typeof body.note === "string" ? body.note : undefined;
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      if (access.mode !== "gm") {
+        return reply
+          .code(403)
+          .send({ error: "The GM must review whether this feint is possible." });
+      }
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const createdAt = new Date().toISOString();
+      const nextRoundState = reviewCombatRoundFeintFeasibility({
+        command: { createdAt, createdByUserId: user.id },
+        feasibility,
+        feasibilityAdjustment: adjustment,
+        note,
+        proposalId,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return { encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to review feint feasibility.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-feint", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Feint roll payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const scenarioParticipantId = parseNonEmptyString(
+        body.scenarioParticipantId,
+        "scenarioParticipantId",
+      );
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === scenarioParticipantId && participant.isActive,
+      );
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) => participant.scenarioParticipantId === scenarioParticipant.id,
+          )
+        : undefined;
+      if (!scenarioParticipant || !encounterParticipant) {
+        return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      }
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) {
+        return reply.code(403).send({ error: "Player does not control this participant." });
+      }
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const proposal = roundState.feintProposals.find((entry) => entry.id === proposalId);
+      if (!proposal || proposal.status !== "awaiting_rolls") {
+        return reply.code(409).send({ error: "Feint rolls are not currently available." });
+      }
+      const isAttackerRoll = !proposal.attackerRoll;
+      const expectedParticipantId = isAttackerRoll
+        ? proposal.attackerParticipantId
+        : proposal.defenderParticipantId;
+      if (encounterParticipant.id !== expectedParticipantId) {
+        return reply.code(409).send({
+          error: isAttackerRoll
+            ? "The attacker must roll the feint."
+            : "The defender must roll resistance.",
+        });
+      }
+      const skillId = isAttackerRoll ? proposal.attackerSkillId : proposal.defenderSkillId;
+      const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === skillId);
+      if (!skill)
+        return reply.code(409).send({ error: "The selected feint skill is unavailable." });
+      const profile = resolveCombatFeintSkillProfile({
+        ...getScenarioParticipantFeintSkillInput(scenarioParticipant),
+        characteristic: isAttackerRoll ? "dex" : "int",
+        skill,
+      });
+      const adjustment = isAttackerRoll ? proposal.feasibilityAdjustment : 0;
+      const roll = rollOpenEndedD20();
+      const createdAt = new Date().toISOString();
+      const result = combatFeintRollResultSchema.parse({
+        adjustment,
+        characteristic: isAttackerRoll ? "dex" : "int",
+        characteristicValue: profile.avgStats,
+        finalTotal:
+          roll.dieResult + profile.rollBaseValue + profile.unknownSkillPenalty + adjustment,
+        id: `${proposal.id}:roll:${isAttackerRoll ? "attacker" : "defender"}`,
+        openEndedD10s: roll.openEndedD10s,
+        participantId: encounterParticipant.id,
+        rollD20: roll.rollD20,
+        rollTotal: roll.dieResult,
+        rolledAt: createdAt,
+        rolledByUserId: user.id,
+        skillId: profile.skillId,
+        skillLabel: profile.skillName,
+        skillXp: profile.totalXP,
+      });
+      const difference = proposal.attackerRoll
+        ? proposal.attackerRoll.finalTotal - result.finalTotal
+        : undefined;
+      const nextRoundState = recordCombatRoundFeintRoll({
+        command: { createdAt, createdByUserId: user.id },
+        proposalId,
+        result,
+        state: roundState,
+        tableResult: difference === undefined ? undefined : resolveCombatFeintTable(difference),
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return {
+        encounter:
+          access.mode === "player"
+            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              })
+            : savedEncounter,
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll the feint.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/commit-feint", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Feint commit payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const gmAttackerDbParryModifier =
+        body.gmAttackerDbParryModifier === undefined
+          ? undefined
+          : parseInteger(body.gmAttackerDbParryModifier, "gmAttackerDbParryModifier");
+      const gmDefenderObDbModifier =
+        body.gmDefenderObDbModifier === undefined
+          ? undefined
+          : parseInteger(body.gmDefenderObDbModifier, "gmDefenderObDbModifier");
+      const notes = typeof body.notes === "string" ? body.notes : undefined;
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      if (access.mode !== "gm") {
+        return reply
+          .code(403)
+          .send({ error: "The GM must commit the feint result before Phase 2." });
+      }
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const existingProposal = roundState.feintProposals.find((entry) => entry.id === proposalId);
+      if (!existingProposal?.review || existingProposal.status !== "awaiting_review") {
+        return reply
+          .code(409)
+          .send({ error: "The GM must commit the feint result before Phase 2." });
+      }
+      const findScenarioParticipant = (roundParticipantId: string) => {
+        const member = membership.participants.find(
+          (participant) => participant.id === roundParticipantId,
+        );
+        return scenarioParticipants.find(
+          (participant) => participant.id === member?.scenarioParticipantId,
+        );
+      };
+      const attacker = findScenarioParticipant(existingProposal.attackerParticipantId);
+      const defender = findScenarioParticipant(existingProposal.defenderParticipantId);
+      if (!attacker || !defender) {
+        return reply.code(409).send({ error: "Feint participants are no longer available." });
+      }
+      const createdAt = new Date().toISOString();
+      const committedProposal = combatFeintProposalSchema.parse({
+        ...existingProposal,
+        committedAt: createdAt,
+        committedByUserId: user.id,
+        review: {
+          ...existingProposal.review,
+          gmAttackerDbParryModifier,
+          gmDefenderObDbModifier,
+          notes,
+        },
+        status: "committed",
+      });
+      const modifiers = applyCommittedCombatFeintModifiers({
+        attackerCombatContext: attacker.state.combat.combatContext,
+        defenderCombatContext: defender.state.combat.combatContext,
+        proposal: committedProposal,
+      });
+      const [savedAttacker, savedDefender] = await Promise.all([
+        encounterService.updateScenarioParticipantState({
+          participantId: attacker.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...attacker.state,
+            combat: { ...attacker.state.combat, combatContext: modifiers.attackerCombatContext },
+          },
+        }),
+        encounterService.updateScenarioParticipantState({
+          participantId: defender.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...defender.state,
+            combat: { ...defender.state.combat, combatContext: modifiers.defenderCombatContext },
+          },
+        }),
+      ]);
+      const nextRoundState = commitCombatRoundFeintResult({
+        attackerCombatContext: savedAttacker.state.combat.combatContext,
+        command: { createdAt, createdByUserId: user.id },
+        defenderCombatContext: savedDefender.state.combat.combatContext,
+        gmAttackerDbParryModifier,
+        gmDefenderObDbModifier,
+        notes,
+        previousAttackerCombatContext: attacker.state.combat.combatContext,
+        previousDefenderCombatContext: defender.state.combat.combatContext,
+        proposalId,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return { encounter: savedEncounter, participants: [savedAttacker, savedDefender] };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to commit the feint result.",
+      });
+    }
+  });
 
   app.post("/encounters/:encounterId/combat-initiative", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -5848,6 +6407,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "decide_double_attack_phase2" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedFeintCommitCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_feint_result" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedAttackCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -5905,6 +6470,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedCombatExperienceCommands.length > 0 ||
         removedBackOutPhaseAttackCommands.length > 0 ||
         removedDoubleAttackDecisionCommands.length > 0 ||
+        removedFeintCommitCommands.length > 0 ||
         removedAttackCommands.length > 0 ||
         removedPhaseInitiativeResolutionCommitCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
@@ -5970,6 +6536,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
                   for (const command of removedDoubleAttackDecisionCommands) {
                     if (command.participantId !== encounterParticipant.id) continue;
+                    const restoredContext = nextRoundState.participants.find(
+                      (entry) => entry.participantId === encounterParticipant.id,
+                    )?.declaration?.combatContext;
+                    if (restoredContext) {
+                      nextState = {
+                        ...nextState,
+                        combat: { ...nextState.combat, combatContext: restoredContext },
+                      };
+                    }
+                  }
+
+                  for (const command of removedFeintCommitCommands) {
+                    const proposalId =
+                      typeof command.facts.proposalId === "string"
+                        ? command.facts.proposalId
+                        : undefined;
+                    const previousProposal = proposalId
+                      ? roundState.feintProposals.find((proposal) => proposal.id === proposalId)
+                      : undefined;
+                    if (
+                      !previousProposal ||
+                      (previousProposal.attackerParticipantId !== encounterParticipant.id &&
+                        previousProposal.defenderParticipantId !== encounterParticipant.id)
+                    ) {
+                      continue;
+                    }
                     const restoredContext = nextRoundState.participants.find(
                       (entry) => entry.participantId === encounterParticipant.id,
                     )?.declaration?.combatContext;

@@ -134,12 +134,15 @@ export async function submitCombatDeclarationOnServer(input: {
   movementId?: string;
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
-  phaseAttackSources?: Partial<
-    Record<"phase1" | "phase2", CombatAttackSourceRef>
-  >;
+  phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
+  feint?: {
+    attackerSkillId: string;
+    method: "movement" | "weapon";
+    targetParticipantId: string;
+  };
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
   const payload = await sendJson<{ encounter: EncounterSession; participant: ScenarioParticipant }>(
     `/encounters/${input.encounterId}/combat-declaration`,
@@ -153,6 +156,7 @@ export async function submitCombatDeclarationOnServer(input: {
         phaseContexts: input.phaseContexts,
         phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,
+        feint: input.feint,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
       }),
@@ -163,21 +167,68 @@ export async function submitCombatDeclarationOnServer(input: {
   return payload;
 }
 
+export async function reviewCombatFeintFeasibilityOnServer(input: {
+  adjustment?: number;
+  encounterId: string;
+  feasibility: "possible" | "possible_with_adjustment" | "impossible";
+  note?: string;
+  proposalId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/feint-feasibility`, {
+    body: JSON.stringify({
+      adjustment: input.adjustment,
+      feasibility: input.feasibility,
+      note: input.note,
+      proposalId: input.proposalId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function rollCombatFeintOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/roll-feint`, {
+    body: JSON.stringify({
+      proposalId: input.proposalId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function commitCombatFeintOnServer(input: {
+  encounterId: string;
+  gmAttackerDbParryModifier?: number;
+  gmDefenderObDbModifier?: number;
+  notes?: string;
+  proposalId: string;
+}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/commit-feint`, {
+    body: JSON.stringify({
+      gmAttackerDbParryModifier: input.gmAttackerDbParryModifier,
+      gmDefenderObDbModifier: input.gmDefenderObDbModifier,
+      notes: input.notes,
+      proposalId: input.proposalId,
+    }),
+    method: "POST",
+  });
+}
+
 export async function decideDoubleAttackPhase2OnServer(input: {
   decision: "continue" | "cancel";
   encounterId: string;
   scenarioParticipantId: string;
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
-  return sendJson(
-    `/encounters/${input.encounterId}/combat-round/double-attack-phase2-decision`,
-    {
-      body: JSON.stringify({
-        decision: input.decision,
-        scenarioParticipantId: input.scenarioParticipantId,
-      }),
-      method: "POST",
-    },
-  );
+  return sendJson(`/encounters/${input.encounterId}/combat-round/double-attack-phase2-decision`, {
+    body: JSON.stringify({
+      decision: input.decision,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
 }
 
 export async function rollCombatExperienceOnServer(input: {

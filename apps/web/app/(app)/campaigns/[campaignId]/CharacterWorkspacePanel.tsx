@@ -8,7 +8,10 @@ import {
   buildGmCharacterWorkspaceCandidates,
   resolvePlayerCharacterWorkspaceCandidate,
 } from "@/lib/campaigns/characterWorkspace";
-import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
+import {
+  refreshScenarioParticipantEquipmentOnServer,
+  updateScenarioParticipantStateOnServer,
+} from "@/lib/api/scenarioClient";
 import CharacterLoadoutView from "../../characters/[id]/components/CharacterLoadoutView";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
 
@@ -66,6 +69,31 @@ export default function CharacterWorkspacePanel({
     gmCandidates.find((candidate) => candidate.id === selectedParticipantId) ?? gmCandidates[0];
   const selectedCandidate = isGameMaster ? selectedGmCandidate : playerCandidate;
   const [saveError, setSaveError] = useState<string>();
+  const [saveFeedback, setSaveFeedback] = useState<string>();
+
+  async function refreshSelectedScenarioEquipment() {
+    if (!isGameMaster || !scenarioId || !selectedCandidate) {
+      return;
+    }
+
+    try {
+      const participant = await refreshScenarioParticipantEquipmentOnServer({
+        participantId: selectedCandidate.scenarioParticipant.id,
+        scenarioId,
+      });
+      onScenarioParticipantUpdated?.(participant);
+      setSaveError(undefined);
+      setSaveFeedback(`${participant.snapshot.displayName}’s scenario equipment was refreshed.`);
+    } catch (caughtError) {
+      setSaveFeedback(undefined);
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to refresh scenario equipment for Combat.",
+      );
+      throw caughtError;
+    }
+  }
 
   async function updateSelectedCombatEffects(
     nextCombatEffects: NonNullable<ScenarioParticipant["state"]["combatEffects"]>,
@@ -86,6 +114,7 @@ export default function CharacterWorkspacePanel({
 
       onScenarioParticipantUpdated?.(participant);
       setSaveError(undefined);
+      setSaveFeedback(undefined);
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save combat effects.",
@@ -143,11 +172,27 @@ export default function CharacterWorkspacePanel({
               {saveError}
             </section>
           ) : null}
+          {saveFeedback ? (
+            <section
+              style={{
+                background: "#eef7ed",
+                border: "1px solid #b8d7b5",
+                borderRadius: 12,
+                color: "#315b2d",
+                padding: "1rem",
+              }}
+            >
+              {saveFeedback}
+            </section>
+          ) : null}
           <CharacterLoadoutView
             canEditCombatEffects={isGameMaster}
             characterId={selectedCandidate.characterId}
             onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
-            physicalStateCombatContext={selectedCandidate.scenarioParticipant.state.combat.combatContext}
+            onEquipmentStateChange={isGameMaster ? refreshSelectedScenarioEquipment : undefined}
+            physicalStateCombatContext={
+              selectedCandidate.scenarioParticipant.state.combat.combatContext
+            }
             physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
             physicalStateCurrentRoundNumber={currentRoundNumber}
             physicalStateEncounterId={activeEncounter?.id}

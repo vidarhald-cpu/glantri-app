@@ -1,6 +1,8 @@
 import type {
   CombatAttackSourceRef,
   CombatAttackSourceSlot,
+  CombatRoundPhaseContexts,
+  EncounterSession,
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
@@ -20,6 +22,70 @@ import type {
 } from "./PlayerCombatPanels";
 
 export type PlayerCombatPhaseKey = "phase1" | "phase2";
+
+export type CombatFeintDeclarationTargetResolution =
+  | {
+      ok: true;
+      phaseContexts: CombatRoundPhaseContexts;
+      targetParticipantId: string;
+    }
+  | { message: string; ok: false };
+
+/**
+ * Combat commands identify actors by encounter-participant id. Phase controls may
+ * begin with a committed scenario-participant alias, so normalize the current
+ * draft once at the request boundary and write the same target into both phases.
+ */
+export function resolveCombatFeintDeclarationRequestTarget(input: {
+  encounterParticipants: EncounterSession["participants"];
+  phaseContexts: CombatRoundPhaseContexts;
+}): CombatFeintDeclarationTargetResolution {
+  const phase1Target = input.phaseContexts.phase1?.targetParticipantId;
+  const phase2Target = input.phaseContexts.phase2?.targetParticipantId;
+  const selectedTarget = phase1Target ?? phase2Target;
+  if (!selectedTarget) {
+    return { message: "Select a target for the feint.", ok: false };
+  }
+
+  const resolveTarget = (targetId: string | undefined) =>
+    targetId
+      ? input.encounterParticipants.find(
+          (participant) =>
+            participant.id === targetId ||
+            participant.scenarioParticipantId === targetId ||
+            participant.characterId === targetId,
+        )
+      : undefined;
+  const targetParticipant = resolveTarget(selectedTarget);
+  if (!targetParticipant) {
+    return {
+      message: "The selected target is no longer in this encounter.",
+      ok: false,
+    };
+  }
+  const otherTarget = phase1Target && phase2Target ? resolveTarget(phase2Target) : undefined;
+  if (phase1Target && phase2Target && otherTarget?.id !== targetParticipant.id) {
+    return {
+      message: "Feint and Phase 2 attack must target the same opponent.",
+      ok: false,
+    };
+  }
+
+  const targetParticipantId = targetParticipant.id;
+  return {
+    ok: true,
+    phaseContexts: {
+      ...input.phaseContexts,
+      phase1: input.phaseContexts.phase1
+        ? { ...input.phaseContexts.phase1, targetParticipantId }
+        : undefined,
+      phase2: input.phaseContexts.phase2
+        ? { ...input.phaseContexts.phase2, targetParticipantId }
+        : undefined,
+    },
+    targetParticipantId,
+  };
+}
 
 export interface PlayerCombatLoadoutReference {
   am: string;
@@ -210,7 +276,8 @@ export function formatScenarioCombatEquipmentDiagnostic(input: {
 }): string | undefined {
   if (!input.status.message) return undefined;
   const participantName = input.participantName?.trim() || "This participant";
-  const possessive = participantName === "This participant" ? "This participant’s" : `${participantName}’s`;
+  const possessive =
+    participantName === "This participant" ? "This participant’s" : `${participantName}’s`;
   return input.isGameMaster
     ? `${possessive} scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.`
     : `${possessive} scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.`;
@@ -425,10 +492,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
   }
   const referenceRow =
     preferredItemIds
-      .map(
-        (itemId) =>
-          combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null,
-      )
+      .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
       .map((rawRow) =>
         rawRow
           ? (combatPanelModel.weaponModeTable.rows.find((row) => {
@@ -442,9 +506,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
                 label: "Mode",
                 row,
               });
-              return (
-                weaponLabel === rawRow.currentItemLabel && modeLabel === rawRow.modeLabel
-              );
+              return weaponLabel === rawRow.currentItemLabel && modeLabel === rawRow.modeLabel;
             }) ?? null)
           : null,
       )
@@ -525,8 +587,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     row: referenceRow,
   });
   const rawReferenceRow = combatPanelModel.weaponRows?.find(
-    (row) =>
-      row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+    (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
   );
   if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
     return {
@@ -546,9 +607,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
   );
   const requireRepeatedRoundAttack = Boolean(
     input.actionId === "double_attack" &&
-      input.phaseKey === "phase2" &&
-      primaryItemId &&
-      selectedSourceItemId === primaryItemId,
+    input.phaseKey === "phase2" &&
+    primaryItemId &&
+    selectedSourceItemId === primaryItemId,
   );
   const modeResolution = resolvePreferredAttackMode({
     requireRepeatedRoundAttack,
@@ -562,9 +623,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
     am: selectedDerivedMode
       ? String(selectedDerivedMode.armorModifier)
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "AM",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "AM",
+          row: referenceRow,
         }),
     am2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -574,9 +635,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
     attackMode: selectedDerivedMode
       ? selectedDerivedMode.label
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Attack 1",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Attack 1",
+          row: referenceRow,
         }),
     attackMode2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -614,9 +675,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
     crit: selectedDerivedMode
       ? String(selectedDerivedMode.crit)
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Crit 1",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Crit 1",
+          row: referenceRow,
         }),
     crit2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -633,9 +694,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
     dmb: selectedDerivedMode
       ? String(selectedDerivedMode.dmb)
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "DMB",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "DMB",
+          row: referenceRow,
         }),
     dmb2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -655,9 +716,9 @@ export function buildPlayerCombatLoadoutSummary(input: {
     ob: selectedDerivedMode
       ? String(selectedDerivedMode.ob)
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "OB",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "OB",
+          row: referenceRow,
         }),
     ob2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -672,15 +733,14 @@ export function buildPlayerCombatLoadoutSummary(input: {
     secondCrit: selectedDerivedMode
       ? String(selectedDerivedMode.secondCrit)
       : getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Sec",
-      row: referenceRow,
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Sec",
+          row: referenceRow,
         }),
     selectedWeapon: referenceWeaponLabel,
     sourceAttackModeId: modeResolution.mode?.id ?? rawReferenceRow?.attackMode1Id,
     sourceItemId: rawReferenceRow?.itemId,
-    sourceSlot:
-      sourceSlot === "missile" ? "throwing" : sourceSlot,
+    sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,
   };
 

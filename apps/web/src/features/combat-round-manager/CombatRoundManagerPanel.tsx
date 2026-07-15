@@ -109,6 +109,7 @@ import {
 import {
   buildCharacterSheetSummary,
   buildCombatStateCharacterInputs,
+  isCombatFeintResistanceSkill,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
@@ -134,6 +135,9 @@ import {
   completeCurrentCombatPhaseResolutionOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
+  reviewCombatFeintFeasibilityOnServer,
+  rollCombatFeintOnServer,
+  commitCombatFeintOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -187,6 +191,7 @@ import {
   formatScenarioCombatEquipmentDiagnostic,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
+  resolveCombatFeintDeclarationRequestTarget,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
@@ -370,6 +375,8 @@ interface CombatInspectorDeclarationDraft {
   movementIntent: MovementIntent;
   phaseContexts: CombatInspectorPhaseContextDrafts;
   secondaryActionId: PlayerEncounterActionId | "";
+  feintMethod: "movement" | "weapon";
+  feintSkillId: string;
 }
 
 interface CombatInspectorPhaseContextDrafts {
@@ -668,6 +675,8 @@ function buildDeclarationDraft(
       : isPlayerEncounterActionId(scopedCombat?.lastDeclaredSecondaryActionId)
         ? scopedCombat.lastDeclaredSecondaryActionId
         : "",
+    feintMethod: declaration?.feint?.method ?? "movement",
+    feintSkillId: declaration?.feint?.attackerSkillId ?? "dodge",
   };
 }
 
@@ -733,6 +742,9 @@ function buildInspectorDisplayDraft(input: {
     movementIntent:
       input.snapshot.declarationSummary?.movementIntent ?? createDefaultMovementIntent(),
     phaseContexts: buildHistoricalInspectorPhaseContexts(input.snapshot),
+    feintMethod: input.snapshot.declarationSummary?.feint?.method ?? input.draft.feintMethod,
+    feintSkillId:
+      input.snapshot.declarationSummary?.feint?.attackerSkillId ?? input.draft.feintSkillId,
     secondaryActionId:
       (input.snapshot.declarationSummary?.secondaryActionId as
         | PlayerEncounterActionId
@@ -3800,6 +3812,13 @@ export default function CombatRoundManagerPanel({
     useState<PhaseAttackChoiceSelection>("continue");
   const [inspectorDoubleAttackDecision, setInspectorDoubleAttackDecision] =
     useState<DoubleAttackPhase2Decision>("continue");
+  const [inspectorFeintFeasibility, setInspectorFeintFeasibility] = useState<
+    "possible" | "possible_with_adjustment" | "impossible"
+  >("possible");
+  const [inspectorFeintAdjustment, setInspectorFeintAdjustment] = useState("0");
+  const [inspectorFeintAttackerModifier, setInspectorFeintAttackerModifier] = useState("0");
+  const [inspectorFeintDefenderModifier, setInspectorFeintDefenderModifier] = useState("0");
+  const [inspectorFeintNote, setInspectorFeintNote] = useState("");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("normal");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -4178,8 +4197,7 @@ export default function CombatRoundManagerPanel({
     step: inspector.step,
   });
   const inspectorHistoricalStepOutcome = deriveCombatHistoryStepOutcome(inspectorSnapshot);
-  const inspectorIsHistorical =
-    !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
+  const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
   ) =>
@@ -4577,16 +4595,16 @@ export default function CombatRoundManagerPanel({
     inspectorPhaseAttackChoiceSelection === "back_out";
   const inspectorDoubleAttackDecisionAvailable = Boolean(
     !inspectorIsInspectionOnly &&
-      inspector.participant?.declaration?.actionId === "double_attack" &&
-      inspector.step === "review_phase_2_modifiers" &&
-      inspector.participant.attackResults.phase1 &&
-      !inspector.participant.attackResults.phase2 &&
-      !roundState.commands.some(
-        (command) =>
-          command.roundNumber === roundState.roundNumber &&
-          command.participantId === inspector.participant?.participantId &&
-          command.type === "decide_double_attack_phase2",
-      ),
+    inspector.participant?.declaration?.actionId === "double_attack" &&
+    inspector.step === "review_phase_2_modifiers" &&
+    inspector.participant.attackResults.phase1 &&
+    !inspector.participant.attackResults.phase2 &&
+    !roundState.commands.some(
+      (command) =>
+        command.roundNumber === roundState.roundNumber &&
+        command.participantId === inspector.participant?.participantId &&
+        command.type === "decide_double_attack_phase2",
+    ),
   );
   const combatExperienceDifficultyControlsDisabled =
     saving ||
@@ -4624,8 +4642,7 @@ export default function CombatRoundManagerPanel({
       buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
         allowUnarmedFallback:
-          inspectorEquipmentStatus.kind === "ready" ||
-          inspectorEquipmentStatus.kind === "unarmed",
+          inspectorEquipmentStatus.kind === "ready" || inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: inspectorLoadoutModel,
         secondaryActionId: inspectorDraft.secondaryActionId,
       }),
@@ -4671,8 +4688,7 @@ export default function CombatRoundManagerPanel({
       return buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
         allowUnarmedFallback:
-          inspectorEquipmentStatus.kind === "ready" ||
-          inspectorEquipmentStatus.kind === "unarmed",
+          inspectorEquipmentStatus.kind === "ready" || inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
@@ -5001,6 +5017,46 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorDamageReviewCommitReadiness =
     inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
+  const inspectorFeintProposal = selectedTimelineRoundState.feintProposals.find(
+    (proposal) =>
+      (proposal.status === "awaiting_feasibility" ||
+        proposal.status === "awaiting_rolls" ||
+        proposal.status === "awaiting_review") &&
+      (proposal.attackerParticipantId === inspector.participant?.participantId ||
+        (proposal.status === "awaiting_rolls" &&
+          proposal.attackerRollRecorded &&
+          proposal.defenderParticipantId === inspector.participant?.participantId)),
+  );
+  const inspectorFeintExpectedParticipantId = inspectorFeintProposal
+    ? inspectorFeintProposal.attackerRoll
+      ? inspectorFeintProposal.defenderParticipantId
+      : inspectorFeintProposal.attackerParticipantId
+    : undefined;
+  const inspectorFeintExpectedEncounterParticipant = encounter.participants.find(
+    (participant) => participant.id === inspectorFeintExpectedParticipantId,
+  );
+  const inspectorFeintExpectedScenarioParticipant = inspectorFeintExpectedEncounterParticipant
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorFeintExpectedEncounterParticipant,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  useEffect(() => {
+    if (!inspectorFeintProposal?.review) return;
+    setInspectorFeintAttackerModifier(
+      String(
+        inspectorFeintProposal.review.gmAttackerDbParryModifier ??
+          inspectorFeintProposal.review.proposedAttackerDbParryModifier,
+      ),
+    );
+    setInspectorFeintDefenderModifier(
+      String(
+        inspectorFeintProposal.review.gmDefenderObDbModifier ??
+          inspectorFeintProposal.review.proposedDefenderObDbModifier,
+      ),
+    );
+    setInspectorFeintNote(inspectorFeintProposal.review.notes ?? "");
+  }, [inspectorFeintProposal]);
   const inspectorRoundEndActionValidationMessage =
     inspector.step === "round_summary" && selectedRoundIsActive
       ? !selectedTimelineRoundState.roundEndReview
@@ -5076,65 +5132,75 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
-    : inspectorDoubleAttackDecisionAvailable
-      ? inspectorDoubleAttackDecision === "cancel"
-        ? "Cancel Attack 2"
-        : "Continue Attack 2"
-    : inspectorPhaseInitiativeChoiceSubmitted
-      ? "Phase choice submitted"
-      : inspectorPhaseAttackChoiceIsBackOut
-        ? "Back out of attack"
-        : inspectorCanContinuePhaseAttack
-          ? "Continue attack"
-          : inspectorCombatExperienceActionLabel
-            ? inspectorCombatExperienceActionLabel
-            : inspectorPhaseInitiativeCommitLabel
-              ? inspectorPhaseInitiativeCommitLabel
-              : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-                ? "Inspecting step - use Current task to resume"
-                : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
-                  ? "Preparing round-end review"
-                  : inspector.step === "round_summary" &&
-                      inspectorRoundEndDistanceAction?.kind === "roll"
-                    ? `Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}`
-                    : inspector.step === "round_summary" &&
-                        inspectorRoundEndDistanceAction?.kind === "commit"
-                      ? "Apply distance control"
-                      : inspector.step === "round_summary" &&
-                          inspectorRoundEndReview?.status === "review_ready"
-                        ? inspectorRoundEndReviewHasProposals
-                          ? "Commit participant SU review"
-                          : "Mark SU review complete"
+    : inspectorFeintProposal?.status === "awaiting_feasibility"
+      ? "Record feint feasibility"
+      : inspectorFeintProposal?.status === "awaiting_rolls"
+        ? inspectorFeintProposal.attackerRoll
+          ? "Roll feint resistance"
+          : "Roll feint"
+        : inspectorFeintProposal?.status === "awaiting_review"
+          ? "Commit feint result"
+          : inspectorDoubleAttackDecisionAvailable
+            ? inspectorDoubleAttackDecision === "cancel"
+              ? "Cancel Attack 2"
+              : "Continue Attack 2"
+            : inspectorPhaseInitiativeChoiceSubmitted
+              ? "Phase choice submitted"
+              : inspectorPhaseAttackChoiceIsBackOut
+                ? "Back out of attack"
+                : inspectorCanContinuePhaseAttack
+                  ? "Continue attack"
+                  : inspectorCombatExperienceActionLabel
+                    ? inspectorCombatExperienceActionLabel
+                    : inspectorPhaseInitiativeCommitLabel
+                      ? inspectorPhaseInitiativeCommitLabel
+                      : inspectorIsInspectionOnly && inspector.step !== "select_actions"
+                        ? "Inspecting step - use Current task to resume"
                         : inspector.step === "round_summary" &&
-                            inspectorRoundEndReview?.status === "health_roll_pending"
-                          ? "Roll health check"
+                            !selectedTimelineRoundState.roundEndReview
+                          ? "Preparing round-end review"
                           : inspector.step === "round_summary" &&
-                              inspectorRoundEndReview?.status === "complete"
-                            ? "Round-end review complete"
-                            : inspectorDamageCommitted
-                              ? "Phase damage committed"
-                              : inspectorDamageSubstate === "critical_pending"
-                                ? `Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}`
-                                : inspectorDamageSubstate === "location_pending"
-                                  ? `Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}`
-                                  : inspectorDamageSubstate === "location_rolled"
-                                    ? "Prepare damage review"
-                                    : inspectorDamageProposalReady
-                                      ? "Commit phase damage"
-                                      : inspectorCanRollParry
-                                        ? "Roll parry"
-                                        : inspectorAttackSourceValidationMessage
-                                          ? inspectorAttackSourceValidationMessage
-                                          : inspectorCurrentResolutionPhase &&
-                                              inspectorActionPhaseHasAttack === false
-                                            ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-                                            : getCombatResolutionButtonLabel({
-                                                hasPhaseAttack: inspectorActionPhaseHasAttack,
-                                                phase: inspectorCurrentResolutionPhase,
-                                                step: inspector.step,
-                                                substep:
-                                                  inspectorActionPhaseResolutionStatus?.substep,
-                                              });
+                              inspectorRoundEndDistanceAction?.kind === "roll"
+                            ? `Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}`
+                            : inspector.step === "round_summary" &&
+                                inspectorRoundEndDistanceAction?.kind === "commit"
+                              ? "Apply distance control"
+                              : inspector.step === "round_summary" &&
+                                  inspectorRoundEndReview?.status === "review_ready"
+                                ? inspectorRoundEndReviewHasProposals
+                                  ? "Commit participant SU review"
+                                  : "Mark SU review complete"
+                                : inspector.step === "round_summary" &&
+                                    inspectorRoundEndReview?.status === "health_roll_pending"
+                                  ? "Roll health check"
+                                  : inspector.step === "round_summary" &&
+                                      inspectorRoundEndReview?.status === "complete"
+                                    ? "Round-end review complete"
+                                    : inspectorDamageCommitted
+                                      ? "Phase damage committed"
+                                      : inspectorDamageSubstate === "critical_pending"
+                                        ? `Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}`
+                                        : inspectorDamageSubstate === "location_pending"
+                                          ? `Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}`
+                                          : inspectorDamageSubstate === "location_rolled"
+                                            ? "Prepare damage review"
+                                            : inspectorDamageProposalReady
+                                              ? "Commit phase damage"
+                                              : inspectorCanRollParry
+                                                ? "Roll parry"
+                                                : inspectorAttackSourceValidationMessage
+                                                  ? inspectorAttackSourceValidationMessage
+                                                  : inspectorCurrentResolutionPhase &&
+                                                      inspectorActionPhaseHasAttack === false
+                                                    ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                                                    : getCombatResolutionButtonLabel({
+                                                        hasPhaseAttack:
+                                                          inspectorActionPhaseHasAttack,
+                                                        phase: inspectorCurrentResolutionPhase,
+                                                        step: inspector.step,
+                                                        substep:
+                                                          inspectorActionPhaseResolutionStatus?.substep,
+                                                      });
   const inspectorCurrentActionOutcomeKey = inspectorSkipActionOutcomeSelectorAvailable
     ? [
         selectedTimelineRoundState.roundNumber,
@@ -5153,19 +5219,22 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeSelection === "skip";
   const inspectorActionButtonDisabled =
     saving ||
-    (inspectorDoubleAttackDecisionAvailable
-      ? false
-      : inspectorPhaseAttackChoiceIsBackOut
-      ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
-      : (inspectorIsInspectionOnly &&
-          inspector.step !== "select_actions" &&
-          !inspectorCombatExperienceRequired &&
-          !inspectorRoundEndDistanceAction) ||
-        inspectorPhaseInitiativeChoiceSubmitted ||
-        Boolean(inspectorActionValidationMessage) ||
-        inspectorSelectedAttackAlreadyRolled ||
-        inspectorDamageCommitted ||
-        Boolean(inspectorSnapshot));
+    (inspectorFeintProposal
+      ? inspectorFeintProposal.status === "awaiting_rolls" &&
+        !inspectorFeintExpectedScenarioParticipant
+      : inspectorDoubleAttackDecisionAvailable
+        ? false
+        : inspectorPhaseAttackChoiceIsBackOut
+          ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
+          : (inspectorIsInspectionOnly &&
+              inspector.step !== "select_actions" &&
+              !inspectorCombatExperienceRequired &&
+              !inspectorRoundEndDistanceAction) ||
+            inspectorPhaseInitiativeChoiceSubmitted ||
+            Boolean(inspectorActionValidationMessage) ||
+            inspectorSelectedAttackAlreadyRolled ||
+            inspectorDamageCommitted ||
+            Boolean(inspectorSnapshot));
   const inspectorEffectiveActionButtonLabel = inspectorSkipActionSelected
     ? "Skip current action"
     : inspectorActionButtonLabel;
@@ -5319,15 +5388,110 @@ export default function CombatRoundManagerPanel({
         </label>
       </div>
     ) : null;
+  const inspectorFeintControls = inspectorFeintProposal ? (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <strong>Feint</strong>
+      <div>
+        {
+          selectedTimelineRoundState.participants.find(
+            (participant) =>
+              participant.participantId === inspectorFeintProposal.attackerParticipantId,
+          )?.label
+        }{" "}
+        against{" "}
+        {
+          selectedTimelineRoundState.participants.find(
+            (participant) =>
+              participant.participantId === inspectorFeintProposal.defenderParticipantId,
+          )?.label
+        }{" "}
+        · {inspectorFeintProposal.method === "movement" ? "Movement" : "Weapon"}
+      </div>
+      <div>Feasibility: {inspectorFeintProposal.feasibility.replaceAll("_", " ")}</div>
+      {inspectorFeintProposal.description ? <div>{inspectorFeintProposal.description}</div> : null}
+      {inspectorFeintProposal.status === "awaiting_feasibility" ? (
+        <>
+          <label style={compactFieldLabelStyle}>
+            <span>Feasibility</span>
+            <select
+              disabled={saving}
+              onChange={(event) =>
+                setInspectorFeintFeasibility(event.target.value as typeof inspectorFeintFeasibility)
+              }
+              value={inspectorFeintFeasibility}
+            >
+              <option value="possible">Possible</option>
+              <option value="possible_with_adjustment">Possible with adjustment</option>
+              <option value="impossible">Impossible</option>
+            </select>
+          </label>
+          {inspectorFeintFeasibility === "possible_with_adjustment" ? (
+            <label style={compactFieldLabelStyle}>
+              <span>Attacker roll adjustment</span>
+              <input
+                disabled={saving}
+                onChange={(event) => setInspectorFeintAdjustment(event.target.value)}
+                type="number"
+                value={inspectorFeintAdjustment}
+              />
+            </label>
+          ) : null}
+        </>
+      ) : null}
+      {inspectorFeintProposal.status === "awaiting_review" && inspectorFeintProposal.review ? (
+        <>
+          <div>
+            Opposed result: {inspectorFeintProposal.attackerRoll?.finalTotal} vs{" "}
+            {inspectorFeintProposal.defenderRoll?.finalTotal} · difference{" "}
+            {inspectorFeintProposal.difference}
+          </div>
+          {inspectorFeintProposal.tableResult ? (
+            <div>Table band: {inspectorFeintProposal.tableResult.band.replaceAll("_", " ")}</div>
+          ) : null}
+          <label style={compactFieldLabelStyle}>
+            <span>Attacker DB/Parry · Phase 1</span>
+            <input
+              disabled={saving}
+              onChange={(event) => setInspectorFeintAttackerModifier(event.target.value)}
+              type="number"
+              value={inspectorFeintAttackerModifier}
+            />
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>Defender Skill/OB and DB/Parry · Phase 2</span>
+            <input
+              disabled={saving}
+              onChange={(event) => setInspectorFeintDefenderModifier(event.target.value)}
+              type="number"
+              value={inspectorFeintDefenderModifier}
+            />
+          </label>
+        </>
+      ) : null}
+      {inspectorFeintProposal.status === "awaiting_feasibility" ||
+      inspectorFeintProposal.status === "awaiting_review" ? (
+        <label style={compactFieldLabelStyle}>
+          <span>GM note</span>
+          <input
+            disabled={saving}
+            onChange={(event) => setInspectorFeintNote(event.target.value)}
+            value={inspectorFeintNote}
+          />
+        </label>
+      ) : null}
+    </div>
+  ) : null;
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
+    inspectorFeintControls ||
     inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
     inspectorRoundEndDistanceControls ? (
       <>
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
+        {inspectorFeintControls}
         {inspectorDoubleAttackDecisionControls}
         {inspectorPhaseAttackChoiceControls}
         {inspectorRoundEndDistanceControls}
@@ -6102,6 +6266,16 @@ export default function CombatRoundManagerPanel({
           actionId: draft.actionId || undefined,
           actionLabel: draft.actionId ? getPlayerEncounterActionLabel(draft.actionId) : undefined,
           additionalActionNotes: draft.additionalActionNotes || undefined,
+          feint:
+            roundParticipant.declaration?.actionId === "feint_attack" &&
+            roundParticipant.declaration.feint
+              ? {
+                  attackerSkillId: roundParticipant.declaration.feint.attackerSkillId,
+                  defenderSkillId: roundParticipant.declaration.feint.defenderSkillId,
+                  method: roundParticipant.declaration.feint.method,
+                  targetParticipantId: roundParticipant.declaration.feint.targetParticipantId,
+                }
+              : undefined,
           movementId: draft.movementId || undefined,
           movementLabel: getPlayerEncounterMovementLabel(draft.movementId),
           movementIntent: draft.movementIntent,
@@ -6539,9 +6713,23 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    const feintTargetResolution =
+      inspectorDraft.actionId === "feint_attack"
+        ? resolveCombatFeintDeclarationRequestTarget({
+            encounterParticipants: encounter.participants,
+            phaseContexts: inspectorDraft.phaseContexts,
+          })
+        : undefined;
+    if (feintTargetResolution && !feintTargetResolution.ok) {
+      setSaveError(feintTargetResolution.message);
+      return;
+    }
+    const requestPhaseContexts = feintTargetResolution?.ok
+      ? feintTargetResolution.phaseContexts
+      : inspectorDraft.phaseContexts;
     const targetValidation = validateCombatDeclarationTargets({
       actionId: inspectorDraft.actionId || undefined,
-      phaseContexts: inspectorDraft.phaseContexts,
+      phaseContexts: requestPhaseContexts,
       secondaryActionId: inspectorDraft.secondaryActionId || undefined,
     });
 
@@ -6564,12 +6752,22 @@ export default function CombatRoundManagerPanel({
         additionalActionNotes: inspectorDraft.additionalActionNotes,
         combatContext: inspectorGeneratedCombatContext,
         encounterId: encounter.id,
+        feint:
+          inspectorDraft.actionId === "feint_attack" && feintTargetResolution?.ok
+            ? {
+                attackerSkillId:
+                  inspectorDraft.feintMethod === "movement" ? "dodge" : inspectorDraft.feintSkillId,
+                method: inspectorDraft.feintMethod,
+                targetParticipantId: feintTargetResolution.targetParticipantId,
+              }
+            : undefined,
         movementId: inspectorDraft.movementId || undefined,
         movementIntent: inspectorDraft.movementIntent,
-        phaseContexts: inspectorDraft.phaseContexts,
+        phaseContexts: requestPhaseContexts,
         phaseAttackSources: {
           phase1:
-            inspectorDraft.actionId === "double_attack"
+            inspectorDraft.actionId === "double_attack" ||
+            (inspectorDraft.actionId === "feint_attack" && inspectorDraft.feintMethod === "weapon")
               ? buildCombatAttackSourceRef({
                   phaseKey: "phase1",
                   reference: inspectorPhaseLoadoutSummaries.phase1.reference,
@@ -6577,7 +6775,8 @@ export default function CombatRoundManagerPanel({
                 })
               : undefined,
           phase2:
-            inspectorDraft.actionId === "double_attack"
+            inspectorDraft.actionId === "double_attack" ||
+            inspectorDraft.actionId === "feint_attack"
               ? buildCombatAttackSourceRef({
                   phaseKey: "phase2",
                   reference: inspectorPhaseLoadoutSummaries.phase2.reference,
@@ -6631,6 +6830,78 @@ export default function CombatRoundManagerPanel({
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reviewInspectorFeintFeasibility() {
+    if (!inspectorFeintProposal) return;
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter } = await reviewCombatFeintFeasibilityOnServer({
+        adjustment: Number.parseInt(inspectorFeintAdjustment, 10) || 0,
+        encounterId: encounter.id,
+        feasibility: inspectorFeintFeasibility,
+        note: inspectorFeintNote || undefined,
+        proposalId: inspectorFeintProposal.id,
+      });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to review feint.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rollInspectorFeint() {
+    if (!inspectorFeintProposal || !inspectorFeintExpectedScenarioParticipant) return;
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter } = await rollCombatFeintOnServer({
+        encounterId: encounter.id,
+        proposalId: inspectorFeintProposal.id,
+        scenarioParticipantId: inspectorFeintExpectedScenarioParticipant.id,
+      });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll feint.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function commitInspectorFeint() {
+    if (!inspectorFeintProposal?.review) return;
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter, participants } = await commitCombatFeintOnServer({
+        encounterId: encounter.id,
+        gmAttackerDbParryModifier: Number.parseInt(inspectorFeintAttackerModifier, 10) || 0,
+        gmDefenderObDbModifier: Number.parseInt(inspectorFeintDefenderModifier, 10) || 0,
+        notes: inspectorFeintNote || undefined,
+        proposalId: inspectorFeintProposal.id,
+      });
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        ...Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+      }));
+      onScenarioParticipantsUpdated?.(participants);
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to commit feint.");
     } finally {
       setSaving(false);
     }
@@ -8071,7 +8342,14 @@ export default function CombatRoundManagerPanel({
                       distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
                       movementId={inspectorDisplayDraft.movementId}
                       movementIntent={inspectorDisplayDraft.movementIntent}
-                      onActionChange={(actionId) => updateInspectorDraft({ actionId })}
+                      onActionChange={(actionId) =>
+                        updateInspectorDraft({
+                          actionId,
+                          ...(actionId === "feint_attack"
+                            ? { feintMethod: "movement", feintSkillId: "dodge" }
+                            : {}),
+                        })
+                      }
                       onAdditionalActionNotesChange={(additionalActionNotes) =>
                         updateInspectorDraft({ additionalActionNotes })
                       }
@@ -8200,12 +8478,9 @@ export default function CombatRoundManagerPanel({
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                             No information available for this panel.
                           </div>
-                        ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
-                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                        ) : null}
-                        {(!inspectorIsHistorical || historicalPhasePanel) &&
-                        phaseModel.showAttackLocationSelector ? (
-                          <>
+                        ) : inspectorDisplayDraft.actionId === "feint_attack" &&
+                          phaseKey === "phase1" ? (
+                          <div style={{ display: "grid", gap: "0.65rem" }}>
                             <PlayerCombatAttackTargetSelector
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || inspectorIsHistorical}
@@ -8213,9 +8488,122 @@ export default function CombatRoundManagerPanel({
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
-                                    ...inspectorDraft.phaseContexts,
-                                    [phaseKey]: combatContext,
+                                    phase1: combatContext,
+                                    phase2: {
+                                      ...inspectorDraft.phaseContexts.phase2,
+                                      targetParticipantId: combatContext.targetParticipantId,
+                                    },
                                   },
+                                })
+                              }
+                              targetOptions={inspectorTargetOptions}
+                            />
+                            <label style={compactFieldLabelStyle}>
+                              <strong>Feint method</strong>
+                              <select
+                                disabled={saving || inspectorIsHistorical}
+                                onChange={(event) => {
+                                  const method =
+                                    event.target.value === "weapon" ? "weapon" : "movement";
+                                  updateInspectorDraft({
+                                    feintMethod: method,
+                                    feintSkillId: method === "movement" ? "dodge" : "",
+                                  });
+                                }}
+                                value={inspectorDisplayDraft.feintMethod}
+                              >
+                                <option value="movement">Movement</option>
+                                <option value="weapon">Weapon</option>
+                              </select>
+                            </label>
+                            <label style={compactFieldLabelStyle}>
+                              <strong>Attacking skill</strong>
+                              <select
+                                disabled={
+                                  saving ||
+                                  inspectorIsHistorical ||
+                                  inspectorDisplayDraft.feintMethod === "movement"
+                                }
+                                onChange={(event) =>
+                                  updateInspectorDraft({ feintSkillId: event.target.value })
+                                }
+                                value={
+                                  inspectorDisplayDraft.feintMethod === "movement"
+                                    ? "dodge"
+                                    : inspectorDisplayDraft.feintSkillId
+                                }
+                              >
+                                {inspectorDisplayDraft.feintMethod === "movement" ? (
+                                  <option value="dodge">Dodge</option>
+                                ) : (
+                                  <option value="">Select combat skill</option>
+                                )}
+                                {inspectorDisplayDraft.feintMethod === "weapon"
+                                  ? (content?.skills ?? [])
+                                      .filter(isCombatFeintResistanceSkill)
+                                      .map((skill) => (
+                                        <option key={skill.id} value={skill.id}>
+                                          {skill.name}
+                                        </option>
+                                      ))
+                                  : null}
+                              </select>
+                            </label>
+                            <div>Characteristic: Dexterity</div>
+                            <div>Defender: highest close-combat skill · Intelligence</div>
+                            <div>Feasibility: GM review required before opposed rolls.</div>
+                            {inspectorDisplayDraft.feintMethod === "weapon" &&
+                            phaseModel.attackStats ? (
+                              <>
+                                <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                                <PlayerCombatAttackModeSelector
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  onChange={(attackModeId) =>
+                                    updateInspectorDraft({
+                                      phaseContexts: {
+                                        ...inspectorDraft.phaseContexts,
+                                        phase1: {
+                                          ...inspectorDraft.phaseContexts.phase1,
+                                          attackModeId,
+                                        },
+                                      },
+                                    })
+                                  }
+                                  options={phaseLoadoutSummary.attackModeOptions}
+                                  selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
+                                />
+                              </>
+                            ) : null}
+                          </div>
+                        ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
+                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                        ) : null}
+                        {(!inspectorIsHistorical || historicalPhasePanel) &&
+                        phaseModel.showAttackLocationSelector &&
+                        !(
+                          inspectorDisplayDraft.actionId === "feint_attack" && phaseKey === "phase1"
+                        ) ? (
+                          <>
+                            <PlayerCombatAttackTargetSelector
+                              combatContext={phaseModel.phaseContext}
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              distanceLabel={phaseDistanceLabel}
+                              onCombatContextChange={(combatContext) =>
+                                updateInspectorDraft({
+                                  phaseContexts:
+                                    inspectorDisplayDraft.actionId === "feint_attack" &&
+                                    phaseKey === "phase2"
+                                      ? {
+                                          phase1: {
+                                            ...inspectorDraft.phaseContexts.phase1,
+                                            targetParticipantId: combatContext.targetParticipantId,
+                                          },
+                                          phase2: combatContext,
+                                        }
+                                      : {
+                                          ...inspectorDraft.phaseContexts,
+                                          [phaseKey]: combatContext,
+                                        },
                                 })
                               }
                               targetOptions={
@@ -8534,55 +8922,62 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (inspectorDoubleAttackDecisionAvailable
-                          ? decideInspectorDoubleAttackPhase2()
-                          : inspectorPhaseAttackChoiceIsBackOut
-                          ? backOutInspectorPhaseAttack()
-                          : inspectorSkipActionSelected
-                            ? skipInspectorCurrentPhaseAction()
-                            : inspectorCombatExperienceDifficultyCommandPending
-                              ? saveCombatExperienceDifficultyDraft()
-                              : inspectorCombatExperienceRequired
-                                ? rollInspectorCombatExperience()
-                                : inspectorCanContinuePhaseAttack
-                                  ? continueInspectorPhaseAttack()
-                                  : inspector.step === "round_summary" &&
-                                      inspectorRoundEndDistanceAction?.kind === "roll"
-                                    ? rollRoundEndDistanceControlFromPrimaryAction()
-                                    : inspector.step === "round_summary" &&
-                                        inspectorRoundEndDistanceAction?.kind === "commit"
-                                      ? commitRoundEndDistanceControl(
-                                          inspectorRoundEndDistanceAction.proposal.id,
-                                        )
-                                      : inspector.step === "round_summary"
-                                        ? advanceInspectorRoundEndReview()
-                                        : inspectorPhaseInitiativeCommitLabel
-                                          ? commitCurrentStep()
-                                          : inspectorCurrentStepIsInitiative
-                                            ? rollInspectorInitiative()
-                                            : inspectorCanRollParry
-                                              ? rollInspectorParry()
-                                              : inspectorCurrentResolutionPhase &&
-                                                  (inspectorActionPhaseHasAttack === false ||
-                                                    inspectorActionPhaseResolutionStatus?.substep ===
-                                                      "effects")
-                                                ? completeInspectorPhaseResolution(
-                                                    inspectorCurrentResolutionPhase,
-                                                  )
-                                                : inspectorCurrentResolutionPhase &&
-                                                    (inspectorActionPhaseResolutionStatus?.substep ===
-                                                      "parry" ||
-                                                      inspectorActionPhaseResolutionStatus?.substep ===
-                                                        "damage")
-                                                  ? advanceInspectorPhaseResolutionSubstep(
-                                                      inspectorCurrentResolutionPhase,
-                                                    )
-                                                  : inspectorCanRollPhaseAttack &&
-                                                      inspectorCurrentAttackPhase
-                                                    ? rollInspectorPhaseAttack(
-                                                        inspectorCurrentAttackPhase,
-                                                      )
-                                                    : saveInspectorDeclaration())
+                        void (inspectorFeintProposal?.status === "awaiting_feasibility"
+                          ? reviewInspectorFeintFeasibility()
+                          : inspectorFeintProposal?.status === "awaiting_rolls"
+                            ? rollInspectorFeint()
+                            : inspectorFeintProposal?.status === "awaiting_review"
+                              ? commitInspectorFeint()
+                              : inspectorDoubleAttackDecisionAvailable
+                                ? decideInspectorDoubleAttackPhase2()
+                                : inspectorPhaseAttackChoiceIsBackOut
+                                  ? backOutInspectorPhaseAttack()
+                                  : inspectorSkipActionSelected
+                                    ? skipInspectorCurrentPhaseAction()
+                                    : inspectorCombatExperienceDifficultyCommandPending
+                                      ? saveCombatExperienceDifficultyDraft()
+                                      : inspectorCombatExperienceRequired
+                                        ? rollInspectorCombatExperience()
+                                        : inspectorCanContinuePhaseAttack
+                                          ? continueInspectorPhaseAttack()
+                                          : inspector.step === "round_summary" &&
+                                              inspectorRoundEndDistanceAction?.kind === "roll"
+                                            ? rollRoundEndDistanceControlFromPrimaryAction()
+                                            : inspector.step === "round_summary" &&
+                                                inspectorRoundEndDistanceAction?.kind === "commit"
+                                              ? commitRoundEndDistanceControl(
+                                                  inspectorRoundEndDistanceAction.proposal.id,
+                                                )
+                                              : inspector.step === "round_summary"
+                                                ? advanceInspectorRoundEndReview()
+                                                : inspectorPhaseInitiativeCommitLabel
+                                                  ? commitCurrentStep()
+                                                  : inspectorCurrentStepIsInitiative
+                                                    ? rollInspectorInitiative()
+                                                    : inspectorCanRollParry
+                                                      ? rollInspectorParry()
+                                                      : inspectorCurrentResolutionPhase &&
+                                                          (inspectorActionPhaseHasAttack ===
+                                                            false ||
+                                                            inspectorActionPhaseResolutionStatus?.substep ===
+                                                              "effects")
+                                                        ? completeInspectorPhaseResolution(
+                                                            inspectorCurrentResolutionPhase,
+                                                          )
+                                                        : inspectorCurrentResolutionPhase &&
+                                                            (inspectorActionPhaseResolutionStatus?.substep ===
+                                                              "parry" ||
+                                                              inspectorActionPhaseResolutionStatus?.substep ===
+                                                                "damage")
+                                                          ? advanceInspectorPhaseResolutionSubstep(
+                                                              inspectorCurrentResolutionPhase,
+                                                            )
+                                                          : inspectorCanRollPhaseAttack &&
+                                                              inspectorCurrentAttackPhase
+                                                            ? rollInspectorPhaseAttack(
+                                                                inspectorCurrentAttackPhase,
+                                                              )
+                                                            : saveInspectorDeclaration())
                       }
                       preActionControls={inspectorPreActionControls}
                       saving={saving}

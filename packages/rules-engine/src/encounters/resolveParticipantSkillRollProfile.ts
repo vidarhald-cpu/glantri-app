@@ -47,6 +47,8 @@ export interface ResolveParticipantSkillRollProfileInput {
   participantId?: string;
   participantName?: string;
   sheetSummary?: unknown;
+  /** Rule-specific characteristic override; skill XP remains the canonical effectiveSkillNumber. */
+  linkedStatsOverride?: string[];
   skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
 }
 
@@ -111,7 +113,9 @@ function readProfileStats(build: unknown): Record<string, number> | undefined {
     return undefined;
   }
 
-  const resolvedStats = getResolvedProfileStats(build.profile as Parameters<typeof getResolvedProfileStats>[0]);
+  const resolvedStats = getResolvedProfileStats(
+    build.profile as Parameters<typeof getResolvedProfileStats>[0],
+  );
   return readStatsFromRecord(resolvedStats);
 }
 
@@ -122,7 +126,9 @@ function readSheetStats(sheetSummary: unknown): Record<string, number> | undefin
 
   return (
     readStatsFromRecord(sheetSummary.adjustedStats) ??
-    (isRecord(sheetSummary.draftView) ? readStatsFromRecord(sheetSummary.draftView.adjustedStats) : undefined)
+    (isRecord(sheetSummary.draftView)
+      ? readStatsFromRecord(sheetSummary.draftView.adjustedStats)
+      : undefined)
   );
 }
 
@@ -131,7 +137,11 @@ function readStatsBlock(value: unknown): Record<string, number> | undefined {
     return undefined;
   }
 
-  return readStatsFromRecord(value.final) ?? readStatsFromRecord(value.base) ?? readStatsFromRecord(value);
+  return (
+    readStatsFromRecord(value.final) ??
+    readStatsFromRecord(value.base) ??
+    readStatsFromRecord(value)
+  );
 }
 
 function readSnapshotStats(snapshot: unknown): Record<string, number> | undefined {
@@ -140,8 +150,12 @@ function readSnapshotStats(snapshot: unknown): Record<string, number> | undefine
   }
 
   return (
-    (isRecord(snapshot.generatedHumanoidNpc) ? readStatsBlock(snapshot.generatedHumanoidNpc.stats) : undefined) ??
-    (isRecord(snapshot.humanoidNpcArchetype) ? readStatsBlock(snapshot.humanoidNpcArchetype.stats) : undefined) ??
+    (isRecord(snapshot.generatedHumanoidNpc)
+      ? readStatsBlock(snapshot.generatedHumanoidNpc.stats)
+      : undefined) ??
+    (isRecord(snapshot.humanoidNpcArchetype)
+      ? readStatsBlock(snapshot.humanoidNpcArchetype.stats)
+      : undefined) ??
     readStatsBlock(snapshot.stats)
   );
 }
@@ -154,7 +168,9 @@ function getLinkedStatAverage(input: {
     return undefined;
   }
 
-  const values = input.linkedStats.map((stat) => input.stats?.[stat]).filter((value): value is number => value != null);
+  const values = input.linkedStats
+    .map((stat) => input.stats?.[stat])
+    .filter((value): value is number => value != null);
 
   if (values.length !== input.linkedStats.length) {
     return undefined;
@@ -179,7 +195,7 @@ function findSkillView(input: {
 
   return skills.find(
     (skill): skill is Record<string, unknown> =>
-      isRecord(skill) && readString(skill.skillId) === input.skillId
+      isRecord(skill) && readString(skill.skillId) === input.skillId,
   );
 }
 
@@ -192,8 +208,12 @@ function readSnapshotSkillView(input: {
   }
 
   const skillLists = [
-    isRecord(input.snapshot.generatedHumanoidNpc) ? input.snapshot.generatedHumanoidNpc.skills : undefined,
-    isRecord(input.snapshot.humanoidNpcArchetype) ? input.snapshot.humanoidNpcArchetype.skills : undefined,
+    isRecord(input.snapshot.generatedHumanoidNpc)
+      ? input.snapshot.generatedHumanoidNpc.skills
+      : undefined,
+    isRecord(input.snapshot.humanoidNpcArchetype)
+      ? input.snapshot.humanoidNpcArchetype.skills
+      : undefined,
     input.snapshot.skills,
   ];
 
@@ -204,7 +224,7 @@ function readSnapshotSkillView(input: {
 
     const skill = skills.find(
       (entry): entry is Record<string, unknown> =>
-        isRecord(entry) && readString(entry.skillId) === input.skillId
+        isRecord(entry) && readString(entry.skillId) === input.skillId,
     );
 
     if (skill) {
@@ -215,11 +235,15 @@ function readSnapshotSkillView(input: {
   return undefined;
 }
 
-function readSnapshotFinalSkill(skillView: Record<string, unknown> | undefined): number | undefined {
+function readSnapshotFinalSkill(
+  skillView: Record<string, unknown> | undefined,
+): number | undefined {
   return readNumber(skillView?.totalSkill) ?? readNumber(skillView?.totalSkillLevel);
 }
 
-function readSnapshotSkillContribution(skillView: Record<string, unknown> | undefined): number | undefined {
+function readSnapshotSkillContribution(
+  skillView: Record<string, unknown> | undefined,
+): number | undefined {
   // Generated/template NPC `targetLevel` values come from seniority bands and represent
   // skill contribution/ranks. Explicit totalSkill fields, when present, are final totals.
   return (
@@ -273,7 +297,7 @@ function readBestGroupXp(input: {
     .map((groupId) => {
       const groupView = groups.find(
         (group): group is Record<string, unknown> =>
-          isRecord(group) && readString(group.groupId) === groupId
+          isRecord(group) && readString(group.groupId) === groupId,
       );
       const groupLevel = readNumber(groupView?.groupLevel);
 
@@ -294,7 +318,7 @@ function readBestGroupXp(input: {
 }
 
 export function resolveParticipantSkillRollProfile(
-  input: ResolveParticipantSkillRollProfileInput
+  input: ResolveParticipantSkillRollProfileInput,
 ): ParticipantSkillRollProfile {
   const sheetSummary = buildSheetSummaryFromSnapshot(input);
   const skillView = findSkillView({
@@ -305,25 +329,31 @@ export function resolveParticipantSkillRollProfile(
     snapshot: input.build,
     skillId: input.skill.id,
   });
-  const stats = readProfileStats(input.build) ?? readSheetStats(sheetSummary) ?? readSnapshotStats(input.build);
+  const stats =
+    readProfileStats(input.build) ?? readSheetStats(sheetSummary) ?? readSnapshotStats(input.build);
+  const linkedStats = input.linkedStatsOverride ?? input.skill.linkedStats;
   const avgStats =
-    readNumber(skillView?.linkedStatAverage) ??
-    getLinkedStatAverage({ linkedStats: input.skill.linkedStats, stats }) ??
+    (input.linkedStatsOverride ? undefined : readNumber(skillView?.linkedStatAverage)) ??
+    getLinkedStatAverage({ linkedStats, stats }) ??
     0;
   const snapshotFinalSkill = readSnapshotFinalSkill(snapshotSkillView);
   const snapshotSkillContribution = readSnapshotSkillContribution(snapshotSkillView);
   const hasStats = Boolean(stats);
-  const groupXP = readBestGroupXp({ sheetSummary, skill: input.skill }) ?? readNumber(skillView?.groupLevel) ?? 0;
+  const groupXP =
+    readBestGroupXp({ sheetSummary, skill: input.skill }) ?? readNumber(skillView?.groupLevel) ?? 0;
   const skillXP =
     readNumber(skillView?.specificSkillLevel) ??
     (snapshotFinalSkill == null
-      ? snapshotSkillContribution ?? 0
+      ? (snapshotSkillContribution ?? 0)
       : Math.max(0, snapshotFinalSkill - avgStats));
   const derivedXP = readNumber(skillView?.relationshipGrantedSkillLevel) ?? 0;
   const totalXP =
     readNumber(skillView?.effectiveSkillNumber) ??
-    (snapshotFinalSkill == null ? groupXP + skillXP + derivedXP : Math.max(0, snapshotFinalSkill - avgStats));
-  const totalSkillLevel = readNumber(skillView?.totalSkill) ?? snapshotFinalSkill ?? avgStats + totalXP;
+    (snapshotFinalSkill == null
+      ? groupXP + skillXP + derivedXP
+      : Math.max(0, snapshotFinalSkill - avgStats));
+  const totalSkillLevel =
+    readNumber(skillView?.totalSkill) ?? snapshotFinalSkill ?? avgStats + totalXP;
   const known =
     (Boolean(skillView) && totalXP > 0) ||
     (snapshotFinalSkill != null && snapshotFinalSkill > 0) ||
@@ -346,7 +376,7 @@ export function resolveParticipantSkillRollProfile(
     derivedXP,
     groupXP,
     known,
-    linkedStats: [...input.skill.linkedStats],
+    linkedStats: [...linkedStats],
     participantId: input.participantId,
     participantName: input.participantName,
     rollBaseValue: known ? totalSkillLevel : avgStats,

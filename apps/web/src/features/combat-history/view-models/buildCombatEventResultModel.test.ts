@@ -36,8 +36,18 @@ describe("buildCombatEventResultModel", () => {
           publicOutcome: { status: "resolved", success: false },
         },
         identities: [
-          { displayName: "Scyrian cavalry guy", participantId: "attacker", role: "attacker", visibility: "visible" },
-          { displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" },
+          {
+            displayName: "Scyrian cavalry guy",
+            participantId: "attacker",
+            role: "attacker",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "defender",
+            role: "defender",
+            visibility: "visible",
+          },
         ],
       }),
       event("attack", 1, {
@@ -47,17 +57,41 @@ describe("buildCombatEventResultModel", () => {
           publicOutcome: {},
         },
         identities: [
-          { displayName: "Scyrian cavalry guy", participantId: "attacker", role: "attacker", visibility: "visible" },
-          { displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" },
+          {
+            displayName: "Scyrian cavalry guy",
+            participantId: "attacker",
+            role: "attacker",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "defender",
+            role: "defender",
+            visibility: "visible",
+          },
         ],
       }),
       event("critical", 4, {
         facts: { involvedOutcome: { criticalGrade: "e" }, publicOutcome: {} },
-        identities: [{ displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" }],
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "defender",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
       }),
       event("hit_location", 3, {
         facts: { involvedOutcome: { selectedHitLocation: "abdomen" }, publicOutcome: {} },
-        identities: [{ displayName: "The Gladiator", participantId: "defender", role: "defender", visibility: "visible" }],
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "defender",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
       }),
     ]);
 
@@ -71,17 +105,11 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[0]?.summary).toBe(
       "Scyrian cavalry guy attacked The Gladiator with a Long sword.",
     );
-    expect(model.items[1]?.summary).toBe(
-      "The Gladiator attempted to parry Scyrian cavalry guy.",
-    );
-    expect(model.items[1]?.outcomeRows.map((row) => row.text)).toEqual([
-      "Result: Parry failed",
-    ]);
+    expect(model.items[1]?.summary).toBe("The Gladiator attempted to parry Scyrian cavalry guy.");
+    expect(model.items[1]?.outcomeRows.map((row) => row.text)).toEqual(["Result: Parry failed"]);
     expect(model.items[2]?.summary).toBe("The Gladiator was hit in the abdomen.");
     expect(model.items[3]?.summary).toBe("Critical E against The Gladiator.");
-    expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
-      "Result: Grazing hit",
-    ]);
+    expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual(["Result: Grazing hit"]);
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
       "OB 10 + roll 18 - DB 15 = 13",
     ]);
@@ -152,14 +180,28 @@ describe("buildCombatEventResultModel", () => {
           involvedOutcome: { criticalGrade: "e", selectedHitLocation: "abdomen", totalDamage: 11 },
           publicOutcome: {},
         },
-        identities: [{ displayName: "The Gladiator", participantId: "target", role: "defender", visibility: "visible" }],
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "target",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
       }),
       event("damage_committed", 3, {
         facts: {
           involvedOutcome: { criticalGrade: "e", finalCommittedDamage: 11, hitLocation: "abdomen" },
           publicOutcome: { status: "committed" },
         },
-        identities: [{ displayName: "The Gladiator", participantId: "target", role: "defender", visibility: "visible" }],
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "target",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
       }),
     ]);
     const displayedText = model.items.flatMap((item) => [
@@ -175,5 +217,57 @@ describe("buildCombatEventResultModel", () => {
       "Critical E committed.",
     ]);
     expect(displayedText.join(" ")).not.toMatch(/Status:|Success:|Required: No|damageRollRequired/);
+  });
+
+  it("presents the feint ruling, contest, and committed modifiers chronologically", () => {
+    const identities = [
+      {
+        displayName: "The Gladiator",
+        participantId: "attacker",
+        role: "actor" as const,
+        visibility: "visible" as const,
+      },
+      {
+        displayName: "Scyrian",
+        participantId: "defender",
+        role: "target" as const,
+        visibility: "visible" as const,
+      },
+    ];
+    const model = buildCombatEventResultModel([
+      event("feint_committed", 3, {
+        facts: {
+          involvedOutcome: {
+            attackerPhase1DbParryModifier: 0,
+            defenderPhase2DbParryModifier: -2,
+            defenderPhase2SkillObModifier: -2,
+          },
+          publicOutcome: {},
+        },
+        identities,
+      }),
+      event("feint_feasibility", 1, {
+        facts: {
+          involvedOutcome: { feasibility: "possible", method: "weapon" },
+          publicOutcome: {},
+        },
+        identities,
+      }),
+      event("feint_result", 2, {
+        facts: { involvedOutcome: { difference: 7 }, publicOutcome: {} },
+        identities,
+      }),
+    ]);
+
+    expect(model.items.map((item) => item.type)).toEqual([
+      "feint_feasibility",
+      "feint_result",
+      "feint_committed",
+    ]);
+    expect(model.items[0]?.summary).toBe("The Gladiator attempted a weapon feint against Scyrian.");
+    expect(model.items[1]?.outcomeRows[0]?.text).toBe("The Gladiator won the feint contest by 7.");
+    expect(model.items[2]?.outcomeRows.map((row) => row.text)).toContain(
+      "Scyrian receives Skill/OB -2 and DB/Parry -2 in Phase 2.",
+    );
   });
 });

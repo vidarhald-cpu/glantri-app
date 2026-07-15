@@ -149,4 +149,17 @@ describe("buildProjectedCombatTrackerModel", () => {
 
     expect(model.cells[`1:aria:${step}`].hoverText).toContain(expected);
   });
+
+  it.each([
+    ["feint_committed", "committed", "✓", "feint result committed."],
+    ["feint_impossible", "not_applicable", "–", "feint ruled impossible; no roll required."],
+  ] as const)("projects %s into the Phase 1 action marker", (type, status, marker, hover) => {
+    const model = buildProjectedCombatTrackerModel({
+      history: history([event({ status, type })]),
+    });
+    const cell = model.cells["1:aria:phase_1_actions"];
+
+    expect(cell.marker).toBe(marker);
+    expect(cell.hoverText).toContain(hover);
+  });
 });

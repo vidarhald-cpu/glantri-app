@@ -51,6 +51,8 @@ export function getCombatDeclarationAttackPhases(input: {
       return ["phase2"];
     case "double_attack":
       return ["phase1", "phase2"];
+    case "feint_attack":
+      return ["phase2"];
     case "adjust_range_attack":
       return ["phase2"];
     default:
@@ -95,8 +97,21 @@ export function validateCombatDeclarationTargets(input: {
     const targetParticipantId = input.phaseContexts?.[phaseKey]?.targetParticipantId;
     return !targetParticipantId || targetParticipantId.trim().length === 0;
   });
+  if (
+    input.actionId === "feint_attack" &&
+    !input.phaseContexts?.phase1?.targetParticipantId &&
+    !missingPhases.includes("phase1")
+  ) {
+    missingPhases.unshift("phase1");
+  }
   const doubleAttackTargetsDiffer =
     input.actionId === "double_attack" &&
+    Boolean(input.phaseContexts?.phase1?.targetParticipantId) &&
+    Boolean(input.phaseContexts?.phase2?.targetParticipantId) &&
+    input.phaseContexts?.phase1?.targetParticipantId !==
+      input.phaseContexts?.phase2?.targetParticipantId;
+  const feintTargetDiffers =
+    input.actionId === "feint_attack" &&
     Boolean(input.phaseContexts?.phase1?.targetParticipantId) &&
     Boolean(input.phaseContexts?.phase2?.targetParticipantId) &&
     input.phaseContexts?.phase1?.targetParticipantId !==
@@ -106,7 +121,9 @@ export function validateCombatDeclarationTargets(input: {
     missingPhases,
     message: doubleAttackTargetsDiffer
       ? "Double Attack must target the same opponent in both phases."
-      : formatMissingTargetMessage(missingPhases),
-    valid: missingPhases.length === 0 && !doubleAttackTargetsDiffer,
+      : feintTargetDiffers
+        ? "Feint and attack must target the same opponent."
+        : formatMissingTargetMessage(missingPhases),
+    valid: missingPhases.length === 0 && !doubleAttackTargetsDiffer && !feintTargetDiffers,
   };
 }
