@@ -4856,7 +4856,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.statusCode).toBe(200);
     const nextState = response.json().encounter.combatRoundState as CombatRoundState;
     expect(nextState.roundNumber).toBe(completedState.roundNumber + 1);
     expect(nextState.rounds).toHaveLength(1);
@@ -7058,9 +7058,112 @@ describe("scenarios route contract", () => {
         attackerParticipantId: "encounter-participant-1",
         defenderParticipantId: "encounter-participant-2",
         method: "movement",
-        status: "awaiting_feasibility",
+        status: "awaiting_action_turn",
       }),
     ]);
+  });
+
+  it("derives a weapon Feint skill from the committed source instead of client input", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const weaponParticipant = makeDoubleAttackWeaponParticipant("weapon-template-dagger");
+    const weaponTemplate = weaponTemplates.find(
+      (candidate) => candidate.id === "weapon-template-dagger",
+    );
+    if (!weaponTemplate) throw new Error("Missing dagger fixture.");
+    const modeId = weaponTemplate.attackModes?.[0]?.id;
+    if (!modeId) throw new Error("Missing fencing sword mode fixture.");
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participants: [
+        {
+          ...weaponParticipant,
+          snapshot: {
+            ...weaponParticipant.snapshot,
+            sheetSummary: {
+              adjustedStats: { dex: 12, int: 9 },
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 8,
+                    name: weaponTemplate.weaponSkill,
+                    skillId: "one_handed_edged",
+                    totalSkill: 24,
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: {
+            displayName: "City guard",
+            sheetSummary: {
+              adjustedStats: { dex: 9, int: 12 },
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 6,
+                    name: "Brawling",
+                    skillId: "brawling",
+                    totalSkill: 18,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const itemId = "item-weapon-template-dagger";
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "feint_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        feint: {
+          attackerSkillId: "unrelated-client-skill",
+          method: "weapon",
+          targetParticipantId: "participant-2",
+        },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            attackModeId: modeId,
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: weaponTemplate.id,
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            attackModeId: modeId,
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: weaponTemplate.id,
+          }),
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const declaration =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .participants[0].declaration;
+    expect(declaration.feint).toMatchObject({
+      attackerSkillId: "one_handed_edged",
+      attackerSkillLabel: weaponTemplate.weaponSkill,
+      method: "weapon",
+    });
+    expect(declaration.feint.attackerSkillId).not.toBe("unrelated-client-skill");
   });
 
   it("rejects a genuinely missing Feint target with the player-facing target error", async () => {

@@ -6,7 +6,12 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
-import { getCombatDeclarationAttackPhases, resolvePreferredAttackMode } from "@glantri/domain";
+import {
+  getCombatDeclarationAttackPhases,
+  resolveCombatFeintWeaponSkillDefinition,
+  resolvePreferredAttackMode,
+  type SkillSpecialization,
+} from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -23,6 +28,26 @@ import type {
 
 export type PlayerCombatPhaseKey = "phase1" | "phase2";
 
+export function resolveCombatFeintWeaponSkill(input: {
+  equipmentState?: EquipmentFeatureState | null;
+  skills: readonly { id: string; name: string }[];
+  specializations?: readonly SkillSpecialization[];
+  sourceTemplateId?: string;
+}): { id: string; label: string } | undefined {
+  const template = input.sourceTemplateId
+    ? input.equipmentState?.templates.templatesById[input.sourceTemplateId]
+    : undefined;
+  if (!template || (template.category !== "weapon" && template.category !== "shield")) {
+    return undefined;
+  }
+  const skill = resolveCombatFeintWeaponSkillDefinition({
+    skills: input.skills as Parameters<typeof resolveCombatFeintWeaponSkillDefinition>[0]["skills"],
+    specializations: input.specializations,
+    weaponSkill: template.weaponSkill,
+  });
+  return skill ? { id: skill.id, label: skill.name } : undefined;
+}
+
 export type CombatFeintDeclarationTargetResolution =
   | {
       ok: true;
@@ -30,6 +55,25 @@ export type CombatFeintDeclarationTargetResolution =
       targetParticipantId: string;
     }
   | { message: string; ok: false };
+
+export function buildCanonicalCombatTargetOptions(input: {
+  encounterParticipants: EncounterSession["participants"];
+  options: readonly { displayName: string; id: string }[];
+}): Array<{ displayName: string; id: string }> {
+  const byId = new Map<string, { displayName: string; id: string }>();
+  for (const option of input.options) {
+    const participant = input.encounterParticipants.find(
+      (candidate) =>
+        candidate.id === option.id ||
+        candidate.scenarioParticipantId === option.id ||
+        candidate.characterId === option.id,
+    );
+    if (participant) {
+      byId.set(participant.id, { displayName: option.displayName, id: participant.id });
+    }
+  }
+  return [...byId.values()];
+}
 
 /**
  * Combat commands identify actors by encounter-participant id. Phase controls may

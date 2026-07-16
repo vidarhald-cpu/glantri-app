@@ -4,6 +4,7 @@ import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerE
 
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
@@ -14,6 +15,7 @@ import {
   getScenarioCombatEquipmentStatus,
   normalizeCombatEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
+  resolveCombatFeintWeaponSkill,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
@@ -113,6 +115,73 @@ function buildLoadoutModel(input: {
 }
 
 describe("player combat phase model", () => {
+  it("derives a weapon Feint skill from authoritative weapon metadata", () => {
+    expect(
+      resolveCombatFeintWeaponSkill({
+        equipmentState: {
+          templates: {
+            templatesById: {
+              "broad-sword": {
+                category: "weapon",
+                id: "broad-sword",
+                weaponSkill: "1-h edged",
+              },
+            },
+          },
+        } as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["equipmentState"],
+        skills: [
+          { id: "dodge", name: "Dodge" },
+          { id: "one-hand-edged", name: "1-h edged" },
+        ],
+        sourceTemplateId: "broad-sword",
+      }),
+    ).toEqual({ id: "one-hand-edged", label: "1-h edged" });
+  });
+
+  it("resolves a weapon specialization name through its canonical parent skill", () => {
+    expect(
+      resolveCombatFeintWeaponSkill({
+        equipmentState: {
+          templates: {
+            templatesById: {
+              rapier: {
+                category: "weapon",
+                id: "rapier",
+                weaponSkill: "Fencing",
+              },
+            },
+          },
+        } as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["equipmentState"],
+        skills: [{ id: "one_handed_edged", name: "1-h edged" }],
+        specializations: [
+          {
+            id: "fencing",
+            name: "Fencing",
+            skillId: "one_handed_edged",
+          },
+        ] as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["specializations"],
+        sourceTemplateId: "rapier",
+      }),
+    ).toEqual({ id: "one_handed_edged", label: "1-h edged" });
+  });
+
+  it("normalizes target options to encounter ids without synthetic raw labels", () => {
+    expect(
+      buildCanonicalCombatTargetOptions({
+        encounterParticipants: [
+          {
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof buildCanonicalCombatTargetOptions>[0]["encounterParticipants"],
+        options: [
+          { displayName: "The Gladiator", id: "scenario-defender" },
+          { displayName: "Saved target (scenario-missing)", id: "scenario-missing" },
+        ],
+      }),
+    ).toEqual([{ displayName: "The Gladiator", id: "encounter-defender" }]);
+  });
+
   it("keeps committed scenario item identities while enriching matching attack modes", () => {
     const scenarioEquipmentState = {
       activeLoadoutByCharacterId: {

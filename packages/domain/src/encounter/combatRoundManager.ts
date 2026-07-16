@@ -5174,7 +5174,7 @@ export function getCombatRoundFeintProposal(input: {
   );
 }
 
-function combatRoundParticipantHasExecutablePhaseAction(input: {
+export function combatRoundParticipantHasExecutablePhaseAction(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
@@ -5185,6 +5185,13 @@ function combatRoundParticipantHasExecutablePhaseAction(input: {
       state: input.state,
     });
     if (proposal && proposal.status !== "committed" && proposal.status !== "impossible") {
+      return true;
+    }
+
+    const participant = input.state.participants.find(
+      (entry) => entry.participantId === input.participantId,
+    );
+    if (participant?.declaration?.actionId === "observe_opponent") {
       return true;
     }
   }
@@ -5425,7 +5432,7 @@ function getCombatRoundInitialPhaseResolutionSubstep(input: {
       return "feint";
     }
   }
-  return combatRoundParticipantHasExecutablePhaseAttack(input) ? "attack" : "done";
+  return combatRoundParticipantHasExecutablePhaseAction(input) ? "attack" : "done";
 }
 
 function getCombatRoundPostAttackResolutionSubstep(
@@ -5484,6 +5491,9 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
           })
         : undefined;
     if (feintProposal) {
+      if (storedStatus === "skipped") {
+        return "skipped";
+      }
       if (feintProposal.status === "committed") {
         return "complete";
       }
@@ -5499,6 +5509,15 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
     });
 
     if (!hasPhaseAttack) {
+      if (phase === "phase1" && participant?.declaration?.actionId === "observe_opponent") {
+        if (storedStatus === "skipped" || phaseStatus.substep === "done") {
+          return "skipped";
+        }
+        return normalized.phaseResolutionCursor?.participantId === input.participantId &&
+          normalized.phaseResolutionCursor.phase === phase
+          ? "ready"
+          : storedStatus;
+      }
       const currentStepIndex = COMBAT_ROUND_STEPS.indexOf(normalized.currentStep);
       const actionStepIndex = COMBAT_ROUND_STEPS.indexOf(actionStep);
       const actionSlotReached =
@@ -5798,23 +5817,27 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
     });
   }
 
+  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+    participantId,
+    state: normalized,
+  });
   const existingStatus = getEffectiveCombatRoundPhaseResolutionStatus({
     participantId,
     phase: input.phase,
-    state: normalized,
+    state: withOpenedFeint,
   });
   const nextSubstep =
     existingStatus.substep === "pending"
       ? getCombatRoundInitialPhaseResolutionSubstep({
           participantId,
           phase: input.phase,
-          state: normalized,
+          state: withOpenedFeint,
         })
       : existingStatus.substep;
   const withStatus = setCombatRoundPhaseResolutionStatus({
     participantId,
     phase: input.phase,
-    state: normalized,
+    state: withOpenedFeint,
     status: {
       substep: nextSubstep,
       updatedAt: input.updatedAt ?? existingStatus.updatedAt,
@@ -5862,15 +5885,19 @@ function moveCombatRoundPhaseResolutionCursorToNextParticipant(input: {
     });
   }
 
+  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+    participantId,
+    state: normalized,
+  });
   const nextSubstep = getCombatRoundInitialPhaseResolutionSubstep({
     participantId,
     phase: input.phase,
-    state: normalized,
+    state: withOpenedFeint,
   });
   const withStatus = setCombatRoundPhaseResolutionStatus({
     participantId,
     phase: input.phase,
-    state: normalized,
+    state: withOpenedFeint,
     status: {
       substep: nextSubstep,
       updatedAt: input.updatedAt,
@@ -6157,15 +6184,13 @@ export function skipCombatRoundCurrentPhaseAction(input: {
   });
 
   if (
-    !combatRoundParticipantHasExecutablePhaseAttack({
+    !combatRoundParticipantHasExecutablePhaseAction({
       participantId: input.participantId,
       phase: input.phase,
       state: normalized,
     })
   ) {
-    throw new RangeError(
-      "Current phase action cannot be skipped because it is not attack-capable.",
-    );
+    throw new RangeError("Current phase action cannot be skipped because it is not available.");
   }
 
   if (
@@ -14777,7 +14802,7 @@ export function recordCombatRoundDeclaration(input: {
                 slot: "attack_2",
               }),
             roundNumber: normalized.roundNumber,
-            status: "awaiting_feasibility",
+            status: "awaiting_action_turn",
           })
         : undefined;
 
@@ -14821,6 +14846,30 @@ function replaceCombatRoundFeintProposal(input: {
       ...input.state.feintProposals.filter((proposal) => proposal.id !== input.proposal.id),
       input.proposal,
     ],
+  });
+}
+
+function openCombatRoundFeintRollsForActionTurn(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const proposal = getCombatRoundFeintProposal({
+    attackerParticipantId: input.participantId,
+    state: input.state,
+  });
+  if (
+    !proposal ||
+    (proposal.status !== "awaiting_action_turn" && proposal.status !== "awaiting_feasibility")
+  ) {
+    return input.state;
+  }
+
+  return replaceCombatRoundFeintProposal({
+    proposal: combatFeintProposalSchema.parse({
+      ...proposal,
+      status: "awaiting_rolls",
+    }),
+    state: input.state,
   });
 }
 
@@ -15126,7 +15175,9 @@ export function commitCombatRoundFeintResult(input: {
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
   defenderCombatContext: ScenarioParticipantCombatContext;
   gmAttackerDbParryModifier?: number;
+  gmDefenderDbParryModifier?: number;
   gmDefenderObDbModifier?: number;
+  gmDefenderSkillObModifier?: number;
   notes?: string;
   previousAttackerCombatContext?: ScenarioParticipantCombatContext;
   previousDefenderCombatContext?: ScenarioParticipantCombatContext;
@@ -15151,7 +15202,9 @@ export function commitCombatRoundFeintResult(input: {
     review: {
       ...previousProposal.review,
       gmAttackerDbParryModifier: input.gmAttackerDbParryModifier,
+      gmDefenderDbParryModifier: input.gmDefenderDbParryModifier,
       gmDefenderObDbModifier: input.gmDefenderObDbModifier,
+      gmDefenderSkillObModifier: input.gmDefenderSkillObModifier,
       notes: input.notes,
     },
     status: "committed",
@@ -15252,7 +15305,9 @@ export function commitCombatRoundFeintResult(input: {
       facts: {
         gmReview: {
           gmAttackerDbParryModifier: committedReview.gmAttackerDbParryModifier,
+          gmDefenderDbParryModifier: committedReview.gmDefenderDbParryModifier,
           gmDefenderObDbModifier: committedReview.gmDefenderObDbModifier,
+          gmDefenderSkillObModifier: committedReview.gmDefenderSkillObModifier,
           notes: committedReview.notes,
           proposedAttackerDbParryModifier: committedReview.proposedAttackerDbParryModifier,
           proposedDefenderObDbModifier: committedReview.proposedDefenderObDbModifier,
@@ -15262,9 +15317,13 @@ export function commitCombatRoundFeintResult(input: {
             committedReview.gmAttackerDbParryModifier ??
             committedReview.proposedAttackerDbParryModifier,
           defenderPhase2DbParryModifier:
-            committedReview.gmDefenderObDbModifier ?? committedReview.proposedDefenderObDbModifier,
+            committedReview.gmDefenderDbParryModifier ??
+            committedReview.gmDefenderObDbModifier ??
+            committedReview.proposedDefenderObDbModifier,
           defenderPhase2SkillObModifier:
-            committedReview.gmDefenderObDbModifier ?? committedReview.proposedDefenderObDbModifier,
+            committedReview.gmDefenderSkillObModifier ??
+            committedReview.gmDefenderObDbModifier ??
+            committedReview.proposedDefenderObDbModifier,
           difference: proposal.difference,
           method: proposal.method,
           modifierIds: command.facts.modifierIds,

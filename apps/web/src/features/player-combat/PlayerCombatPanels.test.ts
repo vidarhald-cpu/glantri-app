@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildGroupedFeintModifierDisplays,
   buildPlayerCombatModifierRows,
   formatCombatInitiativeFormula,
   formatCombatModifierDetailsLabel,
@@ -205,13 +206,33 @@ describe("PlayerCombatPanels", () => {
       modifierBuckets: {
         general: [],
         situationDb: [
-          { id: "double-db-p1", scope: "until" as const, sourcePhase: "phase1" as const, value: -4 },
-          { id: "double-db-p2", scope: "until" as const, sourcePhase: "phase2" as const, value: -4 },
+          {
+            id: "double-db-p1",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -4,
+          },
+          {
+            id: "double-db-p2",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
         ],
         situationInitiative: [],
         situationObSkill: [
-          { id: "double-ob-p1", scope: "until" as const, sourcePhase: "phase1" as const, value: -1 },
-          { id: "double-ob-p2", scope: "until" as const, sourcePhase: "phase2" as const, value: -1 },
+          {
+            id: "double-ob-p1",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -1,
+          },
+          {
+            id: "double-ob-p2",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -1,
+          },
         ],
       },
     };
@@ -448,6 +469,89 @@ describe("PlayerCombatPanels", () => {
     }
 
     expect(formatCombatModifierScopeLabel(dbEntry)).toBe("P1");
+  });
+
+  it("groups linked equal Feint OB and DB rows without merging their calculation buckets", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              id: "generated:feint:proposal:target:phase2:db-parry",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [
+            {
+              id: "generated:feint:proposal:target:phase2:ob-skill",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase2",
+    });
+
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([
+      {
+        entryIds: [
+          "generated:feint:proposal:target:phase2:ob-skill",
+          "generated:feint:proposal:target:phase2:db-parry",
+        ],
+        resultGroupId: "proposal",
+        value: -4,
+      },
+    ]);
+    expect(rows.find((row) => row.bucketKey === "situation_ob_skill")?.total).toBe(-4);
+    expect(rows.find((row) => row.bucketKey === "situation_db")?.total).toBe(-4);
+  });
+
+  it("keeps adjusted Feint OB and DB rows visually separate when their values differ", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              id: "generated:feint:proposal:target:phase2:db-parry",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -2,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [
+            {
+              id: "generated:feint:proposal:target:phase2:ob-skill",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase2",
+    });
+
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {

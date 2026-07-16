@@ -139,7 +139,7 @@ export async function submitCombatDeclarationOnServer(input: {
   scenarioParticipantId: string;
   secondaryActionId?: string;
   feint?: {
-    attackerSkillId: string;
+    attackerSkillId?: string;
     method: "movement" | "weapon";
     targetParticipantId: string;
   };
@@ -202,14 +202,18 @@ export async function rollCombatFeintOnServer(input: {
 export async function commitCombatFeintOnServer(input: {
   encounterId: string;
   gmAttackerDbParryModifier?: number;
+  gmDefenderDbParryModifier?: number;
   gmDefenderObDbModifier?: number;
+  gmDefenderSkillObModifier?: number;
   notes?: string;
   proposalId: string;
 }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
   return sendJson(`/encounters/${input.encounterId}/combat-round/commit-feint`, {
     body: JSON.stringify({
       gmAttackerDbParryModifier: input.gmAttackerDbParryModifier,
+      gmDefenderDbParryModifier: input.gmDefenderDbParryModifier,
       gmDefenderObDbModifier: input.gmDefenderObDbModifier,
+      gmDefenderSkillObModifier: input.gmDefenderSkillObModifier,
       notes: input.notes,
       proposalId: input.proposalId,
     }),

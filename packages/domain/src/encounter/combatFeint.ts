@@ -6,11 +6,35 @@ import {
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
+import type { SkillDefinition, SkillSpecialization } from "../content/skills";
 
 const idSchema = z.string().min(1);
 
 export const combatFeintMethodSchema = z.enum(["movement", "weapon"]);
 export type CombatFeintMethod = z.infer<typeof combatFeintMethodSchema>;
+
+/**
+ * Weapon templates historically name either a canonical combat skill or one of
+ * that skill's specializations. Feint rolls currently use the canonical skill
+ * profile, so resolve a specialization name through its declared parent rather
+ * than trusting a client-selected skill id.
+ */
+export function resolveCombatFeintWeaponSkillDefinition(input: {
+  skills: readonly SkillDefinition[];
+  specializations?: readonly SkillSpecialization[];
+  weaponSkill?: string | null;
+}): SkillDefinition | undefined {
+  const weaponSkill = input.weaponSkill?.trim().toLowerCase();
+  if (!weaponSkill) return undefined;
+  const direct = input.skills.find((skill) => skill.name.trim().toLowerCase() === weaponSkill);
+  if (direct) return direct;
+  const specialization = input.specializations?.find(
+    (candidate) => candidate.name.trim().toLowerCase() === weaponSkill,
+  );
+  return specialization
+    ? input.skills.find((skill) => skill.id === specialization.skillId)
+    : undefined;
+}
 
 export const combatFeintFeasibilitySchema = z.enum([
   "pending",
@@ -21,6 +45,7 @@ export const combatFeintFeasibilitySchema = z.enum([
 export type CombatFeintFeasibility = z.infer<typeof combatFeintFeasibilitySchema>;
 
 export const combatFeintStatusSchema = z.enum([
+  "awaiting_action_turn",
   "awaiting_feasibility",
   "awaiting_rolls",
   "awaiting_review",
@@ -62,7 +87,9 @@ export type CombatFeintTableResult = z.infer<typeof combatFeintTableResultSchema
 
 export const combatFeintReviewSchema = z.object({
   gmAttackerDbParryModifier: z.number().int().optional(),
+  gmDefenderDbParryModifier: z.number().int().optional(),
   gmDefenderObDbModifier: z.number().int().optional(),
+  gmDefenderSkillObModifier: z.number().int().optional(),
   notes: z.string().optional(),
   proposedAttackerDbParryModifier: z.number().int(),
   proposedDefenderObDbModifier: z.number().int(),
@@ -94,7 +121,7 @@ export const combatFeintProposalSchema = z.object({
   phase2AttackOpportunityId: idSchema,
   review: combatFeintReviewSchema.optional(),
   roundNumber: z.number().int().positive(),
-  status: combatFeintStatusSchema.default("awaiting_feasibility"),
+  status: combatFeintStatusSchema.default("awaiting_action_turn"),
   tableResult: combatFeintTableResultSchema.optional(),
 });
 export type CombatFeintProposal = z.infer<typeof combatFeintProposalSchema>;
@@ -154,6 +181,10 @@ function buildFeintModifier(input: {
     sourceActionId: "feint_attack",
     sourcePhase: input.phase,
     sourceRule: `feint:${input.proposalId}:${input.participantId}:${input.phase}:${input.bucket}`,
+    sourceType: "feint",
+    ...(input.phase === "phase2"
+      ? { resultGroupId: input.proposalId, resultGroupKind: "ob_db" as const }
+      : {}),
     value: input.value,
   });
 }
@@ -173,7 +204,12 @@ export function applyCommittedCombatFeintModifiers(input: {
   const attackerValue =
     input.proposal.review.gmAttackerDbParryModifier ??
     input.proposal.review.proposedAttackerDbParryModifier;
-  const defenderValue =
+  const defenderObValue =
+    input.proposal.review.gmDefenderSkillObModifier ??
+    input.proposal.review.gmDefenderObDbModifier ??
+    input.proposal.review.proposedDefenderObDbModifier;
+  const defenderDbValue =
+    input.proposal.review.gmDefenderDbParryModifier ??
     input.proposal.review.gmDefenderObDbModifier ??
     input.proposal.review.proposedDefenderObDbModifier;
   const attackerContext = removeCombatFeintGeneratedModifiers(
@@ -196,14 +232,14 @@ export function applyCommittedCombatFeintModifiers(input: {
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
-    value: defenderValue,
+    value: defenderObValue,
   });
   const defenderDb = buildFeintModifier({
     bucket: "db-parry",
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
-    value: defenderValue,
+    value: defenderDbValue,
   });
   return {
     attackerCombatContext: scenarioParticipantCombatContextSchema.parse({

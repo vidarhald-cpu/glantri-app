@@ -110,6 +110,7 @@ import {
   normalizeMovementIntent,
   projectCombatHistory,
   removeDistanceGeneratedObSkillModifiers,
+  resolveCombatFeintWeaponSkillDefinition,
   scenarioParticipantCombatContextSchema,
   combatFeintMethodSchema,
   combatFeintProposalSchema,
@@ -412,7 +413,7 @@ function parseCombatDeclarationBody(body: unknown): {
   scenarioParticipantId: string;
   secondaryActionId?: string;
   feint?: {
-    attackerSkillId: string;
+    attackerSkillId?: string;
     method: "movement" | "weapon";
     targetParticipantId: string;
   };
@@ -442,9 +443,8 @@ function parseCombatDeclarationBody(body: unknown): {
     feint:
       value.feint && typeof value.feint === "object"
         ? {
-            attackerSkillId: parseNonEmptyString(
+            attackerSkillId: parseOptionalDeclarationString(
               (value.feint as Record<string, unknown>).attackerSkillId,
-              "feint.attackerSkillId",
             ),
             method: combatFeintMethodSchema.parse((value.feint as Record<string, unknown>).method),
             targetParticipantId: parseFeintTargetParticipantId(
@@ -1030,6 +1030,7 @@ function resolveDeclaredWeaponSource(input: {
         itemId: string;
         repeatEligible: boolean;
         weaponName: string;
+        weaponSkill: string;
         weaponTemplateId: string;
       };
     }
@@ -1088,6 +1089,7 @@ function resolveDeclaredWeaponSource(input: {
       itemId,
       repeatEligible: canRepeatWeaponAttackInRound(mode),
       weaponName: template.name,
+      weaponSkill: template.weaponSkill,
       weaponTemplateId: template.id,
     },
   };
@@ -2799,20 +2801,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               }
             : undefined,
         };
-        const attackerSkill = defaultCanonicalContent.skills.find(
-          (skill) => skill.id === body.feint?.attackerSkillId,
-        );
-        if (!attackerSkill) {
-          return reply.code(400).send({ error: "Select a skill for the feint." });
-        }
-        if (body.feint.method === "movement" && attackerSkill.id !== "dodge") {
-          return reply.code(400).send({ error: "Movement feints use the Dodge skill." });
-        }
-        if (body.feint.method === "weapon" && !isCombatFeintResistanceSkill(attackerSkill)) {
-          return reply.code(400).send({
-            error: "Select a relevant close-combat skill for the weapon feint.",
-          });
-        }
         const defenderProfile = resolveHighestCombatFeintResistanceProfile({
           ...getScenarioParticipantFeintSkillInput(targetScenarioParticipant),
           skills: defaultCanonicalContent.skills,
@@ -2824,6 +2812,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
         const phase1Source = body.phaseAttackSources?.phase1;
         let feintWeaponSource: CombatAttackSourceRef | undefined;
+        let attackerSkill =
+          body.feint.method === "movement"
+            ? defaultCanonicalContent.skills.find((skill) => skill.id === "dodge")
+            : undefined;
         if (body.feint.method === "weapon") {
           if (!phase1Source || phase1Source.sourceKind !== "weapon") {
             return reply.code(400).send({ error: "Select a weapon for the weapon feint." });
@@ -2835,6 +2827,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
           if (!resolution.ok) return reply.code(400).send({ error: resolution.error });
           feintWeaponSource = phase1Source;
+          const derivedWeaponSkill = resolveCombatFeintWeaponSkillDefinition({
+            skills: defaultCanonicalContent.skills,
+            specializations: defaultCanonicalContent.specializations,
+            weaponSkill: resolution.source.weaponSkill,
+          });
+          if (!derivedWeaponSkill || !isCombatFeintResistanceSkill(derivedWeaponSkill)) {
+            return reply.code(400).send({
+              error: `${resolution.source.weaponName} has no valid combat skill for a weapon feint.`,
+            });
+          }
+          attackerSkill = derivedWeaponSkill;
+        }
+        if (!attackerSkill) {
+          return reply.code(400).send({ error: "No valid skill is available for the feint." });
         }
         const phase2Source = body.phaseAttackSources?.phase2;
         if (!phase2Source) {
@@ -3287,7 +3293,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         characteristic: isAttackerRoll ? "dex" : "int",
         skill,
       });
-      const adjustment = isAttackerRoll ? proposal.feasibilityAdjustment : 0;
+      const adjustment = 0;
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
       const result = combatFeintRollResultSchema.parse({
@@ -3355,6 +3361,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         body.gmDefenderObDbModifier === undefined
           ? undefined
           : parseInteger(body.gmDefenderObDbModifier, "gmDefenderObDbModifier");
+      const gmDefenderSkillObModifier =
+        body.gmDefenderSkillObModifier === undefined
+          ? undefined
+          : parseInteger(body.gmDefenderSkillObModifier, "gmDefenderSkillObModifier");
+      const gmDefenderDbParryModifier =
+        body.gmDefenderDbParryModifier === undefined
+          ? undefined
+          : parseInteger(body.gmDefenderDbParryModifier, "gmDefenderDbParryModifier");
       const notes = typeof body.notes === "string" ? body.notes : undefined;
       const encounter = await encounterService.getEncounterById(encounterId);
       if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
@@ -3403,7 +3417,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         review: {
           ...existingProposal.review,
           gmAttackerDbParryModifier,
+          gmDefenderDbParryModifier,
           gmDefenderObDbModifier,
+          gmDefenderSkillObModifier,
           notes,
         },
         status: "committed",
@@ -3436,7 +3452,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         command: { createdAt, createdByUserId: user.id },
         defenderCombatContext: savedDefender.state.combat.combatContext,
         gmAttackerDbParryModifier,
+        gmDefenderDbParryModifier,
         gmDefenderObDbModifier,
+        gmDefenderSkillObModifier,
         notes,
         previousAttackerCombatContext: attacker.state.combat.combatContext,
         previousDefenderCombatContext: defender.state.combat.combatContext,

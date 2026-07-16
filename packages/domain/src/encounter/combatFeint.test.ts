@@ -9,9 +9,12 @@ import {
 import {
   combatRoundStateSchema,
   commitCombatRoundFeintResult,
+  getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseAttackCandidates,
+  initializeCombatRoundPhaseResolutionCursor,
   recordCombatRoundFeintRoll,
   reviewCombatRoundFeintFeasibility,
+  setCombatRoundParticipantInitiative,
   undoLatestCombatRoundCommand,
 } from "./combatRoundManager";
 import {
@@ -148,6 +151,83 @@ describe("combat feint modifiers", () => {
 });
 
 describe("combat feint lifecycle", () => {
+  it("opens Feint rolls only when the initiative-ordered A1 cursor reaches the actor", () => {
+    const base = state();
+    const actionTurnState = combatRoundStateSchema.parse({
+      ...base,
+      feintProposals: [
+        {
+          ...base.feintProposals[0],
+          status: "awaiting_action_turn",
+        },
+      ],
+      participants: base.participants.map((participant) =>
+        participant.participantId === "defender"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "observe_opponent",
+                combatContext: {},
+                roundNumber: 1,
+                submittedBy: "gm",
+              },
+            }
+          : participant,
+      ),
+    });
+    const withInitiative = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+      participantId: "defender",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [5],
+          rollTotal: 5,
+          total: 5,
+        },
+        participantId: "attacker",
+        phase: "phase1",
+        state: actionTurnState,
+      }),
+    });
+    const opened = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: withInitiative,
+      updatedAt: createdAt,
+    });
+
+    expect(opened.phaseResolutionCursor).toEqual({
+      participantId: "attacker",
+      phase: "phase1",
+      substep: "feint",
+    });
+    expect(opened.feintProposals[0]?.status).toBe("awaiting_rolls");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "defender",
+        state: opened,
+        step: "phase_1_actions",
+      }),
+    ).toBe("pending");
+  });
+
+  it("opens legacy awaiting-feasibility records at their normal A1 turn", () => {
+    const opened = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: state(),
+      updatedAt: createdAt,
+    });
+
+    expect(opened.phaseResolutionCursor).toEqual({
+      participantId: "attacker",
+      phase: "phase1",
+      substep: "feint",
+    });
+    expect(opened.feintProposals[0]?.status).toBe("awaiting_rolls");
+  });
+
   it("records feasibility, both rolls, commit, and retains the normal phase-2 attack", () => {
     const feasible = reviewCombatRoundFeintFeasibility({
       command: { createdAt },

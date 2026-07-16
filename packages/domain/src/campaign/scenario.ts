@@ -97,7 +97,7 @@ export const scenarioParticipantConditionSchema = z.object({
 });
 
 export const scenarioCombatModifierScopeSchema = z.enum(["until", "save"]);
-export const scenarioCombatModifierSourceTypeSchema = z.enum(["character_effect"]);
+export const scenarioCombatModifierSourceTypeSchema = z.enum(["character_effect", "feint"]);
 export const scenarioCombatModifierBucketSchema = z.enum([
   "general",
   "situation_initiative",
@@ -134,6 +134,8 @@ export const scenarioCombatModifierEntrySchema = z.object({
   imported: z.boolean().optional(),
   notes: z.string().optional(),
   readOnly: z.boolean().optional(),
+  resultGroupId: idSchema.optional(),
+  resultGroupKind: z.enum(["ob_db"]).optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
   sourceActionId: idSchema.optional(),
   sourceDuration: z.string().optional(),

@@ -46,6 +46,21 @@ function markerForEvents(input: {
     return { kind: hit ? "attack_hit" : "attack_miss", marker: hit ? "H" : "M" };
   }
 
+  const feintEvent = [...input.events]
+    .reverse()
+    .find((event) =>
+      ["feint_committed", "feint_impossible", "feint_result", "feint_roll"].includes(event.type),
+    );
+  if (feintEvent?.type === "feint_committed") {
+    return { kind: "complete", marker: "✓" };
+  }
+  if (feintEvent?.type === "feint_impossible") {
+    return { kind: "skipped", marker: "–" };
+  }
+  if (feintEvent) {
+    return { kind: "required", marker: "?" };
+  }
+
   const skipped = input.events.some(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
@@ -131,10 +146,26 @@ export function formatProjectedCombatTrackerHoverDetail(
       ].includes(event.type),
     );
   if (feint) {
-    if (feint.type === "feint_committed") return "feint result committed.";
+    if (feint.type === "feint_committed") {
+      const attacker = feint.identities.find(
+        (identity) => identity.role === "attacker" || identity.role === "actor",
+      )?.displayName;
+      const defender = feint.identities.find(
+        (identity) => identity.role === "defender" || identity.role === "target",
+      )?.displayName;
+      const methodFact = projectedFact(feint, "method");
+      const method = typeof methodFact === "string" ? methodFact.toLowerCase() : undefined;
+      const modifier = projectedFact(feint, "defenderPhase2SkillObModifier");
+      return attacker && defender
+        ? `${attacker} completed a ${method ?? ""} feint against ${defender}. Result: defender OB/DB ${typeof modifier === "number" && modifier >= 0 ? "+" : ""}${typeof modifier === "number" ? modifier : "adjusted"} in Phase 2.`.replace(
+            "a  feint",
+            "a feint",
+          )
+        : "feint result committed.";
+    }
     if (feint.type === "feint_result") return "feint result awaiting GM review.";
     if (feint.type === "feint_roll") return "feint opposed roll in progress.";
-    return "feint permitted; opposed rolls pending.";
+    return "feint opposed rolls pending.";
   }
 
   const declaration = events.find((event) => event.type === "declaration");

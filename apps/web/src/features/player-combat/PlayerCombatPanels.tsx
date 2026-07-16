@@ -52,8 +52,41 @@ export interface PlayerCombatModifierDisplayEntry {
   details?: string;
   id: string;
   scopeLabel: string;
-  sourceLabel: "Character/state" | "Situational";
+  sourceLabel: "Character/state" | "Feint · OB/DB" | "Situational";
   value: number;
+}
+
+export interface GroupedFeintModifierDisplay {
+  entryIds: readonly string[];
+  resultGroupId: string;
+  value: number;
+}
+
+export function buildGroupedFeintModifierDisplays(
+  rows: readonly PlayerCombatModifierBucketView[],
+): GroupedFeintModifierDisplay[] {
+  const entries = rows.flatMap((row) => row.entries);
+  const groups = new Map<string, ScenarioCombatModifierEntry[]>();
+
+  for (const entry of entries) {
+    if (
+      entry.sourceType !== "feint" ||
+      entry.resultGroupKind !== "ob_db" ||
+      !entry.resultGroupId ||
+      entry.sourcePhase !== "phase2"
+    ) {
+      continue;
+    }
+    groups.set(entry.resultGroupId, [...(groups.get(entry.resultGroupId) ?? []), entry]);
+  }
+
+  return [...groups.entries()].flatMap(([resultGroupId, groupedEntries]) => {
+    const obEntry = groupedEntries.find((entry) => entry.id.endsWith(":ob-skill"));
+    const dbEntry = groupedEntries.find((entry) => entry.id.endsWith(":db-parry"));
+    return obEntry && dbEntry && obEntry.value === dbEntry.value
+      ? [{ entryIds: [obEntry.id, dbEntry.id], resultGroupId, value: obEntry.value }]
+      : [];
+  });
 }
 
 export interface PlayerCombatPhaseCardView {
@@ -892,6 +925,8 @@ export function PlayerCombatModifierPanel({
   sourceLabel,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
+  const groupedFeintDisplays = buildGroupedFeintModifierDisplays(rows);
+  const groupedFeintEntryIds = new Set(groupedFeintDisplays.flatMap((group) => group.entryIds));
   const [draftEntries, setDraftEntries] = useState<
     Partial<Record<ScenarioCombatModifierBucket, ScenarioCombatModifierEntry>>
   >({});
@@ -920,11 +955,24 @@ export function PlayerCombatModifierPanel({
         const draftEntry = draftEntries[row.bucketKey];
         const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
         const situationalEntries = row.entries.filter(
-          (entry) => !isPersistentCombatModifierEntry(entry),
+          (entry) => !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
         );
+        const groupedFeintDisplayEntries =
+          row.bucketKey === "situation_ob_skill"
+            ? groupedFeintDisplays.map(
+                (group): PlayerCombatModifierDisplayEntry => ({
+                  details: "feint result",
+                  id: `grouped-feint:${group.resultGroupId}`,
+                  scopeLabel: "P2",
+                  sourceLabel: "Feint · OB/DB",
+                  value: group.value,
+                }),
+              )
+            : [];
         const persistentDisplayEntries = [
           ...(row.characterStateEntries ?? []),
           ...importedEntries.map(buildImportedModifierDisplayEntry),
+          ...groupedFeintDisplayEntries,
         ];
         const hasVisibleRows =
           persistentDisplayEntries.length > 0 ||
@@ -1494,9 +1542,7 @@ export function PlayerCombatAttackTargetSelector({
       >
         <option value="">No target</option>
         {selectedTargetUnavailable ? (
-          <option value={combatContext.targetParticipantId}>
-            Saved target ({combatContext.targetParticipantId})
-          </option>
+          <option value={combatContext.targetParticipantId}>Target unavailable</option>
         ) : null}
         {targetOptions.map((option) => (
           <option key={option.id} value={option.id}>

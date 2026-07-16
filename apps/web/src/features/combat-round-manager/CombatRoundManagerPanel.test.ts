@@ -25,14 +25,14 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Feint method");
-    expect(source).toContain("Possible with adjustment");
+    expect(source).toContain("COMBAT_FEINT_REFERENCE_ROWS");
     expect(source).toContain("Commit feint result");
-    expect(source).toContain("reviewCombatFeintFeasibilityOnServer");
+    expect(source).not.toContain("reviewCombatFeintFeasibilityOnServer");
     expect(source).toContain("rollCombatFeintOnServer");
     expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
     expect(source).toContain("commitCombatFeintOnServer");
     expect(source).toContain("inspectorFeintExpectedParticipantId");
-    expect(source).toContain("isCombatFeintResistanceSkill");
+    expect(source).toContain("resolveCombatFeintWeaponSkill");
   });
 
   it("renders the GM round manager orchestration controls", () => {
@@ -590,7 +590,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey]",
     );
-    expect(source).toContain(": inspectorDisplayDraft.phaseContexts[phaseKey]");
+    expect(source).toContain("inspectorNormalizedFeintPhaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");

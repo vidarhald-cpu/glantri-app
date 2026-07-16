@@ -329,12 +329,18 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "feint_roll": {
       const side = factLabel(factValue(event, "side"));
+      const method = factLabel(factValue(event, "method"))?.toLowerCase();
       return {
         outcomeRows: [],
         summary:
           side?.toLowerCase() === "defender"
             ? `${roller ?? defender ?? "Defender"} rolled feint resistance.`
-            : `${roller ?? attacker ?? "Attacker"} rolled the feint.`,
+            : attacker && defender
+              ? `${attacker} attempted a ${method ?? ""} feint against ${defender}.`.replace(
+                  "a  feint",
+                  "a feint",
+                )
+              : `${roller ?? attacker ?? "Attacker"} rolled the feint.`,
       };
     }
     case "feint_result": {

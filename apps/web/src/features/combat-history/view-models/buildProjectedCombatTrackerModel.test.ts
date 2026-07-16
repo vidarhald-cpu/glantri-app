@@ -153,6 +153,8 @@ describe("buildProjectedCombatTrackerModel", () => {
   it.each([
     ["feint_committed", "committed", "✓", "feint result committed."],
     ["feint_impossible", "not_applicable", "–", "feint ruled impossible; no roll required."],
+    ["feint_roll", "recorded", "?", "feint opposed roll in progress."],
+    ["feint_result", "proposed", "?", "feint result awaiting GM review."],
   ] as const)("projects %s into the Phase 1 action marker", (type, status, marker, hover) => {
     const model = buildProjectedCombatTrackerModel({
       history: history([event({ status, type })]),

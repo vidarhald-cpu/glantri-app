@@ -97,6 +97,7 @@ import {
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
@@ -105,6 +106,7 @@ import {
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
+  resolveCombatFeintWeaponSkill,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
@@ -116,11 +118,7 @@ import {
 } from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import {
-  buildCharacterSheetSummary,
-  isCombatFeintResistanceSkill,
-  type CombatAllocationState,
-} from "@glantri/rules-engine";
+import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
@@ -1136,7 +1134,6 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("");
   const [feintMethod, setFeintMethod] = useState<"movement" | "weapon">("movement");
-  const [feintSkillId, setFeintSkillId] = useState("dodge");
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
@@ -1562,7 +1559,6 @@ export default function ScenarioPlayerCombatPageContent({
     setSelectedMovementIntent(nextDraft.movementIntent);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
     setFeintMethod(selectedRoundDeclaration?.feint?.method ?? "movement");
-    setFeintSkillId(selectedRoundDeclaration?.feint?.attackerSkillId ?? "dodge");
     setCombatContextDraft(nextDraft.combatContext);
     setPhaseCombatContextDrafts(nextDraft.phaseContexts);
     setCombatDeclarationDraftDirty(false);
@@ -1798,7 +1794,15 @@ export default function ScenarioPlayerCombatPageContent({
         })
       : undefined;
   const selectedFeintProposal = combatRoundState?.feintProposals.find((proposal) => {
-    if (!selectedRoundParticipant || proposal.status !== "awaiting_rolls") return false;
+    if (
+      !selectedRoundParticipant ||
+      proposal.status !== "awaiting_rolls" ||
+      combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
+      combatRoundState.phaseResolutionCursor.substep !== "feint" ||
+      combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
+    ) {
+      return false;
+    }
     const expectedParticipantId = proposal.attackerRollRecorded
       ? proposal.defenderParticipantId
       : proposal.attackerParticipantId;
@@ -2015,7 +2019,8 @@ export default function ScenarioPlayerCombatPageContent({
         feint:
           selectedActionId === "feint_attack" && feintTargetResolution?.ok
             ? {
-                attackerSkillId: feintMethod === "movement" ? "dodge" : feintSkillId,
+                attackerSkillId:
+                  feintMethod === "movement" ? resolvedFeintAttackerSkill?.id : undefined,
                 method: feintMethod,
                 targetParticipantId: feintTargetResolution.targetParticipantId,
               }
@@ -2509,24 +2514,35 @@ export default function ScenarioPlayerCombatPageContent({
     selectableParticipants,
     selectedParticipant?.id,
   ]);
-  const targetOptions = useMemo(
-    () =>
-      getPlayerEncounterOpponentParticipants({
-        allowedParticipantIds: encounterScenarioParticipantIds,
-        currentUserId: currentUser?.id,
-        isGameMaster: false,
-        participants: selectableParticipants,
-        projectionVisibleParticipants: playerPerspectiveVisibleParticipants,
-        selectedParticipantId: selectedParticipant?.id,
-      }),
-    [
-      currentUser?.id,
-      encounterScenarioParticipantIds,
-      playerPerspectiveVisibleParticipants,
-      selectableParticipants,
-      selectedParticipant?.id,
-    ],
-  );
+  const targetOptions = useMemo(() => {
+    const options = getPlayerEncounterOpponentParticipants({
+      allowedParticipantIds: encounterScenarioParticipantIds,
+      currentUserId: currentUser?.id,
+      isGameMaster: false,
+      participants: selectableParticipants,
+      projectionVisibleParticipants: playerPerspectiveVisibleParticipants,
+      selectedParticipantId: selectedParticipant?.id,
+    });
+    return buildCanonicalCombatTargetOptions({
+      encounterParticipants: encounterSession?.participants ?? [],
+      options,
+    });
+  }, [
+    currentUser?.id,
+    encounterScenarioParticipantIds,
+    playerPerspectiveVisibleParticipants,
+    selectableParticipants,
+    encounterSession?.participants,
+    selectedParticipant?.id,
+  ]);
+  const normalizedFeintPhaseContexts = useMemo(() => {
+    if (selectedActionId !== "feint_attack") return phaseCombatContextDrafts;
+    const resolution = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: encounterSession?.participants ?? [],
+      phaseContexts: phaseCombatContextDrafts,
+    });
+    return resolution.ok ? resolution.phaseContexts : phaseCombatContextDrafts;
+  }, [encounterSession?.participants, phaseCombatContextDrafts, selectedActionId]);
   const phaseCombatLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
@@ -2613,6 +2629,15 @@ export default function ScenarioPlayerCombatPageContent({
     selectedParticipant?.state.combatEffects,
     selectedSecondaryActionId,
   ]);
+  const resolvedFeintAttackerSkill =
+    feintMethod === "movement"
+      ? { id: "dodge", label: "Dodge" }
+      : resolveCombatFeintWeaponSkill({
+          equipmentState: controlledEquipmentState,
+          skills: content?.skills ?? [],
+          specializations: content?.specializations ?? [],
+          sourceTemplateId: phaseCombatLoadoutSummaries.phase1.reference?.sourceTemplateId,
+        });
   const distancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
     const primaryTargetId =
       phaseCombatContextDrafts.phase1.targetParticipantId ??
@@ -3309,8 +3334,8 @@ export default function ScenarioPlayerCombatPageContent({
     ),
   );
   const declarationTargetValidationMessage =
-    selectedActionId === "feint_attack" && feintMethod === "weapon" && !feintSkillId
-      ? "Select a skill for the feint."
+    selectedActionId === "feint_attack" && feintMethod === "weapon" && !resolvedFeintAttackerSkill
+      ? "The selected weapon has no valid combat skill for a weapon feint."
       : !currentInitiativePhase && declarationIncomplete
         ? targetValidation.message
         : undefined;
@@ -3323,7 +3348,9 @@ export default function ScenarioPlayerCombatPageContent({
       : playerDeclarationLocked ||
         !hasMeaningfulDeclaration ||
         !targetValidation.valid ||
-        (selectedActionId === "feint_attack" && feintMethod === "weapon" && !feintSkillId));
+        (selectedActionId === "feint_attack" &&
+          feintMethod === "weapon" &&
+          !resolvedFeintAttackerSkill));
   const declarationButtonLabel =
     currentCombatStep === "select_actions" && (!playerDeclarationLocked || declarationIncomplete)
       ? "Declare action"
@@ -3661,7 +3688,6 @@ export default function ScenarioPlayerCombatPageContent({
                 setSelectedActionId(actionId);
                 if (actionId === "feint_attack") {
                   setFeintMethod("movement");
-                  setFeintSkillId("dodge");
                 }
               }}
               onAdditionalActionNotesChange={(notes) => {
@@ -3685,7 +3711,8 @@ export default function ScenarioPlayerCombatPageContent({
             />
             {phaseCards.map((phaseCard, index) => {
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
-              const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
+              const phaseCombatContext =
+                normalizedFeintPhaseContexts[phaseKey] ?? phaseCombatContextDrafts[phaseKey];
               const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
               const targetRoundParticipant = phaseCombatContext.targetParticipantId
                 ? combatRoundState?.participants.find(
@@ -3751,7 +3778,6 @@ export default function ScenarioPlayerCombatPageContent({
                             markCombatDeclarationDraftDirty();
                             const method = event.target.value === "weapon" ? "weapon" : "movement";
                             setFeintMethod(method);
-                            setFeintSkillId(method === "movement" ? "dodge" : "");
                           }}
                           value={feintMethod}
                         >
@@ -3759,36 +3785,13 @@ export default function ScenarioPlayerCombatPageContent({
                           <option value="weapon">Weapon</option>
                         </select>
                       </label>
-                      <label style={{ display: "grid", gap: "0.25rem" }}>
-                        <strong>Attacking skill</strong>
-                        <select
-                          disabled={declarationControlsDisabled || feintMethod === "movement"}
-                          onChange={(event) => {
-                            markCombatDeclarationDraftDirty();
-                            setFeintSkillId(event.target.value);
-                          }}
-                          value={feintMethod === "movement" ? "dodge" : feintSkillId}
-                        >
-                          {feintMethod === "movement" ? <option value="dodge">Dodge</option> : null}
-                          {feintMethod === "weapon" ? (
-                            <option value="">Select combat skill</option>
-                          ) : null}
-                          {feintMethod === "weapon"
-                            ? (content?.skills ?? [])
-                                .filter(isCombatFeintResistanceSkill)
-                                .map((skill) => (
-                                  <option key={skill.id} value={skill.id}>
-                                    {skill.name}
-                                  </option>
-                                ))
-                            : null}
-                        </select>
-                      </label>
+                      <div>
+                        <strong>Skill:</strong> {resolvedFeintAttackerSkill?.label ?? "Unavailable"}
+                      </div>
                       <div>Characteristic: Dexterity</div>
                       <div>
                         Defender resists with their highest close-combat skill · Intelligence.
                       </div>
-                      <div>Feasibility: GM review required before opposed rolls.</div>
                       {feintMethod === "weapon" && phaseModel.attackStats ? (
                         <>
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
