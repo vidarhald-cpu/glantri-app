@@ -198,6 +198,7 @@ interface PlayerCombatAttackTargetSelectorProps {
   controlsDisabled?: boolean;
   distanceLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
   targetOptions: readonly PlayerEncounterOpponentOption[];
 }
 
@@ -1519,12 +1520,32 @@ export function PlayerCombatAttackTargetSelector({
   controlsDisabled = false,
   distanceLabel,
   onCombatContextChange,
+  readOnly = false,
   targetOptions,
 }: PlayerCombatAttackTargetSelectorProps) {
   const selectedTargetUnavailable = Boolean(
     combatContext.targetParticipantId &&
     !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
   );
+  const selectedTarget = targetOptions.find(
+    (option) => option.id === combatContext.targetParticipantId,
+  );
+
+  if (readOnly) {
+    return (
+      <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
+        <span style={compactPhaseTargetSelectStyle}>
+          {selectedTarget?.displayName ?? "Target unavailable"}
+        </span>
+        {distanceLabel ? (
+          <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
+            {distanceLabel}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>

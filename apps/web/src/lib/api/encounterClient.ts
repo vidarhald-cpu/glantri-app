@@ -561,7 +561,7 @@ export async function rollCombatAttackOnServer(input: {
   actionId?: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
-  defenderScenarioParticipantId: string;
+  defenderParticipantId: string;
   encounterId: string;
   ob: number;
   obSkillRaw: number;
@@ -588,7 +588,7 @@ export async function rollCombatAttackOnServer(input: {
       actionId: input.actionId,
       defenderDb: input.defenderDb,
       defenderDbParryRaw: input.defenderDbParryRaw,
-      defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+      defenderParticipantId: input.defenderParticipantId,
       ob: input.ob,
       obSkillRaw: input.obSkillRaw,
       phase: input.phase,

@@ -665,6 +665,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Target");
     expect(source).toContain("targetOptions.map");
     expect(source).toContain("selectedTargetUnavailable");
+    expect(source).toContain("if (readOnly)");
+    expect(source).toContain('selectedTarget?.displayName ?? "Target unavailable"');
     expect(source).toContain('value={combatContext.targetParticipantId ?? ""}');
     expect(source).toContain("targetParticipantId: event.target.value || undefined");
     expect(source).toContain("{distanceLabel}");

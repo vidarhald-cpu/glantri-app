@@ -4786,11 +4786,28 @@ function sanitizeCombatRoundDeclarationTargets(input: {
   participant: CombatRoundParticipantState;
   validTargetIds: Set<string>;
 }): { participant: CombatRoundParticipantState; repaired: boolean } {
-  const declaration = input.participant.declaration;
+  const storedDeclaration = input.participant.declaration;
 
-  if (!declaration) {
+  if (!storedDeclaration) {
     return { participant: input.participant, repaired: false };
   }
+  const declaration =
+    storedDeclaration.actionId === "feint_attack" &&
+    storedDeclaration.feint &&
+    input.validTargetIds.has(storedDeclaration.feint.targetParticipantId)
+      ? synchronizeCombatRoundFeintDeclarationTarget(storedDeclaration)
+      : storedDeclaration;
+  const feintTargetSynchronized =
+    storedDeclaration.phaseContexts?.phase1?.targetParticipantId !==
+      declaration.phaseContexts?.phase1?.targetParticipantId ||
+    storedDeclaration.phaseContexts?.phase2?.targetParticipantId !==
+      declaration.phaseContexts?.phase2?.targetParticipantId ||
+    storedDeclaration.attackOpportunities?.find(
+      (opportunity) => opportunity.phase === "phase2" && opportunity.origin === "feint_attack",
+    )?.targetParticipantId !==
+      declaration.attackOpportunities?.find(
+        (opportunity) => opportunity.phase === "phase2" && opportunity.origin === "feint_attack",
+      )?.targetParticipantId;
 
   const phase1 = sanitizeCombatRoundContextTargetIds(
     declaration.phaseContexts?.phase1,
@@ -4821,7 +4838,12 @@ function sanitizeCombatRoundDeclarationTargets(input: {
       (movementIntent?.distancePreferences.length ?? 0);
 
   if (!repaired) {
-    return { participant: input.participant, repaired: false };
+    return feintTargetSynchronized
+      ? {
+          participant: { ...input.participant, declaration },
+          repaired: false,
+        }
+      : { participant: input.participant, repaired: false };
   }
 
   return {
@@ -5076,6 +5098,35 @@ export function buildCombatRoundDeclaredAttackOpportunities(input: {
         targetParticipantId,
       }),
     ];
+  });
+}
+
+/**
+ * Feint has one opponent for both its opposed action and its phase-2 attack.
+ * Keep the declaration field authoritative and derive every phase/opportunity
+ * target from it when current state is recorded or materialized.
+ */
+export function synchronizeCombatRoundFeintDeclarationTarget(
+  declaration: CombatRoundDeclaration,
+): CombatRoundDeclaration {
+  if (declaration.actionId !== "feint_attack" || !declaration.feint) return declaration;
+  const targetParticipantId = declaration.feint.targetParticipantId;
+  const synchronizeContext = (context?: ScenarioParticipantCombatContext) =>
+    scenarioParticipantCombatContextSchema.parse({
+      ...(context ?? {}),
+      targetParticipantId,
+    });
+  return combatRoundDeclarationSchema.parse({
+    ...declaration,
+    attackOpportunities: declaration.attackOpportunities?.map((opportunity) =>
+      opportunity.phase === "phase2" && opportunity.origin === "feint_attack"
+        ? { ...opportunity, targetParticipantId }
+        : opportunity,
+    ),
+    phaseContexts: {
+      phase1: synchronizeContext(declaration.phaseContexts?.phase1),
+      phase2: synchronizeContext(declaration.phaseContexts?.phase2),
+    },
   });
 }
 
@@ -14757,10 +14808,12 @@ export function recordCombatRoundDeclaration(input: {
   }
 
   const normalized = combatRoundStateSchema.parse(withStatus);
-  const declaration = combatRoundDeclarationSchema.parse({
-    ...input.declaration,
-    submittedBy: input.submittedBy,
-  });
+  const declaration = synchronizeCombatRoundFeintDeclarationTarget(
+    combatRoundDeclarationSchema.parse({
+      ...input.declaration,
+      submittedBy: input.submittedBy,
+    }),
+  );
   const withoutPreviousFeint = normalized.feintProposals.filter(
     (proposal) =>
       proposal.roundNumber !== normalized.roundNumber ||

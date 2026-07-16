@@ -478,7 +478,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("const { encounter: nextEncounter, participant }");
     expect(source).toContain("[participant.id]: participant");
     expect(source).toContain("onScenarioParticipantsUpdated?.([participant])");
-    expect(source).toContain("defenderScenarioParticipantId: targetScenarioParticipant.id");
+    expect(source).toContain("defenderParticipantId: targetIdentity.encounterParticipantId");
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");

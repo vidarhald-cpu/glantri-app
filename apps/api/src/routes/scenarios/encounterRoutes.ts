@@ -370,7 +370,7 @@ function parseOptionalDeclarationString(value: unknown): string | undefined {
 
 function parseFeintTargetParticipantId(value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("Select a target for the feint.");
+    throw new Error("Select a target for the Feint.");
   }
   return value.trim();
 }
@@ -715,7 +715,7 @@ function parseCombatAttackBody(body: unknown): {
   actionId?: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
-  defenderScenarioParticipantId: string;
+  defenderParticipantId: string;
   ob: number;
   obSkillRaw: number;
   phase: "phase1" | "phase2";
@@ -726,9 +726,9 @@ function parseCombatAttackBody(body: unknown): {
 } {
   const value = parseBodyObject(body, "Combat attack payload");
   const parsed = parseParticipantCommandBody(value, "Combat attack payload");
-  const defenderScenarioParticipantId = parseNonEmptyString(
-    value.defenderScenarioParticipantId,
-    "defenderScenarioParticipantId",
+  const defenderParticipantId = parseNonEmptyString(
+    value.defenderParticipantId ?? value.defenderScenarioParticipantId,
+    "defenderParticipantId",
   );
   const phase = combatRoundPhaseSchema.parse(value.phase);
   const actionId =
@@ -753,7 +753,7 @@ function parseCombatAttackBody(body: unknown): {
     actionId,
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
-    defenderScenarioParticipantId,
+    defenderParticipantId,
     ob: parseInteger(value.ob, "ob"),
     obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
     phase,
@@ -2727,18 +2727,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState,
       });
 
-      const targetValidation = validateCombatDeclarationTargets({
-        actionId: body.actionId,
-        phaseContexts: submittedPhaseContexts,
-        secondaryActionId: body.secondaryActionId,
-      });
-
-      if (!targetValidation.valid) {
-        return reply.code(400).send({
-          error: targetValidation.message ?? "Select a target for each attack phase.",
-        });
-      }
-
       let attackOpportunities;
       let declarationPhaseContexts = submittedPhaseContexts;
       let declarationFeint;
@@ -2758,21 +2746,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const targetEncounterParticipant = resolveEncounterTarget(body.feint.targetParticipantId);
         if (!targetEncounterParticipant) {
           return reply.code(400).send({
-            error: "The selected target is no longer in this encounter.",
-          });
-        }
-        const phase1TargetParticipant = resolveEncounterTarget(
-          submittedPhaseContexts?.phase1?.targetParticipantId,
-        );
-        const phase2TargetParticipant = resolveEncounterTarget(
-          submittedPhaseContexts?.phase2?.targetParticipantId,
-        );
-        if (
-          phase1TargetParticipant?.id !== targetEncounterParticipant.id ||
-          phase2TargetParticipant?.id !== targetEncounterParticipant.id
-        ) {
-          return reply.code(400).send({
-            error: "Feint and Phase 2 attack must target the same opponent.",
+            error: "The Feint target is no longer in this encounter.",
           });
         }
         const targetScenarioParticipant = scenarioParticipants.find(
@@ -2782,24 +2756,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         );
         if (!targetScenarioParticipant) {
           return reply.code(400).send({
-            error: "The selected target is no longer in this encounter.",
+            error: "The Feint target is no longer in this encounter.",
           });
         }
         const canonicalTargetParticipantId = targetEncounterParticipant.id;
         const feintPhaseContexts = {
           ...submittedPhaseContexts,
-          phase1: submittedPhaseContexts?.phase1
-            ? {
-                ...submittedPhaseContexts.phase1,
-                targetParticipantId: canonicalTargetParticipantId,
-              }
-            : undefined,
-          phase2: submittedPhaseContexts?.phase2
-            ? {
-                ...submittedPhaseContexts.phase2,
-                targetParticipantId: canonicalTargetParticipantId,
-              }
-            : undefined,
+          phase1: scenarioParticipantCombatContextSchema.parse({
+            ...submittedPhaseContexts?.phase1,
+            targetParticipantId: canonicalTargetParticipantId,
+          }),
+          phase2: scenarioParticipantCombatContextSchema.parse({
+            ...submittedPhaseContexts?.phase2,
+            targetParticipantId: canonicalTargetParticipantId,
+          }),
         };
         const defenderProfile = resolveHighestCombatFeintResistanceProfile({
           ...getScenarioParticipantFeintSkillInput(targetScenarioParticipant),
@@ -2880,12 +2850,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         declarationPhaseContexts = {
           ...feintPhaseContexts,
-          phase2: feintPhaseContexts.phase2
-            ? {
-                ...feintPhaseContexts.phase2,
-                attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
-              }
-            : undefined,
+          phase2: {
+            ...feintPhaseContexts.phase2,
+            attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
+          },
         };
         declarationFeint = {
           attackerSkillId: attackerSkill.id,
@@ -2992,6 +2960,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               }
             : undefined,
         };
+      }
+
+      const targetValidation = validateCombatDeclarationTargets({
+        actionId: body.actionId,
+        phaseContexts: declarationPhaseContexts,
+        secondaryActionId: body.secondaryActionId,
+      });
+
+      if (!targetValidation.valid) {
+        return reply.code(400).send({
+          error: targetValidation.message ?? "Select a target for each attack phase.",
+        });
       }
 
       const submittedAt = new Date().toISOString();
@@ -5469,9 +5449,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const scenarioParticipant = scenarioParticipants.find(
         (participant) => participant.id === body.scenarioParticipantId,
       );
-      const defenderScenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.defenderScenarioParticipantId,
-      );
       const membership = resolveEncounterParticipantMembership({
         encounter,
         scenarioParticipants,
@@ -5485,15 +5462,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 participant.characterId === scenarioParticipant.characterId),
           )
         : undefined;
-      const defenderEncounterParticipant = defenderScenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === defenderScenarioParticipant.id ||
-              participant.id === defenderScenarioParticipant.id ||
-              (defenderScenarioParticipant.characterId &&
-                participant.characterId === defenderScenarioParticipant.characterId),
-          )
-        : undefined;
+      const defenderEncounterParticipant = membership.participants.find(
+        (participant) =>
+          participant.id === body.defenderParticipantId ||
+          participant.scenarioParticipantId === body.defenderParticipantId ||
+          participant.characterId === body.defenderParticipantId,
+      );
+      const defenderScenarioParticipant = scenarioParticipants.find(
+        (participant) =>
+          participant.id === defenderEncounterParticipant?.scenarioParticipantId ||
+          participant.id === defenderEncounterParticipant?.id ||
+          (participant.characterId &&
+            participant.characterId === defenderEncounterParticipant?.characterId),
+      );
 
       if (
         !scenarioParticipant ||
@@ -5552,13 +5533,36 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerRoundParticipant = roundState.participants.find(
         (participant) => participant.participantId === encounterParticipant.id,
       );
+      const declaredOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
+        (opportunity) => opportunity.phase === body.phase && opportunity.status === "committed",
+      );
       const declaredTargetId =
+        (attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
+        body.phase === "phase2"
+          ? attackerRoundParticipant.declaration.feint?.targetParticipantId
+          : undefined) ??
+        declaredOpportunity?.targetParticipantId ??
         attackerRoundParticipant?.declaration?.phaseContexts?.[body.phase]?.targetParticipantId;
+      const declaredTargetParticipant = membership.participants.find(
+        (participant) =>
+          participant.id === declaredTargetId ||
+          participant.scenarioParticipantId === declaredTargetId ||
+          participant.characterId === declaredTargetId,
+      );
 
       if (
-        declaredTargetId &&
-        declaredTargetId !== defenderScenarioParticipant.id &&
-        declaredTargetId !== defenderEncounterParticipant.id
+        attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
+        body.phase === "phase2" &&
+        !declaredTargetParticipant
+      ) {
+        return reply.code(409).send({
+          error: "The Feint target is no longer in this encounter.",
+        });
+      }
+
+      if (
+        declaredTargetParticipant &&
+        declaredTargetParticipant.id !== defenderEncounterParticipant.id
       ) {
         return reply.code(409).send({
           error: "Selected defender does not match the declared attack target.",

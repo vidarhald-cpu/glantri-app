@@ -7016,7 +7016,7 @@ describe("scenarios route contract", () => {
         },
         phaseContexts: {
           phase1: testCombatPhaseContext("participant-2"),
-          phase2: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("stale-participant"),
         },
         scenarioParticipantId: "participant-1",
       },
@@ -7163,6 +7163,9 @@ describe("scenarios route contract", () => {
       attackerSkillLabel: weaponTemplate.weaponSkill,
       method: "weapon",
     });
+    expect(declaration.phaseContexts.phase1.targetParticipantId).toBe("encounter-participant-2");
+    expect(declaration.phaseContexts.phase2.targetParticipantId).toBe("encounter-participant-2");
+    expect(declaration.attackOpportunities[0].targetParticipantId).toBe("encounter-participant-2");
     expect(declaration.feint.attackerSkillId).not.toBe("unrelated-client-skill");
   });
 
@@ -7191,7 +7194,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "Select a target for the feint." });
+    expect(response.json()).toEqual({ error: "Select a target for the Feint." });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
@@ -9515,7 +9518,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
-  it("allows the current attacking player to roll the open phase 2 attack once", async () => {
+  it("resolves the canonical encounter target when rolling an open Feint phase 2 attack", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],
       {
@@ -9572,11 +9575,28 @@ describe("scenarios route contract", () => {
             {
               attackResults: {},
               declaration: {
-                actionId: "parry_attack",
-                phaseContexts: {
-                  phase2: {
-                    targetParticipantId: "participant-2",
+                actionId: "feint_attack",
+                attackOpportunities: [
+                  {
+                    id: "feint-a2",
+                    origin: "feint_attack",
+                    phase: "phase2",
+                    slot: "attack_2",
+                    status: "committed",
+                    targetParticipantId: "encounter-participant-2",
                   },
+                ],
+                feint: {
+                  attackerSkillId: "dodge",
+                  attackerSkillLabel: "Dodge",
+                  defenderSkillId: "one-handed-edged",
+                  defenderSkillLabel: "1-h edged",
+                  method: "movement",
+                  targetParticipantId: "encounter-participant-2",
+                },
+                phaseContexts: {
+                  phase1: {},
+                  phase2: {},
                 },
                 roundNumber: 1,
                 submittedAt: "2026-01-01T00:01:00.000Z",
@@ -9720,7 +9740,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        defenderScenarioParticipantId: "participant-2",
+        defenderParticipantId: "encounter-participant-2",
         ob: 9,
         obSkillRaw: 0,
         phase: "phase2",

@@ -42,6 +42,7 @@ function MissingHistoricalPanel(input: { title: string }) {
 }
 
 function HistoricalPhasePanel(input: {
+  actionId?: string;
   panel: ProjectedCombatHistoryPhasePanel;
   phaseLabel: "Phase 1" | "Phase 2";
 }) {
@@ -67,6 +68,7 @@ function HistoricalPhasePanel(input: {
             controlsDisabled
             distanceLabel={input.panel.distanceLabel}
             onCombatContextChange={noop}
+            readOnly={input.actionId === "feint_attack" && input.phaseLabel === "Phase 2"}
             targetOptions={targets}
           />
           <PlayerCombatAttackLocationSelector
@@ -91,21 +93,22 @@ function HistoricalPhasePanel(input: {
           />
         </>
       ) : null}
-      {input.panel.defenseSummary ? (
-        <>
+      <>
+        {input.panel.defenseSummary ? (
           <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
-          <PlayerCombatParryContextPanel
-            combatContext={context}
-            controlsDisabled
-            mainHandItemLabel={input.panel.mainHandParryItemLabel}
-            offHandItemLabel={input.panel.offHandParryItemLabel}
-            onCombatContextChange={noop}
-          />
-        </>
-      ) : null}
-      {!input.panel.attackSummary && !input.panel.defenseSummary ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{historicalDataMissingMessage}</div>
-      ) : null}
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            Defense information unavailable.
+          </div>
+        )}
+        <PlayerCombatParryContextPanel
+          combatContext={context}
+          controlsDisabled
+          mainHandItemLabel={input.panel.mainHandParryItemLabel}
+          offHandItemLabel={input.panel.offHandParryItemLabel}
+          onCombatContextChange={noop}
+        />
+      </>
     </PlayerCombatPhasePanel>
   );
 }
@@ -173,8 +176,16 @@ export function PlayerCombatHistoryInspector(input: {
         ) : (
           <MissingHistoricalPanel title="Action selector" />
         )}
-        <HistoricalPhasePanel panel={input.snapshot?.panels.phase1 ?? {}} phaseLabel="Phase 1" />
-        <HistoricalPhasePanel panel={input.snapshot?.panels.phase2 ?? {}} phaseLabel="Phase 2" />
+        <HistoricalPhasePanel
+          actionId={selector?.actionId}
+          panel={input.snapshot?.panels.phase1 ?? {}}
+          phaseLabel="Phase 1"
+        />
+        <HistoricalPhasePanel
+          actionId={selector?.actionId}
+          panel={input.snapshot?.panels.phase2 ?? {}}
+          phaseLabel="Phase 2"
+        />
       </div>
       <div style={playerCombatPanelRowStyle}>
         {modifierRows ? (

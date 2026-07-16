@@ -16,6 +16,7 @@ import {
   normalizeCombatEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
   resolveCombatFeintWeaponSkill,
+  resolveCanonicalCombatTargetIdentity,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
@@ -400,7 +401,6 @@ describe("player combat phase model", () => {
     expect(phase1.showAttackStats).toBe(true);
     expect(phase1.showAttackLocationSelector).toBe(true);
     expect(phase1.showDefenseContext).toBe(true);
-    expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(false);
     expect(phase2.showAttackLocationSelector).toBe(false);
     expect(phase2.showDefenseContext).toBe(true);
@@ -439,7 +439,6 @@ describe("player combat phase model", () => {
     expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(true);
     expect(phase2.showAttackLocationSelector).toBe(true);
-    expect(phase2.showDefenseContext).toBe(true);
     expect(phase2.showDefenseContext).toBe(true);
   });
 
@@ -732,7 +731,7 @@ describe("player combat phase model", () => {
     expect(phase1.phaseCard.title).toBe("Adjust range");
     expect(phase1.showAttackStats).toBe(false);
     expect(phase1.showAttackLocationSelector).toBe(false);
-    expect(phase1.showDefenseContext).toBe(false);
+    expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(true);
     expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.phaseContext.targetParticipantId).toBe("target-phase-2");
@@ -851,6 +850,48 @@ describe("player combat phase model", () => {
     });
   });
 
+  it("resolves a canonical encounter target to its scenario participant for live API reads", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [
+          {
+            characterId: "character-defender",
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof resolveCanonicalCombatTargetIdentity>[0]["encounterParticipants"],
+        targetParticipantId: "encounter-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "encounter-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
+  it("always exposes defense context for both Feint phases", () => {
+    const phaseContext = createEmptyPlayerEncounterCombatContext();
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: "Broad sword",
+      offHandParryItemLabel: "Medium shield",
+      phaseContext,
+      reference,
+    });
+
+    for (const phaseKey of ["phase1", "phase2"] as const) {
+      expect(
+        buildPlayerCombatPhasePanelModel({
+          actionId: "feint_attack",
+          attackStats,
+          defenseStats,
+          phaseCard: { ...phaseCard, phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2" },
+          phaseContext,
+          phaseKey,
+          secondaryActionId: "",
+        }).showDefenseContext,
+      ).toBe(true);
+    }
+  });
+
   it("lets the current visible Feint target fill an older empty paired phase", () => {
     const result = resolveCombatFeintDeclarationRequestTarget({
       encounterParticipants: [
@@ -876,7 +917,7 @@ describe("player combat phase model", () => {
     });
   });
 
-  it("rejects different visible Feint and Phase 2 targets", () => {
+  it("lets the current Phase 1 Feint target replace a stale Phase 2 target", () => {
     const result = resolveCombatFeintDeclarationRequestTarget({
       encounterParticipants: [
         { id: "encounter-a", scenarioParticipantId: "scenario-a" },
@@ -896,9 +937,13 @@ describe("player combat phase model", () => {
       },
     });
 
-    expect(result).toEqual({
-      message: "Feint and Phase 2 attack must target the same opponent.",
-      ok: false,
+    expect(result).toMatchObject({
+      ok: true,
+      phaseContexts: {
+        phase1: { targetParticipantId: "encounter-a" },
+        phase2: { targetParticipantId: "encounter-a" },
+      },
+      targetParticipantId: "encounter-a",
     });
   });
 });

@@ -100,6 +100,7 @@ import {
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   recordCombatRoundParryResolution,
+  synchronizeCombatRoundFeintDeclarationTarget,
   recordCombatRoundParticipantStepReview,
   prepareCombatRoundEndReview,
   commitCombatRoundEndDistanceControl,
@@ -980,6 +981,55 @@ function commitFailedParryDamage(input: {
 }
 
 describe("combat round manager", () => {
+  it("derives both Feint phase targets and the A2 opportunity from one declaration target", () => {
+    const declaration = synchronizeCombatRoundFeintDeclarationTarget({
+      actionId: "feint_attack",
+      attackOpportunities: [
+        {
+          id: "feint-a2",
+          origin: "feint_attack",
+          phase: "phase2",
+          slot: "attack_2",
+          status: "committed",
+          targetParticipantId: "stale-target",
+        },
+      ],
+      feint: {
+        attackerSkillId: "dodge",
+        attackerSkillLabel: "Dodge",
+        defenderSkillId: "one-handed-edged",
+        defenderSkillLabel: "1-h edged",
+        method: "movement",
+        targetParticipantId: "encounter-defender",
+      },
+      phaseContexts: {
+        phase1: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+          targetParticipantId: "stale-target",
+        },
+        phase2: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+      },
+      roundNumber: 3,
+      submittedBy: "gm",
+    });
+
+    expect(declaration.feint?.targetParticipantId).toBe("encounter-defender");
+    expect(declaration.phaseContexts?.phase1?.targetParticipantId).toBe("encounter-defender");
+    expect(declaration.phaseContexts?.phase2?.targetParticipantId).toBe("encounter-defender");
+    expect(declaration.attackOpportunities?.[0]?.targetParticipantId).toBe("encounter-defender");
+  });
   it("defines the compact round timeline steps in order", () => {
     expect(COMBAT_ROUND_STEPS.map((step) => COMBAT_ROUND_STEP_ABBREVIATIONS[step])).toEqual([
       "DE",

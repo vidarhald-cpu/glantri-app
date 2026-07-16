@@ -193,6 +193,7 @@ import {
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
   resolveCombatFeintWeaponSkill,
+  resolveCanonicalCombatTargetIdentity,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
@@ -7311,8 +7312,12 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    const targetIdentity = resolveCanonicalCombatTargetIdentity({
+      encounterParticipants: encounter.participants,
+      targetParticipantId: phaseContext.targetParticipantId,
+    });
     const targetScenarioParticipant = effectiveScenarioParticipants.find(
-      (participant) => participant.id === phaseContext.targetParticipantId,
+      (participant) => participant.id === targetIdentity?.scenarioParticipantId,
     );
     const targetEncounterParticipant = findEncounterParticipantForScenarioParticipant({
       encounterParticipants: encounter.participants,
@@ -7323,8 +7328,12 @@ export default function CombatRoundManagerPanel({
       (participant) => participant.participantId === targetEncounterParticipant?.id,
     );
 
-    if (!targetScenarioParticipant || !targetEncounterParticipant) {
-      setSaveError(`Select a target for ${phaseLabel} attack.`);
+    if (!targetIdentity || !targetScenarioParticipant || !targetEncounterParticipant) {
+      setSaveError(
+        inspectorDraft.actionId === "feint_attack" && phase === "phase2"
+          ? "The Feint target is no longer in this encounter."
+          : `Select a target for ${phaseLabel} attack.`,
+      );
       return;
     }
 
@@ -7371,7 +7380,7 @@ export default function CombatRoundManagerPanel({
           combatContext: targetScenarioParticipant.state.combat.combatContext,
           phase,
         }),
-        defenderScenarioParticipantId: targetScenarioParticipant.id,
+        defenderParticipantId: targetIdentity.encounterParticipantId,
         encounterId: encounter.id,
         ob,
         obSkillRaw: getMergedCombatSkillObModifierTotal({
@@ -8402,19 +8411,24 @@ export default function CombatRoundManagerPanel({
                       : (inspectorNormalizedFeintPhaseContexts[phaseKey] ??
                         inspectorDisplayDraft.phaseContexts[phaseKey]);
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                    const phaseTargetIdentity = !inspectorIsHistorical
+                      ? resolveCanonicalCombatTargetIdentity({
+                          encounterParticipants: encounter.participants,
+                          targetParticipantId: phaseCombatContext.targetParticipantId,
+                        })
+                      : undefined;
                     const phaseTargetScenarioParticipant = !inspectorIsHistorical
                       ? effectiveScenarioParticipants.find(
                           (participant) =>
-                            participant.id === phaseCombatContext.targetParticipantId,
+                            participant.id === phaseTargetIdentity?.scenarioParticipantId,
                         )
                       : undefined;
                     const phaseTargetEncounterParticipant =
-                      !inspectorIsHistorical && phaseCombatContext.targetParticipantId
-                        ? findEncounterParticipantForScenarioParticipant({
-                            encounterParticipants: encounter.participants,
-                            scenarioParticipant: phaseTargetScenarioParticipant,
-                            scenarioParticipantId: phaseCombatContext.targetParticipantId,
-                          })
+                      !inspectorIsHistorical && phaseTargetIdentity
+                        ? encounter.participants.find(
+                            (participant) =>
+                              participant.id === phaseTargetIdentity.encounterParticipantId,
+                          )
                         : undefined;
                     const phaseDistanceRow = !inspectorIsHistorical
                       ? getCombatDistanceTableRowForParticipants({
@@ -8605,6 +8619,10 @@ export default function CombatRoundManagerPanel({
                                         },
                                 })
                               }
+                              readOnly={
+                                inspectorDisplayDraft.actionId === "feint_attack" &&
+                                phaseKey === "phase2"
+                              }
                               targetOptions={
                                 historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
                               }
@@ -8657,10 +8675,15 @@ export default function CombatRoundManagerPanel({
                           </>
                         ) : null}
                         {(!inspectorIsHistorical || historicalPhasePanel) &&
-                        phaseModel.showDefenseContext &&
-                        phaseModel.defenseStats ? (
+                        phaseModel.showDefenseContext ? (
                           <>
-                            <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                            {phaseModel.defenseStats ? (
+                              <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                            ) : (
+                              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                Defense information unavailable.
+                              </div>
+                            )}
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || inspectorIsHistorical}

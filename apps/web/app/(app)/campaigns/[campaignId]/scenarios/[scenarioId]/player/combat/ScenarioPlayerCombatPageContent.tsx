@@ -107,6 +107,7 @@ import {
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
   resolveCombatFeintWeaponSkill,
+  resolveCanonicalCombatTargetIdentity,
   resolveCombatEquipmentCharacterId,
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
@@ -2328,7 +2329,10 @@ export default function ScenarioPlayerCombatPageContent({
 
     const phaseContext = currentAttackPhaseContext ?? phaseCombatContextDrafts[currentAttackPhase];
     const phaseAttackStats = phaseCombatLoadoutSummaries[currentAttackPhase].attackStats;
-    const defenderScenarioParticipantId = phaseContext.targetParticipantId;
+    const targetIdentity = resolveCanonicalCombatTargetIdentity({
+      encounterParticipants: encounterSession?.participants ?? [],
+      targetParticipantId: phaseContext.targetParticipantId,
+    });
 
     if (!phaseAttackStats) {
       setError(
@@ -2337,8 +2341,12 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    if (!defenderScenarioParticipantId) {
-      setError("Select an attack target before rolling.");
+    if (!targetIdentity) {
+      setError(
+        selectedRoundDeclaration?.actionId === "feint_attack" && currentAttackPhase === "phase2"
+          ? "The Feint target is no longer in this encounter."
+          : "Select an attack target before rolling.",
+      );
       return;
     }
 
@@ -2363,7 +2371,7 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
         actionId: selectedActionId || `${currentAttackPhase}_attack`,
-        defenderScenarioParticipantId,
+        defenderParticipantId: targetIdentity.encounterParticipantId,
         encounterId,
         ob,
         obSkillRaw: liveCombatModifiers.obSkillRaw,
@@ -3838,6 +3846,7 @@ export default function ScenarioPlayerCombatPageContent({
                               : { ...current, [phaseKey]: combatContext },
                           );
                         }}
+                        readOnly={selectedActionId === "feint_attack" && phaseKey === "phase2"}
                         targetOptions={targetOptions}
                       />
                       <PlayerCombatAttackLocationSelector
@@ -3868,9 +3877,15 @@ export default function ScenarioPlayerCombatPageContent({
                       />
                     </>
                   ) : null}
-                  {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
+                  {phaseModel.showDefenseContext ? (
                     <>
-                      <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                      {phaseModel.defenseStats ? (
+                        <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                      ) : (
+                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          Defense information unavailable.
+                        </div>
+                      )}
                       <PlayerCombatParryContextPanel
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}

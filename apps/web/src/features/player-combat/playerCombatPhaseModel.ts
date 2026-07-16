@@ -10,15 +10,13 @@ import {
   getCombatDeclarationAttackPhases,
   resolveCombatFeintWeaponSkillDefinition,
   resolvePreferredAttackMode,
+  scenarioParticipantCombatContextSchema,
   type SkillSpecialization,
 } from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
-import {
-  isPlayerEncounterDefenseAction,
-  type PlayerEncounterActionId,
-} from "@/lib/campaigns/playerEncounter";
+import type { PlayerEncounterActionId } from "@/lib/campaigns/playerEncounter";
 
 import type {
   PlayerCombatAttackStatsView,
@@ -75,6 +73,30 @@ export function buildCanonicalCombatTargetOptions(input: {
   return [...byId.values()];
 }
 
+export function resolveCanonicalCombatTargetIdentity(input: {
+  encounterParticipants: EncounterSession["participants"];
+  targetParticipantId?: string;
+}):
+  | {
+      encounterParticipantId: string;
+      scenarioParticipantId: string;
+    }
+  | undefined {
+  if (!input.targetParticipantId) return undefined;
+  const participant = input.encounterParticipants.find(
+    (candidate) =>
+      candidate.id === input.targetParticipantId ||
+      candidate.scenarioParticipantId === input.targetParticipantId ||
+      candidate.characterId === input.targetParticipantId,
+  );
+  return participant?.scenarioParticipantId
+    ? {
+        encounterParticipantId: participant.id,
+        scenarioParticipantId: participant.scenarioParticipantId,
+      }
+    : undefined;
+}
+
 /**
  * Combat commands identify actors by encounter-participant id. Phase controls may
  * begin with a committed scenario-participant alias, so normalize the current
@@ -88,7 +110,7 @@ export function resolveCombatFeintDeclarationRequestTarget(input: {
   const phase2Target = input.phaseContexts.phase2?.targetParticipantId;
   const selectedTarget = phase1Target ?? phase2Target;
   if (!selectedTarget) {
-    return { message: "Select a target for the feint.", ok: false };
+    return { message: "Select a target for the Feint.", ok: false };
   }
 
   const resolveTarget = (targetId: string | undefined) =>
@@ -103,29 +125,23 @@ export function resolveCombatFeintDeclarationRequestTarget(input: {
   const targetParticipant = resolveTarget(selectedTarget);
   if (!targetParticipant) {
     return {
-      message: "The selected target is no longer in this encounter.",
+      message: "The Feint target is no longer in this encounter.",
       ok: false,
     };
   }
-  const otherTarget = phase1Target && phase2Target ? resolveTarget(phase2Target) : undefined;
-  if (phase1Target && phase2Target && otherTarget?.id !== targetParticipant.id) {
-    return {
-      message: "Feint and Phase 2 attack must target the same opponent.",
-      ok: false,
-    };
-  }
-
   const targetParticipantId = targetParticipant.id;
   return {
     ok: true,
     phaseContexts: {
       ...input.phaseContexts,
-      phase1: input.phaseContexts.phase1
-        ? { ...input.phaseContexts.phase1, targetParticipantId }
-        : undefined,
-      phase2: input.phaseContexts.phase2
-        ? { ...input.phaseContexts.phase2, targetParticipantId }
-        : undefined,
+      phase1: scenarioParticipantCombatContextSchema.parse({
+        ...input.phaseContexts.phase1,
+        targetParticipantId,
+      }),
+      phase2: scenarioParticipantCombatContextSchema.parse({
+        ...input.phaseContexts.phase2,
+        targetParticipantId,
+      }),
     },
     targetParticipantId,
   };
@@ -905,39 +921,30 @@ function getPhaseContentFlags(input: {
   actionId: PlayerEncounterActionId | "";
   phaseKey: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
-}): { attack: boolean; defense: boolean } {
+}): { attack: boolean } {
   const attackPhases = getCombatDeclarationAttackPhases({
     actionId: input.actionId,
     secondaryActionId: input.secondaryActionId,
   });
 
   if (input.actionId === "attack_parry") {
-    return input.phaseKey === "phase1"
-      ? { attack: true, defense: true }
-      : { attack: false, defense: true };
+    return { attack: input.phaseKey === "phase1" };
   }
 
   if (input.actionId === "parry_attack") {
-    return input.phaseKey === "phase1"
-      ? { attack: false, defense: true }
-      : { attack: true, defense: true };
+    return { attack: input.phaseKey === "phase2" };
   }
 
   if (input.actionId === "adjust_range_attack") {
-    return input.phaseKey === "phase1"
-      ? { attack: false, defense: false }
-      : { attack: true, defense: false };
+    return { attack: input.phaseKey === "phase2" };
   }
 
   if (input.actionId === "double_attack") {
-    return { attack: true, defense: true };
+    return { attack: true };
   }
-
-  const phaseActionId = input.phaseKey === "phase1" ? input.actionId : input.secondaryActionId;
 
   return {
     attack: attackPhases.includes(input.phaseKey),
-    defense: isPlayerEncounterDefenseAction(phaseActionId),
   };
 }
 
@@ -971,6 +978,9 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
-    showDefenseContext: Boolean(input.defenseStats && flags.defense),
+    // Defensive state belongs to the participant and phase, not to the offensive
+    // action selected for that phase. Render the shared defense/parry projection
+    // even when there is no attack opportunity.
+    showDefenseContext: true,
   };
 }
