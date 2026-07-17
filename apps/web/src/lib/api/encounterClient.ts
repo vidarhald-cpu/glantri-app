@@ -127,6 +127,7 @@ export async function updateEncounterParticipantsOnServer(input: {
 }
 
 export async function submitCombatDeclarationOnServer(input: {
+  adjustDistance?: { requestedDistance: number; targetParticipantId: string };
   actionId?: string;
   additionalActionNotes?: string;
   combatContext: ScenarioParticipantCombatContext;
@@ -149,6 +150,7 @@ export async function submitCombatDeclarationOnServer(input: {
     {
       body: JSON.stringify({
         actionId: input.actionId,
+        adjustDistance: input.adjustDistance,
         additionalActionNotes: input.additionalActionNotes,
         combatContext: input.combatContext,
         movementId: input.movementId,
@@ -183,6 +185,59 @@ export async function reviewCombatFeintFeasibilityOnServer(input: {
     }),
     method: "POST",
   });
+}
+
+export async function respondCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  response: "allow" | "oppose";
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/respond-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function reviewCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  notes?: string;
+  participantId?: string;
+  proposalId: string;
+  value: number;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/review-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function rollCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function commitCombatAdjustDistanceOnServer(input: {
+  committedDistance: number;
+  encounterId: string;
+  notes?: string;
+  outcome: "successful" | "unsuccessful" | "allowed";
+  proposalId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/commit-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
 }
 
 export async function rollCombatFeintOnServer(input: {

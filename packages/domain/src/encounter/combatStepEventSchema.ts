@@ -22,6 +22,11 @@ export const combatStepEventTypeSchema = z.enum([
   "feint_result",
   "feint_committed",
   "feint_impossible",
+  "adjust_distance_response",
+  "adjust_distance_adjustment",
+  "adjust_distance_roll",
+  "adjust_distance_result",
+  "adjust_distance_committed",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -127,6 +132,10 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "review_feint_feasibility",
   "roll_feint",
   "commit_feint_result",
+  "respond_adjust_distance",
+  "review_adjust_distance_roll_adjustment",
+  "roll_adjust_distance",
+  "commit_adjust_distance",
 ]);
 
 export const combatStepEventSourceSchema = z.object({

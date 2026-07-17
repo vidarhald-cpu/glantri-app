@@ -95,6 +95,9 @@ export function getCombatTrackerCellMarkerKind(
     if (input.feint.status === "impossible") return "skipped";
     return "required";
   }
+  if (input.step === "phase_1_actions" && input.adjustDistance) {
+    return input.adjustDistance.status === "committed" ? "complete" : "required";
+  }
   if (input.stepOutcome) return "skipped";
   if (attackPhase(input.step)) {
     if (input.attackResult)
@@ -243,6 +246,14 @@ function cellDetail(input: CombatTrackerCellFacts): string {
     return input.feint.status === "pending"
       ? "feint opposed rolls/review pending."
       : "feint pending.";
+  }
+  if (input.step === "phase_1_actions" && input.adjustDistance) {
+    const target = input.adjustDistance.defenderLabel
+      ? ` against ${input.adjustDistance.defenderLabel}`
+      : "";
+    return input.adjustDistance.status === "committed"
+      ? `completed a distance adjustment${target}. Distance: ${input.adjustDistance.currentDistance} → ${input.adjustDistance.committedDistance ?? input.adjustDistance.currentDistance}.`
+      : "distance-adjustment response, rolls, or review pending.";
   }
   if (input.stepOutcome) return input.stepOutcome.message;
   if (input.attackResult) {

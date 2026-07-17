@@ -39,6 +39,11 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   feint_result: "Opposed result",
   feint_committed: "Feint committed",
   feint_impossible: "Feint ruling",
+  adjust_distance_response: "Defender response",
+  adjust_distance_adjustment: "Maneuver adjustment",
+  adjust_distance_roll: "Dodge roll",
+  adjust_distance_result: "Distance proposal",
+  adjust_distance_committed: "Distance adjustment committed",
 };
 
 function humanize(key: string): string {
@@ -385,6 +390,23 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         ],
         summary: "The GM committed the feint result.",
       };
+    }
+    case "adjust_distance_response": {
+      const response = factValue(event, "response");
+      return { outcomeRows: resultRow(event, response === "allow" ? `${defender ?? "Defender"} allowed the distance adjustment.` : `${defender ?? "Defender"} opposed the distance adjustment.`), summary: "The defender responded to the maneuver." };
+    }
+    case "adjust_distance_adjustment":
+      return { outcomeRows: [], summary: "The GM confirmed the maneuver adjustment." };
+    case "adjust_distance_roll":
+      return { outcomeRows: [], summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge.` };
+    case "adjust_distance_result": {
+      const proposed = factValue(event, "standardProposedDistance");
+      return { outcomeRows: typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [], summary: "The maneuver proposal was resolved." };
+    }
+    case "adjust_distance_committed": {
+      const previous = factValue(event, "previousDistance");
+      const committed = factValue(event, "committedDistance");
+      return { outcomeRows: typeof committed === "number" ? resultRow(event, previous === committed ? `Distance remained ${committed}.` : `Distance changed from ${previous} to ${committed}.`) : [], summary: "The GM committed the distance adjustment." };
     }
   }
 }

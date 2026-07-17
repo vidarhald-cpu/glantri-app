@@ -50,6 +50,13 @@ export interface CombatTrackerCellFacts {
     method: "movement" | "weapon";
     status: "pending" | "committed" | "impossible";
   };
+  adjustDistance?: {
+    currentDistance: number;
+    requestedDistance: number;
+    committedDistance?: number;
+    defenderLabel?: string;
+    status: "pending" | "committed";
+  };
   inspectable: boolean;
   initiativeTotal?: number;
   participantId: string;

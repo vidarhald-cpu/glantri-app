@@ -193,17 +193,6 @@ const adjustRangePhase1DbParryModifierEntry = {
   sourceRule: "adjust-range-phase1-db-parry",
   value: -2,
 };
-const adjustRangePhase2DbParryModifierEntry = {
-  durationRounds: 1,
-  generated: true,
-  id: "generated:adjust-range-attack:phase2:db-parry",
-  notes: "adjust range attack",
-  scope: "until",
-  sourceActionId: "adjust_range_attack",
-  sourcePhase: "phase2",
-  sourceRule: "adjust-range-attack-phase2-db-parry",
-  value: -4,
-};
 const doubleAttackPhase1ObSkillModifier = expect.objectContaining(
   doubleAttackPhase1ObSkillModifierEntry,
 );
@@ -218,9 +207,6 @@ const doubleAttackPhase2DbParryModifier = expect.objectContaining(
 );
 const adjustRangePhase1DbParryModifier = expect.objectContaining(
   adjustRangePhase1DbParryModifierEntry,
-);
-const adjustRangePhase2DbParryModifier = expect.objectContaining(
-  adjustRangePhase2DbParryModifierEntry,
 );
 
 async function buildScenarioTestApp() {
@@ -7279,10 +7265,76 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
-      error: "Select a target for Phase 2.",
+      error: "Select an opponent for Adjust Distance-Attack.",
     });
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("normalizes one Adjust Distance target and persists the A1 proposal plus A2 attack", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participants: [{ id: "participant-1" }, { id: "participant-2" }],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "adjust_range_attack",
+        adjustDistance: {
+          requestedDistance: 1,
+          targetParticipantId: "participant-2",
+        },
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-punch",
+          }),
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const roundState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+    expect(roundState.participants[0].declaration).toMatchObject({
+      actionId: "adjust_range_attack",
+      adjustDistance: {
+        requestedDistance: 1,
+        targetParticipantId: "encounter-participant-2",
+      },
+      attackOpportunities: [
+        expect.objectContaining({
+          origin: "adjust_range_attack",
+          phase: "phase2",
+          targetParticipantId: "encounter-participant-2",
+        }),
+      ],
+      phaseContexts: {
+        phase1: expect.objectContaining({ targetParticipantId: "encounter-participant-2" }),
+        phase2: expect.objectContaining({ targetParticipantId: "encounter-participant-2" }),
+      },
+    });
+    expect(roundState.adjustDistanceProposals).toEqual([
+      expect.objectContaining({
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        requestedDistance: 1,
+        status: "awaiting_action_turn",
+      }),
+    ]);
   });
 
   it("creates the phase 2 DB/Parry modifier when a player declares Reactive attack", async () => {
@@ -7320,7 +7372,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
       expect.objectContaining({
         participantId: "participant-1",
@@ -7733,14 +7785,21 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("creates phase 1 and phase 2 DB/Parry modifiers when a player declares Adjust Range - Attack", async () => {
-    setupCombatDeclarationRoute();
+  it("creates only the phase 1 DB/Parry risk when declaring a closer Adjust Distance-Attack", async () => {
+    setupCombatDeclarationRoute({
+      encounter: { participants: makeTwoCombatEncounterParticipants() },
+      participants: [{ id: "participant-1" }, { id: "participant-2" }],
+    });
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
       method: "POST",
       payload: {
         actionId: "adjust_range_attack",
+        adjustDistance: {
+          requestedDistance: 1,
+          targetParticipantId: "participant-2",
+        },
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -7750,6 +7809,12 @@ describe("scenarios route contract", () => {
           },
         },
         movementId: "hold",
+        phaseAttackSources: {
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-punch",
+          }),
+        },
         phaseContexts: {
           phase1: {
             modifierBuckets: {
@@ -7758,6 +7823,7 @@ describe("scenarios route contract", () => {
               situationInitiative: [],
               situationObSkill: [],
             },
+            targetParticipantId: "participant-2",
           },
           phase2: {
             modifierBuckets: {
@@ -7766,7 +7832,7 @@ describe("scenarios route contract", () => {
               situationInitiative: [],
               situationObSkill: [],
             },
-            targetParticipantId: "encounter-target-1",
+            targetParticipantId: "participant-2",
           },
         },
         scenarioParticipantId: "participant-1",
@@ -7776,7 +7842,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
       expect.objectContaining({
         participantId: "participant-1",
@@ -7787,7 +7853,7 @@ describe("scenarios route contract", () => {
             lastDeclaredEncounterId: "encounter-1",
             combatContext: expect.objectContaining({
               modifierBuckets: expect.objectContaining({
-                situationDb: [adjustRangePhase1DbParryModifier, adjustRangePhase2DbParryModifier],
+                situationDb: [adjustRangePhase1DbParryModifier],
               }),
             }),
           }),
@@ -7799,13 +7865,13 @@ describe("scenarios route contract", () => {
       actionId: "adjust_range_attack",
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
-          situationDb: [adjustRangePhase1DbParryModifier, adjustRangePhase2DbParryModifier],
+          situationDb: [adjustRangePhase1DbParryModifier],
         }),
       }),
       phaseContexts: {
         phase1: expect.any(Object),
         phase2: expect.objectContaining({
-          targetParticipantId: "encounter-target-1",
+          targetParticipantId: "encounter-participant-2",
         }),
       },
       roundNumber: 1,

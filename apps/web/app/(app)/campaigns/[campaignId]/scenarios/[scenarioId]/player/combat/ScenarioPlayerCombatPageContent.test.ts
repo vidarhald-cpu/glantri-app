@@ -425,7 +425,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('"Back out of attack (-2 DB/Parry penalty)"');
     expect(source).toContain('"Back out of attack (no CE roll)"');
     expect(source).toContain('<option value="continue">');
-    expect(source).toContain("preActionControls={selectedPhaseAttackChoiceControls}");
+    expect(source).toContain('selectedAdjustDistanceProposal?.status === "awaiting_defender_response"');
+    expect(source).toContain(": selectedPhaseAttackChoiceControls");
     expect(source).toContain("? backOutPhaseAttack()");
     expect(source).toContain("phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel");
     expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");

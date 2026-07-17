@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
 import {
   ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
-  ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
   ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
@@ -198,9 +197,10 @@ describe("combat action generated modifiers", () => {
     ).toHaveLength(2);
   });
 
-  it("creates phase 1 and phase 2 DB/Parry modifiers for Adjust Range - Attack", () => {
+  it("creates the phase 1 DB/Parry risk only when Adjust Distance moves closer", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2, roundNumber: 4 },
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
     });
 
@@ -215,26 +215,26 @@ describe("combat action generated modifiers", () => {
         sourceRule: "adjust-range-phase1-db-parry",
         value: -2,
       }),
-      expect.objectContaining({
-        durationRounds: 1,
-        generated: true,
-        id: ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
-        notes: "adjust range attack",
-        sourceActionId: "adjust_range_attack",
-        sourcePhase: "phase2",
-        sourceRule: "adjust-range-attack-phase2-db-parry",
-        value: -4,
-      }),
     ]);
+    expect(context.modifierBuckets.situationDb[0]?.expiresAtRound).toBe(4);
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "adjust_range_attack",
+        adjustDistance: { currentDistance: 3, requestedDistance: 4 },
+        combatContext: context,
+      }).modifierBuckets.situationDb,
+    ).toEqual([]);
   });
 
   it("does not duplicate Adjust Range - Attack generated modifiers when saving repeatedly", () => {
     const firstSave = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
     });
     const secondSave = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: firstSave,
     });
 
@@ -242,7 +242,7 @@ describe("combat action generated modifiers", () => {
       secondSave.modifierBuckets.situationDb.filter(
         isAdjustRangeAttackGeneratedDbParryModifier,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("removes the generated modifier when changing away from Single attack", () => {
@@ -394,6 +394,7 @@ describe("combat action generated modifiers", () => {
   it("removes Adjust Range - Attack generated rows when changing away while preserving manual rows", () => {
     const adjustRangeContext = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: scenarioParticipantCombatContextSchema.parse({
         modifierBuckets: {
           situationDb: [

@@ -29,6 +29,7 @@ export const DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE =
 export const ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID =
   "generated:adjust-range-attack:phase1:db-parry";
 export const ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE = "adjust-range-phase1-db-parry";
+/** Legacy placeholder row: retained only so refresh can remove saved copies. */
 export const ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID =
   "generated:adjust-range-attack:phase2:db-parry";
 export const ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE = "adjust-range-attack-phase2-db-parry";
@@ -305,8 +306,7 @@ function combatActionGeneratedDbParryModifierMatchesPhase(input: {
 
   return (
     input.entry.sourceRule === PARRY_ATTACK_DB_PARRY_SOURCE_RULE ||
-    input.entry.sourceRule === DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE ||
-    input.entry.sourceRule === ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE
+    input.entry.sourceRule === DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE
   );
 }
 
@@ -607,10 +607,22 @@ export function continueDoubleAttackPhase2GeneratedModifiers(
   });
 }
 
-export function buildAdjustRangeAttackGeneratedDbParryModifiers(): ScenarioCombatModifierEntry[] {
+export function buildAdjustRangeAttackGeneratedDbParryModifiers(input?: {
+  currentDistance?: number;
+  requestedDistance?: number;
+  roundNumber?: number;
+}): ScenarioCombatModifierEntry[] {
+  if (
+    input?.currentDistance === undefined ||
+    input.requestedDistance === undefined ||
+    input.requestedDistance >= input.currentDistance
+  ) {
+    return [];
+  }
   return [
     {
       durationRounds: 1,
+      ...(input.roundNumber ? { expiresAtRound: input.roundNumber } : {}),
       generated: true,
       id: ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
       notes: "adjust range",
@@ -620,18 +632,26 @@ export function buildAdjustRangeAttackGeneratedDbParryModifiers(): ScenarioComba
       sourceRule: ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE,
       value: -2,
     },
-    {
-      durationRounds: 1,
-      generated: true,
-      id: ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
-      notes: "adjust range attack",
-      scope: "until",
-      sourceActionId: "adjust_range_attack",
-      sourcePhase: "phase2",
-      sourceRule: ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE,
-      value: -4,
-    },
   ];
+}
+
+export function expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
+  combatContext: ScenarioParticipantCombatContext | undefined,
+  roundNumber: number,
+): ScenarioParticipantCombatContext {
+  const context = scenarioParticipantCombatContextSchema.parse(combatContext ?? {});
+  return scenarioParticipantCombatContextSchema.parse({
+    ...context,
+    modifierBuckets: {
+      ...context.modifierBuckets,
+      situationDb: context.modifierBuckets.situationDb.filter(
+        (entry) =>
+          !isAdjustRangeAttackGeneratedDbParryModifier(entry) ||
+          entry.expiresAtRound === undefined ||
+          entry.expiresAtRound >= roundNumber,
+      ),
+    },
+  });
 }
 
 export function applyCombatActionGeneratedModifiers(input: {
@@ -639,6 +659,7 @@ export function applyCombatActionGeneratedModifiers(input: {
   combatContext: ScenarioParticipantCombatContext;
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
   initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
+  adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter(
@@ -660,7 +681,7 @@ export function applyCombatActionGeneratedModifiers(input: {
         : input.actionId === "double_attack"
           ? buildDoubleAttackGeneratedDbParryModifiers()
           : input.actionId === "adjust_range_attack"
-            ? buildAdjustRangeAttackGeneratedDbParryModifiers()
+            ? buildAdjustRangeAttackGeneratedDbParryModifiers(input.adjustDistance)
             : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];

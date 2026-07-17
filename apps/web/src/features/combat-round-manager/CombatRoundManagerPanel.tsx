@@ -137,6 +137,10 @@ import {
   decideDoubleAttackPhase2OnServer,
   rollCombatFeintOnServer,
   commitCombatFeintOnServer,
+  respondCombatAdjustDistanceOnServer,
+  reviewCombatAdjustDistanceOnServer,
+  rollCombatAdjustDistanceOnServer,
+  commitCombatAdjustDistanceOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -3826,6 +3830,13 @@ export default function CombatRoundManagerPanel({
   const [inspectorFeintDefenderObModifier, setInspectorFeintDefenderObModifier] = useState("0");
   const [inspectorFeintDefenderDbModifier, setInspectorFeintDefenderDbModifier] = useState("0");
   const [inspectorFeintNote, setInspectorFeintNote] = useState("");
+  const [inspectorAdjustDistanceResponse, setInspectorAdjustDistanceResponse] = useState<"allow" | "oppose">("oppose");
+  const [inspectorAdjustDistanceAdjustmentTarget, setInspectorAdjustDistanceAdjustmentTarget] = useState("");
+  const [inspectorAdjustDistanceAdjustmentValue, setInspectorAdjustDistanceAdjustmentValue] = useState("0");
+  const [inspectorAdjustDistanceAdjustmentNote, setInspectorAdjustDistanceAdjustmentNote] = useState("");
+  const [inspectorAdjustDistanceCommittedDistance, setInspectorAdjustDistanceCommittedDistance] = useState("2");
+  const [inspectorAdjustDistanceOutcome, setInspectorAdjustDistanceOutcome] = useState<"successful" | "unsuccessful" | "allowed">("unsuccessful");
+  const [inspectorAdjustDistanceReviewNote, setInspectorAdjustDistanceReviewNote] = useState("");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("normal");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -4744,11 +4755,14 @@ export default function CombatRoundManagerPanel({
       inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId ??
       inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId ??
       inspectorDisplayDraft.combatContext.targetParticipantId;
-    const primaryTargetPhase = inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId
-      ? "phase1"
-      : inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId
+    const primaryTargetPhase =
+      inspectorDisplayDraft.actionId === "adjust_range_attack"
         ? "phase2"
-        : undefined;
+        : inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId
+          ? "phase1"
+          : inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId
+            ? "phase2"
+            : undefined;
     const defaultDistance =
       primaryTargetId && primaryTargetPhase
         ? getLongestPreferredDistanceForWeaponName({
@@ -4765,6 +4779,7 @@ export default function CombatRoundManagerPanel({
     }));
   }, [
     inspectorDisplayDraft.combatContext.targetParticipantId,
+    inspectorDisplayDraft.actionId,
     inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId,
     inspectorDisplayDraft.phaseContexts.phase2.targetParticipantId,
     inspectorEquipmentState,
@@ -5063,6 +5078,49 @@ export default function CombatRoundManagerPanel({
             proposal.attackerParticipantId === inspectorPhaseResolutionCursor.participantId,
         )
       : undefined;
+  const inspectorAdjustDistanceProposal =
+    inspectorPhaseResolutionCursor?.phase === "phase1" &&
+    inspectorPhaseResolutionCursor.substep === "adjust_distance"
+      ? selectedTimelineRoundState.adjustDistanceProposals.find(
+          (proposal) =>
+            proposal.status !== "committed" &&
+            proposal.attackerParticipantId === inspectorPhaseResolutionCursor.participantId,
+        )
+      : undefined;
+  const inspectorAdjustDistanceExpectedParticipantId = inspectorAdjustDistanceProposal
+    ? inspectorAdjustDistanceProposal.status === "awaiting_defender_response"
+      ? inspectorAdjustDistanceProposal.defenderParticipantId
+      : inspectorAdjustDistanceProposal.status === "awaiting_rolls"
+        ? inspectorAdjustDistanceProposal.attackerRoll
+          ? inspectorAdjustDistanceProposal.defenderParticipantId
+          : inspectorAdjustDistanceProposal.attackerParticipantId
+        : undefined
+    : undefined;
+  const inspectorAdjustDistanceExpectedEncounterParticipant = encounter.participants.find(
+    (participant) => participant.id === inspectorAdjustDistanceExpectedParticipantId,
+  );
+  const inspectorAdjustDistanceExpectedScenarioParticipant = inspectorAdjustDistanceExpectedEncounterParticipant
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorAdjustDistanceExpectedEncounterParticipant,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  useEffect(() => {
+    if (!inspectorAdjustDistanceProposal) return;
+    setInspectorAdjustDistanceCommittedDistance(
+      String(
+        inspectorAdjustDistanceProposal.review?.committedDistance ??
+          inspectorAdjustDistanceProposal.standardProposedDistance ??
+          inspectorAdjustDistanceProposal.currentDistance,
+      ),
+    );
+    setInspectorAdjustDistanceOutcome(
+      inspectorAdjustDistanceProposal.review?.acceptedOutcome ??
+        inspectorAdjustDistanceProposal.standardOutcome ??
+        "unsuccessful",
+    );
+    setInspectorAdjustDistanceReviewNote(inspectorAdjustDistanceProposal.review?.notes ?? "");
+  }, [inspectorAdjustDistanceProposal]);
   const inspectorFeintExpectedParticipantId = inspectorFeintProposal
     ? inspectorFeintProposal.attackerRoll
       ? inspectorFeintProposal.defenderParticipantId
@@ -5176,6 +5234,14 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
+    : inspectorAdjustDistanceProposal?.status === "awaiting_defender_response"
+      ? "Confirm defender response"
+      : inspectorAdjustDistanceProposal?.status === "awaiting_gm_adjustment"
+        ? "Confirm maneuver adjustment"
+        : inspectorAdjustDistanceProposal?.status === "awaiting_rolls"
+          ? inspectorAdjustDistanceProposal.attackerRoll ? "Roll defender Dodge" : "Roll attacker Dodge"
+          : inspectorAdjustDistanceProposal?.status === "awaiting_review"
+            ? "Commit distance adjustment"
     : inspectorFeintProposal?.status === "awaiting_rolls"
       ? inspectorFeintProposal.attackerRoll
         ? "Roll feint resistance"
@@ -5260,7 +5326,11 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeSelection === "skip";
   const inspectorActionButtonDisabled =
     saving ||
-    (inspectorFeintProposal
+    (inspectorAdjustDistanceProposal
+      ? (inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ||
+          inspectorAdjustDistanceProposal.status === "awaiting_rolls") &&
+        !inspectorAdjustDistanceExpectedScenarioParticipant
+      : inspectorFeintProposal
       ? inspectorFeintProposal.status === "awaiting_rolls" &&
         !inspectorFeintExpectedScenarioParticipant
       : inspectorDoubleAttackDecisionAvailable
@@ -5530,10 +5600,76 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </div>
   ) : null;
+  const inspectorAdjustDistanceControls = inspectorAdjustDistanceProposal ? (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <strong>Adjustment maneuver</strong>
+      <div>
+        Distance {inspectorAdjustDistanceProposal.currentDistance} → {inspectorAdjustDistanceProposal.requestedDistance} · {inspectorAdjustDistanceProposal.direction}
+      </div>
+      {inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ? (
+        <label style={compactFieldLabelStyle}>
+          <span>Defender response</span>
+          <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceResponse(event.target.value as "allow" | "oppose")} value={inspectorAdjustDistanceResponse}>
+            <option value="oppose">Oppose</option>
+            <option value="allow">Allow adjustment</option>
+          </select>
+        </label>
+      ) : null}
+      {inspectorAdjustDistanceProposal.status === "awaiting_gm_adjustment" ? (
+        <>
+          <label style={compactFieldLabelStyle}>
+            <span>Adjustment target</span>
+            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentTarget(event.target.value)} value={inspectorAdjustDistanceAdjustmentTarget}>
+              <option value="">Neither</option>
+              <option value={inspectorAdjustDistanceProposal.attackerParticipantId}>Attacker</option>
+              <option value={inspectorAdjustDistanceProposal.defenderParticipantId}>Defender</option>
+            </select>
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>Adjustment (0–4)</span>
+            <input min={0} max={4} type="number" disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentValue(event.target.value)} value={inspectorAdjustDistanceAdjustmentValue} />
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>GM note</span>
+            <input disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentNote(event.target.value)} value={inspectorAdjustDistanceAdjustmentNote} />
+          </label>
+        </>
+      ) : null}
+      {inspectorAdjustDistanceProposal.status === "awaiting_review" ? (
+        <>
+          <div>
+            {inspectorAdjustDistanceProposal.defenderResponse === "allow"
+              ? "Defender allowed the adjustment."
+              : `Dodge: ${inspectorAdjustDistanceProposal.attackerRoll?.finalTotal} vs ${inspectorAdjustDistanceProposal.defenderRoll?.finalTotal} · ${inspectorAdjustDistanceProposal.standardOutcome}`}
+          </div>
+          <div>Standard proposal: distance {inspectorAdjustDistanceProposal.standardProposedDistance}</div>
+          <label style={compactFieldLabelStyle}>
+            <span>Accepted outcome</span>
+            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceOutcome(event.target.value as "successful" | "unsuccessful" | "allowed")} value={inspectorAdjustDistanceOutcome}>
+              <option value="successful">Successful</option>
+              <option value="unsuccessful">Unsuccessful</option>
+              {inspectorAdjustDistanceProposal.defenderResponse === "allow" ? <option value="allowed">Allowed</option> : null}
+            </select>
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>Committed distance</span>
+            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceCommittedDistance(event.target.value)} value={inspectorAdjustDistanceCommittedDistance}>
+              {[0,1,2,3,4,5,6,7,8].map((distance) => <option key={distance} value={distance}>{distance}</option>)}
+            </select>
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>GM note</span>
+            <input disabled={saving} onChange={(event) => setInspectorAdjustDistanceReviewNote(event.target.value)} value={inspectorAdjustDistanceReviewNote} />
+          </label>
+        </>
+      ) : null}
+    </div>
+  ) : null;
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
     inspectorFeintControls ||
+    inspectorAdjustDistanceControls ||
     inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
     inspectorRoundEndDistanceControls ? (
@@ -5541,6 +5677,7 @@ export default function CombatRoundManagerPanel({
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
+        {inspectorAdjustDistanceControls}
         {inspectorDoubleAttackDecisionControls}
         {inspectorPhaseAttackChoiceControls}
         {inspectorRoundEndDistanceControls}
@@ -6313,6 +6450,7 @@ export default function CombatRoundManagerPanel({
         committedAt,
         declarationSummary: {
           actionId: draft.actionId || undefined,
+          adjustDistance: roundParticipant.declaration?.adjustDistance,
           actionLabel: draft.actionId ? getPlayerEncounterActionLabel(draft.actionId) : undefined,
           additionalActionNotes: draft.additionalActionNotes || undefined,
           feint:
@@ -6783,9 +6921,30 @@ export default function CombatRoundManagerPanel({
       setSaveError(feintTargetResolution.message);
       return;
     }
-    const requestPhaseContexts = feintTargetResolution?.ok
+    let requestPhaseContexts = feintTargetResolution?.ok
       ? feintTargetResolution.phaseContexts
       : inspectorDraft.phaseContexts;
+    if (inspectorDraft.actionId === "adjust_range_attack") {
+      const targetParticipantId =
+        requestPhaseContexts.phase1?.targetParticipantId ??
+        requestPhaseContexts.phase2?.targetParticipantId;
+      if (!targetParticipantId) {
+        setSaveError("Select an opponent for Adjust Distance-Attack.");
+        return;
+      }
+      requestPhaseContexts = {
+        phase1: {
+          ...inspectorDraft.phaseContexts.phase1,
+          ...requestPhaseContexts.phase1,
+          targetParticipantId,
+        },
+        phase2: {
+          ...inspectorDraft.phaseContexts.phase2,
+          ...requestPhaseContexts.phase2,
+          targetParticipantId,
+        },
+      };
+    }
     const targetValidation = validateCombatDeclarationTargets({
       actionId: inspectorDraft.actionId || undefined,
       phaseContexts: requestPhaseContexts,
@@ -6808,6 +6967,23 @@ export default function CombatRoundManagerPanel({
       );
       const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
+        adjustDistance:
+          inspectorDraft.actionId === "adjust_range_attack" &&
+          requestPhaseContexts.phase1?.targetParticipantId
+            ? {
+                requestedDistance:
+                  inspectorDraft.movementIntent.distancePreferences.find(
+                    (preference) =>
+                      preference.targetParticipantId ===
+                      requestPhaseContexts.phase1?.targetParticipantId,
+                  )?.desiredDistance ??
+                  inspectorDistancePreferenceOptions.find(
+                    (option) => option.id === requestPhaseContexts.phase1?.targetParticipantId,
+                  )?.defaultDistance ??
+                  2,
+                targetParticipantId: requestPhaseContexts.phase1!.targetParticipantId!,
+              }
+            : undefined,
         additionalActionNotes: inspectorDraft.additionalActionNotes,
         combatContext: inspectorGeneratedCombatContext,
         encounterId: encounter.id,
@@ -6837,7 +7013,8 @@ export default function CombatRoundManagerPanel({
               : undefined,
           phase2:
             inspectorDraft.actionId === "double_attack" ||
-            inspectorDraft.actionId === "feint_attack"
+            inspectorDraft.actionId === "feint_attack" ||
+            inspectorDraft.actionId === "adjust_range_attack"
               ? buildCombatAttackSourceRef({
                   phaseKey: "phase2",
                   reference: inspectorPhaseLoadoutSummaries.phase2.reference,
@@ -6912,6 +7089,55 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll feint.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function advanceInspectorAdjustDistance() {
+    if (!inspectorAdjustDistanceProposal) return;
+    setSaving(true);
+    try {
+      let nextEncounter: EncounterSession;
+      if (inspectorAdjustDistanceProposal.status === "awaiting_defender_response") {
+        if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
+        nextEncounter = await respondCombatAdjustDistanceOnServer({
+          encounterId: encounter.id,
+          proposalId: inspectorAdjustDistanceProposal.id,
+          response: inspectorAdjustDistanceResponse,
+          scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
+        });
+      } else if (inspectorAdjustDistanceProposal.status === "awaiting_gm_adjustment") {
+        nextEncounter = await reviewCombatAdjustDistanceOnServer({
+          encounterId: encounter.id,
+          notes: inspectorAdjustDistanceAdjustmentNote || undefined,
+          participantId: inspectorAdjustDistanceAdjustmentTarget || undefined,
+          proposalId: inspectorAdjustDistanceProposal.id,
+          value: Number.parseInt(inspectorAdjustDistanceAdjustmentValue, 10) || 0,
+        });
+      } else if (inspectorAdjustDistanceProposal.status === "awaiting_rolls") {
+        if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
+        nextEncounter = await rollCombatAdjustDistanceOnServer({
+          encounterId: encounter.id,
+          proposalId: inspectorAdjustDistanceProposal.id,
+          scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
+        });
+      } else if (inspectorAdjustDistanceProposal.status === "awaiting_review") {
+        nextEncounter = await commitCombatAdjustDistanceOnServer({
+          committedDistance: Number.parseInt(inspectorAdjustDistanceCommittedDistance, 10),
+          encounterId: encounter.id,
+          notes: inspectorAdjustDistanceReviewNote || undefined,
+          outcome: inspectorAdjustDistanceOutcome,
+          proposalId: inspectorAdjustDistanceProposal.id,
+        });
+      } else return;
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to advance the distance adjustment.");
     } finally {
       setSaving(false);
     }
@@ -8128,7 +8354,27 @@ export default function CombatRoundManagerPanel({
           ? (trackerFeintProposal.review.gmDefenderObDbModifier ??
             trackerFeintProposal.review.proposedDefenderObDbModifier)
           : undefined;
+        const trackerAdjustDistanceProposal =
+          step === "phase_1_actions"
+            ? timelineRoundState.adjustDistanceProposals.find(
+                (proposal) =>
+                  proposal.attackerParticipantId === timelineParticipant.participantId &&
+                  proposal.roundNumber === timelineRoundState.roundNumber,
+              )
+            : undefined;
         trackerCellFacts.push({
+          adjustDistance: trackerAdjustDistanceProposal
+            ? {
+                committedDistance: trackerAdjustDistanceProposal.review?.committedDistance,
+                currentDistance: trackerAdjustDistanceProposal.currentDistance,
+                defenderLabel: timelineRoundState.participants.find(
+                  (participant) =>
+                    participant.participantId === trackerAdjustDistanceProposal.defenderParticipantId,
+                )?.label,
+                requestedDistance: trackerAdjustDistanceProposal.requestedDistance,
+                status: trackerAdjustDistanceProposal.status === "committed" ? "committed" : "pending",
+              }
+            : undefined,
           actionResultStatus: trackerSnapshot?.actionResultStatus,
           activeTask:
             timelineRoundState.roundNumber === roundState.roundNumber &&
@@ -8559,6 +8805,65 @@ export default function CombatRoundManagerPanel({
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                             No information available for this panel.
                           </div>
+                        ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
+                          phaseKey === "phase1" ? (
+                          <div style={{ display: "grid", gap: "0.65rem" }}>
+                            <PlayerCombatAttackTargetSelector
+                              combatContext={phaseModel.phaseContext}
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              distanceLabel={phaseDistanceLabel}
+                              onCombatContextChange={(combatContext) =>
+                                updateInspectorDraft({
+                                  phaseContexts: {
+                                    phase1: combatContext,
+                                    phase2: {
+                                      ...inspectorDraft.phaseContexts.phase2,
+                                      targetParticipantId: combatContext.targetParticipantId,
+                                    },
+                                  },
+                                })
+                              }
+                              targetOptions={inspectorTargetOptions}
+                            />
+                            <label style={compactFieldLabelStyle}>
+                              <strong>Requested distance</strong>
+                              <select
+                                disabled={saving || inspectorIsHistorical}
+                                onChange={(event) => {
+                                  const targetParticipantId = phaseModel.phaseContext.targetParticipantId;
+                                  if (!targetParticipantId) return;
+                                  updateInspectorDraft({
+                                    movementIntent: {
+                                      ...inspectorDraft.movementIntent,
+                                      distancePreferences: [
+                                        ...inspectorDraft.movementIntent.distancePreferences.filter(
+                                          (entry) => entry.targetParticipantId !== targetParticipantId,
+                                        ),
+                                        {
+                                          desiredDistance: Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+                                          source: "gm_proxy",
+                                          targetParticipantId,
+                                        },
+                                      ],
+                                    },
+                                  });
+                                }}
+                                value={
+                                  inspectorDraft.movementIntent.distancePreferences.find(
+                                    (entry) => entry.targetParticipantId === phaseModel.phaseContext.targetParticipantId,
+                                  )?.desiredDistance ??
+                                  inspectorDistancePreferenceOptions.find(
+                                    (option) => option.id === phaseModel.phaseContext.targetParticipantId,
+                                  )?.defaultDistance ??
+                                  2
+                                }
+                              >
+                                {[0,1,2,3,4,5,6,7,8].map((distance) => <option key={distance} value={distance}>{distance}</option>)}
+                              </select>
+                            </label>
+                            <div>Skill: Dodge</div>
+                            <div>The defender may oppose or allow the maneuver.</div>
+                          </div>
                         ) : inspectorDisplayDraft.actionId === "feint_attack" &&
                           phaseKey === "phase1" ? (
                           <div style={{ display: "grid", gap: "0.65rem" }}>
@@ -8642,8 +8947,9 @@ export default function CombatRoundManagerPanel({
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts:
-                                    inspectorDisplayDraft.actionId === "feint_attack" &&
-                                    phaseKey === "phase2"
+                                    (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                      inspectorDisplayDraft.actionId === "adjust_range_attack") &&
+                                      phaseKey === "phase2"
                                       ? {
                                           phase1: {
                                             ...inspectorDraft.phaseContexts.phase1,
@@ -8658,8 +8964,9 @@ export default function CombatRoundManagerPanel({
                                 })
                               }
                               readOnly={
-                                inspectorDisplayDraft.actionId === "feint_attack" &&
-                                phaseKey === "phase2"
+                                (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                  inspectorDisplayDraft.actionId === "adjust_range_attack") &&
+                                  phaseKey === "phase2"
                               }
                               targetOptions={
                                 historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
@@ -8982,7 +9289,9 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (inspectorFeintProposal?.status === "awaiting_rolls"
+                        void (inspectorAdjustDistanceProposal
+                          ? advanceInspectorAdjustDistance()
+                          : inspectorFeintProposal?.status === "awaiting_rolls"
                           ? rollInspectorFeint()
                           : inspectorFeintProposal?.status === "awaiting_review"
                             ? commitInspectorFeint()

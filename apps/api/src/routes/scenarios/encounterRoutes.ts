@@ -42,6 +42,7 @@ import {
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
   combatAttackSourceRefSchema,
+  combatDistanceSchema,
   combatRoundStepSchema,
   combatRoundStepSnapshotSchema,
   encounterParticipantMembershipModeSchema,
@@ -50,6 +51,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   ensureCombatRoundEndReviewPrepared,
   expireCombatFeintGeneratedModifiersBeforeRound,
+  expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   getCombatRoundInitiativePhaseForStep,
   getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
@@ -58,6 +60,7 @@ import {
   getCombatRoundAttackResultId,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
+  getDistanceEdgeBetweenParticipantAliases,
   getCombatDeclarationAttackPhases,
   getCombatRoundDistanceEdge,
   getCombatRoundEndDistanceProposalLifecycle,
@@ -78,6 +81,11 @@ import {
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
+  respondCombatRoundAdjustDistance,
+  reviewCombatRoundAdjustDistanceRollAdjustment,
+  recordCombatRoundAdjustDistanceRoll,
+  commitCombatRoundAdjustDistance,
+  combatAdjustDistanceRollResultSchema,
   reviewCombatRoundFeintFeasibility,
   recordCombatRoundFeintRoll,
   commitCombatRoundFeintResult,
@@ -104,7 +112,6 @@ import {
   rollOpenEndedD6,
   skipCombatRoundCurrentPhaseAction,
   combatRoundPhaseContextsSchema,
-  getDistanceEdgeBetweenParticipantAliases,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
   movementIntentSchema,
@@ -116,6 +123,7 @@ import {
   combatFeintMethodSchema,
   combatFeintProposalSchema,
   combatFeintRollResultSchema,
+  combatAdjustDistanceProposalSchema,
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundPairDistance,
   setCombatRoundSelection,
@@ -403,6 +411,10 @@ function parseCombatDeclarationPhaseAttackSources(
 }
 
 function parseCombatDeclarationBody(body: unknown): {
+  adjustDistance?: {
+    requestedDistance: ReturnType<typeof combatDistanceSchema.parse>;
+    targetParticipantId: string;
+  };
   actionId?: string;
   additionalActionNotes?: string;
   combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
@@ -427,6 +439,17 @@ function parseCombatDeclarationBody(body: unknown): {
   }
 
   return {
+    adjustDistance:
+      value.adjustDistance && typeof value.adjustDistance === "object"
+        ? {
+            requestedDistance: combatDistanceSchema.parse(
+              (value.adjustDistance as Record<string, unknown>).requestedDistance,
+            ),
+            targetParticipantId: parseFeintTargetParticipantId(
+              (value.adjustDistance as Record<string, unknown>).targetParticipantId,
+            ),
+          }
+        : undefined,
     actionId: parseOptionalDeclarationString(value.actionId),
     additionalActionNotes:
       typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
@@ -1405,6 +1428,7 @@ function buildDistanceModifierDetailFromExistingEntry(
 }
 
 function applyGeneratedCombatActionModifiersForDeclaration(input: {
+  adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterParticipant: EncounterSession["participants"][number];
@@ -1423,6 +1447,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
 
   return applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
+    adjustDistance: input.adjustDistance,
     combatContext: input.combatContext,
     distanceModifiers: buildCombatActionDistanceModifierInputsForDeclaration({
       actionId: input.actionId,
@@ -1491,6 +1516,9 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
       roundState: input.roundState,
       scenarioParticipant,
       secondaryActionId: declaration.secondaryActionId,
+      adjustDistance: declaration.adjustDistance
+        ? { ...declaration.adjustDistance, roundNumber: input.roundState.roundNumber }
+        : undefined,
     });
 
     if (combatContextsDiffer(currentContext, nextCombatContext)) {
@@ -1807,7 +1835,11 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   if (
     input.command.type === "review_feint_feasibility" ||
     input.command.type === "roll_feint" ||
-    input.command.type === "commit_feint_result"
+    input.command.type === "commit_feint_result" ||
+    input.command.type === "respond_adjust_distance" ||
+    input.command.type === "review_adjust_distance_roll_adjustment" ||
+    input.command.type === "roll_adjust_distance" ||
+    input.command.type === "commit_adjust_distance"
   ) {
     return undefined;
   }
@@ -1893,6 +1925,33 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       edges: safeDistanceEdges,
     },
     events: [],
+    adjustDistanceProposals: roundState.adjustDistanceProposals
+      .filter((proposal) =>
+        isPlayerVisibleCombatRoundResultPair({
+          attackerParticipantId: proposal.attackerParticipantId,
+          controlledEncounterParticipantIds,
+          defenderParticipantId: proposal.defenderParticipantId,
+          visibleParticipantIds,
+        }),
+      )
+      .map((proposal) => {
+        const viewerIsAttacker = controlledEncounterParticipantIds.has(
+          proposal.attackerParticipantId,
+        );
+        const viewerIsDefender = controlledEncounterParticipantIds.has(
+          proposal.defenderParticipantId,
+        );
+        return combatAdjustDistanceProposalSchema.parse({
+          ...proposal,
+          attackerRoll: viewerIsAttacker ? proposal.attackerRoll : undefined,
+          committedByUserId: undefined,
+          defenderRoll: viewerIsDefender ? proposal.defenderRoll : undefined,
+          gmRollAdjustment: proposal.gmRollAdjustment
+            ? { ...proposal.gmRollAdjustment, notes: undefined }
+            : undefined,
+          review: proposal.review ? { ...proposal.review, notes: undefined } : undefined,
+        });
+      }),
     feintProposals: roundState.feintProposals
       .filter((proposal) =>
         isPlayerVisibleCombatRoundResultPair({
@@ -2689,6 +2748,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ? baseSubmittedCombatContext
         : applyGeneratedCombatActionModifiersForDeclaration({
             actionId: body.actionId,
+            adjustDistance: body.adjustDistance
+              ? {
+                  currentDistance:
+                    getDistanceEdgeBetweenParticipantAliases({
+                      participantA: encounterParticipant,
+                      participantB: findCombatRoundParticipantByAlias({
+                        id: body.adjustDistance?.targetParticipantId,
+                        state: roundState,
+                      }),
+                      state: roundState.distanceState,
+                    })?.distance ?? 3,
+                  requestedDistance: body.adjustDistance.requestedDistance,
+                  roundNumber: roundState.roundNumber,
+                }
+              : undefined,
             combatContext: baseSubmittedCombatContext,
             encounterParticipant,
             movementIntent: body.movementIntent,
@@ -2736,7 +2810,99 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       let attackOpportunities;
       let declarationPhaseContexts = submittedPhaseContexts;
       let declarationFeint;
-      if (body.actionId === "feint_attack") {
+      let declarationAdjustDistance;
+      if (body.actionId === "adjust_range_attack") {
+        if (!body.adjustDistance) {
+          return reply.code(400).send({ error: "Select an opponent for Adjust Distance-Attack." });
+        }
+        const targetEncounterParticipant = membership.participants.find(
+          (participant) =>
+            participant.id === body.adjustDistance?.targetParticipantId ||
+            participant.scenarioParticipantId === body.adjustDistance?.targetParticipantId ||
+            participant.characterId === body.adjustDistance?.targetParticipantId,
+        );
+        if (!targetEncounterParticipant) {
+          return reply.code(400).send({ error: "The selected opponent is no longer in this encounter." });
+        }
+        const canonicalTargetParticipantId = targetEncounterParticipant.id;
+        const submittedPhaseTargetIds = [
+          submittedPhaseContexts?.phase1?.targetParticipantId,
+          submittedPhaseContexts?.phase2?.targetParticipantId,
+        ].filter((value): value is string => Boolean(value));
+        const hasMismatchedPhaseTarget = submittedPhaseTargetIds.some((targetId) => {
+          const resolved = membership.participants.find(
+            (participant) =>
+              participant.id === targetId ||
+              participant.scenarioParticipantId === targetId ||
+              participant.characterId === targetId,
+          );
+          return !resolved || resolved.id !== canonicalTargetParticipantId;
+        });
+        if (hasMismatchedPhaseTarget) {
+          return reply.code(400).send({
+            error: "Adjust Distance target and Phase 2 attack target must match.",
+          });
+        }
+        const distanceEdge = getDistanceEdgeBetweenParticipantAliases({
+          participantA: encounterParticipant,
+          participantB: targetEncounterParticipant,
+          state: roundState.distanceState,
+        });
+        if (!distanceEdge) {
+          return reply.code(400).send({ error: "Current distance is unavailable for this opponent." });
+        }
+        if (body.adjustDistance.requestedDistance === distanceEdge.distance) {
+          return reply.code(400).send({ error: "Requested distance must differ from the current distance." });
+        }
+        const phase2Source = body.phaseAttackSources?.phase2;
+        if (!phase2Source) {
+          return reply.code(400).send({ error: "Select an attack source for Phase 2." });
+        }
+        const phase2WeaponResolution =
+          phase2Source.sourceKind === "weapon"
+            ? resolveDeclaredWeaponSource({
+                participant: scenarioParticipant,
+                phaseLabel: "Phase 2",
+                source: phase2Source,
+              })
+            : undefined;
+        if (phase2WeaponResolution && !phase2WeaponResolution.ok) {
+          return reply.code(400).send({ error: phase2WeaponResolution.error });
+        }
+        const contexts = {
+          ...submittedPhaseContexts,
+          phase1: scenarioParticipantCombatContextSchema.parse({
+            ...submittedPhaseContexts?.phase1,
+            targetParticipantId: canonicalTargetParticipantId,
+          }),
+          phase2: scenarioParticipantCombatContextSchema.parse({
+            ...submittedPhaseContexts?.phase2,
+            attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
+            targetParticipantId: canonicalTargetParticipantId,
+          }),
+        };
+        attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+          actionId: body.actionId,
+          participantId: encounterParticipant.id,
+          phaseContexts: contexts,
+          roundNumber: roundState.roundNumber,
+          sources: {
+            phase2: phase2WeaponResolution?.source
+              ? { ...phase2WeaponResolution.source, sourceKind: "weapon" }
+              : {
+                  attackModeId: "mode-1",
+                  sourceKind: "unarmed",
+                  weaponTemplateId: phase2Source.templateId,
+                },
+          },
+        });
+        declarationPhaseContexts = contexts;
+        declarationAdjustDistance = {
+          currentDistance: distanceEdge.distance,
+          requestedDistance: body.adjustDistance.requestedDistance,
+          targetParticipantId: canonicalTargetParticipantId,
+        };
+      } else if (body.actionId === "feint_attack") {
         if (!body.feint) {
           return reply.code(400).send({ error: "Select a feint method." });
         }
@@ -3011,6 +3177,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : undefined,
         declaration: {
           actionId: body.actionId,
+          adjustDistance: declarationAdjustDistance,
           additionalActionNotes: body.additionalActionNotes,
           attackOpportunities,
           combatContext: submittedCombatContext,
@@ -3155,6 +3322,150 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/respond-adjust-distance", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Adjust Distance response payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const scenarioParticipantId = parseNonEmptyString(body.scenarioParticipantId, "scenarioParticipantId");
+      const response = body.response === "allow" ? "allow" : body.response === "oppose" ? "oppose" : undefined;
+      if (!response) throw new Error("Select Allow or Oppose.");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId && entry.isActive);
+      const encounterParticipant = scenarioParticipant ? membership.participants.find((entry) => entry.scenarioParticipantId === scenarioParticipant.id) : undefined;
+      if (!scenarioParticipant || !encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) return reply.code(403).send({ error: "Player does not control this participant." });
+      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
+      if (!proposal || proposal.defenderParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: "The defender must choose whether to oppose the maneuver." });
+      const createdAt = new Date().toISOString();
+      const nextRoundState = respondCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, proposalId, response, state: roundState });
+      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
+      return {
+        encounter:
+          access.mode === "player"
+            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              })
+            : savedEncounter,
+      };
+    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to record the maneuver response." }); }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/review-adjust-distance", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Adjust Distance review payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const value = body.value === undefined ? 0 : parseInteger(body.value, "value");
+      const participantId = parseOptionalDeclarationString(body.participantId);
+      const notes = typeof body.notes === "string" ? body.notes : undefined;
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
+      if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must confirm the maneuver adjustment." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const createdAt = new Date().toISOString();
+      const nextRoundState = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt, createdByUserId: user.id }, notes, participantId, proposalId, state: roundState, value });
+      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
+      return { encounter: savedEncounter };
+    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to confirm the maneuver adjustment." }); }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-adjust-distance", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Adjust Distance roll payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const scenarioParticipantId = parseNonEmptyString(body.scenarioParticipantId, "scenarioParticipantId");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId && entry.isActive);
+      const encounterParticipant = scenarioParticipant ? membership.participants.find((entry) => entry.scenarioParticipantId === scenarioParticipant.id) : undefined;
+      if (!scenarioParticipant || !encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) return reply.code(403).send({ error: "Player does not control this participant." });
+      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
+      if (!proposal || proposal.status !== "awaiting_rolls") return reply.code(409).send({ error: "Distance-adjustment rolls are not currently available." });
+      const expectedParticipantId = proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId;
+      if (expectedParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: proposal.attackerRoll ? "The defender must roll Dodge." : "The attacker must roll Dodge." });
+      const profile = buildRoundEndParticipantInputs({ encounter, roundState, scenarioParticipants })[encounterParticipant.id]?.distanceControl;
+      if (!profile || profile.dodgeSkillTotal === undefined) return reply.code(409).send({ error: "Dodge profile is unavailable." });
+      const adjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id ? proposal.gmRollAdjustment.value : 0;
+      const roll = rollOpenEndedD20();
+      const createdAt = new Date().toISOString();
+      const result = combatAdjustDistanceRollResultSchema.parse({ dodgeSkillTotal: profile.dodgeSkillTotal, finalTotal: roll.dieResult + profile.dodgeSkillTotal + profile.generalFatigueModifier + adjustment, generalFatigueModifier: profile.generalFatigueModifier, id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`, openEndedD10s: roll.openEndedD10s, participantId: encounterParticipant.id, rollD20: roll.rollD20, rollTotal: roll.dieResult, rolledAt: createdAt, rolledByUserId: user.id, situationalAdjustment: adjustment });
+      const nextRoundState = recordCombatRoundAdjustDistanceRoll({ command: { createdAt, createdByUserId: user.id }, proposalId, result, state: roundState });
+      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
+      return {
+        encounter:
+          access.mode === "player"
+            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              })
+            : savedEncounter,
+      };
+    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to roll Dodge." }); }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/commit-adjust-distance", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Adjust Distance commit payload");
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const committedDistance = combatDistanceSchema.parse(body.committedDistance);
+      const outcome = body.outcome === "successful" || body.outcome === "unsuccessful" || body.outcome === "allowed" ? body.outcome : undefined;
+      if (!outcome) throw new Error("Select the maneuver outcome.");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
+      if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must commit the distance proposal before Phase 2." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const createdAt = new Date().toISOString();
+      const nextRoundState = commitCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, committedDistance, notes: typeof body.notes === "string" ? body.notes : undefined, outcome, proposalId, state: roundState });
+      const recomputed = recomputeRoundDeclarationCombatActionModifiers({
+        encounter,
+        roundState: nextRoundState,
+        scenarioParticipants,
+      });
+      const participants = [];
+      for (const [participantId, state] of recomputed.participantStatesById) {
+        participants.push(
+          await encounterService.updateScenarioParticipantState({
+            participantId,
+            scenarioId: encounter.scenarioId,
+            state,
+          }),
+        );
+      }
+      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: recomputed.roundState, updatedAt: createdAt } });
+      return { encounter: savedEncounter, participants };
+    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to commit the distance adjustment." }); }
+  });
 
   app.post("/encounters/:encounterId/combat-round/feint-feasibility", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -4676,8 +4987,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               await Promise.all(
                 scenarioParticipants.map(async (participant) => {
                   const currentContext = participant.state.combat.combatContext;
-                  const nextContext = expireCombatFeintGeneratedModifiersBeforeRound(
-                    currentContext,
+                  const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
+                    expireCombatFeintGeneratedModifiersBeforeRound(
+                      currentContext,
+                      nextRoundState.roundNumber,
+                    ),
                     nextRoundState.roundNumber,
                   );
                   if (JSON.stringify(nextContext) === JSON.stringify(currentContext))

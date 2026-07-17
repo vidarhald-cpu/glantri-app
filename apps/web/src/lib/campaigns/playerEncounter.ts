@@ -75,7 +75,7 @@ export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncoun
   { label: getCombatDeclarationActionLabel("parry_attack"), value: "parry_attack" },
   { label: "Double Attack", value: "double_attack" },
   { label: "Feint - Attack", value: "feint_attack" },
-  { label: "Adjust Range - Attack", value: "adjust_range_attack" },
+  { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
   { label: "Counterattack", value: "counterattack" },
   { label: "Observe Opponent", value: "observe_opponent" },
   { label: "Offensive Parry", value: "offensive_parry" },

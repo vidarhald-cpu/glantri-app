@@ -124,6 +124,46 @@ describe("buildCombatTrackerModel", () => {
     expect(cell.hoverText).toContain("OB/DB -2 in Phase 2");
   });
 
+  it("marks a committed distance adjustment complete without using an attack marker", () => {
+    const result = model([
+      facts({
+        adjustDistance: {
+          committedDistance: 2,
+          currentDistance: 3,
+          defenderLabel: "Bera",
+          requestedDistance: 2,
+          status: "committed",
+        },
+        status: "complete",
+        step: "phase_1_actions",
+      }),
+    ]);
+
+    const cell = result.cells["1:participant-a:phase_1_actions"];
+    expect(cell).toMatchObject({ marker: "✓", markerKind: "complete" });
+    expect(cell.hoverText).toContain("completed a distance adjustment against Bera");
+    expect(cell.hoverText).toContain("Distance: 3 → 2");
+  });
+
+  it("marks an unresolved distance adjustment pending", () => {
+    const result = model([
+      facts({
+        adjustDistance: {
+          currentDistance: 3,
+          defenderLabel: "Bera",
+          requestedDistance: 2,
+          status: "pending",
+        },
+        step: "phase_1_actions",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:phase_1_actions"]).toMatchObject({
+      marker: "?",
+      markerKind: "required",
+    });
+  });
+
   it("renders initiative totals and pending markers with the existing legend meanings", () => {
     const result = model([
       facts({ initiativeTotal: 8, status: "gmEdited", step: "initiative_phase_1" }),

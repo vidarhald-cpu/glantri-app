@@ -248,7 +248,8 @@ Changing away from the matching action removes generated lines while leaving man
 If the GM removes a generated action line while the action remains selected, the next declaration save
 may recreate it because the line is derived from the action choice.
 
-Declaring `Adjust Range - Attack` currently creates declaration-level DB/Parry modifiers only:
+Declaring `Adjust Distance-Attack` creates one known modifier only when the requested
+distance is closer than the current canonical pair distance:
 
 ```text
 Stored bucket key = situationDb
@@ -257,18 +258,11 @@ Duration = 1 round
 Details = adjust range
 Source phase = phase 1
 
-Stored bucket key = situationDb
-Value = -4
-Duration = 1 round
-Details = adjust range attack
-Source phase = phase 2
 ```
 
-The source inventory notes that the phase 1 `-2` DB risk is specifically tied to moving closer.
-Because the app does not yet model range direction, distance state, or the opposed movement contest,
-this first slice applies the phase 1 declaration modifier whenever Adjust Range - Attack is declared.
-The phase 2 row is the standard attack DB/Parry risk. Full distance/range resolution and wrong-range
-attack penalties are deferred.
+The row is deterministic, visible at M1, applies only to Phase 1, and expires before M2.
+Moving farther creates no automatic row. The Phase 2 attack receives no action-specific DB row;
+its ordinary range modifiers are regenerated from the distance committed by the maneuver.
 
 ## Broad sword OB example
 

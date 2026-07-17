@@ -60,6 +60,13 @@ function markerForEvents(input: {
   if (feintEvent) {
     return { kind: "required", marker: "?" };
   }
+  const adjustDistanceEvent = [...input.events]
+    .reverse()
+    .find((event) => event.type.startsWith("adjust_distance_"));
+  if (adjustDistanceEvent?.type === "adjust_distance_committed") {
+    return { kind: "complete", marker: "✓" };
+  }
+  if (adjustDistanceEvent) return { kind: "required", marker: "?" };
 
   const skipped = input.events.some(
     (event) => event.status === "skipped" || event.status === "not_applicable",
@@ -166,6 +173,17 @@ export function formatProjectedCombatTrackerHoverDetail(
     if (feint.type === "feint_result") return "feint result awaiting GM review.";
     if (feint.type === "feint_roll") return "feint opposed roll in progress.";
     return "feint opposed rolls pending.";
+  }
+
+  const adjustment = [...events].reverse().find((event) => event.type.startsWith("adjust_distance_"));
+  if (adjustment) {
+    if (adjustment.type === "adjust_distance_committed") {
+      const previous = projectedFact(adjustment, "previousDistance");
+      const committed = projectedFact(adjustment, "committedDistance");
+      return `distance adjustment complete${typeof previous === "number" && typeof committed === "number" ? `: ${previous} → ${committed}` : ""}.`;
+    }
+    if (adjustment.type === "adjust_distance_result") return "distance adjustment awaiting GM review.";
+    return "distance-adjustment response or rolls pending.";
   }
 
   const declaration = events.find((event) => event.type === "declaration");
