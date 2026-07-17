@@ -2405,6 +2405,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().history.sourceUpdatedAt).toBe(encounter.updatedAt);
     expect(response.json().history.rows).toEqual([
       { displayName: "Player hero", participantId: "encounter-participant-1" },
       { displayName: "Visible guard", participantId: "encounter-participant-2" },
@@ -4832,19 +4833,49 @@ describe("scenarios route contract", () => {
         proposedDistances: completedState.roundEndReview?.proposedDistances.map((proposal) => ({
           ...proposal,
           // Browser reproduction: apply/event facts persisted, but this lifecycle field was stale.
+          appliedDistance: undefined,
           status: "rolled",
         })),
       },
       selectedParticipantId: "encounter-participant-2",
       selectedStep: "select_actions",
     } as CombatRoundState;
+    const participantWithExpiredFeint = {
+      ...fixture.participants[0],
+      state: {
+        ...fixture.participants[0].state,
+        combat: {
+          combatContext: {
+            modifierBuckets: {
+              general: [
+                { id: "imported", imported: true, sourceType: "character_effect", value: 1 },
+              ],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [
+                {
+                  durationRounds: 1,
+                  expiresAtRound: completedState.roundNumber,
+                  generated: true,
+                  id: "generated:feint:old:ob",
+                  sourcePhase: "phase2",
+                  sourceRule: `feint:combat-feint:round:${completedState.roundNumber}:old:phase2:ob-skill`,
+                  sourceType: "feint",
+                  value: -2,
+                },
+              ],
+            },
+          },
+        },
+      },
+    } as unknown as ReturnType<typeof makeCombatScenarioParticipant>;
     const lifecycle = setupMutableCombatRouteState({
       encounter: {
         ...fixture.encounter,
         combatRoundState: persistedState,
         currentRound: persistedState.roundNumber,
       },
-      participants: fixture.participants,
+      participants: [participantWithExpiredFeint, fixture.participants[1]],
       user: mocks.adminUser,
     });
     const app = await buildScenarioTestApp();
@@ -4870,6 +4901,21 @@ describe("scenarios route contract", () => {
     ).toBe(3);
     expect(lifecycle.encounter.combatRoundState?.roundNumber).toBe(completedState.roundNumber + 1);
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            combatContext: expect.objectContaining({
+              modifierBuckets: expect.objectContaining({
+                general: [expect.objectContaining({ id: "imported" })],
+                situationObSkill: [],
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it("rejects starting the next round while a resolved distance still awaits apply", async () => {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CombatHistoryProjection,
   type CombatRoundCombatExperienceResult,
@@ -65,6 +65,8 @@ import {
   buildProjectedCombatTrackerModel,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
+  isCombatViewRevisionAtLeast,
+  isCombatViewRevisionUnchanged,
   PlayerCombatHistoryInspector,
   resolveProjectedCombatHistoryPanelSnapshot,
   type CombatHistoryInspectionSelection,
@@ -1120,6 +1122,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
   const [combatHistory, setCombatHistory] = useState<CombatHistoryProjection>();
+  const acceptedEncounterUpdatedAtRef = useRef<string | undefined>(undefined);
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -1169,6 +1172,30 @@ export default function ScenarioPlayerCombatPageContent({
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
   );
   const controlsDisabled = readOnlyInspection;
+  const acceptEncounterSession = useCallback((nextEncounter: EncounterSession | undefined) => {
+    if (!nextEncounter) {
+      return false;
+    }
+    const acceptedUpdatedAt = acceptedEncounterUpdatedAtRef.current;
+    if (
+      !isCombatViewRevisionAtLeast({
+        acceptedUpdatedAt,
+        candidateUpdatedAt: nextEncounter.updatedAt,
+      })
+    ) {
+      return false;
+    }
+    acceptedEncounterUpdatedAtRef.current = nextEncounter.updatedAt;
+    setEncounterSession((current) =>
+      isCombatViewRevisionUnchanged({
+        acceptedUpdatedAt: current?.updatedAt,
+        candidateUpdatedAt: nextEncounter.updatedAt,
+      })
+        ? current
+        : nextEncounter,
+    );
+    return true;
+  }, []);
   const rememberedParticipantSelection = useRememberedSelection(
     buildRememberedScopedSelectionKey({
       baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
@@ -1190,7 +1217,10 @@ export default function ScenarioPlayerCombatPageContent({
 
     let cancelled = false;
 
+    let refreshInFlight = false;
     async function refreshCombatView(input: { showLoading?: boolean } = {}) {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
       if (input.showLoading ?? false) {
         setLoading(true);
       }
@@ -1219,11 +1249,26 @@ export default function ScenarioPlayerCombatPageContent({
           return;
         }
 
+        const acceptedEncounter = nextEncounter ? acceptEncounterSession(nextEncounter) : true;
+        if (!acceptedEncounter) return;
         setProjection(nextProjection);
         setContent(nextContent);
         setSelectableParticipants(nextParticipants);
-        setEncounterSession(nextEncounter);
-        setCombatHistory(nextHistory);
+        if (
+          nextHistory &&
+          (!nextEncounter ||
+            !nextHistory.sourceUpdatedAt ||
+            isCombatViewRevisionUnchanged({
+              acceptedUpdatedAt: nextEncounter.updatedAt,
+              candidateUpdatedAt: nextHistory.sourceUpdatedAt,
+            }))
+        ) {
+          setCombatHistory((current) =>
+            current && current.sourceUpdatedAt === nextHistory.sourceUpdatedAt
+              ? current
+              : nextHistory,
+          );
+        }
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -1236,6 +1281,7 @@ export default function ScenarioPlayerCombatPageContent({
             : "Unable to load the player combat screen.",
         );
       } finally {
+        refreshInFlight = false;
         if (!cancelled) {
           setLoading(false);
         }
@@ -1269,7 +1315,49 @@ export default function ScenarioPlayerCombatPageContent({
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [currentUser, encounterId, isGameMaster, scenarioId, selectedParticipantId, sessionLoading]);
+  }, [
+    acceptEncounterSession,
+    currentUser,
+    encounterId,
+    isGameMaster,
+    scenarioId,
+    selectedParticipantId,
+    sessionLoading,
+  ]);
+
+  useEffect(() => {
+    if (!encounterId || !encounterSession || !currentUser) return;
+    let cancelled = false;
+    void loadCombatHistory(
+      encounterId,
+      isGameMaster && selectedParticipantId
+        ? { perspectiveParticipantId: selectedParticipantId }
+        : {},
+    )
+      .then((history) => {
+        if (
+          cancelled ||
+          (history.sourceUpdatedAt &&
+            !isCombatViewRevisionUnchanged({
+              acceptedUpdatedAt: encounterSession.updatedAt,
+              candidateUpdatedAt: history.sourceUpdatedAt,
+            }))
+        ) {
+          return;
+        }
+        setCombatHistory((current) =>
+          current && current.sourceUpdatedAt === history.sourceUpdatedAt ? current : history,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("Combat view could not refresh. Showing the latest confirmed state.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, encounterId, encounterSession?.updatedAt, isGameMaster, selectedParticipantId]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -2059,7 +2147,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setCombatDeclarationDraftDirty(false);
       setError(undefined);
     } catch (caughtError) {
@@ -2082,7 +2170,7 @@ export default function ScenarioPlayerCombatPageContent({
         proposalId: selectedFeintProposal.id,
         scenarioParticipantId: selectedParticipant.id,
       });
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to roll the feint.");
@@ -2110,7 +2198,7 @@ export default function ScenarioPlayerCombatPageContent({
         scenarioParticipantId: selectedParticipant.id,
       });
 
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2141,7 +2229,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2175,7 +2263,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2209,7 +2297,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2243,7 +2331,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setActionRollResult({
         interpretedResult:
           "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
@@ -2282,7 +2370,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setActionRollResult({
         interpretedResult: "Continue attack submitted; waiting for GM to commit initiative.",
         phaseLabel:
@@ -2309,7 +2397,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2388,7 +2476,7 @@ export default function ScenarioPlayerCombatPageContent({
         );
       }
 
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2436,7 +2524,7 @@ export default function ScenarioPlayerCombatPageContent({
         usedOffHand: true,
       });
 
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to roll combat parry.");
@@ -2472,7 +2560,7 @@ export default function ScenarioPlayerCombatPageContent({
               scenarioParticipantId: selectedParticipant.id,
             });
 
-      setEncounterSession(encounter);
+      acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
       setError(

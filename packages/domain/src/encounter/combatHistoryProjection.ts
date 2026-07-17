@@ -118,6 +118,8 @@ export interface CombatHistoryProjection {
   activeRound: ProjectedCombatHistoryRound;
   archivedRounds: ProjectedCombatHistoryRound[];
   rows: ProjectedCombatHistoryRow[];
+  /** Encounter revision used to build this projection. */
+  sourceUpdatedAt?: string;
 }
 
 export interface CombatHistoryParticipantInput {
@@ -510,6 +512,7 @@ function projectRound(input: {
 
 export function projectCombatHistory(input: {
   participants: readonly CombatHistoryParticipantInput[];
+  sourceUpdatedAt?: string;
   state: CombatRoundState;
   viewer: CombatHistoryViewer;
 }): CombatHistoryProjection {
@@ -544,5 +547,6 @@ export function projectCombatHistory(input: {
       displayName: participant.displayName,
       participantId: participant.participantId,
     })),
+    ...(input.sourceUpdatedAt ? { sourceUpdatedAt: input.sourceUpdatedAt } : {}),
   };
 }

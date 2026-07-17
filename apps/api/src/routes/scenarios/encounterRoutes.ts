@@ -49,6 +49,7 @@ import {
   encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
   ensureCombatRoundEndReviewPrepared,
+  expireCombatFeintGeneratedModifiersBeforeRound,
   getCombatRoundInitiativePhaseForStep,
   getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
@@ -2340,7 +2341,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             };
 
       return {
-        history: projectCombatHistory({ participants, state, viewer }),
+        history: projectCombatHistory({
+          participants,
+          sourceUpdatedAt: encounter.updatedAt,
+          state,
+          viewer,
+        }),
       };
     } catch (error) {
       return reply.code(400).send({
@@ -4664,6 +4670,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         stepSnapshots: body.stepSnapshots,
         visibility: encounter.roleplayState?.visibility,
       });
+      const refreshedParticipants =
+        nextRoundState.roundNumber > roundState.roundNumber
+          ? (
+              await Promise.all(
+                scenarioParticipants.map(async (participant) => {
+                  const currentContext = participant.state.combat.combatContext;
+                  const nextContext = expireCombatFeintGeneratedModifiersBeforeRound(
+                    currentContext,
+                    nextRoundState.roundNumber,
+                  );
+                  if (JSON.stringify(nextContext) === JSON.stringify(currentContext))
+                    return undefined;
+                  return encounterService.updateScenarioParticipantState({
+                    participantId: participant.id,
+                    scenarioId,
+                    state: {
+                      ...participant.state,
+                      combat: { ...participant.state.combat, combatContext: nextContext },
+                    },
+                  });
+                }),
+              )
+            ).filter((participant): participant is ScenarioParticipant => participant !== undefined)
+          : [];
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -4682,6 +4712,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         commandEnvelope,
         encounter: savedEncounter,
+        participants: refreshedParticipants,
       };
     } catch (error) {
       return reply.code(400).send({

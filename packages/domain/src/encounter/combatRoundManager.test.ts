@@ -8480,7 +8480,9 @@ describe("combat round manager", () => {
     expect(committed.command.facts).toMatchObject({
       cancelledActions: [],
       createdOperationalCombatEffectIds: [dropEffectId],
-      operationalConsequences: expect.arrayContaining([expect.objectContaining({ kind: "drop_item" })]),
+      operationalConsequences: expect.arrayContaining([
+        expect.objectContaining({ kind: "drop_item" }),
+      ]),
     });
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
@@ -8560,15 +8562,21 @@ describe("combat round manager", () => {
 
     expect(getCombatRoundPhaseAttackCandidates({ phase: "phase2", state: phase2 })).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ origin: "double_attack", participantId: "guard", status: "committed" }),
+        expect.objectContaining({
+          origin: "double_attack",
+          participantId: "guard",
+          status: "committed",
+        }),
       ]),
     );
     expect(phase2.currentCursor).toMatchObject({ participantId: "guard", step: "A2" });
-    expect(combatRoundParticipantHasExecutablePhaseAttack({
-      participantId: "guard",
-      phase: "phase2",
-      state: phase2,
-    })).toBe(true);
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "guard",
+        phase: "phase2",
+        state: phase2,
+      }),
+    ).toBe(true);
   });
 
   it("raises committed damage to critical minimum and cancels pending no-action attacks", () => {
@@ -12447,7 +12455,9 @@ describe("combat round manager", () => {
         ...roundComplete.roundEndReview,
         proposedDistances: roundComplete.roundEndReview?.proposedDistances.map((proposal) => ({
           ...proposal,
-          // Reproduces the persisted conflict: the apply fact survived while this status was stale.
+          // Reproduces the persisted conflict: the apply event/command survived while the
+          // proposal lifecycle fields were stale.
+          appliedDistance: undefined,
           status: "review_ready",
         })),
       },
@@ -12455,10 +12465,11 @@ describe("combat round manager", () => {
       selectedStep: "select_actions",
     });
 
-    expect(getCombatRoundEndDistanceProposalLifecycle(
-      persistedWithLegacyStatus.roundEndReview!.proposedDistances[0]!,
-    )).toBe("applied");
-    expect(getCombatRoundStartNextRoundBlocker(persistedWithLegacyStatus)).toBeUndefined();
+    expect(
+      getCombatRoundEndDistanceProposalLifecycle(
+        persistedWithLegacyStatus.roundEndReview!.proposedDistances[0]!,
+      ),
+    ).toBe("resolved");
 
     const reloaded = initializeCombatRoundState({
       encounter: encounter({ combatRoundState: persistedWithLegacyStatus, currentRound: 3 }),
@@ -12644,8 +12655,9 @@ describe("combat round manager", () => {
         state: gladiatorRolled.state,
       }),
     ).toBe(1);
-    expect(gladiatorRolled.state.events.filter((event) => event.type === "distance_control_roll"))
-      .toHaveLength(1);
+    expect(
+      gladiatorRolled.state.events.filter((event) => event.type === "distance_control_roll"),
+    ).toHaveLength(1);
     expect(gladiatorRolled.state.events.at(-1)).toMatchObject({
       distanceProposalId: proposal?.id,
       ownerParticipantId: "gladiator",
@@ -13751,10 +13763,10 @@ describe("combat round manager", () => {
     const completed = advanceCombatRoundStep(
       { ...reviewedRoundSummaryState, events: [seededEvent] },
       {
-      command: {
-        createdAt: "2026-01-01T00:10:00.000Z",
-        createdByUserId: "gm-1",
-      },
+        command: {
+          createdAt: "2026-01-01T00:10:00.000Z",
+          createdByUserId: "gm-1",
+        },
       },
     );
     const clearedAtNewRoundStart = clearCombatRoundStep({
@@ -16410,7 +16422,7 @@ describe("combat round manager", () => {
     expect(attackEnvelope).toMatchObject({
       currentTask: {
         cursorStep: "M2",
-        participantId: "gladiator",
+        participantId: "scyrian",
         step: "review_phase_2_modifiers",
       },
       latestEvent: {
@@ -16430,7 +16442,7 @@ describe("combat round manager", () => {
         defenderParticipantId: "scyrian",
         hit: false,
         nextStepOpened: {
-          participantId: "gladiator",
+          participantId: "scyrian",
           step: "M2",
         },
       },
@@ -17890,7 +17902,14 @@ describe("combat round manager", () => {
   it("cancels and undoes Double Attack 2 without creating a second phase-2 scheduler", () => {
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "double_attack",
-      combatContext: { modifierBuckets: { general: [], situationDb: [], situationInitiative: [], situationObSkill: [] } },
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
     });
     const phaseContexts = {
       phase1: { ...combatContext, targetParticipantId: "guard" },
@@ -17942,7 +17961,13 @@ describe("combat round manager", () => {
       state,
     });
     const hero = cancelled.participants[0];
-    expect(combatRoundParticipantHasPhaseAttack({ participantId: "hero", phase: "phase2", state: cancelled })).toBe(false);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "hero",
+        phase: "phase2",
+        state: cancelled,
+      }),
+    ).toBe(false);
     expect(hero?.declaration?.combatContext?.modifierBuckets.situationObSkill).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2" })]),
     );
@@ -17952,8 +17977,16 @@ describe("combat round manager", () => {
 
     const restored = undoLatestCombatRoundCommand({ state: cancelled });
     expect(restored).toBeDefined();
-    expect(combatRoundParticipantHasPhaseAttack({ participantId: "hero", phase: "phase2", state: restored! })).toBe(true);
-    expect(restored?.participants[0]?.declaration?.combatContext?.modifierBuckets.situationDb).toEqual(
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "hero",
+        phase: "phase2",
+        state: restored!,
+      }),
+    ).toBe(true);
+    expect(
+      restored?.participants[0]?.declaration?.combatContext?.modifierBuckets.situationDb,
+    ).toEqual(
       expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2", value: -4 })]),
     );
   });

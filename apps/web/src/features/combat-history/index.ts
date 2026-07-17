@@ -7,4 +7,5 @@ export * from "./view-models/buildRecordedCombatModifierRows";
 export * from "./view-models/selectCombatEventsForTrackerCell";
 export * from "./view-models/buildCombatTrackerModel";
 export * from "./view-models/buildProjectedCombatTrackerModel";
+export * from "./view-models/combatViewRevision";
 export * from "./view-models/resolveCombatHistoryPanelSnapshot";

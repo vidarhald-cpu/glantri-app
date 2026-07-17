@@ -44,6 +44,12 @@ export interface CombatTrackerCellFacts {
   commands: readonly CombatRoundCommand[];
   current: boolean;
   declarationSubmittedBy?: "gm" | "player";
+  feint?: {
+    defenderLabel?: string;
+    defenderPhase2Modifier?: number;
+    method: "movement" | "weapon";
+    status: "pending" | "committed" | "impossible";
+  };
   inspectable: boolean;
   initiativeTotal?: number;
   participantId: string;

@@ -433,10 +433,12 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
+  participants: ScenarioParticipant[];
 }> {
   const payload = await sendJson<{
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
+    participants: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/advance-current-step`, {
     body: JSON.stringify({
       stepSnapshots: input.stepSnapshots,

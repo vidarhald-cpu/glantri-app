@@ -105,6 +105,25 @@ describe("buildCombatTrackerModel", () => {
     );
   });
 
+  it("marks a committed Feint action complete instead of treating it as a skipped attack", () => {
+    const result = model([
+      facts({
+        feint: {
+          defenderLabel: "Bera",
+          defenderPhase2Modifier: -2,
+          method: "weapon",
+          status: "committed",
+        },
+        status: "complete",
+        step: "phase_1_actions",
+      }),
+    ]);
+    const cell = result.cells["1:participant-a:phase_1_actions"];
+    expect(cell).toMatchObject({ marker: "✓", markerKind: "complete" });
+    expect(cell.hoverText).toContain("completed a weapon feint against Bera");
+    expect(cell.hoverText).toContain("OB/DB -2 in Phase 2");
+  });
+
   it("renders initiative totals and pending markers with the existing legend meanings", () => {
     const result = model([
       facts({ initiativeTotal: 8, status: "gmEdited", step: "initiative_phase_1" }),

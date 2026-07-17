@@ -5,6 +5,7 @@ import {
   applyCommittedCombatFeintModifiers,
   buildCombatFeintProposalId,
   combatFeintProposalSchema,
+  expireCombatFeintGeneratedModifiersBeforeRound,
 } from "./combatFeint";
 import {
   combatRoundStateSchema,
@@ -120,6 +121,7 @@ describe("combat feint modifiers", () => {
     expect(second.defenderCombatContext.modifierBuckets.situationObSkill).toHaveLength(2);
     expect(second.modifierIds).toHaveLength(3);
     expect(second.defenderCombatContext.modifierBuckets.situationObSkill.at(-1)).toMatchObject({
+      expiresAtRound: 1,
       sourcePhase: "phase2",
       value: -2,
     });
@@ -147,6 +149,39 @@ describe("combat feint modifiers", () => {
         phase: "phase2",
       }),
     ).toBe(0);
+  });
+
+  it("expires prior-round Feint rows without removing unrelated rows", () => {
+    const committed = applyCommittedCombatFeintModifiers({
+      attackerCombatContext: {
+        modifierBuckets: {
+          general: [
+            {
+              id: "imported",
+              imported: true,
+              scope: "until",
+              sourceType: "character_effect",
+              value: 2,
+            },
+          ],
+          situationDb: [{ id: "manual-db", scope: "until", value: 3 }],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      defenderCombatContext: undefined,
+      proposal: proposal("committed"),
+    });
+
+    const nextRound = expireCombatFeintGeneratedModifiersBeforeRound(
+      committed.attackerCombatContext,
+      2,
+    );
+
+    expect(nextRound.modifierBuckets.situationDb).toEqual([
+      { id: "manual-db", scope: "until", value: 3 },
+    ]);
+    expect(nextRound.modifierBuckets.general).toHaveLength(1);
   });
 });
 

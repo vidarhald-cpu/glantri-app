@@ -172,8 +172,10 @@ function buildFeintModifier(input: {
   proposalId: string;
   value: number;
 }): ScenarioCombatModifierEntry {
+  const sourceRound = input.proposalId.match(/:round:(\d+):/)?.[1];
   return scenarioCombatModifierEntrySchema.parse({
     durationRounds: 1,
+    ...(sourceRound ? { expiresAtRound: Number(sourceRound) } : {}),
     generated: true,
     id: feintModifierId(input),
     notes: "feint",
@@ -186,6 +188,37 @@ function buildFeintModifier(input: {
       ? { resultGroupId: input.proposalId, resultGroupKind: "ob_db" as const }
       : {}),
     value: input.value,
+  });
+}
+
+function getCombatFeintModifierRound(entry: ScenarioCombatModifierEntry): number | undefined {
+  if (!isCombatFeintGeneratedModifier(entry)) return undefined;
+  if (entry.expiresAtRound !== undefined) return entry.expiresAtRound;
+  const round = entry.sourceRule?.match(/feint:combat-feint:round:(\d+):/)?.[1];
+  return round ? Number(round) : undefined;
+}
+
+/**
+ * Feint rows are scenario-participant projections for one combat round. New-round
+ * normalization removes only expired Feint rows; imported, manual, and unrelated
+ * generated rows remain owned by their existing lifecycles.
+ */
+export function expireCombatFeintGeneratedModifiersBeforeRound(
+  combatContext: ScenarioParticipantCombatContext | undefined,
+  roundNumber: number,
+): ScenarioParticipantCombatContext {
+  const context = scenarioParticipantCombatContextSchema.parse(combatContext ?? {});
+  const keep = (entry: ScenarioCombatModifierEntry) => {
+    const sourceRound = getCombatFeintModifierRound(entry);
+    return sourceRound === undefined || sourceRound >= roundNumber;
+  };
+  return scenarioParticipantCombatContextSchema.parse({
+    ...context,
+    modifierBuckets: {
+      ...context.modifierBuckets,
+      situationDb: context.modifierBuckets.situationDb.filter(keep),
+      situationObSkill: context.modifierBuckets.situationObSkill.filter(keep),
+    },
   });
 }
 

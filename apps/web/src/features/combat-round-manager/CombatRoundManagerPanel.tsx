@@ -6444,11 +6444,21 @@ export default function CombatRoundManagerPanel({
 
     setSaving(true);
     try {
-      const { commandEnvelope, encounter: nextEncounter } =
-        await advanceCombatRoundCurrentStepOnServer({
-          encounterId: encounter.id,
-          stepSnapshots,
-        });
+      const {
+        commandEnvelope,
+        encounter: nextEncounter,
+        participants,
+      } = await advanceCombatRoundCurrentStepOnServer({
+        encounterId: encounter.id,
+        stepSnapshots,
+      });
+      if (participants.length > 0) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          ...Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+        }));
+        onScenarioParticipantsUpdated?.(participants);
+      }
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
           commandEnvelope,
@@ -8106,6 +8116,18 @@ export default function CombatRoundManagerPanel({
                 state: timelineRoundState,
               })
             : undefined;
+        const trackerFeintProposal =
+          step === "phase_1_actions"
+            ? timelineRoundState.feintProposals.find(
+                (proposal) =>
+                  proposal.attackerParticipantId === timelineParticipant.participantId &&
+                  proposal.roundNumber === timelineRoundState.roundNumber,
+              )
+            : undefined;
+        const trackerFeintModifier = trackerFeintProposal?.review
+          ? (trackerFeintProposal.review.gmDefenderObDbModifier ??
+            trackerFeintProposal.review.proposedDefenderObDbModifier)
+          : undefined;
         trackerCellFacts.push({
           actionResultStatus: trackerSnapshot?.actionResultStatus,
           activeTask:
@@ -8130,6 +8152,22 @@ export default function CombatRoundManagerPanel({
             timelineRoundState.roundNumber === roundState.roundNumber &&
             roundState.currentStep === step,
           declarationSubmittedBy: roundParticipant.declaration?.submittedBy,
+          feint: trackerFeintProposal
+            ? {
+                defenderLabel: timelineRoundState.participants.find(
+                  (participant) =>
+                    participant.participantId === trackerFeintProposal.defenderParticipantId,
+                )?.label,
+                defenderPhase2Modifier: trackerFeintModifier,
+                method: trackerFeintProposal.method,
+                status:
+                  trackerFeintProposal.status === "committed"
+                    ? "committed"
+                    : trackerFeintProposal.status === "impossible"
+                      ? "impossible"
+                      : "pending",
+              }
+            : undefined,
           inspectable: true,
           initiativeTotal: getCombatRoundInitiativeTotal(initiative),
           participantId: timelineParticipant.participantId,

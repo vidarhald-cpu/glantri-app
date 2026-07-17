@@ -90,6 +90,11 @@ export function getCombatTrackerCellMarkerKind(
     input.pendingDistanceControlRollCount + input.pendingHealthCheckRollCount;
   if (input.phaseCombatExperienceMarkerRequired || pendingRoundEndRollCount > 0) return "required";
   if (input.initiativeTotal !== undefined) return "roll_result";
+  if (input.step === "phase_1_actions" && input.feint) {
+    if (input.feint.status === "committed") return "complete";
+    if (input.feint.status === "impossible") return "skipped";
+    return "required";
+  }
   if (input.stepOutcome) return "skipped";
   if (attackPhase(input.step)) {
     if (input.attackResult)
@@ -224,6 +229,21 @@ function cellDetail(input: CombatTrackerCellFacts): string {
     return `${input.pendingDistanceControlCommitCount} distance-control commit${input.pendingDistanceControlCommitCount === 1 ? "" : "s"} pending.`;
   if (input.initiativeTotal !== undefined)
     return `initiative ${input.initiativeTotal}${initiativeSource(input)}.`;
+  if (input.step === "phase_1_actions" && input.feint) {
+    if (input.feint.status === "committed") {
+      const target = input.feint.defenderLabel ? ` against ${input.feint.defenderLabel}` : "";
+      const modifier = input.feint.defenderPhase2Modifier;
+      const result =
+        typeof modifier === "number"
+          ? ` Result: defender OB/DB ${modifier >= 0 ? "+" : ""}${modifier} in Phase 2.`
+          : "";
+      return `completed a ${input.feint.method} feint${target}.${result}`;
+    }
+    if (input.feint.status === "impossible") return "feint ruled impossible.";
+    return input.feint.status === "pending"
+      ? "feint opposed rolls/review pending."
+      : "feint pending.";
+  }
   if (input.stepOutcome) return input.stepOutcome.message;
   if (input.attackResult) {
     const outcome = input.attackResult.grazing

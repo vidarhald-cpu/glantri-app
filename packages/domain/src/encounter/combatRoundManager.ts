@@ -577,6 +577,12 @@ export type CombatRoundEndDistanceProposal = z.infer<typeof combatRoundEndDistan
 
 export type CombatRoundEndDistanceProposalLifecycle = "pending_rolls" | "resolved" | "applied";
 
+export function isCombatRoundEndDistanceProposalApplied(
+  proposal: CombatRoundEndDistanceProposal,
+): boolean {
+  return proposal.status === "committed" || proposal.appliedDistance !== undefined;
+}
+
 /**
  * Canonical lifecycle used by round-end task selection, review completion, and round advancement.
  * `appliedDistance` is retained as compatibility evidence for persisted proposals written by the
@@ -585,7 +591,7 @@ export type CombatRoundEndDistanceProposalLifecycle = "pending_rolls" | "resolve
 export function getCombatRoundEndDistanceProposalLifecycle(
   proposal: CombatRoundEndDistanceProposal,
 ): CombatRoundEndDistanceProposalLifecycle {
-  if (proposal.status === "committed" || proposal.appliedDistance !== undefined) {
+  if (isCombatRoundEndDistanceProposalApplied(proposal)) {
     return "applied";
   }
 
@@ -598,11 +604,15 @@ export function getCombatRoundEndDistanceProposalLifecycle(
 
 function normalizeCombatRoundEndDistanceProposalLifecycle(
   proposal: CombatRoundEndDistanceProposal,
+  appliedDistance?: number,
 ): CombatRoundEndDistanceProposal {
-  return proposal.accepted &&
-    proposal.status !== "committed" &&
-    proposal.appliedDistance !== undefined
-    ? combatRoundEndDistanceProposalSchema.parse({ ...proposal, status: "committed" })
+  const canonicalAppliedDistance = proposal.appliedDistance ?? appliedDistance;
+  return canonicalAppliedDistance !== undefined
+    ? combatRoundEndDistanceProposalSchema.parse({
+        ...proposal,
+        appliedDistance: canonicalAppliedDistance,
+        status: "committed",
+      })
     : proposal;
 }
 
@@ -2698,7 +2708,10 @@ function getCombatRoundPhaseCompletionCursor(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundCursor {
-  const participantId = input.state.participants[0]?.participantId;
+  const participantId =
+    input.phase === "phase1"
+      ? getCombatRoundPhaseResolutionOrder({ phase: "phase1", state: input.state })[0]
+      : input.state.participants[0]?.participantId;
 
   return combatRoundCursorSchema.parse({
     participantId,
@@ -14146,6 +14159,22 @@ export function initializeCombatRoundState(input: {
     (snapshot) =>
       snapshot.roundNumber === roundNumber && participantIds.has(snapshot.participantId),
   );
+  const appliedDistanceByProposalId = new Map<string, number>();
+  for (const command of commands) {
+    if (command.type !== "commit_round_end_distance_control") continue;
+    const proposalId = command.facts.distanceProposalId;
+    const appliedDistance = command.facts.appliedDistance;
+    if (typeof proposalId === "string" && typeof appliedDistance === "number") {
+      appliedDistanceByProposalId.set(proposalId, appliedDistance);
+    }
+  }
+  for (const event of events) {
+    if (event.type !== "distance_control_applied" || !event.distanceProposalId) continue;
+    const appliedDistance = event.facts.involvedOutcome?.appliedDistance;
+    if (typeof appliedDistance === "number") {
+      appliedDistanceByProposalId.set(event.distanceProposalId, appliedDistance);
+    }
+  }
   const roundEndReview =
     existing?.roundEndReview?.roundNumber === roundNumber
       ? combatRoundEndReviewSchema.parse({
@@ -14155,8 +14184,11 @@ export function initializeCombatRoundState(input: {
               participantIds.has(participantId),
             ),
           ),
-          proposedDistances: existing.roundEndReview.proposedDistances.map(
-            normalizeCombatRoundEndDistanceProposalLifecycle,
+          proposedDistances: existing.roundEndReview.proposedDistances.map((proposal) =>
+            normalizeCombatRoundEndDistanceProposalLifecycle(
+              proposal,
+              appliedDistanceByProposalId.get(proposal.id),
+            ),
           ),
         })
       : undefined;
