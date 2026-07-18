@@ -132,6 +132,33 @@ describe("buildCombatEventResultModel", () => {
     ]);
   });
 
+  it("uses the concise Dodge calculation structure for an in-round distance roll", () => {
+    const model = buildCombatEventResultModel([
+      event("adjust_distance_roll", 1, {
+        facts: {
+          involvedOutcome: { side: "attacker" },
+          privateCalculation: {
+            dodgeSkillTotal: 16,
+            finalTotal: 21,
+            generalFatigueModifier: 0,
+            openEndedD10s: [],
+            rollD20: 3,
+            rollTotal: 3,
+            situationalAdjustment: 2,
+          },
+          publicOutcome: {},
+        },
+      }),
+    ]);
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
+      "Skill: Dodge 16",
+      "Modifier: +2",
+      "Die roll: 3",
+      "Result: 21",
+      "Outcome: Awaiting opponent roll",
+    ]);
+  });
+
   it("labels incomplete and legacy-derived events", () => {
     const model = buildCombatEventResultModel([
       event("attack", 1, { completeness: "incomplete" }),

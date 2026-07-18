@@ -43,6 +43,15 @@ describe("selectPlayerCombatActionResultPanel", () => {
     expect(result).toBe("attacker-owned hit location");
   });
 
+  it("shows an owned distance-adjustment roll before older action facts", () => {
+    const result = selectPlayerCombatActionResultPanel({
+      adjustDistance: "owned Dodge roll",
+      relevantInitiative: "older initiative result",
+    });
+
+    expect(result).toBe("owned Dodge roll");
+  });
+
   it("uses latest involved damage before plain attack facts", () => {
     const result = selectPlayerCombatActionResultPanel({
       currentAttack: "current attack roll",

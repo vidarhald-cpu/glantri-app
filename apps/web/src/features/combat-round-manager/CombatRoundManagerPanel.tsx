@@ -1,6 +1,14 @@
 "use client";
 
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  type KeyboardEvent,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   CombatRoundDeclaration,
@@ -77,6 +85,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
+  isCombatPhaseActionOpen,
   getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
@@ -115,6 +124,7 @@ import {
 
 import {
   buildCombatTrackerModel,
+  buildConciseDodgeCalculationRows,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatTracker,
@@ -3651,23 +3661,19 @@ function CombatRoundEndDistanceControlPanel(input: {
             const resultA = proposal.participantA.result;
             const resultB = proposal.participantB.result;
             const participantASummary = resultA
-              ? `${formatOpenEndedD20RollBreakdown({
-                  dieResult: resultA.rollTotal,
-                  openEndedD10s: resultA.openEndedD10s,
-                  rollD20: resultA.rollD20,
-                })} + Dodge ${resultA.dodgeSkillTotal} + Gen/Fatigue ${resultA.generalFatigueModifier} = ${resultA.finalTotal}`
-              : proposal.participantA.status === "pending"
-                ? "pending"
-                : "not required";
+              ? buildConciseDodgeCalculationRows({
+                  calculation: resultA,
+                  eventId: `${proposal.id}:participant-a`,
+                  outcome: proposal.status === "rolled" ? proposal.outcome : undefined,
+                }).map((row) => row.text)
+              : [proposal.participantA.status === "pending" ? "pending" : "not required"];
             const participantBSummary = resultB
-              ? `${formatOpenEndedD20RollBreakdown({
-                  dieResult: resultB.rollTotal,
-                  openEndedD10s: resultB.openEndedD10s,
-                  rollD20: resultB.rollD20,
-                })} + Dodge ${resultB.dodgeSkillTotal} + Gen/Fatigue ${resultB.generalFatigueModifier} = ${resultB.finalTotal}`
-              : proposal.participantB.status === "pending"
-                ? "pending"
-                : "not required";
+              ? buildConciseDodgeCalculationRows({
+                  calculation: resultB,
+                  eventId: `${proposal.id}:participant-b`,
+                  outcome: proposal.status === "rolled" ? proposal.outcome : undefined,
+                }).map((row) => row.text)
+              : [proposal.participantB.status === "pending" ? "pending" : "not required"];
 
             return (
               <div
@@ -3687,11 +3693,13 @@ function CombatRoundEndDistanceControlPanel(input: {
                   {proposal.participantA.desiredDistance ?? "no preference"} · {participantBLabel}:{" "}
                   {proposal.participantB.desiredDistance ?? "no preference"}
                 </div>
-                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                  {participantALabel}: {participantASummary}
+                <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}>
+                  <strong>{participantALabel}</strong>
+                  {participantASummary.map((line) => <div key={`${proposal.id}:a:${line}`}>{line}</div>)}
                 </div>
-                <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                  {participantBLabel}: {participantBSummary}
+                <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}>
+                  <strong>{participantBLabel}</strong>
+                  {participantBSummary.map((line) => <div key={`${proposal.id}:b:${line}`}>{line}</div>)}
                 </div>
                 {proposal.winnerParticipantId ? (
                   <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
@@ -3776,6 +3784,79 @@ function getCombatRoundManagerStateFromCommandEnvelope(input: {
   };
 }
 
+export interface AdjustDistanceAdjustmentDraft {
+  note: string;
+  participantId: string;
+  value: string;
+}
+
+export interface AdjustDistanceAdjustmentDraftHandle {
+  getDraft: () => AdjustDistanceAdjustmentDraft;
+}
+
+/**
+ * Keep the GM's in-progress adjustment local to this small editor.  The parent
+ * combat manager only receives the draft when its primary action is confirmed,
+ * so typing cannot rebuild history or issue mutation requests.
+ */
+const AdjustDistanceAdjustmentEditor = forwardRef<
+  AdjustDistanceAdjustmentDraftHandle,
+  {
+    attackerParticipantId: string;
+    defenderParticipantId: string;
+    proposalId: string;
+    saving: boolean;
+    savedAdjustment?: { notes?: string; participantId?: string; value?: number };
+  }
+>(function AdjustDistanceAdjustmentEditor(input, ref) {
+  const [participantId, setParticipantId] = useState(input.savedAdjustment?.participantId ?? "");
+  const [value, setValue] = useState(String(input.savedAdjustment?.value ?? 0));
+  const [note, setNote] = useState(input.savedAdjustment?.notes ?? "");
+
+  useEffect(() => {
+    setParticipantId(input.savedAdjustment?.participantId ?? "");
+    setValue(String(input.savedAdjustment?.value ?? 0));
+    setNote(input.savedAdjustment?.notes ?? "");
+  }, [input.proposalId, input.savedAdjustment?.notes, input.savedAdjustment?.participantId, input.savedAdjustment?.value]);
+
+  useImperativeHandle(
+    ref,
+    () => ({ getDraft: () => ({ note, participantId, value }) }),
+    [note, participantId, value],
+  );
+
+  return (
+    <>
+      <label style={compactFieldLabelStyle}>
+        <span>Adjustment target</span>
+        <select disabled={input.saving} onChange={(event) => setParticipantId(event.target.value)} value={participantId}>
+          <option value="">Neither</option>
+          <option value={input.attackerParticipantId}>Attacker</option>
+          <option value={input.defenderParticipantId}>Defender</option>
+        </select>
+      </label>
+      <label style={compactFieldLabelStyle}>
+        <span>Adjustment</span>
+        <input
+          aria-describedby={`${input.proposalId}:adjustment-help`}
+          disabled={input.saving}
+          inputMode="numeric"
+          onChange={(event) => setValue(event.target.value)}
+          type="text"
+          value={value}
+        />
+        <span id={`${input.proposalId}:adjustment-help`} style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+          Typical range: -4 to +4
+        </span>
+      </label>
+      <label style={compactFieldLabelStyle}>
+        <span>GM note</span>
+        <input disabled={input.saving} onChange={(event) => setNote(event.target.value)} value={note} />
+      </label>
+    </>
+  );
+});
+
 export default function CombatRoundManagerPanel({
   encounter,
   onEncounterUpdated,
@@ -3831,9 +3912,6 @@ export default function CombatRoundManagerPanel({
   const [inspectorFeintDefenderDbModifier, setInspectorFeintDefenderDbModifier] = useState("0");
   const [inspectorFeintNote, setInspectorFeintNote] = useState("");
   const [inspectorAdjustDistanceResponse, setInspectorAdjustDistanceResponse] = useState<"allow" | "oppose">("oppose");
-  const [inspectorAdjustDistanceAdjustmentTarget, setInspectorAdjustDistanceAdjustmentTarget] = useState("");
-  const [inspectorAdjustDistanceAdjustmentValue, setInspectorAdjustDistanceAdjustmentValue] = useState("0");
-  const [inspectorAdjustDistanceAdjustmentNote, setInspectorAdjustDistanceAdjustmentNote] = useState("");
   const [inspectorAdjustDistanceCommittedDistance, setInspectorAdjustDistanceCommittedDistance] = useState("2");
   const [inspectorAdjustDistanceOutcome, setInspectorAdjustDistanceOutcome] = useState<"successful" | "unsuccessful" | "allowed">("unsuccessful");
   const [inspectorAdjustDistanceReviewNote, setInspectorAdjustDistanceReviewNote] = useState("");
@@ -3851,6 +3929,7 @@ export default function CombatRoundManagerPanel({
       >
     >({});
   const activeCurrentCellRef = useRef<HTMLButtonElement | null>(null);
+  const inspectorAdjustDistanceAdjustmentDraftRef = useRef<AdjustDistanceAdjustmentDraftHandle | null>(null);
   const timelineCellRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const encounterScopeRef = useRef(encounter.id);
@@ -5616,24 +5695,14 @@ export default function CombatRoundManagerPanel({
         </label>
       ) : null}
       {inspectorAdjustDistanceProposal.status === "awaiting_gm_adjustment" ? (
-        <>
-          <label style={compactFieldLabelStyle}>
-            <span>Adjustment target</span>
-            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentTarget(event.target.value)} value={inspectorAdjustDistanceAdjustmentTarget}>
-              <option value="">Neither</option>
-              <option value={inspectorAdjustDistanceProposal.attackerParticipantId}>Attacker</option>
-              <option value={inspectorAdjustDistanceProposal.defenderParticipantId}>Defender</option>
-            </select>
-          </label>
-          <label style={compactFieldLabelStyle}>
-            <span>Adjustment (0–4)</span>
-            <input min={0} max={4} type="number" disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentValue(event.target.value)} value={inspectorAdjustDistanceAdjustmentValue} />
-          </label>
-          <label style={compactFieldLabelStyle}>
-            <span>GM note</span>
-            <input disabled={saving} onChange={(event) => setInspectorAdjustDistanceAdjustmentNote(event.target.value)} value={inspectorAdjustDistanceAdjustmentNote} />
-          </label>
-        </>
+        <AdjustDistanceAdjustmentEditor
+          ref={inspectorAdjustDistanceAdjustmentDraftRef}
+          attackerParticipantId={inspectorAdjustDistanceProposal.attackerParticipantId}
+          defenderParticipantId={inspectorAdjustDistanceProposal.defenderParticipantId}
+          proposalId={inspectorAdjustDistanceProposal.id}
+          savedAdjustment={inspectorAdjustDistanceProposal.gmRollAdjustment}
+          saving={saving}
+        />
       ) : null}
       {inspectorAdjustDistanceProposal.status === "awaiting_review" ? (
         <>
@@ -7108,12 +7177,19 @@ export default function CombatRoundManagerPanel({
           scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
         });
       } else if (inspectorAdjustDistanceProposal.status === "awaiting_gm_adjustment") {
+        const draft = inspectorAdjustDistanceAdjustmentDraftRef.current?.getDraft() ?? {
+          note: "",
+          participantId: "",
+          value: "0",
+        };
         nextEncounter = await reviewCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
-          notes: inspectorAdjustDistanceAdjustmentNote || undefined,
-          participantId: inspectorAdjustDistanceAdjustmentTarget || undefined,
+          notes: draft.note || undefined,
+          participantId: draft.participantId || undefined,
           proposalId: inspectorAdjustDistanceProposal.id,
-          value: Number.parseInt(inspectorAdjustDistanceAdjustmentValue, 10) || 0,
+          // Preserve decimals/blank input for the API validator instead of
+          // truncating them with parseInt; only finite integers are accepted.
+          value: draft.value.trim() === "" ? Number.NaN : Number(draft.value),
         });
       } else if (inspectorAdjustDistanceProposal.status === "awaiting_rolls") {
         if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
@@ -8277,6 +8353,10 @@ export default function CombatRoundManagerPanel({
           step,
         });
         const phase = getCombatAttackPhaseForStep(step);
+        const phaseActionOpen = phase
+          ? timelineRoundState.roundNumber !== roundState.roundNumber ||
+            isCombatPhaseActionOpen({ phase, state: timelineRoundState })
+          : undefined;
         const phaseCombatExperienceMarkerRequired =
           selectedRoundIsActive &&
           timelineRoundState.roundNumber === roundState.roundNumber &&
@@ -8424,6 +8504,7 @@ export default function CombatRoundManagerPanel({
               : 0,
           pendingDistanceControlRollCount,
           pendingHealthCheckRollCount,
+          phaseActionOpen,
           phaseCombatExperienceMarkerRequired,
           phaseResolutionResult: trackerPhaseResolutionResult,
           roundNumber: timelineRoundState.roundNumber,

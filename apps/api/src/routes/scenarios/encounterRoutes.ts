@@ -3444,7 +3444,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const body = parseBodyObject(request.body, "Adjust Distance review payload");
       const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
-      const value = body.value === undefined ? 0 : parseInteger(body.value, "value");
+      const value = body.value === undefined ? 0 : body.value;
+      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+        throw new Error("Maneuver adjustment must be an integer.");
+      }
       const participantId = parseOptionalDeclarationString(body.participantId);
       const notes = typeof body.notes === "string" ? body.notes : undefined;
       const encounter = await encounterService.getEncounterById(encounterId);

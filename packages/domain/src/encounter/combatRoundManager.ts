@@ -2784,6 +2784,16 @@ function getCombatRoundPhaseActionOrCompletionCursor(input: {
     phase: input.phase,
     state: input.state,
   });
+  if (!isCombatPhaseActionOpen({ phase: input.phase, state: normalized })) {
+    return combatRoundCursorSchema.parse({
+      ...(normalized.currentCursor ?? {
+        participantId: normalized.participants[0]?.participantId,
+        roundNumber: normalized.roundNumber,
+      }),
+      roundNumber: normalized.roundNumber,
+      step: input.phase === "phase1" ? "i1" : "i2",
+    });
+  }
   const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
@@ -5078,6 +5088,21 @@ export function getCombatRoundDamageReviewStepForPhase(phase: CombatRoundPhase):
 
 export function getCombatRoundPhaseActionStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
   return phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+}
+
+/**
+ * A declaration may be committed before initiative, but the action phase is
+ * not open until its canonical initiative commit advances currentStep.
+ */
+export function isCombatPhaseActionOpen(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  return (
+    COMBAT_ROUND_STEPS.indexOf(normalized.currentStep) >=
+    COMBAT_ROUND_STEPS.indexOf(getCombatRoundPhaseActionStepForPhase(input.phase))
+  );
 }
 
 function getCombatRoundAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
@@ -10890,6 +10915,43 @@ function buildCombatRoundEndDistanceProposalId(input: {
   return `round-end:${input.roundNumber}:distance:${input.pairKey}`;
 }
 
+/**
+ * An in-round adjustment is itself the pair's distance contest for this round.
+ * This remains true when the committed distance equals the previous distance;
+ * the proposal status, rather than the numeric edge, is the completion fact.
+ */
+export function wasCombatRoundPairDistanceResolvedDuringRound(input: {
+  pairKey: string;
+  roundNumber: number;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  if (normalized.adjustDistanceProposals.some(
+    (proposal) =>
+      proposal.roundNumber === input.roundNumber &&
+      proposal.status === "committed" &&
+      makeDistancePairKey(proposal.attackerParticipantId, proposal.defenderParticipantId) ===
+        input.pairKey,
+  )) {
+    return true;
+  }
+
+  // Materialized/reloaded states normally retain the proposal itself. The
+  // canonical committed event is also sufficient evidence, however, and
+  // protects round-end preparation when a legacy projection only retained
+  // events plus the distance matrix.
+  return normalized.events.some(
+    (event) =>
+      event.roundNumber === input.roundNumber &&
+      event.type === "adjust_distance_committed" &&
+      event.status === "committed" &&
+      event.attackerParticipantId &&
+      event.defenderParticipantId &&
+      makeDistancePairKey(event.attackerParticipantId, event.defenderParticipantId) ===
+        input.pairKey,
+  );
+}
+
 function buildCombatRoundEndDistanceProposals(input: {
   participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
   state: CombatRoundState;
@@ -10922,6 +10984,16 @@ function buildCombatRoundEndDistanceProposals(input: {
       const [participantAId, participantBId] = pairKey.split("::");
 
       if (!participantAId || !participantBId) {
+        continue;
+      }
+
+      if (
+        wasCombatRoundPairDistanceResolvedDuringRound({
+          pairKey,
+          roundNumber: normalized.roundNumber,
+          state: normalized,
+        })
+      ) {
         continue;
       }
 
@@ -15250,8 +15322,8 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
   if (!previousProposal || previousProposal.status !== "awaiting_gm_adjustment") {
     throw new RangeError("The GM must confirm the maneuver adjustment.");
   }
-  if (!Number.isInteger(input.value) || input.value < 0 || input.value > 4) {
-    throw new RangeError("Maneuver adjustment must be an integer from 0 to 4.");
+  if (!Number.isFinite(input.value) || !Number.isInteger(input.value)) {
+    throw new RangeError("Maneuver adjustment must be an integer.");
   }
   if (input.participantId && ![previousProposal.attackerParticipantId, previousProposal.defenderParticipantId].includes(input.participantId)) {
     throw new RangeError("The maneuver adjustment must apply to the attacker or defender.");

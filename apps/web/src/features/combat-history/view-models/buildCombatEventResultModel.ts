@@ -140,6 +140,54 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
   });
 }
 
+export function buildConciseDodgeCalculationRows(input: {
+  calculation?: Record<string, unknown>;
+  eventId: string;
+  outcome?: string;
+}): CombatEventResultFactRow[] {
+  const calculation = input.calculation;
+  if (!calculation) return [];
+  const skill = calculation.dodgeSkillTotal;
+  const die = calculation.rollD20;
+  const rollTotal = calculation.rollTotal;
+  const result = calculation.finalTotal;
+  if (
+    typeof skill !== "number" ||
+    typeof die !== "number" ||
+    typeof rollTotal !== "number" ||
+    typeof result !== "number"
+  ) {
+    return calculationFactRows(input.eventId, calculation, new Map());
+  }
+  const general = typeof calculation.generalFatigueModifier === "number" ? calculation.generalFatigueModifier : 0;
+  const adjustment = typeof calculation.situationalAdjustment === "number" ? calculation.situationalAdjustment : 0;
+  const modifier = general + adjustment;
+  const openEnded = Array.isArray(calculation.openEndedD10s) ? calculation.openEndedD10s : [];
+  const dieText = openEnded.length
+    ? `${die} (${openEnded.join(" + ")})`
+    : String(die);
+  const standardOutcome = input.outcome;
+  return [
+    { key: `${input.eventId}:calculation:skill`, text: `Skill: Dodge ${skill}` },
+    { key: `${input.eventId}:calculation:modifier`, text: `Modifier: ${modifier >= 0 ? "+" : ""}${modifier}` },
+    { key: `${input.eventId}:calculation:die`, text: `Die roll: ${dieText}` },
+    { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
+    {
+      key: `${input.eventId}:calculation:outcome`,
+      text: `Outcome: ${standardOutcome ?? "Awaiting opponent roll"}`,
+    },
+  ];
+}
+
+function dodgeCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
+  const standardOutcome = factLabel(factValue(event, "standardOutcome"));
+  return buildConciseDodgeCalculationRows({
+    calculation: event.facts.privateCalculation,
+    eventId: event.id,
+    outcome: standardOutcome,
+  });
+}
+
 function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
   for (const key of keys) {
     const involved = event.facts.involvedOutcome?.[key];
@@ -397,8 +445,11 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "adjust_distance_adjustment":
       return { outcomeRows: [], summary: "The GM confirmed the maneuver adjustment." };
-    case "adjust_distance_roll":
-      return { outcomeRows: [], summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge.` };
+    case "adjust_distance_roll": {
+      const side = factLabel(factValue(event, "side"));
+      const outcome = side?.toLowerCase() === "defender" ? "to resist the distance adjustment" : "to adjust distance";
+      return { outcomeRows: [], summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge ${outcome}.` };
+    }
     case "adjust_distance_result": {
       const proposed = factValue(event, "standardProposedDistance");
       return { outcomeRows: typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [], summary: "The maneuver proposal was resolved." };
@@ -428,7 +479,9 @@ export function buildCombatEventResultModel(
         return {
           calculationRows: attack
             ? attackCalculationRows(event)
-            : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
+            : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
+              ? dodgeCalculationRows(event)
+              : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
           completenessLabel:
             event.completeness === "complete"
               ? undefined

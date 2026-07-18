@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   combatRoundStateSchema,
   commitCombatRoundAdjustDistance,
+  getCombatRoundStartNextRoundBlocker,
+  isCombatPhaseActionOpen,
+  prepareCombatRoundEndReview,
   recordCombatRoundAdjustDistanceRoll,
   respondCombatRoundAdjustDistance,
   reviewCombatRoundAdjustDistanceRollAdjustment,
@@ -77,6 +80,14 @@ function roll(participantId: string, finalTotal: number, id: string) {
 }
 
 describe("Adjust Distance-Attack lifecycle", () => {
+  it("opens A1 only after the canonical phase initiative commit", () => {
+    const before = combatRoundStateSchema.parse({ ...buildState(), currentStep: "initiative_phase_1" });
+    const after = combatRoundStateSchema.parse({ ...buildState(), currentStep: "phase_1_actions" });
+    expect(isCombatPhaseActionOpen({ phase: "phase1", state: before })).toBe(false);
+    expect(isCombatPhaseActionOpen({ phase: "phase1", state: after })).toBe(true);
+    expect(isCombatPhaseActionOpen({ phase: "phase2", state: after })).toBe(false);
+  });
+
   it("opposes, applies the GM adjustment once, resolves rolls, and commits the pair distance", () => {
     let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
     state = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt }, participantId: "scyrian", proposalId: "proposal", state, value: 2 });
@@ -96,6 +107,54 @@ describe("Adjust Distance-Attack lifecycle", () => {
     const state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
     expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ standardOutcome: "allowed", standardProposedDistance: 2, status: "awaiting_review" }));
     expect(state.adjustDistanceProposals[0]?.attackerRoll).toBeUndefined();
+  });
+
+  it("accepts signed GM adjustments without policing the suggested range", () => {
+    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
+    state = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt }, participantId: "gladiator", proposalId: "proposal", state, value: -10 });
+    expect(state.adjustDistanceProposals[0]?.gmRollAdjustment).toEqual(
+      expect.objectContaining({ participantId: "gladiator", value: -10 }),
+    );
+  });
+
+  it("rejects non-integer GM adjustments with the focused validation error", () => {
+    const state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
+    expect(() =>
+      reviewCombatRoundAdjustDistanceRollAdjustment({
+        command: { createdAt },
+        participantId: "gladiator",
+        proposalId: "proposal",
+        state,
+        value: 1.5,
+      }),
+    ).toThrow("Maneuver adjustment must be an integer.");
+  });
+
+  it("does not create a duplicate SU contest after an in-round commit", () => {
+    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
+    state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 3, outcome: "allowed", proposalId: "proposal", state });
+    state = combatRoundStateSchema.parse({
+      ...state,
+      currentCursor: { roundNumber: 1, step: "SU" },
+      currentStep: "round_summary",
+      participants: state.participants.map((participant) =>
+        participant.participantId === "scyrian"
+          ? {
+              ...participant,
+              declaration: {
+                ...participant.declaration,
+                movementIntent: {
+                  distancePreferences: [{ desiredDistance: 2, source: "player_declared", targetParticipantId: "gladiator" }],
+                  mode: "set_distance_preferences",
+                },
+              },
+            }
+          : participant,
+      ),
+    });
+    const reviewed = prepareCombatRoundEndReview({ state });
+    expect(reviewed.roundEndReview?.proposedDistances).toHaveLength(0);
+    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBeDefined();
   });
 
   it("undoes the commit atomically and restores the review and prior pair distance", () => {

@@ -62,6 +62,7 @@ import {
 } from "@glantri/domain";
 
 import {
+  buildConciseDodgeCalculationRows,
   buildProjectedCombatTrackerModel,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
@@ -1916,6 +1917,65 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined;
     return expectedParticipantId === selectedRoundParticipant.participantId;
   });
+  // The task selector above intentionally follows the canonical next roller.
+  // The result panel uses the persisted proposal separately so a roller keeps
+  // seeing their own Dodge result while the opponent's task is pending.
+  const selectedAdjustDistanceDisplayProposal = combatRoundState?.adjustDistanceProposals.find(
+    (proposal) =>
+      selectedRoundParticipant &&
+      proposal.roundNumber === combatRoundState.roundNumber &&
+      (proposal.attackerParticipantId === selectedRoundParticipant.participantId ||
+        proposal.defenderParticipantId === selectedRoundParticipant.participantId) &&
+      (proposal.attackerParticipantId === selectedRoundParticipant.participantId
+        ? proposal.attackerRollRecorded && Boolean(proposal.attackerRoll)
+        : proposal.defenderRollRecorded && Boolean(proposal.defenderRoll)),
+  );
+  const selectedAdjustDistanceOwnRoll = selectedAdjustDistanceDisplayProposal
+    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId === selectedRoundParticipant?.participantId
+      ? selectedAdjustDistanceDisplayProposal.attackerRoll
+      : selectedAdjustDistanceDisplayProposal.defenderRoll
+    : undefined;
+  const selectedAdjustDistanceOpponentRoll = selectedAdjustDistanceDisplayProposal
+    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId === selectedRoundParticipant?.participantId
+      ? selectedAdjustDistanceDisplayProposal.defenderRoll
+      : selectedAdjustDistanceDisplayProposal.attackerRoll
+    : undefined;
+  const selectedAdjustDistanceRollOutcome = selectedAdjustDistanceOwnRoll
+    ? selectedAdjustDistanceOpponentRoll
+      ? selectedAdjustDistanceDisplayProposal?.status === "committed"
+        ? `Distance adjustment ${selectedAdjustDistanceDisplayProposal.review?.acceptedOutcome ?? "resolved"}.`
+        : "Distance proposal awaiting GM review."
+      : "Awaiting opponent roll."
+    : undefined;
+  const selectedAdjustDistanceResultPanel = selectedAdjustDistanceOwnRoll
+    ? {
+        interpretedResult:
+          selectedRoundParticipant?.participantId ===
+          selectedAdjustDistanceDisplayProposal?.attackerParticipantId
+            ? "Dodge roll to adjust distance"
+            : "Dodge roll to resist the distance adjustment",
+        rankLabel: "Dodge roll",
+        sections: [
+          {
+            calculationLines: buildConciseDodgeCalculationRows({
+              calculation: {
+                dodgeSkillTotal: selectedAdjustDistanceOwnRoll.dodgeSkillTotal,
+                finalTotal: selectedAdjustDistanceOwnRoll.finalTotal,
+                generalFatigueModifier: selectedAdjustDistanceOwnRoll.generalFatigueModifier,
+                openEndedD10s: selectedAdjustDistanceOwnRoll.openEndedD10s,
+                rollD20: selectedAdjustDistanceOwnRoll.rollD20,
+                rollTotal: selectedAdjustDistanceOwnRoll.rollTotal,
+                situationalAdjustment: selectedAdjustDistanceOwnRoll.situationalAdjustment,
+              },
+              eventId: `${selectedAdjustDistanceDisplayProposal?.id ?? "adjust-distance"}:own-roll`,
+              outcome: selectedAdjustDistanceRollOutcome,
+            }).map((row) => row.text),
+            resultLine: selectedAdjustDistanceRollOutcome,
+            title: "Dodge",
+          },
+        ],
+      }
+    : null;
   const currentModifierPhase = getPlayerCombatModifierDisplayPhase({
     actionId: selectedActionId,
     step: currentCombatStep,
@@ -3329,14 +3389,23 @@ export default function ScenarioPlayerCombatPageContent({
         sections: [
           {
             calculationLines: [
-              `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${formatOpenEndedD20RollBreakdown(
-                {
-                  dieResult: selectedDistanceControlProposal.ownSide.result.rollTotal,
+              ...buildConciseDodgeCalculationRows({
+                calculation: {
+                  dodgeSkillTotal: selectedDistanceControlProposal.ownSide.dodgeSkillTotal,
+                  finalTotal: selectedDistanceControlProposal.ownSide.result.finalTotal,
+                  generalFatigueModifier:
+                    selectedDistanceControlProposal.ownSide.generalFatigueModifier,
                   openEndedD10s: selectedDistanceControlProposal.ownSide.result.openEndedD10s,
                   rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
+                  rollTotal: selectedDistanceControlProposal.ownSide.result.rollTotal,
                 },
-              )} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
-              `Your preference: ${
+                eventId: `${selectedDistanceControlProposal.proposal.id}:own-roll`,
+                outcome:
+                  selectedDistanceControlCommittedDistance !== undefined
+                    ? `Distance ${selectedDistanceControlCommittedDistance} next round`
+                    : "Distance-control roll recorded",
+              }).map((row) => row.text),
+              `Preference: ${
                 selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"
               }`,
             ],
@@ -4366,6 +4435,7 @@ export default function ScenarioPlayerCombatPageContent({
             <PlayerCombatActionResultPanel
               result={selectPlayerCombatActionResultPanel<PlayerCombatActionResultPanelView>({
                 actionRoll: actionRollResult,
+                adjustDistance: selectedAdjustDistanceResultPanel,
                 attackerPrivileged: selectedAttackerPrivilegedResultPanel,
                 combatExperience: selectedCombatExperienceResultPanel,
                 currentAttack: selectedCurrentAttackResultPanel,

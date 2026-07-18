@@ -54,6 +54,21 @@ describe("buildCombatTrackerModel", () => {
     expect(result.selectedCellKey).toBe(key);
   });
 
+  it("keeps declared A1 actions at not-reached until initiative opens the phase", () => {
+    const result = model([
+      facts({
+        activeTask: true,
+        adjustDistance: { currentDistance: 3, requestedDistance: 2, status: "pending" },
+        phaseActionOpen: false,
+        step: "phase_1_actions",
+      }),
+    ]);
+    expect(result.cells["1:participant-a:phase_1_actions"]).toMatchObject({
+      marker: "·",
+      markerKind: "not_reached",
+    });
+  });
+
   it("preserves attack markers and stored identity/result hover facts", () => {
     const attackResult = {
       grazing: true,

@@ -10,6 +10,7 @@ export interface PlayerCombatAttackResultStateLike {
 
 export interface PlayerCombatActionResultSelectionInput<TPanel> {
   actionRoll?: TPanel | null;
+  adjustDistance?: TPanel | null;
   attackerPrivileged?: TPanel | null;
   combatExperience?: TPanel | null;
   currentAttack?: TPanel | null;
@@ -51,6 +52,7 @@ export function selectPlayerCombatActionResultPanel<TPanel>(
   return (
     input.healthCheck ??
     input.distanceControl ??
+    input.adjustDistance ??
     input.attackerPrivileged ??
     input.currentPhaseResolution ??
     input.involvedDamage ??

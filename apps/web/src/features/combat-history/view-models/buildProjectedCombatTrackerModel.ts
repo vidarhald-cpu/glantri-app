@@ -29,8 +29,10 @@ function markerForEvents(input: {
   current: boolean;
   events: readonly ProjectedCombatHistoryEvent[];
   hasSnapshot: boolean;
+  phaseActionOpen?: boolean;
   stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
+  if (input.phaseActionOpen === false) return { kind: "not_reached", marker: "·" };
   const initiative = input.events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative?.facts.privateCalculation?.total ??
@@ -250,6 +252,14 @@ export function buildProjectedCombatTrackerModel(input: {
           current,
           events: cellEvents,
           hasSnapshot: Boolean(snapshot),
+          phaseActionOpen:
+            step === "phase_1_actions" || step === "phase_2_actions"
+              ? round.roundNumber !== input.history.activeRound.roundNumber ||
+                (input.currentTask
+                  ? COMBAT_ROUND_STEPS.indexOf(input.currentTask.step) >=
+                    COMBAT_ROUND_STEPS.indexOf(step)
+                  : true)
+              : undefined,
           stepOutcome: snapshot?.stepOutcome,
         });
         const cellKey = buildCombatTrackerCellKey(selection);

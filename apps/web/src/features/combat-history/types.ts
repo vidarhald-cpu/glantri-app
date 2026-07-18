@@ -64,6 +64,8 @@ export interface CombatTrackerCellFacts {
   pendingDistanceControlCommitCount: number;
   pendingDistanceControlRollCount: number;
   pendingHealthCheckRollCount: number;
+  /** Whether the canonical initiative commit has opened this phase's actions. */
+  phaseActionOpen?: boolean;
   phaseCombatExperienceMarkerRequired: boolean;
   phaseResolutionResult?: CombatRoundPhaseResolutionResult;
   roundNumber: number;

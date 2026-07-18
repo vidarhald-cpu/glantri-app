@@ -33,7 +33,9 @@ export const combatAdjustDistanceRollResultSchema = z.object({
   rollTotal: z.number().int(),
   rolledAt: z.string().datetime(),
   rolledByUserId: idSchema.optional(),
-  situationalAdjustment: z.number().int().min(0).max(4).default(0),
+  // The GM's adjustment is a signed, deliberate roll input.  The rules suggest
+  // a small range, but the application must not police the GM's judgment.
+  situationalAdjustment: z.number().int().default(0),
 });
 export type CombatAdjustDistanceRollResult = z.infer<
   typeof combatAdjustDistanceRollResultSchema
@@ -56,7 +58,7 @@ export const combatAdjustDistanceProposalSchema = z.object({
     .object({
       notes: z.string().optional(),
       participantId: idSchema.optional(),
-      value: z.number().int().min(0).max(4).default(0),
+      value: z.number().int().default(0),
     })
     .optional(),
   id: idSchema,

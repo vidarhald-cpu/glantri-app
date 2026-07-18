@@ -88,6 +88,7 @@ export function getCombatTrackerCellMarkerKind(
 ): CombatTrackerMarkerKind {
   const pendingRoundEndRollCount =
     input.pendingDistanceControlRollCount + input.pendingHealthCheckRollCount;
+  if (attackPhase(input.step) && input.phaseActionOpen === false) return "not_reached";
   if (input.phaseCombatExperienceMarkerRequired || pendingRoundEndRollCount > 0) return "required";
   if (input.initiativeTotal !== undefined) return "roll_result";
   if (input.step === "phase_1_actions" && input.feint) {
