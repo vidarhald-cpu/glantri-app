@@ -9,3 +9,4 @@ export * from "./view-models/buildCombatTrackerModel";
 export * from "./view-models/buildProjectedCombatTrackerModel";
 export * from "./view-models/combatViewRevision";
 export * from "./view-models/resolveCombatHistoryPanelSnapshot";
+export * from "./view-models/formatCombatModifier";

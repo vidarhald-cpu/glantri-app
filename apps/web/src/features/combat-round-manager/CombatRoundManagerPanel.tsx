@@ -128,6 +128,7 @@ import {
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatTracker,
+  formatSignedCombatModifier,
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
@@ -169,6 +170,11 @@ import {
   loadServerCharacterById,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
+import {
+  buildAdjustDistanceGmAdjustmentRequest,
+  type AdjustDistanceAdjustmentDraft,
+  type AdjustDistanceAdjustmentDraftHandle,
+} from "./adjustDistanceAdjustmentDraft";
 import {
   buildPlayerCombatModifierRows,
   formatCombatInitiativeFormula,
@@ -879,10 +885,6 @@ function formatCombatToHitCalculationLine(result: CombatRoundAttackRollResult): 
   return `OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
 }
 
-function formatSignedCombatNumber(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value}`;
-}
-
 function buildRoundEndDistancePairLabel(
   proposal: CombatRoundEndDistanceProposal,
   participantLabelsById: Record<string, string>,
@@ -976,11 +978,11 @@ function formatCombatParryModifierBreakdown(input: {
   const modifiers = input.modifiers?.filter((modifier) => modifier.value !== 0) ?? [];
 
   if (modifiers.length === 0) {
-    return `mods ${formatSignedCombatNumber(input.fallbackAdjustment)}`;
+    return `mods ${formatSignedCombatModifier(input.fallbackAdjustment)}`;
   }
 
   return modifiers
-    .map((modifier) => `${modifier.label} ${formatSignedCombatNumber(modifier.value)}`)
+    .map((modifier) => `${modifier.label} ${formatSignedCombatModifier(modifier.value)}`)
     .join(" + ");
 }
 
@@ -3784,16 +3786,6 @@ function getCombatRoundManagerStateFromCommandEnvelope(input: {
   };
 }
 
-export interface AdjustDistanceAdjustmentDraft {
-  note: string;
-  participantId: string;
-  value: string;
-}
-
-export interface AdjustDistanceAdjustmentDraftHandle {
-  getDraft: () => AdjustDistanceAdjustmentDraft;
-}
-
 /**
  * Keep the GM's in-progress adjustment local to this small editor.  The parent
  * combat manager only receives the draft when its primary action is confirmed,
@@ -3809,51 +3801,83 @@ const AdjustDistanceAdjustmentEditor = forwardRef<
     savedAdjustment?: { notes?: string; participantId?: string; value?: number };
   }
 >(function AdjustDistanceAdjustmentEditor(input, ref) {
-  const [participantId, setParticipantId] = useState(input.savedAdjustment?.participantId ?? "");
-  const [value, setValue] = useState(String(input.savedAdjustment?.value ?? 0));
-  const [note, setNote] = useState(input.savedAdjustment?.notes ?? "");
+  const draftRef = useRef<AdjustDistanceAdjustmentDraft>({
+    note: input.savedAdjustment?.notes ?? "",
+    participantId: input.savedAdjustment?.participantId ?? "",
+    value: String(input.savedAdjustment?.value ?? 0),
+  });
+  const [, setDraftRevision] = useState(0);
+  const draft = draftRef.current;
+  const updateDraft = (update: (current: AdjustDistanceAdjustmentDraft) => AdjustDistanceAdjustmentDraft) => {
+    draftRef.current = update(draftRef.current);
+    setDraftRevision((current) => current + 1);
+  };
 
   useEffect(() => {
-    setParticipantId(input.savedAdjustment?.participantId ?? "");
-    setValue(String(input.savedAdjustment?.value ?? 0));
-    setNote(input.savedAdjustment?.notes ?? "");
+    draftRef.current = {
+      note: input.savedAdjustment?.notes ?? "",
+      participantId: input.savedAdjustment?.participantId ?? "",
+      value: String(input.savedAdjustment?.value ?? 0),
+    };
+    setDraftRevision((current) => current + 1);
   }, [input.proposalId, input.savedAdjustment?.notes, input.savedAdjustment?.participantId, input.savedAdjustment?.value]);
 
   useImperativeHandle(
     ref,
-    () => ({ getDraft: () => ({ note, participantId, value }) }),
-    [note, participantId, value],
+    () => ({ getDraft: () => draftRef.current }),
+    [],
   );
 
   return (
-    <>
+    <div style={{ display: "grid", gap: "0.35rem" }}>
+      <div
+        style={{
+          alignItems: "end",
+          display: "grid",
+          gap: "0.5rem",
+          gridTemplateColumns: "minmax(9rem, 12rem) minmax(5rem, 6rem)",
+        }}
+      >
+        <label style={compactFieldLabelStyle}>
+          <span>Adjustment target</span>
+          <select
+            disabled={input.saving}
+            onChange={(event) =>
+              updateDraft((current) => ({ ...current, participantId: event.target.value }))
+            }
+            value={draft.participantId}
+          >
+            <option value="">Neither</option>
+            <option value={input.attackerParticipantId}>Attacker</option>
+            <option value={input.defenderParticipantId}>Defender</option>
+          </select>
+        </label>
+        <label style={compactFieldLabelStyle}>
+          <span>Modifier</span>
+          <input
+            aria-describedby={`${input.proposalId}:adjustment-help`}
+            disabled={input.saving}
+            onChange={(event) =>
+              updateDraft((current) => ({ ...current, value: event.target.value }))
+            }
+            step="1"
+            type="number"
+            value={draft.value}
+          />
+        </label>
+      </div>
+      <span id={`${input.proposalId}:adjustment-help`} style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+        Typical range: -4 to +4 (guidance only)
+      </span>
       <label style={compactFieldLabelStyle}>
-        <span>Adjustment target</span>
-        <select disabled={input.saving} onChange={(event) => setParticipantId(event.target.value)} value={participantId}>
-          <option value="">Neither</option>
-          <option value={input.attackerParticipantId}>Attacker</option>
-          <option value={input.defenderParticipantId}>Defender</option>
-        </select>
-      </label>
-      <label style={compactFieldLabelStyle}>
-        <span>Adjustment</span>
+        <span>GM note (private, optional)</span>
         <input
-          aria-describedby={`${input.proposalId}:adjustment-help`}
           disabled={input.saving}
-          inputMode="numeric"
-          onChange={(event) => setValue(event.target.value)}
-          type="text"
-          value={value}
+          onChange={(event) => updateDraft((current) => ({ ...current, note: event.target.value }))}
+          value={draft.note}
         />
-        <span id={`${input.proposalId}:adjustment-help`} style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
-          Typical range: -4 to +4
-        </span>
       </label>
-      <label style={compactFieldLabelStyle}>
-        <span>GM note</span>
-        <input disabled={input.saving} onChange={(event) => setNote(event.target.value)} value={note} />
-      </label>
-    </>
+    </div>
   );
 });
 
@@ -7164,7 +7188,7 @@ export default function CombatRoundManagerPanel({
   }
 
   async function advanceInspectorAdjustDistance() {
-    if (!inspectorAdjustDistanceProposal) return;
+    if (!inspectorAdjustDistanceProposal || saving) return;
     setSaving(true);
     try {
       let nextEncounter: EncounterSession;
@@ -7182,14 +7206,11 @@ export default function CombatRoundManagerPanel({
           participantId: "",
           value: "0",
         };
+        const request = buildAdjustDistanceGmAdjustmentRequest(draft);
         nextEncounter = await reviewCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
-          notes: draft.note || undefined,
-          participantId: draft.participantId || undefined,
           proposalId: inspectorAdjustDistanceProposal.id,
-          // Preserve decimals/blank input for the API validator instead of
-          // truncating them with parseInt; only finite integers are accepted.
-          value: draft.value.trim() === "" ? Number.NaN : Number(draft.value),
+          ...request,
         });
       } else if (inspectorAdjustDistanceProposal.status === "awaiting_rolls") {
         if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;

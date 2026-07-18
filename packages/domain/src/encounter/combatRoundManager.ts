@@ -15328,9 +15328,10 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
   if (input.participantId && ![previousProposal.attackerParticipantId, previousProposal.defenderParticipantId].includes(input.participantId)) {
     throw new RangeError("The maneuver adjustment must apply to the attacker or defender.");
   }
+  const appliedValue = input.participantId ? input.value : 0;
   const proposal = combatAdjustDistanceProposalSchema.parse({
     ...previousProposal,
-    gmRollAdjustment: { notes: input.notes, participantId: input.participantId, value: input.value },
+    gmRollAdjustment: { notes: input.notes, participantId: input.participantId, value: appliedValue },
     status: "awaiting_rolls",
   });
   return recordAdjustDistanceCommand({
@@ -15339,9 +15340,9 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
     eventOutcome: {
       participantId: input.participantId,
       proposalId: proposal.id,
-      value: input.value,
+      value: appliedValue,
     },
-    facts: { participantId: input.participantId, previousProposal, proposalId: proposal.id, value: input.value },
+    facts: { participantId: input.participantId, previousProposal, proposalId: proposal.id, value: appliedValue },
     participantId: proposal.attackerParticipantId,
     proposal,
     state: normalized,

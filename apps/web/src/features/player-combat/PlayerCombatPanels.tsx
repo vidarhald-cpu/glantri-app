@@ -21,6 +21,9 @@ import {
 } from "@glantri/domain";
 
 import {
+  formatSignedCombatModifier,
+} from "@/features/combat-history";
+import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
@@ -450,10 +453,6 @@ function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): numbe
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
 
-function formatSignedModifierValue(value: number): string {
-  return value >= 0 ? `+${value}` : String(value);
-}
-
 function formatModifierPhaseLabel(phase?: "phase1" | "phase2"): string | undefined {
   return phase === "phase1" ? "P1" : phase === "phase2" ? "P2" : undefined;
 }
@@ -558,7 +557,7 @@ export function formatCombatModifierDisplayLine(input: {
   const details = formatCombatModifierDetailsLabel(input.entry);
 
   return [
-    `${input.bucketLabel} ${formatSignedModifierValue(input.entry.value)}`,
+    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}`,
     formatCombatModifierScopeLabel(input.entry),
     details,
   ]
@@ -811,13 +810,13 @@ function ModifierDisplayEntryRow({
     <div
       key={`${entry.sourceLabel}:${entry.id}`}
       style={compactModifierDisplayRowStyle}
-      title={`${bucketLabel} ${formatSignedModifierValue(entry.value)} · ${entry.scopeLabel}${
+      title={`${bucketLabel} ${formatSignedCombatModifier(entry.value)} · ${entry.scopeLabel}${
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
       <div style={compactModifierDisplayTopRowStyle}>
         <span>{entry.sourceLabel}</span>
-        <span>{formatSignedModifierValue(entry.value)}</span>
+        <span>{formatSignedCombatModifier(entry.value)}</span>
         <span>{entry.scopeLabel}</span>
       </div>
       <div style={compactModifierDetailsRowStyle}>

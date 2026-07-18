@@ -130,6 +130,28 @@ describe("Adjust Distance-Attack lifecycle", () => {
     ).toThrow("Maneuver adjustment must be an integer.");
   });
 
+  it("normalizes a neither-target adjustment to zero without dropping the note", () => {
+    const opposed = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
+    const reviewed = reviewCombatRoundAdjustDistanceRollAdjustment({
+      command: { createdAt },
+      notes: "no side favored",
+      proposalId: "proposal",
+      state: opposed,
+      value: 10,
+    });
+
+    expect(reviewed.adjustDistanceProposals[0]?.gmRollAdjustment).toEqual({
+      notes: "no side favored",
+      participantId: undefined,
+      value: 0,
+    });
+  });
+
   it("does not create a duplicate SU contest after an in-round commit", () => {
     let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
     state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 3, outcome: "allowed", proposalId: "proposal", state });

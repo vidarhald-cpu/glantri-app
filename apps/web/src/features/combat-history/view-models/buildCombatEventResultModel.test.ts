@@ -156,7 +156,33 @@ describe("buildCombatEventResultModel", () => {
       "Die roll: 3",
       "Result: 21",
       "Outcome: Awaiting opponent roll",
+      "Maneuver adjustment: +2",
     ]);
+  });
+
+  it("shows the final combined modifier and the maneuver adjustment separately", () => {
+    const model = buildCombatEventResultModel([
+      event("adjust_distance_roll", 1, {
+        facts: {
+          involvedOutcome: { side: "attacker" },
+          privateCalculation: {
+            dodgeSkillTotal: 16,
+            finalTotal: 23,
+            generalFatigueModifier: -1,
+            openEndedD10s: [],
+            rollD20: 6,
+            rollTotal: 6,
+            situationalAdjustment: 2,
+          },
+          publicOutcome: {},
+        },
+      }),
+    ]);
+
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Modifier: +1");
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain(
+      "Maneuver adjustment: +2",
+    );
   });
 
   it("labels incomplete and legacy-derived events", () => {

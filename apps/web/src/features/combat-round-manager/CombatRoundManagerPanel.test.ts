@@ -64,6 +64,18 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("latestCombatEventSummary.summaryText");
   });
 
+  it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("buildAdjustDistanceGmAdjustmentRequest(draft)");
+    expect(source).toContain("getDraft: () => draftRef.current");
+    expect(source).toContain('type="number"');
+    expect(source).toContain('step="1"');
+    expect(source).toContain("GM note (private, optional)");
+    expect(source).toContain("Typical range: -4 to +4 (guidance only)");
+    expect(source).toContain("if (!inspectorAdjustDistanceProposal || saving) return;");
+  });
+
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {
     const source = readSource();
 

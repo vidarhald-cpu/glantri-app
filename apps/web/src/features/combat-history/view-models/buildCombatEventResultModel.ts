@@ -1,5 +1,7 @@
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
+import { formatSignedCombatModifier } from "./formatCombatModifier";
+
 export interface CombatEventResultItemModel {
   calculationRows: CombatEventResultFactRow[];
   completenessLabel?: string;
@@ -142,6 +144,7 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
 
 export function buildConciseDodgeCalculationRows(input: {
   calculation?: Record<string, unknown>;
+  detailRows?: readonly string[];
   eventId: string;
   outcome?: string;
 }): CombatEventResultFactRow[] {
@@ -167,9 +170,9 @@ export function buildConciseDodgeCalculationRows(input: {
     ? `${die} (${openEnded.join(" + ")})`
     : String(die);
   const standardOutcome = input.outcome;
-  return [
+  const rows: CombatEventResultFactRow[] = [
     { key: `${input.eventId}:calculation:skill`, text: `Skill: Dodge ${skill}` },
-    { key: `${input.eventId}:calculation:modifier`, text: `Modifier: ${modifier >= 0 ? "+" : ""}${modifier}` },
+    { key: `${input.eventId}:calculation:modifier`, text: `Modifier: ${formatSignedCombatModifier(modifier)}` },
     { key: `${input.eventId}:calculation:die`, text: `Die roll: ${dieText}` },
     { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
     {
@@ -177,12 +180,21 @@ export function buildConciseDodgeCalculationRows(input: {
       text: `Outcome: ${standardOutcome ?? "Awaiting opponent roll"}`,
     },
   ];
+  for (const [index, detail] of (input.detailRows ?? []).entries()) {
+    rows.push({ key: `${input.eventId}:calculation:detail:${index}`, text: detail });
+  }
+  return rows;
 }
 
 function dodgeCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
   const standardOutcome = factLabel(factValue(event, "standardOutcome"));
+  const situationalAdjustment = event.facts.privateCalculation?.situationalAdjustment;
   return buildConciseDodgeCalculationRows({
     calculation: event.facts.privateCalculation,
+    detailRows:
+      event.type === "adjust_distance_roll" && typeof situationalAdjustment === "number"
+        ? [`Maneuver adjustment: ${formatSignedCombatModifier(situationalAdjustment)}`]
+        : undefined,
     eventId: event.id,
     outcome: standardOutcome,
   });
