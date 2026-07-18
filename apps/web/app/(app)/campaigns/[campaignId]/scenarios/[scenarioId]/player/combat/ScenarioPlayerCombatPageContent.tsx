@@ -2026,7 +2026,10 @@ export default function ScenarioPlayerCombatPageContent({
       buildPlayerCombatModifierRows({
         combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
+        currentRound: combatRoundState?.roundNumber,
+        encounterId: scenarioId,
         liveModifiers: liveCombatModifiers,
+        ownerParticipantId: selectedParticipant?.id,
         phaseKey: currentModifierPhase,
         visibleAtStep: currentCombatStep,
       }),

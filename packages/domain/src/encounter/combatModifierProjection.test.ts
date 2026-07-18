@@ -12,6 +12,7 @@ import {
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatModifierTotals,
   getMergedCombatSkillObModifierTotal,
+  buildLiveCombatModifierContributionProjection,
   mergePersistentCombatEffectModifiers,
   normalizeCombatModifierRowsForEncounter,
   projectPersistentCombatEffectModifiers,
@@ -115,6 +116,119 @@ function refresh(input: {
 }
 
 describe("persistent combat modifier projection", () => {
+  it("builds one deterministic live contribution projection without mutating sources", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [
+          {
+            id: "manual-general",
+            notes: "terrain",
+            scope: "until",
+            value: 1,
+          },
+          {
+            id: "expired-row",
+            expiresAtRound: 1,
+            scope: "until",
+            value: 9,
+          },
+        ],
+        situationDb: [
+          {
+            generated: true,
+            id: "generated-feint-db",
+            notes: "feint",
+            scope: "until",
+            sourceEncounterId: "encounter-a",
+            sourcePhase: "phase2",
+            value: -2,
+          },
+        ],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    };
+    const combatEffects = effects(
+      effect({
+        combatModifierBucket: "general",
+        id: "persistent-general",
+        modifierValue: -2,
+      }),
+      effect({
+        combatModifierBucket: undefined,
+        effectGroup: "special",
+        id: "unsupported-special",
+        modifierValue: undefined,
+        type: "physical_damage",
+      }),
+      effect({
+        combatModifierBucket: "general",
+        id: "expired-effect",
+        expiresAtRound: 1,
+        modifierValue: -8,
+      }),
+    );
+    const input = { combatContext, combatEffects };
+    const before = structuredClone(input);
+
+    const projection = buildLiveCombatModifierContributionProjection({
+      combatContext,
+      combatEffects,
+      currentRound: 2,
+      encounterId: "encounter-a",
+      ownerParticipantId: "participant-1",
+    });
+
+    expect(projection.contributions.map((row) => [row.id, row.value])).toEqual([
+      ["manual-general", 1],
+      ["import:character_effect:persistent-general:general", -2],
+      ["generated-feint-db", -2],
+    ]);
+    expect(projection.contributions.every((row) => row.ownerParticipantId === "participant-1")).toBe(
+      true,
+    );
+    expect(projection.specialEffectIds).toEqual(["unsupported-special"]);
+    expect(projection.specialEffectCount).toBe(1);
+    expect(input).toEqual(before);
+  });
+
+  it("does not leak rows from another encounter or duplicate imported rows", () => {
+    const projection = buildLiveCombatModifierContributionProjection({
+      combatContext: {
+        modifierBuckets: {
+          general: [
+            {
+              id: "import:character_effect:effect-1:general",
+              imported: true,
+              readOnly: true,
+              scope: "until",
+              sourceEffectId: "effect-1",
+              sourceType: "character_effect",
+              value: -2,
+            },
+            {
+              generated: true,
+              id: "generated-old",
+              scope: "until",
+              sourceEncounterId: "encounter-old",
+              value: -5,
+            },
+          ],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: effects(effect({ id: "effect-1", modifierValue: -2 })),
+      encounterId: "encounter-current",
+      ownerParticipantId: "participant-1",
+    });
+
+    expect(projection.contributions.map((row) => row.id)).toEqual([
+      "import:character_effect:effect-1:general",
+    ]);
+  });
+
   it.each([
     ["general", "general"],
     ["initiative", "situationInitiative"],
@@ -165,7 +279,7 @@ describe("persistent combat modifier projection", () => {
         effect({ combatModifierBucket: undefined, id: "missing-bucket" }),
         effect({ id: "missing-value", modifierValue: undefined }),
         effect({
-          combatModifierBucket: undefined,
+          combatModifierBucket: "general",
           damage: 12,
           generalDamage: 8,
           id: "damage",

@@ -5,6 +5,11 @@ import type {
   ScenarioParticipantState,
 } from "../campaign/scenario";
 import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "./combatEffects";
+import {
+  isCombatModifierContributionActive,
+  normalizeScenarioCombatModifierEntry,
+  type CombatModifierContribution,
+} from "./combatModifierContributions";
 
 export const PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE = "character_effect" as const;
 
@@ -25,6 +30,27 @@ export interface MergedCombatModifierTotals {
   generalFatigue: number;
   initiative: number;
   skillOb: number;
+}
+
+export interface LiveCombatModifierContributionProjectionInput {
+  combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
+  currentRound?: number;
+  encounterId?: string;
+  ownerParticipantId?: string;
+}
+
+/**
+ * The live panel adapter is deliberately additive: combatEffects and persisted bucket entries
+ * remain the source of truth. It returns normalized contributions plus the original rows keyed
+ * by contribution id so existing editors can continue to issue their established row commands.
+ * No calculation consumes this projection yet.
+ */
+export interface LiveCombatModifierContributionProjection {
+  contributions: CombatModifierContribution[];
+  sourceEntries: ReadonlyMap<string, ScenarioCombatModifierEntry>;
+  specialEffectIds: string[];
+  specialEffectCount: number;
 }
 
 export interface NormalizeCombatModifierRowsForEncounterInput {
@@ -100,6 +126,18 @@ function isEffectActiveForRound(effect: CombatEffect, currentRound?: number): bo
 function getScenarioBucket(
   effect: CombatEffect,
 ): ScenarioCombatModifierBucket | undefined {
+  // Damage, bleed, and healing facts are physical/special effects. Even malformed legacy rows
+  // carrying a bucket must not turn those facts into generic numeric combat modifiers.
+  if (
+    effect.type === "physical_damage" ||
+    effect.type === "general_damage" ||
+    effect.type === "bleed" ||
+    effect.type === "internal_bleed" ||
+    effect.type === "healing"
+  ) {
+    return undefined;
+  }
+
   switch (effect.combatModifierBucket) {
     case "general":
       return "general";
@@ -243,6 +281,79 @@ export function mergePersistentCombatEffectModifiers(input: {
         projected.modifierBuckets.situationObSkill,
       ),
     },
+  };
+}
+
+const LIVE_PROJECTION_BUCKETS: readonly [
+  ScenarioCombatModifierBucket,
+  keyof ScenarioParticipantCombatContext["modifierBuckets"],
+][] = [
+  ["general", "general"],
+  ["situation_initiative", "situationInitiative"],
+  ["situation_ob_skill", "situationObSkill"],
+  ["situation_db", "situationDb"],
+];
+
+/**
+ * Builds the single normalized contribution projection used by live modifier panels.
+ *
+ * Existing effects and bucket rows are never mutated or written back. Imported persistent
+ * rows are refreshed from combatEffects for the supplied round, then all rows are normalized,
+ * filtered for lifetime/provenance, de-duplicated by their stable row id, and returned in a
+ * deterministic bucket/id order. Unsupported active effects are reported separately so callers
+ * can display a special-effects count without treating damage as a numeric modifier.
+ */
+export function buildLiveCombatModifierContributionProjection(
+  input: LiveCombatModifierContributionProjectionInput,
+): LiveCombatModifierContributionProjection {
+  const ownerParticipantId = input.ownerParticipantId ?? "unknown-participant";
+  const combatContext = mergePersistentCombatEffectModifiers({
+    combatContext: input.combatContext,
+    combatEffects: input.combatEffects,
+    currentRound: input.currentRound,
+  });
+  const persistentProjection = projectPersistentCombatEffectModifiers({
+    combatEffects: input.combatEffects,
+    currentRound: input.currentRound,
+  });
+  const resolutionContext = {
+    ownerParticipantId,
+    ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+    ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+  };
+  const seenIds = new Set<string>();
+  const contributions: CombatModifierContribution[] = [];
+  const sourceEntries = new Map<string, ScenarioCombatModifierEntry>();
+
+  for (const [bucket, bucketKey] of LIVE_PROJECTION_BUCKETS) {
+    // Persisted bucket order is the existing user-facing order. Preserve it while de-duplicating;
+    // persisted source order is stable, so projection refreshes do not reorder the panel.
+    const entries = combatContext.modifierBuckets[bucketKey];
+
+    for (const entry of entries) {
+      if (seenIds.has(entry.id)) continue;
+
+      const contribution = normalizeScenarioCombatModifierEntry({
+        bucket,
+        currentRound: input.currentRound,
+        entry,
+        ownerParticipantId,
+      });
+      if (!contribution || !isCombatModifierContributionActive(contribution, resolutionContext)) {
+        continue;
+      }
+
+      seenIds.add(entry.id);
+      sourceEntries.set(contribution.id, entry);
+      contributions.push(contribution);
+    }
+  }
+
+  return {
+    contributions,
+    sourceEntries,
+    specialEffectCount: persistentProjection.specialEffectCount,
+    specialEffectIds: persistentProjection.specialEffectIds,
   };
 }
 

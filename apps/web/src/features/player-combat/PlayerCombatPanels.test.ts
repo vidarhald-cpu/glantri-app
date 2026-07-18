@@ -37,8 +37,8 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("buildPlayerCombatModifierRows");
-    expect(source).toContain("getMergedCombatModifierTotals");
-    expect(source).toContain("mergePersistentCombatEffectModifiers");
+    expect(source).toContain("buildLiveCombatModifierContributionProjection");
+    expect(source).not.toContain("mergePersistentCombatEffectModifiers");
     expect(source).toContain("filterCombatModifierEntriesForPhase");
     expect(source).toContain("phaseKey?: EncounterCombatPhaseKey");
     expect(source).toContain("General/Fatigue");

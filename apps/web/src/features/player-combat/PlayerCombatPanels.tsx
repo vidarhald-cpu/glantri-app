@@ -15,9 +15,9 @@ import {
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
   getHitLocationFullLabel,
-  getMergedCombatModifierTotals,
+  buildLiveCombatModifierContributionProjection,
+  type CombatModifierContributionBucket,
   isPersistentCombatModifierEntry,
-  mergePersistentCombatEffectModifiers,
 } from "@glantri/domain";
 
 import {
@@ -686,15 +686,26 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentRound?: number;
+  encounterId?: string;
   includeAllPhases?: boolean;
   liveModifiers?: EncounterLiveCombatModifierSummary;
+  ownerParticipantId?: string;
   phaseKey?: EncounterCombatPhaseKey;
   visibleAtStep?: CombatRoundStep;
 }): PlayerCombatModifierBucketView[] {
-  const combatContext = mergePersistentCombatEffectModifiers({
+  const projection = buildLiveCombatModifierContributionProjection({
     combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     combatEffects: input.combatEffects,
+    currentRound: input.currentRound,
+    encounterId: input.encounterId,
+    ownerParticipantId: input.ownerParticipantId,
   });
+  const entriesForContributions = (bucket: CombatModifierContributionBucket) =>
+    projection.contributions
+      .filter((contribution) => contribution.bucket === bucket)
+      .map((contribution) => projection.sourceEntries.get(contribution.id))
+      .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
   const entriesForDisplay = (entries: ScenarioCombatModifierEntry[]) =>
     input.includeAllPhases
       ? entries
@@ -703,46 +714,37 @@ export function buildPlayerCombatModifierRows(input: {
         : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
   const displayModifierBuckets = {
     general: sanitizeCombatModifierEntries(
-      entriesForDisplay(combatContext.modifierBuckets.general),
+      entriesForDisplay(entriesForContributions("general_fatigue")),
     ),
     situationDb: sanitizeCombatModifierEntries(
-      entriesForDisplay(combatContext.modifierBuckets.situationDb),
+      entriesForDisplay(entriesForContributions("db_parry")),
     ),
     situationInitiative: sanitizeCombatModifierEntries(
-      entriesForDisplay(combatContext.modifierBuckets.situationInitiative),
+      entriesForDisplay(entriesForContributions("initiative")),
     ),
     situationObSkill: sanitizeCombatModifierEntries(
-      entriesForDisplay(combatContext.modifierBuckets.situationObSkill),
+      entriesForDisplay(entriesForContributions("skill_ob")),
     ),
   };
-  const applicableModifierBuckets = {
-    general: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.general, input.phaseKey),
-    ),
-    situationDb: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationDb,
-        input.phaseKey,
-      ),
-    ),
-    situationInitiative: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationInitiative,
-        input.phaseKey,
-      ),
-    ),
-    situationObSkill: sanitizeCombatModifierEntries(
-      filterCombatModifierEntriesForPhase(
-        combatContext.modifierBuckets.situationObSkill,
-        input.phaseKey,
-      ),
-    ),
+  const applicableContributions = projection.contributions.filter(
+    (contribution) =>
+      !contribution.applicability.phase ||
+      (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
+  );
+  const totals = {
+    dbParry: applicableContributions
+      .filter((contribution) => contribution.bucket === "db_parry")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    generalFatigue: applicableContributions
+      .filter((contribution) => contribution.bucket === "general_fatigue")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    initiative: applicableContributions
+      .filter((contribution) => contribution.bucket === "initiative")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    skillOb: applicableContributions
+      .filter((contribution) => contribution.bucket === "skill_ob")
+      .reduce((total, contribution) => total + contribution.value, 0),
   };
-  const applicableContext = {
-    ...combatContext,
-    modifierBuckets: applicableModifierBuckets,
-  };
-  const totals = getMergedCombatModifierTotals(applicableContext);
 
   return [
     {

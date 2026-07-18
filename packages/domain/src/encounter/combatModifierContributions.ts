@@ -297,7 +297,11 @@ function doesLifetimeApply(
 ): boolean {
   const { lifetime } = contribution;
 
-  if (contribution.sourceEncounterId && contribution.sourceEncounterId !== context.encounterId) {
+  if (
+    contribution.sourceEncounterId &&
+    context.encounterId !== undefined &&
+    contribution.sourceEncounterId !== context.encounterId
+  ) {
     return false;
   }
 
@@ -310,6 +314,7 @@ function doesLifetimeApply(
   if (
     lifetime.sourceRoundNumber !== undefined &&
     ["round", "phase", "action", "roll"].includes(lifetime.kind) &&
+    context.roundNumber !== undefined &&
     context.roundNumber !== lifetime.sourceRoundNumber
   ) {
     return false;

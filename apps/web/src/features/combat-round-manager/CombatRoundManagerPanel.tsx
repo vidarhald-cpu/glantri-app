@@ -4482,7 +4482,10 @@ export default function CombatRoundManagerPanel({
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        currentRound: selectedRoundNumber,
+        encounterId: encounter.id,
         liveModifiers: inspectorLiveModifiers,
+        ownerParticipantId: selectedScenarioParticipant?.id,
         phaseKey: inspectorModifierPhase,
         visibleAtStep: inspector.step,
       }),
@@ -6213,7 +6216,10 @@ export default function CombatRoundManagerPanel({
     const modifierRows = buildPlayerCombatModifierRows({
       combatContext: draft.combatContext,
       combatEffects: input.scenarioParticipant?.state.combatEffects,
+      currentRound: selectedRoundNumber,
+      encounterId: encounter.id,
       liveModifiers,
+      ownerParticipantId: input.scenarioParticipant?.id,
       phaseKey: input.phaseKey,
     });
     const resolvedCharacterState = input.scenarioParticipant
