@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { createCombatParticipantPairKey } from "./combatModifierContributions";
+
 const idSchema = z.string().min(1);
 
 export const combatDistanceSchema = z.union([
@@ -83,11 +85,7 @@ export function makeDistancePairKey(participantAId: string, participantBId: stri
   const participantA = validateParticipantId(participantAId, "Participant A id");
   const participantB = validateParticipantId(participantBId, "Participant B id");
 
-  if (participantA === participantB) {
-    throw new RangeError("A distance pair requires two distinct participants.");
-  }
-
-  return [participantA, participantB].sort((left, right) => left.localeCompare(right)).join("::");
+  return createCombatParticipantPairKey(participantA, participantB);
 }
 
 function normalizeDistancePair(input: { participantAId: string; participantBId: string }): {
