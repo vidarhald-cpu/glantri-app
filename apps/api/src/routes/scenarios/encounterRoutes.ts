@@ -116,6 +116,7 @@ import {
   isDistanceGeneratedObSkillModifier,
   movementIntentSchema,
   normalizeMovementIntent,
+  normalizeCombatModifierRowsForEncounter,
   projectCombatHistory,
   removeDistanceGeneratedObSkillModifiers,
   resolveCombatFeintWeaponSkillDefinition,
@@ -1287,6 +1288,49 @@ function initializeMaterializedCombatRoundState(input: {
   });
 }
 
+async function normalizeScenarioParticipantModifierRowsForEncounter(input: {
+  encounter: EncounterSession;
+  initializingNewEncounter?: boolean;
+  scenarioParticipants: ScenarioParticipant[];
+}): Promise<ScenarioParticipant[]> {
+  if (!Array.isArray(input.encounter.participants)) return input.scenarioParticipants;
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  const linkedScenarioParticipantIds = new Set(
+    membership.participants.map((participant) => participant.scenarioParticipantId),
+  );
+  const activeProposalIds = input.encounter.combatRoundState?.feintProposals.map(
+    (proposal) => proposal.id,
+  ) ?? [];
+
+  return Promise.all(
+    input.scenarioParticipants.map(async (participant) => {
+      if (!linkedScenarioParticipantIds.has(participant.id)) return participant;
+      if (!participant.state?.combat) return participant;
+      const combatContext = normalizeCombatModifierRowsForEncounter({
+        activeProposalIds,
+        combatContext: participant.state.combat.combatContext,
+        encounterId: input.encounter.id,
+        initializingNewEncounter: input.initializingNewEncounter,
+        roundNumber: input.encounter.combatRoundState?.roundNumber ?? input.encounter.currentRound,
+      });
+      if (!combatContextsDiffer(combatContext, participant.state.combat.combatContext)) {
+        return participant;
+      }
+      return encounterService.updateScenarioParticipantState({
+        participantId: participant.id,
+        scenarioId: participant.scenarioId,
+        state: {
+          ...participant.state,
+          combat: { ...participant.state.combat, combatContext },
+        },
+      });
+    }),
+  );
+}
+
 function buildCombatActionDistanceModifierInputs(input: {
   actionId?: string;
   encounterParticipant: EncounterSession["participants"][number];
@@ -1431,6 +1475,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
   adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
+  encounterId: string;
   encounterParticipant: EncounterSession["participants"][number];
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
@@ -1449,6 +1494,8 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
     actionId: input.actionId,
     adjustDistance: input.adjustDistance,
     combatContext: input.combatContext,
+    sourceEncounterId: input.encounterId,
+    sourceRoundNumber: input.roundState.roundNumber,
     distanceModifiers: buildCombatActionDistanceModifierInputsForDeclaration({
       actionId: input.actionId,
       encounterParticipant: input.encounterParticipant,
@@ -1510,6 +1557,7 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
     const nextCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
       actionId: declaration.actionId,
       combatContext: currentContext,
+      encounterId: input.encounter.id,
       encounterParticipant,
       movementIntent: declaration.movementIntent,
       phaseContexts: declaration.phaseContexts,
@@ -1944,8 +1992,10 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         return combatAdjustDistanceProposalSchema.parse({
           ...proposal,
           attackerRoll: viewerIsAttacker ? proposal.attackerRoll : undefined,
+          attackerRollRecorded: proposal.attackerRollRecorded || Boolean(proposal.attackerRoll),
           committedByUserId: undefined,
           defenderRoll: viewerIsDefender ? proposal.defenderRoll : undefined,
+          defenderRollRecorded: proposal.defenderRollRecorded || Boolean(proposal.defenderRoll),
           gmRollAdjustment: proposal.gmRollAdjustment
             ? { ...proposal.gmRollAdjustment, notes: undefined }
             : undefined,
@@ -2215,6 +2265,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           currentRound: 1,
         }),
       });
+      const scenarioParticipants =
+        (await scenarioService.listScenarioParticipants(scenarioId)) ?? [];
+      await normalizeScenarioParticipantModifierRowsForEncounter({
+        encounter,
+        initializingNewEncounter: true,
+        scenarioParticipants,
+      });
 
       await scenarioService.recordScenarioEvent({
         actorUserId: user.id,
@@ -2272,7 +2329,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const loadedScenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipants = await normalizeScenarioParticipantModifierRowsForEncounter({
+        encounter,
+        scenarioParticipants: loadedScenarioParticipants,
+      });
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -2764,6 +2825,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 }
               : undefined,
             combatContext: baseSubmittedCombatContext,
+            encounterId: encounter.id,
             encounterParticipant,
             movementIntent: body.movementIntent,
             phaseContexts: submittedPhaseContexts,
@@ -2851,7 +2913,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!distanceEdge) {
           return reply.code(400).send({ error: "Current distance is unavailable for this opponent." });
         }
-        if (body.adjustDistance.requestedDistance === distanceEdge.distance) {
+        const existingAdjustDistanceProposal = roundState.adjustDistanceProposals.find(
+          (proposal) =>
+            proposal.roundNumber === roundState.roundNumber &&
+            participantAliasesInclude({
+              id: proposal.attackerParticipantId,
+              participant: encounterParticipant,
+            }),
+        );
+        const distanceAtDeclaration =
+          existingAdjustDistanceProposal?.currentDistance ?? distanceEdge.distance;
+        if (
+          existingAdjustDistanceProposal?.status !== "committed" &&
+          body.adjustDistance.requestedDistance === distanceAtDeclaration
+        ) {
           return reply.code(400).send({ error: "Requested distance must differ from the current distance." });
         }
         const phase2Source = body.phaseAttackSources?.phase2;
@@ -3724,6 +3799,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const modifiers = applyCommittedCombatFeintModifiers({
         attackerCombatContext: attacker.state.combat.combatContext,
         defenderCombatContext: defender.state.combat.combatContext,
+        encounterId: encounter.id,
         proposal: committedProposal,
       });
       const [savedAttacker, savedDefender] = await Promise.all([

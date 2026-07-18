@@ -660,6 +660,8 @@ export function applyCombatActionGeneratedModifiers(input: {
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
   initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
   adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
+  sourceEncounterId?: string;
+  sourceRoundNumber?: number;
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter(
@@ -693,6 +695,12 @@ export function applyCombatActionGeneratedModifiers(input: {
       }),
     )
     .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
+  const withSourceProvenance = (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry =>
+    scenarioCombatModifierEntrySchema.parse({
+      ...entry,
+      sourceEncounterId: input.sourceEncounterId ?? entry.sourceEncounterId,
+      sourceRoundNumber: input.sourceRoundNumber ?? entry.sourceRoundNumber,
+    });
 
   return {
     ...input.combatContext,
@@ -700,15 +708,18 @@ export function applyCombatActionGeneratedModifiers(input: {
       ...input.combatContext.modifierBuckets,
       // The stored key remains situationDb for backward compatibility, while the
       // product-facing bucket is now DB/Parry.
-      situationDb: [...situationDbWithoutGeneratedActionModifiers, ...generatedDbParryModifiers],
+      situationDb: [
+        ...situationDbWithoutGeneratedActionModifiers,
+        ...generatedDbParryModifiers.map(withSourceProvenance),
+      ],
       situationInitiative: [
         ...situationInitiativeWithoutGeneratedActionModifiers,
-        ...(input.initiativeModifiers ?? []),
+        ...(input.initiativeModifiers ?? []).map(withSourceProvenance),
       ],
       situationObSkill: [
         ...situationObSkillWithoutGeneratedActionModifiers,
-        ...generatedObSkillModifiers,
-        ...generatedDistanceObSkillModifiers,
+        ...generatedObSkillModifiers.map(withSourceProvenance),
+        ...generatedDistanceObSkillModifiers.map(withSourceProvenance),
       ],
     },
   };

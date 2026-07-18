@@ -167,6 +167,7 @@ export function removeCombatFeintGeneratedModifiers(
 
 function buildFeintModifier(input: {
   bucket: "db-parry" | "ob-skill";
+  encounterId?: string;
   participantId: string;
   phase: "phase1" | "phase2";
   proposalId: string;
@@ -181,7 +182,10 @@ function buildFeintModifier(input: {
     notes: "feint",
     scope: "until",
     sourceActionId: "feint_attack",
+    sourceEncounterId: input.encounterId,
     sourcePhase: input.phase,
+    sourceProposalId: input.proposalId,
+    ...(sourceRound ? { sourceRoundNumber: Number(sourceRound) } : {}),
     sourceRule: `feint:${input.proposalId}:${input.participantId}:${input.phase}:${input.bucket}`,
     sourceType: "feint",
     ...(input.phase === "phase2"
@@ -225,6 +229,7 @@ export function expireCombatFeintGeneratedModifiersBeforeRound(
 export function applyCommittedCombatFeintModifiers(input: {
   attackerCombatContext?: ScenarioParticipantCombatContext;
   defenderCombatContext?: ScenarioParticipantCombatContext;
+  encounterId?: string;
   proposal: CombatFeintProposal;
 }): {
   attackerCombatContext: ScenarioParticipantCombatContext;
@@ -255,6 +260,7 @@ export function applyCommittedCombatFeintModifiers(input: {
   );
   const attackerDb = buildFeintModifier({
     bucket: "db-parry",
+    encounterId: input.encounterId,
     participantId: input.proposal.attackerParticipantId,
     phase: "phase1",
     proposalId: input.proposal.id,
@@ -262,6 +268,7 @@ export function applyCommittedCombatFeintModifiers(input: {
   });
   const defenderOb = buildFeintModifier({
     bucket: "ob-skill",
+    encounterId: input.encounterId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
@@ -269,6 +276,7 @@ export function applyCommittedCombatFeintModifiers(input: {
   });
   const defenderDb = buildFeintModifier({
     bucket: "db-parry",
+    encounterId: input.encounterId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,

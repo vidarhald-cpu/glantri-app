@@ -15009,8 +15009,10 @@ export function recordCombatRoundDeclaration(input: {
       : declaration.actionId === "adjust_range_attack" && declaration.adjustDistance
         ? combatAdjustDistanceProposalSchema.parse({
             attackerParticipantId: input.participantId,
+            attackerRollRecorded: false,
             currentDistance: declaration.adjustDistance.currentDistance,
             defenderParticipantId: declaration.adjustDistance.targetParticipantId,
+            defenderRollRecorded: false,
             direction: getCombatAdjustDistanceDirection(declaration.adjustDistance),
             id: buildCombatAdjustDistanceProposalId({
               attackerParticipantId: input.participantId,
@@ -15341,7 +15343,17 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
   const attackerRoll = side === "attacker" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.attackerRoll;
   const defenderRoll = side === "defender" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.defenderRoll;
   const standard = attackerRoll && defenderRoll ? resolveCombatAdjustDistanceStandardProposal({ attackerTotal: attackerRoll.finalTotal, currentDistance: previousProposal.currentDistance, defenderTotal: defenderRoll.finalTotal, requestedDistance: previousProposal.requestedDistance }) : undefined;
-  const proposal = combatAdjustDistanceProposalSchema.parse({ ...previousProposal, attackerRoll, defenderRoll, difference: standard?.difference, standardOutcome: standard?.outcome, standardProposedDistance: standard?.proposedDistance, status: standard ? "awaiting_review" : "awaiting_rolls" });
+  const proposal = combatAdjustDistanceProposalSchema.parse({
+    ...previousProposal,
+    attackerRoll,
+    attackerRollRecorded: Boolean(attackerRoll),
+    defenderRoll,
+    defenderRollRecorded: Boolean(defenderRoll),
+    difference: standard?.difference,
+    standardOutcome: standard?.outcome,
+    standardProposedDistance: standard?.proposedDistance,
+    status: standard ? "awaiting_review" : "awaiting_rolls",
+  });
   const withRoll = recordAdjustDistanceCommand({
     command: input.command,
     draftType: "adjust_distance_roll",

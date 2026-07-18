@@ -81,8 +81,11 @@ describe("Adjust Distance-Attack lifecycle", () => {
     let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
     state = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt }, participantId: "scyrian", proposalId: "proposal", state, value: 2 });
     state = recordCombatRoundAdjustDistanceRoll({ command: { createdAt }, proposalId: "proposal", result: roll("scyrian", 20, "attacker-roll"), state });
+    expect(state.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({ attackerRollRecorded: true, defenderRollRecorded: false }),
+    );
     state = recordCombatRoundAdjustDistanceRoll({ command: { createdAt }, proposalId: "proposal", result: roll("gladiator", 18, "defender-roll"), state });
-    expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ difference: 2, standardOutcome: "successful", standardProposedDistance: 2, status: "awaiting_review" }));
+    expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ attackerRollRecorded: true, defenderRollRecorded: true, difference: 2, standardOutcome: "successful", standardProposedDistance: 2, status: "awaiting_review" }));
     state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 2, outcome: "successful", proposalId: "proposal", state });
     expect(state.distanceState.edges["gladiator::scyrian"]?.distance).toBe(2);
     expect(state.adjustDistanceProposals[0]?.status).toBe("committed");

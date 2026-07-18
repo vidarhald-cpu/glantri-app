@@ -42,12 +42,14 @@ export type CombatAdjustDistanceRollResult = z.infer<
 export const combatAdjustDistanceProposalSchema = z.object({
   attackerParticipantId: idSchema,
   attackerRoll: combatAdjustDistanceRollResultSchema.optional(),
+  attackerRollRecorded: z.boolean().default(false),
   committedAt: z.string().datetime().optional(),
   committedByUserId: idSchema.optional(),
   currentDistance: combatDistanceSchema,
   defenderParticipantId: idSchema,
   defenderResponse: combatAdjustDistanceDefenderResponseSchema.default("pending"),
   defenderRoll: combatAdjustDistanceRollResultSchema.optional(),
+  defenderRollRecorded: z.boolean().default(false),
   difference: z.number().int().optional(),
   direction: combatAdjustDistanceDirectionSchema,
   gmRollAdjustment: z

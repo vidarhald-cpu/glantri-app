@@ -1910,7 +1910,9 @@ export default function ScenarioPlayerCombatPageContent({
     const expectedParticipantId = proposal.status === "awaiting_defender_response"
       ? proposal.defenderParticipantId
       : proposal.status === "awaiting_rolls"
-        ? proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId
+        ? proposal.attackerRollRecorded
+          ? proposal.defenderParticipantId
+          : proposal.attackerParticipantId
         : undefined;
     return expectedParticipantId === selectedRoundParticipant.participantId;
   });
@@ -3537,7 +3539,7 @@ export default function ScenarioPlayerCombatPageContent({
     : selectedAdjustDistanceProposal
       ? selectedAdjustDistanceProposal.status === "awaiting_defender_response"
         ? "Confirm defender response"
-        : selectedAdjustDistanceProposal.attackerRoll
+        : selectedAdjustDistanceProposal.attackerRollRecorded
           ? "Roll defender Dodge"
           : "Roll attacker Dodge"
     : selectedFeintProposal

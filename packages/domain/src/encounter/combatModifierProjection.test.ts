@@ -13,6 +13,7 @@ import {
   getMergedCombatModifierTotals,
   getMergedCombatSkillObModifierTotal,
   mergePersistentCombatEffectModifiers,
+  normalizeCombatModifierRowsForEncounter,
   projectPersistentCombatEffectModifiers,
   refreshScenarioParticipantPersistentCombatModifiers,
 } from "./combatModifierProjection";
@@ -678,5 +679,76 @@ describe("persistent combat modifier refresh lifecycle", () => {
         phase: "phase1",
       }),
     ).toBe(6);
+  });
+
+  it("isolates temporary rows by encounter while retaining imported effects", () => {
+    const context: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [
+          { id: "imported", imported: true, scope: "until", sourceType: "character_effect", value: 2 },
+          { id: "manual-old", scope: "until", value: -1 },
+        ],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [
+          {
+            generated: true,
+            id: "generated:feint:proposal-a:defender:phase2:ob-skill",
+            scope: "until",
+            sourceEncounterId: "encounter-a",
+            sourceProposalId: "proposal-a",
+            sourceRoundNumber: 1,
+            sourceType: "feint",
+            value: -2,
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeCombatModifierRowsForEncounter({
+      combatContext: context,
+      encounterId: "encounter-b",
+      initializingNewEncounter: true,
+      roundNumber: 1,
+    });
+
+    expect(normalized.modifierBuckets.general).toEqual([expect.objectContaining({ id: "imported" })]);
+    expect(normalized.modifierBuckets.situationObSkill).toEqual([]);
+    expect(normalizeCombatModifierRowsForEncounter({
+      combatContext: normalized,
+      encounterId: "encounter-b",
+      initializingNewEncounter: true,
+      roundNumber: 1,
+    })).toEqual(normalized);
+  });
+
+  it("repairs legacy Feint rows only when no matching current proposal exists", () => {
+    const legacy: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [{
+          generated: true,
+          id: "generated:feint:proposal-a:defender:phase2:ob-skill",
+          scope: "until",
+          sourceType: "feint",
+          value: -2,
+        }],
+      },
+    };
+
+    expect(normalizeCombatModifierRowsForEncounter({
+      activeProposalIds: ["proposal-a"],
+      combatContext: legacy,
+      encounterId: "encounter-a",
+      roundNumber: 1,
+    }).modifierBuckets.situationObSkill).toHaveLength(1);
+    expect(normalizeCombatModifierRowsForEncounter({
+      activeProposalIds: [],
+      combatContext: legacy,
+      encounterId: "encounter-b",
+      roundNumber: 1,
+    }).modifierBuckets.situationObSkill).toEqual([]);
   });
 });

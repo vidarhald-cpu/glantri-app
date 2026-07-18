@@ -27,12 +27,66 @@ export interface MergedCombatModifierTotals {
   skillOb: number;
 }
 
+export interface NormalizeCombatModifierRowsForEncounterInput {
+  activeProposalIds?: readonly string[];
+  combatContext?: ScenarioParticipantCombatContext;
+  encounterId: string;
+  initializingNewEncounter?: boolean;
+  roundNumber: number;
+}
+
 const emptyModifierBuckets = (): ScenarioParticipantCombatContext["modifierBuckets"] => ({
   general: [],
   situationDb: [],
   situationInitiative: [],
   situationObSkill: [],
 });
+
+/**
+ * Keeps scenario-persistent imported effects while preventing temporary combat rows from
+ * crossing encounter boundaries. Legacy Feint rows are retained only while their proposal is
+ * present in the current encounter; this repairs encounters saved before encounter provenance
+ * was added without rewriting archived step snapshots.
+ */
+export function normalizeCombatModifierRowsForEncounter(
+  input: NormalizeCombatModifierRowsForEncounterInput,
+): ScenarioParticipantCombatContext {
+  const context = input.combatContext ?? { modifierBuckets: emptyModifierBuckets() };
+  const activeProposalIds = new Set(input.activeProposalIds ?? []);
+  const keep = (entry: ScenarioCombatModifierEntry): boolean => {
+    if (entry.imported || isPersistentCombatModifierEntry(entry)) return true;
+    if (entry.persistsAcrossEncounters) return true;
+    if (entry.sourceEncounterId) {
+      if (entry.sourceEncounterId !== input.encounterId) return false;
+      const sourceRound = entry.sourceRoundNumber ?? entry.expiresAtRound;
+      return sourceRound === undefined || sourceRound >= input.roundNumber;
+    }
+
+    const isLegacyFeint =
+      entry.sourceType === "feint" ||
+      entry.id.startsWith("generated:feint:") ||
+      entry.sourceRule?.startsWith("feint:") === true;
+    if (isLegacyFeint) {
+      return [...activeProposalIds].some((proposalId) =>
+        entry.id.startsWith(`generated:feint:${proposalId}:`),
+      );
+    }
+
+    // A new encounter starts without temporary generated or manual combat rows. Existing
+    // encounters keep unknown legacy rows because their ownership cannot be reconstructed.
+    return !input.initializingNewEncounter;
+  };
+
+  return {
+    ...context,
+    modifierBuckets: {
+      general: context.modifierBuckets.general.filter(keep),
+      situationDb: context.modifierBuckets.situationDb.filter(keep),
+      situationInitiative: context.modifierBuckets.situationInitiative.filter(keep),
+      situationObSkill: context.modifierBuckets.situationObSkill.filter(keep),
+    },
+  };
+}
 
 function isEffectActiveForRound(effect: CombatEffect, currentRound?: number): boolean {
   return (
