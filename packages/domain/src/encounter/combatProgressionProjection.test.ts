@@ -358,7 +358,7 @@ describe("CombatProgressionProjection", () => {
     ).toBe(true);
   });
 
-  it("maps attack, defense, damage, and commit stages without advancing state", () => {
+  it("maps the adapter-derived standard attack stages without advancing state", () => {
     const projection = buildCombatProgressionProjection(
       state({
         cursorParticipantId: "hero",
@@ -390,9 +390,12 @@ describe("CombatProgressionProjection", () => {
     ).toEqual([
       { executionStrategy: "single_task", kind: "attack", state: "active" },
       { executionStrategy: "single_task", kind: "defense", state: "pending" },
-      { executionStrategy: "single_task", kind: "damage", state: "pending" },
+      { executionStrategy: "single_task", kind: "hit_location", state: "pending" },
+      { executionStrategy: "gm_review", kind: "damage", state: "pending" },
+      { executionStrategy: "single_task", kind: "critical", state: "pending" },
       { executionStrategy: "gm_review", kind: "commit", state: "pending" },
     ]);
+    expect(process?.planId).toContain("single_attack:attack:");
     expect(process?.stages[0]?.tasks[0]).toMatchObject({
       expectedCommand: "roll_attack",
       kind: "attack",
@@ -852,6 +855,77 @@ describe("authorizeCombatProgressionTask", () => {
         projection,
       }),
     ).toMatchObject({ code: "stale_opportunity", ok: false });
+  });
+
+  it("authorizes the adapter-derived Double Attack decision for its owner or GM", () => {
+    const phase1Result = buildCombatRoundAttackRollResult({
+      actionId: "double_attack",
+      attackerParticipantId: "hero",
+      defenderDb: 20,
+      defenderParticipantId: "guard",
+      ob: 0,
+      phase: "phase1",
+      rollD20: 1,
+      rollTotal: 1,
+      rolledAt: "2026-07-19T10:00:00.000Z",
+      weaponName: "Sword",
+    });
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "M2",
+        currentStep: "review_phase_2_modifiers",
+        participantOverrides: [
+          {
+            attackResults: { phase1: phase1Result },
+            declaration: {
+              actionId: "double_attack",
+              phaseContexts: {
+                phase1: { targetParticipantId: "guard" },
+                phase2: { targetParticipantId: "guard" },
+              },
+              roundNumber: 2,
+              submittedBy: "player",
+            },
+          },
+        ],
+      }),
+    );
+    const opportunityId = projection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "double_attack_decision")?.identity.opportunityId;
+
+    expect(
+      authorizeCombatProgressionTask({
+        actor: player("hero"),
+        commandType: "decide_double_attack_phase2",
+        opportunityId,
+        participantId: "hero",
+        phase: "phase2",
+        projection,
+      }),
+    ).toMatchObject({ ok: true, task: { kind: "double_attack_decision" } });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: gm,
+        commandType: "decide_double_attack_phase2",
+        opportunityId,
+        participantId: "hero",
+        phase: "phase2",
+        projection,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: player("guard"),
+        commandType: "decide_double_attack_phase2",
+        opportunityId,
+        participantId: "hero",
+        phase: "phase2",
+        projection,
+      }),
+    ).toMatchObject({ code: "wrong_participant", ok: false });
   });
 
   it("rejects blocked source facts and only diagnostics relevant to the matching task", () => {

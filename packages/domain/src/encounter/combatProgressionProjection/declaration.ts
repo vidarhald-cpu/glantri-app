@@ -162,6 +162,7 @@ export function buildDeclarationProcesses(
 export function buildModifierReviewProcess(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
+  actionDecisionProcesses: readonly CombatProgressionProcess[] = [],
 ): CombatProgressionProcess {
   const step: CombatRoundStep =
     phase === "phase1" ? "review_action_modifiers" : "review_phase_2_modifiers";
@@ -192,6 +193,10 @@ export function buildModifierReviewProcess(
       trackerStep,
     };
   });
+  const pendingActionDecision = actionDecisionProcesses.some((process) =>
+    process.stages.some((stage) => stage.state !== "complete"),
+  );
+  const boundaryReady = tasks.length === 0 && !pendingActionDecision;
 
   return buildProcess(context, "modifier_review", [
     {
@@ -202,29 +207,79 @@ export function buildModifierReviewProcess(
     },
     {
       kind: "boundary",
-      state: tasks.length === 0 ? "active" : "pending",
+      state: boundaryReady ? "active" : "pending",
       strategy: "gm_review",
-      tasks:
-        tasks.length === 0
-          ? [
-              {
-                allowedActors: ["gm"],
-                expectedCommand: "advance_combat_boundary",
-                kind: "gm_advance_boundary",
-                owner: GM_IDENTITY,
-                trackerStep,
-                transition: {
-                  currentBoundary: context.boundaryKind,
-                  requiredCompletedProcessIds: [
-                    getCombatProgressionProcessId(context, "modifier_review"),
-                  ],
-                  targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
-                },
+      tasks: boundaryReady
+        ? [
+            {
+              allowedActors: ["gm"],
+              expectedCommand: "advance_combat_boundary",
+              kind: "gm_advance_boundary",
+              owner: GM_IDENTITY,
+              trackerStep,
+              transition: {
+                currentBoundary: context.boundaryKind,
+                requiredCompletedProcessIds: [
+                  getCombatProgressionProcessId(context, "modifier_review"),
+                  ...actionDecisionProcesses.map((process) => process.id),
+                ],
+                targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
               },
-            ]
-          : [],
+            },
+          ]
+        : [],
     },
   ]);
+}
+
+export function buildModifierReviewProcesses(
+  context: ProjectionBuildContext,
+  phase: CombatRoundPhase,
+): CombatProgressionProcess[] {
+  const actionDecisionProcesses =
+    phase === "phase2"
+      ? context.actionProcessPlans.flatMap<CombatProgressionProcess>((plan) => {
+          const gate = plan.decisionGate;
+          if (!gate?.required) return [];
+          const owner = context.identities.get(gate.ownerParticipantId);
+          return [
+            buildProcess(
+              context,
+              "attack_decision",
+              [
+                {
+                  kind: "decision",
+                  state: gate.state === "complete" ? "complete" : "active",
+                  strategy: "single_task",
+                  tasks:
+                    gate.state === "ready"
+                      ? [
+                          {
+                            expectedCommand: "decide_double_attack_phase2",
+                            identity: {
+                              opportunityId: gate.opportunityId,
+                              phase: "phase2",
+                            },
+                            key: gate.id,
+                            kind: "double_attack_decision",
+                            owner,
+                            trackerOwner: owner,
+                            trackerStep: "M2",
+                          },
+                        ]
+                      : [],
+                },
+              ],
+              { key: gate.ownerParticipantId, planId: plan.id },
+            ),
+          ];
+        })
+      : [];
+
+  return [
+    ...actionDecisionProcesses,
+    buildModifierReviewProcess(context, phase, actionDecisionProcesses),
+  ];
 }
 
 export function buildInitiativeProcess(

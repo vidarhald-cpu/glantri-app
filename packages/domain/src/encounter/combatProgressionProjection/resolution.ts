@@ -9,6 +9,7 @@ import {
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
+import type { CombatActionProcessStage, StandardAttackProcessPlan } from "../combatActionProcesses";
 import {
   GM_IDENTITY,
   buildProcess,
@@ -192,7 +193,7 @@ function buildAdjustDistanceProcess(
   );
 }
 
-function buildAttackProcess(
+function buildLegacyAttackProcess(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
 ): CombatProgressionProcess {
@@ -410,6 +411,130 @@ function buildAttackProcess(
   return buildProcess(context, "attack", stages);
 }
 
+function adapterStageTaskKind(stage: CombatActionProcessStage): TaskSpec["kind"] | undefined {
+  switch (stage.kind) {
+    case "attack":
+      return "attack";
+    case "defense":
+      return "parry";
+    case "hit_location":
+      return "hit_location";
+    case "damage":
+    case "commit":
+      return "damage_review";
+    case "critical":
+      return "critical";
+  }
+}
+
+function buildAdapterAttackProcess(
+  context: ProjectionBuildContext,
+  plan: StandardAttackProcessPlan,
+): CombatProgressionProcess {
+  const attacker = context.identities.get(plan.ownerParticipantId);
+  const defender = plan.targetParticipantId
+    ? context.identities.get(plan.targetParticipantId)
+    : undefined;
+  const stages: StageSpec[] = plan.stages.map((stage) => {
+    const task = stage.task;
+    const taskKind = adapterStageTaskKind(stage);
+    const owner =
+      task?.owner === "gm" ? GM_IDENTITY : task?.owner === "defender" ? defender : attacker;
+    const trackerOwner = stage.trackerFacet === "attack" ? attacker : defender;
+    const dependencies: TaskDependency[] = [];
+    for (const prerequisite of plan.prerequisites) {
+      if (prerequisite.satisfied) continue;
+      dependencies.push({
+        message:
+          prerequisite.kind === "target"
+            ? "The active attack target is missing or invalid."
+            : prerequisite.kind === "reactive_trigger"
+              ? "Reactive Attack is waiting for its phase-1 trigger."
+              : prerequisite.kind === "double_attack_continued"
+                ? "Double Attack is waiting for its phase-2 decision."
+                : "The active attack has no committed opportunity.",
+        owner: attacker,
+        type:
+          prerequisite.kind === "target"
+            ? "invalid_target"
+            : prerequisite.kind === "attack_opportunity"
+              ? "invalid_source"
+              : "participant_input_pending",
+      });
+    }
+    return {
+      kind: stage.kind,
+      state:
+        stage.state === "ready" ? "active" : stage.state === "pending" ? "pending" : "complete",
+      strategy:
+        task?.owner === "gm" || stage.kind === "damage" || stage.kind === "commit"
+          ? "gm_review"
+          : "single_task",
+      tasks:
+        stage.state === "ready" && task && taskKind
+          ? [
+              {
+                allowedActors: task.owner === "gm" ? (["gm"] as const) : undefined,
+                dependencies,
+                expectedCommand: task.expectedCommand,
+                identity: {
+                  attackResultId: task.attackResultId,
+                  opportunityId: task.opportunityId,
+                  phase: task.phase,
+                },
+                key: task.opportunityId,
+                kind: taskKind,
+                owner,
+                trackerOwner,
+                trackerStep: trackerStepForPhase(plan.phase, stage.trackerFacet),
+              },
+            ]
+          : [],
+    };
+  });
+  return buildProcess(context, "attack", stages, {
+    key: plan.opportunity.id,
+    planId: plan.id,
+  });
+}
+
+function findAdapterAttackProcess(
+  context: ProjectionBuildContext,
+  phase: CombatRoundPhase,
+): StandardAttackProcessPlan | undefined {
+  const phaseCursor = context.state.phaseResolutionCursor;
+  const participantId =
+    phaseCursor?.phase === phase
+      ? phaseCursor.participantId
+      : context.state.currentCursor?.participantId;
+  if (!participantId) return undefined;
+
+  if (!phaseCursor || phaseCursor.phase !== phase || phaseCursor.substep === "attack") {
+    return context.actionProcessPlans
+      .flatMap((plan) => plan.standardAttacks)
+      .find((attack) => attack.phase === phase && attack.ownerParticipantId === participantId);
+  }
+
+  const incoming = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+    participantId,
+    phase,
+    state: context.state,
+  });
+  const outgoing = context.state.participants.find(
+    (participant) => participant.participantId === participantId,
+  )?.attackResults[phase];
+  const attackResult = incoming ?? outgoing;
+  return context.actionProcessPlans
+    .flatMap((plan) => plan.standardAttacks)
+    .find(
+      (attack) =>
+        attack.phase === phase &&
+        (attackResult?.attackOpportunityId
+          ? attack.opportunity.id === attackResult.attackOpportunityId
+          : attack.ownerParticipantId === attackResult?.attackerParticipantId),
+    );
+}
+
 export function buildResolutionProcesses(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
@@ -477,5 +602,10 @@ export function buildResolutionProcesses(
   ) {
     return [buildAdjustDistanceProcess(context, phase, participantId)];
   }
-  return [buildAttackProcess(context, phase)];
+  const adapterAttack = findAdapterAttackProcess(context, phase);
+  return [
+    adapterAttack
+      ? buildAdapterAttackProcess(context, adapterAttack)
+      : buildLegacyAttackProcess(context, phase),
+  ];
 }

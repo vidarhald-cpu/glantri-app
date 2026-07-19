@@ -3610,6 +3610,13 @@ export default function ScenarioPlayerCombatPageContent({
     selectedPhaseAttackChoiceSelectorAvailable && phaseAttackChoiceSelection === "back_out";
   const selectedDoubleAttackDecisionAvailable = Boolean(
     !readOnlyInspection &&
+    selectedProgressionTasks.some(
+      (task) =>
+        task.kind === "double_attack_decision" &&
+        task.state === "executable" &&
+        task.owner?.kind === "combatant" &&
+        task.owner.participantId === selectedRoundParticipant?.participantId,
+    ) &&
     selectedRoundParticipant?.declaration?.actionId === "double_attack" &&
     currentCombatStep === "review_phase_2_modifiers" &&
     selectedRoundParticipant.attackResults.phase1 &&

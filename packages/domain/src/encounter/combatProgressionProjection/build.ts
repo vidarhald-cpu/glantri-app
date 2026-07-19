@@ -5,6 +5,7 @@ import {
   type CombatRoundCommandCurrentTask,
   type CombatRoundState,
 } from "../combatRoundManager";
+import { buildCombatActionProcessPlans } from "../combatActionProcesses";
 import {
   boundaryForCursorStep,
   boundaryForStep,
@@ -14,6 +15,7 @@ import {
 import {
   buildDeclarationProcesses,
   buildInitiativeProcess,
+  buildModifierReviewProcesses,
   buildModifierReviewProcess,
 } from "./declaration";
 import { buildResolutionProcesses } from "./resolution";
@@ -78,6 +80,7 @@ export function buildCombatProgressionProjection(
     if (participant.characterId) identities.set(participant.characterId, identity);
   }
   const context: ProjectionBuildContext = {
+    actionProcessPlans: buildCombatActionProcessPlans(normalized),
     blockers: new Map(),
     boundaryId,
     boundaryKind,
@@ -91,7 +94,7 @@ export function buildCombatProgressionProjection(
   else if (boundaryKind === "phase1_modifier_review")
     processes = [buildModifierReviewProcess(context, "phase1")];
   else if (boundaryKind === "phase2_modifier_review")
-    processes = [buildModifierReviewProcess(context, "phase2")];
+    processes = buildModifierReviewProcesses(context, "phase2");
   else if (boundaryKind === "phase1_initiative")
     processes = [buildInitiativeProcess(context, "phase1")];
   else if (boundaryKind === "phase2_initiative")

@@ -4064,6 +4064,9 @@ export default function CombatRoundManagerPanel({
       task.state === "executable" &&
       task.transition,
   );
+  const projectedDoubleAttackDecisionTask = projectedCurrentTasks.find(
+    (task) => task.kind === "double_attack_decision" && task.state === "executable",
+  );
   const projectedCurrentTask =
     projectedCurrentTasks.find(
       (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
@@ -4758,6 +4761,9 @@ export default function CombatRoundManagerPanel({
     inspectorPhaseAttackChoiceSelection === "back_out";
   const inspectorDoubleAttackDecisionAvailable = Boolean(
     !inspectorIsInspectionOnly &&
+    projectedDoubleAttackDecisionTask?.owner?.kind === "combatant" &&
+    projectedDoubleAttackDecisionTask.owner.participantId ===
+      inspector.participant?.participantId &&
     inspector.participant?.declaration?.actionId === "double_attack" &&
     inspector.step === "review_phase_2_modifiers" &&
     inspector.participant.attackResults.phase1 &&

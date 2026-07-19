@@ -23,6 +23,7 @@ export type CombatProgressionBoundaryKind = (typeof COMBAT_PROGRESSION_BOUNDARIE
 
 export type CombatProgressionProcessKind =
   | "adjust_distance"
+  | "attack_decision"
   | "attack"
   | "combat_experience"
   | "boundary_transition"
@@ -43,6 +44,7 @@ export type CombatProgressionStageKind =
   | "damage"
   | "defense"
   | "difficulty"
+  | "decision"
   | "feasibility"
   | "health"
   | "hit_location"
@@ -69,6 +71,7 @@ export type CombatProgressionTaskKind =
   | "damage_review"
   | "distance_commit"
   | "distance_roll"
+  | "double_attack_decision"
   | "gm_advance_boundary"
   | "health_review"
   | "hit_location"
@@ -166,6 +169,8 @@ export interface CombatProgressionProcess {
   readonly boundaryId: string;
   readonly id: string;
   readonly kind: CombatProgressionProcessKind;
+  /** Stable source action-process plan identifier, when this process is adapter-derived. */
+  readonly planId?: string;
   readonly stages: readonly CombatProgressionStage[];
 }
 

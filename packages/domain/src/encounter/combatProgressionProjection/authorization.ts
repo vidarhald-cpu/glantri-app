@@ -73,6 +73,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "declaration",
     stage: "input",
   },
+  decide_double_attack_phase2: {
+    boundary: "phase2_modifier_review",
+    kind: "double_attack_decision",
+    process: "attack_decision",
+    stage: "decision",
+  },
   complete_round: {
     boundary: "round_boundary",
     kind: "gm_advance_boundary",
