@@ -5570,6 +5570,58 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("rejects phase initiative commit while projected initiative rolls are pending", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentCursor: {
+            participantId: "encounter-participant-1",
+            roundNumber: 1,
+            step: "i1",
+          },
+          currentStep: "initiative_phase_1",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { phase: "phase1" },
+      url: "/encounters/encounter-1/combat-round/commit-phase-initiative-resolution",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Phase initiative must be complete before resolution can be committed.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("lets the GM commit submitted phase initiative back-out and softens the phase DB/Parry modifier", async () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
     const backedOut = backOutCombatRoundPhaseAttack({

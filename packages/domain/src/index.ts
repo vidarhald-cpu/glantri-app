@@ -12,6 +12,7 @@ export * from "./docs/glantriTerms";
 export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";
 export * from "./encounter/combatRoundManager";
+export * from "./encounter/combatProgressionProjection";
 export * from "./encounter/combatHistoryProjection";
 export * from "./encounter/combatStepEvents";
 export * from "./encounter/combatDistance";

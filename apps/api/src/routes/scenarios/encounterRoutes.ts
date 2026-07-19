@@ -17,9 +17,11 @@ import {
   buildPlayerSafeRoleplayStateForUser,
   applyCommittedCombatFeintModifiers,
   applyCombatActionGeneratedModifiers,
+  authorizeCombatProgressionTask,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundCommandEnvelope,
   buildCombatRoundAttackRollResult,
+  buildCombatProgressionProjection,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
@@ -71,6 +73,7 @@ import {
   getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getNextCombatRoundEndTask,
+  getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseResolutionStatus,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
@@ -2875,6 +2878,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // After DE this endpoint also serves the existing GM modifier-review/edit workflow. That
+      // legacy command remains governed by its current guards until modifier review is migrated.
+      const progressionProjection = buildCombatProgressionProjection(roundState);
+      if (progressionProjection.boundary.kind === "declaration") {
+        const authorization = authorizeCombatProgressionTask({
+          actor: gmAuthorizedOperation
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "declare_action",
+          participantId: encounterParticipant.id,
+          projection: progressionProjection,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({
+            error: "Declaration is closed for this round.",
+          });
+        }
+      }
+
       const submittedMovementIntent = normalizeCombatDeclarationMovementIntent({
         encounter,
         encounterParticipant,
@@ -4049,6 +4071,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       ) {
         return reply.code(409).send({
           error: "Initiative is not open for this step.",
+        });
+      }
+
+      const initiativeAuthorization = authorizeCombatProgressionTask({
+        actor: gmAuthorizedOperation
+          ? { kind: "gm" }
+          : { kind: "combatant", participantId: encounterParticipant.id },
+        commandType: phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
+        participantId: encounterParticipant.id,
+        phase,
+        projection: buildCombatProgressionProjection(roundState),
+      });
+      if (!initiativeAuthorization.ok) {
+        return reply.code(409).send({
+          error: "Initiative is closed for this step.",
         });
       }
 
@@ -5870,6 +5907,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const initiativeCommitAuthorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "commit_phase_initiative_resolution",
+          phase,
+          projection: buildCombatProgressionProjection(roundState),
+        });
+        if (!initiativeCommitAuthorization.ok) {
+          return reply.code(400).send({
+            error: "Phase initiative must be complete before resolution can be committed.",
+          });
+        }
         const participantInputs: Record<string, CombatRoundPhaseInitiativeCommitParticipantInput> =
           {};
 
@@ -6080,6 +6128,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
+      const projectedAttackOpportunity = getCombatRoundPhaseAttackCandidates({
+        phase: body.phase,
+        state: roundState,
+      }).find((candidate) => candidate.participantId === encounterParticipant.id);
+      const projectedAttacker = roundState.participants.find(
+        (participant) => participant.participantId === encounterParticipant.id,
+      );
+      const isMigratedStandardAttack =
+        projectedAttacker?.declaration?.actionId !== "feint_attack" &&
+        projectedAttacker?.declaration?.actionId !== "adjust_range_attack";
+      if (isMigratedStandardAttack) {
+        const attackAuthorization = authorizeCombatProgressionTask({
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_attack",
+          opportunityId: projectedAttackOpportunity?.id,
+          participantId: encounterParticipant.id,
+          phase: body.phase,
+          projection: buildCombatProgressionProjection(roundState),
+        });
+        if (!attackAuthorization.ok) {
+          return reply.code(409).send({
+            error: "Attack is not open for this participant.",
+          });
+        }
+      }
       const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
         participantId: encounterParticipant.id,
         phase: body.phase,
@@ -6451,6 +6527,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+      const parryAuthorization = authorizeCombatProgressionTask({
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+        attackResultId: body.attackResultId,
+        commandType: "roll_parry",
+        opportunityId: attackResult?.attackOpportunityId,
+        participantId: encounterParticipant.id,
+        phase: attackResult?.phase,
+        projection: buildCombatProgressionProjection(roundState),
+      });
+      if (!parryAuthorization.ok) {
+        return reply.code(409).send({
+          error: "Parry is not open for this participant.",
+        });
+      }
       const currentRollAction = getPlayerCombatCurrentRollAction({
         participantId: encounterParticipant.id,
         state: roundState,
@@ -6464,11 +6561,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Parry is not open for this participant.",
         });
       }
-
-      const attackResult = getCombatRoundAttackResultById({
-        attackResultId: body.attackResultId,
-        state: roundState,
-      });
 
       if (!attackResult) {
         return reply.code(404).send({
