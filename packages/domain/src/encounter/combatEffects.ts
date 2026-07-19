@@ -48,6 +48,13 @@ export const combatEffectStatusSchema = z.enum([
   "superseded",
 ]);
 
+export const combatEffectModifierBucketSchema = z.enum([
+  "general",
+  "initiative",
+  "skill_ob",
+  "db_parry",
+]);
+
 export const combatEffectBleedStateSchema = z.object({
   accumulatedTenths: z.number().int().nonnegative().default(0),
   initializedRound: z.number().int().positive().optional(),
@@ -72,6 +79,7 @@ export const combatEffectEventSchema = z.object({
 export const combatEffectSchema = z.object({
   checkRequired: z.boolean().optional(),
   checkSkillOrStat: z.string().optional(),
+  combatModifierBucket: combatEffectModifierBucketSchema.optional(),
   createdAt: timestampSchema,
   damage: z.number().default(0),
   description: z.string().optional(),
@@ -105,6 +113,7 @@ export type CombatEffectSourceType = z.infer<typeof combatEffectSourceTypeSchema
 export type CombatEffectType = z.infer<typeof combatEffectTypeSchema>;
 export type CombatEffectGroup = z.infer<typeof combatEffectGroupSchema>;
 export type CombatEffectStatus = z.infer<typeof combatEffectStatusSchema>;
+export type CombatEffectModifierBucket = z.infer<typeof combatEffectModifierBucketSchema>;
 export type CombatEffectBleedState = z.infer<typeof combatEffectBleedStateSchema>;
 export type CombatEffectEvent = z.infer<typeof combatEffectEventSchema>;
 export type CombatEffect = z.infer<typeof combatEffectSchema>;

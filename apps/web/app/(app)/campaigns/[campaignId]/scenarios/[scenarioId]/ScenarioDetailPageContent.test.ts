@@ -36,6 +36,18 @@ function readScenarioDetailSources(): string {
 }
 
 describe("ScenarioDetailPageContent GM scenario manager UI", () => {
+  it("owns explicit character equipment refresh in the participant assignment grid", () => {
+    const source = readScenarioDetailSources();
+
+    expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
+    expect(source).toContain("handleRefreshParticipantEquipment");
+    expect(source).toContain("Refresh equipment");
+    expect(source).toContain("Refreshing…");
+    expect(source).toContain("participant.sourceType === \"character\"");
+    expect(source).toContain("await refreshScenario()");
+    expect(source).toContain("scenario equipment was refreshed");
+  });
+
   it("uses compact roster sources instead of a separate concrete participant section", () => {
     const source = readScenarioDetailSources();
 
@@ -65,16 +77,26 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
   it("supports combat and roleplaying encounters with timeline/status controls", () => {
     const source = readScenarioDetailSources();
+    const encountersSource = readComponentSource("ScenarioEncountersSection.tsx");
 
     expect(source).toContain("<option value=\"combat\">Combat</option>");
     expect(source).toContain("<option value=\"roleplay\">Roleplaying</option>");
     expect(source).toContain("Timeline</th>");
     expect(source).toContain("Participants</th>");
     expect(source).toContain("handleUpdateEncounterStatus");
+    expect(source).toContain("updateEncounterStatusOnServer");
+    expect(source).toContain("updateEncounterParticipantsOnServer");
+    expect(source).not.toContain("updateEncounterOnServer");
     expect(source).toContain("\"active\"");
     expect(source).toContain("\"paused\"");
     expect(source).toContain("\"archived\"");
     expect(source).not.toContain("participants.map((participant) => (");
+    expect(encountersSource).toMatch(
+      /onUpdateEncounterStatus\(encounter, "paused"\)[\s\S]*?type="button"/,
+    );
+    expect(encountersSource).toMatch(
+      /onUpdateEncounterStatus\(encounter, "archived"\)[\s\S]*?type="button"/,
+    );
   });
 
   it("assigns encounter participants from concrete scenario participant rows", () => {

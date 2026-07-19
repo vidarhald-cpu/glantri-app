@@ -100,6 +100,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="player-combat"');
     expect(source).toContain("showParticipantSelector={false}");
+    expect(source).toContain("key={`${activeEncounter.id}:${selectedGmInspectableCandidate.id}`}");
     expect(source).toContain(
       'selectInspectableParticipant({ participantId, tab: "player-combat" })',
     );

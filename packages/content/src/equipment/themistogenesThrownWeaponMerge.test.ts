@@ -25,6 +25,10 @@ describe("themistogenes thrown weapon merge", () => {
       dmb: -1,
       crit: "DP",
       armorModifier: "A",
+      allowsRepeatedRoundAttack: false,
+      canonicalMeleeMode: null,
+      isPrimaryAttack: false,
+      order: 2,
     });
     expect(knife?.attackModes?.[2]?.notes).toContain("Workbook thrown mode from T. Knife");
   });
@@ -35,4 +39,3 @@ describe("themistogenes thrown weapon merge", () => {
     expect(mergedById["weapon-template-t-spear"]?.name).toBe("T. Spear");
   });
 });
-

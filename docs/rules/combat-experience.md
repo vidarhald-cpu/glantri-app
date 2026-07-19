@@ -47,12 +47,18 @@ added separately.
 
 ## Phase Attack Rolls
 
-After `i1` is complete and before A1 attacks, the sequencer checks every participant who both has an
-executable phase 1 attack and is attacked in phase 1 by an aware/seen opponent. After `i2`, the same
-check runs for phase 2 before A2 attacks. Required checks are resolved before the A1/A2
-phase-resolution cursor opens. The GM grid marks an unresolved A1/A2 phase CE check with `?`; the
-inspector and Player Combat panel describe the reason as "attacked while attacking" and list the
-incoming attacker initiative comparison.
+After all `i1` rolls are known, the sequencer reviews phase 1 initiative before A1 opens. It detects
+every participant who both has an executable phase 1 attack and is attacked in phase 1 by an
+aware/seen opponent. After all `i2` rolls are known, the same review happens for phase 2 before A2
+opens. This creates a broader back-out opportunity for threatened attackers, while the initiative
+comparison decides the narrower set of participants who must roll CE if they continue.
+
+Phase CE/back-out choices are resolved during the `i1`/`i2` initiative result review, not during
+the A1/A2 attack step. The combat round `currentCursor` remains on `i1` or `i2` while the phase
+initiative review is open. The GM grid still marks an unresolved A1/A2 CE requirement with `?`
+because the consequence applies to that pending attack; `?` means CE is required, not merely that
+back-out is available. The `?` marker clears when that participant submits a CE roll/confirmation or
+backs out. A1/A2 does not ask CE/back-out questions after the GM commits phase initiative resolution.
 
 Initiative is highest first. For each same-phase attack relationship, compare the attacking
 participant's phase initiative with the incoming attacker's phase initiative:
@@ -60,19 +66,40 @@ participant's phase initiative with the incoming attacker's phase initiative:
 - Initiative difference `<= 3`: both involved attacking participants roll CE when each is also
   attacked by and aware of the other participant.
 - Initiative difference `> 3`: only the lower-initiative participant rolls CE, provided that lower
-  participant is attacking in the phase and sees the incoming attacker.
+  participant is attacking in the phase and sees the incoming attacker. The higher-initiative
+  participant does not roll CE, but may still back out while the attack is pending.
 - A participant who is not attacking in that phase does not roll phase CE.
 - An incoming attack from an explicitly unseen attacker does not trigger the opportunity. Missing
   visibility data is treated as seen for backward-compatible encounters.
 
 Example: if two participants both make valid A1 attacks against each other, both see each other, and
 their i1 totals are `5` and `5`, both must resolve phase CE before either A1 attack roll opens. If
-one participant declared Parry - Attack, that participant has no A1 attack, so their declaration
+their i1 totals are `9` and `4`, only the lower-initiative participant must roll CE if they continue,
+but the higher-initiative participant may still back out before their attack is rolled. If
+one participant declared Reactive attack, that participant has no A1 attack, so their declaration
 cannot create a phase-1 attacked-while-attacking CE check.
 
 Phase CE uses the same displayed effective skill total, difficulty-shifted table lookup, no-roll
-rule, and command-backed undo as combat-start CE. Phase CE does not require a new GM "start rolls"
-button; reaching the A1/A2 pre-attack gate opens the phase CE window.
+rule, and command-backed undo as combat-start CE. During the `i1`/`i2` review:
+
+- A CE-required threatened attacker may roll/confirm Combat Experience or back out.
+- A threatened attacker who does not require CE may submit Continue attack or back out.
+- Submitting a CE roll, Continue, or Back out records a pending phase initiative choice but does not
+  open normal A1/A2 attack resolution.
+- The GM may commit phase initiative resolution any time after all initiative rolls for that phase
+  are complete.
+
+On commit, submitted choices are applied and then normal A1/A2 resolution opens. Submitted Back out
+cancels only that A1/A2 attack, records no CE roll result, keeps declaration-generated modifiers,
+and softens the matching generated phase attack DB/Parry penalty from `-4` to `-2` for that phase.
+Submitted CE results are applied to the pending attack. Any unresolved CE-required participant is
+auto-rolled as continuing the planned attack during GM commit. Any unresolved non-CE-required
+threatened participant defaults to Continue attack with no CE roll.
+
+Before commit, the GM can see all threatened attackers and submitted/unsubmitted statuses. A player
+can see and submit only their own phase initiative choice; other participants' CE rolls, back-outs,
+continue choices, skipped attacks, and modifiers are not exposed through player-facing panels or
+latest-event text before commit.
 
 Phase CE uses a phase-attack outcome table:
 
@@ -86,9 +113,13 @@ Phase CE uses a phase-attack outcome table:
 
 Phase OB penalties are stored in the participant combat context as phase-scoped Skill/OB modifiers
 for only that A1/A2 attack, not as round-duration General modifier rows. A `<= 5` result cancels the
-pending phase attack in the same CE command. Clear current step removes the CE command/result, any
-created phase OB modifier or cancellation, and restores the participant to the unresolved `?` CE
-gate.
+pending phase attack when phase initiative resolution is committed.
+
+Clear before commit removes the latest submitted phase initiative choice only and returns that
+participant to unresolved review state. Clear after commit first undoes the commit: it removes applied
+CE modifiers/cancellations, removes backed-out skipped-attack markers, restores softened generated
+DB/Parry rows from `-2` to `-4`, returns to phase initiative review, and preserves submitted choices
+for further Clear operations. Other declaration modifiers remain in place.
 
 ## Result Table
 

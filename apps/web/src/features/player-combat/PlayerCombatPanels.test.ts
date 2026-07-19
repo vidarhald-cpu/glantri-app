@@ -3,7 +3,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { buildPlayerCombatModifierRows } from "./PlayerCombatPanels";
+import {
+  buildGroupedFeintModifierDisplays,
+  buildPlayerCombatModifierRows,
+  formatCombatInitiativeFormula,
+  formatCombatModifierDetailsLabel,
+  formatCombatModifierDisplayLine,
+  formatCombatModifierScopeLabel,
+  isMeaningfulCombatModifierEntry,
+  sanitizeCombatModifierEntries,
+} from "./PlayerCombatPanels";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "PlayerCombatPanels.tsx");
 
@@ -12,23 +21,57 @@ function readSource(): string {
 }
 
 describe("PlayerCombatPanels", () => {
+  it("formats recorded initiative modifier facts without recalculating current context", () => {
+    expect(
+      formatCombatInitiativeFormula({
+        baseInitiative: 8,
+        modifierAdjustment: 2,
+        rolls: [4],
+        rollTotal: 4,
+        total: 14,
+      }),
+    ).toBe("Main: I 8 + Initiative 2 + roll 4 = 14");
+  });
+
   it("exposes reusable combat modifier rows with the shared player combat buckets", () => {
     const source = readSource();
 
     expect(source).toContain("buildPlayerCombatModifierRows");
-    expect(source).toContain("getPlayerEncounterCombatModifierTotals");
+    expect(source).toContain("buildLiveCombatModifierContributionProjection");
+    expect(source).not.toContain("mergePersistentCombatEffectModifiers");
     expect(source).toContain("filterCombatModifierEntriesForPhase");
     expect(source).toContain("phaseKey?: EncounterCombatPhaseKey");
     expect(source).toContain("General/Fatigue");
-    expect(source).toContain("liveModifiers?.generalFatigueRaw");
     expect(source).toContain("Initiative");
-    expect(source).toContain("liveModifiers?.initiativeRaw");
     expect(source).toContain("Skill/OB");
     expect(source).toContain("DB/Parry");
     expect(source.indexOf('label: "General/Fatigue"')).toBeLessThan(
       source.indexOf('label: "Initiative"'),
     );
     expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
+  });
+
+  it("renders structured distance preference movement controls instead of placeholder-only options", () => {
+    const source = readSource();
+
+    expect(source).toContain("Maintain distance to opponent");
+    expect(source).toContain("Set preferred distance");
+    expect(source).toContain("distancePreferenceOptions");
+    expect(source).toContain("No preference");
+    expect(source).toContain("Melee zones");
+    expect(source).toContain("Extended");
+    expect(source).toContain("onMovementIntentChange");
+    expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
+  });
+
+  it("keeps alternate task outcomes above one primary action", () => {
+    const source = readSource();
+
+    expect(source).toContain("preActionControls");
+    expect(source).toContain("Alternative outcomes for the same pending");
+    expect(source).toContain("task should use preActionControls");
+    expect(source).toContain("{preActionControls ? (");
+    expect(source).toContain("secondaryButtonLabel");
   });
 
   it("filters phase-scoped generated modifier rows while keeping manual rows broad", () => {
@@ -40,7 +83,7 @@ describe("PlayerCombatPanels", () => {
           {
             generated: true,
             id: "generated:attack-parry:phase1:db-parry",
-            notes: "attack parry",
+            notes: "single attack",
             scope: "until" as const,
             sourcePhase: "phase1" as const,
             value: -4,
@@ -48,7 +91,7 @@ describe("PlayerCombatPanels", () => {
           {
             generated: true,
             id: "generated:parry-attack:phase2:db-parry",
-            notes: "parry attack",
+            notes: "reactive attack",
             scope: "until" as const,
             sourcePhase: "phase2" as const,
             value: -4,
@@ -88,25 +131,43 @@ describe("PlayerCombatPanels", () => {
     const noPhaseRows = buildPlayerCombatModifierRows({
       combatContext,
     });
+    const declarationPreviewRows = buildPlayerCombatModifierRows({
+      combatContext,
+      includeAllPhases: true,
+    });
     const phase1DbRow = phase1Rows.find((row) => row.bucketKey === "situation_db");
     const phase2DbRow = phase2Rows.find((row) => row.bucketKey === "situation_db");
     const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
     const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
     const noPhaseDbRow = noPhaseRows.find((row) => row.bucketKey === "situation_db");
     const noPhaseObRow = noPhaseRows.find((row) => row.bucketKey === "situation_ob_skill");
+    const previewDbRow = declarationPreviewRows.find((row) => row.bucketKey === "situation_db");
+    const previewObRow = declarationPreviewRows.find(
+      (row) => row.bucketKey === "situation_ob_skill",
+    );
 
     expect(noPhaseDbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-db"]);
     expect(noPhaseDbRow?.total).toBe(-1);
     expect(noPhaseObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-ob"]);
     expect(noPhaseObRow?.total).toBe(2);
+    expect(previewDbRow?.entries.map((entry) => [entry.id, entry.value])).toEqual([
+      ["manual-db", -1],
+      ["generated:attack-parry:phase1:db-parry", -4],
+      ["generated:parry-attack:phase2:db-parry", -4],
+    ]);
+    expect(previewObRow?.entries.map((entry) => [entry.id, entry.value])).toEqual([
+      ["manual-ob", 2],
+      ["generated:double-attack:phase1:ob-skill", -1],
+      ["generated:double-attack:phase2:ob-skill", -1],
+    ]);
     expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
-      "attack parry",
+      "single attack",
     ]);
     expect(phase1DbRow?.total).toBe(-5);
     expect(phase2DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
-      "parry attack",
+      "reactive attack",
     ]);
     expect(phase2DbRow?.total).toBe(-5);
     expect(phase1ObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
@@ -119,6 +180,378 @@ describe("PlayerCombatPanels", () => {
       "double attack",
     ]);
     expect(phase2ObRow?.total).toBe(1);
+    const attackParryEntry = phase1DbRow?.entries.find((entry) => entry.notes === "single attack");
+    const doubleAttackEntry = phase1ObRow?.entries.find((entry) => entry.notes === "double attack");
+
+    if (!attackParryEntry || !doubleAttackEntry) {
+      throw new Error("Expected generated phase modifier entries to be present.");
+    }
+
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "DB/Parry",
+        entry: attackParryEntry,
+      }),
+    ).toBe("DB/Parry -4 · P1 · single attack");
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Skill/OB",
+        entry: doubleAttackEntry,
+      }),
+    ).toBe("Skill/OB -1 · P1 · double attack");
+  });
+
+  it("shows future Double Attack rows at M1 without applying them to phase-1 totals", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [
+          {
+            id: "double-db-p1",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -4,
+          },
+          {
+            id: "double-db-p2",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
+        ],
+        situationInitiative: [],
+        situationObSkill: [
+          {
+            id: "double-ob-p1",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -1,
+          },
+          {
+            id: "double-ob-p2",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -1,
+          },
+        ],
+      },
+    };
+    const m1Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase1",
+      visibleAtStep: "review_action_modifiers",
+    });
+    const m2Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase2",
+      visibleAtStep: "review_phase_2_modifiers",
+    });
+    const m1Ob = m1Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const m1Db = m1Rows.find((row) => row.bucketKey === "situation_db");
+    const m2Ob = m2Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const m2Db = m2Rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(m1Ob?.entries.map((entry) => entry.id)).toEqual(["double-ob-p1", "double-ob-p2"]);
+    expect(m1Db?.entries.map((entry) => entry.id)).toEqual(["double-db-p1", "double-db-p2"]);
+    expect(m1Ob?.total).toBe(-1);
+    expect(m1Db?.total).toBe(-4);
+    expect(m2Ob?.entries.map((entry) => entry.id)).toEqual(["double-ob-p2"]);
+    expect(m2Db?.entries.map((entry) => entry.id)).toEqual(["double-db-p2"]);
+    expect(m2Ob?.total).toBe(-1);
+    expect(m2Db?.total).toBe(-4);
+  });
+
+  it("shows generated distance modifiers in the phase Skill/OB bucket", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [
+          {
+            generated: true,
+            id: "generated:distance:phase1:ob-skill",
+            notes: "distance: Broad sword preferred 2 · actual 3 · nearest 2 · Skill/OB -2",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            sourceRule: "distance-ob-skill-phase1",
+            value: -2,
+          },
+        ],
+      },
+    };
+
+    const phase1Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase1",
+    });
+    const phase2Rows = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase2",
+    });
+    const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
+
+    expect(phase1ObRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          id: "generated:distance:phase1:ob-skill",
+          notes: expect.stringContaining("Broad sword preferred 2"),
+          value: -2,
+        }),
+      ],
+      label: "Skill/OB",
+      total: -2,
+    });
+    expect(phase2ObRow?.entries).toEqual([]);
+    expect(phase2ObRow?.total).toBe(0);
+    const distanceEntry = phase1ObRow?.entries[0];
+
+    if (!distanceEntry) {
+      throw new Error("Expected generated distance modifier entry to be present.");
+    }
+
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Skill/OB",
+        entry: distanceEntry,
+      }),
+    ).toBe("Skill/OB -2 · P1 · long distance");
+    expect(formatCombatModifierDetailsLabel(distanceEntry)).toBe("long distance");
+    expect(
+      formatCombatModifierDetailsLabel({
+        ...distanceEntry,
+        notes: "distance: Broad sword preferred 3 · actual 2 · nearest 3 · Skill/OB -2",
+      }),
+    ).toBe("short distance");
+  });
+
+  it("uses compact details for generated Reactive initiative rows", () => {
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "Initiative",
+        entry: {
+          durationRounds: 1,
+          generated: true,
+          id: "generated:parry-attack:phase2:initiative",
+          notes: "reactive attack: phase 2 initiative pending phase 1 incoming result",
+          scope: "until" as const,
+          sourceActionId: "parry_attack",
+          sourcePhase: "phase2" as const,
+          sourceRule: "parry-attack-phase2-initiative",
+          value: 6,
+        },
+      }),
+    ).toBe("Initiative +6 · P2 · reactive attack");
+  });
+
+  it("hides meaningless zero situational rows while keeping meaningful zero summaries possible", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [
+            {
+              id: "blank-zero",
+              notes: "",
+              scope: "until" as const,
+              value: 0,
+            },
+            {
+              id: "meaningful-zero",
+              notes: "explicit no modifier reminder",
+              scope: "until" as const,
+              value: 0,
+            },
+          ],
+          situationObSkill: [
+            {
+              id: "distance",
+              notes: "distance: Broad sword preferred 2 · actual 3",
+              scope: "until" as const,
+              sourcePhase: "phase1" as const,
+              value: -2,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase1",
+    });
+    const initiativeRow = rows.find((row) => row.bucketKey === "situation_initiative");
+    const obRow = rows.find((row) => row.bucketKey === "situation_ob_skill");
+
+    expect(isMeaningfulCombatModifierEntry({ id: "blank", scope: "until", value: 0 })).toBe(false);
+    expect(
+      sanitizeCombatModifierEntries([
+        { id: "blank", scope: "until", value: 0 },
+        { id: "actual", scope: "until", value: -2 },
+      ]).map((entry) => entry.id),
+    ).toEqual(["actual"]);
+    expect(initiativeRow?.entries.map((entry) => entry.id)).toEqual(["meaningful-zero"]);
+    expect(initiativeRow?.total).toBe(0);
+    expect(obRow?.entries.map((entry) => entry.id)).toEqual(["distance"]);
+    expect(obRow?.total).toBe(-2);
+  });
+
+  it("labels character-state and situational modifier sources without changing totals", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              generated: true,
+              id: "generated:attack-parry:phase1:db-parry",
+              notes: "single attack",
+              scope: "until" as const,
+              sourcePhase: "phase1" as const,
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: {
+        effects: [
+          {
+            combatModifierBucket: "general",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            damage: 0,
+            duration: "2 rounds",
+            effectGroup: "general",
+            generalDamage: 0,
+            id: "ce-effect",
+            modifierValue: -1,
+            sourceEventId: "ce-event",
+            status: "active",
+            targetParticipantId: "scenario-1",
+            type: "general_modifier",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-01-01T00:00:00.000Z",
+            description: "Combat Experience: Active",
+            id: "ce-event",
+            sourceLabel: "Combat Experience",
+            sourceType: "skill_roll",
+            targetParticipantId: "scenario-1",
+          },
+        ],
+      },
+      phaseKey: "phase1",
+    });
+    const generalRow = rows.find((row) => row.bucketKey === "general");
+    const dbRow = rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(generalRow?.entries).toEqual([
+      expect.objectContaining({
+        imported: true,
+        notes: "Combat Experience",
+        readOnly: true,
+        sourceDuration: "2 rounds",
+        sourceType: "character_effect",
+        value: -1,
+      }),
+    ]);
+    expect(dbRow?.entries[0]).toMatchObject({
+      generated: true,
+      notes: "single attack",
+      value: -4,
+    });
+    const dbEntry = dbRow?.entries[0];
+
+    if (!dbEntry) {
+      throw new Error("Expected generated DB/Parry entry to be present.");
+    }
+
+    expect(formatCombatModifierScopeLabel(dbEntry)).toBe("P1");
+  });
+
+  it("groups linked equal Feint OB and DB rows without merging their calculation buckets", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              id: "generated:feint:proposal:target:phase2:db-parry",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [
+            {
+              id: "generated:feint:proposal:target:phase2:ob-skill",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase2",
+    });
+
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([
+      {
+        entryIds: [
+          "generated:feint:proposal:target:phase2:ob-skill",
+          "generated:feint:proposal:target:phase2:db-parry",
+        ],
+        resultGroupId: "proposal",
+        value: -4,
+      },
+    ]);
+    expect(rows.find((row) => row.bucketKey === "situation_ob_skill")?.total).toBe(-4);
+    expect(rows.find((row) => row.bucketKey === "situation_db")?.total).toBe(-4);
+  });
+
+  it("keeps adjusted Feint OB and DB rows visually separate when their values differ", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              id: "generated:feint:proposal:target:phase2:db-parry",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -2,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [
+            {
+              id: "generated:feint:proposal:target:phase2:ob-skill",
+              resultGroupId: "proposal",
+              resultGroupKind: "ob_db" as const,
+              scope: "until" as const,
+              sourcePhase: "phase2" as const,
+              sourceType: "feint" as const,
+              value: -4,
+            },
+          ],
+        },
+      },
+      phaseKey: "phase2",
+    });
+
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
@@ -126,6 +559,9 @@ describe("PlayerCombatPanels", () => {
 
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("readOnly");
+    expect(source).toContain("sourceLabel");
+    expect(source).toContain("PanelTitleWithSource");
+    expect(source).toContain("panelSourceMarkerStyle");
     expect(source).toContain("onAddEntry");
     expect(source).toContain("onRemoveEntry");
     expect(source).toContain("onUpdateEntry");
@@ -135,39 +571,60 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierMiniTableStyle");
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
     expect(source).toContain("compactModifierMiniTableEntryRowStyle");
+    expect(source).toContain("compactModifierEntryTopRowStyle");
+    expect(source).toContain("compactModifierTopRowColumns");
+    expect(source).toContain("compactModifierDisplayTopRowStyle");
+    expect(source).toContain("compactModifierDetailsRowStyle");
+    expect(source).toContain("compactModifierEditableDetailsRowStyle");
     expect(source).not.toContain("compactModifierMiniTableDraftRowStyle");
-    expect(source).toContain('gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem"');
-    expect(source).toContain('["Mod", "Dur", "Details"].map');
-    expect(source).not.toContain('["Mod", "Dur", "Details", "Remove"].map');
+    expect(source).toContain(
+      'const compactModifierTopRowColumns = "minmax(7rem, 1fr) 3.75rem 4.25rem"',
+    );
+    expect(source).toContain('gridTemplateColumns: "4.25rem minmax(0, 1fr)"');
+    expect(source).toContain('gridTemplateColumns: "4.25rem minmax(0, 1fr) auto"');
+    expect(source).toContain('["Source/scope", "Mod", "Dur"].map');
+    expect(source).not.toContain('["Source", "Mod", "Dur", "Details", "Remove"].map');
+    expect(source).toContain("characterStateEntries");
+    expect(source).toContain("Character/state");
+    expect(source).toContain("Situational");
+    expect(source).toContain("Situational · {scopeLabel}");
+    expect(source).toContain("ModifierDisplayEntryRow");
+    expect(source).toContain("ModifierEditableEntryRow");
     expect(source).toContain("createModifierEntryDraft");
+    expect(source).toContain("isMeaningfulCombatModifierEntry");
+    expect(source).toContain("sanitizeCombatModifierEntries");
+    expect(source).toContain("sanitizePlayerCombatModifierContext");
     expect(source).not.toContain("createModifierEntryFromDraft");
     expect(source).not.toContain("updateEntryDraft");
     expect(source).not.toContain("addEntryFromDraft");
-    expect(source).toContain("onAddEntry(row.bucketKey, createModifierEntryDraft())");
+    expect(source).toContain("setDraftEntry(row.bucketKey, createModifierEntryDraft())");
+    expect(source).toContain("onAddEntry(row.bucketKey, nextEntry)");
     expect(source).toContain("compactModifierNumberInputStyle");
     expect(source).toContain("compactModifierDetailsInputStyle");
     expect(source).toContain("compactModifierRemoveButtonStyle");
-    expect(source).toContain('width: "5.5ch"');
+    expect(source).toContain('width: "100%"');
     expect(source).toContain('boxSizing: "border-box"');
-    expect(source).toContain("row.entries.length > 0");
-    expect(source).toContain("aria-label={`${row.label} modifier value`}");
+    expect(source).toContain("hasVisibleRows");
+    expect(source).toContain("aria-label={`${bucketLabel} modifier value`}");
     expect(source).not.toContain("aria-label={`${row.label} new modifier value`}");
-    expect(source).toContain("aria-label={`${row.label} modifier details`}");
+    expect(source).toContain("aria-label={`${bucketLabel} modifier details`}");
     expect(source).not.toContain("aria-label={`${row.label} new modifier details`}");
     expect(source).toContain('"durationRounds"');
     expect(source).toContain('value={entry.durationRounds ?? ""}');
     expect(source).not.toContain('value={getEntryDraft(row.bucketKey).durationRounds ?? ""}');
     expect(source).not.toContain("value={getEntryDraft(row.bucketKey).notes}");
     expect(source).toContain(
-      "onClick={() => onAddEntry(row.bucketKey, createModifierEntryDraft())}",
+      "onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}",
     );
-    expect(source).toContain("onClick={() => onRemoveEntry(row.bucketKey, entry.id)}");
+    expect(source).toContain("onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}");
     expect(source).toContain('aria-label="Remove modifier"');
     expect(source).toContain('title="Remove modifier"');
     expect(source).toMatch(/>\s*-\s*<\/button>/);
     expect(source).not.toContain(">Remove</button>");
-    expect(source).toContain('<span aria-hidden="true" />');
-    expect(source).toContain("formatModifierDuration");
+    expect(source).toContain("formatCombatModifierScopeLabel");
+    expect(source).toContain("formatCombatModifierDisplayLine");
+    expect(source).toContain("<span>{entry.sourceLabel}</span>");
+    expect(source).toContain("<span>{entry.scopeLabel}</span>");
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');
   });
@@ -189,6 +646,16 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source).toContain("PlayerCombatAttackModeSelector");
+    expect(source).toContain("distanceLabel?: string");
+    expect(source).toContain("distanceLabel");
+    expect(source).toContain("compactPhaseTargetRowStyle");
+    expect(source).toContain("compactPhaseTargetMetaStyle");
+    expect(source).toContain('gridTemplateColumns: "6.5rem minmax(7rem, 1fr) max-content"');
+    expect(source).toContain('className="combatPhaseTargetRow"');
+    expect(source).toContain('className="combatPhaseTargetMeta"');
+    expect(source).toContain('justifySelf: "end"');
+    expect(source).toContain('justifyItems: "end"');
     expect(source.indexOf("export function PlayerCombatAttackTargetSelector")).toBeLessThan(
       source.indexOf("export function PlayerCombatAttackLocationSelector"),
     );
@@ -198,14 +665,21 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Target");
     expect(source).toContain("targetOptions.map");
     expect(source).toContain("selectedTargetUnavailable");
+    expect(source).toContain("if (readOnly)");
+    expect(source).toContain('selectedTarget?.displayName ?? "Target unavailable"');
     expect(source).toContain('value={combatContext.targetParticipantId ?? ""}');
     expect(source).toContain("targetParticipantId: event.target.value || undefined");
+    expect(source).toContain("{distanceLabel}");
+    expect(source).toContain('whiteSpace: "nowrap"');
     expect(source).toContain("Attack location");
+    expect(source).toContain("Attack mode");
     expect(source).toContain("No target");
     expect(source).toContain("HIT_LOCATIONS.map");
     expect(source).toContain("getHitLocationFullLabel(location)");
     expect(source).toContain('value={combatContext.targetLocation ?? "none"}');
-    expect(source).toContain('targetLocation: targetLocation === "none" ? undefined : targetLocation');
+    expect(source).toContain(
+      'targetLocation: targetLocation === "none" ? undefined : targetLocation',
+    );
     expect(source).toContain("compactPhaseContextSelectorColumns");
     expect(source).toContain('const compactPhaseContextSelectorColumns = "6.5rem 7rem auto"');
     expect(source).toContain("style={compactPhaseContextSelectStyle}");
@@ -226,6 +700,8 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("PlayerCombatActionSelectorPanel");
+    expect(source).toContain("sourceLabel");
+    expect(source).toContain("PanelTitleWithSource");
     expect(source).toContain("Action selector");
     expect(source).toContain("Secondary action");
     expect(source).toContain("Movement");
@@ -246,6 +722,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("Choose opponent");
     expect(source).not.toContain("selectedOpponentId");
     expect(source).toContain("PlayerCombatActionButtonPanel");
+    expect(source).toContain("Current action");
+    expect(source).not.toContain("Action button");
     expect(source).toContain("validationMessage");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
@@ -269,7 +747,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain(
-      "Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
+      "Main: I ${baseInitiative} + Initiative ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
     );
     expect(source).toContain("rankLabel");
     expect(source).toContain("resultLabel");

@@ -1,16 +1,20 @@
 import type {
   CombatEffect,
   CombatEffectsState,
+  CombatRoundStep,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
+} from "@glantri/domain";
+import {
+  getMergedCombatDbParryModifierTotal,
+  getMergedCombatInitiativeModifierTotal,
+  getMergedCombatSkillObModifierTotal,
 } from "@glantri/domain";
 import {
   calculateWorkbookPercentageAdjustmentTrace,
   lookupWorkbookPercentageAdjustment,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
-
-import { getPlayerEncounterCombatModifierTotals } from "./playerEncounter";
 
 export interface EncounterCombatEffectModifierSums {
   db: number;
@@ -134,13 +138,15 @@ export function buildEncounterLiveCombatModifierSummary(input: {
         },
       }
     : undefined;
-  const contextTotals = getPlayerEncounterCombatModifierTotals(phaseAwareCombatContext);
-
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw: effectSums.db + contextTotals.situationDbTotal,
+    dbRaw: getMergedCombatDbParryModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
     generalFatigueRaw: effectSums.generalFatigue,
-    initiativeRaw: contextTotals.situationInitiativeTotal,
+    initiativeRaw: getMergedCombatInitiativeModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
     modifierNoteLabels: [
       "Gen/Fatigue",
       "Initiative",
@@ -149,7 +155,9 @@ export function buildEncounterLiveCombatModifierSummary(input: {
       "Enc",
       "Equipment",
     ],
-    obSkillRaw: effectSums.obSkill + contextTotals.situationObSkillTotal,
+    obSkillRaw: getMergedCombatSkillObModifierTotal({
+      combatContext: phaseAwareCombatContext,
+    }),
   };
 }
 
@@ -160,6 +168,44 @@ export function filterCombatModifierEntriesForPhase(
   return entries.filter(
     (entry) => !entry.sourcePhase || (phaseKey != null && entry.sourcePhase === phaseKey),
   );
+}
+
+/** Rows applied to a calculation. Future-phase rows are deliberately excluded. */
+export const getCombatModifierRowsApplicableToPhase = filterCombatModifierEntriesForPhase;
+
+/**
+ * Rows visible for review at a combat step. M1 and the phase-1 resolution chain show the
+ * participant's complete remaining round commitment; M2 and phase 2 hide expired P1 rows.
+ * This display projection must not be used to calculate phase totals.
+ */
+export function getCombatModifierRowsVisibleAtStep(
+  entries: ScenarioCombatModifierEntry[],
+  step?: CombatRoundStep,
+): ScenarioCombatModifierEntry[] {
+  if (!step) return entries;
+
+  const phase1AndFutureSteps: CombatRoundStep[] = [
+    "select_actions",
+    "review_action_modifiers",
+    "initiative_phase_1",
+    "phase_1_actions",
+    "review_phase_2_actions",
+    "phase_1_damage",
+  ];
+  if (phase1AndFutureSteps.includes(step)) return entries;
+
+  const phase2Steps: CombatRoundStep[] = [
+    "review_phase_2_modifiers",
+    "initiative_phase_2",
+    "phase_2_actions",
+    "review_phase_2_damage",
+    "phase_2_damage",
+  ];
+  if (phase2Steps.includes(step)) {
+    return entries.filter((entry) => entry.sourcePhase !== "phase1");
+  }
+
+  return entries.filter((entry) => !entry.sourcePhase);
 }
 
 export function applyLiveRawModifierToCombatValue(input: {
@@ -184,10 +230,13 @@ export function applyLiveRawModifierToCombatValue(input: {
 
 export function buildEncounterInitiativeModifierCalculation(input: {
   baseInitiative: number;
-  liveModifiers?: EncounterLiveCombatModifierSummary;
+  combatContext?: ScenarioParticipantCombatContext;
+  phaseKey?: EncounterCombatPhaseKey;
 }): EncounterInitiativeModifierCalculation {
-  const rawModifierTotal =
-    (input.liveModifiers?.generalFatigueRaw ?? 0) + (input.liveModifiers?.initiativeRaw ?? 0);
+  const rawModifierTotal = getMergedCombatInitiativeModifierTotal({
+    combatContext: input.combatContext,
+    phase: input.phaseKey,
+  });
   const modifiedInitiative = applyLiveRawModifierToCombatValue({
     baseValue: input.baseInitiative,
     rawModifier: rawModifierTotal,
@@ -207,10 +256,6 @@ export function buildEncounterDbParryModifierCalculation(input: {
   liveModifiers?: EncounterLiveCombatModifierSummary;
 }): EncounterDbParryModifierCalculation | null {
   const rawModifiers: WorkbookRawModifier[] = [
-    {
-      label: "General/Fatigue",
-      value: input.liveModifiers?.generalFatigueRaw ?? 0,
-    },
     {
       label: "DB/Parry",
       value: input.liveModifiers?.dbRaw ?? 0,

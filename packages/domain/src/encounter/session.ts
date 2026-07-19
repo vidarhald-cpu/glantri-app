@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 import type { ScenarioParticipant } from "../campaign/scenario";
-import { combatRoundStateSchema } from "./combatRoundManager";
+import { combatRoundStateSchema, type CombatRoundState } from "./combatRoundManager";
 
 const idSchema = z.string().min(1);
+const encounterCombatRoundStateSchema = combatRoundStateSchema as z.ZodType<CombatRoundState>;
 
 export const encounterKindSchema = z.enum(["combat", "roleplay"]);
 export const encounterParticipantMembershipModeSchema = z.enum([
@@ -303,7 +304,7 @@ export const encounterParticipantSchema = z.object({
 export const encounterSessionSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
   campaignId: idSchema.optional(),
-  combatRoundState: combatRoundStateSchema.optional(),
+  combatRoundState: encounterCombatRoundStateSchema.optional(),
   createdAt: z.string().min(1),
   currentRound: z.number().int().positive().default(1),
   currentTurnIndex: z.number().int().nonnegative().default(0),

@@ -11,14 +11,14 @@ export {
   loginLocalUser,
   logoutLocalUser,
   registerLocalUser,
-  updateAuthUserRole
+  updateAuthUserRole,
 } from "./authClient";
 export {
   activateChargenRuleSet,
   createChargenRuleSet,
   loadActiveChargenRuleSet,
   loadChargenRuleSets,
-  type ChargenRuleSetStoreResponse
+  type ChargenRuleSetStoreResponse,
 } from "./chargenClient";
 export {
   loadMyServerCharacters,
@@ -26,7 +26,7 @@ export {
   loadServerCharacters,
   saveCharacterToServer,
   updateServerCharacter,
-  type ServerCharacterRecord
+  type ServerCharacterRecord,
 } from "./characterClient";
 export {
   addCampaignRosterEntryOnServer,
@@ -47,7 +47,7 @@ export {
   loadTemplates,
   removeCampaignRosterEntryOnServer,
   updateTemplateOnServer,
-  type AccessibleCampaignRecord
+  type AccessibleCampaignRecord,
 } from "./campaignClient";
 export {
   addScenarioParticipantFromCharacterOnServer,
@@ -66,23 +66,48 @@ export {
   updateScenarioParticipantStateOnServer,
   type JoinableScenarioRecord,
   type ScenarioParticipantFromCharacterInput,
-  type ScenarioParticipantFromEntityInput
+  type ScenarioParticipantFromEntityInput,
 } from "./scenarioClient";
 export {
+  advanceCombatRoundCurrentStepOnServer,
+  backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
+  commitPhaseInitiativeResolutionOnServer,
+  commitCurrentCombatPhaseDamageOnServer,
+  continuePhaseAttackOnServer,
+  decideDoubleAttackPhase2OnServer,
+  reviewCombatFeintFeasibilityOnServer,
+  rollCombatFeintOnServer,
+  commitCombatFeintOnServer,
+  respondCombatAdjustDistanceOnServer,
+  reviewCombatAdjustDistanceOnServer,
+  rollCombatAdjustDistanceOnServer,
   createEncounterOnServer,
   loadEncounterById,
+  loadCombatHistory,
   loadScenarioEncounters,
+  prepareCombatRoundEndReviewOnServer,
+  advanceCurrentCombatPhaseResolutionOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
   rollCombatExperienceOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollCombatParryCommandOnServer,
+  saveCurrentCombatDamageReviewOnServer,
+  completeCurrentCombatPhaseResolutionOnServer,
+  rollRoundEndDistanceControlOnServer,
+  rollCurrentRoundEndDistanceControlOnServer,
+  rollRoundEndHealthCheckOnServer,
   setCombatExperienceDifficultyOnServer,
+  setPairDistanceOnServer,
+  skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
-  updateEncounterOnServer
+  updateEncounterParticipantsOnServer,
+  updateEncounterOnServer,
+  updateEncounterStatusOnServer,
 } from "./encounterClient";
 export {
   addCharacterEquipmentItemOnServer,
@@ -99,10 +124,10 @@ export {
   setCharacterWornArmorOnServer,
   updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer,
-  type EquipmentStateResponse
+  type EquipmentStateResponse,
 } from "./equipmentClient";
 export {
   isAdminContentConflictPayload,
   loadAdminCanonicalContentFromServer,
-  saveAdminCanonicalContentToServer
+  saveAdminCanonicalContentToServer,
 } from "./adminContentClient";

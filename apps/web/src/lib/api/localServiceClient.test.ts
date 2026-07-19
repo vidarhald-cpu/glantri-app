@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CombatRoundStepSnapshot, EncounterParticipant } from "@glantri/domain";
+
 type LocalServiceClientModule = typeof import("./localServiceClient");
 type FetchMock = ReturnType<
   typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
@@ -69,6 +71,41 @@ describe("localServiceClient wire contract", () => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.resetModules();
+  });
+
+  it("loads the projected combat-history payload", async () => {
+    const history = {
+      activeRound: { events: [], roundNumber: 2, snapshots: [] },
+      archivedRounds: [],
+      rows: [],
+    };
+    const fetchMock = stubFetch({ history });
+    const client = await loadClient();
+
+    await expect(client.loadCombatHistory("encounter-1")).resolves.toEqual(history);
+    expectFetchCall(fetchMock, {
+      method: "GET",
+      url: "https://api.example.test/encounters/encounter-1/combat-history",
+    });
+  });
+
+  it("requests a selected participant perspective for GM Player Combat history", async () => {
+    const history = {
+      activeRound: { events: [], roundNumber: 1, snapshots: [] },
+      archivedRounds: [],
+      rows: [],
+    };
+    const fetchMock = stubFetch({ history });
+    const client = await loadClient();
+
+    await client.loadCombatHistory("encounter-1", {
+      perspectiveParticipantId: "participant/one",
+    });
+
+    expectFetchCall(fetchMock, {
+      method: "GET",
+      url: "https://api.example.test/encounters/encounter-1/combat-history?perspectiveParticipantId=participant%2Fone",
+    });
   });
 
   it("uses the configured API base URL for auth session lookup", async () => {
@@ -289,6 +326,77 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("updates encounter status through the narrow status endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "paused",
+    };
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.updateEncounterStatusOnServer({
+        encounterId: "encounter-1",
+        status: "paused",
+      }),
+    ).resolves.toEqual(encounter);
+
+    expectFetchCall(fetchMock, {
+      body: {
+        status: "paused",
+      },
+      method: "PATCH",
+      url: "https://api.example.test/encounters/encounter-1/status",
+    });
+  });
+
+  it("updates encounter participants through the narrow participants endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      participantMembershipMode: "explicit",
+      scenarioId: "scenario-1",
+    };
+    const participants: EncounterParticipant[] = [
+      {
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any",
+        },
+        facing: "north",
+        id: "scenario-participant-1",
+        initiative: 0,
+        label: "The Gladiator",
+        order: 0,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: { x: 0, y: 0, zone: "center" },
+        scenarioParticipantId: "participant-1",
+      },
+    ];
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.updateEncounterParticipantsOnServer({
+        encounterId: "encounter-1",
+        participantMembershipMode: "explicit",
+        participants,
+      }),
+    ).resolves.toEqual(encounter);
+
+    expectFetchCall(fetchMock, {
+      body: {
+        participantMembershipMode: "explicit",
+        participants,
+      },
+      method: "PATCH",
+      url: "https://api.example.test/encounters/encounter-1/participants",
+    });
+  });
+
   it("submits combat declarations through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",
@@ -302,7 +410,7 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.submitCombatDeclarationOnServer({
-        actionId: "attack_parry",
+        actionId: "double_attack",
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -341,13 +449,34 @@ describe("localServiceClient wire contract", () => {
             },
           },
         },
+        phaseAttackSources: {
+          phase1: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            scenarioItemId: "scenario-fencing-sword",
+            slot: "primary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-fencing-sword",
+          },
+          phase2: {
+            attackModeId: "mode-2",
+            opportunitySlot: "attack_2",
+            scenarioItemId: "scenario-main-gauche",
+            slot: "secondary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-main-gauche",
+          },
+        },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
+        },
         scenarioParticipantId: "participant-1",
       }),
     ).resolves.toEqual({ encounter, participant });
 
     expectFetchCall(fetchMock, {
       body: {
-        actionId: "attack_parry",
+        actionId: "double_attack",
         additionalActionNotes: undefined,
         combatContext: {
           modifierBuckets: {
@@ -385,6 +514,27 @@ describe("localServiceClient wire contract", () => {
               situationObSkill: [],
             },
           },
+        },
+        phaseAttackSources: {
+          phase1: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            scenarioItemId: "scenario-fencing-sword",
+            slot: "primary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-fencing-sword",
+          },
+          phase2: {
+            attackModeId: "mode-2",
+            opportunitySlot: "attack_2",
+            scenarioItemId: "scenario-main-gauche",
+            slot: "secondary",
+            sourceKind: "weapon",
+            templateId: "weapon-template-main-gauche",
+          },
+        },
+        phaseWeaponNames: {
+          phase1: "Broad sword",
         },
         scenarioParticipantId: "participant-1",
         secondaryActionId: undefined,
@@ -433,12 +583,8 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatParryOnServer({
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         encounterId: "encounter-1",
-        modifierBreakdown: [
-          { label: "General/Fatigue", value: 0 },
-          { label: "DB/Parry", value: -4 },
-          { label: "attack result", value: -2 },
-        ],
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
         scenarioParticipantId: "participant-2",
@@ -450,12 +596,8 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
         mainHandParryScore: undefined,
-        modifierBreakdown: [
-          { label: "General/Fatigue", value: 0 },
-          { label: "DB/Parry", value: -4 },
-          { label: "attack result", value: -2 },
-        ],
         offHandParryScore: undefined,
         parryBase: 13,
         parrySourceLabel: "Sword / shield",
@@ -465,6 +607,99 @@ describe("localServiceClient wire contract", () => {
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+    });
+  });
+
+  it("rolls GM combat parry and keeps the command envelope summary", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_damage",
+      latestResult: {
+        attackResultId: "1:phase1:attacker:defender",
+        kind: "parry",
+      },
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatParryCommandOnServer({
+        attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
+        encounterId: "encounter-1",
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        attackResultId: "1:phase1:attacker:defender",
+        dbParryRaw: -4,
+        mainHandParryScore: undefined,
+        offHandParryScore: undefined,
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+        usedOffHand: undefined,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+    });
+  });
+
+  it("advances current combat phase resolution through a narrow route", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_damage",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.advanceCurrentCombatPhaseResolutionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-phase-resolution",
+    });
+  });
+
+  it("completes current combat phase resolution through a narrow route", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_actions",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.completeCurrentCombatPhaseResolutionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/complete-current-phase-resolution",
     });
   });
 
@@ -486,6 +721,90 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+    });
+  });
+
+  it("advances the current combat round step through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "review_action_modifiers",
+      warnings: [],
+    };
+    const stepSnapshots: CombatRoundStepSnapshot[] = [
+      {
+        committedAt: "2026-01-01T00:00:00.000Z",
+        id: "1:encounter-participant-1:select_actions",
+        participantId: "encounter-participant-1",
+        participantLabel: "The Gladiator",
+        roundNumber: 1,
+        step: "select_actions",
+      },
+    ];
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.advanceCombatRoundCurrentStepOnServer({
+        encounterId: "encounter-1",
+        expectedBoundary: "declaration",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        stepSnapshots,
+        targetBoundary: "phase1_modifier_review",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        expectedBoundary: "declaration",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        stepSnapshots,
+        targetBoundary: "phase1_modifier_review",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-step",
+    });
+  });
+
+  it("prepares round-end review without uploading encounter history", async () => {
+    const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.prepareCombatRoundEndReviewOnServer({ encounterId: "encounter-1" }),
+    ).resolves.toEqual({ encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/prepare-round-end-review",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+  });
+
+  it("skips the current combat round action through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const commandEnvelope = {
+      currentStep: "phase_1_actions",
+      warnings: [],
+    };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.skipCombatRoundCurrentActionOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/skip-current-action",
     });
   });
 
@@ -528,6 +847,35 @@ describe("localServiceClient wire contract", () => {
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+  });
+
+  it("backs out of a phase attack through the encounter command endpoint", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participant = {
+      id: "participant-1",
+    };
+    const fetchMock = stubFetch({ encounter, participant });
+    const client = await loadClient();
+
+    await expect(
+      client.backOutPhaseAttackOnServer({
+        encounterId: "encounter-1",
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, participant });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/back-out-phase-attack",
     });
   });
 

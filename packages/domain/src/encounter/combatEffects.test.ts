@@ -209,5 +209,30 @@ describe("combat effect state", () => {
     });
 
     expect(parsed.effects[0]?.type).toBe("ob_skill_modifier");
+    expect(parsed.effects[0]?.combatModifierBucket).toBeUndefined();
+  });
+
+  it("accepts an explicit Initiative combat modifier bucket", () => {
+    const parsed = combatEffectsStateSchema.parse({
+      effects: [
+        {
+          combatModifierBucket: "initiative",
+          createdAt: "2026-05-17T10:00:00.000Z",
+          damage: 0,
+          effectGroup: "other",
+          generalDamage: 0,
+          id: "effect-haste",
+          modifierValue: 3,
+          sourceEventId: "event-haste",
+          status: "active",
+          targetParticipantId: "participant-1",
+          type: "other_modifier",
+          updatedAt: "2026-05-17T10:00:00.000Z",
+        },
+      ],
+      events: [],
+    });
+
+    expect(parsed.effects[0]?.combatModifierBucket).toBe("initiative");
   });
 });

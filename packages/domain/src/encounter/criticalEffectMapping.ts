@@ -153,11 +153,17 @@ export function mapCombatHitLocationToCriticalLocation(
       return { status: "mapped", value: "chest" };
     case "abdomen":
       return { status: "mapped", value: "abdomen" };
+    case "upperRightLeg":
+    case "upperLeftLeg":
+      return { status: "mapped", value: "upper_leg" };
+    case "lowerRightLeg":
+    case "lowerLeftLeg":
+      return { status: "mapped", value: "lower_leg" };
     case "rightLeg":
     case "leftLeg":
       return {
         reason:
-          "Combat hit location is a whole leg, but the critical table distinguishes upper_leg and lower_leg.",
+          "Combat hit location is a legacy whole leg, but the critical table distinguishes upper_leg and lower_leg. Review the damage location as upper or lower leg before applying critical effects.",
         status: "ambiguous",
       };
     case undefined:

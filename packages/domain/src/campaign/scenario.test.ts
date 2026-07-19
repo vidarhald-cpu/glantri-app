@@ -52,6 +52,24 @@ describe("scenario combat modifier entries", () => {
       sourceRule: "attack-parry-db-parry-phase1",
       value: -4,
     });
+
+    expect(
+      scenarioCombatModifierEntrySchema.parse({
+        id: "import:character_effect:haste:initiative",
+        imported: true,
+        readOnly: true,
+        sourceDuration: "2 rounds",
+        sourceEffectId: "haste",
+        sourceType: "character_effect",
+        value: 2,
+      }),
+    ).toMatchObject({
+      imported: true,
+      readOnly: true,
+      sourceEffectId: "haste",
+      sourceType: "character_effect",
+      value: 2,
+    });
   });
 
   it("keeps old combat contexts compatible while supporting Initiative modifiers", () => {

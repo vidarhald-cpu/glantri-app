@@ -1,11 +1,12 @@
-import type {
-  ScenarioCombatModifierEntry,
-  ScenarioParticipantCombatContext,
-  ScenarioParticipantIncomingAttackSide,
-  ScenarioParticipantParryDirection,
-  ScenarioParticipantParrySource,
-  ScenarioParticipant,
-  ScenarioPlayerVisibleParticipant,
+import {
+  getCombatDeclarationActionLabel,
+  type ScenarioCombatModifierEntry,
+  type ScenarioParticipantCombatContext,
+  type ScenarioParticipantIncomingAttackSide,
+  type ScenarioParticipantParryDirection,
+  type ScenarioParticipantParrySource,
+  type ScenarioParticipant,
+  type ScenarioPlayerVisibleParticipant,
 } from "@glantri/domain";
 
 export type PlayerEncounterActionId =
@@ -70,11 +71,11 @@ export interface PlayerEncounterOpponentOption {
 }
 
 export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] = [
-  { label: "Attack - Parry", value: "attack_parry" },
-  { label: "Parry - Attack", value: "parry_attack" },
+  { label: getCombatDeclarationActionLabel("attack_parry"), value: "attack_parry" },
+  { label: getCombatDeclarationActionLabel("parry_attack"), value: "parry_attack" },
   { label: "Double Attack", value: "double_attack" },
   { label: "Feint - Attack", value: "feint_attack" },
-  { label: "Adjust Range - Attack", value: "adjust_range_attack" },
+  { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
   { label: "Counterattack", value: "counterattack" },
   { label: "Observe Opponent", value: "observe_opponent" },
   { label: "Offensive Parry", value: "offensive_parry" },
@@ -94,7 +95,7 @@ export function isPlayerEncounterActionId(value: unknown): value is PlayerEncoun
 
 export const PLAYER_ENCOUNTER_MOVEMENT_OPTIONS: PlayerEncounterOption<PlayerEncounterMovementId>[] =
   [
-    { label: "Hold position", value: "hold" },
+    { label: "Maintain distance to opponent", value: "hold" },
     { label: "Step", value: "step" },
     { label: "Advance", value: "advance" },
     { label: "Withdraw", value: "withdraw" },
@@ -220,7 +221,7 @@ export function evaluatePlayerEncounterParryLegality(input: {
 }): PlayerEncounterParryLegalityResult {
   if (input.actionId !== "attack_parry") {
     return {
-      reason: "Parry context applies to Attack - Parry in this first pass.",
+      reason: "Parry context applies to Single attack in this first pass.",
       status: "incomplete",
     };
   }
@@ -296,12 +297,12 @@ export function getPlayerEncounterMovementLabel(
   movementId: PlayerEncounterMovementId | "",
 ): string {
   if (!movementId) {
-    return "Hold position";
+    return "Maintain distance to opponent";
   }
 
   return (
     PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.find((option) => option.value === movementId)?.label ??
-    "Hold position"
+    "Maintain distance to opponent"
   );
 }
 

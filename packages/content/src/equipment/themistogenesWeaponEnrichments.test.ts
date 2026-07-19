@@ -59,6 +59,28 @@ describe("themistogenes weapon enrichments", () => {
     });
   });
 
+  it("marks only explicit melee thrust modes as eligible for same-source Double Attack", () => {
+    for (const id of [
+      "weapon-template-dagger",
+      "weapon-template-fencing-sword",
+      "weapon-template-rapier",
+      "weapon-template-1-h-spear",
+      "weapon-template-2-h-javelin",
+      "weapon-template-1-h-javelin",
+      "weapon-template-spear",
+    ]) {
+      expect(enrichedById[id]?.attackModes?.[0]).toMatchObject({
+        allowsRepeatedRoundAttack: true,
+        canonicalMeleeMode: "thrust",
+        isPrimaryAttack: true,
+        order: 0,
+      });
+    }
+    expect(
+      enrichedById["weapon-template-t-javelin"]?.attackModes?.[0]?.allowsRepeatedRoundAttack,
+    ).not.toBe(true);
+  });
+
   it("preserves Lance primary Charge attack explicitly while keeping Second crit. on that primary mode", () => {
     const lance = enrichedById["weapon-template-lance"];
 

@@ -10,7 +10,7 @@ describe("session auth HTTP contract", () => {
     vi.resetModules();
   });
 
-  it("allows credentialed CORS preflight for DELETE from the configured web origin", async () => {
+  it("allows credentialed CORS preflight for PATCH from the configured web origin", async () => {
     vi.stubEnv("WEB_ORIGIN", "https://web.example.test");
     const app = Fastify();
     applyLocalCors(app);
@@ -19,7 +19,7 @@ describe("session auth HTTP contract", () => {
       method: "OPTIONS",
       url: "/health",
       headers: {
-        "access-control-request-method": "DELETE",
+        "access-control-request-method": "PATCH",
         origin: "https://web.example.test",
       },
     });
@@ -29,7 +29,7 @@ describe("session auth HTTP contract", () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers["access-control-allow-origin"]).toBe("https://web.example.test");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
-    expect(response.headers["access-control-allow-methods"]).toBe("GET,POST,PUT,DELETE,OPTIONS");
+    expect(response.headers["access-control-allow-methods"]).toBe("GET,POST,PUT,PATCH,DELETE,OPTIONS");
     expect(response.headers["access-control-allow-headers"]).toBe("content-type");
     expect(response.headers.vary).toBe("origin");
   });

@@ -1,4 +1,11 @@
-import type { CombatEffect, CombatEffectGroup, CombatEffectStatus, CombatEffectType, CombatEffectsState } from "@glantri/domain";
+import type {
+  CombatEffect,
+  CombatEffectGroup,
+  CombatEffectModifierBucket,
+  CombatEffectStatus,
+  CombatEffectType,
+  CombatEffectsState,
+} from "@glantri/domain";
 
 export interface HitLocationDefinition {
   id: string;
@@ -22,6 +29,7 @@ export interface DamageByTypeView {
 }
 
 export interface HitLogEntryView {
+  combatModifierBucket?: CombatEffectModifierBucket;
   damage: number;
   duration: string;
   effectGroup: CombatEffectGroup;
@@ -235,6 +243,7 @@ function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
 
   return combatEffects.effects
     .map((effect) => ({
+      combatModifierBucket: effect.combatModifierBucket,
       damage: effect.damage,
       duration: effect.duration ?? "",
       effectGroup: effect.effectGroup,

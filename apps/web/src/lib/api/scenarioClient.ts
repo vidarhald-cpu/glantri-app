@@ -227,6 +227,17 @@ export async function updateScenarioParticipantStateOnServer(input: {
   return payload.participant;
 }
 
+export async function refreshScenarioParticipantEquipmentOnServer(input: {
+  participantId: string;
+  scenarioId: string;
+}): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/${input.participantId}/refresh-character-equipment`,
+    { method: "POST" },
+  );
+  return payload.participant;
+}
+
 export async function updateScenarioParticipantMetadataOnServer(input: {
   controlledByUserId?: string | null;
   displayOrder?: number | null;

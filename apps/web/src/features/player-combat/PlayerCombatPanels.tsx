@@ -1,44 +1,95 @@
 "use client";
 
-import type { ReactNode } from "react";
+import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
+  type CombatEffectsState,
+  type CombatDistance,
   type CombatRoundInitiativeResult,
   type CombatRoundStep,
+  type MovementIntent,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
   getHitLocationFullLabel,
+  buildLiveCombatModifierContributionProjection,
+  type CombatModifierContributionBucket,
+  isPersistentCombatModifierEntry,
 } from "@glantri/domain";
 
+import {
+  formatSignedCombatModifier,
+} from "@/features/combat-history";
 import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
-  PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
-  getPlayerEncounterCombatModifierTotals,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
+  type PlayerEncounterOption,
 } from "@/lib/campaigns/playerEncounter";
 import {
   filterCombatModifierEntriesForPhase,
+  getCombatModifierRowsVisibleAtStep,
   type EncounterCombatPhaseKey,
   type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
+  characterStateEntries?: PlayerCombatModifierDisplayEntry[];
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
   locked?: boolean;
   total: number;
+}
+
+export interface PlayerCombatModifierDisplayEntry {
+  details?: string;
+  id: string;
+  scopeLabel: string;
+  sourceLabel: "Character/state" | "Feint · OB/DB" | "Situational";
+  value: number;
+}
+
+export interface GroupedFeintModifierDisplay {
+  entryIds: readonly string[];
+  resultGroupId: string;
+  value: number;
+}
+
+export function buildGroupedFeintModifierDisplays(
+  rows: readonly PlayerCombatModifierBucketView[],
+): GroupedFeintModifierDisplay[] {
+  const entries = rows.flatMap((row) => row.entries);
+  const groups = new Map<string, ScenarioCombatModifierEntry[]>();
+
+  for (const entry of entries) {
+    if (
+      entry.sourceType !== "feint" ||
+      entry.resultGroupKind !== "ob_db" ||
+      !entry.resultGroupId ||
+      entry.sourcePhase !== "phase2"
+    ) {
+      continue;
+    }
+    groups.set(entry.resultGroupId, [...(groups.get(entry.resultGroupId) ?? []), entry]);
+  }
+
+  return [...groups.entries()].flatMap(([resultGroupId, groupedEntries]) => {
+    const obEntry = groupedEntries.find((entry) => entry.id.endsWith(":ob-skill"));
+    const dbEntry = groupedEntries.find((entry) => entry.id.endsWith(":db-parry"));
+    return obEntry && dbEntry && obEntry.value === dbEntry.value
+      ? [{ entryIds: [obEntry.id, dbEntry.id], resultGroupId, value: obEntry.value }]
+      : [];
+  });
 }
 
 export interface PlayerCombatPhaseCardView {
@@ -83,24 +134,37 @@ interface PlayerCombatModifierPanelProps {
   ) => void;
   readOnly?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
+  sourceLabel?: string;
 }
 
 interface PlayerCombatPhasePanelProps {
   children?: ReactNode;
   phaseCard: PlayerCombatPhaseCardView;
+  sourceLabel?: string;
 }
 
 interface PlayerCombatActionSelectorPanelProps {
   actionId: PlayerEncounterActionId | "";
+  actionOptions?: readonly PlayerEncounterOption<PlayerEncounterActionId>[];
   additionalActionNotes: string;
   controlsDisabled?: boolean;
+  distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
   movementId: PlayerEncounterMovementId | "";
+  movementIntent?: MovementIntent;
   onActionChange: (actionId: PlayerEncounterActionId | "") => void;
   onAdditionalActionNotesChange: (notes: string) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
+  onMovementIntentChange?: (movementIntent: MovementIntent) => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
   roundNumber?: number;
   secondaryActionId: PlayerEncounterActionId | "";
+  sourceLabel?: string;
+}
+
+export interface PlayerCombatDistancePreferenceOption {
+  defaultDistance?: CombatDistance;
+  displayName: string;
+  id: string;
 }
 
 interface PlayerCombatAttackStatsTableProps {
@@ -125,10 +189,19 @@ interface PlayerCombatAttackLocationSelectorProps {
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
 }
 
+interface PlayerCombatAttackModeSelectorProps {
+  controlsDisabled?: boolean;
+  onChange: (attackModeId: string) => void;
+  options: readonly { id: string; label: string }[];
+  selectedAttackModeId?: string;
+}
+
 interface PlayerCombatAttackTargetSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
+  distanceLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
   targetOptions: readonly PlayerEncounterOpponentOption[];
 }
 
@@ -136,6 +209,11 @@ interface PlayerCombatActionButtonPanelProps {
   buttonLabel?: string;
   disabled?: boolean;
   onDeclareAction?: () => void;
+  preActionControls?: ReactNode;
+  /**
+   * Reserved for non-primary utility commands. Alternative outcomes for the same pending
+   * task should use preActionControls plus one primary action.
+   */
   onSecondaryAction?: () => void;
   secondaryButtonDisabled?: boolean;
   secondaryButtonLabel?: string;
@@ -187,6 +265,32 @@ export const playerCombatTopPanelRowStyle = {
   gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns,
 } as const;
 
+const panelTitleWithSourceStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.4rem",
+} as const;
+
+const panelSourceMarkerStyle = {
+  border: "1px solid #ddd3bf",
+  borderRadius: 999,
+  color: "#5e5a50",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  lineHeight: 1.25,
+  padding: "0.04rem 0.4rem",
+} as const;
+
+function PanelTitleWithSource({ label, sourceLabel }: { label: string; sourceLabel?: string }) {
+  return (
+    <div style={panelTitleWithSourceStyle}>
+      <strong>{label}</strong>
+      {sourceLabel ? <span style={panelSourceMarkerStyle}>{sourceLabel}</span> : null}
+    </div>
+  );
+}
+
 const compactFieldLabelStyle = {
   display: "grid",
   gap: "0.18rem",
@@ -199,6 +303,18 @@ const compactWideFieldLabelStyle = {
   maxWidth: "100%",
 } as const;
 
+const compactDistancePreferenceGridStyle = {
+  display: "grid",
+  gap: "0.3rem",
+} as const;
+
+const compactDistancePreferenceRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.5rem",
+  gridTemplateColumns: "minmax(0, 1fr) 7.5rem",
+} as const;
+
 const compactModifierGroupHeaderStyle = {
   alignItems: "center",
   display: "flex",
@@ -208,30 +324,55 @@ const compactModifierGroupHeaderStyle = {
 
 const compactModifierMiniTableStyle = {
   display: "grid",
-  gap: "0.2rem",
+  gap: "0.35rem",
   minWidth: 0,
 } as const;
+
+const compactModifierTopRowColumns = "minmax(7rem, 1fr) 3.75rem 4.25rem";
 
 const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gridTemplateColumns: compactModifierTopRowColumns,
   minWidth: 0,
 } as const;
 
 const compactModifierMiniTableEntryRowStyle = {
-  alignItems: "center",
+  borderTop: "1px solid #e6e0d2",
+  display: "grid",
+  gap: "0.3rem",
+  minWidth: 0,
+  paddingTop: "0.35rem",
+} as const;
+
+const compactModifierDisplayRowStyle = {
+  borderTop: "1px solid #eee9dc",
+  color: "#5e5a50",
+  display: "grid",
+  fontSize: "0.88rem",
+  gap: "0.25rem",
+  minWidth: 0,
+  paddingTop: "0.3rem",
+} as const;
+
+const compactModifierDisplayHeaderStyle = {
+  ...compactModifierDisplayRowStyle,
+  gridTemplateColumns: compactModifierTopRowColumns,
+} as const;
+
+const compactModifierDisplayTopRowStyle = {
+  alignItems: "start",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
+  gridTemplateColumns: compactModifierTopRowColumns,
   minWidth: 0,
 } as const;
 
 const compactModifierNumberInputStyle = {
   boxSizing: "border-box",
   minWidth: 0,
-  width: "5.5ch",
+  width: "100%",
 } as const;
 
 const compactModifierDetailsInputStyle = {
@@ -245,6 +386,30 @@ const compactModifierRemoveButtonStyle = {
   lineHeight: 1,
   minWidth: "1.35rem",
   padding: "0.08rem 0.25rem",
+} as const;
+
+const compactModifierEntryTopRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: compactModifierTopRowColumns,
+  minWidth: 0,
+} as const;
+
+const compactModifierDetailsRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.25rem",
+  gridTemplateColumns: "4.25rem minmax(0, 1fr)",
+  minWidth: 0,
+} as const;
+
+const compactModifierEditableDetailsRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.25rem",
+  gridTemplateColumns: "4.25rem minmax(0, 1fr) auto",
+  minWidth: 0,
 } as const;
 
 const compactStatsRowStyle = {
@@ -262,13 +427,171 @@ const compactStatsTableStyle = {
 
 const compactPhaseContextSelectorColumns = "6.5rem 7rem auto";
 const compactPhaseContextSelectStyle = { width: "7rem" } as const;
+const compactPhaseTargetRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: "6.5rem minmax(7rem, 1fr) max-content",
+  minWidth: 0,
+  width: "100%",
+} as const;
+const compactPhaseTargetSelectStyle = {
+  ...compactPhaseContextSelectStyle,
+  maxWidth: "13rem",
+} as const;
+const compactPhaseTargetMetaStyle = {
+  color: "#4f5f57",
+  display: "grid",
+  fontSize: "0.82rem",
+  justifyItems: "end",
+  justifySelf: "end",
+  minWidth: "5.5rem",
+  whiteSpace: "nowrap",
+} as const;
 
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
 
-function formatModifierDuration(entry: ScenarioCombatModifierEntry): string {
-  return entry.durationRounds ? `${entry.durationRounds} rnd` : entry.scope;
+function formatModifierPhaseLabel(phase?: "phase1" | "phase2"): string | undefined {
+  return phase === "phase1" ? "P1" : phase === "phase2" ? "P2" : undefined;
+}
+
+function inferModifierPhase(entry: ScenarioCombatModifierEntry): "phase1" | "phase2" | undefined {
+  if (entry.sourcePhase === "phase1" || entry.sourcePhase === "phase2") {
+    return entry.sourcePhase;
+  }
+
+  const sourceText = `${entry.id} ${entry.sourceRule ?? ""}`;
+
+  if (sourceText.includes("phase1")) {
+    return "phase1";
+  }
+
+  return sourceText.includes("phase2") ? "phase2" : undefined;
+}
+
+export function formatCombatModifierScopeLabel(entry: ScenarioCombatModifierEntry): string {
+  const phaseLabel = formatModifierPhaseLabel(inferModifierPhase(entry));
+
+  if (phaseLabel) {
+    return phaseLabel;
+  }
+
+  if (entry.generated && entry.durationRounds === 1) {
+    return "1 attack";
+  }
+
+  if (entry.durationRounds) {
+    return entry.durationRounds === 1 ? "RD" : `duration ${entry.durationRounds}`;
+  }
+
+  return entry.scope === "save" ? "until save" : "until SU";
+}
+
+function isGeneratedDistanceModifier(entry: ScenarioCombatModifierEntry): boolean {
+  return (
+    entry.id.startsWith("generated:distance:") ||
+    entry.sourceRule === "distance-ob-skill" ||
+    entry.sourceRule === "distance-ob-skill-phase1" ||
+    entry.sourceRule === "distance-ob-skill-phase2" ||
+    entry.notes?.trim().toLowerCase().startsWith("distance:") === true
+  );
+}
+
+function formatCompactDistanceModifierDetails(entry: ScenarioCombatModifierEntry): string {
+  const notes = entry.notes ?? "";
+  const actualMatch = notes.match(/\b(?:actual|declared)\s+(\d+)/i);
+  const nearestMatch = notes.match(/\bnearest\s+(\d+)/i);
+  const actualDistance = actualMatch ? Number(actualMatch[1]) : undefined;
+  const nearestDistance = nearestMatch ? Number(nearestMatch[1]) : undefined;
+
+  if (actualDistance !== undefined && nearestDistance !== undefined) {
+    if (actualDistance > nearestDistance) {
+      return "long distance";
+    }
+
+    if (actualDistance < nearestDistance) {
+      return "short distance";
+    }
+  }
+
+  return "distance";
+}
+
+export function formatCombatModifierDetailsLabel(
+  entry: ScenarioCombatModifierEntry,
+): string | undefined {
+  if (
+    entry.id === "generated:parry-attack:phase2:initiative" ||
+    entry.sourceRule === "parry-attack-phase2-initiative"
+  ) {
+    return "reactive attack";
+  }
+
+  if (isGeneratedDistanceModifier(entry)) {
+    return formatCompactDistanceModifierDetails(entry);
+  }
+
+  if (
+    entry.sourceActionId === "attack_parry" ||
+    entry.sourceRule?.startsWith("attack-parry-db-parry") === true
+  ) {
+    return "single attack";
+  }
+
+  if (
+    entry.sourceActionId === "parry_attack" ||
+    entry.sourceRule?.startsWith("parry-attack-db-parry") === true
+  ) {
+    return "reactive attack";
+  }
+
+  return entry.notes?.trim() || undefined;
+}
+
+export function formatCombatModifierDisplayLine(input: {
+  bucketLabel: string;
+  entry: ScenarioCombatModifierEntry;
+}): string {
+  const details = formatCombatModifierDetailsLabel(input.entry);
+
+  return [
+    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}`,
+    formatCombatModifierScopeLabel(input.entry),
+    details,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+}
+
+export function isMeaningfulCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
+  return entry.value !== 0 || Boolean(entry.notes?.trim()) || Boolean(entry.sourceRule?.trim());
+}
+
+export function sanitizeCombatModifierEntries(
+  entries: readonly ScenarioCombatModifierEntry[],
+): ScenarioCombatModifierEntry[] {
+  return entries.filter(isMeaningfulCombatModifierEntry);
+}
+
+export function sanitizePlayerCombatModifierContext(
+  combatContext: ScenarioParticipantCombatContext,
+): ScenarioParticipantCombatContext {
+  return {
+    ...combatContext,
+    modifierBuckets: {
+      ...combatContext.modifierBuckets,
+      general: sanitizeCombatModifierEntries(combatContext.modifierBuckets.general),
+      situationDb: sanitizeCombatModifierEntries(combatContext.modifierBuckets.situationDb),
+      situationInitiative: sanitizeCombatModifierEntries(
+        combatContext.modifierBuckets.situationInitiative,
+      ),
+      situationObSkill: sanitizeCombatModifierEntries(
+        combatContext.modifierBuckets.situationObSkill,
+      ),
+    },
+  };
 }
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
@@ -362,60 +685,236 @@ export function getPlayerCombatActionButtonLabel(input: {
 
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
+  currentRound?: number;
+  encounterId?: string;
+  includeAllPhases?: boolean;
   liveModifiers?: EncounterLiveCombatModifierSummary;
+  ownerParticipantId?: string;
   phaseKey?: EncounterCombatPhaseKey;
+  visibleAtStep?: CombatRoundStep;
 }): PlayerCombatModifierBucketView[] {
-  const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
-  const filteredModifierBuckets = {
-    general: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.general,
-      input.phaseKey,
+  const projection = buildLiveCombatModifierContributionProjection({
+    combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
+    combatEffects: input.combatEffects,
+    currentRound: input.currentRound,
+    encounterId: input.encounterId,
+    ownerParticipantId: input.ownerParticipantId,
+  });
+  const entriesForContributions = (bucket: CombatModifierContributionBucket) =>
+    projection.contributions
+      .filter((contribution) => contribution.bucket === bucket)
+      .map((contribution) => projection.sourceEntries.get(contribution.id))
+      .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
+  const entriesForDisplay = (entries: ScenarioCombatModifierEntry[]) =>
+    input.includeAllPhases
+      ? entries
+      : input.visibleAtStep
+        ? getCombatModifierRowsVisibleAtStep(entries, input.visibleAtStep)
+        : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
+  const displayModifierBuckets = {
+    general: sanitizeCombatModifierEntries(
+      entriesForDisplay(entriesForContributions("general_fatigue")),
     ),
-    situationDb: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationDb,
-      input.phaseKey,
+    situationDb: sanitizeCombatModifierEntries(
+      entriesForDisplay(entriesForContributions("db_parry")),
     ),
-    situationInitiative: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationInitiative,
-      input.phaseKey,
+    situationInitiative: sanitizeCombatModifierEntries(
+      entriesForDisplay(entriesForContributions("initiative")),
     ),
-    situationObSkill: filterCombatModifierEntriesForPhase(
-      combatContext.modifierBuckets.situationObSkill,
-      input.phaseKey,
+    situationObSkill: sanitizeCombatModifierEntries(
+      entriesForDisplay(entriesForContributions("skill_ob")),
     ),
   };
-  const totals = getPlayerEncounterCombatModifierTotals({
-    ...combatContext,
-    modifierBuckets: filteredModifierBuckets,
-  });
+  const applicableContributions = projection.contributions.filter(
+    (contribution) =>
+      !contribution.applicability.phase ||
+      (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
+  );
+  const totals = {
+    dbParry: applicableContributions
+      .filter((contribution) => contribution.bucket === "db_parry")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    generalFatigue: applicableContributions
+      .filter((contribution) => contribution.bucket === "general_fatigue")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    initiative: applicableContributions
+      .filter((contribution) => contribution.bucket === "initiative")
+      .reduce((total, contribution) => total + contribution.value, 0),
+    skillOb: applicableContributions
+      .filter((contribution) => contribution.bucket === "skill_ob")
+      .reduce((total, contribution) => total + contribution.value, 0),
+  };
 
   return [
     {
       bucketKey: "general",
-      entries: [],
+      entries: displayModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
-      total: input.liveModifiers?.generalFatigueRaw ?? 0,
+      total: totals.generalFatigue,
     },
     {
       bucketKey: "situation_initiative",
-      entries: filteredModifierBuckets.situationInitiative,
+      entries: displayModifierBuckets.situationInitiative,
       label: "Initiative",
-      total: input.liveModifiers?.initiativeRaw ?? totals.situationInitiativeTotal,
+      total: totals.initiative,
     },
     {
       bucketKey: "situation_ob_skill",
-      entries: filteredModifierBuckets.situationObSkill,
+      entries: displayModifierBuckets.situationObSkill,
       label: "Skill/OB",
-      total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
+      total: totals.skillOb,
     },
     {
       bucketKey: "situation_db",
-      entries: filteredModifierBuckets.situationDb,
+      entries: displayModifierBuckets.situationDb,
       label: "DB/Parry",
-      total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
+      total: totals.dbParry,
     },
   ];
+}
+
+function buildImportedModifierDisplayEntry(
+  entry: ScenarioCombatModifierEntry,
+): PlayerCombatModifierDisplayEntry {
+  return {
+    details: entry.notes,
+    id: entry.id,
+    scopeLabel:
+      entry.sourceDuration?.trim() ??
+      (entry.expiresAtRound ? `until RD ${entry.expiresAtRound}` : "until SU"),
+    sourceLabel: "Character/state",
+    value: entry.value,
+  };
+}
+
+function buildSituationalModifierDisplayEntry(
+  entry: ScenarioCombatModifierEntry,
+): PlayerCombatModifierDisplayEntry {
+  return {
+    details: formatCombatModifierDetailsLabel(entry),
+    id: entry.id,
+    scopeLabel: formatCombatModifierScopeLabel(entry),
+    sourceLabel: "Situational",
+    value: entry.value,
+  };
+}
+
+function ModifierDisplayEntryRow({
+  bucketLabel,
+  entry,
+}: {
+  bucketLabel: string;
+  entry: PlayerCombatModifierDisplayEntry;
+}) {
+  return (
+    <div
+      key={`${entry.sourceLabel}:${entry.id}`}
+      style={compactModifierDisplayRowStyle}
+      title={`${bucketLabel} ${formatSignedCombatModifier(entry.value)} · ${entry.scopeLabel}${
+        entry.details ? ` · ${entry.details}` : ""
+      }`}
+    >
+      <div style={compactModifierDisplayTopRowStyle}>
+        <span>{entry.sourceLabel}</span>
+        <span>{formatSignedCombatModifier(entry.value)}</span>
+        <span>{entry.scopeLabel}</span>
+      </div>
+      <div style={compactModifierDetailsRowStyle}>
+        <span style={{ color: "#1f1b14", fontWeight: 700 }}>Details</span>
+        <span
+          style={{
+            minWidth: 0,
+            overflowWrap: "break-word",
+          }}
+        >
+          {entry.details ?? "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ModifierEditableEntryRow({
+  bucketLabel,
+  controlsDisabled,
+  entry,
+  onRemove,
+  onUpdate,
+}: {
+  bucketLabel: string;
+  controlsDisabled: boolean;
+  entry: ScenarioCombatModifierEntry;
+  onRemove: () => void;
+  onUpdate: (
+    patch: Partial<Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "value">>,
+  ) => void;
+}) {
+  const scopeLabel = formatCombatModifierScopeLabel(entry);
+  const detailsValue = entry.generated
+    ? (formatCombatModifierDetailsLabel(entry) ?? entry.notes ?? "")
+    : (entry.notes ?? "");
+
+  return (
+    <div style={compactModifierMiniTableEntryRowStyle}>
+      <div style={compactModifierEntryTopRowStyle}>
+        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational · {scopeLabel}</span>
+        <input
+          aria-label={`${bucketLabel} modifier value`}
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onUpdate({
+              value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+            })
+          }
+          style={compactModifierNumberInputStyle}
+          type="number"
+          value={entry.value}
+        />
+        <input
+          aria-label={`${bucketLabel} modifier duration`}
+          disabled={controlsDisabled}
+          min={1}
+          onChange={(event) =>
+            onUpdate({
+              durationRounds:
+                event.target.value.length > 0 ? Number(event.target.value) : undefined,
+            })
+          }
+          style={compactModifierNumberInputStyle}
+          type="number"
+          value={entry.durationRounds ?? ""}
+        />
+      </div>
+      <div style={compactModifierEditableDetailsRowStyle}>
+        <span style={{ color: "#1f1b14", fontSize: "0.78rem", fontWeight: 700 }}>Details</span>
+        <input
+          aria-label={`${bucketLabel} modifier details`}
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onUpdate({
+              notes: event.target.value,
+            })
+          }
+          placeholder="Details"
+          style={compactModifierDetailsInputStyle}
+          type="text"
+          value={detailsValue}
+        />
+        <button
+          aria-label="Remove modifier"
+          disabled={controlsDisabled}
+          onClick={onRemove}
+          style={compactModifierRemoveButtonStyle}
+          title="Remove modifier"
+          type="button"
+        >
+          -
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function PlayerCombatModifierPanel({
@@ -425,128 +924,242 @@ export function PlayerCombatModifierPanel({
   onUpdateEntry,
   readOnly = false,
   rows,
+  sourceLabel,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
+  const groupedFeintDisplays = buildGroupedFeintModifierDisplays(rows);
+  const groupedFeintEntryIds = new Set(groupedFeintDisplays.flatMap((group) => group.entryIds));
+  const [draftEntries, setDraftEntries] = useState<
+    Partial<Record<ScenarioCombatModifierBucket, ScenarioCombatModifierEntry>>
+  >({});
+
+  const setDraftEntry = (
+    bucketKey: ScenarioCombatModifierBucket,
+    entry?: ScenarioCombatModifierEntry,
+  ) => {
+    setDraftEntries((current) => {
+      const next = { ...current };
+
+      if (entry) {
+        next[bucketKey] = entry;
+      } else {
+        delete next[bucketKey];
+      }
+
+      return next;
+    });
+  };
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Combat modifiers</strong>
-      {rows.map((row) => (
-        <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-          <div style={compactModifierGroupHeaderStyle}>
-            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-              <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
-              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {getDisplayTotal(row) >= 0 ? "+" : ""}
-                {getDisplayTotal(row)}
-              </span>
+      <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
+      {rows.map((row) => {
+        const draftEntry = draftEntries[row.bucketKey];
+        const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
+        const situationalEntries = row.entries.filter(
+          (entry) => !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
+        );
+        const groupedFeintDisplayEntries =
+          row.bucketKey === "situation_ob_skill"
+            ? groupedFeintDisplays.map(
+                (group): PlayerCombatModifierDisplayEntry => ({
+                  details: "feint result",
+                  id: `grouped-feint:${group.resultGroupId}`,
+                  scopeLabel: "P2",
+                  sourceLabel: "Feint · OB/DB",
+                  value: group.value,
+                }),
+              )
+            : [];
+        const persistentDisplayEntries = [
+          ...(row.characterStateEntries ?? []),
+          ...importedEntries.map(buildImportedModifierDisplayEntry),
+          ...groupedFeintDisplayEntries,
+        ];
+        const hasVisibleRows =
+          persistentDisplayEntries.length > 0 ||
+          situationalEntries.length > 0 ||
+          Boolean(draftEntry);
+
+        return (
+          <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
+            <div style={compactModifierGroupHeaderStyle}>
+              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
+                <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  {getDisplayTotal(row) >= 0 ? "+" : ""}
+                  {getDisplayTotal(row)}
+                </span>
+              </div>
+              {editable && !row.locked ? (
+                <button
+                  disabled={controlsDisabled || Boolean(draftEntry)}
+                  onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
+                  style={{ justifySelf: "end" }}
+                  type="button"
+                >
+                  Add
+                </button>
+              ) : null}
             </div>
-            {editable && !row.locked ? (
-              <button
-                disabled={controlsDisabled}
-                onClick={() => onAddEntry(row.bucketKey, createModifierEntryDraft())}
-                style={{ justifySelf: "end" }}
-                type="button"
-              >
-                Add
-              </button>
+
+            {hasVisibleRows ? (
+              <div style={compactModifierMiniTableStyle}>
+                {persistentDisplayEntries.length > 0 ||
+                (!editable && situationalEntries.length > 0) ? (
+                  <div style={compactModifierDisplayHeaderStyle}>
+                    {["Source/scope", "Mod", "Dur"].map((heading) => (
+                      <span
+                        key={heading}
+                        style={{
+                          color: "#1f1b14",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {heading}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {persistentDisplayEntries.map((entry) => (
+                  <ModifierDisplayEntryRow
+                    bucketLabel={row.label}
+                    entry={entry}
+                    key={`${entry.sourceLabel}:${entry.id}`}
+                  />
+                ))}
+                {editable && !row.locked ? (
+                  <>
+                    {situationalEntries.length > 0 || draftEntry ? (
+                      <div style={compactModifierMiniTableHeaderStyle}>
+                        {["Source/scope", "Mod", "Dur"].map((heading) => (
+                          <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                            {heading}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {situationalEntries.map((entry) => (
+                      <ModifierEditableEntryRow
+                        bucketLabel={row.label}
+                        controlsDisabled={controlsDisabled}
+                        entry={entry}
+                        key={entry.id}
+                        onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
+                        onUpdate={(patch) => {
+                          const nextEntry = { ...entry, ...patch };
+
+                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                            onUpdateEntry(row.bucketKey, entry.id, patch);
+                          } else {
+                            onRemoveEntry(row.bucketKey, entry.id);
+                          }
+                        }}
+                      />
+                    ))}
+                    {draftEntry ? (
+                      <ModifierEditableEntryRow
+                        bucketLabel={row.label}
+                        controlsDisabled={controlsDisabled}
+                        entry={draftEntry}
+                        key={draftEntry.id}
+                        onRemove={() => setDraftEntry(row.bucketKey)}
+                        onUpdate={(patch) => {
+                          const nextEntry = { ...draftEntry, ...patch };
+
+                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                            onAddEntry(row.bucketKey, nextEntry);
+                            setDraftEntry(row.bucketKey);
+                          } else {
+                            setDraftEntry(row.bucketKey, nextEntry);
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  situationalEntries.map((entry) => (
+                    <ModifierDisplayEntryRow
+                      bucketLabel={row.label}
+                      entry={buildSituationalModifierDisplayEntry(entry)}
+                      key={`Situational:${entry.id}`}
+                    />
+                  ))
+                )}
+              </div>
             ) : null}
           </div>
-
-          {editable && !row.locked && row.entries.length > 0 ? (
-            <div style={compactModifierMiniTableStyle}>
-              <div style={compactModifierMiniTableHeaderStyle}>
-                {["Mod", "Dur", "Details"].map((heading) => (
-                  <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                    {heading}
-                  </span>
-                ))}
-                <span aria-hidden="true" />
-              </div>
-              {row.entries.map((entry) => (
-                <div key={entry.id} style={compactModifierMiniTableEntryRowStyle}>
-                  <input
-                    aria-label={`${row.label} modifier value`}
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                      })
-                    }
-                    style={compactModifierNumberInputStyle}
-                    type="number"
-                    value={entry.value}
-                  />
-                  <input
-                    aria-label={`${row.label} modifier duration`}
-                    disabled={controlsDisabled}
-                    min={1}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        durationRounds:
-                          event.target.value.length > 0 ? Number(event.target.value) : undefined,
-                      })
-                    }
-                    style={compactModifierNumberInputStyle}
-                    type="number"
-                    value={entry.durationRounds ?? ""}
-                  />
-                  <input
-                    aria-label={`${row.label} modifier details`}
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        notes: event.target.value,
-                      })
-                    }
-                    placeholder="Details"
-                    style={compactModifierDetailsInputStyle}
-                    type="text"
-                    value={entry.notes ?? ""}
-                  />
-                  <button
-                    aria-label="Remove modifier"
-                    disabled={controlsDisabled}
-                    onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
-                    style={compactModifierRemoveButtonStyle}
-                    title="Remove modifier"
-                    type="button"
-                  >
-                    -
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            row.entries.map((entry) => (
-              <div key={entry.id} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {entry.value >= 0 ? "+" : ""}
-                {entry.value} · {formatModifierDuration(entry)}
-                {entry.notes ? ` · ${entry.notes}` : ""}
-              </div>
-            ))
-          )}
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }
 
 export function PlayerCombatActionSelectorPanel({
   actionId,
+  actionOptions = PLAYER_ENCOUNTER_ACTION_OPTIONS,
   additionalActionNotes,
   controlsDisabled = false,
+  distancePreferenceOptions = [],
   movementId,
+  movementIntent,
   onActionChange,
   onAdditionalActionNotesChange,
   onMovementChange,
+  onMovementIntentChange,
   onSecondaryActionChange,
   roundNumber,
   secondaryActionId,
+  sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
+  const effectiveMovementIntent =
+    movementIntent ??
+    ({
+      distancePreferences: [],
+      mode: movementId && movementId !== "hold" ? "set_distance_preferences" : "hold_position",
+    } satisfies MovementIntent);
+  const updateMovementMode = (mode: MovementIntent["mode"]) => {
+    onMovementChange(mode === "hold_position" ? "hold" : "step");
+    onMovementIntentChange?.({
+      distancePreferences:
+        mode === "set_distance_preferences"
+          ? distancePreferenceOptions
+              .filter((option) => option.defaultDistance !== undefined)
+              .map((option) => ({
+                desiredDistance: option.defaultDistance as CombatDistance,
+                source: "player_declared" as const,
+                targetParticipantId: option.id,
+              }))
+          : [],
+      mode,
+    });
+  };
+  const updateDistancePreference = (targetParticipantId: string, desiredDistance: string) => {
+    const nextPreferences = effectiveMovementIntent.distancePreferences.filter(
+      (preference) => preference.targetParticipantId !== targetParticipantId,
+    );
+
+    if (desiredDistance !== "") {
+      nextPreferences.push({
+        desiredDistance: Number(desiredDistance) as CombatDistance,
+        source: "player_declared",
+        targetParticipantId,
+      });
+    }
+
+    onMovementIntentChange?.({
+      distancePreferences: nextPreferences,
+      mode: "set_distance_preferences",
+    });
+  };
+
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Action selector{roundNumber ? ` · Round ${roundNumber}` : ""}</strong>
+      <PanelTitleWithSource
+        label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
+        sourceLabel={sourceLabel}
+      />
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
@@ -555,7 +1168,7 @@ export function PlayerCombatActionSelectorPanel({
           value={actionId}
         >
           <option value="">Choose action</option>
-          {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
+          {actionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -573,7 +1186,7 @@ export function PlayerCombatActionSelectorPanel({
           value={secondaryActionId}
         >
           <option value="">Open</option>
-          {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
+          {actionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -585,18 +1198,71 @@ export function PlayerCombatActionSelectorPanel({
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Movement</span>
         <select
           disabled={controlsDisabled}
-          onChange={(event) =>
-            onMovementChange(event.target.value as PlayerEncounterMovementId | "")
-          }
-          value={movementId}
+          onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
+          value={effectiveMovementIntent.mode}
         >
-          {PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <option value="hold_position">Maintain distance to opponent</option>
+          <option value="set_distance_preferences">Set preferred distance</option>
         </select>
       </label>
+
+      {effectiveMovementIntent.mode === "set_distance_preferences" ? (
+        <section style={compactDistancePreferenceGridStyle}>
+          {distancePreferenceOptions.length === 0 ? (
+            <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+              No visible opponents available.
+            </div>
+          ) : (
+            distancePreferenceOptions.map((option) => {
+              const preference = effectiveMovementIntent.distancePreferences.find(
+                (entry) => entry.targetParticipantId === option.id,
+              );
+
+              return (
+                <label key={option.id} style={compactDistancePreferenceRowStyle}>
+                  <span
+                    style={{
+                      fontSize: "0.84rem",
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={option.displayName}
+                  >
+                    {option.displayName}
+                  </span>
+                  <select
+                    disabled={controlsDisabled}
+                    onChange={(event) => updateDistancePreference(option.id, event.target.value)}
+                    value={
+                      preference?.desiredDistance !== undefined
+                        ? String(preference.desiredDistance)
+                        : ""
+                    }
+                  >
+                    <option value="">No preference</option>
+                    <optgroup label="Melee zones">
+                      {[0, 1, 2, 3, 4].map((distance) => (
+                        <option key={distance} value={distance}>
+                          Distance {distance}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Extended">
+                      {[5, 6, 7, 8].map((distance) => (
+                        <option key={distance} value={distance}>
+                          Distance {distance}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+              );
+            })
+          )}
+        </section>
+      ) : null}
 
       <label style={compactWideFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>
@@ -616,6 +1282,7 @@ export function PlayerCombatActionButtonPanel({
   buttonLabel = "Declare action",
   disabled = false,
   onDeclareAction,
+  preActionControls,
   onSecondaryAction,
   secondaryButtonDisabled = false,
   secondaryButtonLabel,
@@ -625,7 +1292,10 @@ export function PlayerCombatActionButtonPanel({
 }: PlayerCombatActionButtonPanelProps) {
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Action button</strong>
+      <strong>Current action</strong>
+      {preActionControls ? (
+        <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
+      ) : null}
       <button
         disabled={disabled || saving}
         onClick={onDeclareAction}
@@ -759,7 +1429,7 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
   const modifierAdjustment =
     initiative.modifierAdjustment ?? initiative.total - baseInitiative - rollTotal;
 
-  return `Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
+  return `Main: I ${baseInitiative} + Initiative ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
@@ -849,23 +1519,37 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
 export function PlayerCombatAttackTargetSelector({
   combatContext,
   controlsDisabled = false,
+  distanceLabel,
   onCombatContextChange,
+  readOnly = false,
   targetOptions,
 }: PlayerCombatAttackTargetSelectorProps) {
   const selectedTargetUnavailable = Boolean(
     combatContext.targetParticipantId &&
-      !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
+    !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
+  );
+  const selectedTarget = targetOptions.find(
+    (option) => option.id === combatContext.targetParticipantId,
   );
 
+  if (readOnly) {
+    return (
+      <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
+        <span style={compactPhaseTargetSelectStyle}>
+          {selectedTarget?.displayName ?? "Target unavailable"}
+        </span>
+        {distanceLabel ? (
+          <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
+            {distanceLabel}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <label
-      style={{
-        alignItems: "center",
-        display: "grid",
-        gap: "0.35rem",
-        gridTemplateColumns: compactPhaseContextSelectorColumns,
-      }}
-    >
+    <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
       <select
         disabled={controlsDisabled}
@@ -875,14 +1559,12 @@ export function PlayerCombatAttackTargetSelector({
             targetParticipantId: event.target.value || undefined,
           })
         }
-        style={compactPhaseContextSelectStyle}
+        style={compactPhaseTargetSelectStyle}
         value={combatContext.targetParticipantId ?? ""}
       >
         <option value="">No target</option>
         {selectedTargetUnavailable ? (
-          <option value={combatContext.targetParticipantId}>
-            Saved target ({combatContext.targetParticipantId})
-          </option>
+          <option value={combatContext.targetParticipantId}>Target unavailable</option>
         ) : null}
         {targetOptions.map((option) => (
           <option key={option.id} value={option.id}>
@@ -890,6 +1572,11 @@ export function PlayerCombatAttackTargetSelector({
           </option>
         ))}
       </select>
+      {distanceLabel ? (
+        <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
+          {distanceLabel}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -937,6 +1624,43 @@ export function PlayerCombatAttackLocationSelector({
         </select>
       </label>
     </div>
+  );
+}
+
+export function PlayerCombatAttackModeSelector({
+  controlsDisabled = false,
+  onChange,
+  options,
+  selectedAttackModeId,
+}: PlayerCombatAttackModeSelectorProps) {
+  if (options.length === 0) {
+    return null;
+  }
+
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.35rem",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
+      }}
+    >
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack mode</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={compactPhaseContextSelectStyle}
+        value={selectedAttackModeId ?? ""}
+      >
+        {!selectedAttackModeId ? <option value="">Select mode</option> : null}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -1050,7 +1774,11 @@ export function PlayerCombatParryContextPanel({
   );
 }
 
-export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhasePanelProps) {
+export function PlayerCombatPhasePanel({
+  children,
+  phaseCard,
+  sourceLabel,
+}: PlayerCombatPhasePanelProps) {
   return (
     <section
       style={{
@@ -1058,7 +1786,7 @@ export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhas
         minHeight: 178,
       }}
     >
-      <strong>{phaseCard.phaseLabel}</strong>
+      <PanelTitleWithSource label={phaseCard.phaseLabel} sourceLabel={sourceLabel} />
       {phaseCard.title ? (
         <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>{phaseCard.title}</div>
       ) : null}

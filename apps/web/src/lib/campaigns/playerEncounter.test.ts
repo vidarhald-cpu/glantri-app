@@ -71,8 +71,8 @@ describe("playerEncounter", () => {
         secondaryActionId: "parry_attack",
       }),
     ).toEqual({
-      phaseOne: "Attack - Parry",
-      phaseTwo: "Parry - Attack",
+      phaseOne: "Single attack",
+      phaseTwo: "Reactive attack",
     });
 
     expect(
@@ -81,8 +81,8 @@ describe("playerEncounter", () => {
         secondaryActionId: "attack_parry",
       }),
     ).toEqual({
-      phaseOne: "Parry - Attack",
-      phaseTwo: "Attack - Parry",
+      phaseOne: "Reactive attack",
+      phaseTwo: "Single attack",
     });
   });
 
@@ -109,7 +109,7 @@ describe("playerEncounter", () => {
 
   it("returns a stable movement label fallback", () => {
     expect(getPlayerEncounterMovementLabel("advance")).toBe("Advance");
-    expect(getPlayerEncounterMovementLabel("")).toBe("Hold position");
+    expect(getPlayerEncounterMovementLabel("")).toBe("Maintain distance to opponent");
   });
 
   it("derives combat modifier totals from the combat modifier buckets", () => {
@@ -135,7 +135,7 @@ describe("playerEncounter", () => {
     });
   });
 
-  it("counts generated Parry - Attack DB/Parry rows in the defense total", () => {
+  it("counts generated Reactive attack DB/Parry rows in the defense total", () => {
     expect(
       getPlayerEncounterCombatModifierTotals({
         modifierBuckets: {
@@ -145,7 +145,7 @@ describe("playerEncounter", () => {
               durationRounds: 1,
               generated: true,
               id: "generated:parry-attack:phase2:db-parry",
-              notes: "parry attack",
+              notes: "reactive attack",
               scope: "until",
               sourceActionId: "parry_attack",
               sourcePhase: "phase2",

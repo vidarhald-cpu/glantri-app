@@ -13,8 +13,8 @@ export interface CombatCriticalModifierRow {
 export const COMBAT_CRITICAL_MODIFIER_TABLE = {
   id: "combat-critical-modifiers",
   notes: [
-    "Critical roll = 2d8 + critical type modifier + armor critical modifier.",
-    "Armor critical modifier is not applied until live hit-location armor mapping is wired.",
+    "Critical roll = 2d8 + critical type modifier - armor critical modifier.",
+    "Armor critical modifier is read from selected hit-location armor coverage when available.",
   ],
   rows: [
     {

@@ -49,10 +49,29 @@ import type { EquipmentFeatureState } from "./types";
 
 export type { DerivedCombatValue } from "@glantri/rules-engine";
 
+export interface DerivedCombatAttackMode {
+  allowsRepeatedRoundAttack: boolean;
+  armorModifier: DerivedCombatValue;
+  canonicalMeleeMode?: WeaponAttackMode["canonicalMeleeMode"];
+  crit: DerivedCombatValue;
+  damageClass?: string | null;
+  dmb: DerivedCombatValue;
+  id: string;
+  isPrimaryAttack: boolean;
+  label: string;
+  ob: DerivedCombatValue;
+  order: number;
+  secondCrit: DerivedCombatValue;
+}
+
 export interface DerivedCombatWeaponRow {
+  attackModes?: DerivedCombatAttackMode[];
+  attackMode1Id?: string;
   slotLabel: string;
   modeLabel: string;
   currentItemLabel: string;
+  itemId?: string;
+  templateId?: string;
   damageClass1?: string | null;
   damageClass2?: string | null;
   damageClass3?: string | null;
@@ -456,8 +475,42 @@ function buildWeaponRow(input: {
   });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
   const mode3 = getAttackMode(input.template, "mode-3");
+  const attackModes: DerivedCombatAttackMode[] = (input.template?.attackModes ?? []).map(
+    (mode, index) => ({
+      allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
+      armorModifier: getArmorModifierValue(mode),
+      canonicalMeleeMode: mode.canonicalMeleeMode,
+      crit: mode.crit ?? "—",
+      damageClass: mode.damageClass,
+      dmb: getDerivedDmbValue({
+        armorTemplate: input.armorTemplate,
+        characterInputs: input.characterInputs,
+        mode,
+        template: input.template,
+      }),
+      id: mode.id,
+      isPrimaryAttack:
+        mode.isPrimaryAttack === true ||
+        (!(input.template?.attackModes ?? []).some(
+          (candidate) => candidate.isPrimaryAttack === true,
+        ) &&
+          index === 0),
+      label: String(getAttackLabel(mode)),
+      ob: getDerivedObValue({
+        allocationInputs: input.allocationInputs,
+        armorTemplate: input.armorTemplate,
+        characterInputs: input.characterInputs,
+        mode,
+        template: input.template,
+      }),
+      order: mode.order ?? index,
+      secondCrit: mode.secondCrit ?? (index === 0 ? input.template?.secondCrit : undefined) ?? "—",
+    }),
+  );
 
   return {
+    attackModes,
+    attackMode1Id: mode1?.id,
     slotLabel: input.slotLabel,
     modeLabel: getCombatRowModeLabel(input.slotLabel),
     currentItemLabel:
@@ -466,6 +519,8 @@ function buildWeaponRow(input: {
         : input.template
           ? getItemLabel(input.state, input.item)
           : "None",
+    itemId: input.item?.id,
+    templateId: input.template?.id,
     damageClass1: mode1?.damageClass,
     damageClass2: mode2?.damageClass,
     damageClass3: mode3?.damageClass,

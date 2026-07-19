@@ -344,6 +344,11 @@ export interface ScenarioRepository {
     participantId: string,
     state: ScenarioParticipantState
   ): Promise<ScenarioParticipant>;
+  updateScenarioParticipantSnapshotAndState(
+    participantId: string,
+    snapshot: ScenarioParticipantSnapshot,
+    state: ScenarioParticipantState
+  ): Promise<ScenarioParticipant>;
   updateScenarioParticipantMetadata(input: {
     controlledByUserId?: string | null;
     displayOrder?: number | null;
@@ -660,6 +665,17 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async updateScenarioParticipantState(participantId, state) {
       const record = await prisma.scenarioParticipant.update({
         data: {
+          stateJson: asJson(state)
+        },
+        where: { id: participantId }
+      });
+
+      return mapScenarioParticipant(record);
+    },
+    async updateScenarioParticipantSnapshotAndState(participantId, snapshot, state) {
+      const record = await prisma.scenarioParticipant.update({
+        data: {
+          snapshotJson: asJson(snapshot),
           stateJson: asJson(state)
         },
         where: { id: participantId }

@@ -23,7 +23,7 @@ export default mergeConfig(
     test: {
       environmentMatchGlobs: [["**/*.component.test.tsx", "happy-dom"]],
       exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
-      setupFiles: ["./src/test/setup.ts"]
+      setupFiles: [fileURLToPath(new URL("./src/test/setup.ts", import.meta.url))]
     }
   })
 );

@@ -50,7 +50,7 @@ export default function MeleeWeaponsAdminPage() {
       <AdminPageIntro
         eyebrow="Admin / Melee weapons"
         title="Melee weapons"
-        summary="Read-only catalog view of system melee and thrown-capable weapon templates."
+        summary="System melee and thrown-capable weapon templates, including explicit per-mode main, type, order, and Double Attack capability data."
         actions={
           <AdminFilterBar>
             <AdminFilterSelect
@@ -73,7 +73,7 @@ export default function MeleeWeaponsAdminPage() {
 
       <AdminPanel
         title="System Melee Weapon Catalog"
-        subtitle="Melee and thrown-capable weapons use the same shared table structure as the current character-facing overview."
+        subtitle="Mode capabilities are edited in canonical weapon enrichment data and displayed here without a competing weapon-level Double Attack flag."
       >
         <AdminCatalogTable
           emptyLabel="No melee weapon templates found."

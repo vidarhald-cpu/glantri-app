@@ -44,7 +44,8 @@ keeps the one-point advantage and displays `14` in the documented shield/combine
 
 These are raw modifier sources when they apply to a given combat value:
 
-- General/Fatigue from active combat effects
+- General/Fatigue from active combat effects, only for consumers whose rules explicitly use that
+  bucket
 - Initiative manual or situational modifiers, for initiative only
 - OB/Skill manual or situational modifiers
 - DB/Parry manual or situational modifiers. The stored JSON key may remain `situationDb` for
@@ -71,31 +72,40 @@ a clear existing workbook-backed path:
 
 ```text
 Base DB = round(Dodge XP / 2) + 4 + DEX GM
-Raw modifiers = equipment defensive value + General/Fatigue + DB/Parry + encumbrance to-hit modifier
+Raw modifiers = equipment defensive value + canonical phase DB/Parry + encumbrance to-hit modifier
 Final DB = apply workbook percentage adjustment once
 ```
 
 OB, parry, and encounter-context combat/encumbrance-dependent skill rows now use the same rule for
 the live modifier sources currently wired through the app:
 
-- OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, General/Fatigue,
-  and OB/Skill before one percentage lookup.
+- OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, and the
+  canonical phase Skill/OB bucket before one percentage lookup. General/Fatigue rows do not enter
+  attack OB merely because they are general rows.
 - Parry/P uses the workbook raw parry as the base value and sums armor activity, weapon/shield
-  parry, General/Fatigue, and DB/Parry before one percentage lookup. Combined parry also keeps the
+  parry, and canonical phase DB/Parry before one percentage lookup. Combined parry also keeps the
   workbook minimum-1 primary/off-hand contribution rule before summing the live raw modifiers.
 - Encounter-context combat skill rows use the unencumbered skill total as the base value. Their
-  live skill value sums General/Fatigue and OB/Skill before one percentage lookup. Their encumbered
-  live value adds the existing encumbrance movement modifier as an `Enc` raw modifier into the same
-  lookup.
-- Initiative uses the panel/passive initiative as the base value. Its live initiative value sums
-  General/Fatigue and Initiative raw modifiers before one percentage lookup, then adds the
-  open-ended d6 roll. OB/Skill and DB/Parry are intentionally not part of initiative unless a later
-  spreadsheet-backed rule adds them.
+  live skill value uses the canonical phase Skill/OB bucket before one percentage lookup. Their
+  encumbered live value adds the existing encumbrance movement modifier as an `Enc` raw modifier
+  into the same lookup.
+- Initiative uses the panel/passive initiative as the base value. Its live initiative value uses
+  the canonical phase Initiative bucket before one percentage lookup, then adds the open-ended d6
+  roll. General/Fatigue, OB/Skill, and DB/Parry are not part of initiative merely because they are
+  present in their own buckets.
 
-DB/Parry does not include Skill/OB or Initiative. The encounter read model uses:
+Live combat-round attack requests must include both the client-computed final `ob` and the raw
+`obSkillRaw` used by that calculation. The server validates `obSkillRaw` against the participant's
+current persisted, phase-filtered canonical Skill/OB rows before accepting the final OB. The final
+workbook OB remains client-derived for now; reconstructing it authoritatively requires a broader
+server-side contract containing the weapon, equipment, total skill XP, characteristic, armor, and
+percentage-adjustment inputs. Snapshot OB is not used as a missing-field fallback for new attacks.
+
+DB/Parry does not include General/Fatigue, Skill/OB, or Initiative merely because those rows exist.
+The encounter read model uses:
 
 ```text
-DB/P raw live modifier = General/Fatigue + DB/Parry
+DB/P raw live modifier = canonical phase DB/Parry
 DB/P adjustment = percentageAdjustment(base DB or base P, abs(DB/P raw live modifier))
 DB/P final = base DB or base P +/- DB/P adjustment
 ```
@@ -103,22 +113,41 @@ DB/P final = base DB or base P +/- DB/P adjustment
 Manual parry resolution reuses that DB/P modifier path. After a hit or grazing hit, the GM selects
 the defender's available main-hand and/or off-hand parry sources for the selected incoming attack.
 The first implementation uses the unmodified combined Parry/P row when the base combat-state read model
-exposes one; otherwise it sums the selected source parry values. It then applies General/Fatigue and
-DB/Parry and the stored attack-result parry modifier as raw modifiers through the same percentage
-adjustment helper:
+exposes one; otherwise it sums the selected source parry values. It then applies canonical DB/Parry
+and the stored attack-result parry modifier as raw modifiers through the same percentage adjustment
+helper:
 
 ```text
 Parry/P base = selected source parry value, or combined Parry/P when available
-Parry raw modifier = General/Fatigue + DB/Parry + attack-result parry modifier
+Parry raw modifier = canonical phase DB/Parry + attack-result parry modifier
 Parry adjustment = percentageAdjustment(Parry/P base, abs(Parry raw modifier))
 Parry total = Parry/P base +/- Parry adjustment + open-ended d20 roll total
 Parry succeeds when Parry total >= 21
 ```
 
+New live parry requests must include `dbParryRaw`. The server derives the authoritative value from
+the defender's current persisted, phase-filtered canonical DB/Parry rows and rejects a stale or
+missing value. The server builds the recorded raw-modifier breakdown from that canonical value and
+the persisted attack-result parry modifier; it does not trust a client-submitted breakdown.
+`parryBase` remains client-derived because complete server reconstruction still requires the
+defender's workbook skill, equipment, armor, source-selection, and percentage-adjustment inputs.
+
+Attack-time final defender DB is normally taken from the defender's persisted step snapshot. The
+server validates the snapshot's recorded `dbRaw` against the defender's current canonical
+phase-filtered DB/Parry rows before executing a new attack. The GM proxy path may supply final
+`defenderDb` only when no snapshot is available; that compatibility path must also supply and pass
+server validation of `defenderDbParryRaw`. This validates the canonical combat-context contribution
+but is not full server-side reconstruction of final DB.
+
 The attack-result parry modifier is read from the hit lookup row and stored on the A1/A2 attack
 result, so undoing P1/P2 keeps the modifier available for a rerolled parry while undoing the attack
 removes the modifier source. Direction legality, hit-location coverage legality, and per-phase parry
 source allocation across multiple incoming opponents are future work.
+
+Completed attack and parry results remain recorded facts. Their final defender DB, parry base,
+modifier breakdown, roll, and outcome are not recalculated when current effects change. Undoing a
+result removes that recorded result under existing command semantics; a subsequently executed roll
+uses the then-current canonical DB/Parry rows.
 
 The Combat Round Manager inspector is context/time based. Base combat state is the equipment/loadout
 value before round or action modifiers. Round/phase modifiers include declared action modifiers,
@@ -163,32 +192,41 @@ future work and should be added as named raw modifier sources rather than as fin
 
 ## Generated action modifiers
 
-Declaring `Attack - Parry` currently creates one generated encounter modifier in the DB/Parry
+Declaring `Single attack` currently creates one generated encounter modifier in the DB/Parry
 bucket:
 
 ```text
 Stored bucket key = situationDb
 Value = -4
 Duration = 1 round
-Details = attack parry
+Details = single attack
 Source phase = phase 1
 ```
 
 This phase 1 row modifies phase 1 DB and Parry/P, but does not modify phase 2 DB/P.
 
-Declaring `Parry - Attack` mirrors the same rule in phase 2:
+Declaring `Reactive attack` mirrors the same rule in phase 2:
 
 ```text
 Stored bucket key = situationDb
 Value = -4
 Duration = 1 round
-Details = parry attack
+Details = reactive attack
 Source phase = phase 2
 ```
 
 This phase 2 row modifies phase 2 DB and Parry/P, but does not modify phase 1 DB/P.
 
 Declaring `Double Attack` creates generated modifiers in both combat phases:
+
+- Attack 1 and Attack 2 are distinct opportunities against the same opponent.
+- Each committed phase has Skill/OB `-1` and DB/Parry `-4`.
+- Attack 2 uses the shared phase-2 candidate/CE/initiative ordering; it has no separate scheduler.
+- Cancelling Attack 2 after phase 1 removes phase-2 Skill/OB `-1` and changes phase-2
+  DB/Parry from `-4` to `-2`; phase-1 recorded facts are unchanged.
+- Repeating one weapon requires an explicit `allowsRepeatedRoundAttack` melee-thrust mode.
+  Dagger, rapier-type thrust, spear, and melee-javelin modes are enriched explicitly; thrown
+  javelin modes are not eligible, and absent legacy capability defaults to false.
 
 ```text
 Stored bucket key = situationObSkill
@@ -210,7 +248,8 @@ Changing away from the matching action removes generated lines while leaving man
 If the GM removes a generated action line while the action remains selected, the next declaration save
 may recreate it because the line is derived from the action choice.
 
-Declaring `Adjust Range - Attack` currently creates declaration-level DB/Parry modifiers only:
+Declaring `Adjust Distance-Attack` creates one known modifier only when the requested
+distance is closer than the current canonical pair distance:
 
 ```text
 Stored bucket key = situationDb
@@ -219,18 +258,11 @@ Duration = 1 round
 Details = adjust range
 Source phase = phase 1
 
-Stored bucket key = situationDb
-Value = -4
-Duration = 1 round
-Details = adjust range attack
-Source phase = phase 2
 ```
 
-The source inventory notes that the phase 1 `-2` DB risk is specifically tied to moving closer.
-Because the app does not yet model range direction, distance state, or the opposed movement contest,
-this first slice applies the phase 1 declaration modifier whenever Adjust Range - Attack is declared.
-The phase 2 row is the standard attack DB/Parry risk. Full distance/range resolution and wrong-range
-attack penalties are deferred.
+The row is deterministic, visible at M1, applies only to Phase 1, and expires before M2.
+Moving farther creates no automatic row. The Phase 2 attack receives no action-specific DB row;
+its ordinary range modifiers are regenerated from the distance committed by the maneuver.
 
 ## Broad sword OB example
 
@@ -243,12 +275,12 @@ Theoretical raw modifiers = Broad sword OB +2
 Theoretical percentage adjustment = lookupWorkbookPercentageAdjustment(10, 2) = 2
 Theoretical final OB = 12
 
-Encounter raw modifiers = Broad sword OB +2 + General/Fatigue -1 = +1
+Encounter raw modifiers = Broad sword OB +2 + Skill/OB -1 = +1
 Encounter percentage adjustment = lookupWorkbookPercentageAdjustment(10, 1) = 1
 Encounter final OB = 11
 ```
 
-So theoretical OB `12` with live General/Fatigue `-1` should display as `11`, not `10`. A result of
+So theoretical OB `12` with live Skill/OB `-1` should display as `11`, not `10`. A result of
 `10` means the live modifier was both included in the raw modifier sum and then applied again as a
 flat post-adjustment subtraction. Applying the percentage table directly to the displayed `12` is
 also not the canonical path, because `12` is already a final workbook value rather than the raw OB

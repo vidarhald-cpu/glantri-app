@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { validateCombatDeclarationTargets } from "./combatDeclarationValidation";
+import {
+  getCombatDeclarationActionLabel,
+  validateCombatDeclarationTargets,
+} from "./combatDeclarationValidation";
 
 const phaseContexts = {
   phase1: {
@@ -22,7 +25,12 @@ const phaseContexts = {
 };
 
 describe("combat declaration target validation", () => {
-  it("requires a Phase 1 target for Attack - Parry", () => {
+  it("keeps legacy action ids while returning renamed labels", () => {
+    expect(getCombatDeclarationActionLabel("attack_parry")).toBe("Single attack");
+    expect(getCombatDeclarationActionLabel("parry_attack")).toBe("Reactive attack");
+  });
+
+  it("requires a Phase 1 target for Single attack", () => {
     expect(
       validateCombatDeclarationTargets({
         actionId: "attack_parry",
@@ -51,7 +59,22 @@ describe("combat declaration target validation", () => {
     });
   });
 
-  it("requires a Phase 2 target for Parry - Attack", () => {
+  it("requires Double Attack to use the same opponent in both phases", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "double_attack",
+        phaseContexts: {
+          phase1: { ...phaseContexts.phase1, targetParticipantId: "opponent-1" },
+          phase2: { ...phaseContexts.phase2, targetParticipantId: "opponent-2" },
+        },
+      }),
+    ).toMatchObject({
+      message: "Double Attack must target the same opponent in both phases.",
+      valid: false,
+    });
+  });
+
+  it("requires a Phase 2 target for Reactive attack", () => {
     expect(
       validateCombatDeclarationTargets({
         actionId: "parry_attack",
@@ -137,7 +160,7 @@ describe("combat declaration target validation", () => {
           },
           phase2: {
             ...phaseContexts.phase2,
-            targetParticipantId: "goblin",
+            targetParticipantId: "guard",
           },
         },
       }),

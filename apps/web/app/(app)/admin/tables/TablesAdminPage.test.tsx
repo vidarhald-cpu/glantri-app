@@ -103,7 +103,7 @@ describe("TablesAdminPage", () => {
       ["19", "Head", "Head", "head"],
       ["18", "Right arm", "R arm", "rightArm"],
     ]);
-    expect(bodyRows.at(-1)).toEqual(["1", "Left leg", "L leg", "leftLeg"]);
+    expect(bodyRows.at(-1)).toEqual(["1", "Lower left leg", "L lower", "lowerLeftLeg"]);
   });
 
   it("renders the canonical combat armor modifier table from structured rule data", () => {

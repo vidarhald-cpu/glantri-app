@@ -114,7 +114,11 @@ export interface WeaponDurabilityProfile {
 export interface WeaponAttackMode {
   id: string;
   label?: string | null;
+  /** Canonical display/default resolution order; legacy data falls back to array order. */
+  order?: number | null;
   canonicalMeleeMode?: CanonicalMeleeMode | null;
+  /** Explicit rules capability; absent legacy data is conservatively ineligible. */
+  allowsRepeatedRoundAttack?: boolean | null;
   isPrimaryAttack?: boolean | null;
   damageClass?: WeaponDamageClass | null;
   ob?: number | null;
@@ -264,6 +268,7 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   dmb2?: number | null;
   parry?: number | null;
   initiative?: number | null;
+  preferredDistances?: number[] | null;
   range?: string | null;
   armorMod1?: string | null;
   armorMod2?: string | null;

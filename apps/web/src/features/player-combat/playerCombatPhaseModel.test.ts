@@ -4,11 +4,21 @@ import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerE
 
 import {
   applyDefaultPlayerCombatPhaseContext,
+  buildCanonicalCombatTargetOptions,
+  buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   DEFAULT_MAIN_HAND_PARRY_DIRECTION,
   DEFAULT_OFF_HAND_PARRY_DIRECTION,
+  formatScenarioCombatEquipmentDiagnostic,
+  getScenarioCombatEquipmentStatus,
+  normalizeCombatEquipmentFeatureState,
+  resolveCombatFeintDeclarationRequestTarget,
+  resolveCombatFeintWeaponSkill,
+  resolveCanonicalCombatTargetIdentity,
+  resolveCombatEquipmentCharacterId,
+  resolveScenarioCombatEquipmentState,
   type PlayerCombatLoadoutReference,
 } from "./playerCombatPhaseModel";
 
@@ -55,13 +65,9 @@ const reference: PlayerCombatLoadoutReference = {
 
 function buildLoadoutModel(input: {
   rows: Array<Array<string | number>>;
+  sourceItemId?: string;
   valueLabel?: string;
-  weaponRows?: Array<{
-    currentItemLabel: string;
-    damageClass1?: string | null;
-    damageClass2?: string | null;
-    modeLabel: string;
-  }>;
+  weaponRows?: Array<Record<string, unknown>>;
 }): Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"] {
   return {
     armorSummary: null,
@@ -102,7 +108,7 @@ function buildLoadoutModel(input: {
         id: "primary",
         label: "Primary weapon",
         options: [],
-        value: "primary-weapon",
+        value: input.sourceItemId ?? "primary-weapon",
         valueLabel: input.valueLabel ?? "Long sword",
       },
     ],
@@ -110,7 +116,261 @@ function buildLoadoutModel(input: {
 }
 
 describe("player combat phase model", () => {
-  it("maps Attack - Parry into phase 1 attack/defense and phase 2 defense", () => {
+  it("derives a weapon Feint skill from authoritative weapon metadata", () => {
+    expect(
+      resolveCombatFeintWeaponSkill({
+        equipmentState: {
+          templates: {
+            templatesById: {
+              "broad-sword": {
+                category: "weapon",
+                id: "broad-sword",
+                weaponSkill: "1-h edged",
+              },
+            },
+          },
+        } as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["equipmentState"],
+        skills: [
+          { id: "dodge", name: "Dodge" },
+          { id: "one-hand-edged", name: "1-h edged" },
+        ],
+        sourceTemplateId: "broad-sword",
+      }),
+    ).toEqual({ id: "one-hand-edged", label: "1-h edged" });
+  });
+
+  it("resolves a weapon specialization name through its canonical parent skill", () => {
+    expect(
+      resolveCombatFeintWeaponSkill({
+        equipmentState: {
+          templates: {
+            templatesById: {
+              rapier: {
+                category: "weapon",
+                id: "rapier",
+                weaponSkill: "Fencing",
+              },
+            },
+          },
+        } as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["equipmentState"],
+        skills: [{ id: "one_handed_edged", name: "1-h edged" }],
+        specializations: [
+          {
+            id: "fencing",
+            name: "Fencing",
+            skillId: "one_handed_edged",
+          },
+        ] as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["specializations"],
+        sourceTemplateId: "rapier",
+      }),
+    ).toEqual({ id: "one_handed_edged", label: "1-h edged" });
+  });
+
+  it("normalizes target options to encounter ids without synthetic raw labels", () => {
+    expect(
+      buildCanonicalCombatTargetOptions({
+        encounterParticipants: [
+          {
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof buildCanonicalCombatTargetOptions>[0]["encounterParticipants"],
+        options: [
+          { displayName: "The Gladiator", id: "scenario-defender" },
+          { displayName: "Saved target (scenario-missing)", id: "scenario-missing" },
+        ],
+      }),
+    ).toEqual([{ displayName: "The Gladiator", id: "encounter-defender" }]);
+  });
+
+  it("keeps committed scenario item identities while enriching matching attack modes", () => {
+    const scenarioEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "scenario-javelin" },
+      },
+      itemsById: {
+        "scenario-javelin": {
+          characterId: "character-1",
+          id: "scenario-javelin",
+          templateId: "weapon-template-javelin",
+        },
+      },
+      locationsById: {},
+      templatesById: {
+        "weapon-template-javelin": { category: "weapon", id: "weapon-template-javelin" },
+      },
+    };
+    const resolvedEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "external-javelin" },
+      },
+      itemsById: {
+        "external-javelin": {
+          characterId: "character-1",
+          id: "external-javelin",
+          templateId: "weapon-template-javelin",
+        },
+      },
+      locationsById: {},
+      templates: {
+        templatesById: {
+          "weapon-template-javelin": {
+            attackModes: [{ id: "thrust", allowsRepeatedRoundAttack: true }],
+            category: "weapon",
+            id: "weapon-template-javelin",
+          },
+        },
+      },
+    };
+
+    const result = resolveScenarioCombatEquipmentState({
+      resolvedEquipmentState,
+      scenarioEquipmentState,
+    });
+
+    expect(result?.activeLoadoutByCharacterId["character-1"]?.activePrimaryWeaponItemId).toBe(
+      "scenario-javelin",
+    );
+    expect(Object.keys(result?.itemsById ?? {})).toEqual(["scenario-javelin"]);
+    expect(result?.templates.templatesById["weapon-template-javelin"]).toMatchObject({
+      attackModes: [{ id: "thrust", allowsRepeatedRoundAttack: true }],
+    });
+  });
+
+  it("builds declaration references from committed scenario IDs rather than hydrated IDs", () => {
+    const reference = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Fencing sword", "2", "Thrust", "10", "4", "A", "—", "A"]],
+        sourceItemId: "scenario-fencing-sword",
+        valueLabel: "Fencing sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                allowsRepeatedRoundAttack: true,
+                canonicalMeleeMode: "thrust",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Thrust",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Fencing sword",
+            itemId: "scenario-fencing-sword",
+            modeLabel: "Primary",
+            templateId: "weapon-template-fencing-sword",
+          },
+        ],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    }).reference;
+
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toEqual({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_1",
+      scenarioItemId: "scenario-fencing-sword",
+      slot: "primary",
+      sourceKind: "weapon",
+      templateId: "weapon-template-fencing-sword",
+    });
+  });
+
+  it("normalizes flat legacy snapshots and resolves their sole committed loadout owner", () => {
+    const state = normalizeCombatEquipmentFeatureState({
+      activeLoadoutByCharacterId: {
+        "base-character-id": { activePrimaryWeaponItemId: "scenario-sword" },
+      },
+      itemsById: {
+        "scenario-sword": { id: "scenario-sword", templateId: "sword-template" },
+      },
+      templatesById: { "sword-template": { category: "weapon", id: "sword-template" } },
+    });
+
+    expect(state?.locationsById).toEqual({});
+    expect(
+      resolveCombatEquipmentCharacterId({ characterId: "scenario-participant-id", state }),
+    ).toBe("base-character-id");
+  });
+
+  it("diagnoses a stale committed loadout without substituting hydrated item IDs", () => {
+    const scenarioEquipmentState = {
+      activeLoadoutByCharacterId: { "character-1": { activeAmmoItemIds: [] } },
+      itemsById: {},
+      locationsById: {},
+      templatesById: {},
+    };
+    const resolvedEquipmentState = {
+      activeLoadoutByCharacterId: {
+        "character-1": { activePrimaryWeaponItemId: "external-sword" },
+      },
+      itemsById: {
+        "external-sword": { id: "external-sword", templateId: "sword-template" },
+      },
+      locationsById: {},
+      templatesById: { "sword-template": { category: "weapon", id: "sword-template" } },
+    };
+
+    expect(
+      getScenarioCombatEquipmentStatus({
+        characterId: "character-1",
+        resolvedEquipmentState,
+        scenarioEquipmentState,
+      }),
+    ).toMatchObject({ kind: "stale" });
+    expect(
+      resolveScenarioCombatEquipmentState({
+        resolvedEquipmentState,
+        scenarioEquipmentState,
+      })?.itemsById,
+    ).toEqual({});
+  });
+
+  it("directs GM and player equipment recovery to the scenario assignment grid", () => {
+    const status = { kind: "stale" as const, message: "stale" };
+
+    expect(
+      formatScenarioCombatEquipmentDiagnostic({
+        isGameMaster: true,
+        participantName: "Scyrian",
+        status,
+      }),
+    ).toBe(
+      "Scyrian’s scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.",
+    );
+    expect(
+      formatScenarioCombatEquipmentDiagnostic({
+        isGameMaster: false,
+        participantName: "Scyrian",
+        status,
+      }),
+    ).toBe(
+      "Scyrian’s scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.",
+    );
+  });
+
+  it("does not silently replace incomplete committed equipment with Punch or Kick", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      allowUnarmedFallback: false,
+      loadoutModel: buildLoadoutModel({ rows: [["Unarmed", "Punch", "0", "Strike", "0"]] }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.attackStats).toBeNull();
+    expect(summary.reference).toBeNull();
+  });
+
+  it("maps Single attack into phase 1 attack/defense and phase 2 defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -146,7 +406,7 @@ describe("player combat phase model", () => {
     expect(phase2.showDefenseContext).toBe(true);
   });
 
-  it("maps Parry - Attack into separate phase 1 defense and phase 2 attack/defense", () => {
+  it("maps Reactive attack into separate phase 1 defense and phase 2 attack/defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -180,6 +440,95 @@ describe("player combat phase model", () => {
     expect(phase2.showAttackStats).toBe(true);
     expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.showDefenseContext).toBe(true);
+  });
+
+  it("resolves independent Double Attack modes and uses an eligible same-source fallback", () => {
+    const loadoutModel = buildLoadoutModel({
+      rows: [
+        [
+          "Primary",
+          "Dagger",
+          "2",
+          "Slash",
+          "7",
+          "3",
+          "A",
+          "—",
+          "A",
+          "10",
+          "0",
+          "4",
+          "Thrust",
+          "8",
+          "4",
+          "B",
+          "B",
+        ],
+      ],
+      valueLabel: "Dagger",
+      weaponRows: [
+        {
+          attackModes: [
+            {
+              allowsRepeatedRoundAttack: false,
+              armorModifier: "A",
+              canonicalMeleeMode: "slash",
+              crit: "A",
+              damageClass: "edged",
+              dmb: 3,
+              id: "slash",
+              isPrimaryAttack: true,
+              label: "Slash",
+              ob: 7,
+              order: 0,
+              secondCrit: "—",
+            },
+            {
+              allowsRepeatedRoundAttack: true,
+              armorModifier: "B",
+              canonicalMeleeMode: "thrust",
+              crit: "B",
+              damageClass: "pointed",
+              dmb: 4,
+              id: "thrust",
+              isPrimaryAttack: false,
+              label: "Thrust",
+              ob: 8,
+              order: 1,
+              secondCrit: "—",
+            },
+          ],
+          attackMode1Id: "slash",
+          currentItemLabel: "Dagger",
+          itemId: "primary-weapon",
+          modeLabel: "Primary",
+          templateId: "weapon-template-dagger",
+        },
+      ],
+    });
+
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "slash",
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+      selectedAttackModeId: "slash",
+    });
+
+    expect(phase1.selectedAttackModeId).toBe("slash");
+    expect(phase1.attackModeOptions.map((mode) => mode.id)).toEqual(["slash", "thrust"]);
+    expect(phase1.attackStats).toMatchObject({ ob: "7", weaponDamageClass: "edged" });
+    expect(phase2.selectedAttackModeId).toBe("thrust");
+    expect(phase2.selectedAttackModeUsedFallback).toBe(true);
+    expect(phase2.attackModeOptions.map((mode) => mode.id)).toEqual(["thrust"]);
+    expect(phase2.attackStats).toMatchObject({ ob: "8", weaponDamageClass: "pointed" });
   });
 
   it("maps Double Attack into phase 1 and phase 2 attacks", () => {
@@ -229,7 +578,7 @@ describe("player combat phase model", () => {
     expect(phase2.phaseContext.targetLocation).toBe("rightArm");
   });
 
-  it("selects Attack 1 for Double Attack phase 1 and Attack 2 for phase 2 when available", () => {
+  it("does not reinterpret a weapon's alternate mode as Double Attack's second opportunity", () => {
     const loadoutModel = buildLoadoutModel({
       rows: [
         [
@@ -286,11 +635,11 @@ describe("player combat phase model", () => {
     });
     expect(phase2.attackStats).toMatchObject({
       attackMode: "C",
-      dmb: "6",
-      maxCrits: "E",
-      ob: "8",
-      weaponCriticalCode: "E",
-      weaponDamageClass: "pointed",
+      dmb: "8",
+      maxCrits: "F / S",
+      ob: "9",
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
       weaponName: "Long sword",
     });
   });
@@ -382,7 +731,7 @@ describe("player combat phase model", () => {
     expect(phase1.phaseCard.title).toBe("Adjust range");
     expect(phase1.showAttackStats).toBe(false);
     expect(phase1.showAttackLocationSelector).toBe(false);
-    expect(phase1.showDefenseContext).toBe(false);
+    expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(true);
     expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.phaseContext.targetParticipantId).toBe("target-phase-2");
@@ -466,5 +815,135 @@ describe("player combat phase model", () => {
     expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetParticipantId).toBe(
       "target-phase-2",
     );
+  });
+
+  it("serializes the visible scenario Feint target as one canonical encounter target", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        {
+          characterId: "character-defender",
+          id: "encounter-defender",
+          scenarioParticipantId: "scenario-defender",
+        },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+        phase2: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      phaseContexts: {
+        phase1: expect.objectContaining({ targetParticipantId: "encounter-defender" }),
+        phase2: expect.objectContaining({ targetParticipantId: "encounter-defender" }),
+      },
+      targetParticipantId: "encounter-defender",
+    });
+  });
+
+  it("resolves a canonical encounter target to its scenario participant for live API reads", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [
+          {
+            characterId: "character-defender",
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof resolveCanonicalCombatTargetIdentity>[0]["encounterParticipants"],
+        targetParticipantId: "encounter-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "encounter-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
+  it("always exposes defense context for both Feint phases", () => {
+    const phaseContext = createEmptyPlayerEncounterCombatContext();
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: "Broad sword",
+      offHandParryItemLabel: "Medium shield",
+      phaseContext,
+      reference,
+    });
+
+    for (const phaseKey of ["phase1", "phase2"] as const) {
+      expect(
+        buildPlayerCombatPhasePanelModel({
+          actionId: "feint_attack",
+          attackStats,
+          defenseStats,
+          phaseCard: { ...phaseCard, phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2" },
+          phaseContext,
+          phaseKey,
+          secondaryActionId: "",
+        }).showDefenseContext,
+      ).toBe(true);
+    }
+  });
+
+  it("lets the current visible Feint target fill an older empty paired phase", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        { id: "encounter-defender", scenarioParticipantId: "scenario-defender" },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-defender",
+        },
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      phaseContexts: {
+        phase1: { targetParticipantId: "encounter-defender" },
+        phase2: { targetParticipantId: "encounter-defender" },
+      },
+    });
+  });
+
+  it("lets the current Phase 1 Feint target replace a stale Phase 2 target", () => {
+    const result = resolveCombatFeintDeclarationRequestTarget({
+      encounterParticipants: [
+        { id: "encounter-a", scenarioParticipantId: "scenario-a" },
+        { id: "encounter-b", scenarioParticipantId: "scenario-b" },
+      ] as Parameters<
+        typeof resolveCombatFeintDeclarationRequestTarget
+      >[0]["encounterParticipants"],
+      phaseContexts: {
+        phase1: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-a",
+        },
+        phase2: {
+          ...createEmptyPlayerEncounterCombatContext(),
+          targetParticipantId: "scenario-b",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      phaseContexts: {
+        phase1: { targetParticipantId: "encounter-a" },
+        phase2: { targetParticipantId: "encounter-a" },
+      },
+      targetParticipantId: "encounter-a",
+    });
   });
 });

@@ -50,7 +50,54 @@ describe("critical effect proposal generation", () => {
     });
 
     expect(proposal.criticalResult).toBeUndefined();
+    expect(proposal.warnings.join(" ")).toContain("legacy whole leg");
     expect(proposal.warnings.join(" ")).toContain("distinguishes upper_leg and lower_leg");
+  });
+
+  it("builds critical proposals for upper and lower leg hit locations", () => {
+    const upperRightProposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 5,
+      finalCriticalRoll: 13,
+      selectedHitLocation: "upperRightLeg",
+      weaponDamageClass: "edged",
+    });
+    const upperLeftProposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 5,
+      finalCriticalRoll: 13,
+      selectedHitLocation: "upperLeftLeg",
+      weaponDamageClass: "edged",
+    });
+    const lowerRightProposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 5,
+      finalCriticalRoll: 13,
+      selectedHitLocation: "lowerRightLeg",
+      weaponDamageClass: "edged",
+    });
+    const lowerLeftProposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 5,
+      finalCriticalRoll: 13,
+      selectedHitLocation: "lowerLeftLeg",
+      weaponDamageClass: "edged",
+    });
+
+    expect(upperRightProposal.criticalResult).toMatchObject({
+      critKey: "sharp|upper_leg|13",
+      location: "upper_leg",
+    });
+    expect(upperLeftProposal.criticalResult).toMatchObject({
+      critKey: "sharp|upper_leg|13",
+      location: "upper_leg",
+    });
+    expect(lowerRightProposal.criticalResult).toMatchObject({
+      critKey: "sharp|lower_leg|13",
+      location: "lower_leg",
+    });
+    expect(lowerLeftProposal.criticalResult).toMatchObject({
+      critKey: "sharp|lower_leg|13",
+      location: "lower_leg",
+    });
+    expect(upperRightProposal.warnings).toEqual([]);
+    expect(lowerRightProposal.warnings).toEqual([]);
   });
 
   it("does not clamp out-of-range final critical rolls", () => {

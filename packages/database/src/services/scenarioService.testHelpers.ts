@@ -164,6 +164,20 @@ export function createScenarioRepositoryStub() {
       participants.push(participant);
       return participant;
     },
+    updateScenarioParticipantSnapshotAndState: async (participantId, snapshot, state) => {
+      const participantIndex = participants.findIndex((entry) => entry.id === participantId);
+      if (participantIndex < 0) {
+        throw new Error("Scenario participant not found.");
+      }
+      const participant = {
+        ...participants[participantIndex]!,
+        snapshot,
+        state,
+        updatedAt: "2026-04-22T00:00:00.000Z",
+      };
+      participants[participantIndex] = participant;
+      return participant;
+    },
     getScenarioParticipantById: async (participantId, scenarioId) =>
       participants.find((p) => p.id === participantId && p.scenarioId === scenarioId) ?? null,
     listScenarioParticipants: async (scenarioId) =>

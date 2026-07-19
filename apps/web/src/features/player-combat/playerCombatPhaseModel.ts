@@ -1,15 +1,22 @@
 import type {
+  CombatAttackSourceRef,
+  CombatAttackSourceSlot,
+  CombatRoundPhaseContexts,
+  EncounterSession,
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
-import { getCombatDeclarationAttackPhases } from "@glantri/domain";
+import {
+  getCombatDeclarationAttackPhases,
+  resolveCombatFeintWeaponSkillDefinition,
+  resolvePreferredAttackMode,
+  scenarioParticipantCombatContextSchema,
+  type SkillSpecialization,
+} from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
-import {
-  isPlayerEncounterDefenseAction,
-  type PlayerEncounterActionId,
-} from "@/lib/campaigns/playerEncounter";
+import type { PlayerEncounterActionId } from "@/lib/campaigns/playerEncounter";
 
 import type {
   PlayerCombatAttackStatsView,
@@ -18,6 +25,127 @@ import type {
 } from "./PlayerCombatPanels";
 
 export type PlayerCombatPhaseKey = "phase1" | "phase2";
+
+export function resolveCombatFeintWeaponSkill(input: {
+  equipmentState?: EquipmentFeatureState | null;
+  skills: readonly { id: string; name: string }[];
+  specializations?: readonly SkillSpecialization[];
+  sourceTemplateId?: string;
+}): { id: string; label: string } | undefined {
+  const template = input.sourceTemplateId
+    ? input.equipmentState?.templates.templatesById[input.sourceTemplateId]
+    : undefined;
+  if (!template || (template.category !== "weapon" && template.category !== "shield")) {
+    return undefined;
+  }
+  const skill = resolveCombatFeintWeaponSkillDefinition({
+    skills: input.skills as Parameters<typeof resolveCombatFeintWeaponSkillDefinition>[0]["skills"],
+    specializations: input.specializations,
+    weaponSkill: template.weaponSkill,
+  });
+  return skill ? { id: skill.id, label: skill.name } : undefined;
+}
+
+export type CombatFeintDeclarationTargetResolution =
+  | {
+      ok: true;
+      phaseContexts: CombatRoundPhaseContexts;
+      targetParticipantId: string;
+    }
+  | { message: string; ok: false };
+
+export function buildCanonicalCombatTargetOptions(input: {
+  encounterParticipants: EncounterSession["participants"];
+  options: readonly { displayName: string; id: string }[];
+}): Array<{ displayName: string; id: string }> {
+  const byId = new Map<string, { displayName: string; id: string }>();
+  for (const option of input.options) {
+    const participant = input.encounterParticipants.find(
+      (candidate) =>
+        candidate.id === option.id ||
+        candidate.scenarioParticipantId === option.id ||
+        candidate.characterId === option.id,
+    );
+    if (participant) {
+      byId.set(participant.id, { displayName: option.displayName, id: participant.id });
+    }
+  }
+  return [...byId.values()];
+}
+
+export function resolveCanonicalCombatTargetIdentity(input: {
+  encounterParticipants: EncounterSession["participants"];
+  targetParticipantId?: string;
+}):
+  | {
+      encounterParticipantId: string;
+      scenarioParticipantId: string;
+    }
+  | undefined {
+  if (!input.targetParticipantId) return undefined;
+  const participant = input.encounterParticipants.find(
+    (candidate) =>
+      candidate.id === input.targetParticipantId ||
+      candidate.scenarioParticipantId === input.targetParticipantId ||
+      candidate.characterId === input.targetParticipantId,
+  );
+  return participant?.scenarioParticipantId
+    ? {
+        encounterParticipantId: participant.id,
+        scenarioParticipantId: participant.scenarioParticipantId,
+      }
+    : undefined;
+}
+
+/**
+ * Combat commands identify actors by encounter-participant id. Phase controls may
+ * begin with a committed scenario-participant alias, so normalize the current
+ * draft once at the request boundary and write the same target into both phases.
+ */
+export function resolveCombatFeintDeclarationRequestTarget(input: {
+  encounterParticipants: EncounterSession["participants"];
+  phaseContexts: CombatRoundPhaseContexts;
+}): CombatFeintDeclarationTargetResolution {
+  const phase1Target = input.phaseContexts.phase1?.targetParticipantId;
+  const phase2Target = input.phaseContexts.phase2?.targetParticipantId;
+  const selectedTarget = phase1Target ?? phase2Target;
+  if (!selectedTarget) {
+    return { message: "Select a target for the Feint.", ok: false };
+  }
+
+  const resolveTarget = (targetId: string | undefined) =>
+    targetId
+      ? input.encounterParticipants.find(
+          (participant) =>
+            participant.id === targetId ||
+            participant.scenarioParticipantId === targetId ||
+            participant.characterId === targetId,
+        )
+      : undefined;
+  const targetParticipant = resolveTarget(selectedTarget);
+  if (!targetParticipant) {
+    return {
+      message: "The Feint target is no longer in this encounter.",
+      ok: false,
+    };
+  }
+  const targetParticipantId = targetParticipant.id;
+  return {
+    ok: true,
+    phaseContexts: {
+      ...input.phaseContexts,
+      phase1: scenarioParticipantCombatContextSchema.parse({
+        ...input.phaseContexts.phase1,
+        targetParticipantId,
+      }),
+      phase2: scenarioParticipantCombatContextSchema.parse({
+        ...input.phaseContexts.phase2,
+        targetParticipantId,
+      }),
+    },
+    targetParticipantId,
+  };
+}
 
 export interface PlayerCombatLoadoutReference {
   am: string;
@@ -42,14 +170,27 @@ export interface PlayerCombatLoadoutReference {
   parry: string;
   secondCrit: string;
   selectedWeapon: string;
+  sourceAttackModeId?: string;
+  sourceItemId?: string;
+  sourceSlot?: Exclude<CombatAttackSourceSlot, "virtual">;
+  sourceTemplateId?: string;
 }
 
 export interface PlayerCombatLoadoutSummary {
+  attackModeOptions: PlayerCombatAttackModeOption[];
   attackStats: PlayerCombatAttackStatsView | null;
   mainHandParryItemLabel: string;
   offHandParryItemLabel: string;
   passiveInitiative: number;
   reference: PlayerCombatLoadoutReference | null;
+  selectedAttackModeId?: string;
+  selectedAttackModeUsedFallback: boolean;
+}
+
+export interface PlayerCombatAttackModeOption {
+  allowsRepeatedRoundAttack: boolean;
+  id: string;
+  label: string;
 }
 
 export interface PlayerCombatPhasePanelModel {
@@ -138,10 +279,213 @@ export function isEquipmentFeatureState(value: unknown): value is EquipmentFeatu
   );
 }
 
+export function normalizeCombatEquipmentFeatureState(value: unknown): EquipmentFeatureState | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const nestedTemplates =
+    candidate.templates && typeof candidate.templates === "object"
+      ? (candidate.templates as Record<string, unknown>).templatesById
+      : undefined;
+  const templatesById = nestedTemplates ?? candidate.templatesById;
+  if (
+    !candidate.itemsById ||
+    typeof candidate.itemsById !== "object" ||
+    !candidate.activeLoadoutByCharacterId ||
+    typeof candidate.activeLoadoutByCharacterId !== "object" ||
+    !templatesById ||
+    typeof templatesById !== "object"
+  ) {
+    return null;
+  }
+
+  return {
+    activeLoadoutByCharacterId:
+      candidate.activeLoadoutByCharacterId as EquipmentFeatureState["activeLoadoutByCharacterId"],
+    itemsById: candidate.itemsById as EquipmentFeatureState["itemsById"],
+    locationsById:
+      candidate.locationsById && typeof candidate.locationsById === "object"
+        ? (candidate.locationsById as EquipmentFeatureState["locationsById"])
+        : {},
+    templates: {
+      templatesById: templatesById as EquipmentFeatureState["templates"]["templatesById"],
+    },
+  };
+}
+
+export function resolveCombatEquipmentCharacterId(input: {
+  characterId?: string;
+  state: EquipmentFeatureState | null;
+}): string | undefined {
+  if (!input.state) return undefined;
+  if (input.characterId && input.state.activeLoadoutByCharacterId[input.characterId]) {
+    return input.characterId;
+  }
+  const loadoutOwnerIds = Object.keys(input.state.activeLoadoutByCharacterId);
+  return loadoutOwnerIds.length === 1 ? loadoutOwnerIds[0] : undefined;
+}
+
+export interface ScenarioCombatEquipmentStatus {
+  kind: "ready" | "unarmed" | "stale" | "incomplete";
+  message?: string;
+}
+
+export function formatScenarioCombatEquipmentDiagnostic(input: {
+  isGameMaster: boolean;
+  participantName?: string;
+  status: ScenarioCombatEquipmentStatus;
+}): string | undefined {
+  if (!input.status.message) return undefined;
+  const participantName = input.participantName?.trim() || "This participant";
+  const possessive =
+    participantName === "This participant" ? "This participant’s" : `${participantName}’s`;
+  return input.isGameMaster
+    ? `${possessive} scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.`
+    : `${possessive} scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.`;
+}
+
+function getReadyEquipmentItemIds(state: EquipmentFeatureState, characterId: string): string[] {
+  const loadout = state.activeLoadoutByCharacterId[characterId];
+  if (!loadout) return [];
+  return [
+    loadout.activePrimaryWeaponItemId,
+    loadout.activeSecondaryWeaponItemId,
+    loadout.activeMissileWeaponItemId,
+    loadout.readyShieldItemId,
+    loadout.wornArmorItemId,
+  ].filter((itemId): itemId is string => Boolean(itemId));
+}
+
+/** Diagnoses scenario-owned equipment without substituting mutable character item identities. */
+export function getScenarioCombatEquipmentStatus(input: {
+  characterId?: string;
+  resolvedEquipmentState?: unknown;
+  scenarioEquipmentState?: unknown;
+}): ScenarioCombatEquipmentStatus {
+  const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
+  if (!scenarioState) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment data is unavailable. Ask the GM to refresh it.",
+    };
+  }
+  const scenarioCharacterId = resolveCombatEquipmentCharacterId({
+    characterId: input.characterId,
+    state: scenarioState,
+  });
+  if (!scenarioCharacterId) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment loadout is unavailable. Ask the GM to refresh it.",
+    };
+  }
+  const scenarioReadyIds = getReadyEquipmentItemIds(scenarioState, scenarioCharacterId);
+  const missingMetadata = scenarioReadyIds.some((itemId) => {
+    const item = scenarioState.itemsById[itemId];
+    return !item || !scenarioState.templates.templatesById[item.templateId];
+  });
+  if (missingMetadata) {
+    return {
+      kind: "incomplete",
+      message: "Committed equipment metadata is incomplete. Ask the GM to refresh it.",
+    };
+  }
+  if (scenarioReadyIds.length > 0) return { kind: "ready" };
+
+  const resolvedState = normalizeCombatEquipmentFeatureState(input.resolvedEquipmentState);
+  const resolvedCharacterId = resolveCombatEquipmentCharacterId({
+    characterId: input.characterId,
+    state: resolvedState,
+  });
+  if (
+    resolvedState &&
+    resolvedCharacterId &&
+    getReadyEquipmentItemIds(resolvedState, resolvedCharacterId).length > 0
+  ) {
+    return {
+      kind: "stale",
+      message: "Committed equipment is out of date. Ask the GM to refresh it.",
+    };
+  }
+  return { kind: "unarmed" };
+}
+
+/**
+ * Combat declarations use the committed scenario participant's item and loadout IDs.
+ * Current equipment data may only enrich matching template definitions (for example,
+ * attack-mode capabilities added after an older scenario snapshot was recorded).
+ */
+export function resolveScenarioCombatEquipmentState(input: {
+  resolvedEquipmentState?: unknown;
+  scenarioEquipmentState?: unknown;
+}): EquipmentFeatureState | null {
+  const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
+  const resolvedState = normalizeCombatEquipmentFeatureState(input.resolvedEquipmentState);
+
+  if (!scenarioState) return resolvedState;
+  if (!resolvedState) return scenarioState;
+
+  const templatesById = { ...scenarioState.templates.templatesById };
+  for (const item of Object.values(scenarioState.itemsById)) {
+    const resolvedTemplate = resolvedState.templates.templatesById[item.templateId];
+    if (resolvedTemplate) {
+      templatesById[item.templateId] = resolvedTemplate;
+    }
+  }
+
+  return {
+    ...scenarioState,
+    templates: {
+      ...scenarioState.templates,
+      templatesById,
+    },
+  };
+}
+
+export function buildCombatAttackSourceRef(input: {
+  phaseKey: PlayerCombatPhaseKey;
+  reference: PlayerCombatLoadoutReference | null;
+  unarmedTemplateId: string;
+}): CombatAttackSourceRef | undefined {
+  const opportunitySlot = input.phaseKey === "phase1" ? "attack_1" : "attack_2";
+  if (
+    input.reference?.sourceItemId &&
+    input.reference.sourceTemplateId &&
+    input.reference.sourceAttackModeId &&
+    input.reference.sourceSlot
+  ) {
+    return {
+      attackModeId: input.reference.sourceAttackModeId,
+      opportunitySlot,
+      scenarioItemId: input.reference.sourceItemId,
+      slot: input.reference.sourceSlot,
+      sourceKind: "weapon",
+      templateId: input.reference.sourceTemplateId,
+    };
+  }
+
+  if (
+    input.reference?.sourceItemId ||
+    input.reference?.sourceTemplateId ||
+    input.reference?.sourceAttackModeId
+  ) {
+    return undefined;
+  }
+
+  return {
+    attackModeId: "mode-1",
+    opportunitySlot,
+    slot: "virtual",
+    sourceKind: "unarmed",
+    templateId: input.unarmedTemplateId,
+  };
+}
+
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
+  allowUnarmedFallback?: boolean;
   loadoutModel: EquipmentLoadoutModuleModel;
   phaseKey?: PlayerCombatPhaseKey;
+  selectedAttackModeId?: string;
   secondaryActionId: PlayerEncounterActionId | "";
 }): PlayerCombatLoadoutSummary {
   const loadoutFieldDisplayMap = new Map(
@@ -163,21 +507,70 @@ export function buildPlayerCombatLoadoutSummary(input: {
   if (!combatPanelModel) {
     return {
       attackStats: null,
+      attackModeOptions: [],
       mainHandParryItemLabel,
       offHandParryItemLabel,
       passiveInitiative: 0,
       reference: null,
+      selectedAttackModeUsedFallback: false,
     };
   }
 
+  const doubleAttackFieldId =
+    input.actionId === "double_attack" && input.phaseKey === "phase2"
+      ? secondaryLoadoutLabel && secondaryLoadoutLabel !== "None"
+        ? ("secondary" as const)
+        : ("primary" as const)
+      : undefined;
   const preferredFieldIds = [
-    getRelevantLoadoutFieldId(input.actionId),
+    doubleAttackFieldId ?? getRelevantLoadoutFieldId(input.actionId),
     getRelevantLoadoutFieldId(input.secondaryActionId),
   ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
+  const preferredItemIds = preferredFieldIds
+    .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value)
+    .filter((value): value is string => Boolean(value));
   const preferredWeaponLabels = preferredFieldIds
     .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
     .filter((value): value is string => Boolean(value) && value !== "None");
+  if (
+    input.actionId === "double_attack" &&
+    input.allowUnarmedFallback !== false &&
+    preferredWeaponLabels.length === 0
+  ) {
+    preferredWeaponLabels.push(input.phaseKey === "phase2" ? "Kick" : "Punch");
+  }
+  if (input.allowUnarmedFallback === false && preferredItemIds.length === 0) {
+    return {
+      attackStats: null,
+      attackModeOptions: [],
+      mainHandParryItemLabel,
+      offHandParryItemLabel,
+      passiveInitiative: 0,
+      reference: null,
+      selectedAttackModeUsedFallback: false,
+    };
+  }
   const referenceRow =
+    preferredItemIds
+      .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
+      .map((rawRow) =>
+        rawRow
+          ? (combatPanelModel.weaponModeTable.rows.find((row) => {
+              const weaponLabel = getCombatTableCell({
+                columns: combatPanelModel.weaponModeTable.columns,
+                label: "Weapon",
+                row,
+              });
+              const modeLabel = getCombatTableCell({
+                columns: combatPanelModel.weaponModeTable.columns,
+                label: "Mode",
+                row,
+              });
+              return weaponLabel === rawRow.currentItemLabel && modeLabel === rawRow.modeLabel;
+            }) ?? null)
+          : null,
+      )
+      .find((row) => row !== null) ??
     preferredWeaponLabels
       .map(
         (weaponLabel) =>
@@ -238,6 +631,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
       offHandParryItemLabel,
       passiveInitiative: 0,
       reference,
+      attackModeOptions: [],
+      selectedAttackModeUsedFallback: false,
     };
   }
 
@@ -252,25 +647,58 @@ export function buildPlayerCombatLoadoutSummary(input: {
     row: referenceRow,
   });
   const rawReferenceRow = combatPanelModel.weaponRows?.find(
-    (row) =>
-      row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+    (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
   );
+  if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
+    return {
+      attackStats: null,
+      attackModeOptions: [],
+      mainHandParryItemLabel,
+      offHandParryItemLabel,
+      passiveInitiative: 0,
+      reference: null,
+      selectedAttackModeUsedFallback: false,
+    };
+  }
+  const primaryItemId = loadoutFieldDisplayMap.get("primary")?.value;
+  const selectedSourceItemId = rawReferenceRow?.itemId;
+  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find(
+    (fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value === selectedSourceItemId,
+  );
+  const requireRepeatedRoundAttack = Boolean(
+    input.actionId === "double_attack" &&
+    input.phaseKey === "phase2" &&
+    primaryItemId &&
+    selectedSourceItemId === primaryItemId,
+  );
+  const modeResolution = resolvePreferredAttackMode({
+    requireRepeatedRoundAttack,
+    selectedModeId: input.selectedAttackModeId,
+    weapon: {
+      attackModes: rawReferenceRow?.attackModes ?? [],
+    },
+  });
+  const selectedDerivedMode = modeResolution.mode;
   const reference = {
-    am: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "AM",
-      row: referenceRow,
-    }),
+    am: selectedDerivedMode
+      ? String(selectedDerivedMode.armorModifier)
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "AM",
+          row: referenceRow,
+        }),
     am2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "AM 2",
       row: referenceRow,
     }),
-    attackMode: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Attack 1",
-      row: referenceRow,
-    }),
+    attackMode: selectedDerivedMode
+      ? selectedDerivedMode.label
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Attack 1",
+          row: referenceRow,
+        }),
     attackMode2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "Attack 2",
@@ -304,28 +732,32 @@ export function buildPlayerCombatLoadoutSummary(input: {
           row: combinedRow,
         })
       : "—",
-    crit: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Crit 1",
-      row: referenceRow,
-    }),
+    crit: selectedDerivedMode
+      ? String(selectedDerivedMode.crit)
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Crit 1",
+          row: referenceRow,
+        }),
     crit2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "Crit 2",
       row: referenceRow,
     }),
-    damageClass: rawReferenceRow?.damageClass1 ?? "—",
+    damageClass: selectedDerivedMode?.damageClass ?? rawReferenceRow?.damageClass1 ?? "—",
     damageClass2: rawReferenceRow?.damageClass2 ?? "—",
     db: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "DB",
       row: referenceRow,
     }),
-    dmb: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "DMB",
-      row: referenceRow,
-    }),
+    dmb: selectedDerivedMode
+      ? String(selectedDerivedMode.dmb)
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "DMB",
+          row: referenceRow,
+        }),
     dmb2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "DMB2",
@@ -341,11 +773,13 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "I",
       row: referenceRow,
     }),
-    ob: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "OB",
-      row: referenceRow,
-    }),
+    ob: selectedDerivedMode
+      ? String(selectedDerivedMode.ob)
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "OB",
+          row: referenceRow,
+        }),
     ob2: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "OB2",
@@ -356,15 +790,26 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Parry",
       row: referenceRow,
     }),
-    secondCrit: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Sec",
-      row: referenceRow,
-    }),
+    secondCrit: selectedDerivedMode
+      ? String(selectedDerivedMode.secondCrit)
+      : getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Sec",
+          row: referenceRow,
+        }),
     selectedWeapon: referenceWeaponLabel,
+    sourceAttackModeId: modeResolution.mode?.id ?? rawReferenceRow?.attackMode1Id,
+    sourceItemId: rawReferenceRow?.itemId,
+    sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
+    sourceTemplateId: rawReferenceRow?.templateId,
   };
 
   return {
+    attackModeOptions: modeResolution.legalModes.map((mode) => ({
+      allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
+      id: mode.id,
+      label: mode.label ?? mode.id,
+    })),
     attackStats: buildPlayerCombatAttackStats(reference, {
       actionId: input.actionId,
       phaseKey: input.phaseKey,
@@ -373,12 +818,14 @@ export function buildPlayerCombatLoadoutSummary(input: {
     offHandParryItemLabel,
     passiveInitiative: parsePassiveInitiative(reference.initiative),
     reference,
+    selectedAttackModeId: modeResolution.mode?.id,
+    selectedAttackModeUsedFallback: modeResolution.usedFallback,
   };
 }
 
 export function buildPlayerCombatAttackStats(
   reference: PlayerCombatLoadoutReference | null,
-  input: {
+  _input: {
     actionId?: PlayerEncounterActionId | "";
     phaseKey?: PlayerCombatPhaseKey;
   } = {},
@@ -387,14 +834,10 @@ export function buildPlayerCombatAttackStats(
     return null;
   }
 
-  const useSecondAttack =
-    input.actionId === "double_attack" &&
-    input.phaseKey === "phase2" &&
-    (hasDisplayValue(reference.attackMode2) ||
-      hasDisplayValue(reference.ob2) ||
-      hasDisplayValue(reference.dmb2) ||
-      hasDisplayValue(reference.am2) ||
-      hasDisplayValue(reference.crit2));
+  // Double Attack's second attack is a separate source/opportunity, not a template's
+  // optional "Attack 2" alternate mode. Same-source repetition remains mode 1 and is
+  // validated from explicit weapon capability by the API/domain boundary.
+  const useSecondAttack = false;
   const attackMode = useSecondAttack ? reference.am2 : reference.am;
   const crit = useSecondAttack ? reference.crit2 : reference.crit;
   const damageClass = useSecondAttack ? reference.damageClass2 : reference.damageClass;
@@ -478,35 +921,30 @@ function getPhaseContentFlags(input: {
   actionId: PlayerEncounterActionId | "";
   phaseKey: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
-}): { attack: boolean; defense: boolean } {
+}): { attack: boolean } {
   const attackPhases = getCombatDeclarationAttackPhases({
     actionId: input.actionId,
     secondaryActionId: input.secondaryActionId,
   });
 
   if (input.actionId === "attack_parry") {
-    return input.phaseKey === "phase1"
-      ? { attack: true, defense: true }
-      : { attack: false, defense: true };
+    return { attack: input.phaseKey === "phase1" };
   }
 
   if (input.actionId === "parry_attack") {
-    return input.phaseKey === "phase1"
-      ? { attack: false, defense: true }
-      : { attack: true, defense: true };
+    return { attack: input.phaseKey === "phase2" };
   }
 
   if (input.actionId === "adjust_range_attack") {
-    return input.phaseKey === "phase1"
-      ? { attack: false, defense: false }
-      : { attack: true, defense: false };
+    return { attack: input.phaseKey === "phase2" };
   }
 
-  const phaseActionId = input.phaseKey === "phase1" ? input.actionId : input.secondaryActionId;
+  if (input.actionId === "double_attack") {
+    return { attack: true };
+  }
 
   return {
     attack: attackPhases.includes(input.phaseKey),
-    defense: isPlayerEncounterDefenseAction(phaseActionId),
   };
 }
 
@@ -540,6 +978,9 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
-    showDefenseContext: Boolean(input.defenseStats && flags.defense),
+    // Defensive state belongs to the participant and phase, not to the offensive
+    // action selected for that phase. Render the shared defense/parry projection
+    // even when there is no attack opportunity.
+    showDefenseContext: true,
   };
 }

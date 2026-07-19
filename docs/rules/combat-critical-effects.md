@@ -180,8 +180,9 @@ Mapping policy:
 - MC-only fallback is allowed only for codes that are unambiguous in current weapon data. Ambiguous
   MC-only values such as `FS`, `EP`, and `FP` are shown as mapping warnings unless damage class is
   available.
-- Current combat hit locations map directly for head, chest, abdomen, and arm. Whole-leg hits remain
-  ambiguous because the critical table distinguishes upper leg and lower leg.
+- Current combat hit locations map directly for head, chest, abdomen, arm, upper leg, and lower leg.
+  Legacy saved whole-leg hits remain ambiguous because the critical table distinguishes upper leg and
+  lower leg; review those old results as upper or lower leg before applying critical effects.
 - The final numeric critical roll maps directly to critical index `1` through `16`. Values of `0` or
   lower mean no critical effect. Values above `16` are unsupported and are not clamped.
 

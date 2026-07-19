@@ -4,7 +4,6 @@ import {
   assertClosedDieRoll,
   expandClosedDieRuleTable,
   resolveClosedDieRuleTableRoll,
-  type ClosedDieRuleTableBand,
 } from "../rules/ruleTable";
 
 export const hitLocationSchema = z.enum([
@@ -13,6 +12,10 @@ export const hitLocationSchema = z.enum([
   "leftArm",
   "chest",
   "abdomen",
+  "upperRightLeg",
+  "lowerRightLeg",
+  "upperLeftLeg",
+  "lowerLeftLeg",
   "rightLeg",
   "leftLeg",
 ]);
@@ -31,7 +34,31 @@ export interface HitLocationSelection {
   targetLocation?: HitLocationTarget;
 }
 
-export const HIT_LOCATIONS = hitLocationSchema.options;
+export const HIT_LOCATIONS = [
+  "head",
+  "rightArm",
+  "leftArm",
+  "chest",
+  "abdomen",
+  "upperRightLeg",
+  "lowerRightLeg",
+  "upperLeftLeg",
+  "lowerLeftLeg",
+] as const satisfies readonly HitLocation[];
+
+const HIT_LOCATION_LABELS = {
+  abdomen: { fullLabel: "Abdomen", shortLabel: "Abd" },
+  chest: { fullLabel: "Chest", shortLabel: "Chest" },
+  head: { fullLabel: "Head", shortLabel: "Head" },
+  leftArm: { fullLabel: "Left arm", shortLabel: "L arm" },
+  leftLeg: { fullLabel: "Left leg", shortLabel: "L leg" },
+  lowerLeftLeg: { fullLabel: "Lower left leg", shortLabel: "L lower" },
+  lowerRightLeg: { fullLabel: "Lower right leg", shortLabel: "R lower" },
+  rightArm: { fullLabel: "Right arm", shortLabel: "R arm" },
+  rightLeg: { fullLabel: "Right leg", shortLabel: "R leg" },
+  upperLeftLeg: { fullLabel: "Upper left leg", shortLabel: "L upper" },
+  upperRightLeg: { fullLabel: "Upper right leg", shortLabel: "R upper" },
+} satisfies Record<HitLocation, { fullLabel: string; shortLabel: string }>;
 
 export const HIT_LOCATION_RULE_TABLE = {
   bands: [
@@ -40,8 +67,34 @@ export const HIT_LOCATION_RULE_TABLE = {
     { fullLabel: "Left arm", key: "leftArm", maxRoll: 16, minRoll: 15, shortLabel: "L arm" },
     { fullLabel: "Chest", key: "chest", maxRoll: 14, minRoll: 11, shortLabel: "Chest" },
     { fullLabel: "Abdomen", key: "abdomen", maxRoll: 10, minRoll: 7, shortLabel: "Abd" },
-    { fullLabel: "Right leg", key: "rightLeg", maxRoll: 6, minRoll: 4, shortLabel: "R leg" },
-    { fullLabel: "Left leg", key: "leftLeg", maxRoll: 3, minRoll: 1, shortLabel: "L leg" },
+    {
+      fullLabel: "Upper right leg",
+      key: "upperRightLeg",
+      maxRoll: 6,
+      minRoll: 5,
+      shortLabel: "R upper",
+    },
+    {
+      fullLabel: "Lower right leg",
+      key: "lowerRightLeg",
+      maxRoll: 4,
+      minRoll: 4,
+      shortLabel: "R lower",
+    },
+    {
+      fullLabel: "Upper left leg",
+      key: "upperLeftLeg",
+      maxRoll: 3,
+      minRoll: 2,
+      shortLabel: "L upper",
+    },
+    {
+      fullLabel: "Lower left leg",
+      key: "lowerLeftLeg",
+      maxRoll: 1,
+      minRoll: 1,
+      shortLabel: "L lower",
+    },
   ],
   dieLabel: "1d20",
   id: "combat-hit-location",
@@ -60,14 +113,15 @@ export const HIT_LOCATION_RULE_TABLE = {
   title: "Combat Hit Location",
 } as const;
 
-function getHitLocationBand(location: HitLocation): ClosedDieRuleTableBand<HitLocation> {
-  const band = HIT_LOCATION_RULE_TABLE.bands.find((candidate) => candidate.key === location);
-
-  if (!band) {
-    throw new RangeError(`Unknown hit location: ${location}`);
+function normalizeLegacyHitLocationForOrder(location: HitLocation): HitLocation {
+  switch (location) {
+    case "leftLeg":
+      return "upperLeftLeg";
+    case "rightLeg":
+      return "upperRightLeg";
+    default:
+      return location;
   }
-
-  return band;
 }
 
 export function resolveHitLocationRoll(roll: number): HitLocation {
@@ -79,15 +133,18 @@ export function expandHitLocationTable() {
 }
 
 export function getHitLocationShortLabel(location: HitLocation): string {
-  return getHitLocationBand(location).shortLabel;
+  return HIT_LOCATION_LABELS[location].shortLabel;
 }
 
 export function getHitLocationFullLabel(location: HitLocation): string {
-  return getHitLocationBand(location).fullLabel;
+  return HIT_LOCATION_LABELS[location].fullLabel;
 }
 
 export function getHitLocationOrderIndex(location: HitLocation): number {
-  const index = HIT_LOCATION_RULE_TABLE.bands.findIndex((band) => band.key === location);
+  const normalizedLocation = normalizeLegacyHitLocationForOrder(location);
+  const index = HIT_LOCATION_RULE_TABLE.bands.findIndex(
+    (band) => band.key === normalizedLocation,
+  );
 
   if (index === -1) {
     throw new RangeError(`Unknown hit location: ${location}`);

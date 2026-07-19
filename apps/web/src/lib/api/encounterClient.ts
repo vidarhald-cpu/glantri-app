@@ -1,10 +1,22 @@
 import type {
+  CombatAttackSourceRef,
+  CombatHistoryProjection,
+  CombatProgressionBoundaryKind,
   CombatRoundAttackRollResult,
+  CombatRoundCommand,
+  CombatRoundCommandEnvelope,
+  CombatRoundDamageReview,
   CombatRoundCombatExperienceResult,
+  CombatDistanceEdge,
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
+  CombatRoundStepSnapshot,
+  EncounterParticipant,
+  EncounterParticipantMembershipMode,
   EncounterSession,
+  EncounterStatus,
+  MovementIntent,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
@@ -47,6 +59,21 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   return payload.encounter;
 }
 
+export async function loadCombatHistory(
+  encounterId: string,
+  input: { perspectiveParticipantId?: string } = {},
+): Promise<CombatHistoryProjection> {
+  const query = input.perspectiveParticipantId
+    ? `?perspectiveParticipantId=${encodeURIComponent(input.perspectiveParticipantId)}`
+    : "";
+  const payload = await sendJson<{ history: CombatHistoryProjection }>(
+    `/encounters/${encounterId}/combat-history${query}`,
+    { method: "GET" },
+  );
+
+  return payload.history;
+}
+
 export async function updateEncounterOnServer(input: {
   encounterId: string;
   session: EncounterSession;
@@ -64,25 +91,75 @@ export async function updateEncounterOnServer(input: {
   return payload.encounter;
 }
 
+export async function updateEncounterStatusOnServer(input: {
+  encounterId: string;
+  status: EncounterStatus;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/status`,
+    {
+      body: JSON.stringify({
+        status: input.status,
+      }),
+      method: "PATCH",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function updateEncounterParticipantsOnServer(input: {
+  encounterId: string;
+  participantMembershipMode?: EncounterParticipantMembershipMode;
+  participants: EncounterParticipant[];
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/participants`,
+    {
+      body: JSON.stringify({
+        participantMembershipMode: input.participantMembershipMode,
+        participants: input.participants,
+      }),
+      method: "PATCH",
+    },
+  );
+
+  return payload.encounter;
+}
+
 export async function submitCombatDeclarationOnServer(input: {
+  adjustDistance?: { requestedDistance: number; targetParticipantId: string };
   actionId?: string;
   additionalActionNotes?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterId: string;
   movementId?: string;
+  movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
+  phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
+  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
+  feint?: {
+    attackerSkillId?: string;
+    method: "movement" | "weapon";
+    targetParticipantId: string;
+  };
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
   const payload = await sendJson<{ encounter: EncounterSession; participant: ScenarioParticipant }>(
     `/encounters/${input.encounterId}/combat-declaration`,
     {
       body: JSON.stringify({
         actionId: input.actionId,
+        adjustDistance: input.adjustDistance,
         additionalActionNotes: input.additionalActionNotes,
         combatContext: input.combatContext,
         movementId: input.movementId,
+        movementIntent: input.movementIntent,
         phaseContexts: input.phaseContexts,
+        phaseAttackSources: input.phaseAttackSources,
+        phaseWeaponNames: input.phaseWeaponNames,
+        feint: input.feint,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
       }),
@@ -91,6 +168,127 @@ export async function submitCombatDeclarationOnServer(input: {
   );
 
   return payload;
+}
+
+export async function reviewCombatFeintFeasibilityOnServer(input: {
+  adjustment?: number;
+  encounterId: string;
+  feasibility: "possible" | "possible_with_adjustment" | "impossible";
+  note?: string;
+  proposalId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/feint-feasibility`, {
+    body: JSON.stringify({
+      adjustment: input.adjustment,
+      feasibility: input.feasibility,
+      note: input.note,
+      proposalId: input.proposalId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function respondCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  response: "allow" | "oppose";
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/respond-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function reviewCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  notes?: string;
+  participantId?: string;
+  proposalId: string;
+  value: number;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/review-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function rollCombatAdjustDistanceOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function commitCombatAdjustDistanceOnServer(input: {
+  committedDistance: number;
+  encounterId: string;
+  notes?: string;
+  outcome: "successful" | "unsuccessful" | "allowed";
+  proposalId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/commit-adjust-distance`,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+  return payload.encounter;
+}
+
+export async function rollCombatFeintOnServer(input: {
+  encounterId: string;
+  proposalId: string;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/roll-feint`, {
+    body: JSON.stringify({
+      proposalId: input.proposalId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function commitCombatFeintOnServer(input: {
+  encounterId: string;
+  gmAttackerDbParryModifier?: number;
+  gmDefenderDbParryModifier?: number;
+  gmDefenderObDbModifier?: number;
+  gmDefenderSkillObModifier?: number;
+  notes?: string;
+  proposalId: string;
+}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/commit-feint`, {
+    body: JSON.stringify({
+      gmAttackerDbParryModifier: input.gmAttackerDbParryModifier,
+      gmDefenderDbParryModifier: input.gmDefenderDbParryModifier,
+      gmDefenderObDbModifier: input.gmDefenderObDbModifier,
+      gmDefenderSkillObModifier: input.gmDefenderSkillObModifier,
+      notes: input.notes,
+      proposalId: input.proposalId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function decideDoubleAttackPhase2OnServer(input: {
+  decision: "continue" | "cancel";
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+  return sendJson(`/encounters/${input.encounterId}/combat-round/double-attack-phase2-decision`, {
+    body: JSON.stringify({
+      decision: input.decision,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
 }
 
 export async function rollCombatExperienceOnServer(input: {
@@ -108,6 +306,130 @@ export async function rollCombatExperienceOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-combat-experience`, {
     body: JSON.stringify({
       scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function rollRoundEndDistanceControlOnServer(input: {
+  distanceProposalId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-distance-control`, {
+    body: JSON.stringify({
+      distanceProposalId: input.distanceProposalId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function rollCurrentRoundEndDistanceControlOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-current-distance-control`, {
+    method: "POST",
+  });
+}
+
+export async function rollRoundEndHealthCheckOnServer(input: {
+  encounterId: string;
+  healthRollId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-health-check`, {
+    body: JSON.stringify({
+      healthRollId: input.healthRollId,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function backOutPhaseAttackOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/back-out-phase-attack`, {
+    body: JSON.stringify({
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function continuePhaseAttackOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+}): Promise<{
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/continue-phase-attack`, {
+    body: JSON.stringify({
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function commitPhaseInitiativeResolutionOnServer(input: {
+  encounterId: string;
+  phase: "phase1" | "phase2";
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participants: ScenarioParticipant[];
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+    participants: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/commit-phase-initiative-resolution`, {
+    body: JSON.stringify({
+      phase: input.phase,
     }),
     method: "POST",
   });
@@ -135,6 +457,149 @@ export async function setCombatExperienceDifficultyOnServer(input: {
   return payload;
 }
 
+export async function setPairDistanceOnServer(input: {
+  distance: number;
+  encounterId: string;
+  participantAId: string;
+  participantBId: string;
+}): Promise<{
+  edge?: CombatDistanceEdge;
+  encounter: EncounterSession;
+  participants?: ScenarioParticipant[];
+}> {
+  const payload = await sendJson<{
+    edge?: CombatDistanceEdge;
+    encounter: EncounterSession;
+    participants?: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/pair-distance`, {
+    body: JSON.stringify({
+      distance: input.distance,
+      participantAId: input.participantAId,
+      participantBId: input.participantBId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function advanceCombatRoundCurrentStepOnServer(input: {
+  encounterId: string;
+  expectedBoundary: CombatProgressionBoundaryKind;
+  expectedRevision: string;
+  stepSnapshots?: CombatRoundStepSnapshot[];
+  targetBoundary: CombatProgressionBoundaryKind;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participants: ScenarioParticipant[];
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+    participants: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/advance-current-step`, {
+    body: JSON.stringify({
+      expectedBoundary: input.expectedBoundary,
+      expectedRevision: input.expectedRevision,
+      stepSnapshots: input.stepSnapshots,
+      targetBoundary: input.targetBoundary,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function prepareCombatRoundEndReviewOnServer(input: {
+  encounterId: string;
+}): Promise<{ encounter: EncounterSession }> {
+  return sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/prepare-round-end-review`,
+    { method: "POST" },
+  );
+}
+
+export async function skipCombatRoundCurrentActionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/skip-current-action`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function advanceCurrentCombatPhaseResolutionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/advance-current-phase-resolution`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function completeCurrentCombatPhaseResolutionOnServer(input: {
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/complete-current-phase-resolution`, {
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function commitCurrentCombatPhaseDamageOnServer(input: {
+  encounterId: string;
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/commit-phase-damage`, {
+    body: JSON.stringify({ review: input.review }),
+    method: "POST",
+  });
+}
+
+export async function saveCurrentCombatDamageReviewOnServer(input: {
+  encounterId: string;
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/save-damage-review`, {
+    body: JSON.stringify({ review: input.review }),
+    method: "POST",
+  });
+}
+
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;
@@ -159,24 +624,37 @@ export async function rollCombatInitiativeOnServer(input: {
 export async function rollCombatAttackOnServer(input: {
   actionId?: string;
   defenderDb?: number;
-  defenderScenarioParticipantId: string;
+  defenderDbParryRaw?: number;
+  defenderParticipantId: string;
   encounterId: string;
-  ob?: number;
+  ob: number;
+  obSkillRaw: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
   weaponName?: string;
-}): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
+}): Promise<{
+  attackResult: CombatRoundAttackRollResult;
+  command?: CombatRoundCommand;
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participant?: ScenarioParticipant;
+}> {
   const payload = await sendJson<{
     attackResult: CombatRoundAttackRollResult;
+    command?: CombatRoundCommand;
+    commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
+    participant?: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
     body: JSON.stringify({
       actionId: input.actionId,
       defenderDb: input.defenderDb,
-      defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+      defenderDbParryRaw: input.defenderDbParryRaw,
+      defenderParticipantId: input.defenderParticipantId,
       ob: input.ob,
+      obSkillRaw: input.obSkillRaw,
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
       weaponCriticalCode: input.weaponCriticalCode,
@@ -191,9 +669,9 @@ export async function rollCombatAttackOnServer(input: {
 
 export async function rollCombatParryOnServer(input: {
   attackResultId: string;
+  dbParryRaw: number;
   encounterId: string;
   mainHandParryScore?: number;
-  modifierBreakdown: Array<{ label: string; value: number }>;
   offHandParryScore?: number;
   parryBase: number;
   parrySourceLabel?: string;
@@ -206,8 +684,8 @@ export async function rollCombatParryOnServer(input: {
     {
       body: JSON.stringify({
         attackResultId: input.attackResultId,
+        dbParryRaw: input.dbParryRaw,
         mainHandParryScore: input.mainHandParryScore,
-        modifierBreakdown: input.modifierBreakdown,
         offHandParryScore: input.offHandParryScore,
         parryBase: input.parryBase,
         parrySourceLabel: input.parrySourceLabel,
@@ -220,6 +698,44 @@ export async function rollCombatParryOnServer(input: {
   );
 
   return payload.encounter;
+}
+
+export async function rollCombatParryCommandOnServer(input: {
+  attackResultId: string;
+  dbParryRaw: number;
+  encounterId: string;
+  mainHandParryScore?: number;
+  offHandParryScore?: number;
+  parryBase: number;
+  parrySourceLabel?: string;
+  scenarioParticipantId: string;
+  usedMainHand?: boolean;
+  usedOffHand?: boolean;
+}): Promise<{
+  command?: CombatRoundCommand;
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  const payload = await sendJson<{
+    command?: CombatRoundCommand;
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-parry`, {
+    body: JSON.stringify({
+      attackResultId: input.attackResultId,
+      dbParryRaw: input.dbParryRaw,
+      mainHandParryScore: input.mainHandParryScore,
+      offHandParryScore: input.offHandParryScore,
+      parryBase: input.parryBase,
+      parrySourceLabel: input.parrySourceLabel,
+      scenarioParticipantId: input.scenarioParticipantId,
+      usedMainHand: input.usedMainHand,
+      usedOffHand: input.usedOffHand,
+    }),
+    method: "POST",
+  });
+
+  return payload;
 }
 
 export async function clearCurrentCombatRoundStepOnServer(input: {

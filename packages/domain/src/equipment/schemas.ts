@@ -137,7 +137,9 @@ export const WeaponDurabilityProfileSchema = z.object({
 export const WeaponAttackModeSchema = z.object({
   id: z.string(),
   label: z.string().nullable().optional(),
+  order: z.number().int().nonnegative().nullable().optional(),
   canonicalMeleeMode: CanonicalMeleeModeSchema.nullable().optional(),
+  allowsRepeatedRoundAttack: z.boolean().nullable().optional(),
   isPrimaryAttack: z.boolean().nullable().optional(),
   damageClass: WeaponDamageClassSchema.nullable().optional(),
   ob: z.number().nullable().optional(),
@@ -285,6 +287,7 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   dmb2: z.number().nullable().optional(),
   parry: z.number().nullable().optional(),
   initiative: z.number().nullable().optional(),
+  preferredDistances: z.array(z.number().int().min(0).max(8)).nullable().optional(),
   range: z.string().nullable().optional(),
   armorMod1: z.string().nullable().optional(),
   armorMod2: z.string().nullable().optional(),

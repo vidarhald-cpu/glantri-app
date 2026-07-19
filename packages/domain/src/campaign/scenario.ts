@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
@@ -96,6 +97,7 @@ export const scenarioParticipantConditionSchema = z.object({
 });
 
 export const scenarioCombatModifierScopeSchema = z.enum(["until", "save"]);
+export const scenarioCombatModifierSourceTypeSchema = z.enum(["character_effect", "feint"]);
 export const scenarioCombatModifierBucketSchema = z.enum([
   "general",
   "situation_initiative",
@@ -126,17 +128,30 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 
 export const scenarioCombatModifierEntrySchema = z.object({
   durationRounds: z.number().int().positive().optional(),
+  expiresAtRound: z.number().int().positive().optional(),
   generated: z.boolean().optional(),
   id: idSchema,
+  imported: z.boolean().optional(),
   notes: z.string().optional(),
+  readOnly: z.boolean().optional(),
+  resultGroupId: idSchema.optional(),
+  resultGroupKind: z.enum(["ob_db"]).optional(),
+  persistsAcrossEncounters: z.boolean().optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
   sourceActionId: idSchema.optional(),
+  sourceDuration: z.string().optional(),
+  sourceEncounterId: idSchema.optional(),
+  sourceEffectId: idSchema.optional(),
   sourcePhase: z.enum(["phase1", "phase2"]).optional(),
+  sourceProposalId: idSchema.optional(),
+  sourceRoundNumber: z.number().int().positive().optional(),
   sourceRule: z.string().optional(),
+  sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
   value: z.number().default(0),
 });
 
 export const scenarioParticipantCombatContextSchema = z.object({
+  attackModeId: idSchema.optional(),
   incomingAttackSide: scenarioParticipantIncomingAttackSideSchema.optional(),
   mainHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   modifierBuckets: z
@@ -180,6 +195,7 @@ export const scenarioParticipantStateSchema = z.object({
     lastDeclaredRoundNumber: z.number().int().positive().optional(),
     lastDeclaredSecondaryActionId: idSchema.optional(),
     lastDeclarationNotes: z.string().optional(),
+    lastMovementIntent: movementIntentSchema.optional(),
     stance: z.string().min(1).optional(),
   }),
   combatEffects: combatEffectsStateSchema.optional(),
@@ -380,6 +396,9 @@ export type ScenarioParticipantPosition = z.infer<typeof scenarioParticipantPosi
 export type ScenarioParticipantModifier = z.infer<typeof scenarioParticipantModifierSchema>;
 export type ScenarioParticipantCondition = z.infer<typeof scenarioParticipantConditionSchema>;
 export type ScenarioCombatModifierScope = z.infer<typeof scenarioCombatModifierScopeSchema>;
+export type ScenarioCombatModifierSourceType = z.infer<
+  typeof scenarioCombatModifierSourceTypeSchema
+>;
 export type ScenarioCombatModifierBucket = z.infer<typeof scenarioCombatModifierBucketSchema>;
 export type ScenarioParticipantIncomingAttackSide = z.infer<
   typeof scenarioParticipantIncomingAttackSideSchema

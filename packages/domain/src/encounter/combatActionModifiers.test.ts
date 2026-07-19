@@ -3,23 +3,29 @@ import { describe, expect, it } from "vitest";
 import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
 import {
   ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
-  ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
   ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
   PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+  REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
   applyCombatActionGeneratedModifiers,
+  cancelDoubleAttackPhase2GeneratedModifiers,
+  continueDoubleAttackPhase2GeneratedModifiers,
+  buildReactiveAttackPhase2GeneratedInitiativeModifier,
+  getSingleAttackDeclaredDistanceForPenalty,
   isAdjustRangeAttackGeneratedDbParryModifier,
   isAttackParryGeneratedDbParryModifier,
+  isDistanceGeneratedObSkillModifier,
   isDoubleAttackGeneratedDbParryModifier,
   isDoubleAttackGeneratedObSkillModifier,
   isParryAttackGeneratedDbParryModifier,
+  isReactiveAttackGeneratedInitiativeModifier,
 } from "./combatActionModifiers";
 
 describe("combat action generated modifiers", () => {
-  it("creates one phase 1 DB/Parry modifier for Attack - Parry", () => {
+  it("creates one phase 1 DB/Parry modifier for Single attack", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
@@ -30,7 +36,7 @@ describe("combat action generated modifiers", () => {
         durationRounds: 1,
         generated: true,
         id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
-        notes: "attack parry",
+        notes: "single attack",
         sourceActionId: "attack_parry",
         sourcePhase: "phase1",
         value: -4,
@@ -53,7 +59,38 @@ describe("combat action generated modifiers", () => {
     ).toHaveLength(1);
   });
 
-  it("creates one phase 2 DB/Parry modifier for Parry - Attack", () => {
+  it("preserves imported persistent rows while recomputing generated rows", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          situationDb: [
+            {
+              generated: false,
+              id: "import:character_effect:defense:db_parry",
+              imported: true,
+              notes: "Persistent defense",
+              readOnly: true,
+              sourceEffectId: "defense",
+              sourceType: "character_effect",
+              value: 2,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: "import:character_effect:defense:db_parry",
+        sourceType: "character_effect",
+        value: 2,
+      }),
+      expect.objectContaining({ id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID }),
+    ]);
+  });
+
+  it("creates one phase 2 DB/Parry modifier for Reactive attack", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "parry_attack",
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
@@ -64,7 +101,7 @@ describe("combat action generated modifiers", () => {
         durationRounds: 1,
         generated: true,
         id: PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
-        notes: "parry attack",
+        notes: "reactive attack",
         sourceActionId: "parry_attack",
         sourcePhase: "phase2",
         sourceRule: "parry-attack-db-parry-phase2",
@@ -73,7 +110,7 @@ describe("combat action generated modifiers", () => {
     ]);
   });
 
-  it("does not duplicate the Parry - Attack modifier when saving repeatedly", () => {
+  it("does not duplicate the Reactive attack modifier when saving repeatedly", () => {
     const firstSave = applyCombatActionGeneratedModifiers({
       actionId: "parry_attack",
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
@@ -160,9 +197,10 @@ describe("combat action generated modifiers", () => {
     ).toHaveLength(2);
   });
 
-  it("creates phase 1 and phase 2 DB/Parry modifiers for Adjust Range - Attack", () => {
+  it("creates the phase 1 DB/Parry risk only when Adjust Distance moves closer", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2, roundNumber: 4 },
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
     });
 
@@ -177,26 +215,26 @@ describe("combat action generated modifiers", () => {
         sourceRule: "adjust-range-phase1-db-parry",
         value: -2,
       }),
-      expect.objectContaining({
-        durationRounds: 1,
-        generated: true,
-        id: ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
-        notes: "adjust range attack",
-        sourceActionId: "adjust_range_attack",
-        sourcePhase: "phase2",
-        sourceRule: "adjust-range-attack-phase2-db-parry",
-        value: -4,
-      }),
     ]);
+    expect(context.modifierBuckets.situationDb[0]?.expiresAtRound).toBe(4);
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "adjust_range_attack",
+        adjustDistance: { currentDistance: 3, requestedDistance: 4 },
+        combatContext: context,
+      }).modifierBuckets.situationDb,
+    ).toEqual([]);
   });
 
   it("does not duplicate Adjust Range - Attack generated modifiers when saving repeatedly", () => {
     const firstSave = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
     });
     const secondSave = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: firstSave,
     });
 
@@ -204,10 +242,10 @@ describe("combat action generated modifiers", () => {
       secondSave.modifierBuckets.situationDb.filter(
         isAdjustRangeAttackGeneratedDbParryModifier,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
-  it("removes the generated modifier when changing away from Attack - Parry", () => {
+  it("removes the generated modifier when changing away from Single attack", () => {
     const attackParryContext = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",
       combatContext: scenarioParticipantCombatContextSchema.parse({
@@ -237,7 +275,7 @@ describe("combat action generated modifiers", () => {
     ]);
   });
 
-  it("removes generated rows when changing between Attack - Parry and Parry - Attack", () => {
+  it("removes generated rows when changing between Single attack and Reactive attack", () => {
     const attackParryContext = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",
       combatContext: scenarioParticipantCombatContextSchema.parse({
@@ -325,7 +363,7 @@ describe("combat action generated modifiers", () => {
     ]);
   });
 
-  it("removes Double Attack rows when changing to Attack - Parry", () => {
+  it("removes Double Attack rows when changing to Single attack", () => {
     const doubleAttackContext = applyCombatActionGeneratedModifiers({
       actionId: "double_attack",
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
@@ -356,6 +394,7 @@ describe("combat action generated modifiers", () => {
   it("removes Adjust Range - Attack generated rows when changing away while preserving manual rows", () => {
     const adjustRangeContext = applyCombatActionGeneratedModifiers({
       actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 3, requestedDistance: 2 },
       combatContext: scenarioParticipantCombatContextSchema.parse({
         modifierBuckets: {
           situationDb: [
@@ -383,7 +422,7 @@ describe("combat action generated modifiers", () => {
     ]);
   });
 
-  it("removes the Parry - Attack modifier when changing away from Parry - Attack", () => {
+  it("removes the Reactive attack modifier when changing away from Reactive attack", () => {
     const parryAttackContext = applyCombatActionGeneratedModifiers({
       actionId: "parry_attack",
       combatContext: scenarioParticipantCombatContextSchema.parse({
@@ -411,5 +450,308 @@ describe("combat action generated modifiers", () => {
         value: 2,
       }),
     ]);
+  });
+
+  it("creates a generated distance Skill/OB modifier during action generation", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
+        value: -4,
+      }),
+    ]);
+    expect(context.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        durationRounds: 1,
+        generated: true,
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("Broad sword preferred 2"),
+        sourceActionId: "attack_parry",
+        sourcePhase: "phase1",
+        sourceRule: "distance-ob-skill-phase1",
+        value: -2,
+      }),
+    ]);
+    expect(
+      context.modifierBuckets.situationObSkill.reduce((sum, entry) => sum + entry.value, 0),
+    ).toBe(-2);
+  });
+
+  it("does not create a distance row inside preferred range", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [3],
+          weaponName: "Long sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toEqual([]);
+  });
+
+  it("uses a Single attack declared farther distance for the current distance penalty", () => {
+    const declaredDistance = getSingleAttackDeclaredDistanceForPenalty({
+      actionId: "attack_parry",
+      movementIntent: {
+        distancePreferences: [
+          {
+            desiredDistance: 4,
+            source: "player_declared",
+            targetParticipantId: "guard",
+          },
+        ],
+        mode: "set_distance_preferences",
+      },
+      phase: "phase1",
+      preferredDistances: [2],
+      targetParticipantId: "guard",
+    });
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: declaredDistance ?? 2,
+          actualDistanceBasis: declaredDistance === undefined ? "current" : "declared_intent",
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(declaredDistance).toBe(4);
+    expect(context.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        id: "generated:distance:phase1:ob-skill",
+        notes: expect.stringContaining("declared 4"),
+        value: -4,
+      }),
+    ]);
+  });
+
+  it("does not use declared distance when Single attack remains inside weapon reach", () => {
+    expect(
+      getSingleAttackDeclaredDistanceForPenalty({
+        actionId: "attack_parry",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 2,
+              source: "player_declared",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        phase: "phase1",
+        preferredDistances: [2],
+        targetParticipantId: "guard",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("creates distance penalties from the nearest preferred distance", () => {
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "attack_parry",
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        distanceModifiers: [
+          {
+            actualDistance: 5,
+            phase: "phase1",
+            preferredDistances: [3],
+            weaponName: "Long sword",
+          },
+        ],
+      }).modifierBuckets.situationObSkill[0],
+    ).toMatchObject({ value: -4 });
+
+    expect(
+      applyCombatActionGeneratedModifiers({
+        actionId: "attack_parry",
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        distanceModifiers: [
+          {
+            actualDistance: 4,
+            phase: "phase1",
+            preferredDistances: [1, 2],
+            weaponName: "Spear",
+          },
+        ],
+      }).modifierBuckets.situationObSkill[0],
+    ).toMatchObject({ value: -4 });
+  });
+
+  it("removes stale distance rows when action generation no longer has distance input", () => {
+    const withDistance = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+    const withoutDistance = applyCombatActionGeneratedModifiers({
+      actionId: "observe_opponent",
+      combatContext: withDistance,
+    });
+
+    expect(
+      withoutDistance.modifierBuckets.situationObSkill.filter(isDistanceGeneratedObSkillModifier),
+    ).toHaveLength(0);
+  });
+
+  it("updates distance rows deterministically without duplication", () => {
+    const firstSave = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+    const secondSave = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: firstSave,
+      distanceModifiers: [
+        {
+          actualDistance: 4,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(
+      secondSave.modifierBuckets.situationObSkill.filter(isDistanceGeneratedObSkillModifier),
+    ).toHaveLength(1);
+    expect(secondSave.modifierBuckets.situationObSkill[0]).toMatchObject({
+      id: "generated:distance:phase1:ob-skill",
+      value: -4,
+    });
+  });
+
+  it("keeps phase 1 and phase 2 distance rows separate", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      distanceModifiers: [
+        {
+          actualDistance: 3,
+          phase: "phase1",
+          preferredDistances: [2],
+          weaponName: "Broad sword",
+        },
+        {
+          actualDistance: 5,
+          phase: "phase2",
+          preferredDistances: [3],
+          weaponName: "Broad sword",
+        },
+      ],
+    });
+
+    expect(context.modifierBuckets.situationObSkill).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "generated:distance:phase1:ob-skill", value: -2 }),
+        expect.objectContaining({ id: "generated:distance:phase2:ob-skill", value: -4 }),
+      ]),
+    );
+  });
+
+  it("cancels and restores only Double Attack's phase 2 generated rows", () => {
+    const manual = { id: "manual-db", notes: "GM", scope: "until" as const, value: 3 };
+    const committed = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: { situationDb: [manual] },
+      }),
+    });
+    const cancelled = cancelDoubleAttackPhase2GeneratedModifiers(committed);
+
+    expect(cancelled.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID, value: -1 }),
+    ]);
+    expect(cancelled.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        manual,
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID, value: -4 }),
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -2 }),
+      ]),
+    );
+
+    const restored = continueDoubleAttackPhase2GeneratedModifiers(cancelled);
+    expect(restored.modifierBuckets.situationObSkill).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID, value: -1 }),
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID, value: -1 }),
+      ]),
+    );
+    expect(restored.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        manual,
+        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -4 }),
+      ]),
+    );
+  });
+
+  it("applies and clears the Reactive attack phase 2 Initiative modifier row", () => {
+    const withReactiveInitiative = applyCombatActionGeneratedModifiers({
+      actionId: "parry_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      initiativeModifiers: [
+        buildReactiveAttackPhase2GeneratedInitiativeModifier({
+          reason: "phase 1 attack missed; no parry needed",
+          value: 6,
+        }),
+      ],
+    });
+    const withoutReactiveInitiative = applyCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: withReactiveInitiative,
+    });
+
+    expect(withReactiveInitiative.modifierBuckets.situationInitiative).toEqual([
+      expect.objectContaining({
+        id: REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
+        notes: "reactive attack: phase 1 attack missed; no parry needed",
+        sourceActionId: "parry_attack",
+        sourcePhase: "phase2",
+        value: 6,
+      }),
+    ]);
+    expect(
+      withReactiveInitiative.modifierBuckets.situationInitiative.filter(
+        isReactiveAttackGeneratedInitiativeModifier,
+      ),
+    ).toHaveLength(1);
+    expect(withoutReactiveInitiative.modifierBuckets.situationInitiative).toEqual([]);
   });
 });
