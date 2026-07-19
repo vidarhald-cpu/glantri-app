@@ -18,7 +18,7 @@ function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCe
   };
 }
 
-function live(taskKind: "distance_roll" | "resolve_adjust_distance" | "attack" = "attack") {
+function live(taskKind: "adjust_distance_attacker_roll" | "distance_roll" | "attack" = "attack") {
   return {
     current: true,
     executable: true,
@@ -160,7 +160,7 @@ describe("buildCombatTrackerModel", () => {
           requestedDistance: 2,
           status: "committed",
         },
-        progression: live("resolve_adjust_distance"),
+        progression: live("adjust_distance_attacker_roll"),
         status: "complete",
         step: "phase_1_actions",
       }),
@@ -181,7 +181,7 @@ describe("buildCombatTrackerModel", () => {
           requestedDistance: 2,
           status: "pending",
         },
-        progression: live("resolve_adjust_distance"),
+        progression: live("adjust_distance_attacker_roll"),
         step: "phase_1_actions",
       }),
     ]);

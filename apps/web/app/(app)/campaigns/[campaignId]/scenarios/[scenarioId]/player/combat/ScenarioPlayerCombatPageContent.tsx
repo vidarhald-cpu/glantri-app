@@ -1901,9 +1901,18 @@ export default function ScenarioPlayerCombatPageContent({
     domainCurrentRollAction && projectedRollTask?.kind === domainCurrentRollAction.kind
       ? domainCurrentRollAction
       : undefined;
-  const projectedFeintTask = selectedProgressionTasks.find((task) => task.kind === "resolve_feint");
+  const projectedFeintTask = selectedProgressionTasks.find((task) =>
+    ["feint_attacker_roll", "feint_defender_roll", "feint_commit"].includes(task.kind),
+  );
   const projectedAdjustDistanceTask = selectedProgressionTasks.find(
-    (task) => task.kind === "resolve_adjust_distance",
+    (task) =>
+      [
+        "adjust_distance_response",
+        "adjust_distance_adjustment",
+        "adjust_distance_attacker_roll",
+        "adjust_distance_defender_roll",
+        "adjust_distance_commit",
+      ].includes(task.kind),
   );
   const selectedFeintProposal = projectedFeintTask
     ? combatRoundState?.feintProposals.find((proposal) => {

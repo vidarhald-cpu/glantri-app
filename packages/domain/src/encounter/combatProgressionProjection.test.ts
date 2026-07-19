@@ -1093,4 +1093,273 @@ describe("authorizeCombatProgressionTask", () => {
     expect(presentation.taskVisibility).toBe("conflicted");
     expect(JSON.stringify(presentation)).not.toContain("cursor_disagrees_with_process");
   });
+
+  it("projects and authorizes only the current Feint participant task", () => {
+    const feintState = state({
+      cursorParticipantId: "hero",
+      cursorStep: "A1",
+      currentStep: "phase_1_actions",
+      overrides: {
+        feintProposals: [
+          {
+            attackerParticipantId: "hero",
+            attackerSkillId: "dodge",
+            attackerSkillLabel: "Dodge",
+            defenderParticipantId: "guard",
+            defenderSkillId: "sword",
+            defenderSkillLabel: "Sword",
+            id: "feint-proposal",
+            method: "movement",
+            pairId: "hero::guard",
+            phase1OpportunityId: "feint-opportunity",
+            phase2AttackOpportunityId: "feint-attack",
+            roundNumber: 2,
+            status: "awaiting_rolls",
+          },
+        ],
+        phaseResolutionCursor: { participantId: "hero", phase: "phase1", substep: "feint" },
+      },
+      participantOverrides: [
+        {
+          declaration: {
+            actionId: "feint_attack",
+            attackOpportunities: [
+              {
+                id: "feint-attack",
+                origin: "feint_attack",
+                phase: "phase2",
+                slot: "attack_2",
+                status: "committed",
+                targetParticipantId: "guard",
+              },
+            ],
+            feint: {
+              attackerSkillId: "dodge",
+              attackerSkillLabel: "Dodge",
+              defenderSkillId: "sword",
+              defenderSkillLabel: "Sword",
+              method: "movement",
+              targetParticipantId: "guard",
+            },
+            phaseContexts: { phase2: { targetParticipantId: "guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+        },
+      ],
+    });
+    const projection = buildCombatProgressionProjection(feintState);
+    const process = projection.boundary.processes[0];
+    const tasks = process?.stages.flatMap((stage) => stage.tasks) ?? [];
+
+    expect(process).toMatchObject({
+      kind: "feint",
+      planId: "round:2:action:hero:feint_attack:maneuver:feint-proposal",
+    });
+    expect(process?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
+      { kind: "attacker_roll", state: "active" },
+      { kind: "defender_roll", state: "pending" },
+      { kind: "proposal_review", state: "pending" },
+      { kind: "proposal_commit", state: "pending" },
+    ]);
+    expect(process?.stages.some((stage) => stage.kind === "feasibility")).toBe(false);
+    expect(tasks).toEqual([
+      expect.objectContaining({
+        expectedCommand: "roll_feint",
+        identity: expect.objectContaining({
+          opponentParticipantId: "guard",
+          opportunityId: "feint-opportunity",
+          pairId: "hero::guard",
+          proposalId: "feint-proposal",
+        }),
+        kind: "feint_attacker_roll",
+        owner: expect.objectContaining({ participantId: "hero" }),
+      }),
+    ]);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "roll_feint",
+        opponentParticipantId: "guard",
+        opportunityId: "feint-opportunity",
+        pairId: "hero::guard",
+        participantId: "hero",
+        phase: "phase1",
+        projection,
+        proposalId: "feint-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "guard" },
+        commandType: "roll_feint",
+        pairId: "hero::guard",
+        participantId: "hero",
+        phase: "phase1",
+        projection,
+        proposalId: "feint-proposal",
+      }),
+    ).toMatchObject({ code: "wrong_participant", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_feint",
+        pairId: "hero::guard",
+        participantId: "hero",
+        phase: "phase1",
+        projection,
+        proposalId: "feint-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "commit_feint_result",
+        pairId: "hero::guard",
+        phase: "phase1",
+        projection,
+        proposalId: "feint-proposal",
+      }),
+    ).toMatchObject({ code: "task_not_found", ok: false });
+  });
+
+  it("projects Adjust Distance response, adjustment, rolls, and commit as exact tasks", () => {
+    const baseProposal = {
+      attackerParticipantId: "hero",
+      currentDistance: 3,
+      defenderParticipantId: "guard",
+      direction: "closer" as const,
+      id: "distance-proposal",
+      pairId: "guard::hero",
+      phase1OpportunityId: "distance-opportunity",
+      phase2AttackOpportunityId: "distance-attack",
+      requestedDistance: 2,
+      roundNumber: 2,
+    };
+    const buildState = (proposal: Record<string, unknown>) =>
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+        overrides: {
+          adjustDistanceProposals: [{ ...baseProposal, ...proposal }],
+          phaseResolutionCursor: {
+            participantId: "hero",
+            phase: "phase1",
+            substep: "adjust_distance",
+          },
+        },
+        participantOverrides: [
+          {
+            declaration: {
+              actionId: "adjust_range_attack",
+              adjustDistance: {
+                currentDistance: 3,
+                requestedDistance: 2,
+                targetParticipantId: "guard",
+              },
+              attackOpportunities: [
+                {
+                  id: "distance-attack",
+                  origin: "adjust_range_attack",
+                  phase: "phase2",
+                  slot: "attack_2",
+                  status: "committed",
+                  targetParticipantId: "guard",
+                },
+              ],
+              phaseContexts: { phase2: { targetParticipantId: "guard" } },
+              roundNumber: 2,
+              submittedBy: "player",
+            },
+          },
+        ],
+      });
+    const responseProjection = buildCombatProgressionProjection(
+      buildState({ status: "awaiting_defender_response" }),
+    );
+    const responseTask = responseProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .at(0);
+    expect(responseTask).toMatchObject({
+      expectedCommand: "respond_adjust_distance",
+      identity: expect.objectContaining({
+        opponentParticipantId: "hero",
+        opportunityId: "distance-opportunity",
+        pairId: "guard::hero",
+        proposalId: "distance-proposal",
+      }),
+      kind: "adjust_distance_response",
+      owner: { participantId: "guard" },
+    });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "guard" },
+        commandType: "respond_adjust_distance",
+        opponentParticipantId: "hero",
+        opportunityId: "distance-opportunity",
+        pairId: "guard::hero",
+        participantId: "guard",
+        phase: "phase1",
+        projection: responseProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "respond_adjust_distance",
+        pairId: "guard::hero",
+        participantId: "guard",
+        phase: "phase1",
+        projection: responseProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ code: "wrong_participant", ok: false });
+
+    const adjustmentProjection = buildCombatProgressionProjection(
+      buildState({ defenderResponse: "oppose", status: "awaiting_gm_adjustment" }),
+    );
+    expect(taskKinds(adjustmentProjection)).toEqual(["adjust_distance_adjustment"]);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "review_adjust_distance_roll_adjustment",
+        pairId: "guard::hero",
+        phase: "phase1",
+        projection: adjustmentProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ code: "gm_only", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "review_adjust_distance_roll_adjustment",
+        pairId: "wrong-pair",
+        phase: "phase1",
+        projection: adjustmentProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ code: "stale_proposal", ok: false });
+
+    const commitProjection = buildCombatProgressionProjection(
+      buildState({
+        defenderResponse: "allow",
+        standardOutcome: "allowed",
+        standardProposedDistance: 2,
+        status: "awaiting_review",
+      }),
+    );
+    expect(taskKinds(commitProjection)).toEqual(["adjust_distance_commit"]);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "commit_adjust_distance",
+        pairId: "guard::hero",
+        phase: "phase1",
+        projection: commitProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+  });
 });

@@ -75,6 +75,24 @@ function attack(input: {
   };
 }
 
+function feintRoll(participantId: string, side: "attacker" | "defender") {
+  return {
+    adjustment: 0,
+    characteristic: side === "attacker" ? ("dex" as const) : ("int" as const),
+    characteristicValue: 5,
+    finalTotal: side === "attacker" ? 22 : 18,
+    id: `feint-roll-${side}`,
+    openEndedD10s: [],
+    participantId,
+    rollD20: 10,
+    rollTotal: 10,
+    rolledAt: NOW,
+    skillId: side === "attacker" ? "dodge" : "sword",
+    skillLabel: side === "attacker" ? "Dodge" : "Sword",
+    skillXp: 7,
+  };
+}
+
 describe("combat action process adapters", () => {
   it("builds a pure, immutable, deterministic Single Attack plan with stable shared stages", () => {
     const state = stateFor("attack_parry");
@@ -108,6 +126,8 @@ describe("combat action process adapters", () => {
       "single_attack",
       "reactive_attack",
       "double_attack",
+      "feint_attack",
+      "adjust_distance_attack",
     ]);
   });
 
@@ -261,20 +281,366 @@ describe("combat action process adapters", () => {
     expect(buildCombatActionProcessPlans(waiting)[0]?.decisionGate?.state).toBe("ready");
   });
 
-  it("does not claim Feint or Adjust Distance action progression", () => {
-    for (const actionId of ["feint_attack", "adjust_range_attack"] as const) {
-      const state = combatRoundStateSchema.parse({
-        ...stateFor("attack_parry"),
-        participants: stateFor("attack_parry").participants.map((participant) =>
+  it("composes a deterministic Feint maneuver with one locked shared phase-2 attack", () => {
+    const base = stateFor("attack_parry");
+    const state = combatRoundStateSchema.parse({
+      ...base,
+      feintProposals: [
+        {
+          attackerParticipantId: "hero",
+          attackerSkillId: "sword",
+          attackerSkillLabel: "Sword",
+          defenderParticipantId: "guard",
+          defenderSkillId: "sword",
+          defenderSkillLabel: "Sword",
+          id: "feint-proposal",
+          method: "weapon",
+          pairId: "hero::guard",
+          phase1OpportunityId: "feint-opportunity",
+          phase2AttackOpportunityId: "feint-attack",
+          roundNumber: 2,
+          status: "awaiting_rolls",
+        },
+      ],
+      phaseResolutionCursor: { participantId: "hero", phase: "phase1", substep: "feint" },
+      participants: base.participants.map((participant) =>
+        participant.participantId === "hero"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "feint_attack",
+                attackOpportunities: [
+                  {
+                    id: "feint-attack",
+                    origin: "feint_attack",
+                    phase: "phase2",
+                    slot: "attack_2",
+                    status: "committed",
+                    targetParticipantId: "guard",
+                  },
+                ],
+                feint: {
+                  attackerSkillId: "sword",
+                  attackerSkillLabel: "Sword",
+                  defenderSkillId: "sword",
+                  defenderSkillLabel: "Sword",
+                  method: "weapon",
+                  targetParticipantId: "guard",
+                },
+                phaseContexts: { phase2: { targetParticipantId: "guard" } },
+                roundNumber: 2,
+                submittedBy: "player",
+              },
+            }
+          : participant,
+      ),
+    });
+    const before = structuredClone(state);
+    const plan = buildCombatActionProcessPlans(state)[0];
+
+    expect(state).toEqual(before);
+    expect(plan?.maneuver).toMatchObject({
+      id: "round:2:action:hero:feint_attack:maneuver:feint-proposal",
+      maneuverKind: "feint",
+      metadata: { method: "weapon" },
+      pairId: "hero::guard",
+      proposalId: "feint-proposal",
+    });
+    expect(plan?.maneuver?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
+      { kind: "attacker_roll", state: "ready" },
+      { kind: "defender_roll", state: "pending" },
+      { kind: "proposal_review", state: "pending" },
+      { kind: "proposal_commit", state: "pending" },
+    ]);
+    expect(plan?.standardAttacks).toHaveLength(1);
+    expect(plan?.standardAttacks[0]?.phase).toBe("phase2");
+    expect(plan?.standardAttacks[0]?.stages.every((stage) => stage.state === "pending")).toBe(true);
+    expect(plan?.maneuver?.downstreamProcessIds).toEqual([plan?.standardAttacks[0]?.id]);
+    expect(
+      buildCombatActionProcessPlans(
+        combatRoundStateSchema.parse(JSON.parse(JSON.stringify(state))),
+      ),
+    ).toEqual(buildCombatActionProcessPlans(state));
+  });
+
+  it("normalizes the Adjust Distance allow path by skipping adjustment and rolls", () => {
+    const base = stateFor("attack_parry");
+    const state = combatRoundStateSchema.parse({
+      ...base,
+      adjustDistanceProposals: [
+        {
+          attackerParticipantId: "hero",
+          currentDistance: 3,
+          defenderParticipantId: "guard",
+          defenderResponse: "allow",
+          direction: "closer",
+          id: "distance-proposal",
+          pairId: "guard::hero",
+          phase1OpportunityId: "distance-opportunity",
+          phase2AttackOpportunityId: "distance-attack",
+          requestedDistance: 2,
+          roundNumber: 2,
+          standardOutcome: "allowed",
+          standardProposedDistance: 2,
+          status: "awaiting_review",
+        },
+      ],
+      phaseResolutionCursor: {
+        participantId: "hero",
+        phase: "phase1",
+        substep: "adjust_distance",
+      },
+      participants: base.participants.map((participant) =>
+        participant.participantId === "hero"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "adjust_range_attack",
+                adjustDistance: {
+                  currentDistance: 3,
+                  requestedDistance: 2,
+                  targetParticipantId: "guard",
+                },
+                attackOpportunities: [
+                  {
+                    id: "distance-attack",
+                    origin: "adjust_range_attack",
+                    phase: "phase2",
+                    slot: "attack_2",
+                    status: "committed",
+                    targetParticipantId: "guard",
+                  },
+                ],
+                phaseContexts: { phase2: { targetParticipantId: "guard" } },
+                roundNumber: 2,
+                submittedBy: "player",
+              },
+            }
+          : participant,
+      ),
+    });
+    const plan = buildCombatActionProcessPlans(state)[0];
+
+    expect(plan?.maneuver?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
+      { kind: "participant_response", state: "complete" },
+      { kind: "gm_adjustment", state: "skipped" },
+      { kind: "attacker_roll", state: "skipped" },
+      { kind: "defender_roll", state: "skipped" },
+      { kind: "proposal_review", state: "complete" },
+      { kind: "proposal_commit", state: "ready" },
+    ]);
+    expect(plan?.maneuver?.stages.filter((stage) => stage.task)).toEqual([
+      expect.objectContaining({
+        kind: "proposal_commit",
+        task: expect.objectContaining({ kind: "adjust_distance_commit", ownerRole: "gm" }),
+      }),
+    ]);
+    expect(plan?.standardAttacks[0]?.stages.every((stage) => stage.state === "pending")).toBe(true);
+  });
+
+  it("advances Feint stages from persisted rolls to GM commit and unlocks the shared attack only after completion", () => {
+    const base = stateFor("attack_parry");
+    const buildState = (proposal: Record<string, unknown>) =>
+      combatRoundStateSchema.parse({
+        ...base,
+        feintProposals: [
+          {
+            attackerParticipantId: "hero",
+            attackerSkillId: "dodge",
+            attackerSkillLabel: "Dodge",
+            defenderParticipantId: "guard",
+            defenderSkillId: "sword",
+            defenderSkillLabel: "Sword",
+            id: "feint-proposal",
+            method: "movement",
+            pairId: "hero::guard",
+            phase1OpportunityId: "feint-opportunity",
+            phase2AttackOpportunityId: "feint-attack",
+            roundNumber: 2,
+            ...proposal,
+          },
+        ],
+        participants: base.participants.map((participant) =>
           participant.participantId === "hero"
             ? {
                 ...participant,
-                declaration: { actionId, roundNumber: 2, submittedBy: "player" },
+                declaration: {
+                  actionId: "feint_attack",
+                  attackOpportunities: [
+                    {
+                      id: "feint-attack",
+                      origin: "feint_attack",
+                      phase: "phase2",
+                      slot: "attack_2",
+                      status: "committed",
+                      targetParticipantId: "guard",
+                    },
+                  ],
+                  feint: {
+                    attackerSkillId: "dodge",
+                    attackerSkillLabel: "Dodge",
+                    defenderSkillId: "sword",
+                    defenderSkillLabel: "Sword",
+                    method: "movement",
+                    targetParticipantId: "guard",
+                  },
+                  phaseContexts: { phase2: { targetParticipantId: "guard" } },
+                  roundNumber: 2,
+                  submittedBy: "player",
+                },
               }
             : participant,
         ),
       });
-      expect(buildCombatActionProcessPlans(state)).toEqual([]);
-    }
+    const defenderPending = buildCombatActionProcessPlans(
+      buildState({
+        attackerRoll: feintRoll("hero", "attacker"),
+        attackerRollRecorded: true,
+        status: "awaiting_rolls",
+      }),
+    )[0];
+    expect(
+      defenderPending?.maneuver?.stages.find((stage) => stage.kind === "defender_roll"),
+    ).toMatchObject({
+      state: "ready",
+      task: { kind: "feint_defender_roll", ownerParticipantId: "guard" },
+    });
+
+    const reviewPending = buildCombatActionProcessPlans(
+      buildState({
+        attackerRoll: feintRoll("hero", "attacker"),
+        attackerRollRecorded: true,
+        defenderRoll: feintRoll("guard", "defender"),
+        defenderRollRecorded: true,
+        difference: 4,
+        review: {
+          proposedAttackerDbParryModifier: -1,
+          proposedDefenderObDbModifier: -2,
+        },
+        status: "awaiting_review",
+        tableResult: {
+          attackerPhase1DbParryModifier: -1,
+          band: "attacker_edge",
+          defenderObDbModifier: -2,
+        },
+      }),
+    )[0];
+    expect(
+      reviewPending?.maneuver?.stages.find((stage) => stage.kind === "proposal_review"),
+    ).toMatchObject({ state: "complete" });
+    expect(
+      reviewPending?.maneuver?.stages.find((stage) => stage.kind === "proposal_commit"),
+    ).toMatchObject({ state: "ready", task: { kind: "feint_commit", ownerRole: "gm" } });
+    expect(reviewPending?.standardAttacks[0]?.stages[0]?.state).toBe("pending");
+
+    const committed = buildCombatActionProcessPlans(
+      buildState({
+        attackerRoll: feintRoll("hero", "attacker"),
+        attackerRollRecorded: true,
+        committedAt: NOW,
+        defenderRoll: feintRoll("guard", "defender"),
+        defenderRollRecorded: true,
+        difference: 4,
+        review: {
+          proposedAttackerDbParryModifier: -1,
+          proposedDefenderObDbModifier: -2,
+        },
+        status: "committed",
+        tableResult: {
+          attackerPhase1DbParryModifier: -1,
+          band: "attacker_edge",
+          defenderObDbModifier: -2,
+        },
+      }),
+    )[0];
+    expect(committed?.maneuver?.completion).toEqual({ complete: true, reason: "committed" });
+    expect(committed?.standardAttacks[0]?.stages[0]?.state).toBe("ready");
+  });
+
+  it("advances opposed Adjust Distance through adjustment and ordered Dodge stages", () => {
+    const base = stateFor("attack_parry");
+    const declaration = {
+      actionId: "adjust_range_attack" as const,
+      adjustDistance: {
+        currentDistance: 3,
+        requestedDistance: 4,
+        targetParticipantId: "guard",
+      },
+      attackOpportunities: [
+        {
+          id: "distance-attack",
+          origin: "adjust_range_attack" as const,
+          phase: "phase2" as const,
+          slot: "attack_2" as const,
+          status: "committed" as const,
+          targetParticipantId: "guard",
+        },
+      ],
+      phaseContexts: { phase2: { targetParticipantId: "guard" } },
+      roundNumber: 2,
+      submittedBy: "player" as const,
+    };
+    const buildState = (proposal: Record<string, unknown>) =>
+      combatRoundStateSchema.parse({
+        ...base,
+        adjustDistanceProposals: [
+          {
+            attackerParticipantId: "hero",
+            currentDistance: 3,
+            defenderParticipantId: "guard",
+            defenderResponse: "oppose",
+            direction: "farther",
+            id: "distance-proposal",
+            pairId: "guard::hero",
+            phase1OpportunityId: "distance-opportunity",
+            phase2AttackOpportunityId: "distance-attack",
+            requestedDistance: 4,
+            roundNumber: 2,
+            ...proposal,
+          },
+        ],
+        participants: base.participants.map((participant) =>
+          participant.participantId === "hero" ? { ...participant, declaration } : participant,
+        ),
+      });
+    const adjustment = buildCombatActionProcessPlans(
+      buildState({ status: "awaiting_gm_adjustment" }),
+    )[0];
+    expect(
+      adjustment?.maneuver?.stages.find((stage) => stage.kind === "gm_adjustment"),
+    ).toMatchObject({ state: "ready", task: { kind: "adjust_distance_adjustment" } });
+
+    const attacker = buildCombatActionProcessPlans(
+      buildState({
+        gmRollAdjustment: { participantId: "hero", value: 2 },
+        status: "awaiting_rolls",
+      }),
+    )[0];
+    expect(
+      attacker?.maneuver?.stages.find((stage) => stage.kind === "attacker_roll"),
+    ).toMatchObject({ state: "ready", task: { kind: "adjust_distance_attacker_roll" } });
+
+    const defender = buildCombatActionProcessPlans(
+      buildState({
+        attackerRoll: {
+          dodgeSkillTotal: 6,
+          finalTotal: 20,
+          id: "distance-attacker-roll",
+          participantId: "hero",
+          rollD20: 10,
+          rollTotal: 10,
+          rolledAt: NOW,
+        },
+        attackerRollRecorded: true,
+        gmRollAdjustment: { participantId: "hero", value: 2 },
+        status: "awaiting_rolls",
+      }),
+    )[0];
+    expect(
+      defender?.maneuver?.stages.find((stage) => stage.kind === "defender_roll"),
+    ).toMatchObject({
+      state: "ready",
+      task: { kind: "adjust_distance_defender_roll", ownerParticipantId: "guard" },
+    });
   });
 });

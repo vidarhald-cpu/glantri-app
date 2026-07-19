@@ -4067,6 +4067,21 @@ export default function CombatRoundManagerPanel({
   const projectedDoubleAttackDecisionTask = projectedCurrentTasks.find(
     (task) => task.kind === "double_attack_decision" && task.state === "executable",
   );
+  const projectedFeintTask = projectedCurrentTasks.find(
+    (task) =>
+      ["feint_attacker_roll", "feint_defender_roll", "feint_commit"].includes(task.kind) &&
+      task.state === "executable",
+  );
+  const projectedAdjustDistanceTask = projectedCurrentTasks.find(
+    (task) =>
+      [
+        "adjust_distance_response",
+        "adjust_distance_adjustment",
+        "adjust_distance_attacker_roll",
+        "adjust_distance_defender_roll",
+        "adjust_distance_commit",
+      ].includes(task.kind) && task.state === "executable",
+  );
   const projectedCurrentTask =
     projectedCurrentTasks.find(
       (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
@@ -5220,22 +5235,25 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorDamageReviewCommitReadiness =
     inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
+  const projectedFeintOwnerParticipantId = projectedFeintTask?.trackerFacet.owner?.participantId;
+  const projectedAdjustDistanceOwnerParticipantId =
+    projectedAdjustDistanceTask?.trackerFacet.owner?.participantId;
   const inspectorFeintProposal =
-    inspectorPhaseResolutionCursor?.phase === "phase1" &&
-    inspectorPhaseResolutionCursor.substep === "feint"
-      ? selectedTimelineRoundState.feintProposals.find(
+    selectedRoundIsActive &&
+    projectedFeintOwnerParticipantId === inspector.participant?.participantId
+      ? roundState.feintProposals.find(
           (proposal) =>
             (proposal.status === "awaiting_rolls" || proposal.status === "awaiting_review") &&
-            proposal.attackerParticipantId === inspectorPhaseResolutionCursor.participantId,
+            proposal.attackerParticipantId === projectedFeintOwnerParticipantId,
         )
       : undefined;
   const inspectorAdjustDistanceProposal =
-    inspectorPhaseResolutionCursor?.phase === "phase1" &&
-    inspectorPhaseResolutionCursor.substep === "adjust_distance"
-      ? selectedTimelineRoundState.adjustDistanceProposals.find(
+    selectedRoundIsActive &&
+    projectedAdjustDistanceOwnerParticipantId === inspector.participant?.participantId
+      ? roundState.adjustDistanceProposals.find(
           (proposal) =>
             proposal.status !== "committed" &&
-            proposal.attackerParticipantId === inspectorPhaseResolutionCursor.participantId,
+            proposal.attackerParticipantId === projectedAdjustDistanceOwnerParticipantId,
         )
       : undefined;
   const inspectorAdjustDistanceExpectedParticipantId = inspectorAdjustDistanceProposal

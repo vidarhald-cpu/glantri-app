@@ -48,9 +48,15 @@ export type CombatProgressionStageKind =
   | "feasibility"
   | "health"
   | "hit_location"
+  | "gm_adjustment"
   | "input"
+  | "attacker_roll"
+  | "defender_roll"
   | "participant"
+  | "participant_response"
   | "response"
+  | "proposal_commit"
+  | "proposal_review"
   | "review"
   | "roll";
 
@@ -65,6 +71,11 @@ export type CombatProgressionStageState = "active" | "complete" | "pending";
 export type CombatProgressionTaskState = "executable" | "waiting";
 
 export type CombatProgressionTaskKind =
+  | "adjust_distance_adjustment"
+  | "adjust_distance_attacker_roll"
+  | "adjust_distance_commit"
+  | "adjust_distance_defender_roll"
+  | "adjust_distance_response"
   | "attack"
   | "combat_experience"
   | "critical"
@@ -72,14 +83,15 @@ export type CombatProgressionTaskKind =
   | "distance_commit"
   | "distance_roll"
   | "double_attack_decision"
+  | "feint_attacker_roll"
+  | "feint_commit"
+  | "feint_defender_roll"
   | "gm_advance_boundary"
   | "health_review"
   | "hit_location"
   | "modifier_review"
   | "parry"
   | "participant_review"
-  | "resolve_adjust_distance"
-  | "resolve_feint"
   | "roll_initiative"
   | "commit_initiative"
   | "submit_declaration";
@@ -131,6 +143,8 @@ export interface CombatProgressionTaskIdentity {
   readonly attackResultId?: string;
   readonly executionGroupId: string;
   readonly opportunityId?: string;
+  readonly opponentParticipantId?: string;
+  readonly pairId?: string;
   readonly phase?: CombatRoundPhase;
   readonly proposalId?: string;
 }

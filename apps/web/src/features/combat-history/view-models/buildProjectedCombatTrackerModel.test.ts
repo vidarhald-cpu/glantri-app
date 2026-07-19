@@ -53,7 +53,17 @@ function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection
 
 function liveProgression(
   input: {
-    kind?: "attack" | "parry" | "resolve_adjust_distance" | "resolve_feint";
+    kind?:
+      | "adjust_distance_adjustment"
+      | "adjust_distance_attacker_roll"
+      | "adjust_distance_commit"
+      | "adjust_distance_defender_roll"
+      | "adjust_distance_response"
+      | "attack"
+      | "feint_attacker_roll"
+      | "feint_commit"
+      | "feint_defender_roll"
+      | "parry";
     ownerId?: string;
     state?: "executable" | "waiting";
     step?: "A1" | "P1";
@@ -68,12 +78,11 @@ function liveProgression(
     processes: [
       {
         id: "process-1",
-        kind:
-          kind === "resolve_feint"
-            ? "feint"
-            : kind === "resolve_adjust_distance"
-              ? "adjust_distance"
-              : "attack",
+        kind: kind.startsWith("feint_")
+          ? "feint"
+          : kind.startsWith("adjust_distance_")
+            ? "adjust_distance"
+            : "attack",
         stages: [
           {
             executionStrategy: "single_task",
@@ -215,7 +224,7 @@ describe("buildProjectedCombatTrackerModel", () => {
   ] as const)("projects %s into the Phase 1 action marker", (type, status, marker, hover) => {
     const projection = history([event({ status, type })]);
     if (type === "feint_roll" || type === "feint_result") {
-      projection.progression = liveProgression({ kind: "resolve_feint" });
+      projection.progression = liveProgression({ kind: "feint_commit" });
     }
     const model = buildProjectedCombatTrackerModel({
       history: projection,
@@ -229,7 +238,7 @@ describe("buildProjectedCombatTrackerModel", () => {
   it("does not mark a future maneuver until its projected stage opens", () => {
     const projection = history([event({ status: "recorded", type: "feint_roll" })]);
     const beforeOpen = buildProjectedCombatTrackerModel({ history: projection });
-    projection.progression = liveProgression({ kind: "resolve_feint" });
+    projection.progression = liveProgression({ kind: "feint_attacker_roll" });
     const opened = buildProjectedCombatTrackerModel({ history: projection });
 
     expect(beforeOpen.cells["1:aria:phase_1_actions"].marker).toBe("·");
@@ -248,11 +257,31 @@ describe("buildProjectedCombatTrackerModel", () => {
         .marker,
     ).toBe("·");
 
-    projection.progression = liveProgression({ kind: "resolve_adjust_distance" });
+    projection.progression = liveProgression({ kind: "adjust_distance_attacker_roll" });
     expect(
       buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:phase_1_actions"]
         .marker,
     ).toBe("?");
+  });
+
+  it.each([
+    ["feint_attacker_roll", "feint"],
+    ["feint_commit", "feint"],
+    ["adjust_distance_response", "adjust_distance"],
+    ["adjust_distance_adjustment", "adjust_distance"],
+  ] as const)("marks only the current adapter-backed %s task", (kind, processKind) => {
+    const projection = history([]);
+    projection.progression = liveProgression({ kind });
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(projection.progression.processes[0]?.kind).toBe(processKind);
+    expect(model.cells["1:aria:phase_1_actions"]).toMatchObject({
+      current: true,
+      executable: true,
+      marker: "?",
+      taskKinds: [kind],
+    });
+    expect(model.cells["1:aria:phase_2_actions"].marker).toBe("·");
   });
 
   it("applies only the committed execution order delivered by progression", () => {

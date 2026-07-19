@@ -1,15 +1,18 @@
 import {
-  getCombatRoundAdjustDistanceProposal,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundAttackResultId,
-  getCombatRoundFeintProposal,
   getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseResolutionResultForAttack,
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
-import type { CombatActionProcessStage, StandardAttackProcessPlan } from "../combatActionProcesses";
+import type {
+  CombatActionProcessStage,
+  CombatManeuverProcessPlan,
+  CombatManeuverProcessStagePlan,
+  StandardAttackProcessPlan,
+} from "../combatActionProcesses";
 import {
   GM_IDENTITY,
   buildProcess,
@@ -23,174 +26,78 @@ import {
 } from "./internal";
 import type { CombatProgressionProcess, CombatProgressionStageKind } from "./types";
 
-function buildFeintProcess(
-  context: ProjectionBuildContext,
-  phase: CombatRoundPhase,
-  participantId: string,
-): CombatProgressionProcess {
-  const proposal = getCombatRoundFeintProposal({
-    attackerParticipantId: participantId,
-    state: context.state,
-  });
-  const trackerStep = trackerStepForPhase(phase, "attack");
-  const attacker = context.identities.get(participantId);
-  const activeStage: CombatProgressionStageKind =
-    !proposal ||
-    proposal.status === "awaiting_action_turn" ||
-    proposal.status === "awaiting_feasibility"
-      ? "feasibility"
-      : proposal.status === "awaiting_rolls"
-        ? "roll"
-        : proposal.status === "awaiting_review"
-          ? "review"
-          : "commit";
-  let task: TaskSpec;
-  if (!proposal) {
-    task = {
-      dependencies: [{ message: "The active Feint has no proposal.", type: "proposal_pending" }],
-      expectedCommand: "review_feint_feasibility",
-      kind: "resolve_feint",
-      owner: attacker,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else if (proposal.status === "awaiting_rolls") {
-    const owner = context.identities.get(
-      proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId,
-    );
-    task = {
-      expectedCommand: "roll_feint",
-      kind: "resolve_feint",
-      owner,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else if (proposal.status === "awaiting_review") {
-    task = {
-      allowedActors: ["gm"],
-      expectedCommand: "commit_feint_result",
-      kind: "resolve_feint",
-      owner: GM_IDENTITY,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else {
-    task = {
-      allowedActors: ["gm"],
-      expectedCommand: "review_feint_feasibility",
-      kind: "resolve_feint",
-      owner: GM_IDENTITY,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  }
-  const order: CombatProgressionStageKind[] = ["feasibility", "roll", "review", "commit"];
-  const activeIndex = order.indexOf(activeStage);
-  return buildProcess(
-    context,
-    "feint",
-    order.map((kind, index) => ({
-      kind,
-      state: index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending",
-      strategy:
-        kind === "roll"
-          ? "ordered_all"
-          : kind === "review" || kind === "feasibility"
-            ? "gm_review"
-            : "single_task",
-      tasks: index === activeIndex ? [task] : [],
-    })),
-  );
+function maneuverStageKind(stage: CombatManeuverProcessStagePlan): CombatProgressionStageKind {
+  return stage.kind;
 }
 
-function buildAdjustDistanceProcess(
+function buildAdapterManeuverProcess(
   context: ProjectionBuildContext,
-  phase: CombatRoundPhase,
-  participantId: string,
+  plan: CombatManeuverProcessPlan,
 ): CombatProgressionProcess {
-  const proposal = getCombatRoundAdjustDistanceProposal({
-    attackerParticipantId: participantId,
-    state: context.state,
+  const trackerOwner = context.identities.get(plan.ownerParticipantId);
+  const stages: StageSpec[] = plan.stages.map((stage) => {
+    const task = stage.task;
+    const owner =
+      task?.ownerRole === "gm"
+        ? GM_IDENTITY
+        : task?.ownerParticipantId
+          ? context.identities.get(task.ownerParticipantId)
+          : undefined;
+    const dependencies: TaskDependency[] = [];
+    for (const prerequisite of plan.prerequisites) {
+      if (prerequisite.satisfied) continue;
+      dependencies.push({
+        message:
+          prerequisite.kind === "proposal"
+            ? `The active ${plan.maneuverKind.replace("_", " ")} has no proposal.`
+            : prerequisite.kind === "target"
+              ? "The maneuver target is missing or invalid."
+              : "The maneuver is waiting for its Phase 1 action turn.",
+        owner: trackerOwner,
+        type:
+          prerequisite.kind === "proposal"
+            ? "proposal_pending"
+            : prerequisite.kind === "target"
+              ? "invalid_target"
+              : "participant_input_pending",
+      });
+    }
+    return {
+      kind: maneuverStageKind(stage),
+      state:
+        stage.state === "ready" ? "active" : stage.state === "pending" ? "pending" : "complete",
+      strategy: stage.executionStrategy,
+      tasks:
+        stage.state === "ready" && task
+          ? [
+              {
+                allowedActors: task.ownerRole === "gm" ? (["gm"] as const) : undefined,
+                dependencies,
+                expectedCommand: task.expectedCommand,
+                identity: {
+                  opportunityId: task.opportunityId,
+                  opponentParticipantId:
+                    task.ownerParticipantId === plan.targetParticipantId
+                      ? plan.ownerParticipantId
+                      : plan.targetParticipantId,
+                  pairId: task.pairId,
+                  phase: task.phase,
+                  proposalId: task.proposalId,
+                },
+                key: `${task.proposalId}:${task.kind}`,
+                kind: task.kind,
+                owner,
+                trackerOwner,
+                trackerStep: "A1" as const,
+              },
+            ]
+          : [],
+    };
   });
-  const trackerStep = trackerStepForPhase(phase, "attack");
-  const attacker = context.identities.get(participantId);
-  const activeStage: CombatProgressionStageKind =
-    !proposal ||
-    proposal.status === "awaiting_action_turn" ||
-    proposal.status === "awaiting_defender_response"
-      ? "response"
-      : proposal.status === "awaiting_gm_adjustment"
-        ? "review"
-        : proposal.status === "awaiting_rolls"
-          ? "roll"
-          : "commit";
-  let task: TaskSpec;
-  if (!proposal) {
-    task = {
-      dependencies: [
-        { message: "The active Adjust Distance action has no proposal.", type: "proposal_pending" },
-      ],
-      expectedCommand: "respond_adjust_distance",
-      kind: "resolve_adjust_distance",
-      owner: attacker,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else if (proposal.status === "awaiting_defender_response") {
-    task = {
-      expectedCommand: "respond_adjust_distance",
-      kind: "resolve_adjust_distance",
-      owner: context.identities.get(proposal.defenderParticipantId),
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else if (proposal.status === "awaiting_gm_adjustment") {
-    task = {
-      allowedActors: ["gm"],
-      expectedCommand: "review_adjust_distance_roll_adjustment",
-      kind: "resolve_adjust_distance",
-      owner: GM_IDENTITY,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else if (proposal.status === "awaiting_rolls") {
-    const owner = context.identities.get(
-      proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId,
-    );
-    task = {
-      expectedCommand: "roll_adjust_distance",
-      kind: "resolve_adjust_distance",
-      owner,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  } else {
-    task = {
-      allowedActors: ["gm"],
-      expectedCommand: "commit_adjust_distance",
-      kind: "resolve_adjust_distance",
-      owner: GM_IDENTITY,
-      trackerOwner: attacker,
-      trackerStep,
-    };
-  }
-  const order: CombatProgressionStageKind[] = ["response", "review", "roll", "commit"];
-  const activeIndex = order.indexOf(activeStage);
-  return buildProcess(
-    context,
-    "adjust_distance",
-    order.map((kind, index) => ({
-      kind,
-      state: index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending",
-      strategy:
-        kind === "roll"
-          ? "ordered_all"
-          : kind === "review" || kind === "commit"
-            ? "gm_review"
-            : "single_task",
-      tasks: index === activeIndex ? [task] : [],
-    })),
-  );
+  return buildProcess(context, plan.maneuverKind, stages, {
+    key: plan.proposalId,
+    planId: plan.id,
+  });
 }
 
 function buildLegacyAttackProcess(
@@ -582,25 +489,22 @@ export function buildResolutionProcesses(
     context.state.phaseResolutionCursor?.phase === phase
       ? context.state.phaseResolutionCursor.substep
       : undefined;
-  if (
-    participantId &&
-    (substep === "feint" ||
-      (participant?.declaration?.actionId === "feint_attack" &&
-        getCombatRoundFeintProposal({ attackerParticipantId: participantId, state: context.state })
-          ?.status !== "committed"))
-  ) {
-    return [buildFeintProcess(context, phase, participantId)];
-  }
-  if (
-    participantId &&
-    (substep === "adjust_distance" ||
-      (participant?.declaration?.actionId === "adjust_range_attack" &&
-        getCombatRoundAdjustDistanceProposal({
-          attackerParticipantId: participantId,
-          state: context.state,
-        })?.status !== "committed"))
-  ) {
-    return [buildAdjustDistanceProcess(context, phase, participantId)];
+  const maneuverPlan = participantId
+    ? context.actionProcessPlans.find(
+        (plan) =>
+          plan.ownerParticipantId === participantId &&
+          plan.maneuver &&
+          (substep === plan.maneuver.maneuverKind ||
+            (phase === "phase1" &&
+              ((participant?.declaration?.actionId === "feint_attack" &&
+                plan.maneuver.maneuverKind === "feint") ||
+                (participant?.declaration?.actionId === "adjust_range_attack" &&
+                  plan.maneuver.maneuverKind === "adjust_distance")) &&
+              !plan.maneuver.completion.complete)),
+      )?.maneuver
+    : undefined;
+  if (maneuverPlan && phase === "phase1") {
+    return [buildAdapterManeuverProcess(context, maneuverPlan)];
   }
   const adapterAttack = findAdapterAttackProcess(context, phase);
   return [

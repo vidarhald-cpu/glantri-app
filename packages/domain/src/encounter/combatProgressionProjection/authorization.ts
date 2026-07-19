@@ -32,6 +32,8 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly executionGroupId?: string;
   readonly opportunityId?: string;
+  readonly opponentParticipantId?: string;
+  readonly pairId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly projection: CombatProgressionProjection;
@@ -51,9 +53,9 @@ interface CommandTaskRule {
   boundary?:
     | CombatProgressionBoundaryKind
     | ((phase?: CombatRoundPhase) => CombatProgressionBoundaryKind | undefined);
-  kind: CombatProgressionTaskKind;
+  kind: CombatProgressionTaskKind | readonly CombatProgressionTaskKind[];
   process?: CombatProgressionProcessKind;
-  stage: CombatProgressionStageKind;
+  stage: CombatProgressionStageKind | readonly CombatProgressionStageKind[];
 }
 
 const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule>> = {
@@ -109,6 +111,42 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "attack",
     stage: "defense",
   },
+  respond_adjust_distance: {
+    boundary: "phase1_resolution",
+    kind: "adjust_distance_response",
+    process: "adjust_distance",
+    stage: "participant_response",
+  },
+  review_adjust_distance_roll_adjustment: {
+    boundary: "phase1_resolution",
+    kind: "adjust_distance_adjustment",
+    process: "adjust_distance",
+    stage: "gm_adjustment",
+  },
+  roll_adjust_distance: {
+    boundary: "phase1_resolution",
+    kind: ["adjust_distance_attacker_roll", "adjust_distance_defender_roll"],
+    process: "adjust_distance",
+    stage: ["attacker_roll", "defender_roll"],
+  },
+  commit_adjust_distance: {
+    boundary: "phase1_resolution",
+    kind: "adjust_distance_commit",
+    process: "adjust_distance",
+    stage: "proposal_commit",
+  },
+  roll_feint: {
+    boundary: "phase1_resolution",
+    kind: ["feint_attacker_roll", "feint_defender_roll"],
+    process: "feint",
+    stage: ["attacker_roll", "defender_roll"],
+  },
+  commit_feint_result: {
+    boundary: "phase1_resolution",
+    kind: "feint_commit",
+    process: "feint",
+    stage: "proposal_commit",
+  },
 };
 
 const RELEVANT_DIAGNOSTICS = new Set<CombatProgressionDiagnostic["code"]>([
@@ -140,6 +178,10 @@ function failure(
   message: string,
 ): CombatProgressionAuthorizationResult {
   return { code, message, ok: false };
+}
+
+function ruleMatches<T extends string>(value: T, expected: T | readonly T[]): boolean {
+  return Array.isArray(expected) ? expected.includes(value) : value === expected;
 }
 
 function hasRelevantDiagnostic(
@@ -185,10 +227,12 @@ export function authorizeCombatProgressionTask(
   const candidateStages = input.projection.boundary.processes
     .filter((candidate) => !rule.process || candidate.kind === rule.process)
     .flatMap((process) => process.stages)
-    .filter((candidate) => candidate.kind === rule.stage);
+    .filter((candidate) => ruleMatches(candidate.kind, rule.stage));
   const commandTasks = candidateStages
     .flatMap((stage) => stage.tasks)
-    .filter((task) => task.kind === rule.kind && task.expectedCommand === input.commandType);
+    .filter(
+      (task) => ruleMatches(task.kind, rule.kind) && task.expectedCommand === input.commandType,
+    );
 
   if (commandTasks.length === 0) {
     return failure("task_not_found", "No projected task matches this command.");
@@ -236,9 +280,25 @@ export function authorizeCombatProgressionTask(
     return failure("stale_proposal", "The combat proposal is stale or not executable.");
   }
 
-  const attackTasks = input.attackResultId
-    ? proposalTasks.filter((task) => task.identity.attackResultId === input.attackResultId)
+  const pairTasks = input.pairId
+    ? proposalTasks.filter((task) => task.identity.pairId === input.pairId)
     : proposalTasks;
+  if (input.pairId && pairTasks.length === 0) {
+    return failure("stale_proposal", "The combat participant pair is stale or not executable.");
+  }
+
+  const opponentTasks = input.opponentParticipantId
+    ? pairTasks.filter(
+        (task) => task.identity.opponentParticipantId === input.opponentParticipantId,
+      )
+    : pairTasks;
+  if (input.opponentParticipantId && opponentTasks.length === 0) {
+    return failure("wrong_participant", "The projected task belongs to another opponent pair.");
+  }
+
+  const attackTasks = input.attackResultId
+    ? opponentTasks.filter((task) => task.identity.attackResultId === input.attackResultId)
+    : opponentTasks;
   if (input.attackResultId && attackTasks.length === 0) {
     return failure("stale_opportunity", "The attack result is stale or not executable.");
   }

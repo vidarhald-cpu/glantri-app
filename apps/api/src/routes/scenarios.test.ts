@@ -4,6 +4,7 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
   combatRoundParticipantWasAttackedInPhase,
@@ -13480,6 +13481,147 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(409);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("authorizes the projected Adjust Distance response and rejects a future-stage repeat", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const buildRoundState = (status: "awaiting_defender_response" | "awaiting_gm_adjustment") =>
+      combatRoundStateSchema.parse({
+        adjustDistanceProposals: [
+          {
+            attackerParticipantId: "encounter-participant-1",
+            currentDistance: 3,
+            defenderParticipantId: "encounter-participant-2",
+            defenderResponse: status === "awaiting_gm_adjustment" ? "oppose" : "pending",
+            direction: "closer",
+            id: "distance-proposal",
+            pairId: "encounter-participant-1::encounter-participant-2",
+            phase1OpportunityId: "distance-opportunity",
+            phase2AttackOpportunityId: "distance-attack",
+            requestedDistance: 2,
+            roundNumber: 1,
+            status,
+          },
+        ],
+        commands: [
+          {
+            afterCursor: {
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i1",
+            },
+            beforeCursor: {
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i1",
+            },
+            createdAt: "2026-01-01T00:01:30.000Z",
+            facts: {},
+            id: "command-i1",
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            roundNumber: 1,
+            step: "i1",
+            type: "roll_initiative_phase1",
+          },
+        ],
+        currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          substep: "adjust_distance",
+        },
+        participants: [
+          {
+            declaration: {
+              actionId: "adjust_range_attack",
+              adjustDistance: {
+                currentDistance: 3,
+                requestedDistance: 2,
+                targetParticipantId: "encounter-participant-2",
+              },
+              attackOpportunities: [
+                {
+                  id: "distance-attack",
+                  origin: "adjust_range_attack",
+                  phase: "phase2",
+                  slot: "attack_2",
+                  status: "committed",
+                  targetParticipantId: "encounter-participant-2",
+                },
+              ],
+              phaseContexts: {
+                phase2: { targetParticipantId: "encounter-participant-2" },
+              },
+              roundNumber: 1,
+              submittedBy: "player",
+            },
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            scenarioParticipantId: "participant-1",
+          },
+          {
+            label: "City guard",
+            participantId: "encounter-participant-2",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+        roundNumber: 1,
+      });
+    const participants = [
+      { controlledByUserId: "other-player", id: "participant-1" },
+      { controlledByUserId: "player-1", id: "participant-2" },
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: buildRoundState("awaiting_defender_response"),
+        participants: encounterParticipants,
+      },
+      participants,
+    });
+    const app = await buildScenarioTestApp();
+    const accepted = await app.inject({
+      method: "POST",
+      payload: {
+        proposalId: "distance-proposal",
+        response: "allow",
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/respond-adjust-distance",
+    });
+    await app.close();
+
+    expect(accepted.statusCode, JSON.stringify(accepted.json())).toBe(200);
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState
+        .adjustDistanceProposals[0],
+    ).toMatchObject({ defenderResponse: "allow", status: "awaiting_review" });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: buildRoundState("awaiting_gm_adjustment"),
+        participants: encounterParticipants,
+      },
+      participants,
+    });
+    const repeatedApp = await buildScenarioTestApp();
+    const rejected = await repeatedApp.inject({
+      method: "POST",
+      payload: {
+        proposalId: "distance-proposal",
+        response: "allow",
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/respond-adjust-distance",
+    });
+    await repeatedApp.close();
+
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json()).toEqual({
+      error: "The defender must choose whether to oppose the maneuver.",
+    });
   });
 
   it("rejects player roleplay rolls for silent assignments", async () => {

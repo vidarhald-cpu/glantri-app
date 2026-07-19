@@ -3473,6 +3473,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
       const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
       if (!proposal || proposal.defenderParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: "The defender must choose whether to oppose the maneuver." });
+      const authorization = authorizeCombatProgressionTask({
+        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
+        commandType: "respond_adjust_distance",
+        opponentParticipantId: proposal.attackerParticipantId,
+        opportunityId: proposal.phase1OpportunityId,
+        pairId: proposal.pairId,
+        participantId: encounterParticipant.id,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) return reply.code(409).send({ error: "The defender must choose whether to oppose the maneuver." });
       const createdAt = new Date().toISOString();
       const nextRoundState = respondCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, proposalId, response, state: roundState });
       const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
@@ -3508,6 +3520,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must confirm the maneuver adjustment." });
       const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
       const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "review_adjust_distance_roll_adjustment",
+        opponentParticipantId: proposal?.defenderParticipantId,
+        opportunityId: proposal?.phase1OpportunityId,
+        pairId: proposal?.pairId,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) return reply.code(409).send({ error: "The GM must confirm the maneuver adjustment." });
       const createdAt = new Date().toISOString();
       const nextRoundState = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt, createdByUserId: user.id }, notes, participantId, proposalId, state: roundState, value });
       const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
@@ -3538,6 +3562,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!proposal || proposal.status !== "awaiting_rolls") return reply.code(409).send({ error: "Distance-adjustment rolls are not currently available." });
       const expectedParticipantId = proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId;
       if (expectedParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: proposal.attackerRoll ? "The defender must roll Dodge." : "The attacker must roll Dodge." });
+      const authorization = authorizeCombatProgressionTask({
+        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
+        commandType: "roll_adjust_distance",
+        opponentParticipantId:
+          encounterParticipant.id === proposal.attackerParticipantId
+            ? proposal.defenderParticipantId
+            : proposal.attackerParticipantId,
+        opportunityId: proposal.phase1OpportunityId,
+        pairId: proposal.pairId,
+        participantId: encounterParticipant.id,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) return reply.code(409).send({ error: "Distance-adjustment rolls are not currently available." });
       const profile = buildRoundEndParticipantInputs({ encounter, roundState, scenarioParticipants })[encounterParticipant.id]?.distanceControl;
       if (!profile || profile.dodgeSkillTotal === undefined) return reply.code(409).send({ error: "Dodge profile is unavailable." });
       const adjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id ? proposal.gmRollAdjustment.value : 0;
@@ -3634,6 +3673,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must commit the distance proposal before Phase 2." });
       const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
       const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "commit_adjust_distance",
+        opponentParticipantId: proposal?.defenderParticipantId,
+        opportunityId: proposal?.phase1OpportunityId,
+        pairId: proposal?.pairId,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) return reply.code(409).send({ error: "The GM must commit the distance proposal before Phase 2." });
       const createdAt = new Date().toISOString();
       const nextRoundState = commitCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, committedDistance, notes: typeof body.notes === "string" ? body.notes : undefined, outcome, proposalId, state: roundState });
       const recomputed = recomputeRoundDeclarationCombatActionModifiers({
@@ -3769,6 +3820,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             ? "The attacker must roll the feint."
             : "The defender must roll resistance.",
         });
+      }
+      const authorization = authorizeCombatProgressionTask({
+        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
+        commandType: "roll_feint",
+        opponentParticipantId: isAttackerRoll
+          ? proposal.defenderParticipantId
+          : proposal.attackerParticipantId,
+        opportunityId: proposal.phase1OpportunityId,
+        pairId: proposal.pairId,
+        participantId: encounterParticipant.id,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) {
+        return reply.code(409).send({ error: "Feint rolls are not currently available." });
       }
       const skillId = isAttackerRoll ? proposal.attackerSkillId : proposal.defenderSkillId;
       const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === skillId);
@@ -3928,6 +3995,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const existingProposal = roundState.feintProposals.find((entry) => entry.id === proposalId);
       if (!existingProposal?.review || existingProposal.status !== "awaiting_review") {
+        return reply
+          .code(409)
+          .send({ error: "The GM must commit the feint result before Phase 2." });
+      }
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "commit_feint_result",
+        opponentParticipantId: existingProposal.defenderParticipantId,
+        opportunityId: existingProposal.phase1OpportunityId,
+        pairId: existingProposal.pairId,
+        phase: "phase1",
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId,
+      });
+      if (!authorization.ok) {
         return reply
           .code(409)
           .send({ error: "The GM must commit the feint result before Phase 2." });
