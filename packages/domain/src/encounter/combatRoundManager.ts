@@ -77,6 +77,11 @@ import {
   type CombatFeintTableResult,
 } from "./combatFeint";
 import {
+  createCombatParticipantPairKey,
+  resolveCombatDodgeModifiers,
+  type CombatModifierContribution,
+} from "./combatModifierContributions";
+import {
   appendCanonicalCombatStepEventForCommand,
   getCombatStepEventPhaseStep,
   removeCanonicalCombatStepEventsForCommand,
@@ -10861,6 +10866,9 @@ function buildCombatRoundBleedAccumulationNotes(input: {
 export interface CombatRoundEndDistanceControlParticipantInput {
   dodgeSkillTotal?: number;
   generalFatigueModifier?: number;
+  modifierContributions?: readonly CombatModifierContribution[];
+  modifierEncounterId?: string;
+  modifierOwnerParticipantId?: string;
   warnings?: readonly string[];
 }
 
@@ -10888,6 +10896,7 @@ function findCombatRoundParticipantByAlias(input: {
 
 function buildCombatRoundEndDistanceControlSide(input: {
   desiredDistance?: CombatDistance;
+  modifierGeneralFatigueTotal?: number;
   participantId: string;
   participantInput?: CombatRoundEndDistanceControlParticipantInput;
   requiresRoll: boolean;
@@ -10901,10 +10910,48 @@ function buildCombatRoundEndDistanceControlSide(input: {
   return combatRoundEndDistanceControlSideSchema.parse({
     desiredDistance: input.desiredDistance,
     dodgeSkillTotal: input.participantInput?.dodgeSkillTotal ?? 0,
-    generalFatigueModifier: input.participantInput?.generalFatigueModifier ?? 0,
+    generalFatigueModifier:
+      input.modifierGeneralFatigueTotal ?? input.participantInput?.generalFatigueModifier ?? 0,
     participantId: input.participantId,
     status: input.requiresRoll ? "pending" : "not_required",
     warnings: [...new Set(warnings)],
+  });
+}
+
+function resolveRoundEndDistanceDodgeModifier(input: {
+  encounterId?: string;
+  pairKey: string;
+  roundNumber: number;
+  participantInput?: CombatRoundEndDistanceControlParticipantInput;
+  opponentInput?: CombatRoundEndDistanceControlParticipantInput;
+}): ReturnType<typeof resolveCombatDodgeModifiers> | undefined {
+  const participantInput = input.participantInput;
+  if (!participantInput?.modifierContributions || !participantInput.modifierOwnerParticipantId) {
+    return undefined;
+  }
+
+  const opponentScenarioParticipantId = input.opponentInput?.modifierOwnerParticipantId;
+  const ownerScenarioParticipantId = participantInput.modifierOwnerParticipantId;
+  if (!opponentScenarioParticipantId || !ownerScenarioParticipantId) return undefined;
+
+  return resolveCombatDodgeModifiers({
+    context: {
+      encounterId: input.encounterId ?? participantInput.modifierEncounterId,
+      ownerParticipantId: ownerScenarioParticipantId,
+      opponentParticipantId: opponentScenarioParticipantId,
+      // Round-end distance state uses encounter-participant aliases, while normalized
+      // contribution scope is owned by scenario participants. Resolve relational scope in
+      // that canonical owner identity space rather than mixing the two keys.
+      pairKey: createCombatParticipantPairKey(
+        ownerScenarioParticipantId,
+        opponentScenarioParticipantId,
+      ),
+      roundNumber: input.roundNumber,
+      rollType: "round_end_distance_dodge",
+      skillId: "dodge",
+      step: "round_summary",
+    },
+    contributions: participantInput.modifierContributions,
   });
 }
 
@@ -11030,6 +11077,24 @@ function buildCombatRoundEndDistanceProposals(input: {
     const proposedDistance = samePreference ? desiredDistanceA : undefined;
     const status = samePreference ? "review_ready" : "pending_rolls";
     const outcome = samePreference ? "uncontested" : "contest_pending";
+    const participantAInput = input.participantInputs?.[entry.participantAId];
+    const participantBInput = input.participantInputs?.[entry.participantBId];
+    const participantAModifierResolution = resolveRoundEndDistanceDodgeModifier({
+      encounterId:
+        participantAInput?.modifierEncounterId ?? participantBInput?.modifierEncounterId,
+      pairKey,
+      roundNumber: normalized.roundNumber,
+      participantInput: participantAInput,
+      opponentInput: participantBInput,
+    });
+    const participantBModifierResolution = resolveRoundEndDistanceDodgeModifier({
+      encounterId:
+        participantBInput?.modifierEncounterId ?? participantAInput?.modifierEncounterId,
+      pairKey,
+      roundNumber: normalized.roundNumber,
+      participantInput: participantBInput,
+      opponentInput: participantAInput,
+    });
 
     return combatRoundEndDistanceProposalSchema.parse({
       appliesFromRound: normalized.roundNumber + 1,
@@ -11042,15 +11107,21 @@ function buildCombatRoundEndDistanceProposals(input: {
       pairKey,
       participantA: buildCombatRoundEndDistanceControlSide({
         desiredDistance: desiredDistanceA,
+        modifierGeneralFatigueTotal: participantAModifierResolution?.bucketResolutions.find(
+          (resolution) => resolution.bucket === "general_fatigue",
+        )?.total,
         participantId: entry.participantAId,
-        participantInput: input.participantInputs?.[entry.participantAId],
+        participantInput: participantAInput,
         requiresRoll: requiresContest,
       }),
       participantAId: entry.participantAId,
       participantB: buildCombatRoundEndDistanceControlSide({
         desiredDistance: desiredDistanceB,
+        modifierGeneralFatigueTotal: participantBModifierResolution?.bucketResolutions.find(
+          (resolution) => resolution.bucket === "general_fatigue",
+        )?.total,
         participantId: entry.participantBId,
-        participantInput: input.participantInputs?.[entry.participantBId],
+        participantInput: participantBInput,
         requiresRoll: requiresContest,
       }),
       participantBId: entry.participantBId,
@@ -12261,9 +12332,12 @@ function buildCombatRoundEndDistanceRollResult(input: {
   rolledBy: "player" | "gm_proxy";
   roll: OpenEndedD20Roll;
   side: CombatRoundEndDistanceControlSide;
+  modifierTotal?: number;
 }): CombatRoundEndDistanceRollResult {
   const finalTotal =
-    input.roll.dieResult + input.side.dodgeSkillTotal + input.side.generalFatigueModifier;
+    input.roll.dieResult +
+    input.side.dodgeSkillTotal +
+    (input.modifierTotal ?? input.side.generalFatigueModifier);
 
   return combatRoundEndDistanceRollResultSchema.parse({
     dodgeSkillTotal: input.side.dodgeSkillTotal,
@@ -12340,6 +12414,7 @@ export function rollCombatRoundEndDistanceControl(input: {
   };
   distanceProposalId?: string;
   participantId: string;
+  participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
   roll?: OpenEndedD20Roll;
   rolledBy?: "player" | "gm_proxy";
   rng?: () => number;
@@ -12383,6 +12458,20 @@ export function rollCombatRoundEndDistanceControl(input: {
     throw new RangeError("Distance control roll is not pending for this participant.");
   }
 
+  const opponentParticipantId =
+    sideKey === "participantA"
+      ? distanceProposal.participantBId
+      : distanceProposal.participantAId;
+  const participantInput = input.participantInputs?.[input.participantId];
+  const opponentInput = input.participantInputs?.[opponentParticipantId];
+  const canonicalModifierResolution = resolveRoundEndDistanceDodgeModifier({
+    encounterId:
+      participantInput?.modifierEncounterId ?? opponentInput?.modifierEncounterId,
+    pairKey: distanceProposal.pairKey,
+    roundNumber: normalized.roundNumber,
+    participantInput,
+    opponentInput,
+  });
   const participantRoll = input.roll ?? rollOpenEndedD20(input.rng);
   const participantResult = buildCombatRoundEndDistanceRollResult({
     command: input.command,
@@ -12390,6 +12479,7 @@ export function rollCombatRoundEndDistanceControl(input: {
     rolledAtRound: normalized.roundNumber,
     rolledBy: input.rolledBy ?? "gm_proxy",
     side,
+    modifierTotal: canonicalModifierResolution?.total,
   });
   const proposalWithRoll = combatRoundEndDistanceProposalSchema.parse({
     ...distanceProposal,

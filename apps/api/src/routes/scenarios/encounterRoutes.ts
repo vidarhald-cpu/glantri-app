@@ -54,8 +54,9 @@ import {
   expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   getCombatRoundInitiativePhaseForStep,
   buildLiveCombatModifierContributionProjection,
-  getMergedCombatDbParryModifierTotal,
-  getMergedCombatSkillObModifierTotal,
+  createCombatParticipantPairKey,
+  getCombatRoundParryReviewStepForPhase,
+  getCombatRoundPhaseActionStepForPhase,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
   getCombatRoundCombatExperienceDifficulty,
@@ -105,6 +106,8 @@ import {
   removeCombatRoundEndParticipantReviewEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  normalizeCombatRollAdjustment,
+  resolveCombatDodgeModifiers,
   resolveCombatModifierContributions,
   rollCombatRoundEndDistanceControl,
   rollCombatRoundEndHealthCheck,
@@ -263,29 +266,6 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
   };
 }
 
-// Round-end distance control still uses the established direct General/Fatigue
-// effect interpretation. Migrating that calculation is a separate rules slice.
-function getLegacyRoundEndGeneralFatigueModifier(participant: ScenarioParticipant): number {
-  return (participant.state.combatEffects?.effects ?? [])
-    .filter(
-      (effect) =>
-        effect.status === "active" &&
-        effect.type !== "physical_damage" &&
-        effect.type !== "general_damage" &&
-        effect.type !== "bleed" &&
-        effect.type !== "internal_bleed" &&
-        (effect.type === "fatigue" ||
-          effect.effectGroup === "fatigue" ||
-          effect.effectGroup === "general"),
-    )
-    .reduce(
-      (total, effect) =>
-        total +
-        (effect.modifierValue ?? (effect.damage !== 0 ? effect.damage : effect.generalDamage)),
-      0,
-    );
-}
-
 function buildRoundEndParticipantInputs(input: {
   encounter: EncounterSession;
   roundState: CombatRoundState;
@@ -303,6 +283,18 @@ function buildRoundEndParticipantInputs(input: {
       if (!scenarioParticipant) return [];
 
       const sheetFacts = getScenarioParticipantRoundEndSheetFacts(scenarioParticipant);
+      const modifierProjection = buildLiveCombatModifierContributionProjection({
+        combatContext: scenarioParticipant.state.combat.combatContext,
+        combatEffects: scenarioParticipant.state.combatEffects,
+        currentRound: input.roundState.roundNumber,
+        encounterId: input.encounter.id,
+        ownerParticipantId: scenarioParticipant.id,
+      });
+      const hasAuthoritativeModifierSource =
+        scenarioParticipant.state.combatEffects !== undefined ||
+        Object.values(scenarioParticipant.state.combat.combatContext?.modifierBuckets ?? {}).some(
+          (entries) => entries.length > 0,
+        );
       return [
         [
           roundParticipant.participantId,
@@ -310,7 +302,13 @@ function buildRoundEndParticipantInputs(input: {
             combatEffects: scenarioParticipant.state.combatEffects,
             distanceControl: {
               dodgeSkillTotal: sheetFacts.dodgeSkillTotal,
-              generalFatigueModifier: getLegacyRoundEndGeneralFatigueModifier(scenarioParticipant),
+              ...(hasAuthoritativeModifierSource
+                ? {
+                    modifierContributions: modifierProjection.contributions,
+                    modifierEncounterId: input.encounter.id,
+                    modifierOwnerParticipantId: scenarioParticipant.id,
+                  }
+                : {}),
               warnings:
                 sheetFacts.dodgeSkillTotal === undefined
                   ? ["Dodge total unavailable in participant snapshot."]
@@ -321,6 +319,20 @@ function buildRoundEndParticipantInputs(input: {
         ],
       ];
     }),
+  );
+}
+
+function buildRoundEndDistanceControlInputs(input: {
+  encounter: EncounterSession;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}) {
+  const participantInputs = buildRoundEndParticipantInputs(input);
+  return Object.fromEntries(
+    Object.entries(participantInputs).map(([participantId, participantInput]) => [
+      participantId,
+      participantInput.distanceControl,
+    ]),
   );
 }
 
@@ -3491,9 +3503,68 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const profile = buildRoundEndParticipantInputs({ encounter, roundState, scenarioParticipants })[encounterParticipant.id]?.distanceControl;
       if (!profile || profile.dodgeSkillTotal === undefined) return reply.code(409).send({ error: "Dodge profile is unavailable." });
       const adjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id ? proposal.gmRollAdjustment.value : 0;
+      const opponentEncounterParticipantId =
+        proposal.attackerParticipantId === encounterParticipant.id
+          ? proposal.defenderParticipantId
+          : proposal.attackerParticipantId;
+      const opponentEncounterParticipant = membership.participants.find(
+        (participant) => participant.id === opponentEncounterParticipantId,
+      );
+      const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+        ? scenarioParticipants.find(
+            (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+          )
+        : undefined;
+      const pairKey = opponentScenarioParticipant
+        ? createCombatParticipantPairKey(scenarioParticipant.id, opponentScenarioParticipant.id)
+        : undefined;
+      const dodgeContext: CombatCalculationContext = {
+        actionId: "adjust_range_attack",
+        encounterId,
+        opportunityId: proposal.phase1OpportunityId,
+        ownerParticipantId: scenarioParticipant.id,
+        opponentParticipantId: opponentScenarioParticipant?.id,
+        pairKey,
+        phase: "phase1",
+        proposalId: proposal.id,
+        rollType: "adjust_distance_dodge",
+        roundNumber: roundState.roundNumber,
+        skillId: "dodge",
+        step: "phase_1_actions",
+      };
+      const rollAdjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id
+        ? normalizeCombatRollAdjustment({
+            actionId: "adjust_range_attack",
+            encounterId,
+            opportunityId: proposal.phase1OpportunityId,
+            opponentParticipantId: opponentScenarioParticipant?.id,
+            ownerParticipantId: scenarioParticipant.id,
+            pairKey,
+            phase: "phase1",
+            proposalId: proposal.id,
+            rollType: "adjust_distance_dodge",
+            roundNumber: roundState.roundNumber,
+            step: "phase_1_actions",
+            value: adjustment,
+            notes: proposal.gmRollAdjustment?.notes,
+          })
+        : undefined;
+      const baseDodgeResolution = resolveCombatDodgeModifiers({
+        context: dodgeContext,
+        contributions: profile.modifierContributions ?? [],
+      });
+      const dodgeResolution = resolveCombatDodgeModifiers({
+        context: dodgeContext,
+        contributions: profile.modifierContributions ?? [],
+        rollAdjustments: rollAdjustment ? [rollAdjustment] : [],
+      });
+      const generalFatigueModifier =
+        baseDodgeResolution.bucketResolutions.find(
+          (resolution) => resolution.bucket === "general_fatigue",
+        )?.total ?? 0;
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
-      const result = combatAdjustDistanceRollResultSchema.parse({ dodgeSkillTotal: profile.dodgeSkillTotal, finalTotal: roll.dieResult + profile.dodgeSkillTotal + profile.generalFatigueModifier + adjustment, generalFatigueModifier: profile.generalFatigueModifier, id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`, openEndedD10s: roll.openEndedD10s, participantId: encounterParticipant.id, rollD20: roll.rollD20, rollTotal: roll.dieResult, rolledAt: createdAt, rolledByUserId: user.id, situationalAdjustment: adjustment });
+      const result = combatAdjustDistanceRollResultSchema.parse({ dodgeSkillTotal: profile.dodgeSkillTotal, finalTotal: roll.dieResult + profile.dodgeSkillTotal + dodgeResolution.total, generalFatigueModifier, id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`, openEndedD10s: roll.openEndedD10s, participantId: encounterParticipant.id, rollD20: roll.rollD20, rollTotal: roll.dieResult, rolledAt: createdAt, rolledByUserId: user.id, situationalAdjustment: adjustment });
       const nextRoundState = recordCombatRoundAdjustDistanceRoll({ command: { createdAt, createdByUserId: user.id }, proposalId, result, state: roundState });
       const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
       return {
@@ -3671,6 +3742,52 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         skill,
       });
       const adjustment = 0;
+      let canonicalDodgeModifier = 0;
+      if (proposal.method === "movement" && skillId === "dodge") {
+        const opponentEncounterParticipantId = isAttackerRoll
+          ? proposal.defenderParticipantId
+          : proposal.attackerParticipantId;
+        const opponentEncounterParticipant = membership.participants.find(
+          (participant) => participant.id === opponentEncounterParticipantId,
+        );
+        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        const projection = buildLiveCombatModifierContributionProjection({
+          combatContext: scenarioParticipant.state.combat.combatContext,
+          combatEffects: scenarioParticipant.state.combatEffects,
+          currentRound: roundState.roundNumber,
+          encounterId,
+          ownerParticipantId: scenarioParticipant.id,
+        });
+        const dodgeResolution = resolveCombatDodgeModifiers({
+          context: {
+            actionId: "feint_attack",
+            encounterId,
+            opportunityId: proposal.phase1OpportunityId,
+            ownerParticipantId: scenarioParticipant.id,
+            ...(opponentScenarioParticipant
+              ? {
+                  opponentParticipantId: opponentScenarioParticipant.id,
+                  pairKey: createCombatParticipantPairKey(
+                    scenarioParticipant.id,
+                    opponentScenarioParticipant.id,
+                  ),
+                }
+              : {}),
+            phase: "phase1",
+            proposalId: proposal.id,
+            rollType: "feint_dodge",
+            roundNumber: roundState.roundNumber,
+            skillId: "dodge",
+            step: "phase_1_actions",
+          },
+          contributions: projection.contributions,
+        });
+        canonicalDodgeModifier = dodgeResolution.total;
+      }
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
       const result = combatFeintRollResultSchema.parse({
@@ -3678,7 +3795,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         characteristic: isAttackerRoll ? "dex" : "int",
         characteristicValue: profile.avgStats,
         finalTotal:
-          roll.dieResult + profile.rollBaseValue + profile.unknownSkillPenalty + adjustment,
+          roll.dieResult +
+          profile.rollBaseValue +
+          profile.unknownSkillPenalty +
+          adjustment +
+          canonicalDodgeModifier,
         id: `${proposal.id}:roll:${isAttackerRoll ? "attacker" : "defender"}`,
         openEndedD10s: roll.openEndedD10s,
         participantId: encounterParticipant.id,
@@ -4465,6 +4586,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
           distanceProposalId: body.distanceProposalId,
           participantId: encounterParticipant.id,
+          participantInputs: buildRoundEndDistanceControlInputs({
+            encounter,
+            roundState,
+            scenarioParticipants,
+          }),
           rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
           state: roundState,
         });
@@ -4559,6 +4685,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
           distanceProposalId: currentTask.distanceProposalId,
           participantId: currentTask.participantId,
+          participantInputs: buildRoundEndDistanceControlInputs({
+            encounter,
+            roundState,
+            scenarioParticipants,
+          }),
           rolledBy: "gm_proxy",
           state: roundState,
         });
@@ -5975,8 +6106,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerRoundParticipant = roundState.participants.find(
         (participant) => participant.participantId === encounterParticipant.id,
       );
+      const defenderRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === defenderEncounterParticipant.id,
+      );
       const declaredOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
         (opportunity) => opportunity.phase === body.phase && opportunity.status === "committed",
+      );
+      const defenderFeintProposal = roundState.feintProposals.find(
+        (proposal) =>
+          proposal.roundNumber === roundState.roundNumber &&
+          proposal.status === "committed" &&
+          proposal.attackerParticipantId === encounterParticipant.id &&
+          proposal.defenderParticipantId === defenderEncounterParticipant.id,
       );
       const declaredTargetId =
         (attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
@@ -6043,16 +6184,86 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const submittedAt = new Date().toISOString();
       const actionId =
         body.actionId ?? attackerRoundParticipant?.declaration?.actionId ?? `${body.phase}_attack`;
+      const attackerActionId = attackerRoundParticipant?.declaration?.actionId ?? actionId;
+      const attackerActionProposalId =
+        attackerActionId === "feint_attack"
+          ? roundState.feintProposals.find(
+              (proposal) =>
+                proposal.roundNumber === roundState.roundNumber &&
+                proposal.status === "committed" &&
+                proposal.attackerParticipantId === encounterParticipant.id &&
+                proposal.defenderParticipantId === defenderEncounterParticipant.id,
+            )?.id
+          : attackerActionId === "adjust_range_attack"
+            ? roundState.adjustDistanceProposals.find(
+                (proposal) =>
+                  proposal.roundNumber === roundState.roundNumber &&
+                  proposal.status === "committed" &&
+                  proposal.attackerParticipantId === encounterParticipant.id &&
+                  proposal.defenderParticipantId === defenderEncounterParticipant.id,
+              )?.id
+            : undefined;
       const attackerCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
+      const attackerModifierProjection = buildLiveCombatModifierContributionProjection({
+        combatContext: attackerCombatContext,
+        combatEffects: scenarioParticipant.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: scenarioParticipant.id,
+      });
+      const canonicalObSkillResolution = resolveCombatModifierContributions({
+        bucket: "skill_ob",
+        context: {
+          actionId: attackerActionId,
+          encounterId,
+          opponentParticipantId: defenderScenarioParticipant.id,
+          opportunityId: declaredOpportunity?.id,
+          ownerParticipantId: scenarioParticipant.id,
+          pairKey: createCombatParticipantPairKey(
+            scenarioParticipant.id,
+            defenderScenarioParticipant.id,
+          ),
+          phase: body.phase,
+          proposalId: attackerActionProposalId,
+          rollType: "attack",
+          roundNumber: roundState.roundNumber,
+          step: getCombatRoundPhaseActionStepForPhase(body.phase),
+        },
+        contributions: attackerModifierProjection.contributions,
+      });
       const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
         defenderScenarioParticipant.state.combat.combatContext ?? {},
       );
-      const canonicalDefenderDbParryRaw = getMergedCombatDbParryModifierTotal({
+      const defenderModifierProjection = buildLiveCombatModifierContributionProjection({
         combatContext: defenderCombatContext,
-        phase: body.phase,
+        combatEffects: defenderScenarioParticipant.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: defenderScenarioParticipant.id,
       });
+      const canonicalDefenderDbParryResolution = resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: {
+          actionId: defenderRoundParticipant?.declaration?.actionId,
+          encounterId,
+          opponentParticipantId: scenarioParticipant.id,
+          opportunityId: declaredOpportunity?.id,
+          ownerParticipantId: defenderScenarioParticipant.id,
+          pairKey: createCombatParticipantPairKey(
+            defenderScenarioParticipant.id,
+            scenarioParticipant.id,
+          ),
+          phase: body.phase,
+          proposalId: defenderFeintProposal?.id,
+          roundNumber: roundState.roundNumber,
+          rollType: "db",
+          step: getCombatRoundPhaseActionStepForPhase(body.phase),
+        },
+        contributions: defenderModifierProjection.contributions,
+      });
+      const canonicalDefenderDbParryRaw = canonicalDefenderDbParryResolution.total;
       const recordedDefenderDbParryRaw = latestDefenderSnapshot
         ? (latestDefenderSnapshot.modifierSummary?.dbRaw ?? 0)
         : body.defenderDbParryRaw;
@@ -6065,10 +6276,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Defender modifiers changed. Refresh combat before rolling.",
         });
       }
-      const canonicalObSkillRaw = getMergedCombatSkillObModifierTotal({
-        combatContext: attackerCombatContext,
-        phase: body.phase,
-      });
+      const canonicalObSkillRaw = canonicalObSkillResolution.total;
 
       if (body.obSkillRaw !== canonicalObSkillRaw) {
         return reply.code(409).send({
@@ -6268,13 +6476,69 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const attackerEncounterParticipant = membership.participants.find(
+        (participant) => participant.id === attackResult.attackerParticipantId,
+      );
+      const attackerScenarioParticipant = attackerEncounterParticipant?.scenarioParticipantId
+        ? scenarioParticipants.find(
+            (participant) => participant.id === attackerEncounterParticipant.scenarioParticipantId,
+          )
+        : undefined;
+      const attackerRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === attackResult.attackerParticipantId,
+      );
+      const defenderRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === encounterParticipant.id,
+      );
+      const attackOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
+        (opportunity) =>
+          opportunity.phase === attackResult.phase && opportunity.status === "committed",
+      );
+      const defenderFeintProposal = roundState.feintProposals.find(
+        (proposal) =>
+          proposal.roundNumber === roundState.roundNumber &&
+          proposal.status === "committed" &&
+          proposal.attackerParticipantId === attackResult.attackerParticipantId &&
+          proposal.defenderParticipantId === encounterParticipant.id,
+      );
+
       const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
-      const canonicalDbParryRaw = getMergedCombatDbParryModifierTotal({
+      const defenderModifierProjection = buildLiveCombatModifierContributionProjection({
         combatContext: defenderCombatContext,
-        phase: attackResult.phase,
+        combatEffects: scenarioParticipant.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: scenarioParticipant.id,
       });
+      const canonicalDbParryResolution = resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: {
+          actionId: defenderRoundParticipant?.declaration?.actionId,
+          encounterId,
+          ...(attackerScenarioParticipant
+            ? { opponentParticipantId: attackerScenarioParticipant.id }
+            : {}),
+          ...(attackOpportunity?.id ? { opportunityId: attackOpportunity.id } : {}),
+          ownerParticipantId: scenarioParticipant.id,
+          ...(attackerScenarioParticipant
+            ? {
+                pairKey: createCombatParticipantPairKey(
+                  scenarioParticipant.id,
+                  attackerScenarioParticipant.id,
+                ),
+              }
+            : {}),
+          phase: attackResult.phase,
+          proposalId: defenderFeintProposal?.id,
+          roundNumber: roundState.roundNumber,
+          rollType: "parry",
+          step: getCombatRoundParryReviewStepForPhase(attackResult.phase),
+        },
+        contributions: defenderModifierProjection.contributions,
+      });
+      const canonicalDbParryRaw = canonicalDbParryResolution.total;
 
       if (body.dbParryRaw !== canonicalDbParryRaw) {
         return reply.code(409).send({

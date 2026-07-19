@@ -138,6 +138,7 @@ import { getDistanceBetween, makeDistancePairKey, setDistanceBetween } from "./c
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
 import type { CombatEffectsState } from "./combatEffects";
 import { mergePersistentCombatEffectModifiers } from "./combatModifierProjection";
+import type { CombatModifierContribution } from "./combatModifierContributions";
 
 function participant(input: {
   id: string;
@@ -262,6 +263,110 @@ function completeCleanRoundEndReview(
     }).state;
   }, reviewed);
 }
+
+describe("canonical Dodge resolution in round-end distance control", () => {
+  it("uses normalized General/Fatigue and Dodge-scoped contributions when rolling", () => {
+    let state = initializeCombatRoundState({ encounter: encounter() });
+    state = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            { desiredDistance: 3, source: "gm_proxy", targetParticipantId: "guard" },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: state.roundNumber,
+      },
+      participantId: "gladiator",
+      state,
+      submittedBy: "gm",
+    });
+    state = recordCombatRoundDeclaration({
+      declaration: {
+        movementIntent: {
+          distancePreferences: [
+            { desiredDistance: 1, source: "gm_proxy", targetParticipantId: "gladiator" },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: state.roundNumber,
+      },
+      participantId: "guard",
+      state,
+      submittedBy: "gm",
+    });
+    state = {
+      ...state,
+      currentCursor: { participantId: "gladiator", roundNumber: state.roundNumber, step: "SU" },
+      currentStep: "round_summary",
+      selectedParticipantId: "gladiator",
+      selectedStep: "round_summary",
+    };
+
+    const contribution = (
+      id: string,
+      ownerParticipantId: string,
+      value: number,
+      applicability: CombatModifierContribution["applicability"] = { skillId: "dodge" },
+      bucket: CombatModifierContribution["bucket"] = "general_fatigue",
+    ): CombatModifierContribution => ({
+      id,
+      schemaVersion: 1,
+      ownerParticipantId,
+      sourceKind: "persistent_effect",
+      sourceId: id,
+      bucket,
+      value,
+      label: id,
+      applicability,
+      lifetime: { kind: "persistent", status: "active" },
+      editPolicy: "source_only",
+      readOnly: true,
+    });
+    const participantInputs = {
+      gladiator: {
+        dodgeSkillTotal: 8,
+        modifierContributions: [
+          contribution("gladiator-fatigue", "scenario-gladiator", -1),
+          contribution("gladiator-pair", "scenario-gladiator", 3, {
+            pairKey: "scenario-gladiator::scenario-guard",
+            skillId: "dodge",
+          }, "skill_ob"),
+        ],
+        modifierEncounterId: "encounter-1",
+        modifierOwnerParticipantId: "scenario-gladiator",
+      },
+      guard: {
+        dodgeSkillTotal: 4,
+        modifierContributions: [contribution("guard-dodge", "scenario-guard", 2)],
+        modifierEncounterId: "encounter-1",
+        modifierOwnerParticipantId: "scenario-guard",
+      },
+    };
+    const reviewed = prepareCombatRoundEndReview({ participantInputs: {
+      gladiator: { distanceControl: participantInputs.gladiator },
+      guard: { distanceControl: participantInputs.guard },
+    }, state });
+    const proposal = reviewed.roundEndReview?.proposedDistances[0];
+    expect(proposal).toBeDefined();
+
+    const rolled = rollCombatRoundEndDistanceControl({
+      command: { createdAt: "2026-01-01T00:11:00.000Z" },
+      distanceProposalId: proposal?.id,
+      participantId: "gladiator",
+      participantInputs,
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rolledBy: "player",
+      state: reviewed,
+    });
+
+    expect(rolled.state.roundEndReview?.proposedDistances[0]?.participantA.result).toMatchObject({
+      dodgeSkillTotal: 8,
+      generalFatigueModifier: -1,
+      finalTotal: 20,
+    });
+  });
+});
 
 function declareRoundAction(input: {
   actionId: string;
