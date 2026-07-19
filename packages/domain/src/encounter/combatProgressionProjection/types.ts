@@ -29,6 +29,7 @@ export type CombatProgressionProcessKind =
   | "boundary_transition"
   | "declaration"
   | "distance"
+  | "effect_review"
   | "feint"
   | "health_review"
   | "initiative"
@@ -44,6 +45,7 @@ export type CombatProgressionStageKind =
   | "damage"
   | "defense"
   | "difficulty"
+  | "effect"
   | "decision"
   | "feasibility"
   | "health"
@@ -86,12 +88,14 @@ export type CombatProgressionTaskKind =
   | "feint_attacker_roll"
   | "feint_commit"
   | "feint_defender_roll"
+  | "effect_review"
   | "gm_advance_boundary"
   | "health_review"
   | "hit_location"
   | "modifier_review"
   | "parry"
   | "participant_review"
+  | "round_end_prepare"
   | "roll_initiative"
   | "commit_initiative"
   | "submit_declaration";
@@ -142,9 +146,11 @@ export interface CombatProgressionTrackerFacet {
 export interface CombatProgressionTaskIdentity {
   readonly attackResultId?: string;
   readonly executionGroupId: string;
+  readonly healthRollId?: string;
   readonly opportunityId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
+  readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly proposalId?: string;
 }

@@ -221,6 +221,8 @@ function cellDetail(input: CombatTrackerCellFacts): string {
     if (kinds.has("health_review")) return "health review pending.";
     if (kinds.has("distance_roll")) return "distance-control roll pending.";
     if (kinds.has("distance_commit")) return "distance-control commit pending.";
+    if (kinds.has("effect_review")) return "effect review pending.";
+    if (kinds.has("round_end_prepare")) return "round-end preparation pending.";
     if (kinds.has("participant_review")) return "participant review pending.";
   }
   if (input.initiativeTotal !== undefined)
@@ -350,7 +352,7 @@ export function buildCombatTrackerModel(input: {
               ? "waiting"
               : !["not_reached", "required"].includes(markerKind)
                 ? "completed"
-                 : "not_reached",
+                : "not_reached",
       stageIds: facts.progression?.stageIds ?? [],
       step: facts.step,
       taskIds: facts.progression?.taskIds ?? [],

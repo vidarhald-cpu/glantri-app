@@ -31,7 +31,6 @@ import {
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
-  getCombatRoundEndHealthCheckPendingRolls,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
   getReactiveAttackPhase2InitiativeModifier,
@@ -1613,6 +1612,12 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedDeclarationProgressionTask = selectedProgressionTasks.find(
     (task) => task.kind === "submit_declaration",
   );
+  const selectedDistanceControlProgressionTask = selectedProgressionTasks.find(
+    (task) => task.kind === "distance_roll" && task.state === "executable",
+  );
+  const selectedHealthProgressionTask = selectedProgressionTasks.find(
+    (task) => task.kind === "health_review" && task.state === "executable",
+  );
   const declarationStepOpen = combatHistory?.progression
     ? Boolean(selectedDeclarationProgressionTask) ||
       (isGameMaster &&
@@ -1782,7 +1787,11 @@ export default function ScenarioPlayerCombatPageContent({
     const participantId = selectedRoundParticipant?.participantId;
     const proposals = combatRoundState?.roundEndReview?.proposedDistances ?? [];
 
-    if (!participantId || combatRoundState?.currentStep !== "round_summary") {
+    if (
+      !participantId ||
+      combatRoundState?.currentStep !== "round_summary" ||
+      !selectedDistanceControlProgressionTask
+    ) {
       return undefined;
     }
 
@@ -1790,7 +1799,10 @@ export default function ScenarioPlayerCombatPageContent({
       (candidate) =>
         candidate.accepted &&
         candidate.requiresContest &&
-        (candidate.participantAId === participantId || candidate.participantBId === participantId),
+        ((candidate.participantAId === participantId &&
+          candidate.participantA.status === "pending") ||
+          (candidate.participantBId === participantId &&
+            candidate.participantB.status === "pending")),
     );
 
     if (!proposal) {
@@ -1819,6 +1831,7 @@ export default function ScenarioPlayerCombatPageContent({
     combatRoundState?.currentStep,
     roundParticipantLabelsById,
     selectedRoundParticipant?.participantId,
+    selectedDistanceControlProgressionTask,
   ]);
   const selectedDistanceControlRollPending =
     selectedDistanceControlProposal?.ownSide.status === "pending";
@@ -1834,11 +1847,12 @@ export default function ScenarioPlayerCombatPageContent({
       ? combatRoundState.roundEndReview?.participantReviews[selectedRoundParticipant.participantId]
       : undefined;
   const selectedPendingHealthRoll =
-    combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
-      ? getCombatRoundEndHealthCheckPendingRolls({
-          participantId: selectedRoundParticipant.participantId,
-          state: combatRoundState,
-        })[0]
+    combatRoundState?.currentStep === "round_summary" &&
+    selectedRoundParticipant &&
+    selectedHealthProgressionTask
+      ? selectedRoundEndReview?.proposedHealthRolls.find(
+          (proposal) => proposal.accepted && proposal.status === "pending",
+        )
       : undefined;
   const selectedVisibleHealthRoll =
     selectedPendingHealthRoll ??
@@ -1904,15 +1918,14 @@ export default function ScenarioPlayerCombatPageContent({
   const projectedFeintTask = selectedProgressionTasks.find((task) =>
     ["feint_attacker_roll", "feint_defender_roll", "feint_commit"].includes(task.kind),
   );
-  const projectedAdjustDistanceTask = selectedProgressionTasks.find(
-    (task) =>
-      [
-        "adjust_distance_response",
-        "adjust_distance_adjustment",
-        "adjust_distance_attacker_roll",
-        "adjust_distance_defender_roll",
-        "adjust_distance_commit",
-      ].includes(task.kind),
+  const projectedAdjustDistanceTask = selectedProgressionTasks.find((task) =>
+    [
+      "adjust_distance_response",
+      "adjust_distance_adjustment",
+      "adjust_distance_attacker_roll",
+      "adjust_distance_defender_roll",
+      "adjust_distance_commit",
+    ].includes(task.kind),
   );
   const selectedFeintProposal = projectedFeintTask
     ? combatRoundState?.feintProposals.find((proposal) => {
@@ -3663,85 +3676,83 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: declareActionDisabled,
           isGameMaster: false,
         });
-  const awaitingGmBoundaryTransition = Boolean(
-    combatHistory?.progression?.awaitingGmTransition,
-  );
+  const awaitingGmBoundaryTransition = Boolean(combatHistory?.progression?.awaitingGmTransition);
   const playerActionButtonLabel = awaitingGmBoundaryTransition
     ? "Waiting for GM"
     : selectedHealthCheckActionAvailable
       ? "Roll health check"
-    : selectedAdjustDistanceProposal
-      ? selectedAdjustDistanceProposal.status === "awaiting_defender_response"
-        ? "Confirm defender response"
-        : selectedAdjustDistanceProposal.attackerRollRecorded
-          ? "Roll defender Dodge"
-          : "Roll attacker Dodge"
-      : selectedFeintProposal
-        ? selectedFeintProposal.attackerRollRecorded
-          ? "Roll feint resistance"
-          : "Roll feint"
-        : selectedDistanceControlActionAvailable
-          ? "Roll distance control"
-          : selectedDoubleAttackDecisionAvailable
-            ? doubleAttackPhase2Decision === "cancel"
-              ? "Cancel Attack 2"
-              : "Continue Attack 2"
-            : selectedPhaseAttackChoiceIsBackOut
-              ? "Back out of attack"
-              : selectedCombatExperienceRequired
-                ? !selectedCombatExperienceWindowOpen
-                  ? "Waiting for GM"
-                  : selectedCombatExperienceNoRollAvailable
-                    ? "Confirm Combat Experience"
-                    : "Roll Combat Experience"
-                : selectedPhaseInitiativeChoice
-                  ? "Phase choice submitted"
-                  : selectedPhaseContinueAvailable
-                    ? "Continue attack"
-                    : (attackerPrivilegedAction?.label ??
-                      currentParryAction?.label ??
-                      currentAttackAction?.label ??
-                      declarationButtonLabel);
+      : selectedAdjustDistanceProposal
+        ? selectedAdjustDistanceProposal.status === "awaiting_defender_response"
+          ? "Confirm defender response"
+          : selectedAdjustDistanceProposal.attackerRollRecorded
+            ? "Roll defender Dodge"
+            : "Roll attacker Dodge"
+        : selectedFeintProposal
+          ? selectedFeintProposal.attackerRollRecorded
+            ? "Roll feint resistance"
+            : "Roll feint"
+          : selectedDistanceControlActionAvailable
+            ? "Roll distance control"
+            : selectedDoubleAttackDecisionAvailable
+              ? doubleAttackPhase2Decision === "cancel"
+                ? "Cancel Attack 2"
+                : "Continue Attack 2"
+              : selectedPhaseAttackChoiceIsBackOut
+                ? "Back out of attack"
+                : selectedCombatExperienceRequired
+                  ? !selectedCombatExperienceWindowOpen
+                    ? "Waiting for GM"
+                    : selectedCombatExperienceNoRollAvailable
+                      ? "Confirm Combat Experience"
+                      : "Roll Combat Experience"
+                  : selectedPhaseInitiativeChoice
+                    ? "Phase choice submitted"
+                    : selectedPhaseContinueAvailable
+                      ? "Continue attack"
+                      : (attackerPrivilegedAction?.label ??
+                        currentParryAction?.label ??
+                        currentAttackAction?.label ??
+                        declarationButtonLabel);
   const playerActionButtonDisabled = awaitingGmBoundaryTransition
     ? true
     : selectedHealthCheckActionAvailable
       ? controlsDisabled || savingCombatContext
-    : selectedAdjustDistanceProposal
-      ? controlsDisabled || savingCombatContext
-      : selectedFeintProposal
+      : selectedAdjustDistanceProposal
         ? controlsDisabled || savingCombatContext
-        : selectedDistanceControlActionAvailable
+        : selectedFeintProposal
           ? controlsDisabled || savingCombatContext
-          : selectedDoubleAttackDecisionAvailable
+          : selectedDistanceControlActionAvailable
             ? controlsDisabled || savingCombatContext
-            : selectedPhaseAttackChoiceIsBackOut
-              ? controlsDisabled ||
-                savingCombatContext ||
-                !selectedPhaseCombatExperienceBackOutAvailable
-              : attackerPrivilegedAction
-                ? selectedCombatExperienceRequired ||
-                  controlsDisabled ||
+            : selectedDoubleAttackDecisionAvailable
+              ? controlsDisabled || savingCombatContext
+              : selectedPhaseAttackChoiceIsBackOut
+                ? controlsDisabled ||
                   savingCombatContext ||
-                  attackerPrivilegedAction.disabled
-                : currentParryAction
+                  !selectedPhaseCombatExperienceBackOutAvailable
+                : attackerPrivilegedAction
                   ? selectedCombatExperienceRequired ||
                     controlsDisabled ||
                     savingCombatContext ||
-                    currentParryAction.disabled
-                  : currentAttackAction
+                    attackerPrivilegedAction.disabled
+                  : currentParryAction
                     ? selectedCombatExperienceRequired ||
                       controlsDisabled ||
                       savingCombatContext ||
-                      currentAttackAction.disabled
-                    : selectedCombatExperienceRequired
-                      ? controlsDisabled ||
+                      currentParryAction.disabled
+                    : currentAttackAction
+                      ? selectedCombatExperienceRequired ||
+                        controlsDisabled ||
                         savingCombatContext ||
-                        !selectedCombatExperienceActionAvailable
-                      : selectedPhaseInitiativeChoice
-                        ? true
-                        : selectedPhaseContinueAvailable
-                          ? controlsDisabled || savingCombatContext
-                          : declareActionDisabled;
+                        currentAttackAction.disabled
+                      : selectedCombatExperienceRequired
+                        ? controlsDisabled ||
+                          savingCombatContext ||
+                          !selectedCombatExperienceActionAvailable
+                        : selectedPhaseInitiativeChoice
+                          ? true
+                          : selectedPhaseContinueAvailable
+                            ? controlsDisabled || savingCombatContext
+                            : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -3763,54 +3774,54 @@ export default function ScenarioPlayerCombatPageContent({
     ? `Current step: ${currentCombatStepLabel}. Complete; awaiting GM progression.`
     : selectedHealthCheckActionAvailable
       ? `Current step: ${currentCombatStepLabel}. Roll health check.`
-    : selectedVisibleHealthRoll?.result
-      ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
-      : selectedDistanceControlActionAvailable
-        ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
-        : selectedDistanceControlCommittedDistance !== undefined
-          ? `Current step: ${currentCombatStepLabel}. Distance control committed.`
-          : selectedDistanceControlProposal?.ownSide.status === "rolled"
-            ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
-              ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
-              : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
-            : selectedPhaseAttackChoiceIsBackOut
-              ? `Current step: ${currentCombatStepLabel}. Pending.`
-              : selectedCombatExperienceRequired
-                ? combatExperienceStatusText
-                : currentInitiativePhase
-                  ? selectedParticipantRolledCurrentInitiative
-                    ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
-                    : initiativeStepStatus === "pending"
-                      ? `Current step: ${currentCombatStepLabel}.`
-                      : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
-                  : currentParryAction
-                    ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                    : selectedReactiveAttackPhase2StatusText
-                      ? `Current step: ${currentCombatStepLabel}. ${selectedReactiveAttackPhase2StatusText}`
-                      : attackerPrivilegedAction
-                        ? attackerPrivilegedAction.disabled
-                          ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
-                          : `Current step: ${currentCombatStepLabel}. ${
-                              attackerPrivilegedAction.statusContext
-                                ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
-                                : "The attacker rolls; the defender receives the damage/effects review."
-                            }`
-                        : currentAttackAction
-                          ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                          : currentAttackSourceValidationMessage
-                            ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
-                            : declarationIncomplete
-                              ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-                              : selectedModifierReviewComplete
-                                ? `Current step: ${currentCombatStepLabel}. Reviewed.`
-                                : currentStepIsModifierReview
-                                  ? `Current step: ${currentCombatStepLabel}.`
-                                  : selectedParticipantHasDeclared
-                                    ? `Current step: ${currentCombatStepLabel}. Declared.`
-                                    : declarationStepOpen &&
-                                        selectedDeclarationStepStatus === "pending"
-                                      ? `Current step: ${currentCombatStepLabel}.`
-                                      : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
+      : selectedVisibleHealthRoll?.result
+        ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
+        : selectedDistanceControlActionAvailable
+          ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
+          : selectedDistanceControlCommittedDistance !== undefined
+            ? `Current step: ${currentCombatStepLabel}. Distance control committed.`
+            : selectedDistanceControlProposal?.ownSide.status === "rolled"
+              ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
+                ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
+                : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
+              : selectedPhaseAttackChoiceIsBackOut
+                ? `Current step: ${currentCombatStepLabel}. Pending.`
+                : selectedCombatExperienceRequired
+                  ? combatExperienceStatusText
+                  : currentInitiativePhase
+                    ? selectedParticipantRolledCurrentInitiative
+                      ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
+                      : initiativeStepStatus === "pending"
+                        ? `Current step: ${currentCombatStepLabel}.`
+                        : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+                    : currentParryAction
+                      ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                      : selectedReactiveAttackPhase2StatusText
+                        ? `Current step: ${currentCombatStepLabel}. ${selectedReactiveAttackPhase2StatusText}`
+                        : attackerPrivilegedAction
+                          ? attackerPrivilegedAction.disabled
+                            ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
+                            : `Current step: ${currentCombatStepLabel}. ${
+                                attackerPrivilegedAction.statusContext
+                                  ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
+                                  : "The attacker rolls; the defender receives the damage/effects review."
+                              }`
+                          : currentAttackAction
+                            ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+                            : currentAttackSourceValidationMessage
+                              ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
+                              : declarationIncomplete
+                                ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
+                                : selectedModifierReviewComplete
+                                  ? `Current step: ${currentCombatStepLabel}. Reviewed.`
+                                  : currentStepIsModifierReview
+                                    ? `Current step: ${currentCombatStepLabel}.`
+                                    : selectedParticipantHasDeclared
+                                      ? `Current step: ${currentCombatStepLabel}. Declared.`
+                                      : declarationStepOpen &&
+                                          selectedDeclarationStepStatus === "pending"
+                                        ? `Current step: ${currentCombatStepLabel}.`
+                                        : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
   const combatExperienceValidationMessage: string | undefined = undefined;
   const selectedPhaseAttackChoiceControls = selectedDoubleAttackDecisionAvailable ? (
     <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>

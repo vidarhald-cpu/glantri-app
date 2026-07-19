@@ -18,7 +18,13 @@ function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCe
   };
 }
 
-function live(taskKind: "adjust_distance_attacker_roll" | "distance_roll" | "attack" = "attack") {
+function live(
+  taskKind:
+    | "adjust_distance_attacker_roll"
+    | "distance_roll"
+    | "effect_review"
+    | "attack" = "attack",
+) {
   return {
     current: true,
     executable: true,
@@ -213,6 +219,22 @@ describe("buildCombatTrackerModel", () => {
     });
     expect(result.cells["1:participant-b:round_summary"].marker).toBe("?");
     expect(result.legend.map((item) => item.kind)).toEqual(["required", "roll_result"]);
+  });
+
+  it("renders projected Round End effect review as current SU work", () => {
+    const result = buildCombatTrackerModel({
+      cellFacts: [facts({ progression: live("effect_review"), step: "round_summary" })],
+      rounds: [{ currentStep: "round_summary", roundNumber: 1 }],
+      rows: [{ label: "Aldren", participantId: "participant-a", selected: true }],
+      steps: ["round_summary"],
+    });
+
+    expect(result.cells["1:participant-a:round_summary"]).toMatchObject({
+      current: true,
+      hoverText: expect.stringContaining("effect review pending"),
+      marker: "?",
+      markerKind: "required",
+    });
   });
 
   it("explains automatic non-required steps without calling them skipped", () => {

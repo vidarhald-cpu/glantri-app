@@ -80,7 +80,10 @@ export function buildCombatProgressionProjection(
     if (participant.characterId) identities.set(participant.characterId, identity);
   }
   const context: ProjectionBuildContext = {
-    actionProcessPlans: buildCombatActionProcessPlans(normalized),
+    actionProcessPlans:
+      boundaryKind === "round_end" || boundaryKind === "round_boundary"
+        ? []
+        : buildCombatActionProcessPlans(normalized),
     blockers: new Map(),
     boundaryId,
     boundaryKind,

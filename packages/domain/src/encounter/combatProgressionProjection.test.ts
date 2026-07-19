@@ -481,14 +481,14 @@ describe("CombatProgressionProjection", () => {
   });
 
   it("projects participant review and the explicit round boundary task", () => {
-    const participantReview = (participantId: string, status: "complete" | "pending") => ({
+    const participantReview = (participantId: string, status: "complete" | "review_ready") => ({
       participantId,
       status,
     });
     const review = {
       participantReviews: {
         guard: participantReview("guard", "complete"),
-        hero: participantReview("hero", "pending"),
+        hero: participantReview("hero", "review_ready"),
       },
       roundNumber: 2,
     };
@@ -500,12 +500,23 @@ describe("CombatProgressionProjection", () => {
         overrides: { roundEndReview: review },
       }),
     );
-    expect(pending.boundary.processes[0]?.kind).toBe("participant_review");
-    expect(pending.boundary.processes[0]?.stages[0]?.tasks[0]).toMatchObject({
+    const effectReview = pending.boundary.processes.find(
+      (process) => process.kind === "effect_review",
+    );
+    expect(pending.boundary.processes.map((process) => process.kind)).toEqual([
+      "distance",
+      "participant_review",
+      "health_review",
+      "effect_review",
+      "round_end",
+    ]);
+    expect(effectReview?.stages[0]?.tasks[0]).toMatchObject({
       allowedActors: ["gm"],
       expectedCommand: "commit_round_end_participant_review",
-      kind: "participant_review",
-      owner: { participantId: "hero" },
+      identity: { participantId: "hero" },
+      kind: "effect_review",
+      owner: { kind: "gm" },
+      trackerFacet: { owner: { participantId: "hero" }, step: "SU" },
     });
 
     const boundary = buildCombatProgressionProjection(
@@ -525,9 +536,11 @@ describe("CombatProgressionProjection", () => {
     );
     expect(boundary.boundary.kind).toBe("round_boundary");
     expect(taskKinds(boundary)).toEqual(["gm_advance_boundary"]);
-    expect(boundary.boundary.processes[0]?.stages[0]?.tasks[0]?.expectedCommand).toBe(
-      "complete_round",
-    );
+    expect(
+      boundary.boundary.processes
+        .flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks)[0]?.expectedCommand,
+    ).toBe("complete_round");
   });
 
   it("is deterministic, reload-idempotent, deeply immutable, and does not persist itself", () => {

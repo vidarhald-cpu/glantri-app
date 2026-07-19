@@ -427,8 +427,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Save review");
     expect(source).toContain("reviewCombatRoundDamageResult");
     expect(source).toContain("commitCurrentCombatPhaseDamageOnServer");
-    expect(source).toContain("updateScenarioParticipantStateOnServer");
-    expect(source).toContain("combatEffects: committed.combatEffects");
+    expect(source).toContain("commitCurrentCombatPhaseDamageOnServer");
+    expect(source).not.toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain(
       "selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation",
     );
@@ -657,15 +657,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Roll health check");
     expect(source).toContain("CombatRoundEndParticipantReviewPanel");
     expect(source).toContain("CombatRoundEndDistanceControlPanel");
-    expect(source).toContain("ensureCombatRoundEndReviewPrepared");
-    expect(source).toContain("commitCombatRoundEndParticipantReview");
-    expect(source).toContain("commitCombatRoundEndDistanceControl");
-    expect(source).toContain("rollCombatRoundEndHealthCheck");
+    expect(source).toContain("commitRoundEndParticipantReviewOnServer");
+    expect(source).toContain("commitRoundEndDistanceControlOnServer");
+    expect(source).toContain("rollRoundEndHealthCheckOnServer");
     expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
     expect(source).toContain('kinds.has("health_review")');
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
-    expect(source).toContain("getNextCombatRoundEndTask");
+    expect(source).not.toContain("getNextCombatRoundEndTask");
+    expect(source).toContain("projectedRoundEndTasks");
     expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
     expect(source).toContain("inspectorRoundEndDistanceControls");
     expect(source).toContain("Round-end distance control");
@@ -835,13 +835,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
     expect(source).not.toContain("advanceCombatRoundStep(");
     expect(source).toContain("attackResult");
-    expect(source).toContain("autoPrepareRoundEndReviewState(nextRoundState)");
+    expect(source).not.toContain("autoPrepareRoundEndReviewState(nextRoundState)");
     expect(source).toContain("combatRoundState: stateToPersist");
     expect(source).toContain("currentRound: stateToPersist.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("phaseWeaponNames: {");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
-    expect(source).toContain("updateScenarioParticipantStateOnServer");
+    expect(source).toContain("commitRoundEndParticipantReviewOnServer");
     expect(source).toContain(
       "const currentSelection = getCurrentCombatRoundTaskSelection(roundState)",
     );

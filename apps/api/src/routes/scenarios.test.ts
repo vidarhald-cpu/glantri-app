@@ -4802,6 +4802,75 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("authorizes the projected GM distance commit through the round-end command route", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const rolledState = rollDistanceControlFixtureBothSides({
+      encounter: fixture.encounter,
+      proposalId: fixture.proposalId,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: rolledState,
+        currentRound: rolledState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { distanceProposalId: fixture.proposalId },
+      url: "/encounters/encounter-1/combat-round/commit-distance-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toHaveProperty("commandEnvelope");
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .roundEndReview.proposedDistances[0],
+    ).toMatchObject({ status: "committed" });
+  });
+
+  it("authorizes the projected GM participant effect review through the API", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const readyState = commitDistanceControlFixture({
+      proposalId: fixture.proposalId,
+      state: rollDistanceControlFixtureBothSides({
+        encounter: fixture.encounter,
+        proposalId: fixture.proposalId,
+      }),
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: readyState,
+        currentRound: readyState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { scenarioParticipantId: "participant-1" },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ participant: { id: "participant-1" } });
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .roundEndReview.participantReviews["encounter-participant-1"],
+    ).toMatchObject({ status: "complete" });
+  });
+
   it("reloads an applied contested distance and starts the next round exactly once", async () => {
     const fixture = makeDistanceControlReviewFixture();
     const rolledState = rollDistanceControlFixtureBothSides({

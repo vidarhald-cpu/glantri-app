@@ -349,7 +349,46 @@ export async function rollCurrentRoundEndDistanceControlOnServer(input: {
   });
 }
 
+export async function commitRoundEndDistanceControlOnServer(input: {
+  distanceOverride?: number;
+  distanceProposalId: string;
+  encounterId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/commit-distance-control`, {
+    body: JSON.stringify({
+      distanceOverride: input.distanceOverride,
+      distanceProposalId: input.distanceProposalId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function commitRoundEndParticipantReviewOnServer(input: {
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/commit-participant-review`, {
+    body: JSON.stringify({ scenarioParticipantId: input.scenarioParticipantId }),
+    method: "POST",
+  });
+}
+
 export async function rollRoundEndHealthCheckOnServer(input: {
+  difficulty?: number;
   encounterId: string;
   healthRollId: string;
   scenarioParticipantId: string;
@@ -362,6 +401,7 @@ export async function rollRoundEndHealthCheckOnServer(input: {
     participant: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/roll-health-check`, {
     body: JSON.stringify({
+      difficulty: input.difficulty,
       healthRollId: input.healthRollId,
       scenarioParticipantId: input.scenarioParticipantId,
     }),

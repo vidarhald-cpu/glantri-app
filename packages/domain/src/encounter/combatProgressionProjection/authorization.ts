@@ -31,6 +31,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly commandType: CombatRoundCommandType;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly executionGroupId?: string;
+  readonly healthRollId?: string;
   readonly opportunityId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
@@ -87,6 +88,18 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "round_end",
     stage: "boundary",
   },
+  commit_round_end_distance_control: {
+    boundary: "round_end",
+    kind: "distance_commit",
+    process: "distance",
+    stage: "proposal_commit",
+  },
+  commit_round_end_participant_review: {
+    boundary: "round_end",
+    kind: "effect_review",
+    process: "effect_review",
+    stage: "effect",
+  },
   roll_attack: {
     boundary: resolutionBoundary,
     kind: "attack",
@@ -110,6 +123,24 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "parry",
     process: "attack",
     stage: "defense",
+  },
+  prepare_round_end_review: {
+    boundary: "round_end",
+    kind: "round_end_prepare",
+    process: "distance",
+    stage: "review",
+  },
+  roll_round_end_distance_control: {
+    boundary: "round_end",
+    kind: "distance_roll",
+    process: "distance",
+    stage: "roll",
+  },
+  roll_round_end_health_check: {
+    boundary: "round_end",
+    kind: "health_review",
+    process: "health_review",
+    stage: "health",
   },
   respond_adjust_distance: {
     boundary: "phase1_resolution",
@@ -252,7 +283,8 @@ export function authorizeCombatProgressionTask(
   const participantTasks = input.participantId
     ? transitionTasks.filter(
         (task) =>
-          task.owner?.kind === "combatant" && task.owner.participantId === input.participantId,
+          (task.owner?.kind === "combatant" && task.owner.participantId === input.participantId) ||
+          task.identity.participantId === input.participantId,
       )
     : transitionTasks;
   if (input.participantId && participantTasks.length === 0) {
@@ -280,9 +312,16 @@ export function authorizeCombatProgressionTask(
     return failure("stale_proposal", "The combat proposal is stale or not executable.");
   }
 
-  const pairTasks = input.pairId
-    ? proposalTasks.filter((task) => task.identity.pairId === input.pairId)
+  const healthRollTasks = input.healthRollId
+    ? proposalTasks.filter((task) => task.identity.healthRollId === input.healthRollId)
     : proposalTasks;
+  if (input.healthRollId && healthRollTasks.length === 0) {
+    return failure("stale_proposal", "The Health roll is stale or not executable.");
+  }
+
+  const pairTasks = input.pairId
+    ? healthRollTasks.filter((task) => task.identity.pairId === input.pairId)
+    : healthRollTasks;
   if (input.pairId && pairTasks.length === 0) {
     return failure("stale_proposal", "The combat participant pair is stale or not executable.");
   }

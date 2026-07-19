@@ -442,7 +442,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('"Confirm Combat Experience"');
     expect(source).toContain('"Roll health check"');
     expect(source).toContain("rollRoundEndHealthCheckOnServer");
-    expect(source).toContain("getCombatRoundEndHealthCheckPendingRolls");
+    expect(source).toContain("selectedHealthProgressionTask");
+    expect(source).not.toContain("getCombatRoundEndHealthCheckPendingRolls");
     expect(source).toContain("selectedPendingHealthRoll");
     expect(source).toContain("selectedHealthCheckActionAvailable");
     expect(source).toContain("rollHealthCheck()");

@@ -35,6 +35,8 @@ import {
   buildRoleplayCalculationPreview,
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundPhaseInitiativeResolution,
+  commitCombatRoundEndDistanceControl,
+  commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   continueCombatRoundPhaseAttack,
@@ -74,7 +76,6 @@ import {
   getPlayerCombatCurrentRollAction,
   getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
-  getNextCombatRoundEndTask,
   getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseResolutionStatus,
   getParticipantCombatExperienceSkillTotalLookup,
@@ -660,16 +661,44 @@ function parseRoundEndDistanceControlRollBody(body: unknown): {
 }
 
 function parseRoundEndHealthCheckRollBody(body: unknown): {
+  difficulty?: number;
   healthRollId: string;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Round-end health check roll payload");
   const parsed = parseParticipantCommandBody(value, "Round-end health check roll payload");
   const healthRollId = parseNonEmptyString(value.healthRollId, "healthRollId");
+  const difficulty = value.difficulty;
+  if (
+    difficulty !== undefined &&
+    (typeof difficulty !== "number" || !Number.isInteger(difficulty) || difficulty <= 0)
+  ) {
+    throw new Error("difficulty must be a positive integer.");
+  }
 
   return {
     ...parsed,
+    difficulty: typeof difficulty === "number" ? difficulty : undefined,
     healthRollId,
+  };
+}
+
+function parseRoundEndDistanceControlCommitBody(body: unknown): {
+  distanceOverride?: number;
+  distanceProposalId: string;
+} {
+  const value = parseBodyObject(body, "Round-end distance control commit payload");
+  const distanceProposalId = parseNonEmptyString(value.distanceProposalId, "distanceProposalId");
+  const distanceOverride = value.distanceOverride;
+  if (
+    distanceOverride !== undefined &&
+    (typeof distanceOverride !== "number" || !Number.isFinite(distanceOverride))
+  ) {
+    throw new Error("distanceOverride must be a number.");
+  }
+  return {
+    distanceOverride: typeof distanceOverride === "number" ? distanceOverride : undefined,
+    distanceProposalId,
   };
 }
 
@@ -1334,9 +1363,8 @@ async function normalizeScenarioParticipantModifierRowsForEncounter(input: {
   const linkedScenarioParticipantIds = new Set(
     membership.participants.map((participant) => participant.scenarioParticipantId),
   );
-  const activeProposalIds = input.encounter.combatRoundState?.feintProposals.map(
-    (proposal) => proposal.id,
-  ) ?? [];
+  const activeProposalIds =
+    input.encounter.combatRoundState?.feintProposals.map((proposal) => proposal.id) ?? [];
 
   return Promise.all(
     input.scenarioParticipants.map(async (participant) => {
@@ -2936,7 +2964,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             participant.characterId === body.adjustDistance?.targetParticipantId,
         );
         if (!targetEncounterParticipant) {
-          return reply.code(400).send({ error: "The selected opponent is no longer in this encounter." });
+          return reply
+            .code(400)
+            .send({ error: "The selected opponent is no longer in this encounter." });
         }
         const canonicalTargetParticipantId = targetEncounterParticipant.id;
         const submittedPhaseTargetIds = [
@@ -2963,7 +2993,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState.distanceState,
         });
         if (!distanceEdge) {
-          return reply.code(400).send({ error: "Current distance is unavailable for this opponent." });
+          return reply
+            .code(400)
+            .send({ error: "Current distance is unavailable for this opponent." });
         }
         const existingAdjustDistanceProposal = roundState.adjustDistanceProposals.find(
           (proposal) =>
@@ -2979,7 +3011,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           existingAdjustDistanceProposal?.status !== "committed" &&
           body.adjustDistance.requestedDistance === distanceAtDeclaration
         ) {
-          return reply.code(400).send({ error: "Requested distance must differ from the current distance." });
+          return reply
+            .code(400)
+            .send({ error: "Requested distance must differ from the current distance." });
         }
         const phase2Source = body.phaseAttackSources?.phase2;
         if (!phase2Source) {
@@ -3450,94 +3484,182 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.post("/encounters/:encounterId/combat-round/respond-adjust-distance", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
-    if (!user) return;
-    try {
-      const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const body = parseBodyObject(request.body, "Adjust Distance response payload");
-      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
-      const scenarioParticipantId = parseNonEmptyString(body.scenarioParticipantId, "scenarioParticipantId");
-      const response = body.response === "allow" ? "allow" : body.response === "oppose" ? "oppose" : undefined;
-      if (!response) throw new Error("Select Allow or Oppose.");
-      const encounter = await encounterService.getEncounterById(encounterId);
-      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
-      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
-      if (!access) return reply.code(404).send({ error: "Encounter not found." });
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
-      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
-      const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId && entry.isActive);
-      const encounterParticipant = scenarioParticipant ? membership.participants.find((entry) => entry.scenarioParticipantId === scenarioParticipant.id) : undefined;
-      if (!scenarioParticipant || !encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
-      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) return reply.code(403).send({ error: "Player does not control this participant." });
-      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
-      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
-      if (!proposal || proposal.defenderParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: "The defender must choose whether to oppose the maneuver." });
-      const authorization = authorizeCombatProgressionTask({
-        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
-        commandType: "respond_adjust_distance",
-        opponentParticipantId: proposal.attackerParticipantId,
-        opportunityId: proposal.phase1OpportunityId,
-        pairId: proposal.pairId,
-        participantId: encounterParticipant.id,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
-      });
-      if (!authorization.ok) return reply.code(409).send({ error: "The defender must choose whether to oppose the maneuver." });
-      const createdAt = new Date().toISOString();
-      const nextRoundState = respondCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, proposalId, response, state: roundState });
-      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
-      return {
-        encounter:
-          access.mode === "player"
-            ? buildPlayerSafeCombatRollMutationEncounterForUser({
-                encounter: savedEncounter,
-                scenarioParticipants,
-                userId: user.id,
-              })
-            : savedEncounter,
-      };
-    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to record the maneuver response." }); }
-  });
-
-  app.post("/encounters/:encounterId/combat-round/review-adjust-distance", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
-    if (!user) return;
-    try {
-      const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const body = parseBodyObject(request.body, "Adjust Distance review payload");
-      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
-      const value = body.value === undefined ? 0 : body.value;
-      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
-        throw new Error("Maneuver adjustment must be an integer.");
+  app.post(
+    "/encounters/:encounterId/combat-round/respond-adjust-distance",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const body = parseBodyObject(request.body, "Adjust Distance response payload");
+        const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+        const scenarioParticipantId = parseNonEmptyString(
+          body.scenarioParticipantId,
+          "scenarioParticipantId",
+        );
+        const response =
+          body.response === "allow" ? "allow" : body.response === "oppose" ? "oppose" : undefined;
+        if (!response) throw new Error("Select Allow or Oppose.");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(
+          encounter.scenarioId,
+        );
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const scenarioParticipant = scenarioParticipants.find(
+          (entry) => entry.id === scenarioParticipantId && entry.isActive,
+        );
+        const encounterParticipant = scenarioParticipant
+          ? membership.participants.find(
+              (entry) => entry.scenarioParticipantId === scenarioParticipant.id,
+            )
+          : undefined;
+        if (!scenarioParticipant || !encounterParticipant)
+          return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
+          return reply.code(403).send({ error: "Player does not control this participant." });
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const proposal = roundState.adjustDistanceProposals.find(
+          (entry) => entry.id === proposalId,
+        );
+        if (!proposal || proposal.defenderParticipantId !== encounterParticipant.id)
+          return reply
+            .code(409)
+            .send({ error: "The defender must choose whether to oppose the maneuver." });
+        const authorization = authorizeCombatProgressionTask({
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "respond_adjust_distance",
+          opponentParticipantId: proposal.attackerParticipantId,
+          opportunityId: proposal.phase1OpportunityId,
+          pairId: proposal.pairId,
+          participantId: encounterParticipant.id,
+          phase: "phase1",
+          projection: buildCombatProgressionProjection(roundState),
+          proposalId,
+        });
+        if (!authorization.ok)
+          return reply
+            .code(409)
+            .send({ error: "The defender must choose whether to oppose the maneuver." });
+        const createdAt = new Date().toISOString();
+        const nextRoundState = respondCombatRoundAdjustDistance({
+          command: { createdAt, createdByUserId: user.id },
+          proposalId,
+          response,
+          state: roundState,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+        });
+        return {
+          encounter:
+            access.mode === "player"
+              ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                })
+              : savedEncounter,
+        };
+      } catch (error) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              error instanceof Error ? error.message : "Unable to record the maneuver response.",
+          });
       }
-      const participantId = parseOptionalDeclarationString(body.participantId);
-      const notes = typeof body.notes === "string" ? body.notes : undefined;
-      const encounter = await encounterService.getEncounterById(encounterId);
-      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
-      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
-      if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must confirm the maneuver adjustment." });
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
-      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
-      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
-      const authorization = authorizeCombatProgressionTask({
-        actor: { kind: "gm" },
-        commandType: "review_adjust_distance_roll_adjustment",
-        opponentParticipantId: proposal?.defenderParticipantId,
-        opportunityId: proposal?.phase1OpportunityId,
-        pairId: proposal?.pairId,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
-      });
-      if (!authorization.ok) return reply.code(409).send({ error: "The GM must confirm the maneuver adjustment." });
-      const createdAt = new Date().toISOString();
-      const nextRoundState = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt, createdByUserId: user.id }, notes, participantId, proposalId, state: roundState, value });
-      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
-      return { encounter: savedEncounter };
-    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to confirm the maneuver adjustment." }); }
-  });
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/review-adjust-distance",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const body = parseBodyObject(request.body, "Adjust Distance review payload");
+        const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+        const value = body.value === undefined ? 0 : body.value;
+        if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+          throw new Error("Maneuver adjustment must be an integer.");
+        }
+        const participantId = parseOptionalDeclarationString(body.participantId);
+        const notes = typeof body.notes === "string" ? body.notes : undefined;
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm")
+          return reply.code(403).send({ error: "The GM must confirm the maneuver adjustment." });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(
+          encounter.scenarioId,
+        );
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const proposal = roundState.adjustDistanceProposals.find(
+          (entry) => entry.id === proposalId,
+        );
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "review_adjust_distance_roll_adjustment",
+          opponentParticipantId: proposal?.defenderParticipantId,
+          opportunityId: proposal?.phase1OpportunityId,
+          pairId: proposal?.pairId,
+          phase: "phase1",
+          projection: buildCombatProgressionProjection(roundState),
+          proposalId,
+        });
+        if (!authorization.ok)
+          return reply.code(409).send({ error: "The GM must confirm the maneuver adjustment." });
+        const createdAt = new Date().toISOString();
+        const nextRoundState = reviewCombatRoundAdjustDistanceRollAdjustment({
+          command: { createdAt, createdByUserId: user.id },
+          notes,
+          participantId,
+          proposalId,
+          state: roundState,
+          value,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+        });
+        return { encounter: savedEncounter };
+      } catch (error) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              error instanceof Error ? error.message : "Unable to confirm the maneuver adjustment.",
+          });
+      }
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-round/roll-adjust-distance", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -3546,24 +3668,58 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const body = parseBodyObject(request.body, "Adjust Distance roll payload");
       const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
-      const scenarioParticipantId = parseNonEmptyString(body.scenarioParticipantId, "scenarioParticipantId");
+      const scenarioParticipantId = parseNonEmptyString(
+        body.scenarioParticipantId,
+        "scenarioParticipantId",
+      );
       const encounter = await encounterService.getEncounterById(encounterId);
       if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
-      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
       if (!access) return reply.code(404).send({ error: "Encounter not found." });
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
       const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
-      const scenarioParticipant = scenarioParticipants.find((entry) => entry.id === scenarioParticipantId && entry.isActive);
-      const encounterParticipant = scenarioParticipant ? membership.participants.find((entry) => entry.scenarioParticipantId === scenarioParticipant.id) : undefined;
-      if (!scenarioParticipant || !encounterParticipant) return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
-      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) return reply.code(403).send({ error: "Player does not control this participant." });
-      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
+      const scenarioParticipant = scenarioParticipants.find(
+        (entry) => entry.id === scenarioParticipantId && entry.isActive,
+      );
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (entry) => entry.scenarioParticipantId === scenarioParticipant.id,
+          )
+        : undefined;
+      if (!scenarioParticipant || !encounterParticipant)
+        return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
+        return reply.code(403).send({ error: "Player does not control this participant." });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
       const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
-      if (!proposal || proposal.status !== "awaiting_rolls") return reply.code(409).send({ error: "Distance-adjustment rolls are not currently available." });
-      const expectedParticipantId = proposal.attackerRoll ? proposal.defenderParticipantId : proposal.attackerParticipantId;
-      if (expectedParticipantId !== encounterParticipant.id) return reply.code(409).send({ error: proposal.attackerRoll ? "The defender must roll Dodge." : "The attacker must roll Dodge." });
+      if (!proposal || proposal.status !== "awaiting_rolls")
+        return reply
+          .code(409)
+          .send({ error: "Distance-adjustment rolls are not currently available." });
+      const expectedParticipantId = proposal.attackerRoll
+        ? proposal.defenderParticipantId
+        : proposal.attackerParticipantId;
+      if (expectedParticipantId !== encounterParticipant.id)
+        return reply
+          .code(409)
+          .send({
+            error: proposal.attackerRoll
+              ? "The defender must roll Dodge."
+              : "The attacker must roll Dodge.",
+          });
       const authorization = authorizeCombatProgressionTask({
-        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
         commandType: "roll_adjust_distance",
         opponentParticipantId:
           encounterParticipant.id === proposal.attackerParticipantId
@@ -3576,10 +3732,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         projection: buildCombatProgressionProjection(roundState),
         proposalId,
       });
-      if (!authorization.ok) return reply.code(409).send({ error: "Distance-adjustment rolls are not currently available." });
-      const profile = buildRoundEndParticipantInputs({ encounter, roundState, scenarioParticipants })[encounterParticipant.id]?.distanceControl;
-      if (!profile || profile.dodgeSkillTotal === undefined) return reply.code(409).send({ error: "Dodge profile is unavailable." });
-      const adjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id ? proposal.gmRollAdjustment.value : 0;
+      if (!authorization.ok)
+        return reply
+          .code(409)
+          .send({ error: "Distance-adjustment rolls are not currently available." });
+      const profile = buildRoundEndParticipantInputs({
+        encounter,
+        roundState,
+        scenarioParticipants,
+      })[encounterParticipant.id]?.distanceControl;
+      if (!profile || profile.dodgeSkillTotal === undefined)
+        return reply.code(409).send({ error: "Dodge profile is unavailable." });
+      const adjustment =
+        proposal.gmRollAdjustment?.participantId === encounterParticipant.id
+          ? proposal.gmRollAdjustment.value
+          : 0;
       const opponentEncounterParticipantId =
         proposal.attackerParticipantId === encounterParticipant.id
           ? proposal.defenderParticipantId
@@ -3609,23 +3776,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         skillId: "dodge",
         step: "phase_1_actions",
       };
-      const rollAdjustment = proposal.gmRollAdjustment?.participantId === encounterParticipant.id
-        ? normalizeCombatRollAdjustment({
-            actionId: "adjust_range_attack",
-            encounterId,
-            opportunityId: proposal.phase1OpportunityId,
-            opponentParticipantId: opponentScenarioParticipant?.id,
-            ownerParticipantId: scenarioParticipant.id,
-            pairKey,
-            phase: "phase1",
-            proposalId: proposal.id,
-            rollType: "adjust_distance_dodge",
-            roundNumber: roundState.roundNumber,
-            step: "phase_1_actions",
-            value: adjustment,
-            notes: proposal.gmRollAdjustment?.notes,
-          })
-        : undefined;
+      const rollAdjustment =
+        proposal.gmRollAdjustment?.participantId === encounterParticipant.id
+          ? normalizeCombatRollAdjustment({
+              actionId: "adjust_range_attack",
+              encounterId,
+              opportunityId: proposal.phase1OpportunityId,
+              opponentParticipantId: opponentScenarioParticipant?.id,
+              ownerParticipantId: scenarioParticipant.id,
+              pairKey,
+              phase: "phase1",
+              proposalId: proposal.id,
+              rollType: "adjust_distance_dodge",
+              roundNumber: roundState.roundNumber,
+              step: "phase_1_actions",
+              value: adjustment,
+              notes: proposal.gmRollAdjustment?.notes,
+            })
+          : undefined;
       const baseDodgeResolution = resolveCombatDodgeModifiers({
         context: dodgeContext,
         contributions: profile.modifierContributions ?? [],
@@ -3641,9 +3809,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         )?.total ?? 0;
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
-      const result = combatAdjustDistanceRollResultSchema.parse({ dodgeSkillTotal: profile.dodgeSkillTotal, finalTotal: roll.dieResult + profile.dodgeSkillTotal + dodgeResolution.total, generalFatigueModifier, id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`, openEndedD10s: roll.openEndedD10s, participantId: encounterParticipant.id, rollD20: roll.rollD20, rollTotal: roll.dieResult, rolledAt: createdAt, rolledByUserId: user.id, situationalAdjustment: adjustment });
-      const nextRoundState = recordCombatRoundAdjustDistanceRoll({ command: { createdAt, createdByUserId: user.id }, proposalId, result, state: roundState });
-      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt } });
+      const result = combatAdjustDistanceRollResultSchema.parse({
+        dodgeSkillTotal: profile.dodgeSkillTotal,
+        finalTotal: roll.dieResult + profile.dodgeSkillTotal + dodgeResolution.total,
+        generalFatigueModifier,
+        id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`,
+        openEndedD10s: roll.openEndedD10s,
+        participantId: encounterParticipant.id,
+        rollD20: roll.rollD20,
+        rollTotal: roll.dieResult,
+        rolledAt: createdAt,
+        rolledByUserId: user.id,
+        situationalAdjustment: adjustment,
+      });
+      const nextRoundState = recordCombatRoundAdjustDistanceRoll({
+        command: { createdAt, createdByUserId: user.id },
+        proposalId,
+        result,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
       return {
         encounter:
           access.mode === "player"
@@ -3654,58 +3844,105 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               })
             : savedEncounter,
       };
-    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to roll Dodge." }); }
+    } catch (error) {
+      return reply
+        .code(400)
+        .send({ error: error instanceof Error ? error.message : "Unable to roll Dodge." });
+    }
   });
 
-  app.post("/encounters/:encounterId/combat-round/commit-adjust-distance", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
-    if (!user) return;
-    try {
-      const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const body = parseBodyObject(request.body, "Adjust Distance commit payload");
-      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
-      const committedDistance = combatDistanceSchema.parse(body.committedDistance);
-      const outcome = body.outcome === "successful" || body.outcome === "unsuccessful" || body.outcome === "allowed" ? body.outcome : undefined;
-      if (!outcome) throw new Error("Select the maneuver outcome.");
-      const encounter = await encounterService.getEncounterById(encounterId);
-      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
-      const access = await resolveScenarioWorkspaceAccess({ campaignService, scenarioService }, { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles });
-      if (!access || access.mode !== "gm") return reply.code(403).send({ error: "The GM must commit the distance proposal before Phase 2." });
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
-      const roundState = initializeMaterializedCombatRoundState({ encounter, scenarioParticipants });
-      const proposal = roundState.adjustDistanceProposals.find((entry) => entry.id === proposalId);
-      const authorization = authorizeCombatProgressionTask({
-        actor: { kind: "gm" },
-        commandType: "commit_adjust_distance",
-        opponentParticipantId: proposal?.defenderParticipantId,
-        opportunityId: proposal?.phase1OpportunityId,
-        pairId: proposal?.pairId,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
-      });
-      if (!authorization.ok) return reply.code(409).send({ error: "The GM must commit the distance proposal before Phase 2." });
-      const createdAt = new Date().toISOString();
-      const nextRoundState = commitCombatRoundAdjustDistance({ command: { createdAt, createdByUserId: user.id }, committedDistance, notes: typeof body.notes === "string" ? body.notes : undefined, outcome, proposalId, state: roundState });
-      const recomputed = recomputeRoundDeclarationCombatActionModifiers({
-        encounter,
-        roundState: nextRoundState,
-        scenarioParticipants,
-      });
-      const participants = [];
-      for (const [participantId, state] of recomputed.participantStatesById) {
-        participants.push(
-          await encounterService.updateScenarioParticipantState({
-            participantId,
-            scenarioId: encounter.scenarioId,
-            state,
-          }),
+  app.post(
+    "/encounters/:encounterId/combat-round/commit-adjust-distance",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const body = parseBodyObject(request.body, "Adjust Distance commit payload");
+        const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+        const committedDistance = combatDistanceSchema.parse(body.committedDistance);
+        const outcome =
+          body.outcome === "successful" ||
+          body.outcome === "unsuccessful" ||
+          body.outcome === "allowed"
+            ? body.outcome
+            : undefined;
+        if (!outcome) throw new Error("Select the maneuver outcome.");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
         );
+        if (!access || access.mode !== "gm")
+          return reply
+            .code(403)
+            .send({ error: "The GM must commit the distance proposal before Phase 2." });
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(
+          encounter.scenarioId,
+        );
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const proposal = roundState.adjustDistanceProposals.find(
+          (entry) => entry.id === proposalId,
+        );
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "commit_adjust_distance",
+          opponentParticipantId: proposal?.defenderParticipantId,
+          opportunityId: proposal?.phase1OpportunityId,
+          pairId: proposal?.pairId,
+          phase: "phase1",
+          projection: buildCombatProgressionProjection(roundState),
+          proposalId,
+        });
+        if (!authorization.ok)
+          return reply
+            .code(409)
+            .send({ error: "The GM must commit the distance proposal before Phase 2." });
+        const createdAt = new Date().toISOString();
+        const nextRoundState = commitCombatRoundAdjustDistance({
+          command: { createdAt, createdByUserId: user.id },
+          committedDistance,
+          notes: typeof body.notes === "string" ? body.notes : undefined,
+          outcome,
+          proposalId,
+          state: roundState,
+        });
+        const recomputed = recomputeRoundDeclarationCombatActionModifiers({
+          encounter,
+          roundState: nextRoundState,
+          scenarioParticipants,
+        });
+        const participants = [];
+        for (const [participantId, state] of recomputed.participantStatesById) {
+          participants.push(
+            await encounterService.updateScenarioParticipantState({
+              participantId,
+              scenarioId: encounter.scenarioId,
+              state,
+            }),
+          );
+        }
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: recomputed.roundState, updatedAt: createdAt },
+        });
+        return { encounter: savedEncounter, participants };
+      } catch (error) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              error instanceof Error ? error.message : "Unable to commit the distance adjustment.",
+          });
       }
-      const savedEncounter = await encounterService.updateEncounter({ campaignId: access.campaignId, encounterId, scenarioId: encounter.scenarioId, session: { ...encounter, combatRoundState: recomputed.roundState, updatedAt: createdAt } });
-      return { encounter: savedEncounter, participants };
-    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to commit the distance adjustment." }); }
-  });
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-round/feint-feasibility", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -3822,7 +4059,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const authorization = authorizeCombatProgressionTask({
-        actor: access.mode === "gm" ? { kind: "gm" } : { kind: "combatant", participantId: encounterParticipant.id },
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
         commandType: "roll_feint",
         opponentParticipantId: isAttackerRoll
           ? proposal.defenderParticipantId
@@ -3857,7 +4097,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         );
         const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
           ? scenarioParticipants.find(
-              (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+              (participant) =>
+                participant.id === opponentEncounterParticipant.scenarioParticipantId,
             )
           : undefined;
         const projection = buildLiveCombatModifierContributionProjection({
@@ -4714,6 +4955,28 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const distanceProposal = roundState.roundEndReview?.proposedDistances.find(
+          (proposal) => proposal.id === body.distanceProposalId,
+        );
+        const opponentParticipantId = distanceProposal
+          ? distanceProposal.participantAId === encounterParticipant.id
+            ? distanceProposal.participantBId
+            : distanceProposal.participantAId
+          : undefined;
+        const authorization = authorizeCombatProgressionTask({
+          actor: gmAuthorizedOperation
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_round_end_distance_control",
+          opponentParticipantId,
+          pairId: distanceProposal?.pairKey,
+          participantId: encounterParticipant.id,
+          projection: buildCombatProgressionProjection(roundState),
+          proposalId: body.distanceProposalId,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const rolled = rollCombatRoundEndDistanceControl({
           command: {
             createdAt: submittedAt,
@@ -4806,10 +5069,37 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const currentTask = getNextCombatRoundEndTask({ state: roundState });
-
-        if (currentTask?.kind !== "distance_roll") {
+        const projection = buildCombatProgressionProjection(roundState);
+        const currentTasks = projection.boundary.processes
+          .flatMap((process) => process.stages)
+          .flatMap((stage) => stage.tasks)
+          .filter((task) => task.kind === "distance_roll" && task.state === "executable");
+        const cursorTasks = roundState.currentCursor?.participantId
+          ? currentTasks.filter(
+              (task) =>
+                task.owner?.kind === "combatant" &&
+                task.owner.participantId === roundState.currentCursor?.participantId,
+            )
+          : [];
+        const selectedTasks = cursorTasks.length > 0 ? cursorTasks : currentTasks;
+        if (selectedTasks.length !== 1) {
           throw new Error("No current distance-control roll is open.");
+        }
+        const currentTask = selectedTasks[0]!;
+        if (currentTask.owner?.kind !== "combatant" || !currentTask.identity.proposalId) {
+          throw new Error("The current distance-control task has no participant owner.");
+        }
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "roll_round_end_distance_control",
+          opponentParticipantId: currentTask.identity.opponentParticipantId,
+          pairId: currentTask.identity.pairId,
+          participantId: currentTask.owner.participantId,
+          projection,
+          proposalId: currentTask.identity.proposalId,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
 
         const submittedAt = new Date().toISOString();
@@ -4818,8 +5108,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             createdAt: submittedAt,
             createdByUserId: user.id,
           },
-          distanceProposalId: currentTask.distanceProposalId,
-          participantId: currentTask.participantId,
+          distanceProposalId: currentTask.identity.proposalId,
+          participantId: currentTask.owner.participantId,
           participantInputs: buildRoundEndDistanceControlInputs({
             encounter,
             roundState,
@@ -4848,6 +5138,165 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error instanceof Error
               ? error.message
               : "Unable to roll current distance control contest.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/commit-distance-control",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({ error: "Only GM users can commit distance control." });
+        }
+        const body = parseRoundEndDistanceControlCommitBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const proposal = roundState.roundEndReview?.proposedDistances.find(
+          (candidate) => candidate.id === body.distanceProposalId,
+        );
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "commit_round_end_distance_control",
+          pairId: proposal?.pairKey,
+          projection: buildCombatProgressionProjection(roundState),
+          proposalId: body.distanceProposalId,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
+        const submittedAt = new Date().toISOString();
+        const committed = commitCombatRoundEndDistanceControl({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          distanceOverride: body.distanceOverride,
+          distanceProposalId: body.distanceProposalId,
+          state: roundState,
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: committed.state,
+            currentRound: committed.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to commit distance control.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/commit-participant-review",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({ error: "Only GM users can commit participant review." });
+        }
+        const body = parseParticipantCommandBody(
+          parseBodyObject(request.body, "Round-end participant review payload"),
+          "Round-end participant review payload",
+        );
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const scenarioParticipant = scenarioParticipants.find(
+          (participant) => participant.id === body.scenarioParticipantId && participant.isActive,
+        );
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const encounterParticipant = scenarioParticipant
+          ? membership.participants.find(
+              (participant) =>
+                participant.scenarioParticipantId === scenarioParticipant.id ||
+                participant.id === scenarioParticipant.id ||
+                (scenarioParticipant.characterId &&
+                  participant.characterId === scenarioParticipant.characterId),
+            )
+          : undefined;
+        if (!scenarioParticipant || !encounterParticipant) {
+          return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        }
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "commit_round_end_participant_review",
+          participantId: encounterParticipant.id,
+          projection: buildCombatProgressionProjection(roundState),
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
+        const submittedAt = new Date().toISOString();
+        const committed = commitCombatRoundEndParticipantReview({
+          combatEffects: scenarioParticipant.state.combatEffects,
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          encounterId,
+          participantId: encounterParticipant.id,
+          scenarioId,
+          scenarioParticipantId: scenarioParticipant.id,
+          state: roundState,
+        });
+        const savedParticipant = await encounterService.updateScenarioParticipantState({
+          participantId: scenarioParticipant.id,
+          scenarioId,
+          state: { ...scenarioParticipant.state, combatEffects: committed.combatEffects },
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: committed.state,
+            currentRound: committed.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
+          encounter: savedEncounter,
+          participant: savedParticipant,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to commit participant review.",
         });
       }
     },
@@ -4935,12 +5384,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
+      const authorization = authorizeCombatProgressionTask({
+        actor: gmAuthorizedOperation
+          ? { kind: "gm" }
+          : { kind: "combatant", participantId: encounterParticipant.id },
+        commandType: "roll_round_end_health_check",
+        healthRollId: body.healthRollId,
+        participantId: encounterParticipant.id,
+        projection: buildCombatProgressionProjection(roundState),
+        proposalId: body.healthRollId,
+      });
+      if (!authorization.ok) {
+        return reply.code(409).send({ code: authorization.code, error: authorization.message });
+      }
       const rolled = rollCombatRoundEndHealthCheck({
         command: {
           createdAt: submittedAt,
           createdByUserId: user.id,
         },
         combatEffects: scenarioParticipant.state.combatEffects,
+        difficulty: body.difficulty,
         healthRollId: body.healthRollId,
         participantId: encounterParticipant.id,
         rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
@@ -5261,6 +5724,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        if (roundState.roundEndReview?.roundNumber === roundState.roundNumber) {
+          return { encounter };
+        }
+        const authorization = authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "prepare_round_end_review",
+          projection: buildCombatProgressionProjection(roundState),
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const submittedAt = new Date().toISOString();
         const nextRoundState = ensureCombatRoundEndReviewPrepared({
           command: { createdAt: submittedAt, createdByUserId: user.id },
@@ -5401,9 +5875,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       };
     } catch (error) {
       return reply.code(400).send({
-        ...(error instanceof CombatProgressionBoundaryAdvanceError
-          ? { code: error.code }
-          : {}),
+        ...(error instanceof CombatProgressionBoundaryAdvanceError ? { code: error.code } : {}),
         error: error instanceof Error ? error.message : "Unable to advance combat round step.",
       });
     }
