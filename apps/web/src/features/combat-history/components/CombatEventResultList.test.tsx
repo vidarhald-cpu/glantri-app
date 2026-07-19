@@ -95,18 +95,18 @@ describe("CombatEventResultList", () => {
     const firstToggle = within(articles[0]!).getByRole("button", { name: "Calculation" });
     const secondToggle = within(articles[1]!).getByRole("button", { name: "Calculation" });
 
-    expect(firstToggle).toHaveAttribute("aria-expanded", "false");
-    expect(secondToggle).toHaveAttribute("aria-expanded", "false");
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(secondToggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
 
     fireEvent.click(firstToggle);
-    expect(firstToggle).toHaveAttribute("aria-expanded", "true");
-    expect(secondToggle).toHaveAttribute("aria-expanded", "false");
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(secondToggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("OB 10 + roll 8 - DB 15 = 3")).toBeTruthy();
     expect(screen.queryByText("OB 11 + roll 7 - DB 12 = 6")).toBeNull();
 
     fireEvent.click(firstToggle);
-    expect(firstToggle).toHaveAttribute("aria-expanded", "false");
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
   });
 });
