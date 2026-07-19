@@ -6,11 +6,17 @@ import {
   type ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
-import type { CombatTrackerCellView, CombatTrackerMarkerKind, CombatTrackerModel } from "../types";
+import type {
+  CombatTrackerCellView,
+  CombatTrackerLiveFacet,
+  CombatTrackerMarkerKind,
+  CombatTrackerModel,
+} from "../types";
 import {
   buildCombatTrackerCellKey,
   COMBAT_TRACKER_MARKER_MEANINGS,
 } from "./buildCombatTrackerModel";
+import { buildCombatProgressionTrackerIndex } from "./buildCombatProgressionTrackerModel";
 
 export interface CombatHistoryInspectionSelection {
   participantId: string;
@@ -26,13 +32,12 @@ function outcomeBoolean(
 }
 
 function markerForEvents(input: {
-  current: boolean;
   events: readonly ProjectedCombatHistoryEvent[];
   hasSnapshot: boolean;
-  phaseActionOpen?: boolean;
+  historical: boolean;
+  liveFacet?: CombatTrackerLiveFacet;
   stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
-  if (input.phaseActionOpen === false) return { kind: "not_reached", marker: "·" };
   const initiative = input.events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative?.facts.privateCalculation?.total ??
@@ -59,24 +64,28 @@ function markerForEvents(input: {
   if (feintEvent?.type === "feint_impossible") {
     return { kind: "skipped", marker: "–" };
   }
-  if (feintEvent) {
-    return { kind: "required", marker: "?" };
-  }
+  if (feintEvent && !input.liveFacet?.current)
+    return input.historical
+      ? { kind: "complete", marker: "✓" }
+      : { kind: "not_reached", marker: "·" };
   const adjustDistanceEvent = [...input.events]
     .reverse()
     .find((event) => event.type.startsWith("adjust_distance_"));
   if (adjustDistanceEvent?.type === "adjust_distance_committed") {
     return { kind: "complete", marker: "✓" };
   }
-  if (adjustDistanceEvent) return { kind: "required", marker: "?" };
+  if (adjustDistanceEvent && !input.liveFacet?.current)
+    return input.historical
+      ? { kind: "complete", marker: "✓" }
+      : { kind: "not_reached", marker: "·" };
 
   const skipped = input.events.some(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
   if (skipped) return { kind: "skipped", marker: "–" };
   if (input.stepOutcome) return { kind: "skipped", marker: "–" };
+  if (input.liveFacet?.current) return { kind: "required", marker: "?" };
   if (input.events.length || input.hasSnapshot) return { kind: "complete", marker: "✓" };
-  if (input.current) return { kind: "required", marker: "?" };
   return { kind: "not_reached", marker: "·" };
 }
 
@@ -177,14 +186,17 @@ export function formatProjectedCombatTrackerHoverDetail(
     return "feint opposed rolls pending.";
   }
 
-  const adjustment = [...events].reverse().find((event) => event.type.startsWith("adjust_distance_"));
+  const adjustment = [...events]
+    .reverse()
+    .find((event) => event.type.startsWith("adjust_distance_"));
   if (adjustment) {
     if (adjustment.type === "adjust_distance_committed") {
       const previous = projectedFact(adjustment, "previousDistance");
       const committed = projectedFact(adjustment, "committedDistance");
       return `distance adjustment complete${typeof previous === "number" && typeof committed === "number" ? `: ${previous} → ${committed}` : ""}.`;
     }
-    if (adjustment.type === "adjust_distance_result") return "distance adjustment awaiting GM review.";
+    if (adjustment.type === "adjust_distance_result")
+      return "distance adjustment awaiting GM review.";
     return "distance-adjustment response or rolls pending.";
   }
 
@@ -210,21 +222,64 @@ export function getProjectedCombatHistoryCellEvents(input: {
 }
 
 export function buildProjectedCombatTrackerModel(input: {
-  currentTask?: CombatHistoryInspectionSelection;
   history: CombatHistoryProjection;
   selected?: CombatHistoryInspectionSelection;
 }): CombatTrackerModel {
+  const progressionIndex = buildCombatProgressionTrackerIndex(input.history.progression);
+  const activeRoundNumber = input.history.activeRound.roundNumber;
+  const currentCells = Object.entries(progressionIndex.byCellKey).filter(
+    ([, facet]) => facet.current,
+  );
+  const currentStep = currentCells[0]?.[0].split(":").slice(2).join(":") as
+    | CombatRoundStep
+    | undefined;
   const rounds = [...input.history.archivedRounds, input.history.activeRound].map((round) => ({
-    currentStep:
-      round.roundNumber === input.history.activeRound.roundNumber
-        ? input.currentTask?.step
-        : undefined,
+    currentStep: round.roundNumber === activeRoundNumber ? currentStep : undefined,
     roundNumber: round.roundNumber,
   }));
   const cells: Record<string, CombatTrackerCellView> = {};
   const markerKinds = new Set<CombatTrackerMarkerKind>();
+  const cellEventsByKey = new Map<string, ProjectedCombatHistoryEvent[]>();
+  const snapshotByKey = new Map<
+    string,
+    CombatHistoryProjection["activeRound"]["snapshots"][number]
+  >();
+  for (const round of [...input.history.archivedRounds, input.history.activeRound]) {
+    for (const event of round.events) {
+      if (!event.ownerParticipantId) continue;
+      const key = buildCombatTrackerCellKey({
+        participantId: event.ownerParticipantId,
+        roundNumber: round.roundNumber,
+        step: event.step,
+      });
+      cellEventsByKey.set(key, [...(cellEventsByKey.get(key) ?? []), event]);
+    }
+    for (const snapshot of round.snapshots) {
+      snapshotByKey.set(
+        buildCombatTrackerCellKey({
+          participantId: snapshot.participant.participantId,
+          roundNumber: round.roundNumber,
+          step: snapshot.step,
+        }),
+        snapshot,
+      );
+    }
+  }
+  for (const events of cellEventsByKey.values()) {
+    events.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id));
+  }
 
-  for (const row of input.history.rows) {
+  const executionOrder = input.history.progression?.executionOrder?.participantIds;
+  const orderIndex = new Map(executionOrder?.map((participantId, index) => [participantId, index]));
+  const rows = [...input.history.rows].sort((left, right) => {
+    if (!orderIndex?.size) return 0;
+    return (
+      (orderIndex.get(left.participantId) ?? Number.MAX_SAFE_INTEGER) -
+      (orderIndex.get(right.participantId) ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
+
+  for (const row of rows) {
     for (const round of [...input.history.archivedRounds, input.history.activeRound]) {
       for (const step of COMBAT_ROUND_STEPS) {
         const selection = {
@@ -232,44 +287,35 @@ export function buildProjectedCombatTrackerModel(input: {
           roundNumber: round.roundNumber,
           step,
         };
-        const cellEvents = getProjectedCombatHistoryCellEvents({
-          history: input.history,
-          selection,
-        });
-        const snapshot = round.snapshots.find(
-          (candidate) =>
-            candidate.participant.participantId === row.participantId && candidate.step === step,
-        );
-        const current =
-          input.currentTask?.participantId === row.participantId &&
-          input.currentTask.roundNumber === round.roundNumber &&
-          input.currentTask.step === step;
+        const cellKey = buildCombatTrackerCellKey(selection);
+        const cellEvents = cellEventsByKey.get(cellKey) ?? [];
+        const snapshot = snapshotByKey.get(cellKey);
+        const liveFacet =
+          round.roundNumber === activeRoundNumber ? progressionIndex.byCellKey[cellKey] : undefined;
+        const current = Boolean(liveFacet?.current);
         const selected =
           input.selected?.participantId === row.participantId &&
           input.selected.roundNumber === round.roundNumber &&
           input.selected.step === step;
         const marker = markerForEvents({
-          current,
           events: cellEvents,
           hasSnapshot: Boolean(snapshot),
-          phaseActionOpen:
-            step === "phase_1_actions" || step === "phase_2_actions"
-              ? round.roundNumber !== input.history.activeRound.roundNumber ||
-                (input.currentTask
-                  ? COMBAT_ROUND_STEPS.indexOf(input.currentTask.step) >=
-                    COMBAT_ROUND_STEPS.indexOf(step)
-                  : true)
-              : undefined,
+          historical: round.roundNumber !== activeRoundNumber,
+          liveFacet,
           stepOutcome: snapshot?.stepOutcome,
         });
-        const cellKey = buildCombatTrackerCellKey(selection);
         const inspectable = current || Boolean(snapshot) || cellEvents.length > 0;
         const hoverDetail =
           snapshot?.stepOutcome?.message ?? formatProjectedCombatTrackerHoverDetail(cellEvents);
         markerKinds.add(marker.kind);
         cells[cellKey] = {
           cellKey,
+          completed: !["not_reached", "required"].includes(marker.kind),
           current,
+          executable: Boolean(liveFacet?.executable),
+          executionGroupIds: liveFacet?.executionGroupIds ?? [],
+          gmProxyAvailable: Boolean(liveFacet?.gmProxyAvailable),
+          historical: round.roundNumber !== activeRoundNumber,
           hoverText: `${row.displayName} · Round ${round.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]}: ${
             hoverDetail ??
             (inspectable
@@ -283,9 +329,25 @@ export function buildProjectedCombatTrackerModel(input: {
           marker: marker.marker,
           markerKind: marker.kind,
           participantId: row.participantId,
+          ownerParticipantIds: liveFacet?.ownerParticipantIds ?? [],
+          processIds: liveFacet?.processIds ?? [],
           roundNumber: round.roundNumber,
           selected,
+          status:
+            round.roundNumber !== activeRoundNumber
+              ? "historical"
+              : liveFacet?.executable
+                ? "executable"
+                : liveFacet?.waiting
+                  ? "waiting"
+                  : !["not_reached", "required"].includes(marker.kind)
+                    ? "completed"
+                    : "not_reached",
+          stageIds: liveFacet?.stageIds ?? [],
           step,
+          taskIds: liveFacet?.taskIds ?? [],
+          taskKinds: liveFacet?.taskKinds ?? [],
+          waiting: Boolean(liveFacet?.waiting),
         };
       }
     }
@@ -293,12 +355,10 @@ export function buildProjectedCombatTrackerModel(input: {
 
   return {
     cells,
-    currentTaskCellKey: input.currentTask
-      ? buildCombatTrackerCellKey(input.currentTask)
-      : undefined,
+    currentTaskCellKey: currentCells[0]?.[0],
     legend: COMBAT_TRACKER_MARKER_MEANINGS.filter((meaning) => markerKinds.has(meaning.kind)),
     rounds,
-    rows: input.history.rows.map((row) => ({
+    rows: rows.map((row) => ({
       label: row.displayName,
       participantId: row.participantId,
       selected: input.selected?.participantId === row.participantId,

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { EncounterParticipant, EncounterSession } from "@glantri/domain";
+import type {
+  CombatProgressionPresentationProjection,
+  CombatRoundPhase,
+  EncounterParticipant,
+  EncounterSession,
+} from "@glantri/domain";
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
@@ -55,8 +60,21 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
   });
 }
 
+function committedOrder(
+  phase: CombatRoundPhase,
+  participantIds: string[],
+): CombatProgressionPresentationProjection {
+  return {
+    boundary: { id: "boundary", kind: "phase1_resolution", roundNumber: 1 },
+    executionOrder: { participantIds, phase },
+    processes: [],
+    roundNumber: 1,
+    taskVisibility: "available",
+  };
+}
+
 describe("combat round manager selection", () => {
-  it("keeps participant order stable until phase initiative is complete", () => {
+  it("keeps participant order stable until the GM commits phase initiative", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const partialPhase2 = {
       ...existing,
@@ -117,10 +135,16 @@ describe("combat round manager selection", () => {
       "bottom",
     ]);
     expect(getCombatRoundManagerDisplayParticipantIds(completePhase2)).toEqual([
+      "top",
       "middle",
       "bottom",
-      "top",
     ]);
+    expect(
+      getCombatRoundManagerDisplayParticipantIds(
+        completePhase2,
+        committedOrder("phase2", ["middle", "bottom", "top"]),
+      ),
+    ).toEqual(["middle", "bottom", "top"]);
   });
 
   it("keeps resolved initiative order through modifier review and reactive execution", () => {
@@ -159,12 +183,14 @@ describe("combat round manager selection", () => {
       })),
     };
 
-    expect(getCombatRoundManagerDisplayParticipantIds(withPhase1Initiative)).toEqual([
+    const phase1Order = committedOrder("phase1", ["bottom", "middle", "top"]);
+    const phase2Order = committedOrder("phase2", ["bottom", "middle", "top"]);
+    expect(getCombatRoundManagerDisplayParticipantIds(withPhase1Initiative, phase1Order)).toEqual([
       "bottom",
       "middle",
       "top",
     ]);
-    expect(getCombatRoundManagerDisplayParticipantIds(withPhase2Initiative)).toEqual([
+    expect(getCombatRoundManagerDisplayParticipantIds(withPhase2Initiative, phase2Order)).toEqual([
       "bottom",
       "middle",
       "top",

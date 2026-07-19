@@ -137,7 +137,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     );
     expect(source).toContain("formatPlayerCombatInitiativeRank");
     expect(source).toContain("getCombatRoundInitiativeRanks");
-    expect(source).toContain("isCombatRoundPhaseInitiativeComplete");
+    expect(source).toContain("combatHistory?.progression?.executionOrder?.phase");
     expect(source).toContain("rank.tiedCount > 1");
     expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("selectedCurrentInitiative");
@@ -238,6 +238,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("visibilitychange");
     expect(source).toContain("loadCombatHistory(encounterId)");
     expect(source).toContain("buildProjectedCombatTrackerModel");
+    expect(source).toContain("combatHistory?.progression");
+    expect(source).toContain("perspectiveParticipantId: selectedParticipantId");
+    expect(source).not.toContain("buildCombatProgressionProjection");
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("setHistoryInspection({");
     expect(source).toContain("setHistoryInspection(undefined)");
@@ -425,8 +428,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('"Back out of attack (-2 DB/Parry penalty)"');
     expect(source).toContain('"Back out of attack (no CE roll)"');
     expect(source).toContain('<option value="continue">');
-    expect(source).toContain('selectedAdjustDistanceProposal?.status === "awaiting_defender_response"');
-    expect(source).toContain(": selectedPhaseAttackChoiceControls");
+    expect(source).toContain(
+      'selectedAdjustDistanceProposal?.status === "awaiting_defender_response"',
+    );
+    expect(source).toContain("selectedPhaseAttackChoiceControls");
     expect(source).toContain("? backOutPhaseAttack()");
     expect(source).toContain("phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel");
     expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");

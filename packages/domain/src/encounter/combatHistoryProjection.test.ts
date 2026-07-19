@@ -53,6 +53,36 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("delivers player-safe live progression from the same state revision", () => {
+    const state = combatRoundStateSchema.parse({
+      currentCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
+      currentStep: "select_actions",
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Hidden foe", participantId: "hidden" },
+      ],
+      roundNumber: 1,
+    });
+    const projection = projectCombatHistory({
+      participants,
+      sourceUpdatedAt: "revision-7",
+      state,
+      viewer: player(["aria"], ["aria"]),
+    });
+    const serialized = JSON.stringify(projection.progression);
+
+    expect(projection.sourceUpdatedAt).toBe("revision-7");
+    expect(projection.progression).toMatchObject({
+      boundary: { kind: "declaration", roundNumber: 1 },
+      roundNumber: 1,
+      taskVisibility: "available",
+    });
+    expect(serialized).toContain("aria");
+    expect(serialized).not.toContain("Hidden foe");
+    expect(serialized).not.toContain("hidden");
+    expect(serialized).not.toContain("diagnostic");
+  });
+
   it("distinguishes historical non-applicability, non-required resolution, and explicit skips", () => {
     const miss = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",

@@ -51,6 +51,7 @@ import {
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
   buildCombatRoundPhaseResolutionResult,
+  buildCombatProgressionProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
   canBackOutCombatRoundPhaseAttack,
@@ -85,17 +86,15 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
-  isCombatPhaseActionOpen,
   getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
-  getCombatRoundEndDistanceControlPendingRollCount,
   getCombatRoundEndDistanceProposalLifecycle,
-  getCombatRoundEndHealthCheckPendingRollCount,
   getNextCombatRoundEndTask,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
   getFinalCriticalRollIndexStatus,
   getLatestCombatEventSummary,
@@ -109,6 +108,7 @@ import {
   isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
   projectCombatHistoryEvent,
+  projectCombatProgressionPresentation,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
@@ -124,11 +124,14 @@ import {
 
 import {
   buildCombatTrackerModel,
+  buildCombatProgressionTrackerIndex,
+  buildCombatTrackerCellKey,
   buildConciseDodgeCalculationRows,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatTracker,
   formatSignedCombatModifier,
+  getCombatProgressionPresentationTasks,
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
@@ -240,7 +243,6 @@ import {
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
-  isSelectedCombatRoundStepCurrentForGm,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
@@ -2733,11 +2735,6 @@ function formatStepStatus(status: string | undefined): string {
   }
 }
 
-function getRoundEndDistanceCommitPendingCount(roundState: CombatRoundState): number {
-  return (roundState.roundEndReview?.proposedDistances ?? []).filter(isRoundEndDistanceCommitReady)
-    .length;
-}
-
 function buildCombatAttackResultParryModifiers(
   attackResult?: CombatRoundAttackRollResult,
 ): WorkbookRawModifier[] {
@@ -3695,13 +3692,21 @@ function CombatRoundEndDistanceControlPanel(input: {
                   {proposal.participantA.desiredDistance ?? "no preference"} · {participantBLabel}:{" "}
                   {proposal.participantB.desiredDistance ?? "no preference"}
                 </div>
-                <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}>
+                <div
+                  style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}
+                >
                   <strong>{participantALabel}</strong>
-                  {participantASummary.map((line) => <div key={`${proposal.id}:a:${line}`}>{line}</div>)}
+                  {participantASummary.map((line) => (
+                    <div key={`${proposal.id}:a:${line}`}>{line}</div>
+                  ))}
                 </div>
-                <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}>
+                <div
+                  style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.1rem" }}
+                >
                   <strong>{participantBLabel}</strong>
-                  {participantBSummary.map((line) => <div key={`${proposal.id}:b:${line}`}>{line}</div>)}
+                  {participantBSummary.map((line) => (
+                    <div key={`${proposal.id}:b:${line}`}>{line}</div>
+                  ))}
                 </div>
                 {proposal.winnerParticipantId ? (
                   <div style={{ color: "#3f5f46", fontSize: "0.82rem" }}>
@@ -3808,7 +3813,9 @@ const AdjustDistanceAdjustmentEditor = forwardRef<
   });
   const [, setDraftRevision] = useState(0);
   const draft = draftRef.current;
-  const updateDraft = (update: (current: AdjustDistanceAdjustmentDraft) => AdjustDistanceAdjustmentDraft) => {
+  const updateDraft = (
+    update: (current: AdjustDistanceAdjustmentDraft) => AdjustDistanceAdjustmentDraft,
+  ) => {
     draftRef.current = update(draftRef.current);
     setDraftRevision((current) => current + 1);
   };
@@ -3820,13 +3827,14 @@ const AdjustDistanceAdjustmentEditor = forwardRef<
       value: String(input.savedAdjustment?.value ?? 0),
     };
     setDraftRevision((current) => current + 1);
-  }, [input.proposalId, input.savedAdjustment?.notes, input.savedAdjustment?.participantId, input.savedAdjustment?.value]);
+  }, [
+    input.proposalId,
+    input.savedAdjustment?.notes,
+    input.savedAdjustment?.participantId,
+    input.savedAdjustment?.value,
+  ]);
 
-  useImperativeHandle(
-    ref,
-    () => ({ getDraft: () => draftRef.current }),
-    [],
-  );
+  useImperativeHandle(ref, () => ({ getDraft: () => draftRef.current }), []);
 
   return (
     <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -3866,7 +3874,10 @@ const AdjustDistanceAdjustmentEditor = forwardRef<
           />
         </label>
       </div>
-      <span id={`${input.proposalId}:adjustment-help`} style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+      <span
+        id={`${input.proposalId}:adjustment-help`}
+        style={{ color: "#5e5a50", fontSize: "0.78rem" }}
+      >
         Typical range: -4 to +4 (guidance only)
       </span>
       <label style={compactFieldLabelStyle}>
@@ -3935,9 +3946,14 @@ export default function CombatRoundManagerPanel({
   const [inspectorFeintDefenderObModifier, setInspectorFeintDefenderObModifier] = useState("0");
   const [inspectorFeintDefenderDbModifier, setInspectorFeintDefenderDbModifier] = useState("0");
   const [inspectorFeintNote, setInspectorFeintNote] = useState("");
-  const [inspectorAdjustDistanceResponse, setInspectorAdjustDistanceResponse] = useState<"allow" | "oppose">("oppose");
-  const [inspectorAdjustDistanceCommittedDistance, setInspectorAdjustDistanceCommittedDistance] = useState("2");
-  const [inspectorAdjustDistanceOutcome, setInspectorAdjustDistanceOutcome] = useState<"successful" | "unsuccessful" | "allowed">("unsuccessful");
+  const [inspectorAdjustDistanceResponse, setInspectorAdjustDistanceResponse] = useState<
+    "allow" | "oppose"
+  >("oppose");
+  const [inspectorAdjustDistanceCommittedDistance, setInspectorAdjustDistanceCommittedDistance] =
+    useState("2");
+  const [inspectorAdjustDistanceOutcome, setInspectorAdjustDistanceOutcome] = useState<
+    "successful" | "unsuccessful" | "allowed"
+  >("unsuccessful");
   const [inspectorAdjustDistanceReviewNote, setInspectorAdjustDistanceReviewNote] = useState("");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("normal");
@@ -3953,7 +3969,8 @@ export default function CombatRoundManagerPanel({
       >
     >({});
   const activeCurrentCellRef = useRef<HTMLButtonElement | null>(null);
-  const inspectorAdjustDistanceAdjustmentDraftRef = useRef<AdjustDistanceAdjustmentDraftHandle | null>(null);
+  const inspectorAdjustDistanceAdjustmentDraftRef =
+    useRef<AdjustDistanceAdjustmentDraftHandle | null>(null);
   const timelineCellRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const encounterScopeRef = useRef(encounter.id);
@@ -3971,6 +3988,18 @@ export default function CombatRoundManagerPanel({
         (participant) => scenarioParticipantOverrides[participant.id] ?? participant,
       ),
     [scenarioParticipantOverrides, scenarioParticipants],
+  );
+  const combatProgressionPresentation = useMemo(
+    () =>
+      projectCombatProgressionPresentation({
+        projection: buildCombatProgressionProjection(roundState),
+        viewer: { kind: "gm" },
+      }),
+    [roundState],
+  );
+  const combatProgressionTrackerIndex = useMemo(
+    () => buildCombatProgressionTrackerIndex(combatProgressionPresentation),
+    [combatProgressionPresentation],
   );
   const phase1Ranks = useMemo(
     () => getCombatRoundInitiativeRanks({ phase: "phase1", state: roundState }),
@@ -3997,12 +4026,12 @@ export default function CombatRoundManagerPanel({
       roundState.participants.map((participant) => [participant.participantId, participant]),
     );
 
-    return getCombatRoundManagerDisplayParticipantIds(roundState)
+    return getCombatRoundManagerDisplayParticipantIds(roundState, combatProgressionPresentation)
       .map((participantId) => participantById.get(participantId))
       .filter((participant): participant is CombatRoundState["participants"][number] =>
         Boolean(participant),
       );
-  }, [roundState]);
+  }, [combatProgressionPresentation, roundState]);
   const combatDistanceRows = useMemo(
     () =>
       buildCombatDistanceTableRows({
@@ -4028,7 +4057,21 @@ export default function CombatRoundManagerPanel({
     [combatDistanceRows, distanceDrafts],
   );
   const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
-  const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
+  const projectedCurrentTasks = getCombatProgressionPresentationTasks(
+    combatProgressionPresentation,
+  ).filter((task) => task.contributesToProgression);
+  const projectedCurrentTask =
+    projectedCurrentTasks.find(
+      (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
+    ) ?? projectedCurrentTasks[0];
+  const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner
+    ? {
+        participantId: projectedCurrentTask.trackerFacet.owner.participantId,
+        step: getCombatRoundStepForCursorStep(projectedCurrentTask.trackerFacet.step),
+      }
+    : combatProgressionPresentation.taskVisibility === "available"
+      ? getCurrentCombatRoundTaskSelection(roundState)
+      : undefined;
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
   const inspector = buildCombatRoundInspector({
     participantId: inspectionSelection.participantId,
@@ -4037,11 +4080,19 @@ export default function CombatRoundManagerPanel({
   });
   const inspectorSelectionIsCurrentProgression =
     selectedRoundIsActive &&
-    isSelectedCombatRoundStepCurrentForGm({
-      participantId: inspector.participant?.participantId,
-      state: roundState,
-      step: inspector.step,
-    });
+    Boolean(
+      combatProgressionPresentation.taskVisibility === "available" &&
+      inspector.participant?.participantId &&
+      (combatProgressionTrackerIndex.byCellKey[
+        buildCombatTrackerCellKey({
+          participantId: inspector.participant.participantId,
+          roundNumber: roundState.roundNumber,
+          step: inspector.step,
+        })
+      ]?.current ||
+        (combatProgressionPresentation.boundary.kind === "declaration" &&
+          inspector.step === "select_actions")),
+    );
   const clearCurrentStepAvailable =
     canClearCombatRoundStep({
       state: roundState,
@@ -5205,12 +5256,13 @@ export default function CombatRoundManagerPanel({
   const inspectorAdjustDistanceExpectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspectorAdjustDistanceExpectedParticipantId,
   );
-  const inspectorAdjustDistanceExpectedScenarioParticipant = inspectorAdjustDistanceExpectedEncounterParticipant
-    ? findScenarioParticipantForEncounterParticipant({
-        encounterParticipant: inspectorAdjustDistanceExpectedEncounterParticipant,
-        scenarioParticipants: effectiveScenarioParticipants,
-      })
-    : undefined;
+  const inspectorAdjustDistanceExpectedScenarioParticipant =
+    inspectorAdjustDistanceExpectedEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: inspectorAdjustDistanceExpectedEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
   useEffect(() => {
     if (!inspectorAdjustDistanceProposal) return;
     setInspectorAdjustDistanceCommittedDistance(
@@ -5345,75 +5397,79 @@ export default function CombatRoundManagerPanel({
       : inspectorAdjustDistanceProposal?.status === "awaiting_gm_adjustment"
         ? "Confirm maneuver adjustment"
         : inspectorAdjustDistanceProposal?.status === "awaiting_rolls"
-          ? inspectorAdjustDistanceProposal.attackerRoll ? "Roll defender Dodge" : "Roll attacker Dodge"
+          ? inspectorAdjustDistanceProposal.attackerRoll
+            ? "Roll defender Dodge"
+            : "Roll attacker Dodge"
           : inspectorAdjustDistanceProposal?.status === "awaiting_review"
             ? "Commit distance adjustment"
-    : inspectorFeintProposal?.status === "awaiting_rolls"
-      ? inspectorFeintProposal.attackerRoll
-        ? "Roll feint resistance"
-        : "Roll feint"
-      : inspectorFeintProposal?.status === "awaiting_review"
-        ? "Commit feint result"
-        : inspectorDoubleAttackDecisionAvailable
-          ? inspectorDoubleAttackDecision === "cancel"
-            ? "Cancel Attack 2"
-            : "Continue Attack 2"
-          : inspectorPhaseInitiativeChoiceSubmitted
-            ? "Phase choice submitted"
-            : inspectorPhaseAttackChoiceIsBackOut
-              ? "Back out of attack"
-              : inspectorCanContinuePhaseAttack
-                ? "Continue attack"
-                : inspectorCombatExperienceActionLabel
-                  ? inspectorCombatExperienceActionLabel
-                  : inspectorPhaseInitiativeCommitLabel
-                    ? inspectorPhaseInitiativeCommitLabel
-                    : inspectorIsInspectionOnly && inspector.step !== "select_actions"
-                      ? "Inspecting step - use Current task to resume"
-                      : inspector.step === "round_summary" &&
-                          !selectedTimelineRoundState.roundEndReview
-                        ? "Preparing round-end review"
-                        : inspector.step === "round_summary" &&
-                            inspectorRoundEndDistanceAction?.kind === "roll"
-                          ? `Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}`
-                          : inspector.step === "round_summary" &&
-                              inspectorRoundEndDistanceAction?.kind === "commit"
-                            ? "Apply distance control"
-                            : inspector.step === "round_summary" &&
-                                inspectorRoundEndReview?.status === "review_ready"
-                              ? inspectorRoundEndReviewHasProposals
-                                ? "Commit participant SU review"
-                                : "Mark SU review complete"
+            : inspectorFeintProposal?.status === "awaiting_rolls"
+              ? inspectorFeintProposal.attackerRoll
+                ? "Roll feint resistance"
+                : "Roll feint"
+              : inspectorFeintProposal?.status === "awaiting_review"
+                ? "Commit feint result"
+                : inspectorDoubleAttackDecisionAvailable
+                  ? inspectorDoubleAttackDecision === "cancel"
+                    ? "Cancel Attack 2"
+                    : "Continue Attack 2"
+                  : inspectorPhaseInitiativeChoiceSubmitted
+                    ? "Phase choice submitted"
+                    : inspectorPhaseAttackChoiceIsBackOut
+                      ? "Back out of attack"
+                      : inspectorCanContinuePhaseAttack
+                        ? "Continue attack"
+                        : inspectorCombatExperienceActionLabel
+                          ? inspectorCombatExperienceActionLabel
+                          : inspectorPhaseInitiativeCommitLabel
+                            ? inspectorPhaseInitiativeCommitLabel
+                            : inspectorIsInspectionOnly && inspector.step !== "select_actions"
+                              ? "Inspecting step - use Current task to resume"
                               : inspector.step === "round_summary" &&
-                                  inspectorRoundEndReview?.status === "health_roll_pending"
-                                ? "Roll health check"
+                                  !selectedTimelineRoundState.roundEndReview
+                                ? "Preparing round-end review"
                                 : inspector.step === "round_summary" &&
-                                    inspectorRoundEndReview?.status === "complete"
-                                  ? "Round-end review complete"
-                                  : inspectorDamageCommitted
-                                    ? "Phase damage committed"
-                                    : inspectorDamageSubstate === "critical_pending"
-                                      ? `Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}`
-                                      : inspectorDamageSubstate === "location_pending"
-                                        ? `Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}`
-                                        : inspectorDamageSubstate === "location_rolled"
-                                          ? "Prepare damage review"
-                                          : inspectorDamageProposalReady
-                                            ? "Commit phase damage"
-                                            : inspectorCanRollParry
-                                              ? "Roll parry"
-                                              : inspectorAttackSourceValidationMessage
-                                                ? inspectorAttackSourceValidationMessage
-                                                : inspectorCurrentResolutionPhase &&
-                                                    inspectorActionPhaseHasAttack === false
-                                                  ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-                                                  : getCombatResolutionButtonLabel({
-                                                      hasPhaseAttack: inspectorActionPhaseHasAttack,
-                                                      phase: inspectorCurrentResolutionPhase,
-                                                      step: inspector.step,
-                                                      substep:
-                                                        inspectorActionPhaseResolutionStatus?.substep,
-                                                    });
+                                    inspectorRoundEndDistanceAction?.kind === "roll"
+                                  ? `Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}`
+                                  : inspector.step === "round_summary" &&
+                                      inspectorRoundEndDistanceAction?.kind === "commit"
+                                    ? "Apply distance control"
+                                    : inspector.step === "round_summary" &&
+                                        inspectorRoundEndReview?.status === "review_ready"
+                                      ? inspectorRoundEndReviewHasProposals
+                                        ? "Commit participant SU review"
+                                        : "Mark SU review complete"
+                                      : inspector.step === "round_summary" &&
+                                          inspectorRoundEndReview?.status === "health_roll_pending"
+                                        ? "Roll health check"
+                                        : inspector.step === "round_summary" &&
+                                            inspectorRoundEndReview?.status === "complete"
+                                          ? "Round-end review complete"
+                                          : inspectorDamageCommitted
+                                            ? "Phase damage committed"
+                                            : inspectorDamageSubstate === "critical_pending"
+                                              ? `Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}`
+                                              : inspectorDamageSubstate === "location_pending"
+                                                ? `Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}`
+                                                : inspectorDamageSubstate === "location_rolled"
+                                                  ? "Prepare damage review"
+                                                  : inspectorDamageProposalReady
+                                                    ? "Commit phase damage"
+                                                    : inspectorCanRollParry
+                                                      ? "Roll parry"
+                                                      : inspectorAttackSourceValidationMessage
+                                                        ? inspectorAttackSourceValidationMessage
+                                                        : inspectorCurrentResolutionPhase &&
+                                                            inspectorActionPhaseHasAttack === false
+                                                          ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+                                                          : getCombatResolutionButtonLabel({
+                                                              hasPhaseAttack:
+                                                                inspectorActionPhaseHasAttack,
+                                                              phase:
+                                                                inspectorCurrentResolutionPhase,
+                                                              step: inspector.step,
+                                                              substep:
+                                                                inspectorActionPhaseResolutionStatus?.substep,
+                                                            });
   const inspectorCurrentActionOutcomeKey = inspectorSkipActionOutcomeSelectorAvailable
     ? [
         selectedTimelineRoundState.roundNumber,
@@ -5437,21 +5493,21 @@ export default function CombatRoundManagerPanel({
           inspectorAdjustDistanceProposal.status === "awaiting_rolls") &&
         !inspectorAdjustDistanceExpectedScenarioParticipant
       : inspectorFeintProposal
-      ? inspectorFeintProposal.status === "awaiting_rolls" &&
-        !inspectorFeintExpectedScenarioParticipant
-      : inspectorDoubleAttackDecisionAvailable
-        ? false
-        : inspectorPhaseAttackChoiceIsBackOut
-          ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
-          : (inspectorIsInspectionOnly &&
-              inspector.step !== "select_actions" &&
-              !inspectorCombatExperienceRequired &&
-              !inspectorRoundEndDistanceAction) ||
-            inspectorPhaseInitiativeChoiceSubmitted ||
-            Boolean(inspectorActionValidationMessage) ||
-            inspectorSelectedAttackAlreadyRolled ||
-            inspectorDamageCommitted ||
-            Boolean(inspectorSnapshot));
+        ? inspectorFeintProposal.status === "awaiting_rolls" &&
+          !inspectorFeintExpectedScenarioParticipant
+        : inspectorDoubleAttackDecisionAvailable
+          ? false
+          : inspectorPhaseAttackChoiceIsBackOut
+            ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
+            : (inspectorIsInspectionOnly &&
+                inspector.step !== "select_actions" &&
+                !inspectorCombatExperienceRequired &&
+                !inspectorRoundEndDistanceAction) ||
+              inspectorPhaseInitiativeChoiceSubmitted ||
+              Boolean(inspectorActionValidationMessage) ||
+              inspectorSelectedAttackAlreadyRolled ||
+              inspectorDamageCommitted ||
+              Boolean(inspectorSnapshot));
   const inspectorEffectiveActionButtonLabel = inspectorSkipActionSelected
     ? "Skip current action"
     : inspectorActionButtonLabel;
@@ -5710,12 +5766,20 @@ export default function CombatRoundManagerPanel({
     <div style={{ display: "grid", gap: "0.5rem" }}>
       <strong>Adjustment maneuver</strong>
       <div>
-        Distance {inspectorAdjustDistanceProposal.currentDistance} → {inspectorAdjustDistanceProposal.requestedDistance} · {inspectorAdjustDistanceProposal.direction}
+        Distance {inspectorAdjustDistanceProposal.currentDistance} →{" "}
+        {inspectorAdjustDistanceProposal.requestedDistance} ·{" "}
+        {inspectorAdjustDistanceProposal.direction}
       </div>
       {inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ? (
         <label style={compactFieldLabelStyle}>
           <span>Defender response</span>
-          <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceResponse(event.target.value as "allow" | "oppose")} value={inspectorAdjustDistanceResponse}>
+          <select
+            disabled={saving}
+            onChange={(event) =>
+              setInspectorAdjustDistanceResponse(event.target.value as "allow" | "oppose")
+            }
+            value={inspectorAdjustDistanceResponse}
+          >
             <option value="oppose">Oppose</option>
             <option value="allow">Allow adjustment</option>
           </select>
@@ -5738,24 +5802,48 @@ export default function CombatRoundManagerPanel({
               ? "Defender allowed the adjustment."
               : `Dodge: ${inspectorAdjustDistanceProposal.attackerRoll?.finalTotal} vs ${inspectorAdjustDistanceProposal.defenderRoll?.finalTotal} · ${inspectorAdjustDistanceProposal.standardOutcome}`}
           </div>
-          <div>Standard proposal: distance {inspectorAdjustDistanceProposal.standardProposedDistance}</div>
+          <div>
+            Standard proposal: distance {inspectorAdjustDistanceProposal.standardProposedDistance}
+          </div>
           <label style={compactFieldLabelStyle}>
             <span>Accepted outcome</span>
-            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceOutcome(event.target.value as "successful" | "unsuccessful" | "allowed")} value={inspectorAdjustDistanceOutcome}>
+            <select
+              disabled={saving}
+              onChange={(event) =>
+                setInspectorAdjustDistanceOutcome(
+                  event.target.value as "successful" | "unsuccessful" | "allowed",
+                )
+              }
+              value={inspectorAdjustDistanceOutcome}
+            >
               <option value="successful">Successful</option>
               <option value="unsuccessful">Unsuccessful</option>
-              {inspectorAdjustDistanceProposal.defenderResponse === "allow" ? <option value="allowed">Allowed</option> : null}
+              {inspectorAdjustDistanceProposal.defenderResponse === "allow" ? (
+                <option value="allowed">Allowed</option>
+              ) : null}
             </select>
           </label>
           <label style={compactFieldLabelStyle}>
             <span>Committed distance</span>
-            <select disabled={saving} onChange={(event) => setInspectorAdjustDistanceCommittedDistance(event.target.value)} value={inspectorAdjustDistanceCommittedDistance}>
-              {[0,1,2,3,4,5,6,7,8].map((distance) => <option key={distance} value={distance}>{distance}</option>)}
+            <select
+              disabled={saving}
+              onChange={(event) => setInspectorAdjustDistanceCommittedDistance(event.target.value)}
+              value={inspectorAdjustDistanceCommittedDistance}
+            >
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                <option key={distance} value={distance}>
+                  {distance}
+                </option>
+              ))}
             </select>
           </label>
           <label style={compactFieldLabelStyle}>
             <span>GM note</span>
-            <input disabled={saving} onChange={(event) => setInspectorAdjustDistanceReviewNote(event.target.value)} value={inspectorAdjustDistanceReviewNote} />
+            <input
+              disabled={saving}
+              onChange={(event) => setInspectorAdjustDistanceReviewNote(event.target.value)}
+              value={inspectorAdjustDistanceReviewNote}
+            />
           </label>
         </>
       ) : null}
@@ -5899,14 +5987,17 @@ export default function CombatRoundManagerPanel({
                       interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
                       rankLabel:
                         formatSnapshotInitiativeRankLabel(inspectorSnapshot?.initiativeRank) ??
-                        formatInitiativeRankLabel({
-                          participantId: inspector.participant?.participantId,
-                          ranks:
-                            inspectorCurrentInitiativePhase === "phase2"
-                              ? phase2Ranks
-                              : phase1Ranks,
-                          value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
-                        }),
+                        (combatProgressionPresentation.executionOrder?.phase ===
+                        inspectorCurrentInitiativePhase
+                          ? formatInitiativeRankLabel({
+                              participantId: inspector.participant?.participantId,
+                              ranks:
+                                inspectorCurrentInitiativePhase === "phase2"
+                                  ? phase2Ranks
+                                  : phase1Ranks,
+                              value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
+                            })
+                          : undefined),
                     }
                   : inspectorFallbackCombatExperienceResult
                     ? {
@@ -7240,7 +7331,11 @@ export default function CombatRoundManagerPanel({
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
     } catch (caughtError) {
-      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to advance the distance adjustment.");
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to advance the distance adjustment.",
+      );
     } finally {
       setSaving(false);
     }
@@ -8366,6 +8461,45 @@ export default function CombatRoundManagerPanel({
   const trackerCellFacts: CombatTrackerCellFacts[] = [];
 
   for (const timelineRoundState of timelineRoundStates) {
+    const snapshotByCellKey = new Map(
+      timelineRoundState.stepSnapshots.map((snapshot) => [
+        buildCombatTrackerCellKey({
+          participantId: snapshot.participantId,
+          roundNumber: snapshot.roundNumber,
+          step: snapshot.step,
+        }),
+        snapshot,
+      ]),
+    );
+    const feintByAttackerId = new Map(
+      timelineRoundState.feintProposals
+        .filter((proposal) => proposal.roundNumber === timelineRoundState.roundNumber)
+        .map((proposal) => [proposal.attackerParticipantId, proposal]),
+    );
+    const adjustDistanceByAttackerId = new Map(
+      timelineRoundState.adjustDistanceProposals
+        .filter((proposal) => proposal.roundNumber === timelineRoundState.roundNumber)
+        .map((proposal) => [proposal.attackerParticipantId, proposal]),
+    );
+    const outgoingAttackByParticipantPhase = new Map<string, CombatRoundAttackRollResult>();
+    const incomingAttackByParticipantPhase = new Map<string, CombatRoundAttackRollResult>();
+    for (const participant of timelineRoundState.participants) {
+      for (const phase of ["phase1", "phase2"] as const) {
+        const key = `${participant.participantId}:${phase}`;
+        const outgoing = getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: participant.participantId,
+          phase,
+          state: timelineRoundState,
+        });
+        const incoming = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+          participantId: participant.participantId,
+          phase,
+          state: timelineRoundState,
+        });
+        if (outgoing) outgoingAttackByParticipantPhase.set(key, outgoing);
+        if (incoming) incomingAttackByParticipantPhase.set(key, incoming);
+      }
+    }
     for (const timelineParticipant of displayParticipants) {
       const roundParticipant =
         timelineRoundState.participants.find(
@@ -8379,37 +8513,6 @@ export default function CombatRoundManagerPanel({
           status: roundParticipant.stepStatuses[step] ?? "pending",
           step,
         });
-        const phase = getCombatAttackPhaseForStep(step);
-        const phaseActionOpen = phase
-          ? timelineRoundState.roundNumber !== roundState.roundNumber ||
-            isCombatPhaseActionOpen({ phase, state: timelineRoundState })
-          : undefined;
-        const phaseCombatExperienceMarkerRequired =
-          selectedRoundIsActive &&
-          timelineRoundState.roundNumber === roundState.roundNumber &&
-          Boolean(
-            phase &&
-            getCombatRoundPhaseCombatExperienceRequirement({
-              participantId: timelineParticipant.participantId,
-              phase,
-              state: roundState,
-              visibility: encounter.roleplayState?.visibility,
-            }),
-          );
-        const pendingHealthCheckRollCount =
-          step === "round_summary"
-            ? getCombatRoundEndHealthCheckPendingRollCount({
-                participantId: timelineParticipant.participantId,
-                state: timelineRoundState,
-              })
-            : 0;
-        const pendingDistanceControlRollCount =
-          step === "round_summary"
-            ? getCombatRoundEndDistanceControlPendingRollCount({
-                participantId: timelineParticipant.participantId,
-                state: timelineRoundState,
-              })
-            : 0;
         const initiative =
           step === "initiative_phase_1"
             ? roundParticipant.initiatives.phase1
@@ -8417,29 +8520,26 @@ export default function CombatRoundManagerPanel({
               ? roundParticipant.initiatives.phase2
               : undefined;
         const trackerAttackPhase = getCombatAttackPhaseForStep(step);
-        const trackerSnapshot = getCombatRoundStepSnapshot({
-          participantId: timelineParticipant.participantId,
-          roundNumber: timelineRoundState.roundNumber,
-          state: timelineRoundState,
-          step,
-        });
+        const trackerSnapshot = snapshotByCellKey.get(
+          buildCombatTrackerCellKey({
+            participantId: timelineParticipant.participantId,
+            roundNumber: timelineRoundState.roundNumber,
+            step,
+          }),
+        );
         const trackerCanonicalAttackResult = trackerAttackPhase
-          ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-              participantId: timelineParticipant.participantId,
-              phase: trackerAttackPhase,
-              state: timelineRoundState,
-            })
+          ? outgoingAttackByParticipantPhase.get(
+              `${timelineParticipant.participantId}:${trackerAttackPhase}`,
+            )
           : undefined;
         const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult;
         const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
         const trackerResolutionAttackResult = trackerSnapshot
           ? trackerSnapshot.attackResult
           : trackerResolutionPhase
-            ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-                participantId: timelineParticipant.participantId,
-                phase: trackerResolutionPhase,
-                state: timelineRoundState,
-              })
+            ? incomingAttackByParticipantPhase.get(
+                `${timelineParticipant.participantId}:${trackerResolutionPhase}`,
+              )
             : undefined;
         const trackerPhaseResolutionResult = trackerSnapshot
           ? trackerSnapshot.phaseResolutionResult
@@ -8451,11 +8551,7 @@ export default function CombatRoundManagerPanel({
             : undefined;
         const trackerFeintProposal =
           step === "phase_1_actions"
-            ? timelineRoundState.feintProposals.find(
-                (proposal) =>
-                  proposal.attackerParticipantId === timelineParticipant.participantId &&
-                  proposal.roundNumber === timelineRoundState.roundNumber,
-              )
+            ? feintByAttackerId.get(timelineParticipant.participantId)
             : undefined;
         const trackerFeintModifier = trackerFeintProposal?.review
           ? (trackerFeintProposal.review.gmDefenderObDbModifier ??
@@ -8463,11 +8559,7 @@ export default function CombatRoundManagerPanel({
           : undefined;
         const trackerAdjustDistanceProposal =
           step === "phase_1_actions"
-            ? timelineRoundState.adjustDistanceProposals.find(
-                (proposal) =>
-                  proposal.attackerParticipantId === timelineParticipant.participantId &&
-                  proposal.roundNumber === timelineRoundState.roundNumber,
-              )
+            ? adjustDistanceByAttackerId.get(timelineParticipant.participantId)
             : undefined;
         trackerCellFacts.push({
           adjustDistance: trackerAdjustDistanceProposal
@@ -8476,17 +8568,15 @@ export default function CombatRoundManagerPanel({
                 currentDistance: trackerAdjustDistanceProposal.currentDistance,
                 defenderLabel: timelineRoundState.participants.find(
                   (participant) =>
-                    participant.participantId === trackerAdjustDistanceProposal.defenderParticipantId,
+                    participant.participantId ===
+                    trackerAdjustDistanceProposal.defenderParticipantId,
                 )?.label,
                 requestedDistance: trackerAdjustDistanceProposal.requestedDistance,
-                status: trackerAdjustDistanceProposal.status === "committed" ? "committed" : "pending",
+                status:
+                  trackerAdjustDistanceProposal.status === "committed" ? "committed" : "pending",
               }
             : undefined,
           actionResultStatus: trackerSnapshot?.actionResultStatus,
-          activeTask:
-            timelineRoundState.roundNumber === roundState.roundNumber &&
-            currentTaskSelection?.participantId === timelineParticipant.participantId &&
-            currentTaskSelection.step === step,
           attackAttackerLabel: trackerAttackResult
             ? timelineRoundState.participants.find(
                 (participant) =>
@@ -8501,9 +8591,6 @@ export default function CombatRoundManagerPanel({
             : undefined,
           attackResult: trackerAttackResult,
           commands: timelineRoundState.commands,
-          current:
-            timelineRoundState.roundNumber === roundState.roundNumber &&
-            roundState.currentStep === step,
           declarationSubmittedBy: roundParticipant.declaration?.submittedBy,
           feint: trackerFeintProposal
             ? {
@@ -8525,15 +8612,17 @@ export default function CombatRoundManagerPanel({
           initiativeTotal: getCombatRoundInitiativeTotal(initiative),
           participantId: timelineParticipant.participantId,
           participantLabel: timelineParticipant.label,
-          pendingDistanceControlCommitCount:
-            step === "round_summary"
-              ? getRoundEndDistanceCommitPendingCount(timelineRoundState)
-              : 0,
-          pendingDistanceControlRollCount,
-          pendingHealthCheckRollCount,
-          phaseActionOpen,
-          phaseCombatExperienceMarkerRequired,
           phaseResolutionResult: trackerPhaseResolutionResult,
+          progression:
+            timelineRoundState.roundNumber === roundState.roundNumber
+              ? combatProgressionTrackerIndex.byCellKey[
+                  buildCombatTrackerCellKey({
+                    participantId: timelineParticipant.participantId,
+                    roundNumber: timelineRoundState.roundNumber,
+                    step,
+                  })
+                ]
+              : undefined,
           roundNumber: timelineRoundState.roundNumber,
           selected:
             timelineRoundState.roundNumber === selectedRoundNumber &&
@@ -8938,17 +9027,28 @@ export default function CombatRoundManagerPanel({
                               <select
                                 disabled={saving || inspectorIsHistorical}
                                 onChange={(event) => {
-                                  const targetParticipantId = phaseModel.phaseContext.targetParticipantId;
+                                  const targetParticipantId =
+                                    phaseModel.phaseContext.targetParticipantId;
                                   if (!targetParticipantId) return;
                                   updateInspectorDraft({
                                     movementIntent: {
                                       ...inspectorDraft.movementIntent,
                                       distancePreferences: [
                                         ...inspectorDraft.movementIntent.distancePreferences.filter(
-                                          (entry) => entry.targetParticipantId !== targetParticipantId,
+                                          (entry) =>
+                                            entry.targetParticipantId !== targetParticipantId,
                                         ),
                                         {
-                                          desiredDistance: Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+                                          desiredDistance: Number(event.target.value) as
+                                            | 0
+                                            | 1
+                                            | 2
+                                            | 3
+                                            | 4
+                                            | 5
+                                            | 6
+                                            | 7
+                                            | 8,
                                           source: "gm_proxy",
                                           targetParticipantId,
                                         },
@@ -8958,15 +9058,22 @@ export default function CombatRoundManagerPanel({
                                 }}
                                 value={
                                   inspectorDraft.movementIntent.distancePreferences.find(
-                                    (entry) => entry.targetParticipantId === phaseModel.phaseContext.targetParticipantId,
+                                    (entry) =>
+                                      entry.targetParticipantId ===
+                                      phaseModel.phaseContext.targetParticipantId,
                                   )?.desiredDistance ??
                                   inspectorDistancePreferenceOptions.find(
-                                    (option) => option.id === phaseModel.phaseContext.targetParticipantId,
+                                    (option) =>
+                                      option.id === phaseModel.phaseContext.targetParticipantId,
                                   )?.defaultDistance ??
                                   2
                                 }
                               >
-                                {[0,1,2,3,4,5,6,7,8].map((distance) => <option key={distance} value={distance}>{distance}</option>)}
+                                {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                                  <option key={distance} value={distance}>
+                                    {distance}
+                                  </option>
+                                ))}
                               </select>
                             </label>
                             <div>Skill: Dodge</div>
@@ -9057,7 +9164,7 @@ export default function CombatRoundManagerPanel({
                                   phaseContexts:
                                     (inspectorDisplayDraft.actionId === "feint_attack" ||
                                       inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                      phaseKey === "phase2"
+                                    phaseKey === "phase2"
                                       ? {
                                           phase1: {
                                             ...inspectorDraft.phaseContexts.phase1,
@@ -9074,7 +9181,7 @@ export default function CombatRoundManagerPanel({
                               readOnly={
                                 (inspectorDisplayDraft.actionId === "feint_attack" ||
                                   inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                  phaseKey === "phase2"
+                                phaseKey === "phase2"
                               }
                               targetOptions={
                                 historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
@@ -9400,58 +9507,59 @@ export default function CombatRoundManagerPanel({
                         void (inspectorAdjustDistanceProposal
                           ? advanceInspectorAdjustDistance()
                           : inspectorFeintProposal?.status === "awaiting_rolls"
-                          ? rollInspectorFeint()
-                          : inspectorFeintProposal?.status === "awaiting_review"
-                            ? commitInspectorFeint()
-                            : inspectorDoubleAttackDecisionAvailable
-                              ? decideInspectorDoubleAttackPhase2()
-                              : inspectorPhaseAttackChoiceIsBackOut
-                                ? backOutInspectorPhaseAttack()
-                                : inspectorSkipActionSelected
-                                  ? skipInspectorCurrentPhaseAction()
-                                  : inspectorCombatExperienceDifficultyCommandPending
-                                    ? saveCombatExperienceDifficultyDraft()
-                                    : inspectorCombatExperienceRequired
-                                      ? rollInspectorCombatExperience()
-                                      : inspectorCanContinuePhaseAttack
-                                        ? continueInspectorPhaseAttack()
-                                        : inspector.step === "round_summary" &&
-                                            inspectorRoundEndDistanceAction?.kind === "roll"
-                                          ? rollRoundEndDistanceControlFromPrimaryAction()
+                            ? rollInspectorFeint()
+                            : inspectorFeintProposal?.status === "awaiting_review"
+                              ? commitInspectorFeint()
+                              : inspectorDoubleAttackDecisionAvailable
+                                ? decideInspectorDoubleAttackPhase2()
+                                : inspectorPhaseAttackChoiceIsBackOut
+                                  ? backOutInspectorPhaseAttack()
+                                  : inspectorSkipActionSelected
+                                    ? skipInspectorCurrentPhaseAction()
+                                    : inspectorCombatExperienceDifficultyCommandPending
+                                      ? saveCombatExperienceDifficultyDraft()
+                                      : inspectorCombatExperienceRequired
+                                        ? rollInspectorCombatExperience()
+                                        : inspectorCanContinuePhaseAttack
+                                          ? continueInspectorPhaseAttack()
                                           : inspector.step === "round_summary" &&
-                                              inspectorRoundEndDistanceAction?.kind === "commit"
-                                            ? commitRoundEndDistanceControl(
-                                                inspectorRoundEndDistanceAction.proposal.id,
-                                              )
-                                            : inspector.step === "round_summary"
-                                              ? advanceInspectorRoundEndReview()
-                                              : inspectorPhaseInitiativeCommitLabel
-                                                ? commitCurrentStep()
-                                                : inspectorCurrentStepIsInitiative
-                                                  ? rollInspectorInitiative()
-                                                  : inspectorCanRollParry
-                                                    ? rollInspectorParry()
-                                                    : inspectorCurrentResolutionPhase &&
-                                                        (inspectorActionPhaseHasAttack === false ||
-                                                          inspectorActionPhaseResolutionStatus?.substep ===
-                                                            "effects")
-                                                      ? completeInspectorPhaseResolution(
-                                                          inspectorCurrentResolutionPhase,
-                                                        )
+                                              inspectorRoundEndDistanceAction?.kind === "roll"
+                                            ? rollRoundEndDistanceControlFromPrimaryAction()
+                                            : inspector.step === "round_summary" &&
+                                                inspectorRoundEndDistanceAction?.kind === "commit"
+                                              ? commitRoundEndDistanceControl(
+                                                  inspectorRoundEndDistanceAction.proposal.id,
+                                                )
+                                              : inspector.step === "round_summary"
+                                                ? advanceInspectorRoundEndReview()
+                                                : inspectorPhaseInitiativeCommitLabel
+                                                  ? commitCurrentStep()
+                                                  : inspectorCurrentStepIsInitiative
+                                                    ? rollInspectorInitiative()
+                                                    : inspectorCanRollParry
+                                                      ? rollInspectorParry()
                                                       : inspectorCurrentResolutionPhase &&
-                                                          (inspectorActionPhaseResolutionStatus?.substep ===
-                                                            "parry" ||
+                                                          (inspectorActionPhaseHasAttack ===
+                                                            false ||
                                                             inspectorActionPhaseResolutionStatus?.substep ===
-                                                              "damage")
-                                                        ? advanceInspectorPhaseResolutionSubstep(
+                                                              "effects")
+                                                        ? completeInspectorPhaseResolution(
                                                             inspectorCurrentResolutionPhase,
                                                           )
-                                                        : inspectorCanRollPhaseAttack &&
-                                                            inspectorCurrentAttackPhase
-                                                          ? rollInspectorPhaseAttack(
-                                                              inspectorCurrentAttackPhase,
+                                                        : inspectorCurrentResolutionPhase &&
+                                                            (inspectorActionPhaseResolutionStatus?.substep ===
+                                                              "parry" ||
+                                                              inspectorActionPhaseResolutionStatus?.substep ===
+                                                                "damage")
+                                                          ? advanceInspectorPhaseResolutionSubstep(
+                                                              inspectorCurrentResolutionPhase,
                                                             )
-                                                          : saveInspectorDeclaration())
+                                                          : inspectorCanRollPhaseAttack &&
+                                                              inspectorCurrentAttackPhase
+                                                            ? rollInspectorPhaseAttack(
+                                                                inspectorCurrentAttackPhase,
+                                                              )
+                                                            : saveInspectorDeclaration())
                       }
                       preActionControls={inspectorPreActionControls}
                       saving={saving}

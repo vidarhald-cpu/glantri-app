@@ -12,6 +12,7 @@ import {
 import {
   authorizeCombatProgressionTask,
   buildCombatProgressionProjection,
+  projectCombatProgressionPresentation,
   type CombatProgressionBoundaryKind,
 } from "./combatProgressionProjection";
 
@@ -734,5 +735,90 @@ describe("authorizeCombatProgressionTask", () => {
       }),
     ).toMatchObject({ code: "task_not_found", ok: false });
     expect(JSON.stringify(projection)).toBe(before);
+  });
+
+  it("publishes initiative execution order only after the GM commit boundary closes", () => {
+    const participantOverrides = [6, 4].map((total) => ({
+      initiatives: {
+        phase1: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [total],
+          rollTotal: total,
+          total,
+        },
+      },
+    }));
+    const commitPending = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "i1",
+        currentStep: "initiative_phase_1",
+        participantOverrides,
+      }),
+    );
+    const committed = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+        participantOverrides,
+      }),
+    );
+
+    expect(commitPending.executionOrder).toBeUndefined();
+    expect(committed.executionOrder).toEqual({
+      participantIds: ["hero", "guard"],
+      phase: "phase1",
+    });
+  });
+
+  it("builds player-safe task presentation with semantic parity and no private internals", () => {
+    const projection = buildCombatProgressionProjection(
+      state({ cursorParticipantId: "hero", cursorStep: "DE" }),
+    );
+    const gm = projectCombatProgressionPresentation({ projection, viewer: { kind: "gm" } });
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["hero"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero"]),
+      },
+    });
+    const gmHeroTask = gm.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.owner?.kind === "combatant" && task.owner.participantId === "hero");
+    const playerTasks = playerView.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(playerTasks).toHaveLength(1);
+    expect(playerTasks[0]).toMatchObject({
+      id: gmHeroTask?.id,
+      kind: "submit_declaration",
+      owner: { participantId: "hero" },
+      state: gmHeroTask?.state,
+      trackerFacet: { owner: { participantId: "hero" }, step: "DE" },
+    });
+    const serialized = JSON.stringify(playerView);
+    expect(serialized).not.toContain("guard");
+    expect(serialized).not.toContain("expectedCommand");
+    expect(serialized).not.toContain("blocker");
+    expect(serialized).not.toContain("diagnostic");
+    expect(serialized).not.toContain("proposalId");
+  });
+
+  it("fails closed for relevant projection contradictions without exposing diagnostics", () => {
+    const projection = buildCombatProgressionProjection(
+      state({ cursorParticipantId: "hero", cursorStep: "A1", currentStep: "select_actions" }),
+    );
+    const presentation = projectCombatProgressionPresentation({
+      projection,
+      viewer: { kind: "gm" },
+    });
+
+    expect(presentation.taskVisibility).toBe("conflicted");
+    expect(JSON.stringify(presentation)).not.toContain("cursor_disagrees_with_process");
   });
 });

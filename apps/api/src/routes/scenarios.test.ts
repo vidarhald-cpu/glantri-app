@@ -2392,6 +2392,10 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().history.sourceUpdatedAt).toBe(encounter.updatedAt);
+    expect(response.json().history.progression).toMatchObject({
+      boundary: { roundNumber: 1 },
+      roundNumber: 1,
+    });
     expect(response.json().history.rows).toEqual([
       { displayName: "Player hero", participantId: "encounter-participant-1" },
       { displayName: "Visible guard", participantId: "encounter-participant-2" },
@@ -2406,6 +2410,7 @@ describe("scenarios route contract", () => {
     expect(serialized).not.toContain("secret override");
     expect(serialized).not.toContain("rollD20");
     expect(serialized).not.toContain("encounter-participant-hidden");
+    expect(serialized).not.toContain("diagnostics");
     expect(response.json()).not.toHaveProperty("encounter");
     expect(encounterResponse.json().encounter.combatRoundState).toMatchObject({
       events: [],
@@ -2465,6 +2470,8 @@ describe("scenarios route contract", () => {
       gmReview: { privateNote: "GM fact" },
       privateCalculation: { rollD20: 18 },
     });
+    expect(response.json().history.progression).toBeDefined();
+    expect(JSON.stringify(response.json().history.progression)).not.toContain("diagnostics");
   });
 
   it("lets a GM request the selected participant's player-safe history perspective", async () => {
@@ -2549,6 +2556,15 @@ describe("scenarios route contract", () => {
     });
     expect(JSON.stringify(response.json())).not.toContain("GM only");
     expect(JSON.stringify(response.json())).not.toContain("rollD20");
+    expect(response.json().history.progression).toBeDefined();
+    const progressionTasks = response
+      .json()
+      .history.progression.processes.flatMap((process: { stages: Array<{ tasks: unknown[] }> }) =>
+        process.stages.flatMap((stage) => stage.tasks),
+      );
+    expect(progressionTasks).not.toContainEqual(
+      expect.objectContaining({ owner: expect.objectContaining({ kind: "gm" }) }),
+    );
   });
 
   it("filters scenario participants for player workspace access", async () => {

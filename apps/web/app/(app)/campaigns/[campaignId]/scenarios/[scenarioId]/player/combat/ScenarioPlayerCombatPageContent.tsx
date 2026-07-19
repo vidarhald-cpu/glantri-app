@@ -41,6 +41,7 @@ import {
   getCombatRoundInitiativeTotal,
   getMergedCombatDbParryModifierTotal,
   getCombatRoundResolutionPhaseForStep,
+  getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
@@ -48,7 +49,6 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
-  isCombatRoundPhaseInitiativeComplete,
   lookupCombatCriticalModifier,
   validateCombatDeclarationTargets,
   type EncounterSession,
@@ -66,6 +66,7 @@ import {
   buildProjectedCombatTrackerModel,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
+  getCombatProgressionPresentationTasks,
   isCombatViewRevisionAtLeast,
   isCombatViewRevisionUnchanged,
   PlayerCombatHistoryInspector,
@@ -1141,7 +1142,9 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("");
   const [feintMethod, setFeintMethod] = useState<"movement" | "weapon">("movement");
-  const [adjustDistanceResponse, setAdjustDistanceResponse] = useState<"allow" | "oppose">("oppose");
+  const [adjustDistanceResponse, setAdjustDistanceResponse] = useState<"allow" | "oppose">(
+    "oppose",
+  );
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
@@ -1489,27 +1492,15 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined,
     [combatRoundState, selectedEncounterParticipant],
   );
-  const playerCombatCurrentTask = useMemo<CombatHistoryInspectionSelection | undefined>(
-    () =>
-      combatRoundState && selectedRoundParticipant
-        ? {
-            participantId: selectedRoundParticipant.participantId,
-            roundNumber: combatRoundState.roundNumber,
-            step: combatRoundState.currentStep,
-          }
-        : undefined,
-    [combatRoundState, selectedRoundParticipant],
-  );
   const playerCombatTrackerModel = useMemo(
     () =>
       combatHistory
         ? buildProjectedCombatTrackerModel({
-            currentTask: playerCombatCurrentTask,
             history: combatHistory,
             selected: historyInspection,
           })
         : undefined,
-    [combatHistory, historyInspection, playerCombatCurrentTask],
+    [combatHistory, historyInspection],
   );
   const inspectedHistoryRound = useMemo(
     () =>
@@ -1611,8 +1602,23 @@ export default function ScenarioPlayerCombatPageContent({
     selectedParticipantStoredDeclarationThisRound &&
     selectedStoredDeclarationTargetValidation?.valid,
   );
-  const declarationStepOpen =
-    !combatRoundState || combatRoundState.currentStep === "select_actions";
+  const selectedProgressionTasks = getCombatProgressionPresentationTasks(
+    combatHistory?.progression,
+  ).filter(
+    (task) =>
+      task.owner?.kind === "combatant" &&
+      task.owner.participantId === selectedRoundParticipant?.participantId &&
+      task.contributesToProgression,
+  );
+  const selectedDeclarationProgressionTask = selectedProgressionTasks.find(
+    (task) => task.kind === "submit_declaration",
+  );
+  const declarationStepOpen = combatHistory?.progression
+    ? Boolean(selectedDeclarationProgressionTask) ||
+      (isGameMaster &&
+        combatHistory.progression.taskVisibility === "available" &&
+        combatHistory.progression.boundary.kind === "declaration")
+    : !combatRoundState || combatRoundState.currentStep === "select_actions";
 
   useEffect(() => {
     if (!selectedParticipant) {
@@ -1878,45 +1884,64 @@ export default function ScenarioPlayerCombatPageContent({
     status: controlledEquipmentStatus,
   });
 
-  const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
-  const currentRollAction =
+  const currentCombatStep = selectedProgressionTasks[0]
+    ? getCombatRoundStepForCursorStep(selectedProgressionTasks[0].trackerFacet.step)
+    : (combatRoundState?.currentStep ?? "select_actions");
+  const projectedRollTask = selectedProgressionTasks.find((task) =>
+    ["attack", "critical", "hit_location", "parry"].includes(task.kind),
+  );
+  const domainCurrentRollAction =
     combatRoundState && selectedRoundParticipant
       ? getPlayerCombatCurrentRollAction({
           participantId: selectedRoundParticipant.participantId,
           state: combatRoundState,
         })
       : undefined;
-  const selectedFeintProposal = combatRoundState?.feintProposals.find((proposal) => {
-    if (
-      !selectedRoundParticipant ||
-      proposal.status !== "awaiting_rolls" ||
-      combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
-      combatRoundState.phaseResolutionCursor.substep !== "feint" ||
-      combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
-    ) {
-      return false;
-    }
-    const expectedParticipantId = proposal.attackerRollRecorded
-      ? proposal.defenderParticipantId
-      : proposal.attackerParticipantId;
-    return expectedParticipantId === selectedRoundParticipant.participantId;
-  });
-  const selectedAdjustDistanceProposal = combatRoundState?.adjustDistanceProposals.find((proposal) => {
-    if (
-      !selectedRoundParticipant ||
-      combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
-      combatRoundState.phaseResolutionCursor.substep !== "adjust_distance" ||
-      combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
-    ) return false;
-    const expectedParticipantId = proposal.status === "awaiting_defender_response"
-      ? proposal.defenderParticipantId
-      : proposal.status === "awaiting_rolls"
-        ? proposal.attackerRollRecorded
+  const currentRollAction =
+    domainCurrentRollAction && projectedRollTask?.kind === domainCurrentRollAction.kind
+      ? domainCurrentRollAction
+      : undefined;
+  const projectedFeintTask = selectedProgressionTasks.find((task) => task.kind === "resolve_feint");
+  const projectedAdjustDistanceTask = selectedProgressionTasks.find(
+    (task) => task.kind === "resolve_adjust_distance",
+  );
+  const selectedFeintProposal = projectedFeintTask
+    ? combatRoundState?.feintProposals.find((proposal) => {
+        if (
+          !selectedRoundParticipant ||
+          proposal.status !== "awaiting_rolls" ||
+          combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
+          combatRoundState.phaseResolutionCursor.substep !== "feint" ||
+          combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
+        ) {
+          return false;
+        }
+        const expectedParticipantId = proposal.attackerRollRecorded
           ? proposal.defenderParticipantId
-          : proposal.attackerParticipantId
-        : undefined;
-    return expectedParticipantId === selectedRoundParticipant.participantId;
-  });
+          : proposal.attackerParticipantId;
+        return expectedParticipantId === selectedRoundParticipant.participantId;
+      })
+    : undefined;
+  const selectedAdjustDistanceProposal = projectedAdjustDistanceTask
+    ? combatRoundState?.adjustDistanceProposals.find((proposal) => {
+        if (
+          !selectedRoundParticipant ||
+          combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
+          combatRoundState.phaseResolutionCursor.substep !== "adjust_distance" ||
+          combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
+        )
+          return false;
+        const expectedParticipantId =
+          proposal.status === "awaiting_defender_response"
+            ? proposal.defenderParticipantId
+            : proposal.status === "awaiting_rolls"
+              ? proposal.attackerRollRecorded
+                ? proposal.defenderParticipantId
+                : proposal.attackerParticipantId
+              : undefined;
+        return expectedParticipantId === selectedRoundParticipant.participantId;
+      })
+    : undefined;
   // The task selector above intentionally follows the canonical next roller.
   // The result panel uses the persisted proposal separately so a roller keeps
   // seeing their own Dodge result while the opponent's task is pending.
@@ -1931,12 +1956,14 @@ export default function ScenarioPlayerCombatPageContent({
         : proposal.defenderRollRecorded && Boolean(proposal.defenderRoll)),
   );
   const selectedAdjustDistanceOwnRoll = selectedAdjustDistanceDisplayProposal
-    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId === selectedRoundParticipant?.participantId
+    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId ===
+      selectedRoundParticipant?.participantId
       ? selectedAdjustDistanceDisplayProposal.attackerRoll
       : selectedAdjustDistanceDisplayProposal.defenderRoll
     : undefined;
   const selectedAdjustDistanceOpponentRoll = selectedAdjustDistanceDisplayProposal
-    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId === selectedRoundParticipant?.participantId
+    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId ===
+      selectedRoundParticipant?.participantId
       ? selectedAdjustDistanceDisplayProposal.defenderRoll
       : selectedAdjustDistanceDisplayProposal.attackerRoll
     : undefined;
@@ -2173,8 +2200,16 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       }
       requestPhaseContexts = {
-        phase1: { ...phaseCombatContextDrafts.phase1, ...requestPhaseContexts.phase1, targetParticipantId },
-        phase2: { ...phaseCombatContextDrafts.phase2, ...requestPhaseContexts.phase2, targetParticipantId },
+        phase1: {
+          ...phaseCombatContextDrafts.phase1,
+          ...requestPhaseContexts.phase1,
+          targetParticipantId,
+        },
+        phase2: {
+          ...phaseCombatContextDrafts.phase2,
+          ...requestPhaseContexts.phase2,
+          targetParticipantId,
+        },
       };
     }
     const targetValidation = validateCombatDeclarationTargets({
@@ -2198,7 +2233,8 @@ export default function ScenarioPlayerCombatPageContent({
       const { encounter, participant } = await submitCombatDeclarationOnServer({
         actionId: selectedActionId || undefined,
         adjustDistance:
-          selectedActionId === "adjust_range_attack" && requestPhaseContexts.phase1?.targetParticipantId
+          selectedActionId === "adjust_range_attack" &&
+          requestPhaseContexts.phase1?.targetParticipantId
             ? {
                 requestedDistance:
                   selectedMovementIntent.distancePreferences.find(
@@ -2293,25 +2329,36 @@ export default function ScenarioPlayerCombatPageContent({
   }
 
   async function advanceAdjustDistance() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId || !selectedAdjustDistanceProposal) return;
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !selectedAdjustDistanceProposal
+    )
+      return;
     setSavingCombatContext(true);
     try {
-      const encounter = selectedAdjustDistanceProposal.status === "awaiting_defender_response"
-        ? await respondCombatAdjustDistanceOnServer({
-            encounterId,
-            proposalId: selectedAdjustDistanceProposal.id,
-            response: adjustDistanceResponse,
-            scenarioParticipantId: selectedParticipant.id,
-          })
-        : await rollCombatAdjustDistanceOnServer({
-            encounterId,
-            proposalId: selectedAdjustDistanceProposal.id,
-            scenarioParticipantId: selectedParticipant.id,
-          });
+      const encounter =
+        selectedAdjustDistanceProposal.status === "awaiting_defender_response"
+          ? await respondCombatAdjustDistanceOnServer({
+              encounterId,
+              proposalId: selectedAdjustDistanceProposal.id,
+              response: adjustDistanceResponse,
+              scenarioParticipantId: selectedParticipant.id,
+            })
+          : await rollCombatAdjustDistanceOnServer({
+              encounterId,
+              proposalId: selectedAdjustDistanceProposal.id,
+              scenarioParticipantId: selectedParticipant.id,
+            });
       acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to advance the distance adjustment.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to advance the distance adjustment.",
+      );
     } finally {
       setSavingCombatContext(false);
     }
@@ -3270,14 +3317,6 @@ export default function ScenarioPlayerCombatPageContent({
         : {},
     [combatRoundState],
   );
-  const phase1InitiativeComplete = Boolean(
-    combatRoundState &&
-    isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: combatRoundState }),
-  );
-  const phase2InitiativeComplete = Boolean(
-    combatRoundState &&
-    isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: combatRoundState }),
-  );
   const latestRolledInitiativePhase = selectedRoundParticipant?.initiatives.phase2
     ? "phase2"
     : selectedRoundParticipant?.initiatives.phase1
@@ -3288,8 +3327,9 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedRelevantInitiative = currentResultPhase
     ? selectedRoundParticipant?.initiatives[currentResultPhase]
     : undefined;
-  const selectedRelevantInitiativeComplete =
-    currentResultPhase === "phase2" ? phase2InitiativeComplete : phase1InitiativeComplete;
+  const selectedRelevantInitiativeComplete = Boolean(
+    currentResultPhase && combatHistory?.progression?.executionOrder?.phase === currentResultPhase,
+  );
   const selectedRelevantInitiativeRankLabel =
     currentResultPhase && selectedRelevantInitiativeComplete
       ? formatPlayerCombatInitiativeRank({
@@ -3450,7 +3490,8 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(displayedParticipant) &&
     Boolean(selectedRoundParticipant) &&
     initiativeStepStatus === "pending" &&
-    !selectedParticipantRolledCurrentInitiative;
+    !selectedParticipantRolledCurrentInitiative &&
+    selectedProgressionTasks.some((task) => task.kind === "roll_initiative");
   const canUseCurrentAttackButton =
     Boolean(currentAttackPhase) &&
     Boolean(displayedParticipant) &&
@@ -3614,70 +3655,70 @@ export default function ScenarioPlayerCombatPageContent({
         : selectedAdjustDistanceProposal.attackerRollRecorded
           ? "Roll defender Dodge"
           : "Roll attacker Dodge"
-    : selectedFeintProposal
-      ? selectedFeintProposal.attackerRollRecorded
-        ? "Roll feint resistance"
-        : "Roll feint"
-      : selectedDistanceControlActionAvailable
-        ? "Roll distance control"
-        : selectedDoubleAttackDecisionAvailable
-          ? doubleAttackPhase2Decision === "cancel"
-            ? "Cancel Attack 2"
-            : "Continue Attack 2"
-          : selectedPhaseAttackChoiceIsBackOut
-            ? "Back out of attack"
-            : selectedCombatExperienceRequired
-              ? !selectedCombatExperienceWindowOpen
-                ? "Waiting for GM"
-                : selectedCombatExperienceNoRollAvailable
-                  ? "Confirm Combat Experience"
-                  : "Roll Combat Experience"
-              : selectedPhaseInitiativeChoice
-                ? "Phase choice submitted"
-                : selectedPhaseContinueAvailable
-                  ? "Continue attack"
-                  : (attackerPrivilegedAction?.label ??
-                    currentParryAction?.label ??
-                    currentAttackAction?.label ??
-                    declarationButtonLabel);
+      : selectedFeintProposal
+        ? selectedFeintProposal.attackerRollRecorded
+          ? "Roll feint resistance"
+          : "Roll feint"
+        : selectedDistanceControlActionAvailable
+          ? "Roll distance control"
+          : selectedDoubleAttackDecisionAvailable
+            ? doubleAttackPhase2Decision === "cancel"
+              ? "Cancel Attack 2"
+              : "Continue Attack 2"
+            : selectedPhaseAttackChoiceIsBackOut
+              ? "Back out of attack"
+              : selectedCombatExperienceRequired
+                ? !selectedCombatExperienceWindowOpen
+                  ? "Waiting for GM"
+                  : selectedCombatExperienceNoRollAvailable
+                    ? "Confirm Combat Experience"
+                    : "Roll Combat Experience"
+                : selectedPhaseInitiativeChoice
+                  ? "Phase choice submitted"
+                  : selectedPhaseContinueAvailable
+                    ? "Continue attack"
+                    : (attackerPrivilegedAction?.label ??
+                      currentParryAction?.label ??
+                      currentAttackAction?.label ??
+                      declarationButtonLabel);
   const playerActionButtonDisabled = selectedHealthCheckActionAvailable
     ? controlsDisabled || savingCombatContext
     : selectedAdjustDistanceProposal
       ? controlsDisabled || savingCombatContext
-    : selectedFeintProposal
-      ? controlsDisabled || savingCombatContext
-      : selectedDistanceControlActionAvailable
+      : selectedFeintProposal
         ? controlsDisabled || savingCombatContext
-        : selectedDoubleAttackDecisionAvailable
+        : selectedDistanceControlActionAvailable
           ? controlsDisabled || savingCombatContext
-          : selectedPhaseAttackChoiceIsBackOut
-            ? controlsDisabled ||
-              savingCombatContext ||
-              !selectedPhaseCombatExperienceBackOutAvailable
-            : attackerPrivilegedAction
-              ? selectedCombatExperienceRequired ||
-                controlsDisabled ||
+          : selectedDoubleAttackDecisionAvailable
+            ? controlsDisabled || savingCombatContext
+            : selectedPhaseAttackChoiceIsBackOut
+              ? controlsDisabled ||
                 savingCombatContext ||
-                attackerPrivilegedAction.disabled
-              : currentParryAction
+                !selectedPhaseCombatExperienceBackOutAvailable
+              : attackerPrivilegedAction
                 ? selectedCombatExperienceRequired ||
                   controlsDisabled ||
                   savingCombatContext ||
-                  currentParryAction.disabled
-                : currentAttackAction
+                  attackerPrivilegedAction.disabled
+                : currentParryAction
                   ? selectedCombatExperienceRequired ||
                     controlsDisabled ||
                     savingCombatContext ||
-                    currentAttackAction.disabled
-                  : selectedCombatExperienceRequired
-                    ? controlsDisabled ||
+                    currentParryAction.disabled
+                  : currentAttackAction
+                    ? selectedCombatExperienceRequired ||
+                      controlsDisabled ||
                       savingCombatContext ||
-                      !selectedCombatExperienceActionAvailable
-                    : selectedPhaseInitiativeChoice
-                      ? true
-                      : selectedPhaseContinueAvailable
-                        ? controlsDisabled || savingCombatContext
-                        : declareActionDisabled;
+                      currentAttackAction.disabled
+                    : selectedCombatExperienceRequired
+                      ? controlsDisabled ||
+                        savingCombatContext ||
+                        !selectedCombatExperienceActionAvailable
+                      : selectedPhaseInitiativeChoice
+                        ? true
+                        : selectedPhaseContinueAvailable
+                          ? controlsDisabled || savingCombatContext
+                          : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedStoredDeclarationComplete &&
     (selectedParticipantStoredDeclarationThisRound ||
@@ -4008,12 +4049,19 @@ export default function ScenarioPlayerCombatPageContent({
                       <PlayerCombatAttackTargetSelector
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
-                        distanceLabel={targetRoundParticipant ? `Distance: ${distanceEdge?.distance ?? "—"}` : undefined}
+                        distanceLabel={
+                          targetRoundParticipant
+                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                            : undefined
+                        }
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({
                             phase1: combatContext,
-                            phase2: { ...current.phase2, targetParticipantId: combatContext.targetParticipantId },
+                            phase2: {
+                              ...current.phase2,
+                              targetParticipantId: combatContext.targetParticipantId,
+                            },
                           }));
                         }}
                         targetOptions={targetOptions}
@@ -4029,9 +4077,20 @@ export default function ScenarioPlayerCombatPageContent({
                             setSelectedMovementIntent((current) => ({
                               ...current,
                               distancePreferences: [
-                                ...current.distancePreferences.filter((entry) => entry.targetParticipantId !== targetParticipantId),
+                                ...current.distancePreferences.filter(
+                                  (entry) => entry.targetParticipantId !== targetParticipantId,
+                                ),
                                 {
-                                  desiredDistance: Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+                                  desiredDistance: Number(event.target.value) as
+                                    | 0
+                                    | 1
+                                    | 2
+                                    | 3
+                                    | 4
+                                    | 5
+                                    | 6
+                                    | 7
+                                    | 8,
                                   source: "player_declared",
                                   targetParticipantId,
                                 },
@@ -4040,7 +4099,9 @@ export default function ScenarioPlayerCombatPageContent({
                           }}
                           value={
                             selectedMovementIntent.distancePreferences.find(
-                              (entry) => entry.targetParticipantId === phaseModel.phaseContext.targetParticipantId,
+                              (entry) =>
+                                entry.targetParticipantId ===
+                                phaseModel.phaseContext.targetParticipantId,
                             )?.desiredDistance ??
                             distancePreferenceOptions.find(
                               (option) => option.id === phaseModel.phaseContext.targetParticipantId,
@@ -4048,7 +4109,11 @@ export default function ScenarioPlayerCombatPageContent({
                             2
                           }
                         >
-                          {[0,1,2,3,4,5,6,7,8].map((distance) => <option key={distance} value={distance}>{distance}</option>)}
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                            <option key={distance} value={distance}>
+                              {distance}
+                            </option>
+                          ))}
                         </select>
                       </label>
                       <div>Skill: Dodge</div>
@@ -4134,7 +4199,8 @@ export default function ScenarioPlayerCombatPageContent({
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) =>
                             (selectedActionId === "feint_attack" ||
-                              selectedActionId === "adjust_range_attack") && phaseKey === "phase2"
+                              selectedActionId === "adjust_range_attack") &&
+                            phaseKey === "phase2"
                               ? {
                                   phase1: {
                                     ...current.phase1,
@@ -4147,7 +4213,8 @@ export default function ScenarioPlayerCombatPageContent({
                         }}
                         readOnly={
                           (selectedActionId === "feint_attack" ||
-                            selectedActionId === "adjust_range_attack") && phaseKey === "phase2"
+                            selectedActionId === "adjust_range_attack") &&
+                          phaseKey === "phase2"
                         }
                         targetOptions={targetOptions}
                       />
@@ -4391,40 +4458,48 @@ export default function ScenarioPlayerCombatPageContent({
                     ? rollHealthCheck()
                     : selectedAdjustDistanceProposal
                       ? advanceAdjustDistance()
-                    : selectedFeintProposal
-                      ? rollFeint()
-                      : selectedDistanceControlActionAvailable
-                        ? rollDistanceControl()
-                        : selectedDoubleAttackDecisionAvailable
-                          ? decideDoubleAttackPhase2()
-                          : selectedPhaseAttackChoiceIsBackOut
-                            ? backOutPhaseAttack()
-                            : selectedCombatExperienceRequired
-                              ? selectedCombatExperienceWindowOpen
-                                ? rollCombatExperience()
-                                : undefined
-                              : selectedPhaseContinueAvailable
-                                ? continuePhaseAttack()
-                                : attackerPrivilegedAction?.kind
-                                  ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                                  : currentParryAction
-                                    ? rollCurrentParry()
-                                    : currentAttackAction
-                                      ? rollPhaseAttack()
-                                      : currentInitiativePhase
-                                        ? rollInitiative()
-                                        : saveCombatContext())
+                      : selectedFeintProposal
+                        ? rollFeint()
+                        : selectedDistanceControlActionAvailable
+                          ? rollDistanceControl()
+                          : selectedDoubleAttackDecisionAvailable
+                            ? decideDoubleAttackPhase2()
+                            : selectedPhaseAttackChoiceIsBackOut
+                              ? backOutPhaseAttack()
+                              : selectedCombatExperienceRequired
+                                ? selectedCombatExperienceWindowOpen
+                                  ? rollCombatExperience()
+                                  : undefined
+                                : selectedPhaseContinueAvailable
+                                  ? continuePhaseAttack()
+                                  : attackerPrivilegedAction?.kind
+                                    ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                                    : currentParryAction
+                                      ? rollCurrentParry()
+                                      : currentAttackAction
+                                        ? rollPhaseAttack()
+                                        : currentInitiativePhase
+                                          ? rollInitiative()
+                                          : saveCombatContext())
                 }
                 preActionControls={
                   selectedAdjustDistanceProposal?.status === "awaiting_defender_response" ? (
                     <label style={{ display: "grid", gap: "0.25rem" }}>
                       <strong>Defender response</strong>
-                      <select disabled={savingCombatContext} onChange={(event) => setAdjustDistanceResponse(event.target.value as "allow" | "oppose")} value={adjustDistanceResponse}>
+                      <select
+                        disabled={savingCombatContext}
+                        onChange={(event) =>
+                          setAdjustDistanceResponse(event.target.value as "allow" | "oppose")
+                        }
+                        value={adjustDistanceResponse}
+                      >
                         <option value="oppose">Oppose</option>
                         <option value="allow">Allow adjustment</option>
                       </select>
                     </label>
-                  ) : selectedPhaseAttackChoiceControls
+                  ) : (
+                    selectedPhaseAttackChoiceControls
+                  )
                 }
                 saving={savingCombatContext}
                 statusText={declarationStatusText}

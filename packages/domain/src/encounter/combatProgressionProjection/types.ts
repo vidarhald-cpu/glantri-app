@@ -188,6 +188,61 @@ export interface CombatProgressionProjection {
   readonly currentCursorEquivalent?: Readonly<CombatRoundCursor>;
   readonly currentTaskEquivalent?: Readonly<CombatRoundCommandCurrentTask>;
   readonly diagnostics: readonly CombatProgressionDiagnostic[];
+  /** The last initiative order committed by the GM. Uncommitted rolls never appear here. */
+  readonly executionOrder?: CombatProgressionExecutionOrder;
   readonly phaseResolutionCursorEquivalent?: Readonly<CombatRoundPhaseResolutionCursor>;
   readonly roundNumber: number;
+}
+
+export interface CombatProgressionExecutionOrder {
+  readonly participantIds: readonly string[];
+  readonly phase: CombatRoundPhase;
+}
+
+export interface CombatProgressionPresentationTask {
+  readonly actorAccess: {
+    readonly combatant: boolean;
+    readonly gm: boolean;
+  };
+  readonly contributesToProgression: boolean;
+  readonly id: string;
+  readonly identity: {
+    readonly executionGroupId: string;
+    readonly phase?: CombatRoundPhase;
+  };
+  readonly kind: CombatProgressionTaskKind;
+  readonly owner?: CombatProgressionTaskOwner;
+  readonly processId: string;
+  readonly stageId: string;
+  readonly state: CombatProgressionTaskState;
+  readonly trackerFacet: CombatProgressionTrackerFacet;
+}
+
+export interface CombatProgressionPresentationStage {
+  readonly executionStrategy: CombatProgressionExecutionStrategy;
+  readonly id: string;
+  readonly kind: CombatProgressionStageKind;
+  readonly processId: string;
+  readonly state: CombatProgressionStageState;
+  readonly tasks: readonly CombatProgressionPresentationTask[];
+}
+
+export interface CombatProgressionPresentationProcess {
+  readonly id: string;
+  readonly kind: CombatProgressionProcessKind;
+  readonly stages: readonly CombatProgressionPresentationStage[];
+}
+
+/** Sanitized live progression facts suitable for shared GM/player presentation. */
+export interface CombatProgressionPresentationProjection {
+  readonly boundary: {
+    readonly id: string;
+    readonly kind: CombatProgressionBoundaryKind;
+    readonly roundNumber: number;
+  };
+  readonly executionOrder?: CombatProgressionExecutionOrder;
+  readonly processes: readonly CombatProgressionPresentationProcess[];
+  readonly roundNumber: number;
+  /** False means relevant canonical facts conflict and live task presentation must fail closed. */
+  readonly taskVisibility: "available" | "conflicted";
 }

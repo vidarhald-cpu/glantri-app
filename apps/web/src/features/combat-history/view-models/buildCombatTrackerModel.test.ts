@@ -6,22 +6,31 @@ import { buildCombatTrackerCellKey, buildCombatTrackerModel } from "./buildComba
 
 function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCellFacts {
   return {
-    activeTask: false,
     commands: [],
-    current: false,
     inspectable: true,
     participantId: "participant-a",
     participantLabel: "Aldren",
-    pendingDistanceControlCommitCount: 0,
-    pendingDistanceControlRollCount: 0,
-    pendingHealthCheckRollCount: 0,
-    phaseCombatExperienceMarkerRequired: false,
     roundNumber: 1,
     selected: false,
     status: "pending",
     step: "select_actions",
     ...overrides,
   };
+}
+
+function live(taskKind: "distance_roll" | "resolve_adjust_distance" | "attack" = "attack") {
+  return {
+    current: true,
+    executable: true,
+    executionGroupIds: ["group-1"],
+    gmProxyAvailable: true,
+    ownerParticipantIds: ["participant-a"],
+    processIds: ["process-1"],
+    stageIds: ["stage-1"],
+    taskIds: ["task-1"],
+    taskKinds: [taskKind],
+    waiting: false,
+  } as const;
 }
 
 function model(cellFacts: CombatTrackerCellFacts[]) {
@@ -36,7 +45,11 @@ function model(cellFacts: CombatTrackerCellFacts[]) {
 describe("buildCombatTrackerModel", () => {
   it("builds stable rows, rounds, keys, and current/selected flags", () => {
     const result = model([
-      facts({ activeTask: true, current: true, selected: true, step: "phase_1_actions" }),
+      facts({
+        progression: live(),
+        selected: true,
+        step: "phase_1_actions",
+      }),
     ]);
     const key = buildCombatTrackerCellKey({
       participantId: "participant-a",
@@ -57,9 +70,7 @@ describe("buildCombatTrackerModel", () => {
   it("keeps declared A1 actions at not-reached until initiative opens the phase", () => {
     const result = model([
       facts({
-        activeTask: true,
         adjustDistance: { currentDistance: 3, requestedDistance: 2, status: "pending" },
-        phaseActionOpen: false,
         step: "phase_1_actions",
       }),
     ]);
@@ -149,6 +160,7 @@ describe("buildCombatTrackerModel", () => {
           requestedDistance: 2,
           status: "committed",
         },
+        progression: live("resolve_adjust_distance"),
         status: "complete",
         step: "phase_1_actions",
       }),
@@ -169,6 +181,7 @@ describe("buildCombatTrackerModel", () => {
           requestedDistance: 2,
           status: "pending",
         },
+        progression: live("resolve_adjust_distance"),
         step: "phase_1_actions",
       }),
     ]);
@@ -185,7 +198,10 @@ describe("buildCombatTrackerModel", () => {
       facts({
         participantId: "participant-b",
         participantLabel: "Bera",
-        pendingDistanceControlRollCount: 1,
+        progression: {
+          ...live("distance_roll"),
+          ownerParticipantIds: ["participant-b"],
+        },
         step: "round_summary",
       }),
     ]);

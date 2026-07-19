@@ -6,6 +6,7 @@ import type {
   CombatRoundStepSnapshot,
   CombatRoundStepStatus,
   CombatHistoryStepOutcome,
+  CombatProgressionTaskKind,
 } from "@glantri/domain";
 
 export type CombatTrackerMarkerKind =
@@ -37,12 +38,10 @@ export interface CombatTrackerRowView {
 
 export interface CombatTrackerCellFacts {
   actionResultStatus?: CombatRoundStepSnapshot["actionResultStatus"];
-  activeTask: boolean;
   attackAttackerLabel?: string;
   attackDefenderLabel?: string;
   attackResult?: CombatRoundAttackRollResult;
   commands: readonly CombatRoundCommand[];
-  current: boolean;
   declarationSubmittedBy?: "gm" | "player";
   feint?: {
     defenderLabel?: string;
@@ -61,13 +60,8 @@ export interface CombatTrackerCellFacts {
   initiativeTotal?: number;
   participantId: string;
   participantLabel: string;
-  pendingDistanceControlCommitCount: number;
-  pendingDistanceControlRollCount: number;
-  pendingHealthCheckRollCount: number;
-  /** Whether the canonical initiative commit has opened this phase's actions. */
-  phaseActionOpen?: boolean;
-  phaseCombatExperienceMarkerRequired: boolean;
   phaseResolutionResult?: CombatRoundPhaseResolutionResult;
+  progression?: CombatTrackerLiveFacet;
   roundNumber: number;
   selected: boolean;
   status: CombatRoundStepStatus;
@@ -78,15 +72,40 @@ export interface CombatTrackerCellFacts {
 export interface CombatTrackerCellView {
   cellKey: string;
   current: boolean;
+  completed: boolean;
+  executable: boolean;
+  executionGroupIds: readonly string[];
+  gmProxyAvailable: boolean;
+  historical: boolean;
   hoverText: string;
   initiativeValue: boolean;
   inspectable: boolean;
   marker: string;
   markerKind: CombatTrackerMarkerKind;
   participantId: string;
+  ownerParticipantIds: readonly string[];
+  processIds: readonly string[];
   roundNumber: number;
   selected: boolean;
+  status: "completed" | "executable" | "historical" | "not_reached" | "waiting";
+  stageIds: readonly string[];
   step: CombatRoundStep;
+  taskIds: readonly string[];
+  taskKinds: readonly CombatProgressionTaskKind[];
+  waiting: boolean;
+}
+
+export interface CombatTrackerLiveFacet {
+  current: boolean;
+  executable: boolean;
+  executionGroupIds: readonly string[];
+  gmProxyAvailable: boolean;
+  ownerParticipantIds: readonly string[];
+  processIds: readonly string[];
+  stageIds: readonly string[];
+  taskIds: readonly string[];
+  taskKinds: readonly CombatProgressionTaskKind[];
+  waiting: boolean;
 }
 
 export interface CombatTrackerModel {

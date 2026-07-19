@@ -80,6 +80,9 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("buildCombatTrackerModel({");
+    expect(source).toContain("buildCombatProgressionProjection(roundState)");
+    expect(source).toContain("buildCombatProgressionTrackerIndex(combatProgressionPresentation)");
+    expect(source.match(/buildCombatProgressionProjection\(roundState\)/g)).toHaveLength(1);
     expect(source).toContain(
       "const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult",
     );
@@ -119,8 +122,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
-    expect(source).toContain("phaseCombatExperienceMarkerRequired");
-    expect(source).toContain("phase CE required.");
+    expect(source).toContain('kinds.has("combat_experience")');
+    expect(source).toContain("Combat Experience work pending.");
     expect(source).toContain('marker: "?"');
     expect(source).toContain('return "required"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
@@ -656,7 +659,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitCombatRoundEndDistanceControl");
     expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
-    expect(source).toContain("getCombatRoundEndHealthCheckPendingRollCount");
+    expect(source).toContain('kinds.has("health_review")');
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
     expect(source).toContain("getNextCombatRoundEndTask");
@@ -672,8 +675,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("No participant-owned round-end changes proposed.");
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");
-    expect(source).toContain("getCombatRoundEndDistanceControlPendingRollCount");
-    expect(source).toContain("distance-control roll${");
+    expect(source).toContain('kinds.has("distance_roll")');
+    expect(source).toContain("distance-control roll pending.");
     expect(source).toContain(
       "Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}",
     );
@@ -789,7 +792,10 @@ describe("CombatRoundManagerPanel", () => {
   it("returns from inspection to the current task without mutating combat state", () => {
     const source = readSource();
 
-    expect(source).toContain("const currentTaskSelection = getCurrentCombatRoundTaskSelection");
+    expect(source).toContain("const projectedCurrentTasks = getCombatProgressionPresentationTasks");
+    expect(source).toContain(
+      "const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner",
+    );
     expect(source).toContain("function selectCurrentTask()");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("pendingSelectionRef.current = undefined");
@@ -930,7 +936,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const [inspectionSelection, setInspectionSelection]");
-    expect(source).toContain("isSelectedCombatRoundStepCurrentForGm");
+    expect(source).toContain("combatProgressionTrackerIndex.byCellKey");
     expect(source).toContain("inspectorSelectionIsCurrentProgression");
     expect(source).toContain(
       'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',

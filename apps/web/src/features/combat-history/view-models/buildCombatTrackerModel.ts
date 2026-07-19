@@ -86,18 +86,18 @@ function markerMeaning(kind: CombatTrackerMarkerKind): CombatTrackerLegendItem {
 export function getCombatTrackerCellMarkerKind(
   input: CombatTrackerCellFacts,
 ): CombatTrackerMarkerKind {
-  const pendingRoundEndRollCount =
-    input.pendingDistanceControlRollCount + input.pendingHealthCheckRollCount;
-  if (attackPhase(input.step) && input.phaseActionOpen === false) return "not_reached";
-  if (input.phaseCombatExperienceMarkerRequired || pendingRoundEndRollCount > 0) return "required";
   if (input.initiativeTotal !== undefined) return "roll_result";
   if (input.step === "phase_1_actions" && input.feint) {
     if (input.feint.status === "committed") return "complete";
     if (input.feint.status === "impossible") return "skipped";
-    return "required";
+    return input.progression?.current ? "required" : "not_reached";
   }
   if (input.step === "phase_1_actions" && input.adjustDistance) {
-    return input.adjustDistance.status === "committed" ? "complete" : "required";
+    return input.adjustDistance.status === "committed"
+      ? "complete"
+      : input.progression?.current
+        ? "required"
+        : "not_reached";
   }
   if (input.stepOutcome) return "skipped";
   if (attackPhase(input.step)) {
@@ -111,7 +111,7 @@ export function getCombatTrackerCellMarkerKind(
     )
       return "skipped";
     if (statusKind(input.status) === "complete") return "skipped";
-    return input.activeTask ? "required" : statusKind(input.status);
+    return input.progression?.current ? "required" : statusKind(input.status);
   }
   if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {
     const parryStatus = input.phaseResolutionResult?.parryResolution.status;
@@ -124,7 +124,7 @@ export function getCombatTrackerCellMarkerKind(
       input.status === "locked"
     )
       return "skipped";
-    if (parryStatus === "pending" || input.activeTask) return "required";
+    if (input.progression?.current) return "required";
     if (statusKind(input.status) === "complete") return "skipped";
   }
   if (input.step === "phase_1_damage" || input.step === "phase_2_damage") {
@@ -138,10 +138,10 @@ export function getCombatTrackerCellMarkerKind(
       input.status === "locked"
     )
       return "skipped";
-    if (resolution || input.activeTask) return "required";
+    if (input.progression?.current) return "required";
     if (statusKind(input.status) === "complete") return "skipped";
   }
-  return statusKind(input.status);
+  return input.progression?.current ? "required" : statusKind(input.status);
 }
 
 function initiativeSource(input: CombatTrackerCellFacts): string {
@@ -215,22 +215,14 @@ function stepNoun(step: CombatRoundStep): string {
 }
 
 function cellDetail(input: CombatTrackerCellFacts): string {
-  const pendingRollCount =
-    input.pendingDistanceControlRollCount + input.pendingHealthCheckRollCount;
-  if (input.phaseCombatExperienceMarkerRequired) return "phase CE required.";
-  if (pendingRollCount > 0) {
-    const details = [
-      input.pendingHealthCheckRollCount
-        ? `${input.pendingHealthCheckRollCount} health check${input.pendingHealthCheckRollCount === 1 ? "" : "s"}`
-        : undefined,
-      input.pendingDistanceControlRollCount
-        ? `${input.pendingDistanceControlRollCount} distance-control roll${input.pendingDistanceControlRollCount === 1 ? "" : "s"}`
-        : undefined,
-    ].filter(Boolean);
-    return `${pendingRollCount} round-end roll${pendingRollCount === 1 ? "" : "s"} pending${details.length ? ` (${details.join(", ")})` : ""}.`;
+  if (input.progression?.current) {
+    const kinds = new Set(input.progression.taskKinds);
+    if (kinds.has("combat_experience")) return "Combat Experience work pending.";
+    if (kinds.has("health_review")) return "health review pending.";
+    if (kinds.has("distance_roll")) return "distance-control roll pending.";
+    if (kinds.has("distance_commit")) return "distance-control commit pending.";
+    if (kinds.has("participant_review")) return "participant review pending.";
   }
-  if (input.pendingDistanceControlCommitCount > 0)
-    return `${input.pendingDistanceControlCommitCount} distance-control commit${input.pendingDistanceControlCommitCount === 1 ? "" : "s"} pending.`;
   if (input.initiativeTotal !== undefined)
     return `initiative ${input.initiativeTotal}${initiativeSource(input)}.`;
   if (input.step === "phase_1_actions" && input.feint) {
@@ -322,6 +314,7 @@ export function buildCombatTrackerModel(input: {
 }): CombatTrackerModel {
   const cells: Record<string, CombatTrackerCellView> = {};
   const markerKinds = new Set<CombatTrackerMarkerKind>();
+  const activeRoundNumber = Math.max(...input.rounds.map((round) => round.roundNumber));
   for (const facts of input.cellFacts) {
     const markerKind = getCombatTrackerCellMarkerKind(facts);
     const marker =
@@ -332,16 +325,37 @@ export function buildCombatTrackerModel(input: {
     markerKinds.add(markerKind);
     cells[cellKey] = {
       cellKey,
-      current: facts.current,
+      completed: !["not_reached", "required"].includes(markerKind),
+      current: Boolean(facts.progression?.current),
+      executable: Boolean(facts.progression?.executable),
+      executionGroupIds: facts.progression?.executionGroupIds ?? [],
+      gmProxyAvailable: Boolean(facts.progression?.gmProxyAvailable),
+      historical: facts.roundNumber !== activeRoundNumber,
       hoverText: `${facts.participantLabel} · Round ${facts.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[facts.step]}: ${cellDetail(facts)}`,
       initiativeValue: facts.initiativeTotal !== undefined,
       inspectable: facts.inspectable,
       marker,
       markerKind,
       participantId: facts.participantId,
+      ownerParticipantIds: facts.progression?.ownerParticipantIds ?? [],
+      processIds: facts.progression?.processIds ?? [],
       roundNumber: facts.roundNumber,
       selected: facts.selected,
+      status:
+        facts.roundNumber !== activeRoundNumber
+          ? "historical"
+          : facts.progression?.executable
+            ? "executable"
+            : facts.progression?.waiting
+              ? "waiting"
+              : !["not_reached", "required"].includes(markerKind)
+                ? "completed"
+                 : "not_reached",
+      stageIds: facts.progression?.stageIds ?? [],
       step: facts.step,
+      taskIds: facts.progression?.taskIds ?? [],
+      taskKinds: facts.progression?.taskKinds ?? [],
+      waiting: Boolean(facts.progression?.waiting),
     };
   }
   return {
@@ -349,7 +363,7 @@ export function buildCombatTrackerModel(input: {
     currentTaskCellKey: Object.values(cells).find(
       (cell) =>
         input.cellFacts.find((facts) => buildCombatTrackerCellKey(facts) === cell.cellKey)
-          ?.activeTask,
+          ?.progression?.current,
     )?.cellKey,
     legend: COMBAT_TRACKER_MARKER_MEANINGS.filter((meaning) => markerKinds.has(meaning.kind)),
     rounds: [...input.rounds],

@@ -1,9 +1,9 @@
-import type { CombatRoundState, CombatRoundStep } from "@glantri/domain";
-import {
-  getCombatRoundStepForCursorStep,
-  isGlobalCombatRoundCursorStep,
-  sortCombatRoundParticipantsByInitiative,
+import type {
+  CombatProgressionPresentationProjection,
+  CombatRoundState,
+  CombatRoundStep,
 } from "@glantri/domain";
+import { getCombatRoundStepForCursorStep, isGlobalCombatRoundCursorStep } from "@glantri/domain";
 
 export interface CombatRoundSelectionTarget {
   participantId?: string;
@@ -41,8 +41,8 @@ export function isSelectedCombatRoundStepExecutable(input: {
 
   return Boolean(
     currentTask &&
-      currentTask.participantId === input.participantId &&
-      currentTask.step === input.step,
+    currentTask.participantId === input.participantId &&
+    currentTask.step === input.step,
   );
 }
 
@@ -82,34 +82,21 @@ export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boole
   );
 }
 
-function getInitiativeSortPhase(state: CombatRoundState): "phase1" | "phase2" | undefined {
-  const phase2Complete = state.participants.every(
-    (participant) => participant.initiatives.phase2 !== undefined,
-  );
-
-  if (phase2Complete) {
-    return "phase2";
-  }
-
-  const phase1Complete = state.participants.every(
-    (participant) => participant.initiatives.phase1 !== undefined,
-  );
-
-  return phase1Complete ? "phase1" : undefined;
-}
-
 export function getCombatRoundManagerDisplayParticipantIds(
   state: CombatRoundState,
+  progression?: CombatProgressionPresentationProjection,
 ): string[] {
-  const phase = getInitiativeSortPhase(state);
-
-  if (!phase) {
+  const committedOrder = progression?.executionOrder?.participantIds;
+  if (!committedOrder) {
     return state.participants.map((participant) => participant.participantId);
   }
-
-  return sortCombatRoundParticipantsByInitiative({ phase, state }).map(
-    (participant) => participant.participantId,
-  );
+  const known = new Set(state.participants.map((participant) => participant.participantId));
+  return [
+    ...committedOrder.filter((participantId) => known.has(participantId)),
+    ...state.participants
+      .map((participant) => participant.participantId)
+      .filter((participantId) => !committedOrder.includes(participantId)),
+  ];
 }
 
 export function getNextCombatRoundParticipantSelection(input: {
@@ -139,8 +126,8 @@ function isValidSelection(input: {
 }): boolean {
   return Boolean(
     input.selection?.participantId &&
-      (input.step === undefined || input.selection.step === input.step) &&
-      input.participantIds.includes(input.selection.participantId),
+    (input.step === undefined || input.selection.step === input.step) &&
+    input.participantIds.includes(input.selection.participantId),
   );
 }
 

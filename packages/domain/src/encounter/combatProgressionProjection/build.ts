@@ -1,6 +1,7 @@
 import {
   combatRoundStateSchema,
   getCombatRoundStepForCursorStep,
+  sortCombatRoundParticipantsByInitiative,
   type CombatRoundCommandCurrentTask,
   type CombatRoundState,
 } from "../combatRoundManager";
@@ -19,9 +20,35 @@ import { buildResolutionProcesses } from "./resolution";
 import { addDiagnostics, buildRoundEndProcesses } from "./roundEnd";
 import type {
   CombatantIdentity,
+  CombatProgressionBoundaryKind,
+  CombatProgressionExecutionOrder,
   CombatProgressionProcess,
   CombatProgressionProjection,
 } from "./types";
+
+function committedExecutionOrder(
+  state: CombatRoundState,
+  boundaryKind: CombatProgressionBoundaryKind,
+): CombatProgressionExecutionOrder | undefined {
+  const phase =
+    boundaryKind === "phase1_resolution" ||
+    boundaryKind === "phase2_modifier_review" ||
+    boundaryKind === "phase2_initiative"
+      ? "phase1"
+      : boundaryKind === "phase2_resolution" ||
+          boundaryKind === "round_end" ||
+          boundaryKind === "round_boundary"
+        ? "phase2"
+        : undefined;
+  if (!phase) return undefined;
+
+  return {
+    participantIds: sortCombatRoundParticipantsByInitiative({ phase, state }).map(
+      (participant) => participant.participantId,
+    ),
+    phase,
+  };
+}
 
 /**
  * Pure read model for the current combat progression. It neither advances nor repairs state.
@@ -96,6 +123,7 @@ export function buildCombatProgressionProjection(
     currentCursorEquivalent: cursor ? { ...cursor } : undefined,
     currentTaskEquivalent,
     diagnostics: context.diagnostics,
+    executionOrder: committedExecutionOrder(normalized, boundaryKind),
     phaseResolutionCursorEquivalent: normalized.phaseResolutionCursor
       ? { ...normalized.phaseResolutionCursor }
       : undefined,

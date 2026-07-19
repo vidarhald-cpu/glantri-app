@@ -4,6 +4,11 @@ import type {
   CombatRoundState,
   CompletedCombatRound,
 } from "./combatRoundManager";
+import {
+  buildCombatProgressionProjection,
+  projectCombatProgressionPresentation,
+  type CombatProgressionPresentationProjection,
+} from "./combatProgressionProjection";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -117,6 +122,8 @@ export interface ProjectedCombatHistoryRound {
 export interface CombatHistoryProjection {
   activeRound: ProjectedCombatHistoryRound;
   archivedRounds: ProjectedCombatHistoryRound[];
+  /** Sanitized canonical live progression for the same encounter revision. */
+  progression?: CombatProgressionPresentationProjection;
   rows: ProjectedCombatHistoryRow[];
   /** Encounter revision used to build this projection. */
   sourceUpdatedAt?: string;
@@ -516,6 +523,10 @@ export function projectCombatHistory(input: {
   state: CombatRoundState;
   viewer: CombatHistoryViewer;
 }): CombatHistoryProjection {
+  const progression = projectCombatProgressionPresentation({
+    projection: buildCombatProgressionProjection(input.state),
+    viewer: input.viewer,
+  });
   const visibleParticipants = input.participants.filter((participant) =>
     isVisible({ participantId: participant.participantId, viewer: input.viewer }),
   );
@@ -543,6 +554,7 @@ export function projectCombatHistory(input: {
       viewer: input.viewer,
     }),
     archivedRounds,
+    progression,
     rows: visibleParticipants.map((participant) => ({
       displayName: participant.displayName,
       participantId: participant.participantId,
