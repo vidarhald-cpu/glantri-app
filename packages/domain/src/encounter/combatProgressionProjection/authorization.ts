@@ -260,7 +260,8 @@ export function authorizeCombatProgressionTask(
     .flatMap((process) => process.stages)
     .filter((candidate) => ruleMatches(candidate.kind, rule.stage));
   const commandTasks = candidateStages
-    .flatMap((stage) => stage.tasks)
+    .flatMap((stage) => stage.executionGroups)
+    .flatMap((group) => group.tasks)
     .filter(
       (task) => ruleMatches(task.kind, rule.kind) && task.expectedCommand === input.commandType,
     );
@@ -343,7 +344,7 @@ export function authorizeCombatProgressionTask(
   }
 
   const matchingTasks = input.executionGroupId
-    ? attackTasks.filter((task) => task.identity.executionGroupId === input.executionGroupId)
+    ? attackTasks.filter((task) => task.executionGroupId === input.executionGroupId)
     : attackTasks;
   if (input.executionGroupId && matchingTasks.length === 0) {
     return failure("task_not_found", "No task is executable in this execution group.");

@@ -66,6 +66,7 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       !combatantMayAct &&
       task.owner?.kind === "combatant"
     ),
+    executionGroupId: task.executionGroupId,
     id: task.id,
     identity: {
       executionGroupId: task.identity.executionGroupId,
@@ -114,29 +115,58 @@ export function projectCombatProgressionPresentation(input: {
 }): CombatProgressionPresentationProjection {
   const processes = input.projection.boundary.processes.flatMap((process) => {
     const stages = process.stages.flatMap((stage) => {
-      const tasks = stage.tasks
-        .filter((task) => taskIsVisible(task, input.viewer))
-        .map(presentationTask)
-        .map((task) => ({
-          ...task,
-          owner:
-            task.owner?.kind === "combatant"
-              ? visibleIdentity(task.owner, input.viewer)
-              : task.owner,
-          trackerFacet: {
-            ...task.trackerFacet,
-            owner: visibleIdentity(task.trackerFacet.owner, input.viewer),
+      const executionGroups = stage.executionGroups.flatMap((group) => {
+        const tasks = group.tasks
+          .filter((task) => taskIsVisible(task, input.viewer))
+          .map(presentationTask)
+          .map((task) => ({
+            ...task,
+            owner:
+              task.owner?.kind === "combatant"
+                ? visibleIdentity(task.owner, input.viewer)
+                : task.owner,
+            trackerFacet: {
+              ...task.trackerFacet,
+              owner: visibleIdentity(task.trackerFacet.owner, input.viewer),
+            },
+          }));
+        if (input.viewer.kind === "player" && tasks.length === 0) return [];
+        return [
+          {
+            activationBoundary: group.activationBoundary,
+            blocked: group.blockerIds.length > 0,
+            completionState: group.completionState,
+            executionStrategy: group.executionStrategy,
+            futureActivationBoundary: group.futureActivationBoundary,
+            id: group.id,
+            position: group.position,
+            stageId: group.stageId,
+            tasks,
           },
-        }));
+        ];
+      });
+      const tasks = executionGroups.flatMap((group) => group.tasks);
       if (input.viewer.kind === "player" && tasks.length === 0) return [];
-      return [{ ...stage, tasks }];
+      return [
+        {
+          executionGroups,
+          executionStrategy: stage.executionStrategy,
+          id: stage.id,
+          kind: stage.kind,
+          processId: stage.processId,
+          state: stage.state,
+          tasks,
+        },
+      ];
     });
     if (input.viewer.kind === "player" && stages.length === 0) return [];
     return [{ id: process.id, kind: process.kind, stages }];
   });
   const visibleTaskIds = new Set(
     processes.flatMap((process) =>
-      process.stages.flatMap((stage) => stage.tasks.map((task) => task.id)),
+      process.stages.flatMap((stage) =>
+        stage.executionGroups.flatMap((group) => group.tasks.map((task) => task.id)),
+      ),
     ),
   );
   const visibleParticipantIds =
@@ -153,12 +183,14 @@ export function projectCombatProgressionPresentation(input: {
     : undefined;
   const awaitingGmTransition = input.projection.boundary.processes.some((process) =>
     process.stages.some((stage) =>
-      stage.tasks.some(
-        (task) =>
-          task.kind === "gm_advance_boundary" &&
-          task.state === "executable" &&
-          task.allowedActors.length === 1 &&
-          task.allowedActors[0] === "gm",
+      stage.executionGroups.some((group) =>
+        group.tasks.some(
+          (task) =>
+            task.kind === "gm_advance_boundary" &&
+            task.state === "executable" &&
+            task.allowedActors.length === 1 &&
+            task.allowedActors[0] === "gm",
+        ),
       ),
     ),
   );

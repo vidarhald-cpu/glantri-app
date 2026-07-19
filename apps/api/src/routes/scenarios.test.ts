@@ -2397,6 +2397,17 @@ describe("scenarios route contract", () => {
       boundary: { roundNumber: 1 },
       roundNumber: 1,
     });
+    const progressionStages = response
+      .json()
+      .history.progression.processes.flatMap(
+        (process: { stages: Array<{ executionGroups: unknown[] }> }) => process.stages,
+      );
+    expect(progressionStages.length).toBeGreaterThan(0);
+    expect(
+      progressionStages.every((stage: { executionGroups: unknown[] }) =>
+        Array.isArray(stage.executionGroups),
+      ),
+    ).toBe(true);
     expect(response.json().history.rows).toEqual([
       { displayName: "Player hero", participantId: "encounter-participant-1" },
       { displayName: "Visible guard", participantId: "encounter-participant-2" },

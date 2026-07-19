@@ -70,6 +70,7 @@ export type CombatProgressionExecutionStrategy =
   | "single_task";
 
 export type CombatProgressionStageState = "active" | "complete" | "pending";
+export type CombatProgressionExecutionGroupCompletionState = "complete" | "incomplete";
 export type CombatProgressionTaskState = "executable" | "waiting";
 
 export type CombatProgressionTaskKind =
@@ -165,6 +166,7 @@ export interface CombatProgressionTask {
   readonly allowedActors: readonly CombatProgressionAllowedActor[];
   readonly blockerIds: readonly string[];
   readonly expectedCommand: CombatProgressionExpectedCommand;
+  readonly executionGroupId: string;
   readonly id: string;
   readonly identity: CombatProgressionTaskIdentity;
   readonly kind: CombatProgressionTaskKind;
@@ -176,12 +178,46 @@ export interface CombatProgressionTask {
   readonly transition?: CombatProgressionBoundaryTransition;
 }
 
+export interface CombatProgressionExecutionGroupBoundaryMetadata {
+  readonly id: string;
+  readonly kind: CombatProgressionBoundaryKind;
+  readonly roundNumber: number;
+}
+
+export interface CombatProgressionExecutionGroupDiagnostic {
+  readonly code: "task_count_mismatch" | "task_identity_mismatch";
+  readonly message: string;
+  readonly relatedIds: readonly string[];
+  readonly severity: "warning";
+}
+
+/**
+ * The scheduling unit between a stage and its tasks. Slice 7 deliberately projects one task per
+ * group; the array shape leaves room for simultaneous initiative work without enabling it.
+ */
+export interface CombatProgressionExecutionGroup {
+  readonly activationBoundary: CombatProgressionExecutionGroupBoundaryMetadata;
+  readonly blockerIds: readonly string[];
+  readonly completionState: CombatProgressionExecutionGroupCompletionState;
+  readonly diagnostics: readonly CombatProgressionExecutionGroupDiagnostic[];
+  readonly executionStrategy: CombatProgressionExecutionStrategy;
+  /** Reserved for a later activation slice; absent groups are eligible only in activationBoundary. */
+  readonly futureActivationBoundary: CombatProgressionExecutionGroupBoundaryMetadata | undefined;
+  readonly id: string;
+  readonly position: number;
+  readonly stageId: string;
+  readonly tasks: readonly CombatProgressionTask[];
+}
+
 export interface CombatProgressionStage {
+  readonly executionGroups: readonly CombatProgressionExecutionGroup[];
+  /** Compatibility adapter; execution strategy is canonically owned by each execution group. */
   readonly executionStrategy: CombatProgressionExecutionStrategy;
   readonly id: string;
   readonly kind: CombatProgressionStageKind;
   readonly processId: string;
   readonly state: CombatProgressionStageState;
+  /** Flattened compatibility adapter retained for existing task consumers. */
   readonly tasks: readonly CombatProgressionTask[];
 }
 
@@ -240,6 +276,7 @@ export interface CombatProgressionPresentationTask {
     readonly gm: boolean;
   };
   readonly contributesToProgression: boolean;
+  readonly executionGroupId: string;
   readonly id: string;
   readonly identity: {
     readonly executionGroupId: string;
@@ -254,12 +291,27 @@ export interface CombatProgressionPresentationTask {
   readonly transition?: CombatProgressionBoundaryTransition;
 }
 
+export interface CombatProgressionPresentationExecutionGroup {
+  readonly activationBoundary: CombatProgressionExecutionGroupBoundaryMetadata;
+  readonly blocked: boolean;
+  readonly completionState: CombatProgressionExecutionGroupCompletionState;
+  readonly executionStrategy: CombatProgressionExecutionStrategy;
+  readonly futureActivationBoundary: CombatProgressionExecutionGroupBoundaryMetadata | undefined;
+  readonly id: string;
+  readonly position: number;
+  readonly stageId: string;
+  readonly tasks: readonly CombatProgressionPresentationTask[];
+}
+
 export interface CombatProgressionPresentationStage {
+  readonly executionGroups: readonly CombatProgressionPresentationExecutionGroup[];
+  /** Compatibility adapter; execution strategy is canonically owned by each execution group. */
   readonly executionStrategy: CombatProgressionExecutionStrategy;
   readonly id: string;
   readonly kind: CombatProgressionStageKind;
   readonly processId: string;
   readonly state: CombatProgressionStageState;
+  /** Flattened compatibility adapter retained for existing presentation consumers. */
   readonly tasks: readonly CombatProgressionPresentationTask[];
 }
 

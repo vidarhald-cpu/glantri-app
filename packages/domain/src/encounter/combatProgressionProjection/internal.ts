@@ -13,6 +13,7 @@ import type {
   CombatProgressionBlockerType,
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
+  CombatProgressionExecutionGroup,
   CombatProgressionExecutionStrategy,
   CombatProgressionExpectedCommand,
   CombatProgressionGmIdentity,
@@ -52,9 +53,7 @@ export interface TaskSpec {
   allowedActors?: readonly CombatProgressionAllowedActor[];
   dependencies?: readonly TaskDependency[];
   expectedCommand: CombatProgressionExpectedCommand;
-  identity?: Omit<CombatProgressionTaskIdentity, "executionGroupId"> & {
-    executionGroupId?: string;
-  };
+  identity?: Omit<CombatProgressionTaskIdentity, "executionGroupId">;
   key?: string;
   kind: CombatProgressionTaskKind;
   owner?: CombatProgressionTaskOwner;
@@ -164,6 +163,7 @@ function buildTask(
   processKind: CombatProgressionProcessKind,
   stageKind: CombatProgressionStageKind,
   spec: TaskSpec,
+  executionGroupId: string,
   processKey?: string,
   stageKey?: string,
 ): CombatProgressionTask {
@@ -214,11 +214,10 @@ function buildTask(
     allowedActors,
     blockerIds,
     expectedCommand: spec.expectedCommand,
+    executionGroupId,
     id,
     identity: {
-      executionGroupId:
-        spec.identity?.executionGroupId ??
-        `${stageId(context, processKind, stageKind, processKey, stageKey)}:group`,
+      executionGroupId,
       ...spec.identity,
     },
     kind: spec.kind,
@@ -228,6 +227,42 @@ function buildTask(
     state: blockerIds.length === 0 ? "executable" : "waiting",
     trackerFacet: { owner: spec.trackerOwner, step: spec.trackerStep },
     transition: spec.transition,
+  };
+}
+
+function buildExecutionGroup(
+  context: ProjectionBuildContext,
+  processKind: CombatProgressionProcessKind,
+  stage: StageSpec,
+  taskSpec: TaskSpec,
+  position: number,
+  processKey?: string,
+): CombatProgressionExecutionGroup {
+  const currentStageId = stageId(context, processKind, stage.kind, processKey, stage.key);
+  const ownerKey =
+    taskSpec.owner?.kind === "combatant"
+      ? taskSpec.owner.participantId
+      : taskSpec.owner?.kind === "gm"
+        ? "gm"
+        : "unowned";
+  const taskKey = taskSpec.key ?? ownerKey;
+  const id = `${currentStageId}:execution-group:${position}:${taskSpec.kind}:${taskKey}`;
+  const task = buildTask(context, processKind, stage.kind, taskSpec, id, processKey, stage.key);
+  return {
+    activationBoundary: {
+      id: context.boundaryId,
+      kind: context.boundaryKind,
+      roundNumber: context.roundNumber,
+    },
+    blockerIds: task.blockerIds,
+    completionState: stage.state === "complete" ? "complete" : "incomplete",
+    diagnostics: [],
+    executionStrategy: stage.strategy,
+    futureActivationBoundary: undefined,
+    id,
+    position,
+    stageId: currentStageId,
+    tasks: [task],
   };
 }
 
@@ -268,16 +303,20 @@ export function buildProcess(
     id,
     kind,
     ...(options.planId ? { planId: options.planId } : {}),
-    stages: stages.map((stage) => ({
-      executionStrategy: stage.strategy,
-      id: stageId(context, kind, stage.kind, options.key, stage.key),
-      kind: stage.kind,
-      processId: id,
-      state: stage.state,
-      tasks: (stage.tasks ?? []).map((task) =>
-        buildTask(context, kind, stage.kind, task, options.key, stage.key),
-      ),
-    })),
+    stages: stages.map((stage) => {
+      const executionGroups = (stage.tasks ?? []).map((task, position) =>
+        buildExecutionGroup(context, kind, stage, task, position, options.key),
+      );
+      return {
+        executionGroups,
+        executionStrategy: stage.strategy,
+        id: stageId(context, kind, stage.kind, options.key, stage.key),
+        kind: stage.kind,
+        processId: id,
+        state: stage.state,
+        tasks: executionGroups.flatMap((group) => group.tasks),
+      };
+    }),
   };
 }
 

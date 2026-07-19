@@ -23,8 +23,9 @@ export function getCombatProgressionPresentationTasks(
 ): CombatProgressionPresentationTask[] {
   if (progression?.taskVisibility !== "available") return [];
   return (
-    progression?.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)) ??
-    []
+    progression?.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
+    ) ?? []
   );
 }
 
@@ -44,15 +45,17 @@ export function buildCombatProgressionTrackerIndex(
   for (const process of progression.processes) {
     for (const stage of process.stages) {
       if (stage.state !== "active") continue;
-      for (const task of stage.tasks) {
-        const participantId = task.trackerFacet.owner?.participantId;
-        if (!participantId) continue;
-        const key = buildCombatTrackerCellKey({
-          participantId,
-          roundNumber: progression.roundNumber,
-          step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
-        });
-        tasksByCellKey.set(key, [...(tasksByCellKey.get(key) ?? []), task]);
+      for (const group of stage.executionGroups) {
+        for (const task of group.tasks) {
+          const participantId = task.trackerFacet.owner?.participantId;
+          if (!participantId) continue;
+          const key = buildCombatTrackerCellKey({
+            participantId,
+            roundNumber: progression.roundNumber,
+            step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
+          });
+          tasksByCellKey.set(key, [...(tasksByCellKey.get(key) ?? []), task]);
+        }
       }
     }
   }
@@ -63,7 +66,7 @@ export function buildCombatProgressionTrackerIndex(
     byCellKey[cellKey] = {
       current: progressionTasks.length > 0,
       executable: progressionTasks.some((task) => task.state === "executable"),
-      executionGroupIds: unique(tasks.map((task) => task.identity.executionGroupId)),
+      executionGroupIds: unique(tasks.map((task) => task.executionGroupId)),
       gmProxyAvailable: tasks.some((task) => task.actorAccess.gm),
       ownerParticipantIds: unique(
         tasks.flatMap((task) =>

@@ -1,6 +1,7 @@
 import type {
   CombatHistoryProjection,
   CombatProgressionPresentationProjection,
+  CombatProgressionPresentationTask,
   ProjectedCombatHistoryEvent,
   ProjectedCombatHistorySnapshot,
 } from "@glantri/domain";
@@ -72,6 +73,22 @@ function liveProgression(
   const kind = input.kind ?? "attack";
   const ownerId = input.ownerId ?? "aria";
   const step = input.step ?? "A1";
+  const task: CombatProgressionPresentationTask = {
+    actorAccess: { combatant: true, gm: true },
+    contributesToProgression: true,
+    executionGroupId: "group-1",
+    id: "task-1",
+    identity: { executionGroupId: "group-1", phase: "phase1" },
+    kind,
+    owner: { kind: "combatant", label: "Aria", participantId: ownerId },
+    processId: "process-1",
+    stageId: "stage-1",
+    state: input.state ?? "executable",
+    trackerFacet: {
+      owner: { kind: "combatant", label: "Aria", participantId: ownerId },
+      step,
+    },
+  };
   return {
     awaitingGmTransition: false,
     boundary: { id: "boundary-1", kind: "phase1_resolution", roundNumber: 1 },
@@ -85,28 +102,30 @@ function liveProgression(
             : "attack",
         stages: [
           {
+            executionGroups: [
+              {
+                activationBoundary: {
+                  id: "boundary-1",
+                  kind: "phase1_resolution",
+                  roundNumber: 1,
+                },
+                blocked: false,
+                completionState: "incomplete",
+                executionStrategy: "single_task",
+                futureActivationBoundary: undefined,
+                id: "group-1",
+                position: 0,
+                stageId: "stage-1",
+                tasks: [task],
+              },
+            ],
             executionStrategy: "single_task",
             id: "stage-1",
             kind: step === "P1" ? "defense" : "attack",
             processId: "process-1",
             state: "active",
-            tasks: [
-              {
-                actorAccess: { combatant: true, gm: true },
-                contributesToProgression: true,
-                id: "task-1",
-                identity: { executionGroupId: "group-1", phase: "phase1" },
-                kind,
-                owner: { kind: "combatant", label: "Aria", participantId: ownerId },
-                processId: "process-1",
-                stageId: "stage-1",
-                state: input.state ?? "executable",
-                trackerFacet: {
-                  owner: { kind: "combatant", label: "Aria", participantId: ownerId },
-                  step,
-                },
-              },
-            ],
+            // Keep the compatibility adapter empty so these tests prove group-backed traversal.
+            tasks: [],
           },
         ],
       },

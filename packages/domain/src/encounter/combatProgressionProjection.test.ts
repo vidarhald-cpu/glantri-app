@@ -401,6 +401,8 @@ describe("CombatProgressionProjection", () => {
       kind: "attack",
       owner: { participantId: "hero" },
     });
+    expect(process?.stages[0]?.executionGroups).toHaveLength(1);
+    expect(process?.stages[0]?.executionGroups[0]?.tasks[0]).toBe(process?.stages[0]?.tasks[0]);
     expect(projection.phaseResolutionCursorEquivalent).toEqual({
       participantId: "hero",
       phase: "phase1",
@@ -555,10 +557,53 @@ describe("CombatProgressionProjection", () => {
     expect(JSON.stringify(source)).toBe(sourceBefore);
     expect("combatProgressionProjection" in source).toBe(false);
     expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.boundary.processes[0]?.stages[0]?.executionGroups)).toBe(true);
+    expect(Object.isFrozen(first.boundary.processes[0]?.stages[0]?.executionGroups[0])).toBe(true);
     expect(Object.isFrozen(first.boundary.processes[0]?.stages[0]?.tasks)).toBe(true);
     expect(() => {
       (first.boundary.processes as unknown as unknown[]).push({});
     }).toThrow(TypeError);
+  });
+
+  it("places every task in one deterministic ordered execution group", () => {
+    const source = state({ cursorParticipantId: "hero", cursorStep: "DE" });
+    const first = buildCombatProgressionProjection(source);
+    const reloaded = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse(JSON.parse(JSON.stringify(source))),
+    );
+    const stages = first.boundary.processes.flatMap((process) => process.stages);
+    const groups = stages.flatMap((stage) => stage.executionGroups);
+    const groupedTasks = groups.flatMap((group) => group.tasks);
+
+    expect(groups.length).toBeGreaterThan(1);
+    expect(new Set(groups.map((group) => group.id)).size).toBe(groups.length);
+    expect(new Set(groupedTasks.map((task) => task.id)).size).toBe(groupedTasks.length);
+    for (const stage of stages) {
+      expect(stage.executionGroups.map((group) => group.position)).toEqual(
+        stage.executionGroups.map((_, position) => position),
+      );
+      expect(stage.tasks).toEqual(stage.executionGroups.flatMap((group) => group.tasks));
+      for (const group of stage.executionGroups) {
+        expect(group.tasks).toHaveLength(1);
+        expect(group.executionStrategy).toBe(stage.executionStrategy);
+        expect(group.activationBoundary).toEqual({
+          id: first.boundary.id,
+          kind: first.boundary.kind,
+          roundNumber: first.roundNumber,
+        });
+        expect(group.blockerIds).toEqual(group.tasks[0]?.blockerIds);
+        expect(group.diagnostics).toEqual([]);
+        expect("futureActivationBoundary" in group).toBe(true);
+        expect(group.futureActivationBoundary).toBeUndefined();
+        expect(group.tasks[0]).toBe(stage.tasks[group.position]);
+        expect(group.tasks[0]).toMatchObject({
+          executionGroupId: group.id,
+          identity: { executionGroupId: group.id },
+          stageId: stage.id,
+        });
+      }
+    }
+    expect(reloaded.boundary.processes).toEqual(first.boundary.processes);
   });
 
   it("returns to the same projection after command-stack undo", () => {
@@ -592,14 +637,23 @@ describe("authorizeCombatProgressionTask", () => {
       state({ cursorParticipantId: "hero", cursorStep: "DE" }),
     );
 
+    const authorized = authorizeCombatProgressionTask({
+      actor: player("hero"),
+      commandType: "declare_action",
+      participantId: "hero",
+      projection,
+    });
+    expect(authorized).toMatchObject({ ok: true, task: { kind: "submit_declaration" } });
+    if (!authorized.ok) throw new Error("Expected declaration authorization to succeed.");
     expect(
       authorizeCombatProgressionTask({
         actor: player("hero"),
         commandType: "declare_action",
+        executionGroupId: authorized.task.executionGroupId,
         participantId: "hero",
         projection,
       }),
-    ).toMatchObject({ ok: true, task: { kind: "submit_declaration" } });
+    ).toEqual(authorized);
     expect(
       authorizeCombatProgressionTask({
         actor: player("hero"),
@@ -1077,8 +1131,20 @@ describe("authorizeCombatProgressionTask", () => {
     const playerTasks = playerView.processes.flatMap((process) =>
       process.stages.flatMap((stage) => stage.tasks),
     );
+    const playerGroups = playerView.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.executionGroups),
+    );
 
     expect(playerTasks).toHaveLength(1);
+    expect(playerGroups).toHaveLength(1);
+    expect(playerGroups[0]?.tasks).toEqual(playerTasks);
+    expect(playerGroups[0]).toMatchObject({
+      blocked: false,
+      completionState: "incomplete",
+      executionStrategy: "parallel_all",
+      id: playerTasks[0]?.executionGroupId,
+      position: 0,
+    });
     expect(playerTasks[0]).toMatchObject({
       id: gmHeroTask?.id,
       kind: "submit_declaration",

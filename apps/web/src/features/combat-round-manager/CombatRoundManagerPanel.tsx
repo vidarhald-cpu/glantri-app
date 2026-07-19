@@ -4115,7 +4115,8 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const projectedRoundEndTasks = combatProgressionProjection.boundary.processes
     .flatMap((process) => process.stages)
-    .flatMap((stage) => stage.tasks)
+    .flatMap((stage) => stage.executionGroups)
+    .flatMap((group) => group.tasks)
     .filter((task) => task.state === "executable" && task.trackerFacet.step === "SU");
   const inspectorRoundEndTask =
     selectedRoundIsActive && inspector.step === "round_summary"

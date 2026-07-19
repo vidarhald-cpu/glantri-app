@@ -98,7 +98,9 @@ export function addDiagnostics(
   }
   for (const process of processes) {
     for (const stage of process.stages) {
-      const executable = stage.tasks.filter((task) => task.state === "executable");
+      const executable = stage.executionGroups
+        .flatMap((group) => group.tasks)
+        .filter((task) => task.state === "executable");
       if (
         executable.length > 1 &&
         stage.executionStrategy !== "parallel_all" &&
@@ -111,7 +113,7 @@ export function addDiagnostics(
           severity: "warning",
         });
       }
-      for (const task of stage.tasks) {
+      for (const task of stage.executionGroups.flatMap((group) => group.tasks)) {
         if (!task.owner)
           context.diagnostics.push({
             code: "missing_owner",
