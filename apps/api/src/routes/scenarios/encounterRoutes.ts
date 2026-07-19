@@ -53,8 +53,8 @@ import {
   expireCombatFeintGeneratedModifiersBeforeRound,
   expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   getCombatRoundInitiativePhaseForStep,
+  buildLiveCombatModifierContributionProjection,
   getMergedCombatDbParryModifierTotal,
-  getMergedCombatInitiativeModifierTotal,
   getMergedCombatSkillObModifierTotal,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
@@ -105,6 +105,7 @@ import {
   removeCombatRoundEndParticipantReviewEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  resolveCombatModifierContributions,
   rollCombatRoundEndDistanceControl,
   rollCombatRoundEndHealthCheck,
   rollOpenEndedCombatToHitD20,
@@ -145,6 +146,7 @@ import type {
   CombatRoundStepSnapshot,
   CombatRoundState,
   CombatRoundPhaseContexts,
+  CombatCalculationContext,
   EncounterSession,
   MovementIntent,
   ScenarioCombatModifierEntry,
@@ -3958,10 +3960,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const initiativeRoll = rollOpenEndedD6();
       const initiativeBase = body.initiativeBase ?? 0;
-      const initiativeRawModifier = getMergedCombatInitiativeModifierTotal({
+      const initiativeProjection = buildLiveCombatModifierContributionProjection({
         combatContext: scenarioParticipant.state.combat.combatContext,
-        phase,
+        combatEffects: scenarioParticipant.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: scenarioParticipant.id,
       });
+      const initiativeCalculationContext: CombatCalculationContext = {
+        encounterId,
+        ownerParticipantId: scenarioParticipant.id,
+        phase,
+        roundNumber: roundState.roundNumber,
+        step: phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+      };
+      const initiativeResolution = resolveCombatModifierContributions({
+        bucket: "initiative",
+        context: initiativeCalculationContext,
+        contributions: initiativeProjection.contributions,
+      });
+      const initiativeRawModifier = initiativeResolution.total;
       const initiativeModifierTrace = calculateWorkbookPercentageAdjustmentTrace({
         baseValue: initiativeBase,
         rawModifiers: [{ label: "Initiative", value: initiativeRawModifier }],

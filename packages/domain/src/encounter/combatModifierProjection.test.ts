@@ -8,6 +8,10 @@ import {
 import { applyCombatActionGeneratedModifiers } from "./combatActionModifiers";
 import type { CombatEffect, CombatEffectsState } from "./combatEffects";
 import {
+  resolveCombatModifierContributions,
+  type CombatCalculationContext,
+} from "./combatModifierContributions";
+import {
   getMergedCombatDbParryModifierTotal,
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatModifierTotals,
@@ -227,6 +231,80 @@ describe("persistent combat modifier projection", () => {
     expect(projection.contributions.map((row) => row.id)).toEqual([
       "import:character_effect:effect-1:general",
     ]);
+  });
+
+  it("resolves initiative from imported, generated, and manual contributions", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [
+          { id: "manual-initiative", scope: "until", value: 2 },
+          {
+            generated: true,
+            id: "generated-initiative-phase1",
+            scope: "until",
+            sourcePhase: "phase1",
+            value: 3,
+          },
+          {
+            generated: true,
+            id: "generated-initiative-phase2",
+            scope: "until",
+            sourcePhase: "phase2",
+            value: 20,
+          },
+          {
+            id: "expired-initiative",
+            expiresAtRound: 1,
+            scope: "until",
+            value: 50,
+          },
+        ],
+        situationObSkill: [],
+      },
+    };
+    const combatEffects = effects(
+      effect({
+        combatModifierBucket: "initiative",
+        id: "persistent-initiative",
+        modifierValue: -1,
+      }),
+      effect({
+        combatModifierBucket: "general",
+        id: "unsupported-damage",
+        modifierValue: undefined,
+        type: "physical_damage",
+      }),
+    );
+    const projection = buildLiveCombatModifierContributionProjection({
+      combatContext,
+      combatEffects,
+      currentRound: 2,
+      encounterId: "encounter-1",
+      ownerParticipantId: "participant-1",
+    });
+    const calculationContext: CombatCalculationContext = {
+      encounterId: "encounter-1",
+      ownerParticipantId: "participant-1",
+      phase: "phase1",
+      roundNumber: 2,
+      step: "initiative_phase_1",
+    };
+    const resolution = resolveCombatModifierContributions({
+      bucket: "initiative",
+      context: calculationContext,
+      contributions: projection.contributions,
+    });
+
+    expect(resolution.rows.map((row) => row.id)).toEqual([
+      "manual-initiative",
+      "generated-initiative-phase1",
+      "import:character_effect:persistent-initiative:initiative",
+    ]);
+    expect(resolution.total).toBe(4);
+    expect(projection.specialEffectIds).toContain("unsupported-damage");
+    expect(projection.contributions.some((row) => row.id === "unsupported-damage")).toBe(false);
   });
 
   it.each([

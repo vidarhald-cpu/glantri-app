@@ -104,7 +104,12 @@ export interface CombatModifierContribution {
   readOnly: boolean;
 }
 
-export interface CombatModifierResolutionContext {
+/**
+ * The calculation context is the complete identity available when a modifier bucket is
+ * resolved.  It deliberately carries more scope than any one calculation needs so the same
+ * applicability contract can be reused by initiative, attacks, contests, and later rolls.
+ */
+export interface CombatCalculationContext {
   encounterId?: string;
   roundNumber?: number;
 
@@ -125,6 +130,15 @@ export interface CombatModifierResolutionContext {
 
   initiativeSequence?: number;
   simultaneousGroupId?: string;
+}
+
+/** Backward-compatible name used by the Slice 1 applicability helpers. */
+export type CombatModifierResolutionContext = CombatCalculationContext;
+
+export interface CombatModifierResolution {
+  bucket: CombatModifierContributionBucket;
+  total: number;
+  rows: CombatModifierContribution[];
 }
 
 export interface NormalizeScenarioCombatModifierEntryInput {
@@ -398,11 +412,32 @@ export function doesCombatModifierContributionApply(
 
 export function filterApplicableCombatModifierContributions(
   contributions: readonly CombatModifierContribution[],
-  context: CombatModifierResolutionContext,
+  context: CombatCalculationContext,
 ): CombatModifierContribution[] {
   return contributions.filter((contribution) =>
     doesCombatModifierContributionApply(contribution, context),
   );
+}
+
+/**
+ * Resolves one normalized bucket for a calculation without consulting any legacy source rows.
+ * Filtering preserves the normalized source order, making the contributing facts deterministic
+ * and suitable for a later calculation/history record.
+ */
+export function resolveCombatModifierContributions(input: {
+  bucket: CombatModifierContributionBucket;
+  context: CombatCalculationContext;
+  contributions: readonly CombatModifierContribution[];
+}): CombatModifierResolution {
+  const rows = filterApplicableCombatModifierContributions(input.contributions, input.context).filter(
+    (contribution) => contribution.bucket === input.bucket,
+  );
+
+  return {
+    bucket: input.bucket,
+    rows,
+    total: sumCombatModifierContributions(rows),
+  };
 }
 
 export function sumCombatModifierContributions(

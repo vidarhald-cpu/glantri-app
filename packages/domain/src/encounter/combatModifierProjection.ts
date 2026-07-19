@@ -44,7 +44,8 @@ export interface LiveCombatModifierContributionProjectionInput {
  * The live panel adapter is deliberately additive: combatEffects and persisted bucket entries
  * remain the source of truth. It returns normalized contributions plus the original rows keyed
  * by contribution id so existing editors can continue to issue their established row commands.
- * No calculation consumes this projection yet.
+ * Initiative is the first calculation consumer; all other calculations remain on their
+ * existing paths until their respective migration slices.
  */
 export interface LiveCombatModifierContributionProjection {
   contributions: CombatModifierContribution[];
@@ -249,7 +250,12 @@ export function projectPersistentCombatEffectModifiers(
 function replaceImportedEntries(
   existing: readonly ScenarioCombatModifierEntry[],
   projected: readonly ScenarioCombatModifierEntry[],
+  sourceEffectsProvided: boolean,
 ): ScenarioCombatModifierEntry[] {
+  // Older scenario snapshots may contain imported rows without the source combatEffects
+  // collection. Preserve those rows until the authoritative collection is available; an
+  // explicitly supplied collection (including an empty one) is the source-of-truth refresh.
+  if (!sourceEffectsProvided) return [...existing];
   return [...existing.filter((entry) => !isPersistentCombatModifierEntry(entry)), ...projected];
 }
 
@@ -267,18 +273,22 @@ export function mergePersistentCombatEffectModifiers(input: {
       general: replaceImportedEntries(
         current.modifierBuckets.general,
         projected.modifierBuckets.general,
+        input.combatEffects !== undefined,
       ),
       situationDb: replaceImportedEntries(
         current.modifierBuckets.situationDb,
         projected.modifierBuckets.situationDb,
+        input.combatEffects !== undefined,
       ),
       situationInitiative: replaceImportedEntries(
         current.modifierBuckets.situationInitiative,
         projected.modifierBuckets.situationInitiative,
+        input.combatEffects !== undefined,
       ),
       situationObSkill: replaceImportedEntries(
         current.modifierBuckets.situationObSkill,
         projected.modifierBuckets.situationObSkill,
+        input.combatEffects !== undefined,
       ),
     },
   };

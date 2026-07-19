@@ -8,6 +8,7 @@ import {
   isCombatModifierContributionActive,
   normalizeScenarioCombatModifierEntry,
   reduceCombatModifierContributionsByBucket,
+  resolveCombatModifierContributions,
   sumCombatModifierContributions,
   type CombatModifierApplicability,
   type CombatModifierContribution,
@@ -275,6 +276,57 @@ describe("combat modifier contribution applicability", () => {
       initiative: 3,
       skill_ob: 2,
     });
+  });
+
+  it("resolves one initiative bucket with the same applicability and lifetime rules", () => {
+    const rows: CombatModifierContribution[] = [
+      contribution({}, { id: "manual", bucket: "initiative", value: 2 }),
+      contribution(
+        { phase: "phase1" },
+        { id: "generated-phase1", bucket: "initiative", value: 3 },
+      ),
+      contribution(
+        { phase: "phase2" },
+        { id: "generated-phase2", bucket: "initiative", value: 20 },
+      ),
+      contribution(
+        {},
+        {
+          id: "expired",
+          bucket: "initiative",
+          lifetime: { kind: "round", status: "active", expiresAtRound: 1 },
+          value: 50,
+        },
+      ),
+      contribution(
+        {},
+        {
+          id: "inactive",
+          bucket: "initiative",
+          lifetime: { kind: "encounter", status: "removed" },
+        },
+      ),
+      contribution({}, { id: "zero", bucket: "initiative", value: 0 }),
+      contribution({}, { id: "other-bucket", bucket: "skill_ob", value: 99 }),
+    ];
+
+    const resolution = resolveCombatModifierContributions({
+      bucket: "initiative",
+      context: context({
+        phase: "phase1",
+        roundNumber: 2,
+        step: "initiative_phase_1",
+      }),
+      contributions: rows,
+    });
+
+    expect(resolution.bucket).toBe("initiative");
+    expect(resolution.rows.map((row) => row.id)).toEqual([
+      "manual",
+      "generated-phase1",
+      "zero",
+    ]);
+    expect(resolution.total).toBe(5);
   });
 });
 
