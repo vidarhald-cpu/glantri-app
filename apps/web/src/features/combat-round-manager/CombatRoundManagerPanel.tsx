@@ -12,6 +12,7 @@ import {
 
 import type {
   CombatRoundDeclaration,
+  CombatProgressionBoundaryKind,
   CombatRoundAttackDirection,
   CombatRoundAttackRollResult,
   CombatRoundCommandEnvelope,
@@ -47,7 +48,6 @@ import type {
   ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 import {
-  COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
   buildCombatRoundPhaseResolutionResult,
@@ -80,7 +80,6 @@ import {
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseDamageCommitReadiness,
-  getCombatRoundStartNextRoundBlocker,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
@@ -105,7 +104,6 @@ import {
   isCombatRoundPhaseInitiativeResolutionOpen,
   hasCombatRoundCombatExperienceRoll,
   getWeaponPreferredDistances,
-  isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
   projectCombatHistoryEvent,
   projectCombatProgressionPresentation,
@@ -526,13 +524,6 @@ function buildInspectorPhaseContexts(
   };
 }
 
-function getNextStepLabel(step: CombatRoundStep): string {
-  const currentIndex = COMBAT_ROUND_STEPS.indexOf(step);
-  const nextStep = COMBAT_ROUND_STEPS[currentIndex + 1] ?? "select_actions";
-
-  return COMBAT_ROUND_STEP_ABBREVIATIONS[nextStep];
-}
-
 function isSequentialResolutionStep(step: CombatRoundStep): boolean {
   return (
     step === "phase_1_actions" ||
@@ -544,16 +535,23 @@ function isSequentialResolutionStep(step: CombatRoundStep): boolean {
   );
 }
 
-function getAdvanceButtonLabel(step: CombatRoundStep): string {
-  if (step === "round_summary") {
-    return "Start next round";
+function getBoundaryTransitionButtonLabel(target: CombatProgressionBoundaryKind): string {
+  switch (target) {
+    case "phase1_modifier_review":
+      return "Advance to M1";
+    case "phase1_initiative":
+      return "Open Phase 1 initiative";
+    case "phase2_modifier_review":
+      return "Open Phase 2";
+    case "phase2_initiative":
+      return "Open Phase 2 initiative";
+    case "round_end":
+      return "Begin round end";
+    case "declaration":
+      return "Start next round";
+    default:
+      return "Advance combat";
   }
-
-  if (isSequentialResolutionStep(step)) {
-    return "Use inspector for phase resolution";
-  }
-
-  return `Commit ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]} and advance to ${getNextStepLabel(step)}`;
 }
 
 function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult): string {
@@ -4060,6 +4058,12 @@ export default function CombatRoundManagerPanel({
   const projectedCurrentTasks = getCombatProgressionPresentationTasks(
     combatProgressionPresentation,
   ).filter((task) => task.contributesToProgression);
+  const projectedBoundaryTransitionTask = projectedCurrentTasks.find(
+    (task) =>
+      task.kind === "gm_advance_boundary" &&
+      task.state === "executable" &&
+      task.transition,
+  );
   const projectedCurrentTask =
     projectedCurrentTasks.find(
       (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
@@ -4131,23 +4135,6 @@ export default function CombatRoundManagerPanel({
     combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey] !== undefined
       ? combatExperienceDifficultyDrafts[inspectorCombatExperienceDifficultyKey]
       : String(activeCombatExperienceDifficulty);
-  const roundEndReviewComplete =
-    roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState);
-  const roundEndStartNextRoundBlocker =
-    roundState.currentStep === "round_summary" && !roundEndReviewComplete
-      ? getCombatRoundStartNextRoundBlocker(roundState)
-      : undefined;
-  const topPhaseInitiativeResolutionPhase = getCombatRoundInitiativePhaseForStep(
-    roundState.currentStep,
-  );
-  const topPhaseInitiativeResolutionOpen =
-    topPhaseInitiativeResolutionPhase && selectedRoundIsActive
-      ? isCombatRoundPhaseInitiativeResolutionOpen({
-          phase: topPhaseInitiativeResolutionPhase,
-          state: roundState,
-          visibility: encounter.roleplayState?.visibility,
-        })
-      : false;
   const inspectorRoundEndReview =
     inspector.step === "round_summary" && inspector.participant?.participantId
       ? selectedTimelineRoundState.roundEndReview?.participantReviews[
@@ -4589,7 +4576,8 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorCanExecuteSelectedStep =
     selectedRoundIsActive &&
-    (inspectorSelectionIsCurrentProgression ||
+    (Boolean(projectedBoundaryTransitionTask) ||
+      inspectorSelectionIsCurrentProgression ||
       (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
@@ -5390,9 +5378,11 @@ export default function CombatRoundManagerPanel({
           participant.participantId === inspectorCursorIncomingAttackResult.defenderParticipantId,
       )?.label
     : undefined;
-  const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
-    ? "Attack already rolled"
-    : inspectorAdjustDistanceProposal?.status === "awaiting_defender_response"
+  const inspectorActionButtonLabel = projectedBoundaryTransitionTask?.transition
+    ? getBoundaryTransitionButtonLabel(projectedBoundaryTransitionTask.transition.targetBoundary)
+    : inspectorSelectedAttackAlreadyRolled
+      ? "Attack already rolled"
+      : inspectorAdjustDistanceProposal?.status === "awaiting_defender_response"
       ? "Confirm defender response"
       : inspectorAdjustDistanceProposal?.status === "awaiting_gm_adjustment"
         ? "Confirm maneuver adjustment"
@@ -5488,7 +5478,9 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeSelection === "skip";
   const inspectorActionButtonDisabled =
     saving ||
-    (inspectorAdjustDistanceProposal
+    (projectedBoundaryTransitionTask
+      ? false
+      : inspectorAdjustDistanceProposal
       ? (inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ||
           inspectorAdjustDistanceProposal.status === "awaiting_rolls") &&
         !inspectorAdjustDistanceExpectedScenarioParticipant
@@ -6705,7 +6697,7 @@ export default function CombatRoundManagerPanel({
   }
 
   async function commitCurrentStep() {
-    if (isSequentialResolutionStep(roundState.currentStep)) {
+    if (isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionTask) {
       return;
     }
 
@@ -6767,6 +6759,11 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    if (!projectedBoundaryTransitionTask?.transition) {
+      setSaveError("The current combat boundary is not ready to advance.");
+      return;
+    }
+
     const committedAt = new Date().toISOString();
     const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, roundState);
 
@@ -6778,7 +6775,10 @@ export default function CombatRoundManagerPanel({
         participants,
       } = await advanceCombatRoundCurrentStepOnServer({
         encounterId: encounter.id,
+        expectedBoundary: projectedBoundaryTransitionTask.transition.currentBoundary,
+        expectedRevision: encounter.updatedAt,
         stepSnapshots,
+        targetBoundary: projectedBoundaryTransitionTask.transition.targetBoundary,
       });
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -8685,23 +8685,6 @@ export default function CombatRoundManagerPanel({
             }}
           >
             <button
-              disabled={
-                saving ||
-                !selectedRoundIsActive ||
-                isSequentialResolutionStep(currentTaskStep) ||
-                Boolean(roundEndStartNextRoundBlocker)
-              }
-              onClick={() => void commitCurrentStep()}
-              type="button"
-              title={roundEndStartNextRoundBlocker}
-            >
-              {saving
-                ? "Saving..."
-                : topPhaseInitiativeResolutionOpen && topPhaseInitiativeResolutionPhase
-                  ? `Commit ${formatCombatPhaseLabel(topPhaseInitiativeResolutionPhase)} initiative resolution`
-                  : getAdvanceButtonLabel(currentTaskStep)}
-            </button>
-            <button
               disabled={saving || !currentTaskSelection}
               onClick={selectCurrentTask}
               title="Return to the current unresolved combat step"
@@ -9504,8 +9487,10 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (inspectorAdjustDistanceProposal
-                          ? advanceInspectorAdjustDistance()
+                        void (projectedBoundaryTransitionTask
+                          ? commitCurrentStep()
+                          : inspectorAdjustDistanceProposal
+                            ? advanceInspectorAdjustDistance()
                           : inspectorFeintProposal?.status === "awaiting_rolls"
                             ? rollInspectorFeint()
                             : inspectorFeintProposal?.status === "awaiting_review"
@@ -9564,7 +9549,11 @@ export default function CombatRoundManagerPanel({
                       preActionControls={inspectorPreActionControls}
                       saving={saving}
                       statusText={
-                        inspectorIsHistorical
+                        projectedBoundaryTransitionTask?.transition
+                          ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                              projectedBoundaryTransitionTask.transition.targetBoundary,
+                            )}.`
+                          : inspectorIsHistorical
                           ? `Historical step: ${
                               inspectorHistoricalStepOutcome?.message ??
                               `${getPlayerCombatStepLabel(inspector.step)}.`

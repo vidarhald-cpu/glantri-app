@@ -4883,7 +4883,12 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
     const response = await app.inject({
       method: "POST",
-      payload: { stepSnapshots: [] },
+      payload: {
+        expectedBoundary: "round_boundary",
+        expectedRevision: lifecycle.encounter.updatedAt,
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
       url: "/encounters/encounter-1/combat-round/advance-current-step",
     });
 
@@ -4926,7 +4931,7 @@ describe("scenarios route contract", () => {
       encounter: fixture.encounter,
       proposalId: fixture.proposalId,
     });
-    setupMutableCombatRouteState({
+    const lifecycle = setupMutableCombatRouteState({
       encounter: {
         ...fixture.encounter,
         combatRoundState: rolledState,
@@ -4938,7 +4943,12 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
     const response = await app.inject({
       method: "POST",
-      payload: { stepSnapshots: [] },
+      payload: {
+        expectedBoundary: "round_boundary",
+        expectedRevision: lifecycle.encounter.updatedAt,
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
       url: "/encounters/encounter-1/combat-round/advance-current-step",
     });
 
@@ -5973,6 +5983,7 @@ describe("scenarios route contract", () => {
         ...participant,
         stepStatuses: {
           ...participant.stepStatuses,
+          review_action_modifiers: "gmEdited",
           select_actions: "submitted",
         },
       })),
@@ -6016,17 +6027,56 @@ describe("scenarios route contract", () => {
     });
     const app = await buildScenarioTestApp();
 
+    const wrongTargetResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        stepSnapshots: [stepSnapshot],
+        targetBoundary: "phase2_modifier_review",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    const playerResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        targetBoundary: "phase1_initiative",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
     const response = await app.inject({
       method: "POST",
       payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots: [stepSnapshot],
+        targetBoundary: "phase1_initiative",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    mocks.encounterService.getEncounterById.mockResolvedValue(response.json().encounter);
+    const staleResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        targetBoundary: "phase1_initiative",
       },
       url: "/encounters/encounter-1/combat-round/advance-current-step",
     });
 
     await app.close();
 
+    expect(wrongTargetResponse.statusCode).toBe(400);
+    expect(wrongTargetResponse.json().code).toBe("wrong_target");
+    expect(playerResponse.statusCode).toBe(403);
     expect(response.statusCode).toBe(200);
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json().code).toBe("stale_revision");
     const payload = response.json();
     const updatedEncounter = payload.encounter;
 
@@ -8699,6 +8749,20 @@ describe("scenarios route contract", () => {
         }),
       ]);
 
+      expect(roundState().currentStep).toBe("phase_1_actions");
+      const phase2ReviewResponse = await app.inject({
+        method: "POST",
+        payload: {
+          expectedBoundary: "phase1_resolution",
+          expectedRevision: fixture.encounter.updatedAt,
+          stepSnapshots: [],
+          targetBoundary: "phase2_modifier_review",
+        },
+        url: "/encounters/encounter-1/combat-round/advance-current-step",
+      });
+      expect(phase2ReviewResponse.statusCode, JSON.stringify(phase2ReviewResponse.json())).toBe(
+        200,
+      );
       expect(roundState().currentStep).toBe("review_phase_2_modifiers");
       for (const [scenarioParticipantId, roundParticipantId] of [
         ["participant-1", "encounter-participant-1"],

@@ -7,6 +7,8 @@ import {
   boundaryForCursorStep,
   boundaryForStep,
   buildProcess,
+  getCombatProgressionBoundaryTarget,
+  getCombatProgressionProcessId,
   type ProjectionBuildContext,
   type TaskSpec,
 } from "./internal";
@@ -169,6 +171,11 @@ export function buildRoundEndProcesses(
             kind: "gm_advance_boundary",
             owner: GM_IDENTITY,
             trackerStep: "SU",
+            transition: {
+              currentBoundary: context.boundaryKind,
+              requiredCompletedProcessIds: [getCombatProgressionProcessId(context, "round_end")],
+              targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+            },
           },
         ],
       },

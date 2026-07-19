@@ -47,7 +47,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Round {roundState.roundNumber} · Current step:");
     expect(source).not.toContain("Rows are participants. Columns are round timeline cells.");
     expect(source).toContain("Commit");
-    expect(source).toContain("and advance to");
+    expect(source).toContain("getBoundaryTransitionButtonLabel");
+    expect(source).toContain('"Advance to M1"');
+    expect(source).toContain('"Open Phase 2"');
     expect(source).toContain('"Start next round"');
     expect(source).toContain("Current task");
     expect(source).toContain("Return to the current unresolved combat step");
@@ -641,11 +643,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("? resolveCombatRoundInspectionSelection({");
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("manualSelectionRef.current = undefined");
-    expect(source).toContain("Use inspector for phase resolution");
+    expect(source).toContain(
+      "isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionTask",
+    );
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
-    expect(source).toContain("roundEndStartNextRoundBlocker");
-    expect(source).toContain("getCombatRoundStartNextRoundBlocker");
-    expect(source).toContain("isCombatRoundEndReviewComplete");
+    expect(source).toContain('task.kind === "gm_advance_boundary"');
+    expect(source).toContain('task.state === "executable"');
     expect(source).not.toContain("Build/Review round-end effects");
     expect(source).toContain("Preparing round-end review");
     expect(source).toContain("Round-end review is preparing automatically.");
@@ -780,9 +783,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_commit"');
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
     expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
-    expect(source).toContain(
-      'roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState)',
-    );
+    expect(source).toContain("projectedBoundaryTransitionTask?.transition");
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
     expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
     expect(source).toContain("commitRoundEndDistanceControl(");
@@ -952,7 +953,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep",
     );
-    expect(source).toContain("getAdvanceButtonLabel(currentTaskStep)");
+    expect(source).toContain("getBoundaryTransitionButtonLabel(");
+    expect(source).toContain("projectedBoundaryTransitionTask.transition.targetBoundary");
     expect(source).toContain("Historical step:");
     expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
     expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
@@ -1008,8 +1010,9 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("const inspectorSelectedAttackAlreadyRolled = Boolean(");
     expect(source).toContain(
-      "const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled",
+      "const inspectorActionButtonLabel = projectedBoundaryTransitionTask?.transition",
     );
+    expect(source).toContain(": inspectorSelectedAttackAlreadyRolled");
     expect(source).toContain('? "Attack already rolled"');
     expect(source).toContain(
       "const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({",

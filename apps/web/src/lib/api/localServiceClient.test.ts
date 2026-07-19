@@ -749,13 +749,19 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.advanceCombatRoundCurrentStepOnServer({
         encounterId: "encounter-1",
+        expectedBoundary: "declaration",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
+        targetBoundary: "phase1_modifier_review",
       }),
     ).resolves.toEqual({ commandEnvelope, encounter });
 
     expectFetchCall(fetchMock, {
       body: {
+        expectedBoundary: "declaration",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
+        targetBoundary: "phase1_modifier_review",
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-step",

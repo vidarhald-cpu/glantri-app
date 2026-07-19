@@ -14,8 +14,10 @@ export type CombatProgressionAuthorizationFailureCode =
   | "gm_only"
   | "stale_opportunity"
   | "stale_proposal"
+  | "stale_boundary"
   | "task_not_found"
   | "task_not_ready"
+  | "wrong_target"
   | "wrong_actor"
   | "wrong_participant";
 
@@ -27,12 +29,14 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly actor: CombatProgressionAuthorizationActor;
   readonly attackResultId?: string;
   readonly commandType: CombatRoundCommandType;
+  readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly executionGroupId?: string;
   readonly opportunityId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly projection: CombatProgressionProjection;
   readonly proposalId?: string;
+  readonly targetBoundary?: CombatProgressionBoundaryKind;
 }
 
 export type CombatProgressionAuthorizationResult =
@@ -44,15 +48,19 @@ export type CombatProgressionAuthorizationResult =
     };
 
 interface CommandTaskRule {
-  boundary:
+  boundary?:
     | CombatProgressionBoundaryKind
     | ((phase?: CombatRoundPhase) => CombatProgressionBoundaryKind | undefined);
   kind: CombatProgressionTaskKind;
-  process: CombatProgressionProcessKind;
+  process?: CombatProgressionProcessKind;
   stage: CombatProgressionStageKind;
 }
 
 const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule>> = {
+  advance_combat_boundary: {
+    kind: "gm_advance_boundary",
+    stage: "boundary",
+  },
   commit_phase_initiative_resolution: {
     boundary: initiativeBoundary,
     kind: "commit_initiative",
@@ -64,6 +72,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "submit_declaration",
     process: "declaration",
     stage: "input",
+  },
+  complete_round: {
+    boundary: "round_boundary",
+    kind: "gm_advance_boundary",
+    process: "round_end",
+    stage: "boundary",
   },
   roll_attack: {
     boundary: resolutionBoundary,
@@ -150,29 +164,47 @@ export function authorizeCombatProgressionTask(
   if (!rule) return failure("task_not_found", "The command has no projected authorization task.");
 
   const expectedBoundary =
-    typeof rule.boundary === "function" ? rule.boundary(input.phase) : rule.boundary;
+    input.commandType === "advance_combat_boundary"
+      ? input.currentBoundary
+      : typeof rule.boundary === "function"
+        ? rule.boundary(input.phase)
+        : rule.boundary;
   if (!expectedBoundary || input.projection.boundary.kind !== expectedBoundary) {
-    return failure("boundary_closed", "The projected combat boundary is closed for this command.");
+    return failure(
+      input.currentBoundary ? "stale_boundary" : "boundary_closed",
+      "The projected combat boundary is closed for this command.",
+    );
   }
 
-  const process = input.projection.boundary.processes.find(
-    (candidate) => candidate.kind === rule.process,
-  );
-  const stage = process?.stages.find((candidate) => candidate.kind === rule.stage);
-  const commandTasks = (stage?.tasks ?? []).filter(
-    (task) => task.kind === rule.kind && task.expectedCommand === input.commandType,
-  );
+  const candidateStages = input.projection.boundary.processes
+    .filter((candidate) => !rule.process || candidate.kind === rule.process)
+    .flatMap((process) => process.stages)
+    .filter((candidate) => candidate.kind === rule.stage);
+  const commandTasks = candidateStages
+    .flatMap((stage) => stage.tasks)
+    .filter((task) => task.kind === rule.kind && task.expectedCommand === input.commandType);
 
   if (commandTasks.length === 0) {
     return failure("task_not_found", "No projected task matches this command.");
   }
 
-  const participantTasks = input.participantId
+  const transitionTasks = input.targetBoundary
     ? commandTasks.filter(
+        (task) =>
+          task.transition?.currentBoundary === expectedBoundary &&
+          task.transition.targetBoundary === input.targetBoundary,
+      )
+    : commandTasks;
+  if (input.targetBoundary && transitionTasks.length === 0) {
+    return failure("wrong_target", "The requested combat boundary target is not executable.");
+  }
+
+  const participantTasks = input.participantId
+    ? transitionTasks.filter(
         (task) =>
           task.owner?.kind === "combatant" && task.owner.participantId === input.participantId,
       )
-    : commandTasks;
+    : transitionTasks;
   if (input.participantId && participantTasks.length === 0) {
     return failure("wrong_participant", "The projected task belongs to another participant.");
   }

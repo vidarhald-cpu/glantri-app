@@ -6,11 +6,14 @@ import {
   getCombatRoundFeintProposal,
   getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseResolutionResultForAttack,
+  isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
 import {
   GM_IDENTITY,
   buildProcess,
+  getCombatProgressionBoundaryTarget,
+  getCombatProgressionProcessId,
   trackerStepForPhase,
   type ProjectionBuildContext,
   type StageSpec,
@@ -411,6 +414,38 @@ export function buildResolutionProcesses(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
 ): CombatProgressionProcess[] {
+  if (isCombatRoundPhaseResolutionComplete({ phase, state: context.state })) {
+    const completedProcess = buildProcess(context, "attack", [
+      { kind: "attack", state: "complete", strategy: "single_task" },
+      { kind: "defense", state: "complete", strategy: "single_task" },
+      { kind: "damage", state: "complete", strategy: "single_task" },
+      { kind: "commit", state: "complete", strategy: "gm_review" },
+    ]);
+    const trackerStep = phase === "phase1" ? "A1" : "A2";
+    const transitionProcess = buildProcess(context, "boundary_transition", [
+      {
+        kind: "boundary",
+        state: "active",
+        strategy: "gm_review",
+        tasks: [
+          {
+            allowedActors: ["gm"],
+            expectedCommand: "advance_combat_boundary",
+            kind: "gm_advance_boundary",
+            owner: GM_IDENTITY,
+            trackerStep,
+            transition: {
+              currentBoundary: context.boundaryKind,
+              requiredCompletedProcessIds: [getCombatProgressionProcessId(context, "attack")],
+              targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+            },
+          },
+        ],
+      },
+    ]);
+
+    return [completedProcess, transitionProcess];
+  }
   const participantId =
     context.state.phaseResolutionCursor?.phase === phase
       ? context.state.phaseResolutionCursor.participantId

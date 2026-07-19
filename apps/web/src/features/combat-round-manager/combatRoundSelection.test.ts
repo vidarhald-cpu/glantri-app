@@ -65,6 +65,7 @@ function committedOrder(
   participantIds: string[],
 ): CombatProgressionPresentationProjection {
   return {
+    awaitingGmTransition: false,
     boundary: { id: "boundary", kind: "phase1_resolution", roundNumber: 1 },
     executionOrder: { participantIds, phase },
     processes: [],

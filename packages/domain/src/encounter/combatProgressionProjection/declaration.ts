@@ -10,6 +10,8 @@ import {
 import {
   GM_IDENTITY,
   buildProcess,
+  getCombatProgressionBoundaryTarget,
+  getCombatProgressionProcessId,
   isCompleteStatus,
   type ProjectionBuildContext,
   type TaskDependency,
@@ -134,13 +136,20 @@ export function buildDeclarationProcesses(
             ? [
                 {
                   allowedActors: ["gm"],
-                  expectedCommand: "advance_boundary",
+                  expectedCommand: "advance_combat_boundary",
                   kind: "gm_advance_boundary",
                   owner: GM_IDENTITY,
                   trackerOwner: context.identities.get(
                     context.state.currentCursor?.participantId ?? "",
                   ),
                   trackerStep: "DE",
+                  transition: {
+                    currentBoundary: context.boundaryKind,
+                    requiredCompletedProcessIds: [
+                      getCombatProgressionProcessId(context, "declaration"),
+                    ],
+                    targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+                  },
                 },
               ]
             : [],
@@ -200,10 +209,17 @@ export function buildModifierReviewProcess(
           ? [
               {
                 allowedActors: ["gm"],
-                expectedCommand: "advance_boundary",
+                expectedCommand: "advance_combat_boundary",
                 kind: "gm_advance_boundary",
                 owner: GM_IDENTITY,
                 trackerStep,
+                transition: {
+                  currentBoundary: context.boundaryKind,
+                  requiredCompletedProcessIds: [
+                    getCombatProgressionProcessId(context, "modifier_review"),
+                  ],
+                  targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+                },
               },
             ]
           : [],

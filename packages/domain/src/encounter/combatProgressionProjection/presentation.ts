@@ -31,6 +31,8 @@ function taskIsVisible(
 ): boolean {
   if (viewer.kind === "gm") return true;
 
+  if (task.kind === "gm_advance_boundary") return false;
+
   const owner = task.owner?.kind === "combatant" ? task.owner : undefined;
   const facetOwner = task.trackerFacet.owner;
   // Optional GM declaration edits are capabilities, not player-visible progression work.
@@ -75,6 +77,7 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
     stageId: task.stageId,
     state: task.state,
     trackerFacet: task.trackerFacet,
+    transition: task.transition,
   };
 }
 
@@ -148,8 +151,20 @@ export function projectCombatProgressionPresentation(input: {
             ),
       }
     : undefined;
+  const awaitingGmTransition = input.projection.boundary.processes.some((process) =>
+    process.stages.some((stage) =>
+      stage.tasks.some(
+        (task) =>
+          task.kind === "gm_advance_boundary" &&
+          task.state === "executable" &&
+          task.allowedActors.length === 1 &&
+          task.allowedActors[0] === "gm",
+      ),
+    ),
+  );
 
   return deepFreeze({
+    awaitingGmTransition,
     boundary: {
       id: input.projection.boundary.id,
       kind: input.projection.boundary.kind,

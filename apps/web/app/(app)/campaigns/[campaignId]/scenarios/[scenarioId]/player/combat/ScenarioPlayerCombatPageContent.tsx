@@ -3647,8 +3647,13 @@ export default function ScenarioPlayerCombatPageContent({
           disabled: declareActionDisabled,
           isGameMaster: false,
         });
-  const playerActionButtonLabel = selectedHealthCheckActionAvailable
-    ? "Roll health check"
+  const awaitingGmBoundaryTransition = Boolean(
+    combatHistory?.progression?.awaitingGmTransition,
+  );
+  const playerActionButtonLabel = awaitingGmBoundaryTransition
+    ? "Waiting for GM"
+    : selectedHealthCheckActionAvailable
+      ? "Roll health check"
     : selectedAdjustDistanceProposal
       ? selectedAdjustDistanceProposal.status === "awaiting_defender_response"
         ? "Confirm defender response"
@@ -3681,8 +3686,10 @@ export default function ScenarioPlayerCombatPageContent({
                       currentParryAction?.label ??
                       currentAttackAction?.label ??
                       declarationButtonLabel);
-  const playerActionButtonDisabled = selectedHealthCheckActionAvailable
-    ? controlsDisabled || savingCombatContext
+  const playerActionButtonDisabled = awaitingGmBoundaryTransition
+    ? true
+    : selectedHealthCheckActionAvailable
+      ? controlsDisabled || savingCombatContext
     : selectedAdjustDistanceProposal
       ? controlsDisabled || savingCombatContext
       : selectedFeintProposal
@@ -3736,8 +3743,10 @@ export default function ScenarioPlayerCombatPageContent({
     : selectedCombatExperienceNoRollAvailable
       ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
       : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
-  const declarationStatusText = selectedHealthCheckActionAvailable
-    ? `Current step: ${currentCombatStepLabel}. Roll health check.`
+  const declarationStatusText = awaitingGmBoundaryTransition
+    ? `Current step: ${currentCombatStepLabel}. Complete; awaiting GM progression.`
+    : selectedHealthCheckActionAvailable
+      ? `Current step: ${currentCombatStepLabel}. Roll health check.`
     : selectedVisibleHealthRoll?.result
       ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
       : selectedDistanceControlActionAvailable

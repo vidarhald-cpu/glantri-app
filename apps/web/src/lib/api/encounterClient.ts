@@ -1,6 +1,7 @@
 import type {
   CombatAttackSourceRef,
   CombatHistoryProjection,
+  CombatProgressionBoundaryKind,
   CombatRoundAttackRollResult,
   CombatRoundCommand,
   CombatRoundCommandEnvelope,
@@ -484,7 +485,10 @@ export async function setPairDistanceOnServer(input: {
 
 export async function advanceCombatRoundCurrentStepOnServer(input: {
   encounterId: string;
+  expectedBoundary: CombatProgressionBoundaryKind;
+  expectedRevision: string;
   stepSnapshots?: CombatRoundStepSnapshot[];
+  targetBoundary: CombatProgressionBoundaryKind;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
@@ -496,7 +500,10 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
     participants: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/advance-current-step`, {
     body: JSON.stringify({
+      expectedBoundary: input.expectedBoundary,
+      expectedRevision: input.expectedRevision,
       stepSnapshots: input.stepSnapshots,
+      targetBoundary: input.targetBoundary,
     }),
     method: "POST",
   });

@@ -7,21 +7,25 @@ import type {
   CombatRoundPhaseResolutionCursor,
 } from "../combatRoundManager";
 
-export type CombatProgressionBoundaryKind =
-  | "declaration"
-  | "phase1_modifier_review"
-  | "phase1_initiative"
-  | "phase1_resolution"
-  | "phase2_modifier_review"
-  | "phase2_initiative"
-  | "phase2_resolution"
-  | "round_end"
-  | "round_boundary";
+export const COMBAT_PROGRESSION_BOUNDARIES = [
+  "declaration",
+  "phase1_modifier_review",
+  "phase1_initiative",
+  "phase1_resolution",
+  "phase2_modifier_review",
+  "phase2_initiative",
+  "phase2_resolution",
+  "round_end",
+  "round_boundary",
+] as const;
+
+export type CombatProgressionBoundaryKind = (typeof COMBAT_PROGRESSION_BOUNDARIES)[number];
 
 export type CombatProgressionProcessKind =
   | "adjust_distance"
   | "attack"
   | "combat_experience"
+  | "boundary_transition"
   | "declaration"
   | "distance"
   | "feint"
@@ -79,7 +83,6 @@ export type CombatProgressionTaskKind =
 
 export type CombatProgressionExpectedCommand =
   | CombatRoundCommandType
-  | "advance_boundary"
   | "set_combat_experience_difficulty";
 
 export type CombatProgressionBlockerType =
@@ -129,6 +132,12 @@ export interface CombatProgressionTaskIdentity {
   readonly proposalId?: string;
 }
 
+export interface CombatProgressionBoundaryTransition {
+  readonly currentBoundary: CombatProgressionBoundaryKind;
+  readonly requiredCompletedProcessIds: readonly string[];
+  readonly targetBoundary: CombatProgressionBoundaryKind;
+}
+
 export interface CombatProgressionTask {
   readonly allowedActors: readonly CombatProgressionAllowedActor[];
   readonly blockerIds: readonly string[];
@@ -141,6 +150,7 @@ export interface CombatProgressionTask {
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;
   readonly trackerFacet: CombatProgressionTrackerFacet;
+  readonly transition?: CombatProgressionBoundaryTransition;
 }
 
 export interface CombatProgressionStage {
@@ -216,6 +226,7 @@ export interface CombatProgressionPresentationTask {
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;
   readonly trackerFacet: CombatProgressionTrackerFacet;
+  readonly transition?: CombatProgressionBoundaryTransition;
 }
 
 export interface CombatProgressionPresentationStage {
@@ -235,6 +246,8 @@ export interface CombatProgressionPresentationProcess {
 
 /** Sanitized live progression facts suitable for shared GM/player presentation. */
 export interface CombatProgressionPresentationProjection {
+  /** Player-safe indication that child work is complete and only the GM may open the next boundary. */
+  readonly awaitingGmTransition: boolean;
   readonly boundary: {
     readonly id: string;
     readonly kind: CombatProgressionBoundaryKind;

@@ -17,6 +17,7 @@ import {
   buildPlayerSafeRoleplayStateForUser,
   applyCommittedCombatFeintModifiers,
   applyCombatActionGeneratedModifiers,
+  advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundCommandEnvelope,
@@ -27,7 +28,8 @@ import {
   buildCombatRoundInitiativeResult,
   buildReactiveAttackPhase2InitiativeModifierEntry,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
-  advanceCombatRoundStep,
+  COMBAT_PROGRESSION_BOUNDARIES,
+  CombatProgressionBoundaryAdvanceError,
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
@@ -151,6 +153,7 @@ import type {
   CombatRoundDamageReview,
   CombatRoundStepSnapshot,
   CombatRoundState,
+  CombatProgressionBoundaryKind,
   CombatRoundPhaseContexts,
   CombatCalculationContext,
   EncounterSession,
@@ -701,16 +704,26 @@ function parsePairDistanceBody(body: unknown): {
 }
 
 function parseCombatRoundAdvanceBody(body: unknown): {
+  expectedBoundary: CombatProgressionBoundaryKind;
+  expectedRevision: string;
   stepSnapshots?: CombatRoundStepSnapshot[];
+  targetBoundary: CombatProgressionBoundaryKind;
 } {
-  const value =
-    body && typeof body === "object" && !Array.isArray(body)
-      ? parseBodyObject(body, "Combat round advance payload")
-      : {};
+  const value = parseBodyObject(body, "Combat round advance payload");
+  const parseBoundary = (key: "expectedBoundary" | "targetBoundary") => {
+    const boundary = parseNonEmptyString(value[key], key);
+    if (!COMBAT_PROGRESSION_BOUNDARIES.includes(boundary as CombatProgressionBoundaryKind)) {
+      throw new Error(`${key} must be a recognized combat progression boundary.`);
+    }
+    return boundary as CombatProgressionBoundaryKind;
+  };
+  const expectedBoundary = parseBoundary("expectedBoundary");
+  const expectedRevision = parseNonEmptyString(value.expectedRevision, "expectedRevision");
+  const targetBoundary = parseBoundary("targetBoundary");
   const stepSnapshotsValue = value.stepSnapshots;
 
   if (stepSnapshotsValue === undefined) {
-    return {};
+    return { expectedBoundary, expectedRevision, targetBoundary };
   }
 
   if (!Array.isArray(stepSnapshotsValue)) {
@@ -718,9 +731,12 @@ function parseCombatRoundAdvanceBody(body: unknown): {
   }
 
   return {
+    expectedBoundary,
+    expectedRevision,
     stepSnapshots: stepSnapshotsValue.map((snapshot) =>
       combatRoundStepSnapshotSchema.parse(snapshot),
     ),
+    targetBoundary,
   };
 }
 
@@ -5231,19 +5247,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseCombatRoundAdvanceBody(request.body);
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed before the boundary could be advanced.",
+        });
+      }
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
       });
       const submittedAt = new Date().toISOString();
-      const nextRoundState = advanceCombatRoundStep(roundState, {
+      const nextRoundState = advanceCombatProgressionBoundary({
         command: {
           createdAt: submittedAt,
           createdByUserId: user.id,
-          participantId: roundState.currentCursor?.participantId,
         },
+        expectedBoundary: body.expectedBoundary,
+        state: roundState,
         stepSnapshots: body.stepSnapshots,
+        targetBoundary: body.targetBoundary,
         visibility: encounter.roleplayState?.visibility,
       });
       const refreshedParticipants =
@@ -5295,6 +5319,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       };
     } catch (error) {
       return reply.code(400).send({
+        ...(error instanceof CombatProgressionBoundaryAdvanceError
+          ? { code: error.code }
+          : {}),
         error: error instanceof Error ? error.message : "Unable to advance combat round step.",
       });
     }

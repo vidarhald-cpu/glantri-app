@@ -24,6 +24,7 @@ import type {
   CombatProgressionTask,
   CombatProgressionTaskIdentity,
   CombatProgressionAllowedActor,
+  CombatProgressionBoundaryTransition,
 } from "./types";
 
 export const GM_IDENTITY: CombatProgressionGmIdentity = {
@@ -58,6 +59,7 @@ export interface TaskSpec {
   owner?: CombatProgressionTaskOwner;
   trackerOwner?: CombatantIdentity;
   trackerStep: CombatRoundCursorStep;
+  transition?: CombatProgressionBoundaryTransition;
 }
 
 export interface StageSpec {
@@ -122,7 +124,10 @@ export function boundaryForStep(
     : "round_end";
 }
 
-function processId(context: ProjectionBuildContext, kind: CombatProgressionProcessKind): string {
+export function getCombatProgressionProcessId(
+  context: ProjectionBuildContext,
+  kind: CombatProgressionProcessKind,
+): string {
   return `${context.boundaryId}:process:${kind}`;
 }
 
@@ -131,7 +136,7 @@ function stageId(
   processKind: CombatProgressionProcessKind,
   kind: CombatProgressionStageKind,
 ): string {
-  return `${processId(context, processKind)}:stage:${kind}`;
+  return `${getCombatProgressionProcessId(context, processKind)}:stage:${kind}`;
 }
 
 function registerBlocker(
@@ -211,11 +216,37 @@ function buildTask(
     },
     kind: spec.kind,
     owner: spec.owner,
-    processId: processId(context, processKind),
+    processId: getCombatProgressionProcessId(context, processKind),
     stageId: stageId(context, processKind, stageKind),
     state: blockerIds.length === 0 ? "executable" : "waiting",
     trackerFacet: { owner: spec.trackerOwner, step: spec.trackerStep },
+    transition: spec.transition,
   };
+}
+
+export function getCombatProgressionBoundaryTarget(
+  boundary: CombatProgressionBoundaryKind,
+): CombatProgressionBoundaryKind | undefined {
+  switch (boundary) {
+    case "declaration":
+      return "phase1_modifier_review";
+    case "phase1_modifier_review":
+      return "phase1_initiative";
+    case "phase1_initiative":
+      return "phase1_resolution";
+    case "phase1_resolution":
+      return "phase2_modifier_review";
+    case "phase2_modifier_review":
+      return "phase2_initiative";
+    case "phase2_initiative":
+      return "phase2_resolution";
+    case "phase2_resolution":
+      return "round_end";
+    case "round_end":
+      return "round_boundary";
+    case "round_boundary":
+      return "declaration";
+  }
 }
 
 export function buildProcess(
@@ -223,7 +254,7 @@ export function buildProcess(
   kind: CombatProgressionProcessKind,
   stages: readonly StageSpec[],
 ): CombatProgressionProcess {
-  const id = processId(context, kind);
+  const id = getCombatProgressionProcessId(context, kind);
   return {
     boundaryId: context.boundaryId,
     id,

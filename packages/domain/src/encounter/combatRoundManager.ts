@@ -403,6 +403,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_round_end_health_check",
   "roll_round_end_distance_control",
   "commit_round_end_distance_control",
+  "advance_combat_boundary",
   "complete_round",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
@@ -2749,14 +2750,15 @@ function getCombatRoundPhaseCompletionCursor(input: {
   state: CombatRoundState;
 }): CombatRoundCursor {
   const participantId =
-    input.phase === "phase1"
-      ? getCombatRoundPhaseResolutionOrder({ phase: "phase1", state: input.state })[0]
-      : input.state.participants[0]?.participantId;
+    input.state.phaseResolutionCursor?.participantId ??
+    input.state.currentCursor?.participantId ??
+    getCombatRoundPhaseResolutionOrder({ phase: input.phase, state: input.state }).at(-1) ??
+    input.state.participants[0]?.participantId;
 
   return combatRoundCursorSchema.parse({
     participantId,
     roundNumber: input.state.roundNumber,
-    step: input.phase === "phase1" ? "M2" : "SU",
+    step: input.phase === "phase1" ? "A1" : "A2",
   });
 }
 
@@ -2840,7 +2842,7 @@ function getCombatRoundCursorForPhaseResolutionCursor(input: {
   });
 }
 
-function buildCombatRoundCommandId(input: {
+export function buildCombatRoundCommandId(input: {
   createdAt: string;
   participantId: string;
   state: CombatRoundState;
@@ -4515,7 +4517,8 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "commit_round_end_participant_review" ||
     type === "roll_round_end_health_check" ||
     type === "roll_round_end_distance_control" ||
-    type === "commit_round_end_distance_control"
+    type === "commit_round_end_distance_control" ||
+    type === "advance_combat_boundary"
   );
 }
 
@@ -5372,7 +5375,7 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
   return combatRoundParticipantHasExecutablePhaseAttack(input);
 }
 
-function getNextCombatRoundPhaseActionParticipantId(input: {
+export function getNextCombatRoundPhaseActionParticipantId(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): string | undefined {
@@ -5404,6 +5407,22 @@ function getNextCombatRoundPhaseActionParticipantId(input: {
       })
     );
   });
+}
+
+export function isCombatRoundPhaseResolutionComplete(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return (
+    isCombatPhaseActionOpen({ phase: input.phase, state: normalized }) &&
+    normalized.phaseResolutionCursor?.phase !== input.phase &&
+    getNextCombatRoundPhaseActionParticipantId({
+      phase: input.phase,
+      state: normalized,
+    }) === undefined
+  );
 }
 
 function combatRoundCommandCancelsPhaseAction(input: {
@@ -18786,6 +18805,35 @@ function undoCombatRoundAdjustDistanceCommandAtIndex(input: {
   });
 }
 
+function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.type !== "advance_combat_boundary") return undefined;
+
+  const previousStepSnapshots = Array.isArray(command.facts.previousStepSnapshots)
+    ? command.facts.previousStepSnapshots.flatMap((snapshot) => {
+        const parsed = combatRoundStepSnapshotSchema.safeParse(snapshot);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : normalized.stepSnapshots;
+  const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor: undefined,
+    selectedParticipantId:
+      command.beforeCursor.participantId ?? normalized.selectedParticipantId,
+    selectedStep,
+    stepSnapshots: previousStepSnapshots,
+  });
+}
+
 function undoCombatRoundCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -18795,6 +18843,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (!command) {
     return undefined;
+  }
+
+  if (command.type === "advance_combat_boundary") {
+    return undoCombatProgressionBoundaryAdvanceCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
   }
 
   if (command.type === "roll_attack") {
@@ -19850,6 +19905,21 @@ function getCombatRoundLatestEventForCommand(input: {
     participantId: command.participantId,
   });
   const phaseLabel = getCombatRoundLatestEventPhaseLabel(command.phase);
+
+  if (command.type === "advance_combat_boundary") {
+    const currentBoundary = getCombatRoundLatestEventFactString(facts, "currentBoundary");
+    const targetBoundary = getCombatRoundLatestEventFactString(facts, "targetBoundary");
+
+    return {
+      commandId: command.id,
+      roundNumber: command.roundNumber,
+      shortTitle: "Combat boundary opened",
+      step: command.afterCursor.step,
+      summaryText: `Round ${command.roundNumber}: ${targetBoundary ?? "next combat boundary"} opened${
+        currentBoundary ? ` after ${currentBoundary}` : ""
+      }.`,
+    };
+  }
 
   if (command.type === "complete_round") {
     const nextRoundNumber =
