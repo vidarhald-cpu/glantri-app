@@ -10,6 +10,7 @@ import {
   type CombatRoundStep,
 } from "./combatRoundManager";
 import {
+  advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
   buildCombatProgressionProjection,
   projectCombatProgressionPresentation,
@@ -61,6 +62,203 @@ function taskKinds(projection: ReturnType<typeof buildCombatProgressionProjectio
 }
 
 describe("CombatProgressionProjection", () => {
+  it("waits after completed declarations and advances to M1 only through the GM task", () => {
+    const waiting = state({
+      cursorParticipantId: "guard",
+      cursorStep: "DE",
+      participantOverrides: [
+        {
+          declaration: { actionId: "move_only", roundNumber: 2, submittedBy: "player" },
+          stepStatuses: { select_actions: "submitted" },
+        },
+        {
+          declaration: { actionId: "move_only", roundNumber: 2, submittedBy: "player" },
+          stepStatuses: { select_actions: "submitted" },
+        },
+      ],
+    });
+    const projection = buildCombatProgressionProjection(waiting);
+    const task = projection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((candidate) => candidate.kind === "gm_advance_boundary");
+
+    expect(waiting.currentStep).toBe("select_actions");
+    expect(task).toMatchObject({
+      allowedActors: ["gm"],
+      expectedCommand: "advance_combat_boundary",
+      state: "executable",
+      transition: {
+        currentBoundary: "declaration",
+        targetBoundary: "phase1_modifier_review",
+      },
+    });
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["hero"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+    expect(playerView.awaitingGmTransition).toBe(true);
+    expect(
+      playerView.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)),
+    ).not.toContainEqual(expect.objectContaining({ kind: "gm_advance_boundary" }));
+
+    const advanced = advanceCombatProgressionBoundary({
+      command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+      expectedBoundary: "declaration",
+      state: waiting,
+      targetBoundary: "phase1_modifier_review",
+    });
+    expect(advanced.currentStep).toBe("review_action_modifiers");
+    expect(advanced.currentCursor?.step).toBe("M1");
+    expect(advanced.commands.at(-1)).toMatchObject({
+      facts: {
+        currentBoundary: "declaration",
+        targetBoundary: "phase1_modifier_review",
+      },
+      type: "advance_combat_boundary",
+    });
+
+    const undone = undoLatestCombatRoundCommand({ state: advanced });
+    expect(undone?.currentStep).toBe("select_actions");
+    expect(undone?.currentCursor?.step).toBe("DE");
+    expect(buildCombatProgressionProjection(undone!)).toEqual(projection);
+  });
+
+  it.each([
+    ["phase1", "A1", "phase_1_actions", "phase1_resolution", "phase2_modifier_review", "M2"],
+    ["phase2", "A2", "phase_2_actions", "phase2_resolution", "round_end", "SU"],
+  ] as const)(
+    "keeps completed %s resolution waiting until the GM opens %s",
+    (phase, cursorStep, currentStep, boundary, targetBoundary, targetCursor) => {
+      const waiting = state({ cursorParticipantId: "hero", cursorStep, currentStep });
+      const reloaded = combatRoundStateSchema.parse(JSON.parse(JSON.stringify(waiting)));
+      const projection = buildCombatProgressionProjection(waiting);
+      const task = projection.boundary.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((candidate) => candidate.kind === "gm_advance_boundary");
+
+      expect(projection.boundary.kind).toBe(boundary);
+      expect(task?.transition).toMatchObject({ currentBoundary: boundary, targetBoundary });
+      expect(buildCombatProgressionProjection(reloaded)).toEqual(projection);
+      expect(() =>
+        advanceCombatProgressionBoundary({
+          command: { createdAt: "2026-07-19T10:00:00.000Z" },
+          expectedBoundary: boundary,
+          state: waiting,
+          targetBoundary: "round_boundary",
+        }),
+      ).toThrow("requested combat boundary target");
+
+      const advanced = advanceCombatProgressionBoundary({
+        command: { createdAt: "2026-07-19T10:00:00.000Z" },
+        expectedBoundary: boundary,
+        state: waiting,
+        targetBoundary,
+      });
+      expect(advanced.currentCursor?.step).toBe(targetCursor);
+      expect(buildCombatProgressionProjection(advanced).boundary.kind).toBe(targetBoundary);
+      expect(advanced.currentStep).toBe(
+        phase === "phase1" ? "review_phase_2_modifiers" : "round_summary",
+      );
+    },
+  );
+
+  it.each([
+    [
+      "M1",
+      "review_action_modifiers",
+      "review_action_modifiers",
+      "phase1_modifier_review",
+      "phase1_initiative",
+      "initiative_phase_1",
+    ],
+    [
+      "M2",
+      "review_phase_2_modifiers",
+      "review_phase_2_modifiers",
+      "phase2_modifier_review",
+      "phase2_initiative",
+      "initiative_phase_2",
+    ],
+  ] as const)(
+    "keeps completed %s modifier review waiting for the GM",
+    (cursorStep, currentStep, statusStep, boundary, targetBoundary, expectedStep) => {
+      const waiting = state({
+        cursorParticipantId: "hero",
+        cursorStep,
+        currentStep,
+        participantOverrides: [
+          { stepStatuses: { [statusStep]: "gmEdited" } },
+          { stepStatuses: { [statusStep]: "gmEdited" } },
+        ],
+      });
+      const projection = buildCombatProgressionProjection(waiting);
+      expect(projection.boundary.kind).toBe(boundary);
+      expect(taskKinds(projection)).toContain("gm_advance_boundary");
+
+      const advanced = advanceCombatProgressionBoundary({
+        command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+        expectedBoundary: boundary,
+        state: waiting,
+        targetBoundary,
+      });
+      expect(advanced.currentStep).toBe(expectedStep);
+    },
+  );
+
+  it("rejects player, blocked, stale, and skipped boundary transitions", () => {
+    const blocked = buildCombatProgressionProjection(
+      state({ cursorParticipantId: "hero", cursorStep: "DE" }),
+    );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "advance_combat_boundary",
+        currentBoundary: "declaration",
+        projection: blocked,
+        targetBoundary: "phase1_modifier_review",
+      }),
+    ).toMatchObject({ code: "task_not_found", ok: false });
+
+    const waiting = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+      }),
+    );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "advance_combat_boundary",
+        currentBoundary: "phase1_resolution",
+        projection: waiting,
+        targetBoundary: "phase2_modifier_review",
+      }),
+    ).toMatchObject({ code: "gm_only", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "advance_combat_boundary",
+        currentBoundary: "phase2_resolution",
+        projection: waiting,
+        targetBoundary: "round_end",
+      }),
+    ).toMatchObject({ code: "stale_boundary", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "advance_combat_boundary",
+        currentBoundary: "phase1_resolution",
+        projection: waiting,
+        targetBoundary: "round_end",
+      }),
+    ).toMatchObject({ code: "wrong_target", ok: false });
+  });
+
   it("builds the declaration boundary, process, stage, strategy, ownership, and blockers", () => {
     const projection = buildCombatProgressionProjection(
       state({ cursorParticipantId: "hero", cursorStep: "DE" }),

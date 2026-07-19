@@ -128,6 +128,7 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "roll_round_end_health_check",
   "roll_round_end_distance_control",
   "commit_round_end_distance_control",
+  "advance_combat_boundary",
   "complete_round",
   "review_feint_feasibility",
   "roll_feint",

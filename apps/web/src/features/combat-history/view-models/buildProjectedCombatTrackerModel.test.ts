@@ -54,8 +54,8 @@ function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection
 function liveProgression(
   input: {
     kind?: "attack" | "parry" | "resolve_adjust_distance" | "resolve_feint";
-  ownerId?: string;
-  state?: "executable" | "waiting";
+    ownerId?: string;
+    state?: "executable" | "waiting";
     step?: "A1" | "P1";
   } = {},
 ): CombatProgressionPresentationProjection {
@@ -63,6 +63,7 @@ function liveProgression(
   const ownerId = input.ownerId ?? "aria";
   const step = input.step ?? "A1";
   return {
+    awaitingGmTransition: false,
     boundary: { id: "boundary-1", kind: "phase1_resolution", roundNumber: 1 },
     processes: [
       {
