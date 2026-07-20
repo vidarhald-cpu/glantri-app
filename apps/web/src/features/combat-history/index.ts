@@ -1,4 +1,5 @@
 export * from "./components/CombatEventResultList";
+export * from "./components/CombatLog";
 export * from "./components/CombatTracker";
 export * from "./components/PlayerCombatHistoryInspector";
 export * from "./types";

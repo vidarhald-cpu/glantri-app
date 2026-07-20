@@ -280,9 +280,20 @@ Fallbacks are semantic, not empty strings:
 
 ## 7. Progressive Combat Recap
 
+The product name for this panel is **Combat Log**. The Combat Log records what happened in the
+fiction; Action Outcome explains how the rules produced that result. It is not command history or
+audit history. It excludes calculations, dice, modifiers, table lookups, proposal administration,
+and routine GM review mechanics.
+
+The canonical log is a GM-full projection of discrete structured events. Viewer-specific identity
+and field sanitization happens after that projection. The log can be viewed while a round is open
+and recalled from the same immutable round facts after the round closes. Until that sanitization is
+implemented, the rendered Combat Log remains GM-only.
+
 ### 7.1 Event model
 
-The existing canonical combat event stream is the source. Project a smaller narrative stream rather than displaying every command:
+The existing canonical combat event stream, persisted declaration/action facts, and immutable round
+facts are the sources. Project a smaller narrative stream rather than displaying every command:
 
 ```ts
 type CombatPresentationEventCategory =
@@ -324,6 +335,9 @@ Default recap events include declarations, visible attempts/targets, responses, 
 ### 7.2 Compaction and supersession
 
 A final resolution may supersede provisional narrative events with the same process/contest compaction key in the default feed. Superseded facts remain expandable in Detailed Action Result or historical audit; they are not deleted.
+
+The initial Combat Log foundation does not compact or supersede events. Its IDs, structured summary
+facts, provisional/final state, and source links leave that capability additive for a later slice.
 
 Example:
 

@@ -1,4 +1,8 @@
 import type { CombatStepEvent, CombatStepEventFacts } from "./combatStepEventSchema";
+import {
+  buildCombatLogProjection,
+  type CombatLogProjection,
+} from "./combatLogProjection";
 import type {
   CombatRoundStepSnapshot,
   CombatRoundState,
@@ -123,6 +127,8 @@ export interface ProjectedCombatHistoryRound {
 export interface CombatHistoryProjection {
   activeRound: ProjectedCombatHistoryRound;
   archivedRounds: ProjectedCombatHistoryRound[];
+  /** GM-full fiction-facing event stream. Player projection is intentionally deferred. */
+  combatLog?: CombatLogProjection;
   /** Player-safe canonical modifier totals bound to the currently executable attack task. */
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   /** Sanitized canonical live progression for the same encounter revision. */
@@ -576,6 +582,15 @@ export function projectCombatHistory(input: {
       viewer: input.viewer,
     }),
     archivedRounds,
+    ...(input.viewer.kind === "gm" && input.sourceUpdatedAt && input.state.encounterId
+      ? {
+          combatLog: buildCombatLogProjection({
+            encounterId: input.state.encounterId,
+            sourceRevision: input.sourceUpdatedAt,
+            state: input.state,
+          }),
+        }
+      : {}),
     currentAttackModifierValidation: input.currentAttackModifierValidation,
     progression,
     rows: visibleParticipants.map((participant) => ({

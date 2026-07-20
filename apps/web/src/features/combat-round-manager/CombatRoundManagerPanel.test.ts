@@ -62,9 +62,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Step controller");
     expect(source).not.toContain("Round-level controls");
     expect(source).not.toContain("Timeline controls; not part of the current attack/parry step.");
-    expect(source).toContain("Latest combat event");
-    expect(source).toContain("getLatestCombatEventSummary");
-    expect(source).toContain("latestCombatEventSummary.summaryText");
+    expect(source).toContain("<CombatLog");
+    expect(source).toContain("events={combatLogProjection.events}");
+    expect(source).toContain("selectedCombatLogEventId={selectedCombatLogEventId}");
+    expect(source).not.toContain('aria-label="Latest combat event"');
   });
 
   it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
@@ -1156,7 +1157,7 @@ describe("CombatRoundManagerPanel", () => {
       source.search(/rollInspectorPhaseAttack\(\s*inspectorCurrentAttackPhase/s),
     );
     expect(source).toContain("Combat Experience");
-    expect(source).toContain("Latest combat event");
+    expect(source).toContain("<CombatLog");
   });
 
   it("uses stable unique keys for repeated warning rows", () => {

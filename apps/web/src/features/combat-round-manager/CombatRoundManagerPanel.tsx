@@ -53,6 +53,7 @@ import {
   COMBAT_ROUND_STEPS,
   buildCombatRoundPhaseResolutionResult,
   buildCombatProgressionProjection,
+  buildCombatLogProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
   canBackOutCombatRoundPhaseAttack,
@@ -124,6 +125,7 @@ import {
   buildCurrentActionPresentation,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
+  CombatLog,
   CombatTracker,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
@@ -3988,6 +3990,7 @@ export default function CombatRoundManagerPanel({
   const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
   const boundaryTransitionInFlightRef = useRef(false);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
+  const [selectedCombatLogEventId, setSelectedCombatLogEventId] = useState<string>();
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
     [encounter.participants],
@@ -4030,6 +4033,15 @@ export default function CombatRoundManagerPanel({
   const latestCombatEventSummary = useMemo(
     () => getLatestCombatEventSummary(roundState),
     [roundState],
+  );
+  const combatLogProjection = useMemo(
+    () =>
+      buildCombatLogProjection({
+        encounterId: encounter.id,
+        sourceRevision: roundView.encounterRevision ?? encounter.updatedAt,
+        state: roundState,
+      }),
+    [encounter.id, encounter.updatedAt, roundState, roundView.encounterRevision],
   );
   const selectedTimelineRoundState =
     timelineRoundStates.find((candidate) => candidate.roundNumber === selectedRoundNumber) ??
@@ -8753,31 +8765,11 @@ export default function CombatRoundManagerPanel({
         </div>
       ) : null}
 
-      <section
-        aria-label="Latest combat event"
-        style={{
-          background: "#fbfaf7",
-          border: "1px solid #e3e1dc",
-          borderRadius: 8,
-          display: "grid",
-          gap: "0.25rem",
-          padding: "0.65rem 0.75rem",
-        }}
-      >
-        <strong>Latest combat event</strong>
-        {latestCombatEventSummary ? (
-          <>
-            <div>{latestCombatEventSummary.summaryText}</div>
-            {latestCombatEventSummary.details ? (
-              <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-                {latestCombatEventSummary.details}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>No resolved combat event yet.</div>
-        )}
-      </section>
+      <CombatLog
+        events={combatLogProjection.events}
+        onSelect={setSelectedCombatLogEventId}
+        selectedCombatLogEventId={selectedCombatLogEventId}
+      />
 
       <CombatTracker
         model={trackerModel}
