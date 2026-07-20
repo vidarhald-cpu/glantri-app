@@ -80,6 +80,7 @@ function liveProgression(
     actorAccess: { combatant: !input.gmOwned, gm: true },
     contributesToProgression: true,
     executionGroupId: "group-1",
+    expectedCommand: kind === "gm_advance_boundary" ? "advance_combat_boundary" : "roll_attack",
     id: "task-1",
     identity: { executionGroupId: "group-1", phase: "phase1" },
     kind,

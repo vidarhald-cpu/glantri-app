@@ -220,7 +220,7 @@ describe("combat round-end process plans", () => {
     ).toMatchObject({ code: "gm_only", ok: false });
   });
 
-  it("keeps player-safe Round End tasks actionable without transporting proposal details", () => {
+  it("keeps player-safe Round End tasks actionable with identity but without proposal details", () => {
     const projection = buildCombatProgressionProjection(
       state(review({ heroStatus: "health_roll_pending" })),
     );
@@ -243,12 +243,10 @@ describe("combat round-end process plans", () => {
         owner: expect.objectContaining({ participantId: "hero" }),
       }),
     );
-    expect(tasks.find((task) => task.kind === "health_review")?.identity).not.toHaveProperty(
-      "proposalId",
-    );
-    expect(tasks.find((task) => task.kind === "health_review")?.identity).not.toHaveProperty(
-      "healthRollId",
-    );
+    expect(tasks.find((task) => task.kind === "health_review")?.identity).toMatchObject({
+      healthRollId: "health:hero",
+      proposalId: "health:hero",
+    });
     expect(JSON.stringify(player)).not.toContain("bleed:hero");
   });
 

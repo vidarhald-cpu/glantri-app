@@ -11,6 +11,7 @@ function transitionTask(
     actorAccess: { combatant: false, gm: true },
     contributesToProgression: true,
     executionGroupId: "group:round-boundary",
+    expectedCommand: "advance_combat_boundary",
     id: "task:round-boundary:start-next-round",
     identity: { executionGroupId: "group:round-boundary" },
     kind: "gm_advance_boundary",

@@ -24,8 +24,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("<strong>Skill:</strong>");
     expect(source).toContain("rollCombatFeintOnServer");
     expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
-    expect(source).toContain("Roll feint");
-    expect(source).toContain("Roll feint resistance");
+    expect(source).toContain('case "roll_feint"');
+    expect(source).toContain("CurrentActionCommandDescriptor");
     expect(source).not.toContain("reviewCombatFeintFeasibilityOnServer");
     expect(source).not.toContain("commitCombatFeintResultOnServer");
   });
@@ -62,17 +62,16 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("itemId: phaseCombatLoadoutSummaries");
     expect(source).toContain("visibleAtStep: currentCombatStep");
     expect(source).toContain("buildPlayerCombatDefenseStats");
-    expect(source).toContain("getPlayerCombatActionButtonLabel");
+    expect(source).toContain("buildCurrentActionPresentation");
+    expect(source).toContain("encounterRevision: combatHistory?.sourceUpdatedAt");
+    expect(source).toContain("presentation={currentActionPresentation}");
+    expect(source).toContain("onDeclareAction={invokePlayerCurrentAction}");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("projectCombatActionGeneratedModifiers");
     expect(source).toContain("projectedCombatContextDraft");
     expect(source).toContain("combatContext: projectedCombatContextDraft");
     expect(source).toContain("movementIntent: selectedMovementIntent");
     expect(source).toContain("resolvedEquipmentState: controlledEquipmentState ?? undefined");
-    expect(source).toContain(
-      "Reactive attack: no phase 1 attack received, so no phase 2 attack opens.",
-    );
-    expect(source).toContain("Target switch is GM-adjudicated.");
     expect(source).toContain("getPlayerCombatModifierDisplayPhase");
     expect(source).toContain("const currentModifierPhase = getPlayerCombatModifierDisplayPhase({");
     expect(source).toContain("phaseKey: currentModifierPhase");
@@ -99,18 +98,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("declarationStepOpen");
     expect(source).toContain("selectedDeclarationStepStatus");
     expect(source).toContain("selectedParticipantStoredDeclarationThisRound");
-    expect(source).toContain("getPlayerCombatStepLabel");
-    expect(source).toContain("Current step: ${currentCombatStepLabel}");
-    expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
-    expect(source).toContain("Declared.");
-    expect(source).toContain("selectedParticipantHasDeclared");
+    expect(source).not.toContain("getPlayerCombatStepLabel");
     expect(source).not.toContain("gmStatusSuffix");
-    expect(source).toContain(". Initiative rolled.");
-    expect(source).toContain(". Reviewed.");
     expect(source).not.toContain("Modifiers declared");
     expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).not.toContain("GM can save or revise this participant declaration.");
-    expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatAttackOnServer");
     expect(source).toContain("const { encounter, participant } = await rollCombatAttackOnServer");
     expect(source).toContain("entry.id === participant.id ? participant : entry");
@@ -130,8 +122,6 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollPhaseAttack");
     expect(source).toContain("rollCurrentParry");
     expect(source).toContain("currentInitiativePhase");
-    expect(source).toContain("Initiative rolled.");
-    expect(source).toContain("Initiative rolled — waiting for others");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("buildEncounterInitiativeModifierCalculation");
     expect(source).toContain("initiativeCalculation");
@@ -168,27 +158,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedLatestRelevantAttackResult");
     expect(source).toContain("selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel");
-    expect(source).toContain("currentParryAction");
-    expect(source).toContain("Roll parry");
     expect(source).toContain("selectedAttackerPrivilegedResolution");
     expect(source).toContain("selectedAttackerPrivilegedAttackResult");
-    expect(source).toContain("getCombatRoundDamageSubstate");
     expect(source).toContain("getCombatRoundAttackResultById");
     expect(source).toContain("rollCombatHitLocationOnServer");
     expect(source).toContain("rollCombatCriticalOnServer");
-    expect(source).toContain("Roll hit location as attacker");
-    expect(source).toContain("Roll critical as attacker");
-    expect(source).toContain("selectedAttackerCriticalContext");
-    expect(source).toContain("selectedAttackerCriticalStatusContext");
-    expect(source).toContain("Critical context: ${attackerPrivilegedAction.statusContext}.");
-    expect(source).toContain("Attacker hit location rolled");
-    expect(source).toContain("Attacker critical rolled");
-    expect(source).toContain(
-      "The attacker rolls; the defender receives the damage/effects review.",
-    );
-    expect(source).toContain(
-      "Attacker roll recorded; defender damage/effects review waits for GM.",
-    );
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
     expect(source).toContain("formatCombatParryCalculationLine");
     expect(source).toContain("Parry: P ${resolution.combinedParryScore}");
@@ -209,21 +183,20 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("involvedDamage: selectedInvolvedDamageResultPanel");
     expect(source).toContain("latestAttack: selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("relevantInitiative: selectedRelevantInitiativeResultPanel");
-    expect(source).toContain("declarationButtonLabel");
-    expect(source).toContain("playerActionButtonLabel");
+    expect(source).not.toContain("const declarationButtonLabel");
+    expect(source).not.toContain("const playerActionButtonLabel");
     expect(source).toContain("selectedParticipantStoredDeclarationThisRound");
     expect(source).toContain("selectedStoredDeclarationTargetValidation");
     expect(source).toContain("selectedStoredDeclarationComplete");
     expect(source).toContain("declarationIncomplete");
     expect(source).toContain("declarationStepHardLocked");
     expect(source).toContain("declarationSubmittedAndComplete");
-    expect(source).toContain("Incomplete declaration.");
-    expect(source).toContain("!playerDeclarationLocked || declarationIncomplete");
-    expect(source).toContain("currentAttackAction?.label");
-    expect(source).toContain("buttonLabel={playerActionButtonLabel}");
-    expect(source).toContain("rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)");
-    expect(source).toContain("currentAttackAction");
-    expect(source).toContain("rollPhaseAttack()");
+    expect(source).not.toContain("currentAttackAction?.label");
+    expect(source).not.toContain("buttonLabel={playerActionButtonLabel}");
+    expect(source).toContain('rollAttackerPrivilegedCombatDie("hitLocation")');
+    expect(source).toContain('rollAttackerPrivilegedCombatDie("critical")');
+    expect(source).toContain('case "roll_attack"');
+    expect(source).toContain("void rollPhaseAttack(descriptor);");
     expect(source).toContain("getPlayerCombatCurrentRollAction");
     expect(source).toContain("currentRollAction");
     expect(source).toContain("currentAttackPhaseContext");
@@ -235,8 +208,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
       'No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.',
     );
     expect(source).toContain("phaseKey,");
-    expect(source).toContain("Roll phase 1 attack");
-    expect(source).toContain("Roll phase 2 attack");
+    expect(source).toContain("descriptor.opportunityId");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("visibilitychange");
     expect(source).toContain("loadCombatHistory(encounterId)");
@@ -369,9 +341,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
     expect(source).toContain("rollCombatExperienceOnServer");
     expect(source).toContain("backOutPhaseAttackOnServer");
-    expect(source).toContain("backOutPhaseAttack()");
+    expect(source).toContain("backOutPhaseAttack(descriptor)");
     expect(source).toContain("getCombatRoundCombatExperienceDifficulty");
-    expect(source).toContain("isCombatRoundCombatExperienceWindowOpen");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("buildCharacterSheetSummary");
     expect(source).toContain("formatCombatExperienceStatus");
@@ -388,7 +359,6 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCombatExperienceTrigger");
     expect(source).toContain("visibility: encounterSession?.roleplayState?.visibility");
     expect(source).toContain("selectedCombatExperienceResult");
-    expect(source).toContain("selectedCombatExperienceWindowOpen");
     expect(source).toContain("const selectedCombatExperienceSkillLookup = useMemo(");
     expect(source).toContain("sheetSummary: selectedSheetSummary");
     expect(source).toContain("selectedCombatExperienceSkillTotal");
@@ -396,13 +366,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "const selectedCombatExperienceSkillTotal = selectedCombatExperienceSkillLookup.skillTotal",
     );
     expect(source).toContain("selectedCombatExperienceDifficulty");
-    expect(source).toContain("selectedCombatExperienceNoRollAvailable");
     expect(source).toContain("selectedPhaseCombatExperienceRequirement");
     expect(source).toContain("selectedPhaseAttackBackOutOpportunity");
     expect(source).toContain("getCombatRoundPhaseAttackBackOutOpportunity");
     expect(source).toContain("canBackOutCombatRoundPhaseAttack");
     expect(source).toContain("selectedCombatExperienceResultPanel");
-    expect(source).toContain("selectedCombatExperienceActionAvailable");
     expect(source).toContain("selectedPhaseCombatExperienceBackOutAvailable");
     expect(source).toContain("selectedPhaseAttackBackOutOpportunity &&");
     expect(source).toContain("PhaseAttackChoiceSelection");
@@ -435,53 +403,40 @@ describe("ScenarioPlayerCombatPageContent", () => {
       'selectedAdjustDistanceProposal?.status === "awaiting_defender_response"',
     );
     expect(source).toContain("selectedPhaseAttackChoiceControls");
-    expect(source).toContain("? backOutPhaseAttack()");
+    expect(source).toContain("? backOutPhaseAttack(descriptor)");
     expect(source).toContain("phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel");
     expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).not.toContain("secondaryButtonLabel=");
     expect(source).not.toContain("secondaryButtonDisabled=");
     expect(source).not.toContain("onSecondaryAction=");
-    expect(source).toContain('"Roll Combat Experience"');
-    expect(source).toContain('"Confirm Combat Experience"');
-    expect(source).toContain('"Roll health check"');
+    expect(source).toContain('case "roll_combat_experience"');
+    expect(source).toContain('case "roll_round_end_health_check"');
     expect(source).toContain("rollRoundEndHealthCheckOnServer");
     expect(source).toContain("selectedHealthProgressionTask");
     expect(source).not.toContain("getCombatRoundEndHealthCheckPendingRolls");
     expect(source).toContain("selectedPendingHealthRoll");
-    expect(source).toContain("selectedHealthCheckActionAvailable");
-    expect(source).toContain("rollHealthCheck()");
+    expect(source).toContain("rollHealthCheck(descriptor)");
     expect(source).toContain("Round-end health check");
     expect(source).toContain("Health check required");
-    expect(source).toContain("Health check rolled. Waiting for GM review.");
+    expect(source).toContain('selectedVisibleHealthRoll.status === "pending"');
+    expect(source).toContain('"Health check rolled"');
     expect(source).toContain("Roll your Health check for round-end bleed review.");
     expect(source).toContain("formatRoundEndHealthCheckResultLine");
-    expect(source).toContain('"Roll distance control"');
+    expect(source).toContain('case "roll_round_end_distance_control"');
     expect(source).toContain("rollRoundEndDistanceControlOnServer");
-    expect(source).toContain("selectedDistanceControlActionAvailable");
     expect(source).toContain("Roll your Dodge for distance control.");
     expect(source).toContain("formatDistanceControlOpponentStatus");
     expect(source).toContain("selectedDistanceControlCommittedDistance");
     expect(source).toContain("selectedDistanceControlResultPanel");
     expect(source).toContain("Waiting for opponent distance-control roll.");
-    expect(source).toContain("Waiting for other distance-control roll(s).");
     expect(source).toContain("Waiting for GM to commit distance control.");
     expect(source).toContain("Distance control committed: distance");
     expect(source).not.toContain("opponentSide.desiredDistance");
     expect(source).not.toContain("opponentSide.result");
-    expect(source).toContain('"Back out of attack"');
-    expect(source).toContain('"Waiting for GM"');
-    expect(source).toContain("Waiting for GM to start CE.");
-    expect(source.match(/Waiting for GM to start Combat Experience rolls\./g) ?? []).toHaveLength(
-      0,
-    );
-    expect(source).toContain("combatExperienceStatusText");
+    expect(source).not.toContain("combatExperienceStatusText");
     expect(source).toContain("combatExperienceValidationMessage");
-    expect(source).toContain("rollCombatExperience()");
-    expect(source).toContain(
-      "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
-    );
+    expect(source).toContain("void rollCombatExperience(descriptor);");
     expect(source).toContain("continuePhaseAttackOnServer");
-    expect(source).toContain('"Continue attack"');
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");
     expect(source).toContain("Incoming attacker(s):");
@@ -491,7 +446,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain(
       "controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired",
     );
-    expect(source).toContain("const playerActionButtonDisabled =");
+    expect(source).not.toContain("const playerActionButtonDisabled =");
+    expect(source).toContain("descriptor.taskId !== currentActionPresentation?.taskId");
+    expect(source).toContain(
+      "descriptor.expectedRevision !== currentActionPresentation.encounterRevision",
+    );
     expect(source).toContain("Combat Experience");
     expect(source).not.toContain("Phase initiative choices");
     expect(source).not.toContain("Waiting for GM to roll Combat Experience.");

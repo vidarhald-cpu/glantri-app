@@ -21,19 +21,16 @@ import {
   formatOpenEndedD20RollBreakdown,
   getCombatRoundAttackResultById,
   getCombatRoundArmorCriticalModifierForDamageResult,
-  getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
-  getCombatRoundIncomingAttackResultsForParticipantPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
-  getReactiveAttackPhase2InitiativeModifier,
   getDistanceEdgeBetweenParticipantAliases,
   getCombatDistanceParticipantAliases,
   getCombatRoundInitiativeRanks,
@@ -47,7 +44,6 @@ import {
   getWeaponPreferredDistances,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
-  isCombatRoundCombatExperienceWindowOpen,
   lookupCombatCriticalModifier,
   validateCombatDeclarationTargets,
   type EncounterSession,
@@ -62,6 +58,7 @@ import {
 
 import {
   buildConciseDodgeCalculationRows,
+  buildCurrentActionPresentation,
   buildProjectedCombatTrackerModel,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
@@ -71,6 +68,7 @@ import {
   PlayerCombatHistoryInspector,
   resolveProjectedCombatHistoryPanelSnapshot,
   type CombatHistoryInspectionSelection,
+  type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 
 import {
@@ -79,8 +77,6 @@ import {
 } from "@/features/equipment/loadoutModule";
 import {
   buildPlayerCombatModifierRows,
-  getPlayerCombatActionButtonLabel,
-  getPlayerCombatStepLabel,
   formatCombatInitiativeFormula,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
@@ -1553,11 +1549,6 @@ export default function ScenarioPlayerCombatPageContent({
       : undefined;
   const selectedCombatExperienceRequired = Boolean(selectedCombatExperienceTrigger);
   const selectedCombatExperienceResult = selectedRoundParticipant?.combatExperience;
-  const selectedCombatExperienceWindowOpen = combatRoundState
-    ? selectedCombatExperienceTrigger === "combat_start"
-      ? isCombatRoundCombatExperienceWindowOpen(combatRoundState)
-      : selectedCombatExperienceRequired
-    : false;
   const selectedCombatExperienceDifficulty = combatRoundState
     ? getCombatRoundCombatExperienceDifficulty(combatRoundState)
     : 26;
@@ -1609,6 +1600,28 @@ export default function ScenarioPlayerCombatPageContent({
       task.owner?.kind === "combatant" &&
       task.owner.participantId === selectedRoundParticipant?.participantId &&
       task.contributesToProgression,
+  );
+  const currentActionPresentation = useMemo(
+    () =>
+      buildCurrentActionPresentation({
+        encounterId: encounterId ?? "",
+        encounterRevision: combatHistory?.sourceUpdatedAt,
+        progression: combatHistory?.progression,
+        viewer: {
+          controlledParticipantIds: new Set(
+            selectedRoundParticipant ? [selectedRoundParticipant.participantId] : [],
+          ),
+          kind: "player",
+          mayProxy: isGameMaster,
+        },
+      }),
+    [
+      combatHistory?.progression,
+      combatHistory?.sourceUpdatedAt,
+      encounterId,
+      isGameMaster,
+      selectedRoundParticipant,
+    ],
   );
   const selectedDeclarationProgressionTask = selectedProgressionTasks.find(
     (task) => task.kind === "submit_declaration",
@@ -1780,10 +1793,6 @@ export default function ScenarioPlayerCombatPageContent({
     [selectedParticipant, selectedSheetSummary],
   );
   const selectedCombatExperienceSkillTotal = selectedCombatExperienceSkillLookup.skillTotal;
-  const selectedCombatExperienceNoRollAvailable =
-    selectedCombatExperienceRequired &&
-    selectedCombatExperienceWindowOpen &&
-    selectedCombatExperienceSkillTotal >= selectedCombatExperienceDifficulty;
   const selectedDistanceControlProposal = useMemo(() => {
     const participantId = selectedRoundParticipant?.participantId;
     const proposals = combatRoundState?.roundEndReview?.proposedDistances ?? [];
@@ -1834,15 +1843,6 @@ export default function ScenarioPlayerCombatPageContent({
     selectedRoundParticipant?.participantId,
     selectedDistanceControlProgressionTask,
   ]);
-  const selectedDistanceControlRollPending =
-    selectedDistanceControlProposal?.ownSide.status === "pending";
-  const selectedDistanceControlActionAvailable = Boolean(
-    selectedDistanceControlRollPending &&
-    selectedDistanceControlProposal &&
-    selectedParticipant &&
-    encounterId &&
-    !readOnlyInspection,
-  );
   const selectedRoundEndReview =
     combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
       ? combatRoundState.roundEndReview?.participantReviews[selectedRoundParticipant.participantId]
@@ -1866,9 +1866,6 @@ export default function ScenarioPlayerCombatPageContent({
           (proposal) => proposal.id === selectedVisibleHealthRoll.damageProposalId,
         )
       : undefined;
-  const selectedHealthCheckActionAvailable = Boolean(
-    selectedPendingHealthRoll && selectedParticipant && encounterId && !readOnlyInspection,
-  );
 
   const controlledEquipmentState = useMemo(() => {
     return resolveScenarioCombatEquipmentState({
@@ -1902,6 +1899,9 @@ export default function ScenarioPlayerCombatPageContent({
   const currentCombatStep = selectedProgressionTasks[0]
     ? getCombatRoundStepForCursorStep(selectedProgressionTasks[0].trackerFacet.step)
     : (combatRoundState?.currentStep ?? "select_actions");
+  const currentStepIsModifierReview =
+    currentCombatStep === "review_action_modifiers" ||
+    currentCombatStep === "review_phase_2_modifiers";
   const projectedRollTask = selectedProgressionTasks.find((task) =>
     ["attack", "critical", "hit_location", "parry"].includes(task.kind),
   );
@@ -1916,9 +1916,6 @@ export default function ScenarioPlayerCombatPageContent({
     domainCurrentRollAction && projectedRollTask?.kind === domainCurrentRollAction.kind
       ? domainCurrentRollAction
       : undefined;
-  const projectedFeintTask = selectedProgressionTasks.find((task) =>
-    ["feint_attacker_roll", "feint_defender_roll", "feint_commit"].includes(task.kind),
-  );
   const projectedAdjustDistanceTask = selectedProgressionTasks.find((task) =>
     [
       "adjust_distance_response",
@@ -1928,23 +1925,6 @@ export default function ScenarioPlayerCombatPageContent({
       "adjust_distance_commit",
     ].includes(task.kind),
   );
-  const selectedFeintProposal = projectedFeintTask
-    ? combatRoundState?.feintProposals.find((proposal) => {
-        if (
-          !selectedRoundParticipant ||
-          proposal.status !== "awaiting_rolls" ||
-          combatRoundState.phaseResolutionCursor?.phase !== "phase1" ||
-          combatRoundState.phaseResolutionCursor.substep !== "feint" ||
-          combatRoundState.phaseResolutionCursor.participantId !== proposal.attackerParticipantId
-        ) {
-          return false;
-        }
-        const expectedParticipantId = proposal.attackerRollRecorded
-          ? proposal.defenderParticipantId
-          : proposal.attackerParticipantId;
-        return expectedParticipantId === selectedRoundParticipant.participantId;
-      })
-    : undefined;
   const selectedAdjustDistanceProposal = projectedAdjustDistanceTask
     ? combatRoundState?.adjustDistanceProposals.find((proposal) => {
         if (
@@ -2331,16 +2311,22 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollFeint() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId || !selectedFeintProposal) {
+  async function rollFeint(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.proposalId ||
+      !descriptor.participantId
+    ) {
       return;
     }
     setSavingCombatContext(true);
     try {
       const { encounter } = await rollCombatFeintOnServer({
         encounterId,
-        proposalId: selectedFeintProposal.id,
-        scenarioParticipantId: selectedParticipant.id,
+        proposalId: descriptor.proposalId,
+        scenarioParticipantId: descriptor.participantId,
       });
       acceptEncounterSession(encounter);
       setError(undefined);
@@ -2351,12 +2337,14 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function advanceAdjustDistance() {
+  async function advanceAdjustDistance(descriptor: CurrentActionCommandDescriptor) {
     if (
       readOnlyInspection ||
       !selectedParticipant ||
       !encounterId ||
-      !selectedAdjustDistanceProposal
+      !selectedAdjustDistanceProposal ||
+      !descriptor.proposalId ||
+      !descriptor.participantId
     )
       return;
     setSavingCombatContext(true);
@@ -2365,14 +2353,14 @@ export default function ScenarioPlayerCombatPageContent({
         selectedAdjustDistanceProposal.status === "awaiting_defender_response"
           ? await respondCombatAdjustDistanceOnServer({
               encounterId,
-              proposalId: selectedAdjustDistanceProposal.id,
+              proposalId: descriptor.proposalId,
               response: adjustDistanceResponse,
-              scenarioParticipantId: selectedParticipant.id,
+              scenarioParticipantId: descriptor.participantId,
             })
           : await rollCombatAdjustDistanceOnServer({
               encounterId,
-              proposalId: selectedAdjustDistanceProposal.id,
-              scenarioParticipantId: selectedParticipant.id,
+              proposalId: descriptor.proposalId,
+              scenarioParticipantId: descriptor.participantId,
             });
       acceptEncounterSession(encounter);
       setError(undefined);
@@ -2387,12 +2375,12 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollInitiative() {
+  async function rollInitiative(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
     }
 
-    if (!selectedParticipant || !encounterId) {
+    if (!selectedParticipant || !encounterId || !descriptor.participantId) {
       return;
     }
 
@@ -2403,7 +2391,7 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId,
         initiativeBase: initiativeCalculation.baseInitiative,
         initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment,
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       acceptEncounterSession(encounter);
@@ -2417,12 +2405,12 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollCombatExperience() {
+  async function rollCombatExperience(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
     }
 
-    if (!selectedParticipant || !encounterId) {
+    if (!selectedParticipant || !encounterId || !descriptor.participantId) {
       return;
     }
 
@@ -2431,7 +2419,7 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollCombatExperienceOnServer({
         encounterId,
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       setSelectableParticipants((current) =>
@@ -2448,14 +2436,14 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollDistanceControl() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId) {
-      return;
-    }
-
-    const distanceProposalId = selectedDistanceControlProposal?.proposal.id;
-
-    if (!distanceProposalId) {
+  async function rollDistanceControl(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.proposalId ||
+      !descriptor.participantId
+    ) {
       return;
     }
 
@@ -2463,9 +2451,9 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollRoundEndDistanceControlOnServer({
-        distanceProposalId,
+        distanceProposalId: descriptor.proposalId,
         encounterId,
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       setSelectableParticipants((current) =>
@@ -2482,14 +2470,14 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollHealthCheck() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId) {
-      return;
-    }
-
-    const healthRollId = selectedPendingHealthRoll?.id;
-
-    if (!healthRollId) {
+  async function rollHealthCheck(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.healthRollId ||
+      !descriptor.participantId
+    ) {
       return;
     }
 
@@ -2498,8 +2486,8 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollRoundEndHealthCheckOnServer({
         encounterId,
-        healthRollId,
-        scenarioParticipantId: selectedParticipant.id,
+        healthRollId: descriptor.healthRollId,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       setSelectableParticipants((current) =>
@@ -2518,12 +2506,12 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function backOutPhaseAttack() {
+  async function backOutPhaseAttack(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
     }
 
-    if (!selectedParticipant || !encounterId || !selectedPhaseAttackBackOutOpportunity) {
+    if (!selectedParticipant || !encounterId || !descriptor.participantId || !descriptor.phase) {
       return;
     }
 
@@ -2532,8 +2520,8 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await backOutPhaseAttackOnServer({
         encounterId,
-        phase: selectedPhaseAttackBackOutOpportunity.phase,
-        scenarioParticipantId: selectedParticipant.id,
+        phase: descriptor.phase,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       setSelectableParticipants((current) =>
@@ -2544,7 +2532,7 @@ export default function ScenarioPlayerCombatPageContent({
         interpretedResult:
           "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
         phaseLabel:
-          selectedPhaseAttackBackOutOpportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
+          descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
         value: 0,
       });
       setError(undefined);
@@ -2557,12 +2545,12 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function continuePhaseAttack() {
+  async function continuePhaseAttack(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
     }
 
-    if (!selectedParticipant || !encounterId || !selectedPhaseAttackBackOutOpportunity) {
+    if (!selectedParticipant || !encounterId || !descriptor.participantId || !descriptor.phase) {
       return;
     }
 
@@ -2571,8 +2559,8 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await continuePhaseAttackOnServer({
         encounterId,
-        phase: selectedPhaseAttackBackOutOpportunity.phase,
-        scenarioParticipantId: selectedParticipant.id,
+        phase: descriptor.phase,
+        scenarioParticipantId: descriptor.participantId,
       });
 
       setSelectableParticipants((current) =>
@@ -2582,7 +2570,7 @@ export default function ScenarioPlayerCombatPageContent({
       setActionRollResult({
         interpretedResult: "Continue attack submitted; waiting for GM to commit initiative.",
         phaseLabel:
-          selectedPhaseAttackBackOutOpportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
+          descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
         value: 0,
       });
       setError(undefined);
@@ -2593,14 +2581,15 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function decideDoubleAttackPhase2() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId) return;
+  async function decideDoubleAttackPhase2(descriptor: CurrentActionCommandDescriptor) {
+    if (readOnlyInspection || !selectedParticipant || !encounterId || !descriptor.participantId)
+      return;
     setSavingCombatContext(true);
     try {
       const { encounter, participant } = await decideDoubleAttackPhase2OnServer({
         decision: doubleAttackPhase2Decision,
         encounterId,
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId,
       });
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
@@ -2618,28 +2607,38 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollPhaseAttack() {
-    if (readOnlyInspection || !selectedParticipant || !encounterId || !currentAttackPhase) {
+  async function rollPhaseAttack(descriptor: CurrentActionCommandDescriptor) {
+    const attackPhase = descriptor.phase;
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !attackPhase ||
+      !descriptor.participantId ||
+      !descriptor.opponentParticipantId ||
+      !descriptor.opportunityId ||
+      projectedRollTask?.id !== descriptor.taskId ||
+      projectedRollTask.identity.opportunityId !== descriptor.opportunityId
+    ) {
       return;
     }
 
-    const phaseContext = currentAttackPhaseContext ?? phaseCombatContextDrafts[currentAttackPhase];
-    const phaseAttackStats = phaseCombatLoadoutSummaries[currentAttackPhase].attackStats;
+    const phaseAttackStats = phaseCombatLoadoutSummaries[attackPhase].attackStats;
     const targetIdentity = resolveCanonicalCombatTargetIdentity({
       encounterParticipants: encounterSession?.participants ?? [],
-      targetParticipantId: phaseContext.targetParticipantId,
+      targetParticipantId: descriptor.opponentParticipantId,
     });
 
     if (!phaseAttackStats) {
       setError(
-        `No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`,
+        `No ${attackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`,
       );
       return;
     }
 
     if (!targetIdentity) {
       setError(
-        selectedRoundDeclaration?.actionId === "feint_attack" && currentAttackPhase === "phase2"
+        selectedRoundDeclaration?.actionId === "feint_attack" && attackPhase === "phase2"
           ? "The Feint target is no longer in this encounter."
           : "Select an attack target before rolling.",
       );
@@ -2647,11 +2646,11 @@ export default function ScenarioPlayerCombatPageContent({
     }
 
     const modifierRequest = buildPlayerCombatAttackModifierRequest({
-      attackerParticipantId: selectedRoundParticipant?.participantId ?? "",
+      attackerParticipantId: descriptor.participantId,
       defenderParticipantId: targetIdentity.encounterParticipantId,
       encounterId,
-      encounterRevision: encounterSession?.updatedAt,
-      phase: currentAttackPhase,
+      encounterRevision: descriptor.expectedRevision,
+      phase: attackPhase,
       task: projectedRollTask,
       validation: combatHistory?.currentAttackModifierValidation,
     });
@@ -2681,7 +2680,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
-        actionId: selectedActionId || `${currentAttackPhase}_attack`,
+        actionId: selectedActionId || `${attackPhase}_attack`,
         attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
         defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
@@ -2691,8 +2690,8 @@ export default function ScenarioPlayerCombatPageContent({
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         ob,
         obSkillRaw: modifierRequest.obSkillRaw,
-        phase: currentAttackPhase,
-        scenarioParticipantId: selectedParticipant.id,
+        phase: attackPhase,
+        scenarioParticipantId: descriptor.participantId,
         weaponCriticalCode: phaseAttackStats.weaponCriticalCode,
         weaponDamageClass: phaseAttackStats.weaponDamageClass,
         weaponName: phaseAttackStats.weaponName,
@@ -2715,12 +2714,14 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollCurrentParry() {
+  async function rollCurrentParry(descriptor: CurrentActionCommandDescriptor) {
     if (
       readOnlyInspection ||
       !selectedParticipant ||
       !encounterId ||
-      currentRollAction?.kind !== "parry"
+      currentRollAction?.kind !== "parry" ||
+      !descriptor.attackResultId ||
+      !descriptor.participantId
     ) {
       return;
     }
@@ -2739,7 +2740,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const encounter = await rollCombatParryOnServer({
-        attackResultId: currentRollAction.attackResultId,
+        attackResultId: descriptor.attackResultId,
         dbParryRaw: getMergedCombatDbParryModifierTotal({
           combatContext: selectedParticipant.state.combat.combatContext,
           phase: currentResolutionPhase,
@@ -2747,7 +2748,7 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId,
         parryBase: currentParryBase,
         parrySourceLabel: currentParryDefenseStats?.sourceName,
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId,
         usedMainHand: true,
         usedOffHand: true,
       });
@@ -3030,7 +3031,6 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedActionId) ||
     Boolean(selectedSecondaryActionId) ||
     additionalActionNotes.trim().length > 0;
-  const currentCombatStepLabel = getPlayerCombatStepLabel(currentCombatStep);
   const currentInitiativePhase =
     currentCombatStep === "initiative_phase_1"
       ? "phase1"
@@ -3075,53 +3075,6 @@ export default function ScenarioPlayerCombatPageContent({
       phaseCombatContextDrafts[currentAttackPhase])
     : undefined;
   const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
-  const selectedReactivePhase1IncomingAttacks =
-    combatRoundState &&
-    selectedRoundParticipant &&
-    selectedRoundDeclaration?.actionId === "parry_attack"
-      ? getCombatRoundIncomingAttackResultsForParticipantPhase({
-          participantId: selectedRoundParticipant.participantId,
-          phase: "phase1",
-          state: combatRoundState,
-        })
-      : [];
-  const selectedReactiveAttackPhase2Modifier =
-    combatRoundState &&
-    selectedRoundParticipant &&
-    selectedRoundDeclaration?.actionId === "parry_attack"
-      ? getReactiveAttackPhase2InitiativeModifier({
-          participantId: selectedRoundParticipant.participantId,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedReactiveAttackPhase2DeclaredTarget =
-    selectedRoundDeclaration?.phaseContexts?.phase2?.targetParticipantId;
-  const selectedReactiveAttackPhase2TargetParticipant =
-    selectedReactiveAttackPhase2DeclaredTarget && combatRoundState
-      ? combatRoundState.participants.find((participant) =>
-          getCombatDistanceParticipantAliases(participant).includes(
-            selectedReactiveAttackPhase2DeclaredTarget,
-          ),
-        )
-      : undefined;
-  const selectedReactiveAttackNeedsTargetAdjudication = Boolean(
-    selectedReactiveAttackPhase2TargetParticipant &&
-    selectedReactivePhase1IncomingAttacks.some(
-      (attack) =>
-        attack.attackerParticipantId !==
-        selectedReactiveAttackPhase2TargetParticipant.participantId,
-    ),
-  );
-  const selectedReactiveAttackPhase2StatusText =
-    selectedRoundDeclaration?.actionId === "parry_attack" && currentCombatStep === "phase_2_actions"
-      ? selectedReactivePhase1IncomingAttacks.length === 0
-        ? "Reactive attack: no phase 1 attack received, so no phase 2 attack opens."
-        : `Reactive attack: phase 2 opens because a phase 1 attack was received${
-            selectedReactiveAttackPhase2Modifier
-              ? ` (${selectedReactiveAttackPhase2Modifier.reason}, Initiative ${selectedReactiveAttackPhase2Modifier.value >= 0 ? "+" : ""}${selectedReactiveAttackPhase2Modifier.value})`
-              : ""
-          }.${selectedReactiveAttackNeedsTargetAdjudication ? " Target switch is GM-adjudicated." : ""}`
-      : undefined;
   const selectedCurrentAttackResult =
     combatRoundState && selectedRoundParticipant && currentAttackPhase
       ? getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -3240,9 +3193,6 @@ export default function ScenarioPlayerCombatPageContent({
           (resolution) => resolution.attackResultId === currentRollAction.attackResultId,
         )
       : undefined;
-  const selectedAttackerPrivilegedDamageSubstate = selectedAttackerPrivilegedResolution
-    ? getCombatRoundDamageSubstate(selectedAttackerPrivilegedResolution)
-    : undefined;
   const selectedAttackerPrivilegedAttackResult =
     combatRoundState && selectedAttackerPrivilegedResolution
       ? getCombatRoundAttackResultById({
@@ -3296,56 +3246,6 @@ export default function ScenarioPlayerCombatPageContent({
         sections: selectedInvolvedDamageResolutionLines.sections,
       }
     : null;
-  const selectedAttackerCriticalContext =
-    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
-      ? formatPlayerCombatCriticalContextLine({
-          attackResult: selectedAttackerPrivilegedAttackResult,
-          compact: true,
-          resolution: selectedAttackerPrivilegedResolution,
-        })
-      : undefined;
-  const selectedAttackerCriticalStatusContext =
-    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
-      ? formatPlayerCombatCriticalContextLine({
-          attackResult: selectedAttackerPrivilegedAttackResult,
-          resolution: selectedAttackerPrivilegedResolution,
-        })
-      : undefined;
-  const attackerPrivilegedAction = selectedAttackerPrivilegedAttackResult
-    ? currentRollAction?.kind === "hit_location" &&
-      selectedAttackerPrivilegedDamageSubstate === "location_pending"
-      ? {
-          disabled: false,
-          kind: "hitLocation" as const,
-          label: "Roll hit location as attacker",
-          statusContext: undefined,
-        }
-      : currentRollAction?.kind === "critical" &&
-          selectedAttackerPrivilegedDamageSubstate === "critical_pending"
-        ? {
-            disabled: false,
-            kind: "critical" as const,
-            label: selectedAttackerCriticalContext
-              ? `Roll critical as attacker: ${selectedAttackerCriticalContext}`
-              : "Roll critical as attacker",
-            statusContext: selectedAttackerCriticalStatusContext,
-          }
-        : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
-          ? {
-              disabled: true,
-              kind: undefined,
-              label: "Attacker hit location rolled",
-              statusContext: undefined,
-            }
-          : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
-            ? {
-                disabled: true,
-                kind: undefined,
-                label: "Attacker critical rolled",
-                statusContext: undefined,
-              }
-            : undefined
-    : undefined;
   const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
@@ -3510,15 +3410,6 @@ export default function ScenarioPlayerCombatPageContent({
           resultLabel: `Distance control committed: distance ${selectedDistanceControlCommittedDistance} next round`,
         }
       : null;
-  const initiativeStepStatus =
-    currentCombatStep === "initiative_phase_1"
-      ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
-      : currentCombatStep === "initiative_phase_2"
-        ? (selectedRoundParticipant?.stepStatuses.initiative_phase_2 ?? "pending")
-        : undefined;
-  const selectedParticipantRolledCurrentInitiative = Boolean(
-    currentInitiativePhase && selectedCurrentInitiative !== undefined,
-  );
   const currentInitiativeRollCounts =
     currentInitiativePhase && combatRoundState
       ? {
@@ -3528,22 +3419,6 @@ export default function ScenarioPlayerCombatPageContent({
           total: combatRoundState.participants.length,
         }
       : undefined;
-  const canUseInitiativeButton =
-    Boolean(currentInitiativePhase) &&
-    Boolean(displayedParticipant) &&
-    Boolean(selectedRoundParticipant) &&
-    initiativeStepStatus === "pending" &&
-    !selectedParticipantRolledCurrentInitiative &&
-    selectedProgressionTasks.some((task) => task.kind === "roll_initiative");
-  const canUseCurrentAttackButton =
-    Boolean(currentAttackPhase) &&
-    Boolean(displayedParticipant) &&
-    Boolean(selectedRoundParticipant) &&
-    Boolean(combatRoundState) &&
-    Boolean(currentAttackTargetParticipantId) &&
-    Boolean(phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats) &&
-    currentRollAction?.kind === "attack" &&
-    currentRollAction.phase === currentAttackPhase;
   const currentAttackSourceMissing =
     Boolean(currentAttackPhase) &&
     Boolean(displayedParticipant) &&
@@ -3557,28 +3432,6 @@ export default function ScenarioPlayerCombatPageContent({
     currentAttackSourceMissing && currentAttackPhase
       ? `No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`
       : undefined;
-  const currentAttackAction = canUseCurrentAttackButton
-    ? {
-        disabled: false,
-        kind: "attack" as const,
-        label: currentAttackPhase === "phase2" ? "Roll phase 2 attack" : "Roll phase 1 attack",
-      }
-    : undefined;
-  const canUseCurrentParryButton =
-    Boolean(displayedParticipant) &&
-    Boolean(selectedRoundParticipant) &&
-    Boolean(combatRoundState) &&
-    currentRollAction?.kind === "parry" &&
-    selectedCurrentResolutionAttackResult?.hit === true &&
-    selectedCurrentPhaseResolutionResult?.parryResolution.status === "pending" &&
-    currentParryBase !== undefined;
-  const currentParryAction = canUseCurrentParryButton
-    ? {
-        disabled: false,
-        kind: "parry" as const,
-        label: "Roll parry",
-      }
-    : undefined;
   const targetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
@@ -3603,11 +3456,6 @@ export default function ScenarioPlayerCombatPageContent({
     !declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete;
   const declarationControlsDisabled =
     controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired;
-  const selectedCombatExperienceActionAvailable =
-    selectedCombatExperienceRequired &&
-    selectedCombatExperienceWindowOpen &&
-    Boolean(selectedParticipant) &&
-    Boolean(encounterId);
   const selectedPhaseCombatExperienceBackOutAvailable = Boolean(
     selectedPhaseAttackBackOutOpportunity &&
     combatRoundState &&
@@ -3677,173 +3525,72 @@ export default function ScenarioPlayerCombatPageContent({
       : !currentInitiativePhase && declarationIncomplete
         ? targetValidation.message
         : undefined;
-  const declareActionDisabled =
+  const combatExperienceValidationMessage: string | undefined = undefined;
+  const currentActionDomainValidationDisabled =
     controlsDisabled ||
     savingCombatContext ||
     !displayedParticipant ||
-    (currentInitiativePhase
-      ? !canUseInitiativeButton
-      : playerDeclarationLocked ||
-        !hasMeaningfulDeclaration ||
-        !targetValidation.valid ||
-        (selectedActionId === "feint_attack" &&
-          feintMethod === "weapon" &&
-          !resolvedFeintAttackerSkill));
-  const declarationButtonLabel =
-    currentCombatStep === "select_actions" && (!playerDeclarationLocked || declarationIncomplete)
-      ? "Declare action"
-      : getPlayerCombatActionButtonLabel({
-          currentStep: currentCombatStep,
-          disabled: declareActionDisabled,
-          isGameMaster: false,
-        });
-  const awaitingGmBoundaryTransition = Boolean(combatHistory?.progression?.awaitingGmTransition);
-  const playerActionButtonLabel = awaitingGmBoundaryTransition
-    ? "Waiting for GM"
-    : selectedHealthCheckActionAvailable
-      ? "Roll health check"
-      : selectedAdjustDistanceProposal
-        ? selectedAdjustDistanceProposal.status === "awaiting_defender_response"
-          ? "Confirm defender response"
-          : selectedAdjustDistanceProposal.attackerRollRecorded
-            ? "Roll defender Dodge"
-            : "Roll attacker Dodge"
-        : selectedFeintProposal
-          ? selectedFeintProposal.attackerRollRecorded
-            ? "Roll feint resistance"
-            : "Roll feint"
-          : selectedDistanceControlActionAvailable
-            ? "Roll distance control"
-            : selectedDoubleAttackDecisionAvailable
-              ? doubleAttackPhase2Decision === "cancel"
-                ? "Cancel Attack 2"
-                : "Continue Attack 2"
-              : selectedPhaseAttackChoiceIsBackOut
-                ? "Back out of attack"
-                : selectedCombatExperienceRequired
-                  ? !selectedCombatExperienceWindowOpen
-                    ? "Waiting for GM"
-                    : selectedCombatExperienceNoRollAvailable
-                      ? "Confirm Combat Experience"
-                      : "Roll Combat Experience"
-                  : selectedPhaseInitiativeChoice
-                    ? "Phase choice submitted"
-                    : selectedPhaseContinueAvailable
-                      ? "Continue attack"
-                      : (attackerPrivilegedAction?.label ??
-                        currentParryAction?.label ??
-                        currentAttackAction?.label ??
-                        declarationButtonLabel);
-  const playerActionButtonDisabled = awaitingGmBoundaryTransition
-    ? true
-    : selectedHealthCheckActionAvailable
-      ? controlsDisabled || savingCombatContext
-      : selectedAdjustDistanceProposal
-        ? controlsDisabled || savingCombatContext
-        : selectedFeintProposal
-          ? controlsDisabled || savingCombatContext
-          : selectedDistanceControlActionAvailable
-            ? controlsDisabled || savingCombatContext
-            : selectedDoubleAttackDecisionAvailable
-              ? controlsDisabled || savingCombatContext
-              : selectedPhaseAttackChoiceIsBackOut
-                ? controlsDisabled ||
-                  savingCombatContext ||
-                  !selectedPhaseCombatExperienceBackOutAvailable
-                : attackerPrivilegedAction
-                  ? selectedCombatExperienceRequired ||
-                    controlsDisabled ||
-                    savingCombatContext ||
-                    attackerPrivilegedAction.disabled
-                  : currentParryAction
-                    ? selectedCombatExperienceRequired ||
-                      controlsDisabled ||
-                      savingCombatContext ||
-                      currentParryAction.disabled
-                    : currentAttackAction
-                      ? selectedCombatExperienceRequired ||
-                        controlsDisabled ||
-                        savingCombatContext ||
-                        currentAttackAction.disabled
-                      : selectedCombatExperienceRequired
-                        ? controlsDisabled ||
-                          savingCombatContext ||
-                          !selectedCombatExperienceActionAvailable
-                        : selectedPhaseInitiativeChoice
-                          ? true
-                          : selectedPhaseContinueAvailable
-                            ? controlsDisabled || savingCombatContext
-                            : declareActionDisabled;
-  const selectedParticipantHasDeclared =
-    selectedStoredDeclarationComplete &&
-    (selectedParticipantStoredDeclarationThisRound ||
-      selectedDeclarationStepStatus === "submitted" ||
-      selectedDeclarationStepStatus === "gmEdited");
-  const selectedCurrentStepStatus = selectedRoundParticipant?.stepStatuses[currentCombatStep];
-  const currentStepIsModifierReview =
-    currentCombatStep === "review_action_modifiers" ||
-    currentCombatStep === "review_phase_2_modifiers";
-  const selectedModifierReviewComplete =
-    currentStepIsModifierReview &&
-    (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited");
-  const combatExperienceStatusText = !selectedCombatExperienceWindowOpen
-    ? "Waiting for GM to start CE."
-    : selectedCombatExperienceNoRollAvailable
-      ? `Current step: ${currentCombatStepLabel}. Confirm Combat Experience.`
-      : `Current step: ${currentCombatStepLabel}. Roll Combat Experience.`;
-  const declarationStatusText = awaitingGmBoundaryTransition
-    ? `Current step: ${currentCombatStepLabel}. Complete; awaiting GM progression.`
-    : selectedHealthCheckActionAvailable
-      ? `Current step: ${currentCombatStepLabel}. Roll health check.`
-      : selectedVisibleHealthRoll?.result
-        ? `Current step: ${currentCombatStepLabel}. Health check rolled. Waiting for GM review.`
-        : selectedDistanceControlActionAvailable
-          ? `Current step: ${currentCombatStepLabel}. Roll distance control.`
-          : selectedDistanceControlCommittedDistance !== undefined
-            ? `Current step: ${currentCombatStepLabel}. Distance control committed.`
-            : selectedDistanceControlProposal?.ownSide.status === "rolled"
-              ? selectedDistanceControlProposal.proposal.status === "pending_rolls"
-                ? `Current step: ${currentCombatStepLabel}. Waiting for other distance-control roll(s).`
-                : `Current step: ${currentCombatStepLabel}. Waiting for GM to commit distance control.`
-              : selectedPhaseAttackChoiceIsBackOut
-                ? `Current step: ${currentCombatStepLabel}. Pending.`
-                : selectedCombatExperienceRequired
-                  ? combatExperienceStatusText
-                  : currentInitiativePhase
-                    ? selectedParticipantRolledCurrentInitiative
-                      ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
-                      : initiativeStepStatus === "pending"
-                        ? `Current step: ${currentCombatStepLabel}.`
-                        : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
-                    : currentParryAction
-                      ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                      : selectedReactiveAttackPhase2StatusText
-                        ? `Current step: ${currentCombatStepLabel}. ${selectedReactiveAttackPhase2StatusText}`
-                        : attackerPrivilegedAction
-                          ? attackerPrivilegedAction.disabled
-                            ? `Current step: ${currentCombatStepLabel}. Attacker roll recorded; defender damage/effects review waits for GM.`
-                            : `Current step: ${currentCombatStepLabel}. ${
-                                attackerPrivilegedAction.statusContext
-                                  ? `Critical context: ${attackerPrivilegedAction.statusContext}.`
-                                  : "The attacker rolls; the defender receives the damage/effects review."
-                              }`
-                          : currentAttackAction
-                            ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-                            : currentAttackSourceValidationMessage
-                              ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
-                              : declarationIncomplete
-                                ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
-                                : selectedModifierReviewComplete
-                                  ? `Current step: ${currentCombatStepLabel}. Reviewed.`
-                                  : currentStepIsModifierReview
-                                    ? `Current step: ${currentCombatStepLabel}.`
-                                    : selectedParticipantHasDeclared
-                                      ? `Current step: ${currentCombatStepLabel}. Declared.`
-                                      : declarationStepOpen &&
-                                          selectedDeclarationStepStatus === "pending"
-                                        ? `Current step: ${currentCombatStepLabel}.`
-                                        : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
-  const combatExperienceValidationMessage: string | undefined = undefined;
+    Boolean(declarationTargetValidationMessage || currentAttackSourceValidationMessage) ||
+    (currentActionPresentation?.taskKind === "submit_declaration" &&
+      (!hasMeaningfulDeclaration || !targetValidation.valid));
+  function invokePlayerCurrentAction(descriptor?: CurrentActionCommandDescriptor) {
+    if (
+      !descriptor ||
+      descriptor.taskId !== currentActionPresentation?.taskId ||
+      descriptor.expectedRevision !== currentActionPresentation.encounterRevision
+    ) {
+      setError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+
+    switch (descriptor.commandType) {
+      case "roll_round_end_health_check":
+        void rollHealthCheck(descriptor);
+        return;
+      case "respond_adjust_distance":
+      case "roll_adjust_distance":
+        void advanceAdjustDistance(descriptor);
+        return;
+      case "roll_feint":
+        void rollFeint(descriptor);
+        return;
+      case "roll_round_end_distance_control":
+        void rollDistanceControl(descriptor);
+        return;
+      case "decide_double_attack_phase2":
+        void decideDoubleAttackPhase2(descriptor);
+        return;
+      case "submit_phase_initiative_choice":
+        void (selectedPhaseAttackChoiceIsBackOut
+          ? backOutPhaseAttack(descriptor)
+          : continuePhaseAttack(descriptor));
+        return;
+      case "roll_combat_experience":
+        void rollCombatExperience(descriptor);
+        return;
+      case "roll_hit_location":
+        void rollAttackerPrivilegedCombatDie("hitLocation");
+        return;
+      case "roll_critical":
+        void rollAttackerPrivilegedCombatDie("critical");
+        return;
+      case "roll_parry":
+        void rollCurrentParry(descriptor);
+        return;
+      case "roll_attack":
+        void rollPhaseAttack(descriptor);
+        return;
+      case "roll_initiative_phase1":
+      case "roll_initiative_phase2":
+        void rollInitiative(descriptor);
+        return;
+      case "declare_action":
+        void saveCombatContext();
+        return;
+      default:
+        setError("This current action is waiting for the GM.");
+    }
+  }
   const selectedPhaseAttackChoiceControls = selectedDoubleAttackDecisionAvailable ? (
     <label style={{ display: "grid", gap: "0.25rem", justifySelf: "stretch" }}>
       <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Attack 2</span>
@@ -4508,37 +4255,8 @@ export default function ScenarioPlayerCombatPageContent({
                 </section>
               ) : null}
               <PlayerCombatActionButtonPanel
-                buttonLabel={playerActionButtonLabel}
-                disabled={playerActionButtonDisabled}
-                onDeclareAction={() =>
-                  void (selectedHealthCheckActionAvailable
-                    ? rollHealthCheck()
-                    : selectedAdjustDistanceProposal
-                      ? advanceAdjustDistance()
-                      : selectedFeintProposal
-                        ? rollFeint()
-                        : selectedDistanceControlActionAvailable
-                          ? rollDistanceControl()
-                          : selectedDoubleAttackDecisionAvailable
-                            ? decideDoubleAttackPhase2()
-                            : selectedPhaseAttackChoiceIsBackOut
-                              ? backOutPhaseAttack()
-                              : selectedCombatExperienceRequired
-                                ? selectedCombatExperienceWindowOpen
-                                  ? rollCombatExperience()
-                                  : undefined
-                                : selectedPhaseContinueAvailable
-                                  ? continuePhaseAttack()
-                                  : attackerPrivilegedAction?.kind
-                                    ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
-                                    : currentParryAction
-                                      ? rollCurrentParry()
-                                      : currentAttackAction
-                                        ? rollPhaseAttack()
-                                        : currentInitiativePhase
-                                          ? rollInitiative()
-                                          : saveCombatContext())
-                }
+                disabled={currentActionDomainValidationDisabled}
+                onDeclareAction={invokePlayerCurrentAction}
                 preActionControls={
                   selectedAdjustDistanceProposal?.status === "awaiting_defender_response" ? (
                     <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -4559,7 +4277,7 @@ export default function ScenarioPlayerCombatPageContent({
                   )
                 }
                 saving={savingCombatContext}
-                statusText={declarationStatusText}
+                presentation={currentActionPresentation}
                 validationMessage={
                   combatExperienceValidationMessage ??
                   declarationTargetValidationMessage ??

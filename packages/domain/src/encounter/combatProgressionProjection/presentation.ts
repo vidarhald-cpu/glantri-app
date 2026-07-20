@@ -67,19 +67,46 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       task.owner?.kind === "combatant"
     ),
     executionGroupId: task.executionGroupId,
+    expectedCommand: task.expectedCommand,
     id: task.id,
-    identity: {
-      executionGroupId: task.identity.executionGroupId,
-      phase: task.identity.phase,
-    },
+    identity: task.identity,
     kind: task.kind,
     opponent: task.opponent,
     owner: task.owner,
+    presentationContext: task.presentationContext,
     processId: task.processId,
     stageId: task.stageId,
     state: task.state,
     trackerFacet: task.trackerFacet,
     transition: task.transition,
+  };
+}
+
+function visibleTaskIdentity(
+  task: CombatProgressionPresentationTask,
+  viewer: CombatProgressionPresentationViewer,
+): CombatProgressionPresentationTask["identity"] {
+  if (viewer.kind === "gm") return task.identity;
+  const participantVisible = (participantId: string | undefined) =>
+    participantId !== undefined && viewer.visibleParticipantIds.has(participantId);
+  return {
+    attackResultId: task.identity.attackResultId,
+    executionGroupId: task.identity.executionGroupId,
+    healthRollId: task.identity.healthRollId,
+    opportunityId: task.identity.opportunityId,
+    opponentParticipantId: participantVisible(task.identity.opponentParticipantId)
+      ? task.identity.opponentParticipantId
+      : undefined,
+    pairId:
+      participantVisible(task.identity.participantId) &&
+      participantVisible(task.identity.opponentParticipantId)
+        ? task.identity.pairId
+        : undefined,
+    participantId: participantVisible(task.identity.participantId)
+      ? task.identity.participantId
+      : undefined,
+    phase: task.identity.phase,
+    proposalId: task.identity.proposalId,
   };
 }
 
@@ -109,7 +136,7 @@ function hasRelevantConflict(
   });
 }
 
-/** Removes authorization, blocker, diagnostic, command, proposal, and calculation details. */
+/** Removes private authorization, blocker, diagnostic, proposal contents, and calculations. */
 export function projectCombatProgressionPresentation(input: {
   projection: CombatProgressionProjection;
   viewer: CombatProgressionPresentationViewer;
@@ -122,11 +149,20 @@ export function projectCombatProgressionPresentation(input: {
           .map(presentationTask)
           .map((task) => ({
             ...task,
+            identity: visibleTaskIdentity(task, input.viewer),
             owner:
               task.owner?.kind === "combatant"
                 ? visibleIdentity(task.owner, input.viewer)
                 : task.owner,
             opponent: visibleIdentity(task.opponent, input.viewer),
+            presentationContext: task.presentationContext
+              ? {
+                  ...task.presentationContext,
+                  actor: visibleIdentity(task.presentationContext.actor, input.viewer),
+                  responder: visibleIdentity(task.presentationContext.responder, input.viewer),
+                  target: visibleIdentity(task.presentationContext.target, input.viewer),
+                }
+              : undefined,
             trackerFacet: {
               ...task.trackerFacet,
               owner: visibleIdentity(task.trackerFacet.owner, input.viewer),

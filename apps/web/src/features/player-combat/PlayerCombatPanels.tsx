@@ -22,6 +22,8 @@ import {
 
 import {
   formatSignedCombatModifier,
+  type CurrentActionCommandDescriptor,
+  type CurrentActionPresentation,
 } from "@/features/combat-history";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -208,7 +210,7 @@ interface PlayerCombatAttackTargetSelectorProps {
 interface PlayerCombatActionButtonPanelProps {
   buttonLabel?: string;
   disabled?: boolean;
-  onDeclareAction?: () => void;
+  onDeclareAction?: (descriptor?: CurrentActionCommandDescriptor) => void;
   preActionControls?: ReactNode;
   /**
    * Reserved for non-primary utility commands. Alternative outcomes for the same pending
@@ -218,7 +220,8 @@ interface PlayerCombatActionButtonPanelProps {
   secondaryButtonDisabled?: boolean;
   secondaryButtonLabel?: string;
   saving?: boolean;
-  statusText: string;
+  statusText?: string;
+  presentation?: CurrentActionPresentation | null;
   validationMessage?: string;
 }
 
@@ -1288,23 +1291,51 @@ export function PlayerCombatActionButtonPanel({
   secondaryButtonLabel,
   saving = false,
   statusText,
+  presentation,
   validationMessage,
 }: PlayerCombatActionButtonPanelProps) {
+  const primaryAction = presentation?.primaryAction;
+  const effectiveButtonLabel = primaryAction?.label ?? buttonLabel;
+  const actionDisabled =
+    disabled ||
+    saving ||
+    Boolean(primaryAction && (!primaryAction.enabled || !primaryAction.viewerMayInvoke));
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Current action</strong>
+      {presentation ? (
+        <div style={{ display: "grid", gap: "0.45rem" }}>
+          <strong>{presentation.heading}</strong>
+          <div style={{ fontWeight: 650 }}>{presentation.taskHeading}</div>
+          <div>{presentation.summary}</div>
+          <div>
+            <strong>Reason: </strong>
+            {presentation.reason}
+          </div>
+          <div>
+            <strong>Required now: </strong>
+            {presentation.requiredNow}
+          </div>
+          {presentation.expectedNextProcess ? (
+            <div>
+              <strong>Next: </strong>
+              {presentation.expectedNextProcess.label}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {preActionControls ? (
         <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
       ) : null}
       <button
-        disabled={disabled || saving}
-        onClick={onDeclareAction}
+        disabled={actionDisabled}
+        onClick={() => onDeclareAction?.(primaryAction?.descriptor)}
         style={{
-          background: disabled ? "#e4e0d6" : "#ded4b1",
+          background: actionDisabled ? "#e4e0d6" : "#ded4b1",
           border: "1px solid #bdb39a",
           borderRadius: 10,
-          color: disabled ? "#8a8477" : "#2f2415",
-          cursor: disabled ? "not-allowed" : "pointer",
+          color: actionDisabled ? "#8a8477" : "#2f2415",
+          cursor: actionDisabled ? "not-allowed" : "pointer",
           justifySelf: "center",
           minHeight: 70,
           padding: "0.75rem 0.9rem",
@@ -1313,7 +1344,7 @@ export function PlayerCombatActionButtonPanel({
         }}
         type="button"
       >
-        <strong>{saving ? "Saving..." : buttonLabel}</strong>
+        <strong>{saving ? "Saving..." : effectiveButtonLabel}</strong>
       </button>
       {secondaryButtonLabel ? (
         <button
@@ -1325,7 +1356,9 @@ export function PlayerCombatActionButtonPanel({
           {secondaryButtonLabel}
         </button>
       ) : null}
-      <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      {statusText && !presentation ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      ) : null}
       {validationMessage ? (
         <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>
           {validationMessage}

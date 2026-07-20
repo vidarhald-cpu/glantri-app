@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PlayerCombatModifierPanel } from "./PlayerCombatPanels";
+import {
+  PlayerCombatActionButtonPanel,
+  PlayerCombatModifierPanel,
+} from "./PlayerCombatPanels";
 
 afterEach(() => {
   cleanup();
@@ -173,5 +176,88 @@ describe("PlayerCombatModifierPanel", () => {
       value: 3,
     });
     expect(onRemoveEntry).toHaveBeenCalledWith("situation_initiative", "manual-initiative");
+  });
+});
+
+describe("PlayerCombatActionButtonPanel", () => {
+  it("renders the canonical context and invokes the immutable descriptor", () => {
+    const onAction = vi.fn();
+    const descriptor = {
+      commandType: "roll_attack" as const,
+      encounterId: "encounter-1",
+      expectedBoundary: "phase1_resolution" as const,
+      expectedRevision: "revision-4",
+      opportunityId: "opportunity-1",
+      phase: "phase1" as const,
+      taskId: "task-1",
+    };
+    render(
+      <PlayerCombatActionButtonPanel
+        onDeclareAction={onAction}
+        presentation={{
+          actionName: "Single Attack",
+          actor: { hidden: false, id: "aria", label: "Aria" },
+          boundary: "phase1_resolution",
+          encounterId: "encounter-1",
+          encounterRevision: "revision-4",
+          expectedNextProcess: { label: "If successful, Borin may parry." },
+          heading: "Single Attack · Aria → Borin · Phase 1",
+          primaryAction: {
+            descriptor,
+            enabled: true,
+            gmProxyAvailable: true,
+            label: "Roll Phase 1 attack",
+            viewerMayInvoke: true,
+          },
+          reason: "This attack follows the declared Single Attack.",
+          requiredActor: { hidden: false, id: "aria", label: "Aria" },
+          requiredNow: "Aria must provide the attack roll.",
+          status: "executable",
+          summary: "Aria is attacking Borin with Long Sword.",
+          target: { hidden: false, id: "borin", label: "Borin" },
+          taskHeading: "Single Attack — attack roll",
+          taskId: "task-1",
+          taskKind: "attack",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Single Attack · Aria → Borin · Phase 1")).toBeInTheDocument();
+    expect(screen.getByText("Single Attack — attack roll")).toBeInTheDocument();
+    expect(screen.getByText("Aria is attacking Borin with Long Sword.")).toBeInTheDocument();
+    expect(screen.getByText(/This attack follows/)).toBeInTheDocument();
+    expect(screen.getByText(/Aria must provide the attack roll/)).toBeInTheDocument();
+    expect(screen.getByText(/If successful, Borin may parry/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Roll Phase 1 attack" }));
+    expect(onAction).toHaveBeenCalledWith(descriptor);
+  });
+
+  it("keeps a contextual waiting presentation non-actionable", () => {
+    render(
+      <PlayerCombatActionButtonPanel
+        presentation={{
+          actionName: "Parry",
+          boundary: "phase1_resolution",
+          encounterId: "encounter-1",
+          encounterRevision: "revision-4",
+          heading: "Parry · Borin → Aria · Phase 1",
+          primaryAction: {
+            enabled: false,
+            gmProxyAvailable: false,
+            label: "Waiting for another combatant",
+            viewerMayInvoke: false,
+          },
+          reason: "A defensive response is required.",
+          requiredActor: { hidden: true, label: "another combatant" },
+          requiredNow: "Another combatant must provide the defender response.",
+          status: "waiting",
+          summary: "Aria is waiting for another combatant's parry.",
+          taskHeading: "Parry — defender response",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Waiting for another combatant" })).toBeDisabled();
+    expect(screen.getByText("Aria is waiting for another combatant's parry.")).toBeInTheDocument();
   });
 });

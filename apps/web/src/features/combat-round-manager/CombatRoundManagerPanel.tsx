@@ -121,6 +121,7 @@ import {
   buildCombatProgressionTrackerIndex,
   buildCombatTrackerCellKey,
   buildConciseDodgeCalculationRows,
+  buildCurrentActionPresentation,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatTracker,
@@ -130,6 +131,7 @@ import {
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
+  type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -4102,6 +4104,20 @@ export default function CombatRoundManagerPanel({
     projectedCurrentTasks.find(
       (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
     ) ?? projectedCurrentTasks[0];
+  const currentActionPresentation = useMemo(
+    () =>
+      buildCurrentActionPresentation({
+        encounterId: roundView.encounterId,
+        encounterRevision: roundView.encounterRevision,
+        progression: combatProgressionPresentation,
+        viewer: { kind: "gm" },
+      }),
+    [
+      combatProgressionPresentation,
+      roundView.encounterId,
+      roundView.encounterRevision,
+    ],
+  );
   const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner
     ? {
         participantId: projectedCurrentTask.trackerFacet.owner.participantId,
@@ -9492,7 +9508,18 @@ export default function CombatRoundManagerPanel({
                     <PlayerCombatActionButtonPanel
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
-                      onDeclareAction={() =>
+                      onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                        if (
+                          !descriptor ||
+                          descriptor.taskId !== currentActionPresentation?.taskId ||
+                          descriptor.expectedRevision !==
+                            currentActionPresentation.encounterRevision
+                        ) {
+                          setSaveError(
+                            "Combat state changed. Review the current action before continuing.",
+                          );
+                          return;
+                        }
                         void (projectedBoundaryTransitionAction
                           ? commitCurrentStep()
                           : inspectorAdjustDistanceProposal
@@ -9550,9 +9577,14 @@ export default function CombatRoundManagerPanel({
                                                               ? rollInspectorPhaseAttack(
                                                                   inspectorCurrentAttackPhase,
                                                                 )
-                                                              : saveInspectorDeclaration())
+                                                              : saveInspectorDeclaration());
+                      }}
+                      preActionControls={
+                        inspectorSelectionIsCurrentProgression
+                          ? inspectorPreActionControls
+                          : undefined
                       }
-                      preActionControls={inspectorPreActionControls}
+                      presentation={currentActionPresentation}
                       saving={saving}
                       statusText={
                         projectedBoundaryTransitionAction

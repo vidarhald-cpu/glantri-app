@@ -1,6 +1,7 @@
 import {
   canPlayerRollCombatInitiative,
   canPlayerSubmitCombatDeclaration,
+  getCombatRoundCombatExperienceDifficulty,
   getCombatRoundPhaseInitiativeChoiceStatuses,
   isCombatRoundPhaseInitiativeComplete,
   isCombatStartExperienceRollRequired,
@@ -62,6 +63,11 @@ export function buildDeclarationProcesses(
         expectedCommand: "roll_combat_experience",
         kind: "combat_experience",
         owner,
+        presentationContext: {
+          actor: owner,
+          difficulty: getCombatRoundCombatExperienceDifficulty(context.state),
+          responder: owner,
+        },
         trackerOwner: owner,
         trackerStep: "DE",
       });
@@ -263,6 +269,19 @@ export function buildModifierReviewProcesses(
                             key: gate.id,
                             kind: "double_attack_decision",
                             owner,
+                            presentationContext: {
+                              actionKind: "double_attack",
+                              actor: owner,
+                              responder: owner,
+                              target: context.identities.get(
+                                context.state.participants
+                                  .find(
+                                    (participant) =>
+                                      participant.participantId === gate.ownerParticipantId,
+                                  )
+                                  ?.declaration?.phaseContexts?.phase2?.targetParticipantId ?? "",
+                              ),
+                            },
                             trackerOwner: owner,
                             trackerStep: "M2",
                           },
@@ -332,6 +351,11 @@ export function buildInitiativeProcess(
             key: `${status.participantId}:choice`,
             kind: "combat_experience",
             owner,
+            presentationContext: {
+              actor: owner,
+              difficulty: getCombatRoundCombatExperienceDifficulty(context.state),
+              responder: owner,
+            },
             trackerOwner: owner,
             trackerStep,
           };

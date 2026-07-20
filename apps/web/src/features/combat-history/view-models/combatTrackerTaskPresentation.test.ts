@@ -60,6 +60,7 @@ function task(
     actorAccess: { combatant: true, gm: true },
     contributesToProgression: true,
     executionGroupId: "group-1",
+    expectedCommand: "roll_attack",
     id: `task:${kind}`,
     identity: { executionGroupId: "group-1", phase: "phase1" },
     kind,

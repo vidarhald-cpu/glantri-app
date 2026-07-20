@@ -156,6 +156,31 @@ export interface CombatProgressionTaskIdentity {
   readonly proposalId?: string;
 }
 
+export interface CombatProgressionPresentationReference {
+  readonly id?: string;
+  readonly label?: string;
+}
+
+/**
+ * Viewer-sanitizable facts used to explain a projected task. These facts describe the task's
+ * process context only; calculations, dice, proposal notes, and blockers deliberately stay out.
+ */
+export interface CombatProgressionTaskPresentationContext {
+  readonly actionKind?: string;
+  readonly actor?: CombatantIdentity;
+  readonly distance?: {
+    readonly current?: number;
+    readonly direction?: string;
+    readonly requested?: number;
+  };
+  readonly difficulty?: number;
+  readonly reason?: string;
+  readonly responder?: CombatantIdentity;
+  readonly skill?: CombatProgressionPresentationReference;
+  readonly target?: CombatantIdentity;
+  readonly weapon?: CombatProgressionPresentationReference;
+}
+
 export interface CombatProgressionBoundaryTransition {
   readonly currentBoundary: CombatProgressionBoundaryKind;
   readonly requiredCompletedProcessIds: readonly string[];
@@ -173,6 +198,7 @@ export interface CombatProgressionTask {
   /** Visible combatant on the other side of this task, when the task has pair/target context. */
   readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
+  readonly presentationContext?: CombatProgressionTaskPresentationContext;
   readonly processId: string;
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;
@@ -280,14 +306,14 @@ export interface CombatProgressionPresentationTask {
   readonly contributesToProgression: boolean;
   readonly executionGroupId: string;
   readonly id: string;
-  readonly identity: {
-    readonly executionGroupId: string;
-    readonly phase?: CombatRoundPhase;
-  };
+  /** Immutable command identity retained without raw proposal or calculation contents. */
+  readonly identity: CombatProgressionTaskIdentity;
+  readonly expectedCommand: CombatProgressionExpectedCommand;
   readonly kind: CombatProgressionTaskKind;
   /** Sanitized opponent context for shared tracker presentation. */
   readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
+  readonly presentationContext?: CombatProgressionTaskPresentationContext;
   readonly processId: string;
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;

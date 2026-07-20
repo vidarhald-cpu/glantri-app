@@ -778,7 +778,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(distancePanelSource).not.toContain("<select");
     expect(distancePanelSource).not.toContain("<label");
     expect(distancePanelSource).not.toContain("onClick");
-    expect(source).toContain("preActionControls={inspectorPreActionControls}");
+    expect(source).toContain("inspectorSelectionIsCurrentProgression");
+    expect(source).toContain("? inspectorPreActionControls");
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "roll"');
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "commit"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_roll"');
@@ -1134,7 +1135,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorPhaseInitiativeChoiceResultPanel");
     expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).toContain('<option value="continue">');
-    expect(source).toContain("preActionControls={inspectorPreActionControls}");
+    expect(source).toContain("inspectorSelectionIsCurrentProgression");
+    expect(source).toContain("? inspectorPreActionControls");
     expect(source).toContain("? saveCombatExperienceDifficultyDraft()");
     expect(source).toContain("? backOutInspectorPhaseAttack()");
     expect(source).toContain("inspectorSkipActionOutcomeSelectorAvailable");

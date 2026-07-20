@@ -31,6 +31,19 @@ export function buildRoundEndProcesses(
           const participantOwner = task.ownerParticipantId
             ? context.identities.get(task.ownerParticipantId)
             : undefined;
+          const distanceProposal = task.proposalId
+            ? context.state.roundEndReview?.proposedDistances.find(
+                (proposal) => proposal.id === task.proposalId,
+              )
+            : undefined;
+          const participantReview = task.ownerParticipantId
+            ? context.state.roundEndReview?.participantReviews[task.ownerParticipantId]
+            : undefined;
+          const healthProposal = task.healthRollId
+            ? participantReview?.proposedHealthRolls.find(
+                (proposal) => proposal.id === task.healthRollId,
+              )
+            : undefined;
           return {
             allowedActors: task.allowedActors,
             expectedCommand: task.expectedCommand,
@@ -44,6 +57,25 @@ export function buildRoundEndProcesses(
             key: task.key,
             kind: task.kind,
             owner: task.ownerRole === "gm" ? GM_IDENTITY : participantOwner,
+            presentationContext: {
+              actionKind: process.kind,
+              actor:
+                task.ownerRole === "gm" && task.trackerParticipantId
+                  ? context.identities.get(task.trackerParticipantId)
+                  : participantOwner,
+              distance: distanceProposal
+                ? {
+                    current: distanceProposal.currentDistance,
+                    requested: distanceProposal.proposedDistance,
+                  }
+                : undefined,
+              reason: healthProposal?.label,
+              responder: task.ownerRole === "participant" ? participantOwner : undefined,
+              skill: task.kind === "health_review" ? { label: "Health" } : undefined,
+              target: task.opponentParticipantId
+                ? context.identities.get(task.opponentParticipantId)
+                : undefined,
+            },
             trackerOwner: task.trackerParticipantId
               ? context.identities.get(task.trackerParticipantId)
               : undefined,

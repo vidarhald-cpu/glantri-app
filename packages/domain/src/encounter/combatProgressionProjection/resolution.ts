@@ -26,6 +26,19 @@ import {
 } from "./internal";
 import type { CombatProgressionProcess, CombatProgressionStageKind } from "./types";
 
+function presentationActionKind(actionId: string | undefined): string | undefined {
+  switch (actionId) {
+    case "attack_parry":
+      return "single_attack";
+    case "parry_attack":
+      return "reactive_attack";
+    case "adjust_range_attack":
+      return "adjust_distance_attack";
+    default:
+      return actionId;
+  }
+}
+
 function maneuverStageKind(stage: CombatManeuverProcessStagePlan): CombatProgressionStageKind {
   return stage.kind;
 }
@@ -35,6 +48,17 @@ function buildAdapterManeuverProcess(
   plan: CombatManeuverProcessPlan,
 ): CombatProgressionProcess {
   const maneuverOwner = context.identities.get(plan.ownerParticipantId);
+  const maneuverTarget = plan.targetParticipantId
+    ? context.identities.get(plan.targetParticipantId)
+    : undefined;
+  const feintProposal =
+    plan.maneuverKind === "feint"
+      ? context.state.feintProposals.find((proposal) => proposal.id === plan.proposalId)
+      : undefined;
+  const adjustDistanceProposal =
+    plan.maneuverKind === "adjust_distance"
+      ? context.state.adjustDistanceProposals.find((proposal) => proposal.id === plan.proposalId)
+      : undefined;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const owner =
@@ -87,6 +111,34 @@ function buildAdapterManeuverProcess(
                 key: `${task.proposalId}:${task.kind}`,
                 kind: task.kind,
                 owner,
+                presentationContext: {
+                  actionKind: plan.actionKind,
+                  actor: maneuverOwner,
+                  distance: adjustDistanceProposal
+                    ? {
+                        current: adjustDistanceProposal.currentDistance,
+                        direction: adjustDistanceProposal.direction,
+                        requested: adjustDistanceProposal.requestedDistance,
+                      }
+                    : undefined,
+                  responder: owner?.kind === "combatant" ? owner : undefined,
+                  skill:
+                    task.kind === "feint_attacker_roll"
+                      ? {
+                          id: feintProposal?.attackerSkillId,
+                          label: feintProposal?.attackerSkillLabel,
+                        }
+                      : task.kind === "feint_defender_roll"
+                        ? {
+                            id: feintProposal?.defenderSkillId,
+                            label: feintProposal?.defenderSkillLabel,
+                          }
+                        : task.kind === "adjust_distance_attacker_roll" ||
+                            task.kind === "adjust_distance_defender_roll"
+                          ? { label: "Dodge" }
+                          : undefined,
+                  target: maneuverTarget,
+                },
                 // Participant-owned maneuver input belongs to the required actor's row. GM review
                 // remains associated with the maneuver initiator's action facet.
                 trackerOwner: owner?.kind === "combatant" ? owner : maneuverOwner,
@@ -152,6 +204,9 @@ function buildLegacyAttackProcess(
 
   if (substep === "attack") {
     const owner = participantId ? context.identities.get(participantId) : undefined;
+    const participant = context.state.participants.find(
+      (entry) => entry.participantId === participantId,
+    );
     const candidate = getCombatRoundPhaseAttackCandidates({ phase, state: context.state }).find(
       (entry) => entry.participantId === participantId,
     );
@@ -181,6 +236,13 @@ function buildLegacyAttackProcess(
           },
           kind: "attack",
           owner,
+          presentationContext: {
+            actionKind: presentationActionKind(participant?.declaration?.actionId),
+            actor: owner,
+            target: candidate?.targetParticipantId
+              ? context.identities.get(candidate.targetParticipantId)
+              : undefined,
+          },
           trackerOwner: owner,
           trackerStep: trackerAttack,
         },
@@ -222,6 +284,20 @@ function buildLegacyAttackProcess(
           },
           kind: "parry",
           owner,
+          presentationContext: {
+            actionKind: presentationActionKind(
+              attack
+                ? context.state.participants.find(
+                    (entry) => entry.participantId === attack.attackerParticipantId,
+                  )?.declaration?.actionId
+                : undefined,
+            ),
+            actor: attack
+              ? context.identities.get(attack.attackerParticipantId)
+              : undefined,
+            responder: owner,
+            target: owner,
+          },
           trackerOwner: owner,
           trackerStep: trackerParry,
         },
@@ -258,6 +334,13 @@ function buildLegacyAttackProcess(
             identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "hit_location",
             owner: attacker,
+            presentationContext: {
+              actor: attacker,
+              responder: attacker,
+              target: attack
+                ? context.identities.get(attack.defenderParticipantId)
+                : undefined,
+            },
             trackerOwner: facetOwner,
             trackerStep: trackerDamage,
           },
@@ -272,6 +355,13 @@ function buildLegacyAttackProcess(
             identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "critical",
             owner: attacker,
+            presentationContext: {
+              actor: attacker,
+              responder: attacker,
+              target: attack
+                ? context.identities.get(attack.defenderParticipantId)
+                : undefined,
+            },
             trackerOwner: facetOwner,
             trackerStep: trackerDamage,
           },
@@ -287,6 +377,12 @@ function buildLegacyAttackProcess(
             identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "damage_review",
             owner: GM_IDENTITY,
+            presentationContext: {
+              actor: attacker,
+              target: attack
+                ? context.identities.get(attack.defenderParticipantId)
+                : undefined,
+            },
             trackerOwner: facetOwner,
             trackerStep: trackerDamage,
           },
@@ -304,6 +400,12 @@ function buildLegacyAttackProcess(
             identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "damage_review",
             owner: GM_IDENTITY,
+            presentationContext: {
+              actor: attacker,
+              target: attack
+                ? context.identities.get(attack.defenderParticipantId)
+                : undefined,
+            },
             trackerOwner: facetOwner,
             trackerStep: trackerDamage,
           },
@@ -353,6 +455,10 @@ function buildAdapterAttackProcess(
   const defender = plan.targetParticipantId
     ? context.identities.get(plan.targetParticipantId)
     : undefined;
+  const attackSnapshot = [...context.state.stepSnapshots]
+    .reverse()
+    .find((snapshot) => snapshot.participantId === plan.ownerParticipantId);
+  const weaponLabel = attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const taskKind = adapterStageTaskKind(stage);
@@ -405,6 +511,19 @@ function buildAdapterAttackProcess(
                 key: task.opportunityId,
                 kind: taskKind,
                 owner,
+                presentationContext: {
+                  actionKind: plan.actionKind,
+                  actor: attacker,
+                  responder: owner?.kind === "combatant" ? owner : undefined,
+                  target: defender,
+                  weapon:
+                    weaponLabel || plan.opportunity.itemId || plan.opportunity.weaponTemplateId
+                      ? {
+                          id: plan.opportunity.itemId ?? plan.opportunity.weaponTemplateId,
+                          label: weaponLabel,
+                        }
+                      : undefined,
+                },
                 trackerOwner,
                 trackerStep: trackerStepForPhase(plan.phase, stage.trackerFacet),
               },

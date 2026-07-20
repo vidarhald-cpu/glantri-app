@@ -25,6 +25,7 @@ import type {
   CombatProgressionTaskOwner,
   CombatProgressionTask,
   CombatProgressionTaskIdentity,
+  CombatProgressionTaskPresentationContext,
   CombatProgressionAllowedActor,
   CombatProgressionBoundaryTransition,
 } from "./types";
@@ -57,6 +58,7 @@ export interface TaskSpec {
   key?: string;
   kind: CombatProgressionTaskKind;
   owner?: CombatProgressionTaskOwner;
+  presentationContext?: CombatProgressionTaskPresentationContext;
   trackerOwner?: CombatantIdentity;
   trackerStep: CombatRoundCursorStep;
   transition?: CombatProgressionBoundaryTransition;
@@ -225,6 +227,7 @@ function buildTask(
       ? context.identities.get(spec.identity.opponentParticipantId)
       : undefined,
     owner: spec.owner,
+    presentationContext: spec.presentationContext,
     processId: getCombatProgressionProcessId(context, processKind, processKey),
     stageId: stageId(context, processKind, stageKind, processKey, stageKey),
     state: blockerIds.length === 0 ? "executable" : "waiting",

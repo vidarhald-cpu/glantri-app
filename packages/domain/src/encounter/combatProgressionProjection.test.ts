@@ -366,6 +366,11 @@ describe("CombatProgressionProjection", () => {
     expect(
       projection.boundary.processes[1]?.stages[0]?.tasks.every((task) => task.state === "waiting"),
     ).toBe(true);
+    expect(
+      projection.boundary.processes[0]?.stages[0]?.tasks
+        .filter((task) => task.owner?.kind === "combatant")
+        .map((task) => task.presentationContext?.difficulty),
+    ).toEqual([26, 26]);
   });
 
   it("maps the adapter-derived standard attack stages without advancing state", () => {
@@ -1156,6 +1161,7 @@ describe("authorizeCombatProgressionTask", () => {
       position: 0,
     });
     expect(playerTasks[0]).toMatchObject({
+      expectedCommand: "declare_action",
       id: gmHeroTask?.id,
       kind: "submit_declaration",
       owner: { participantId: "hero" },
@@ -1164,7 +1170,6 @@ describe("authorizeCombatProgressionTask", () => {
     });
     const serialized = JSON.stringify(playerView);
     expect(serialized).not.toContain("guard");
-    expect(serialized).not.toContain("expectedCommand");
     expect(serialized).not.toContain("blocker");
     expect(serialized).not.toContain("diagnostic");
     expect(serialized).not.toContain("proposalId");
@@ -1402,10 +1407,31 @@ describe("authorizeCombatProgressionTask", () => {
       .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .find((task) => task.kind === "adjust_distance_response");
     expect(gmResponseTask?.opponent).toMatchObject({ label: "Hero", participantId: "hero" });
+    expect(gmResponseTask).toMatchObject({
+      expectedCommand: "respond_adjust_distance",
+      identity: expect.objectContaining({
+        opportunityId: "distance-opportunity",
+        proposalId: "distance-proposal",
+      }),
+      presentationContext: {
+        actionKind: "adjust_distance_attack",
+        actor: { participantId: "hero" },
+        distance: { current: 3, direction: "closer", requested: 2 },
+        responder: { participantId: "guard" },
+        target: { participantId: "guard" },
+      },
+    });
     expect(playerResponseTask).toMatchObject({
       kind: "adjust_distance_response",
       opponent: undefined,
       owner: { participantId: "guard" },
+      presentationContext: {
+        actionKind: "adjust_distance_attack",
+        actor: undefined,
+        distance: { current: 3, direction: "closer", requested: 2 },
+        responder: { participantId: "guard" },
+        target: { participantId: "guard" },
+      },
       trackerFacet: { owner: { participantId: "guard" } },
     });
     expect(JSON.stringify(hiddenOpponentPresentation)).not.toContain("hero");

@@ -11,6 +11,7 @@ const task = {
   actorAccess: { combatant: true, gm: true },
   contributesToProgression: true,
   executionGroupId: "attack-group",
+  expectedCommand: "roll_attack",
   id: "attack-task",
   identity: { executionGroupId: "attack-group", phase: "phase1" },
   kind: "attack",
