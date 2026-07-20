@@ -736,6 +736,7 @@ function parseCombatRoundAdvanceBody(body: unknown): {
   expectedBoundary: CombatProgressionBoundaryKind;
   expectedRevision: string;
   stepSnapshots?: CombatRoundStepSnapshot[];
+  taskId?: string;
   targetBoundary: CombatProgressionBoundaryKind;
 } {
   const value = parseBodyObject(body, "Combat round advance payload");
@@ -748,11 +749,13 @@ function parseCombatRoundAdvanceBody(body: unknown): {
   };
   const expectedBoundary = parseBoundary("expectedBoundary");
   const expectedRevision = parseNonEmptyString(value.expectedRevision, "expectedRevision");
+  const taskId =
+    value.taskId === undefined ? undefined : parseNonEmptyString(value.taskId, "taskId");
   const targetBoundary = parseBoundary("targetBoundary");
   const stepSnapshotsValue = value.stepSnapshots;
 
   if (stepSnapshotsValue === undefined) {
-    return { expectedBoundary, expectedRevision, targetBoundary };
+    return { expectedBoundary, expectedRevision, targetBoundary, taskId };
   }
 
   if (!Array.isArray(stepSnapshotsValue)) {
@@ -765,6 +768,7 @@ function parseCombatRoundAdvanceBody(body: unknown): {
     stepSnapshots: stepSnapshotsValue.map((snapshot) =>
       combatRoundStepSnapshotSchema.parse(snapshot),
     ),
+    taskId,
     targetBoundary,
   };
 }
@@ -5822,6 +5826,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdByUserId: user.id,
         },
         expectedBoundary: body.expectedBoundary,
+        expectedTaskId: body.taskId,
         state: roundState,
         stepSnapshots: body.stepSnapshots,
         targetBoundary: body.targetBoundary,

@@ -41,6 +41,7 @@ import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioP
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
 import { PlayerRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 import CombatRoundManagerPanel from "@/features/combat-round-manager/CombatRoundManagerPanel";
+import { selectLatestCombatViewRevision } from "@/features/combat-history";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -121,12 +122,18 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     setAccessMode(workspaceAccess.accessMode);
     setScenarios(workspaceAccess.scenarios);
     setScenarioParticipants(nextScenarioParticipants);
-    setEncounters(
-      getCampaignWorkspaceVisibleEncounters({
-        campaignId,
-        encounters: nextEncounters,
-        scenarioIds,
-      }),
+    const visibleEncounters = getCampaignWorkspaceVisibleEncounters({
+      campaignId,
+      encounters: nextEncounters,
+      scenarioIds,
+    });
+    setEncounters((current) =>
+      visibleEncounters.map((candidate) =>
+        selectLatestCombatViewRevision({
+          accepted: current.find((encounter) => encounter.id === candidate.id),
+          candidate,
+        }),
+      ),
     );
   }, [campaignId, currentUser]);
 
@@ -757,7 +764,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 onEncounterUpdated={(nextEncounter) => {
                   setEncounters((current) =>
                     current.map((encounter) =>
-                      encounter.id === nextEncounter.id ? nextEncounter : encounter,
+                      encounter.id === nextEncounter.id
+                        ? selectLatestCombatViewRevision({
+                            accepted: encounter,
+                            candidate: nextEncounter,
+                          })
+                        : encounter,
                     ),
                   );
                 }}

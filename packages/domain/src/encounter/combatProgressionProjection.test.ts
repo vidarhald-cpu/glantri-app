@@ -104,10 +104,20 @@ describe("CombatProgressionProjection", () => {
     expect(
       playerView.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)),
     ).not.toContainEqual(expect.objectContaining({ kind: "gm_advance_boundary" }));
+    expect(() =>
+      advanceCombatProgressionBoundary({
+        command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+        expectedBoundary: "declaration",
+        expectedTaskId: "stale:boundary-task",
+        state: waiting,
+        targetBoundary: "phase1_modifier_review",
+      }),
+    ).toThrow("projected combat boundary task changed");
 
     const advanced = advanceCombatProgressionBoundary({
       command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
       expectedBoundary: "declaration",
+      expectedTaskId: task?.id,
       state: waiting,
       targetBoundary: "phase1_modifier_review",
     });

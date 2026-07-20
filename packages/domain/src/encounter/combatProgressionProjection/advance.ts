@@ -111,6 +111,7 @@ export function advanceCombatProgressionBoundary(input: {
     createdByUserId?: string;
   };
   expectedBoundary: CombatProgressionBoundaryKind;
+  expectedTaskId?: string;
   state: CombatRoundState;
   stepSnapshots?: CombatRoundStepSnapshot[];
   targetBoundary: CombatProgressionBoundaryKind;
@@ -135,6 +136,12 @@ export function advanceCombatProgressionBoundary(input: {
       if (roundBoundaryBlocker) throw new RangeError(roundBoundaryBlocker);
     }
     throw new CombatProgressionBoundaryAdvanceError(authorization.code, authorization.message);
+  }
+  if (input.expectedTaskId && authorization.task.id !== input.expectedTaskId) {
+    throw new CombatProgressionBoundaryAdvanceError(
+      "task_not_ready",
+      "The projected combat boundary task changed before it could be advanced.",
+    );
   }
   if (authorization.task.blockerIds.length > 0) {
     throw new CombatProgressionBoundaryAdvanceError(

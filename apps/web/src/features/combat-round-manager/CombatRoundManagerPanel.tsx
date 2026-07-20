@@ -3,6 +3,7 @@
 import {
   forwardRef,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -125,6 +126,7 @@ import {
   CombatTracker,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
+  isCombatViewRevisionAtLeast,
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
@@ -161,8 +163,10 @@ import {
   skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
   prepareCombatRoundEndReviewOnServer,
+  loadEncounterById,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
+import { ApiRequestError } from "@/lib/api/apiClient";
 import {
   loadCharacterEquipmentState,
   loadServerCharacterById,
@@ -253,12 +257,19 @@ import {
   scrollCombatRoundTimelineCellIntoView,
   type CombatRoundTimelineScrollMode,
 } from "./combatRoundTimelineScroll";
+import { buildCombatBoundaryTransitionAction } from "./combatBoundaryTransitionAction";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
   onEncounterUpdated?: (encounter: EncounterSession) => void;
   onScenarioParticipantsUpdated?: (participants: ScenarioParticipant[]) => void;
   scenarioParticipants?: ScenarioParticipant[];
+}
+
+interface CombatRoundViewState {
+  encounterId: string;
+  encounterRevision?: string;
+  state: CombatRoundState;
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
@@ -3858,7 +3869,52 @@ export default function CombatRoundManagerPanel({
       }),
     [initialRoundState],
   );
-  const [roundState, setRoundState] = useState(initialRoundState);
+  const [roundView, setRoundView] = useState<CombatRoundViewState>({
+    encounterId: encounter.id,
+    encounterRevision: encounter.updatedAt,
+    state: initialRoundState,
+  });
+  const roundState = roundView.state;
+  const acceptedEncounterRevisionRef = useRef({
+    encounterId: encounter.id,
+    updatedAt: encounter.updatedAt,
+  });
+  const setRoundState = useCallback(
+    (state: CombatRoundState) => {
+      setRoundView({ encounterId: encounter.id, state });
+    },
+    [encounter.id],
+  );
+  const acceptCanonicalEncounterState = useCallback(
+    (
+      nextEncounter: EncounterSession,
+      state = initializeCombatRoundState({ encounter: nextEncounter }),
+    ) => {
+      const accepted = acceptedEncounterRevisionRef.current;
+
+      if (
+        accepted.encounterId === nextEncounter.id &&
+        !isCombatViewRevisionAtLeast({
+          acceptedUpdatedAt: accepted.updatedAt,
+          candidateUpdatedAt: nextEncounter.updatedAt,
+        })
+      ) {
+        return false;
+      }
+
+      acceptedEncounterRevisionRef.current = {
+        encounterId: nextEncounter.id,
+        updatedAt: nextEncounter.updatedAt,
+      };
+      setRoundView({
+        encounterId: nextEncounter.id,
+        encounterRevision: nextEncounter.updatedAt,
+        state,
+      });
+      return true;
+    },
+    [],
+  );
   const [inspectionSelection, setInspectionSelection] = useState(initialInspectionSelection);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
@@ -3928,6 +3984,7 @@ export default function CombatRoundManagerPanel({
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
+  const boundaryTransitionInFlightRef = useRef(false);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
@@ -4018,6 +4075,11 @@ export default function CombatRoundManagerPanel({
   const projectedBoundaryTransitionTask = projectedCurrentTasks.find(
     (task) => task.kind === "gm_advance_boundary" && task.state === "executable" && task.transition,
   );
+  const projectedBoundaryTransitionAction = buildCombatBoundaryTransitionAction({
+    encounterId: roundView.encounterId,
+    encounterRevision: roundView.encounterRevision,
+    task: projectedBoundaryTransitionTask,
+  });
   const projectedDoubleAttackDecisionTask = projectedCurrentTasks.find(
     (task) => task.kind === "double_attack_decision" && task.state === "executable",
   );
@@ -4221,7 +4283,7 @@ export default function CombatRoundManagerPanel({
     void prepareCombatRoundEndReviewOnServer({ encounterId: encounter.id })
       .then(({ encounter: nextEncounter }) => {
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-        setRoundState(nextRoundState);
+        acceptCanonicalEncounterState(nextEncounter, nextRoundState);
         setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
         setSelectedRoundNumber(nextRoundState.roundNumber);
         onEncounterUpdated?.(nextEncounter);
@@ -4235,7 +4297,14 @@ export default function CombatRoundManagerPanel({
         );
       })
       .finally(() => setSaving(false));
-  }, [encounter.id, inspectorRoundEndTask?.kind, saving, selectedRoundIsActive]);
+  }, [
+    acceptCanonicalEncounterState,
+    encounter.id,
+    inspectorRoundEndTask?.kind,
+    onEncounterUpdated,
+    saving,
+    selectedRoundIsActive,
+  ]);
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
     inspector.participant?.declaration,
   )
@@ -4483,7 +4552,7 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorCanExecuteSelectedStep =
     selectedRoundIsActive &&
-    (Boolean(projectedBoundaryTransitionTask) ||
+    (Boolean(projectedBoundaryTransitionAction) ||
       inspectorSelectionIsCurrentProgression ||
       (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
@@ -5291,8 +5360,8 @@ export default function CombatRoundManagerPanel({
           participant.participantId === inspectorCursorIncomingAttackResult.defenderParticipantId,
       )?.label
     : undefined;
-  const inspectorActionButtonLabel = projectedBoundaryTransitionTask?.transition
-    ? getBoundaryTransitionButtonLabel(projectedBoundaryTransitionTask.transition.targetBoundary)
+  const inspectorActionButtonLabel = projectedBoundaryTransitionAction
+    ? getBoundaryTransitionButtonLabel(projectedBoundaryTransitionAction.targetBoundary)
     : inspectorSelectedAttackAlreadyRolled
       ? "Attack already rolled"
       : inspectorAdjustDistanceProposal?.status === "awaiting_defender_response"
@@ -5392,7 +5461,7 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeSelection === "skip";
   const inspectorActionButtonDisabled =
     saving ||
-    (projectedBoundaryTransitionTask
+    (projectedBoundaryTransitionAction
       ? false
       : inspectorAdjustDistanceProposal
         ? (inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ||
@@ -5988,6 +6057,10 @@ export default function CombatRoundManagerPanel({
   useEffect(() => {
     const encounterChanged = encounterScopeRef.current !== encounter.id;
 
+    if (!acceptCanonicalEncounterState(encounter, initialRoundState)) {
+      return;
+    }
+
     if (encounterChanged) {
       encounterScopeRef.current = encounter.id;
       manualSelectionRef.current = undefined;
@@ -6038,7 +6111,6 @@ export default function CombatRoundManagerPanel({
     }
 
     setInspectionSelection(nextInspectionSelection);
-    setRoundState(initialRoundState);
 
     if (currentTaskSelection?.participantId) {
       scrollTimelineCellIntoView(
@@ -6050,7 +6122,7 @@ export default function CombatRoundManagerPanel({
         "center",
       );
     }
-  }, [initialRoundState]);
+  }, [acceptCanonicalEncounterState, encounter, initialRoundState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6611,7 +6683,7 @@ export default function CombatRoundManagerPanel({
   }
 
   async function commitCurrentStep() {
-    if (isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionTask) {
+    if (isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionAction) {
       return;
     }
 
@@ -6673,14 +6745,21 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    if (!projectedBoundaryTransitionTask?.transition) {
+    const boundaryTransitionAction = projectedBoundaryTransitionAction;
+
+    if (!boundaryTransitionAction) {
       setSaveError("The current combat boundary is not ready to advance.");
+      return;
+    }
+
+    if (boundaryTransitionInFlightRef.current) {
       return;
     }
 
     const committedAt = new Date().toISOString();
     const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, roundState);
 
+    boundaryTransitionInFlightRef.current = true;
     setSaving(true);
     try {
       const {
@@ -6688,11 +6767,12 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participants,
       } = await advanceCombatRoundCurrentStepOnServer({
-        encounterId: encounter.id,
-        expectedBoundary: projectedBoundaryTransitionTask.transition.currentBoundary,
-        expectedRevision: encounter.updatedAt,
+        encounterId: boundaryTransitionAction.encounterId,
+        expectedBoundary: boundaryTransitionAction.expectedBoundary,
+        expectedRevision: boundaryTransitionAction.expectedRevision,
         stepSnapshots,
-        targetBoundary: projectedBoundaryTransitionTask.transition.targetBoundary,
+        targetBoundary: boundaryTransitionAction.targetBoundary,
+        taskId: boundaryTransitionAction.taskId,
       });
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -6710,16 +6790,45 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to advance combat round.",
-      );
+      const stalePayload =
+        caughtError instanceof ApiRequestError &&
+        caughtError.status === 409 &&
+        caughtError.payload &&
+        typeof caughtError.payload === "object" &&
+        "code" in caughtError.payload &&
+        caughtError.payload.code === "stale_revision";
+
+      if (stalePayload) {
+        try {
+          const refreshedEncounter = await loadEncounterById(boundaryTransitionAction.encounterId);
+          const accepted = acceptCanonicalEncounterState(refreshedEncounter);
+
+          if (accepted) {
+            onEncounterUpdated?.(refreshedEncounter);
+          }
+          setSaveError(
+            "Combat state refreshed. Review the current action and retry if it is still available.",
+          );
+        } catch (refreshError) {
+          setSaveError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Combat state changed and could not be refreshed.",
+          );
+        }
+      } else {
+        setSaveError(
+          caughtError instanceof Error ? caughtError.message : "Unable to advance combat round.",
+        );
+      }
     } finally {
+      boundaryTransitionInFlightRef.current = false;
       setSaving(false);
     }
   }
@@ -7996,7 +8105,7 @@ export default function CombatRoundManagerPanel({
             scenarioParticipantId: selectedScenarioParticipant.id,
           });
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-        setRoundState(nextRoundState);
+        acceptCanonicalEncounterState(nextEncounter, nextRoundState);
         setInspectionSelection({
           participantId: nextRoundState.currentCursor?.participantId,
           step: "round_summary",
@@ -8043,7 +8152,7 @@ export default function CombatRoundManagerPanel({
             scenarioParticipantId: selectedScenarioParticipant.id,
           });
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-        setRoundState(nextRoundState);
+        acceptCanonicalEncounterState(nextEncounter, nextRoundState);
         setScenarioParticipantOverrides((current) => ({
           ...current,
           [updatedParticipant.id]: updatedParticipant,
@@ -8088,7 +8197,7 @@ export default function CombatRoundManagerPanel({
           encounter: nextEncounter,
         });
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setRoundEndDistanceOverrideDrafts((current) => {
@@ -8133,7 +8242,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -9375,7 +9484,7 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={() =>
-                        void (projectedBoundaryTransitionTask
+                        void (projectedBoundaryTransitionAction
                           ? commitCurrentStep()
                           : inspectorAdjustDistanceProposal
                             ? advanceInspectorAdjustDistance()
@@ -9437,9 +9546,9 @@ export default function CombatRoundManagerPanel({
                       preActionControls={inspectorPreActionControls}
                       saving={saving}
                       statusText={
-                        projectedBoundaryTransitionTask?.transition
+                        projectedBoundaryTransitionAction
                           ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
-                              projectedBoundaryTransitionTask.transition.targetBoundary,
+                              projectedBoundaryTransitionAction.targetBoundary,
                             )}.`
                           : inspectorIsHistorical
                             ? `Historical step: ${

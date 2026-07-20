@@ -752,6 +752,7 @@ describe("localServiceClient wire contract", () => {
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
+        taskId: "task:declaration:advance",
         targetBoundary: "phase1_modifier_review",
       }),
     ).resolves.toEqual({ commandEnvelope, encounter });
@@ -761,6 +762,7 @@ describe("localServiceClient wire contract", () => {
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
+        taskId: "task:declaration:advance",
         targetBoundary: "phase1_modifier_review",
       },
       method: "POST",

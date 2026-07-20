@@ -90,6 +90,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("No encounter is currently available for combat tools.");
     expect(source).not.toContain("Player combat inspection");
     expect(source).not.toContain('screenName="Combat"');
+    expect(source).toContain("selectLatestCombatViewRevision({");
   });
 
   it("routes Player combat through its own GM inspection tab", () => {

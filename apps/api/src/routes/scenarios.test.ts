@@ -4,6 +4,7 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildCombatProgressionProjection,
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
@@ -4846,7 +4847,7 @@ describe("scenarios route contract", () => {
     ).toMatchObject({ status: "committed" });
   });
 
-  it("authorizes the projected GM participant effect review through the API", async () => {
+  it("returns the incremented revision and Start next round task after the final SU review", async () => {
     const fixture = makeDistanceControlReviewFixture();
     const readyState = commitDistanceControlFixture({
       proposalId: fixture.proposalId,
@@ -4855,12 +4856,19 @@ describe("scenarios route contract", () => {
         proposalId: fixture.proposalId,
       }),
     });
-    setupCombatDeclarationRoute({
-      combatExperienceResolved: false,
+    const firstReview = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:13:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-1",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-1",
+      state: readyState,
+    }).state;
+    setupMutableCombatRouteState({
       encounter: {
         ...fixture.encounter,
-        combatRoundState: readyState,
-        currentRound: readyState.roundNumber,
+        combatRoundState: firstReview,
+        currentRound: firstReview.roundNumber,
       },
       participants: fixture.participants,
       user: mocks.adminUser,
@@ -4869,17 +4877,35 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "POST",
-      payload: { scenarioParticipantId: "participant-1" },
+      payload: { scenarioParticipantId: "participant-2" },
       url: "/encounters/encounter-1/combat-round/commit-participant-review",
     });
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ participant: { id: "participant-1" } });
+    expect(response.json()).toMatchObject({ participant: { id: "participant-2" } });
+    expect(response.json().encounter.updatedAt).not.toBe(fixture.encounter.updatedAt);
     expect(
       mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
-        .roundEndReview.participantReviews["encounter-participant-1"],
+        .roundEndReview.participantReviews["encounter-participant-2"],
     ).toMatchObject({ status: "complete" });
+    const projection = buildCombatProgressionProjection(
+      response.json().encounter.combatRoundState as CombatRoundState,
+    );
+    expect(
+      projection.boundary.processes
+        .flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "gm_advance_boundary",
+        state: "executable",
+        transition: expect.objectContaining({
+          currentBoundary: "round_boundary",
+          targetBoundary: "declaration",
+        }),
+      }),
+    );
   });
 
   it("reloads an applied contested distance and starts the next round exactly once", async () => {
@@ -6086,6 +6112,10 @@ describe("scenarios route contract", () => {
       roundNumber: reviewState.roundNumber,
       step: "review_action_modifiers",
     };
+    const boundaryTask = buildCombatProgressionProjection(reviewState)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "gm_advance_boundary");
 
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
@@ -6118,6 +6148,16 @@ describe("scenarios route contract", () => {
       },
       url: "/encounters/encounter-1/combat-round/advance-current-step",
     });
+    const wrongTaskResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        targetBoundary: "phase1_initiative",
+        taskId: "stale:boundary-task",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
     const playerResponse = await app.inject({
       method: "POST",
@@ -6135,6 +6175,7 @@ describe("scenarios route contract", () => {
         expectedBoundary: "phase1_modifier_review",
         expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots: [stepSnapshot],
+        taskId: boundaryTask?.id,
         targetBoundary: "phase1_initiative",
       },
       url: "/encounters/encounter-1/combat-round/advance-current-step",
@@ -6154,6 +6195,8 @@ describe("scenarios route contract", () => {
 
     expect(wrongTargetResponse.statusCode).toBe(400);
     expect(wrongTargetResponse.json().code).toBe("wrong_target");
+    expect(wrongTaskResponse.statusCode).toBe(400);
+    expect(wrongTaskResponse.json().code).toBe("task_not_ready");
     expect(playerResponse.statusCode).toBe(403);
     expect(response.statusCode).toBe(200);
     expect(staleResponse.statusCode).toBe(409);

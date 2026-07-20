@@ -528,6 +528,7 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
   expectedBoundary: CombatProgressionBoundaryKind;
   expectedRevision: string;
   stepSnapshots?: CombatRoundStepSnapshot[];
+  taskId: string;
   targetBoundary: CombatProgressionBoundaryKind;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
@@ -543,6 +544,7 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
       expectedBoundary: input.expectedBoundary,
       expectedRevision: input.expectedRevision,
       stepSnapshots: input.stepSnapshots,
+      taskId: input.taskId,
       targetBoundary: input.targetBoundary,
     }),
     method: "POST",
