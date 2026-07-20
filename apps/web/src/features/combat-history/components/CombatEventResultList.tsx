@@ -6,6 +6,7 @@ import { buildCombatEventResultModel } from "../view-models/buildCombatEventResu
 export function CombatEventResultList(input: {
   emptyMessage?: string;
   events: readonly ProjectedCombatHistoryEvent[];
+  title?: string;
 }) {
   const model = buildCombatEventResultModel(input.events);
   const [expandedCalculationIds, setExpandedCalculationIds] = React.useState<Set<string>>(
@@ -23,7 +24,7 @@ export function CombatEventResultList(input: {
 
   return (
     <section
-      aria-label="Action result"
+      aria-label={input.title ?? "Action result"}
       style={{
         alignContent: "start",
         background: "#fffdf8",
@@ -34,7 +35,7 @@ export function CombatEventResultList(input: {
         padding: "0.7rem",
       }}
     >
-      <strong>Action result</strong>
+      <strong>{input.title ?? "Action result"}</strong>
       {model.items.length ? (
         <ol style={{ display: "grid", gap: "0.55rem", margin: 0, paddingLeft: "1.4rem" }}>
           {model.items.map((item) => (
@@ -78,7 +79,10 @@ export function CombatEventResultList(input: {
                       Calculation
                     </button>
                     {expandedCalculationIds.has(item.id) ? (
-                      <div id={`${item.id}:calculation`} style={{ display: "grid", gap: "0.12rem" }}>
+                      <div
+                        id={`${item.id}:calculation`}
+                        style={{ display: "grid", gap: "0.12rem" }}
+                      >
                         {item.calculationRows.map((row) => (
                           <div key={row.key}>{row.text}</div>
                         ))}

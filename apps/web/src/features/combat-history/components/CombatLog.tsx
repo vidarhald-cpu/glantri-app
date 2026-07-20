@@ -1,5 +1,7 @@
-import React, { useEffect } from "react";
+import React from "react";
 import type { CombatLogEventPresentation } from "@glantri/domain";
+
+import type { CombatLogEventSelection } from "../view-models/combatLogSelection";
 
 const PHASE_LABELS: Readonly<Record<NonNullable<CombatLogEventPresentation["phase"]>, string>> = {
   declaration: "Declaration",
@@ -10,18 +12,10 @@ const PHASE_LABELS: Readonly<Record<NonNullable<CombatLogEventPresentation["phas
 
 export function CombatLog(input: {
   events: readonly CombatLogEventPresentation[];
-  onSelect: (eventId: string | undefined) => void;
+  onSelect: (selection: CombatLogEventSelection) => void;
   selectedCombatLogEventId?: string;
+  selectedPresentationTargetId?: string;
 }) {
-  useEffect(() => {
-    if (
-      input.selectedCombatLogEventId &&
-      !input.events.some((event) => event.id === input.selectedCombatLogEventId)
-    ) {
-      input.onSelect(undefined);
-    }
-  }, [input.events, input.onSelect, input.selectedCombatLogEventId]);
-
   return (
     <section
       aria-label="Combat Log"
@@ -49,12 +43,20 @@ export function CombatLog(input: {
           }}
         >
           {input.events.map((event) => {
-            const selected = input.selectedCombatLogEventId === event.id;
+            const selected =
+              input.selectedCombatLogEventId === event.id &&
+              input.selectedPresentationTargetId === event.presentationTargetId;
             return (
               <li key={event.id}>
                 <button
                   aria-pressed={selected}
-                  onClick={() => input.onSelect(selected ? undefined : event.id)}
+                  data-presentation-target-id={event.presentationTargetId}
+                  onClick={() =>
+                    input.onSelect({
+                      combatLogEventId: event.id,
+                      presentationTargetId: event.presentationTargetId,
+                    })
+                  }
                   style={{
                     background: selected ? "#efe7d3" : "transparent",
                     border: selected ? "1px solid #c9bea4" : "1px solid transparent",

@@ -11,12 +11,15 @@ function logEvent(
   id: string,
   sequence: number,
   summary: string,
+  presentationTargetId?: string,
 ): CombatLogEventPresentation {
   return {
     category: sequence === 0 ? "round" : "attack",
     encounterId: "encounter-1",
     id,
     phase: sequence === 0 ? "declaration" : "phase1",
+    presentationTargetId,
+    presentationTargetKind: presentationTargetId ? "attack" : undefined,
     roundNumber: 1,
     sequence,
     sourceEventIds: sequence === 0 ? [] : [`source-${sequence}`],
@@ -56,26 +59,27 @@ describe("CombatLog", () => {
     );
   });
 
-  it("selects only the canonical event ID and permits clearing it", () => {
+  it("selects the canonical event and its immutable presentation target", () => {
     const onSelect = vi.fn();
-    const event = logEvent("attack-hit", 1, "The attack hit.");
-    const { rerender } = render(<CombatLog events={[event]} onSelect={onSelect} />);
-
-    fireEvent.click(screen.getByRole("button"));
-    expect(onSelect).toHaveBeenLastCalledWith("attack-hit");
-
-    rerender(
-      <CombatLog
-        events={[event]}
-        onSelect={onSelect}
-        selectedCombatLogEventId="attack-hit"
-      />,
+    const event = logEvent(
+      "attack-hit",
+      1,
+      "The attack hit.",
+      "combat-presentation:attack:attack-1",
     );
+    render(<CombatLog events={[event]} onSelect={onSelect} />);
+
     fireEvent.click(screen.getByRole("button"));
-    expect(onSelect).toHaveBeenLastCalledWith(undefined);
+    expect(onSelect).toHaveBeenLastCalledWith({
+      combatLogEventId: "attack-hit",
+      presentationTargetId: "combat-presentation:attack:attack-1",
+    });
+    expect(screen.getByRole("button").dataset.presentationTargetId).toBe(
+      "combat-presentation:attack:attack-1",
+    );
   });
 
-  it("clears a selected event that disappears instead of selecting an unrelated event", () => {
+  it("does not infer a replacement selection when its controlled event is absent", () => {
     const onSelect = vi.fn();
     const remaining = logEvent("remaining", 0, "Round 1 began.");
 
@@ -87,7 +91,21 @@ describe("CombatLog", () => {
       />,
     );
 
-    expect(onSelect).toHaveBeenCalledWith(undefined);
-    expect(onSelect).not.toHaveBeenCalledWith("remaining");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("button").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("selects a targetless narrative event without inventing outcome identity", () => {
+    const onSelect = vi.fn();
+    render(
+      <CombatLog events={[logEvent("round-open", 0, "Round 1 began.")]} onSelect={onSelect} />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(onSelect).toHaveBeenCalledWith({
+      combatLogEventId: "round-open",
+      presentationTargetId: undefined,
+    });
   });
 });

@@ -326,7 +326,14 @@ interface CombatRecapEventPresentation {
   state: "provisional" | "final";
   compactionKey?: string;
   supersedesEventIds: string[];
-  detailResultId?: string;
+  presentationTargetId?: string;
+  presentationTargetKind?:
+    | "attack"
+    | "defense"
+    | "maneuver"
+    | "damage"
+    | "declaration"
+    | "participant_review";
 }
 ```
 
@@ -446,6 +453,7 @@ interface CombatPresentationProjection {
   currentAction: CurrentActionPresentation | null;
   tracker: CombatTrackerPresentation;
   recapEvents: CombatRecapEventPresentation[];
+  selectedPresentationTargetId?: string;
   selectedDetailedResult?: CombatDetailedResultPresentation;
   modifierRows: CombatModifierPresentation[];
 }
@@ -456,11 +464,12 @@ Rules:
 1. The client accepts a candidate encounter/presentation only if its revision is not older than the accepted revision. Same-revision payloads must be identical or rejected as contradictory.
 2. A history/progression payload is displayed only with the encounter revision that produced it. Partial replacement does not mix revisions.
 3. Current Action's command descriptor is immutable and uses the task's bound revision.
-4. A local tracker cell, recap event, historical round, or participant inspection changes only `selectedDetailedResult`/inspector state. It never changes canonical task IDs, execution group, boundary, or Current Action.
-5. Player/GM Player participant switching re-sanitizes the accepted canonical presentation and clears viewer-local transient results. It does not rebuild progression.
-6. A task change or accepted newer revision invalidates transient local roll-result cards unless they are attached to a canonical event/result.
-7. Reconnect/reload replaces the complete accepted bundle. Polling does not rebuild the projection per row/cell.
-8. Missing task enrichment or severe relevant diagnostics yield a non-actionable conflict/waiting presentation, never a latest-event or cursor fallback.
+4. Combat Log selection owns `selectedPresentationTargetId`; Action Outcome consumes that target. A local tracker cell or participant inspection never replaces the live selection with a latest-result fallback. The historical inspector retains its own immutable selection. None of these selections change canonical task IDs, execution group, boundary, tracker state, or Current Action.
+5. A fresh live view defaults to the newest Combat Log event with a presentation target. A selected target survives newer accepted revisions while it still exists; undo/removal clears it without jumping to an unrelated target.
+6. Player/GM Player participant switching re-sanitizes the accepted canonical presentation and clears viewer-local transient results. It does not rebuild progression.
+7. A task change or accepted newer revision invalidates transient local roll-result cards unless they are attached to a canonical event/result.
+8. Reconnect/reload replaces the complete accepted bundle. Polling does not rebuild the projection per row/cell.
+9. Missing task enrichment or severe relevant diagnostics yield a non-actionable conflict/waiting presentation, never a latest-event or cursor fallback.
 
 ## 11. GM-first view-model and component architecture
 

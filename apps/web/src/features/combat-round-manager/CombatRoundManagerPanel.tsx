@@ -27,7 +27,6 @@ import type {
   CombatRoundParryResolution,
   CombatRoundParryModifierBreakdownEntry,
   CombatRoundPhase,
-  CombatRoundPhaseInitiativeChoice,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
   CombatRoundStepStatus,
@@ -94,7 +93,6 @@ import {
   getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
   getFinalCriticalRollIndexStatus,
-  getLatestCombatEventSummary,
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
@@ -127,12 +125,17 @@ import {
   CombatEventResultList,
   CombatLog,
   CombatTracker,
+  createDefaultCombatLogSelection,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
   isCombatViewRevisionAtLeast,
+  reconcileCombatLogSelection,
+  resolveCombatLogPresentationTargetEvents,
   resolveCombatHistoryPanelSnapshot,
+  selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
   type CombatTrackerCellFacts,
+  type CombatLogEventSelection,
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
@@ -206,7 +209,6 @@ import {
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
-import { getLatestRelevantPlayerCombatAttackResult } from "@/features/player-combat/playerCombatResultSelection";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildCanonicalCombatTargetOptions,
@@ -596,78 +598,6 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
   return `${result.label} ${result.modifierValue}, duration ${result.durationRounds}`;
 }
 
-function formatCombatExperienceCalculation(result: CombatRoundCombatExperienceResult): string {
-  if (result.noRollRequired) {
-    return `Combat Experience ${result.skillTotal} vs difficulty ${result.difficulty}`;
-  }
-
-  return `Combat Experience ${result.skillTotal} + roll ${result.rollTotal} = ${result.finalTotal} vs ${result.difficulty}`;
-}
-
-function formatCombatExperienceEffectLine(result: CombatRoundCombatExperienceResult): string {
-  const isPhaseResult = result.trigger !== "combat_start";
-
-  if (result.noRollRequired) {
-    return "Result: Active, no modifier";
-  }
-
-  if (
-    isPhaseResult &&
-    result.effectiveTableTotal !== undefined &&
-    result.effectiveTableTotal <= 5
-  ) {
-    return "Result: attack cancelled";
-  }
-
-  if (isPhaseResult && result.modifierValue < 0) {
-    return `Result: OB ${result.modifierValue}`;
-  }
-
-  if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Result: Active, no modifier";
-  }
-
-  return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
-    result.durationRounds === 1 ? "" : "s"
-  }`;
-}
-
-function buildPhaseInitiativeChoiceResultPanel(choice?: CombatRoundPhaseInitiativeChoice): {
-  interpretedResult: string;
-  rankLabel?: string;
-  resultLabel?: string;
-} | null {
-  if (!choice) {
-    return null;
-  }
-
-  if (choice.choice === "roll_ce_result" && choice.combatExperience) {
-    return {
-      interpretedResult: formatCombatExperienceCalculation(choice.combatExperience),
-      rankLabel: "Combat Experience",
-      resultLabel: formatCombatExperienceEffectLine(choice.combatExperience),
-    };
-  }
-
-  if (choice.choice === "back_out") {
-    return {
-      interpretedResult: "Back out of attack",
-      rankLabel: "Phase Combat Experience",
-      resultLabel: "Result: attack cancelled/backed out",
-    };
-  }
-
-  if (choice.choice === "continue_without_ce") {
-    return {
-      interpretedResult: "Continue attack",
-      rankLabel: "Phase Combat Experience",
-      resultLabel: "Result: no CE roll required",
-    };
-  }
-
-  return null;
-}
-
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -826,26 +756,6 @@ function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): 
     declaration?.combatContext ||
     declaration?.phaseContexts,
   );
-}
-
-function formatInitiativeRankLabel(input: {
-  participantId?: string;
-  ranks: Record<string, CombatRoundInitiativeRank>;
-  value: number | undefined;
-}): string | undefined {
-  if (!input.participantId || input.value === undefined) {
-    return undefined;
-  }
-
-  const rank = input.ranks[input.participantId];
-
-  if (!rank) {
-    return undefined;
-  }
-
-  const tieLabel = rank.tiedCount > 1 ? ` (tied with ${rank.tiedCount})` : "";
-
-  return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
 }
 
 function formatSnapshotInitiativeRankLabel(rank?: CombatRoundInitiativeRank): string | undefined {
@@ -3990,7 +3900,6 @@ export default function CombatRoundManagerPanel({
   const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
   const boundaryTransitionInFlightRef = useRef(false);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
-  const [selectedCombatLogEventId, setSelectedCombatLogEventId] = useState<string>();
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
     [encounter.participants],
@@ -4018,20 +3927,8 @@ export default function CombatRoundManagerPanel({
     () => buildCombatProgressionTrackerIndex(combatProgressionPresentation),
     [combatProgressionPresentation],
   );
-  const phase1Ranks = useMemo(
-    () => getCombatRoundInitiativeRanks({ phase: "phase1", state: roundState }),
-    [roundState],
-  );
-  const phase2Ranks = useMemo(
-    () => getCombatRoundInitiativeRanks({ phase: "phase2", state: roundState }),
-    [roundState],
-  );
   const timelineRoundStates = useMemo(
     () => getCombatRoundTimelineRoundStates(roundState),
-    [roundState],
-  );
-  const latestCombatEventSummary = useMemo(
-    () => getLatestCombatEventSummary(roundState),
     [roundState],
   );
   const combatLogProjection = useMemo(
@@ -4042,6 +3939,25 @@ export default function CombatRoundManagerPanel({
         state: roundState,
       }),
     [encounter.id, encounter.updatedAt, roundState, roundView.encounterRevision],
+  );
+  const [combatLogSelection, setCombatLogSelection] = useState(() =>
+    createDefaultCombatLogSelection(combatLogProjection),
+  );
+  useEffect(() => {
+    setCombatLogSelection((current) =>
+      reconcileCombatLogSelection({ current, projection: combatLogProjection }),
+    );
+  }, [combatLogProjection]);
+  const handleCombatLogSelection = useCallback(
+    (selection: CombatLogEventSelection) => {
+      setCombatLogSelection(
+        selectCombatLogEvent({
+          eventId: selection.combatLogEventId,
+          projection: combatLogProjection,
+        }),
+      );
+    },
+    [combatLogProjection],
   );
   const selectedTimelineRoundState =
     timelineRoundStates.find((candidate) => candidate.roundNumber === selectedRoundNumber) ??
@@ -4124,11 +4040,7 @@ export default function CombatRoundManagerPanel({
         progression: combatProgressionPresentation,
         viewer: { kind: "gm" },
       }),
-    [
-      combatProgressionPresentation,
-      roundView.encounterId,
-      roundView.encounterRevision,
-    ],
+    [combatProgressionPresentation, roundView.encounterId, roundView.encounterRevision],
   );
   const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner
     ? {
@@ -4613,8 +4525,6 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined;
-  const inspectorVisibleCombatExperienceResult =
-    inspectorPhaseInitiativeChoice?.combatExperience ?? inspectorCombatExperienceResult;
   const inspectorPhaseResolutionCursor =
     inspectorSelectedStepIsSequential &&
     selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
@@ -4979,16 +4889,6 @@ export default function CombatRoundManagerPanel({
           state: selectedTimelineRoundState,
         })
       : undefined;
-  const inspectorCanShowLatestRelevantAttackResult =
-    COMBAT_ROUND_STEPS.indexOf(inspector.step) >= COMBAT_ROUND_STEPS.indexOf("phase_1_actions") &&
-    inspector.step !== "round_summary";
-  const inspectorLatestRelevantAttackResult =
-    !inspectorIsHistorical && inspectorCanShowLatestRelevantAttackResult && inspector.participant
-      ? getLatestRelevantPlayerCombatAttackResult({
-          participantId: inspector.participant.participantId,
-          state: selectedTimelineRoundState,
-        })
-      : undefined;
   const inspectorResolutionAttackResult = inspectorIsHistorical
     ? inspectorSnapshot?.attackResult
     : inspector.participant && inspectorResolutionPhase
@@ -5089,10 +4989,6 @@ export default function CombatRoundManagerPanel({
     ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
     : 0;
   const inspectorParryModifierBreakdown = inspectorParryModifierCalculation?.rawModifiers ?? [];
-  const inspectorNoPhaseAttack =
-    Boolean(inspectorAttackPhase) &&
-    !inspectorDisplayAttackResult &&
-    inspectorCurrentPhaseHasAttack === false;
   const inspectorSelectedAttackAlreadyRolled = Boolean(
     inspectorAttackPhase && inspectorDisplayAttackResult,
   );
@@ -5894,25 +5790,11 @@ export default function CombatRoundManagerPanel({
     !showInspectorModifierReviewContextPanel &&
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceIsCombatStart;
-  const inspectorPhaseInitiativeChoiceResultPanel = buildPhaseInitiativeChoiceResultPanel(
-    inspectorPhaseInitiativeChoice,
-  );
-  const inspectorFallbackCombatExperienceResult = inspectorPhaseInitiativeChoiceResultPanel
-    ? undefined
-    : inspectorVisibleCombatExperienceResult;
-  const inspectorPhaseResolutionLines =
-    inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
-      ? formatCombatPhaseResolutionResultLines({
-          attackResult: inspectorResolutionAttackResult,
-          participantId: inspector.participant?.participantId,
-          resolution: inspectorDisplayPhaseResolutionResult,
-        })
-      : undefined;
   const inspectorCanonicalActionResultEvents = projectGmCombatEvents({
     events: selectCombatEventsForTrackerCell({
       events: selectedTimelineRoundState.events,
       participantId: inspector.participant?.participantId,
-      retainLatestWhenEmpty: !inspectorIsHistorical && inspectorSelectionIsCurrentProgression,
+      retainLatestWhenEmpty: false,
       step: inspector.step,
     }),
     participants: selectedTimelineRoundState.participants,
@@ -5927,24 +5809,6 @@ export default function CombatRoundManagerPanel({
       inspectorSnapshot.initiativeResult ||
       inspectorSnapshot.actionResultSummary),
   );
-  const inspectorLatestRoundEndDistanceResult =
-    selectedRoundIsActive &&
-    inspector.step === "round_summary" &&
-    latestCombatEventSummary?.roundNumber === roundState.roundNumber &&
-    (latestCombatEventSummary.shortTitle === "Distance control rolled" ||
-      latestCombatEventSummary.shortTitle === "Distance control applied")
-      ? {
-          detailLines: latestCombatEventSummary.details
-            ? [latestCombatEventSummary.details]
-            : undefined,
-          interpretedResult: latestCombatEventSummary.summaryText,
-          rankLabel: latestCombatEventSummary.shortTitle,
-          resultLabel:
-            latestCombatEventSummary.shortTitle === "Distance control applied"
-              ? latestCombatEventSummary.summaryText
-              : undefined,
-        }
-      : undefined;
   const inspectorHistoricalActionResult = inspectorIsHistorical
     ? inspectorHistoricalStepOutcome
       ? { interpretedResult: inspectorHistoricalStepOutcome.message }
@@ -5953,68 +5817,35 @@ export default function CombatRoundManagerPanel({
           snapshot: inspectorSnapshot,
         })
     : undefined;
-  const inspectorActionResult = inspectorIsHistorical
-    ? inspectorHistoricalActionResult
-    : inspectorPhaseResolutionLines
-      ? {
-          detailLines: [inspectorPhaseResolutionLines.armorLine].filter((line): line is string =>
-            Boolean(line),
-          ),
-          interpretedResult: inspectorPhaseResolutionLines.statusLine,
-          rankLabel: inspectorPhaseResolutionLines.attackLine,
-          resultLabel: inspectorPhaseResolutionLines.proposalLine,
-          sections: inspectorPhaseResolutionLines.sections,
-        }
-      : inspectorDisplayAttackResult
-        ? buildCombatAttackResultPanel({
-            participantId: inspector.participant?.participantId,
-            result: inspectorDisplayAttackResult,
-          })
-        : inspectorLatestRelevantAttackResult
-          ? buildCombatAttackResultPanel({
-              participantId: inspector.participant?.participantId,
-              result: inspectorLatestRelevantAttackResult,
-            })
-          : inspectorResolutionPhase
-            ? {
-                interpretedResult: `No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result.`,
-              }
-            : inspectorNoPhaseAttack
-              ? {
-                  interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
-                }
-              : inspectorPhaseInitiativeChoiceResultPanel
-                ? inspectorPhaseInitiativeChoiceResultPanel
-                : inspectorDisplayInitiative
-                  ? {
-                      interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
-                      rankLabel:
-                        formatSnapshotInitiativeRankLabel(inspectorSnapshot?.initiativeRank) ??
-                        (combatProgressionPresentation.executionOrder?.phase ===
-                        inspectorCurrentInitiativePhase
-                          ? formatInitiativeRankLabel({
-                              participantId: inspector.participant?.participantId,
-                              ranks:
-                                inspectorCurrentInitiativePhase === "phase2"
-                                  ? phase2Ranks
-                                  : phase1Ranks,
-                              value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
-                            })
-                          : undefined),
-                    }
-                  : inspectorFallbackCombatExperienceResult
-                    ? {
-                        interpretedResult: formatCombatExperienceCalculation(
-                          inspectorFallbackCombatExperienceResult,
-                        ),
-                        rankLabel: "Combat Experience",
-                        resultLabel: formatCombatExperienceEffectLine(
-                          inspectorFallbackCombatExperienceResult,
-                        ),
-                      }
-                    : inspectorLatestRoundEndDistanceResult
-                      ? inspectorLatestRoundEndDistanceResult
-                      : null;
+  const selectedCombatLogEvent = useMemo(
+    () =>
+      combatLogProjection.events.find(
+        (event) => event.id === combatLogSelection.selectedCombatLogEventId,
+      ),
+    [combatLogProjection.events, combatLogSelection.selectedCombatLogEventId],
+  );
+  const selectedCombatLogActionOutcomeSourceEvents = useMemo(
+    () =>
+      resolveCombatLogPresentationTargetEvents({
+        projection: combatLogProjection,
+        roundStates: timelineRoundStates,
+        selection: combatLogSelection,
+      }),
+    [combatLogProjection, combatLogSelection, timelineRoundStates],
+  );
+  const selectedCombatLogActionOutcomeEvents = useMemo(
+    () =>
+      projectGmCombatEvents({
+        events: selectedCombatLogActionOutcomeSourceEvents,
+        participants: roundState.participants,
+      }),
+    [roundState.participants, selectedCombatLogActionOutcomeSourceEvents],
+  );
+  const selectedCombatLogActionOutcomeEmptyMessage = !selectedCombatLogEvent
+    ? "Select a Combat Log event to view its Action Outcome."
+    : !selectedCombatLogEvent.presentationTargetId
+      ? "The selected Combat Log event has no Action Outcome details."
+      : "Action Outcome details are unavailable for the selected Combat Log event.";
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorHistoricalStatusLabel = inspectorHistoricalStepOutcome
     ? inspectorHistoricalStepOutcome.category === "not_required"
@@ -8767,8 +8598,9 @@ export default function CombatRoundManagerPanel({
 
       <CombatLog
         events={combatLogProjection.events}
-        onSelect={setSelectedCombatLogEventId}
-        selectedCombatLogEventId={selectedCombatLogEventId}
+        onSelect={handleCombatLogSelection}
+        selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}
+        selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}
       />
 
       <CombatTracker
@@ -9595,19 +9427,25 @@ export default function CombatRoundManagerPanel({
                       validationMessage={inspectorActionValidationMessage}
                     />
                   </div>
-                  {inspectorHasCanonicalActionResult ? (
+                  {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
                     <CombatEventResultList events={inspectorCanonicalActionResultEvents} />
-                  ) : inspectorActionResult ? (
+                  ) : inspectorIsHistorical && inspectorHistoricalActionResult ? (
                     <div style={{ display: "grid", gap: "0.3rem" }}>
                       {inspectorShowsLegacyResultFallback ? (
                         <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
                           Some historical result details are unavailable.
                         </div>
                       ) : null}
-                      <PlayerCombatActionResultPanel result={inspectorActionResult} />
+                      <PlayerCombatActionResultPanel result={inspectorHistoricalActionResult} />
                     </div>
-                  ) : (
+                  ) : inspectorIsHistorical ? (
                     <PlayerCombatActionResultPanel result={null} />
+                  ) : (
+                    <CombatEventResultList
+                      emptyMessage={selectedCombatLogActionOutcomeEmptyMessage}
+                      events={selectedCombatLogActionOutcomeEvents}
+                      title="Action Outcome"
+                    />
                   )}
                 </div>
               </>

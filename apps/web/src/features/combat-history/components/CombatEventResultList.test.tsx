@@ -29,6 +29,21 @@ function event(
 }
 
 describe("CombatEventResultList", () => {
+  it("renders the selected-log empty state without substituting another result", () => {
+    render(
+      <CombatEventResultList
+        emptyMessage="The selected Combat Log event has no Action Outcome details."
+        events={[]}
+        title="Action Outcome"
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Action Outcome" })).toBeTruthy();
+    expect(
+      screen.getByText("The selected Combat Log event has no Action Outcome details."),
+    ).toBeTruthy();
+  });
+
   afterEach(() => vi.restoreAllMocks());
 
   it("renders one concise attack outcome without duplicate React keys", () => {
@@ -46,9 +61,9 @@ describe("CombatEventResultList", () => {
 
     expect(screen.getAllByText("Result: Miss")).toHaveLength(1);
     expect(screen.queryByText("Hit: No")).toBeNull();
-    expect(
-      consoleError.mock.calls.some((call) => String(call[0]).includes("same key")),
-    ).toBe(false);
+    expect(consoleError.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(
+      false,
+    );
   });
 
   it("keeps identical attack results across events in chronological order", () => {
@@ -70,9 +85,9 @@ describe("CombatEventResultList", () => {
     const articles = screen.getAllByRole("article");
     expect(articles[0]?.textContent).toContain("Calculation");
     expect(articles[1]?.textContent).not.toContain("Calculation");
-    expect(
-      consoleError.mock.calls.some((call) => String(call[0]).includes("same key")),
-    ).toBe(false);
+    expect(consoleError.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(
+      false,
+    );
   });
 
   it("keeps each event calculation independently collapsed by default", () => {

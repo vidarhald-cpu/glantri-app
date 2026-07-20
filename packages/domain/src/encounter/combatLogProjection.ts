@@ -1,10 +1,7 @@
 import { getCombatDeclarationActionLabel } from "./combatDeclarationValidation";
 import type { CombatAdjustDistanceProposal } from "./combatAdjustDistance";
 import type { CombatFeintProposal } from "./combatFeint";
-import {
-  getCombatRoundTimelineRoundStates,
-  type CombatRoundState,
-} from "./combatRoundManager";
+import { getCombatRoundTimelineRoundStates, type CombatRoundState } from "./combatRoundManager";
 import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import type { CombatStepEvent } from "./combatStepEventSchema";
 
@@ -22,6 +19,14 @@ export type CombatLogEventCategory =
   | "state_change";
 
 export type CombatLogPhase = "declaration" | "phase1" | "phase2" | "round_end";
+
+export type CombatLogPresentationTargetKind =
+  | "attack"
+  | "damage"
+  | "declaration"
+  | "defense"
+  | "maneuver"
+  | "participant_review";
 
 export interface CombatLogSubjectPresentation {
   readonly displayName: string;
@@ -86,6 +91,7 @@ export interface CombatLogEventPresentation {
   readonly actor?: CombatLogSubjectPresentation;
   readonly attackResultId?: string;
   readonly category: CombatLogEventCategory;
+  /** @deprecated Use presentationTargetId for Action Outcome selection. */
   readonly detailResultId?: string;
   readonly encounterId: string;
   readonly id: string;
@@ -94,6 +100,9 @@ export interface CombatLogEventPresentation {
   readonly phase?: CombatLogPhase;
   readonly processId?: string;
   readonly proposalId?: string;
+  readonly presentationTargetId?: string;
+  readonly presentationTargetKind?: CombatLogPresentationTargetKind;
+  readonly presentationTargetSourceId?: string;
   readonly roundNumber: number;
   readonly sequence: number;
   readonly sourceEventIds: readonly string[];
@@ -171,12 +180,10 @@ function possessive(name: string): string {
   return name.endsWith("s") ? `${name}'` : `${name}’s`;
 }
 
-function targetFromDeclaration(
-  participantId: string,
-  state: CombatRoundState,
-): string | undefined {
-  const declaration = state.participants.find((entry) => entry.participantId === participantId)
-    ?.declaration;
+function targetFromDeclaration(participantId: string, state: CombatRoundState): string | undefined {
+  const declaration = state.participants.find(
+    (entry) => entry.participantId === participantId,
+  )?.declaration;
   return (
     declaration?.phaseContexts?.phase1?.targetParticipantId ??
     declaration?.phaseContexts?.phase2?.targetParticipantId ??
@@ -225,6 +232,9 @@ function baseCandidate(input: {
   eventId: string;
   occurredAt?: string | null;
   phase?: CombatLogPhase;
+  presentationTargetId?: string;
+  presentationTargetKind?: CombatLogPresentationTargetKind;
+  presentationTargetSourceId?: string;
   proposalId?: string;
   roundNumber: number;
   semanticOrder?: number;
@@ -244,6 +254,9 @@ function baseCandidate(input: {
     id: `combat-log:${input.eventId}`,
     occurredAt: input.occurredAt ?? undefined,
     phase: input.phase,
+    presentationTargetId: input.presentationTargetId,
+    presentationTargetKind: input.presentationTargetKind,
+    presentationTargetSourceId: input.presentationTargetSourceId,
     proposalId: input.proposalId,
     roundNumber: input.roundNumber,
     semanticOrder: input.semanticOrder ?? 0,
@@ -257,6 +270,13 @@ function baseCandidate(input: {
   };
 }
 
+function presentationTargetId(
+  kind: CombatLogPresentationTargetKind,
+  sourceId: string | undefined,
+): string | undefined {
+  return sourceId ? `combat-presentation:${kind}:${sourceId}` : undefined;
+}
+
 function projectDeclaration(input: {
   encounterId: string;
   event: CombatStepEvent;
@@ -264,7 +284,10 @@ function projectDeclaration(input: {
   sourceRevision: string;
   state: CombatRoundState;
 }): Candidate | undefined {
-  const actor = subject(input.event.actorParticipantId ?? input.event.ownerParticipantId, input.labels);
+  const actor = subject(
+    input.event.actorParticipantId ?? input.event.ownerParticipantId,
+    input.labels,
+  );
   if (!actor) return undefined;
   const actionId = stringFact(input.event.facts.involvedOutcome, "actionId");
   const label = actionLabel(actionId);
@@ -278,6 +301,9 @@ function projectDeclaration(input: {
       eventId: `${input.event.id}:submitted`,
       occurredAt: input.event.occurredAt,
       phase: "declaration",
+      presentationTargetId: presentationTargetId("declaration", input.event.id),
+      presentationTargetKind: "declaration",
+      presentationTargetSourceId: input.event.id,
       roundNumber: input.event.roundNumber,
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
@@ -296,8 +322,14 @@ function projectAttack(input: {
   labels: ReadonlyMap<string, string>;
   sourceRevision: string;
 }): Candidate | undefined {
-  const actor = subject(input.event.attackerParticipantId ?? input.event.actorParticipantId, input.labels);
-  const target = subject(input.event.defenderParticipantId ?? input.event.targetParticipantId, input.labels);
+  const actor = subject(
+    input.event.attackerParticipantId ?? input.event.actorParticipantId,
+    input.labels,
+  );
+  const target = subject(
+    input.event.defenderParticipantId ?? input.event.targetParticipantId,
+    input.labels,
+  );
   if (!actor || !target) return undefined;
   const hit = booleanFact(input.event.facts.publicOutcome, "hit");
   const grazing = booleanFact(input.event.facts.publicOutcome, "grazing");
@@ -315,6 +347,12 @@ function projectAttack(input: {
       eventId: `${input.event.id}:resolved`,
       occurredAt: input.event.occurredAt,
       phase: phaseForEvent(input.event),
+      presentationTargetId: presentationTargetId(
+        "attack",
+        input.event.attackResultId ?? input.event.id,
+      ),
+      presentationTargetKind: "attack",
+      presentationTargetSourceId: input.event.attackResultId ?? input.event.id,
       roundNumber: input.event.roundNumber,
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
@@ -338,8 +376,14 @@ function projectParry(input: {
   if (input.event.status === "not_applicable") return undefined;
   const success = booleanFact(input.event.facts.publicOutcome, "success");
   if (success === undefined) return undefined;
-  const actor = subject(input.event.defenderParticipantId ?? input.event.actorParticipantId, input.labels);
-  const target = subject(input.event.attackerParticipantId ?? input.event.targetParticipantId, input.labels);
+  const actor = subject(
+    input.event.defenderParticipantId ?? input.event.actorParticipantId,
+    input.labels,
+  );
+  const target = subject(
+    input.event.attackerParticipantId ?? input.event.targetParticipantId,
+    input.labels,
+  );
   if (!actor) return undefined;
   const outcome = success ? "succeeded" : "failed";
   return {
@@ -351,6 +395,12 @@ function projectParry(input: {
       eventId: `${input.event.id}:resolved`,
       occurredAt: input.event.occurredAt,
       phase: phaseForEvent(input.event),
+      presentationTargetId: presentationTargetId(
+        "defense",
+        input.event.parryResultId ?? input.event.id,
+      ),
+      presentationTargetKind: "defense",
+      presentationTargetSourceId: input.event.parryResultId ?? input.event.id,
       roundNumber: input.event.roundNumber,
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
@@ -370,17 +420,29 @@ function projectDamage(input: {
   sourceRevision: string;
 }): Candidate | undefined {
   const amount = numberFact(input.event.facts.involvedOutcome, "finalCommittedDamage");
-  const target = subject(input.event.defenderParticipantId ?? input.event.targetParticipantId, input.labels);
+  const target = subject(
+    input.event.defenderParticipantId ?? input.event.targetParticipantId,
+    input.labels,
+  );
   if (amount === undefined || !target) return undefined;
   return {
     ...baseCandidate({
-      actor: subject(input.event.attackerParticipantId ?? input.event.actorParticipantId, input.labels),
+      actor: subject(
+        input.event.attackerParticipantId ?? input.event.actorParticipantId,
+        input.labels,
+      ),
       category: "damage",
       detailResultId: input.event.damageResultId,
       encounterId: input.encounterId,
       eventId: `${input.event.id}:damage`,
       occurredAt: input.event.occurredAt,
       phase: phaseForEvent(input.event),
+      presentationTargetId: presentationTargetId(
+        "damage",
+        input.event.damageResultId ?? input.event.id,
+      ),
+      presentationTargetKind: "damage",
+      presentationTargetSourceId: input.event.damageResultId ?? input.event.id,
       roundNumber: input.event.roundNumber,
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
@@ -399,7 +461,10 @@ function projectRoundEndReview(input: {
   labels: ReadonlyMap<string, string>;
   sourceRevision: string;
 }): Candidate[] {
-  const actor = subject(input.event.actorParticipantId ?? input.event.ownerParticipantId, input.labels);
+  const actor = subject(
+    input.event.actorParticipantId ?? input.event.ownerParticipantId,
+    input.labels,
+  );
   if (!actor) return [];
   const damage = input.event.facts.involvedOutcome.damageApplied;
   const candidates: Candidate[] = [];
@@ -416,6 +481,12 @@ function projectRoundEndReview(input: {
           eventId: `${input.event.id}:bleeding:${index}`,
           occurredAt: input.event.occurredAt,
           phase: "round_end",
+          presentationTargetId: presentationTargetId(
+            "damage",
+            `${input.event.id}:bleeding:${index}`,
+          ),
+          presentationTargetKind: "damage",
+          presentationTargetSourceId: `${input.event.id}:bleeding:${index}`,
           roundNumber: input.event.roundNumber,
           semanticOrder: index,
           sourceEventIds: [input.event.id],
@@ -436,6 +507,9 @@ function projectRoundEndReview(input: {
       eventId: `${input.event.id}:review`,
       occurredAt: input.event.occurredAt,
       phase: "round_end",
+      presentationTargetId: presentationTargetId("participant_review", input.event.id),
+      presentationTargetKind: "participant_review",
+      presentationTargetSourceId: input.event.id,
       roundNumber: input.event.roundNumber,
       semanticOrder: candidates.length + 1,
       sourceEventIds: [input.event.id],
@@ -481,6 +555,9 @@ function projectFeint(input: {
         category: "response",
         detailResultId: proposal.id,
         eventId: `${input.event.id}:response`,
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         summary: `${target.displayName} attempted to resist ${possessive(actor.displayName)} feint.`,
         summaryFacts: { kind: "participant_response", maneuver: "feint", response: "resisted" },
       }),
@@ -494,6 +571,9 @@ function projectFeint(input: {
       category: "contest",
       detailResultId: proposal.id,
       eventId: `${input.event.id}:resolved`,
+      presentationTargetId: presentationTargetId("maneuver", proposal.id),
+      presentationTargetKind: "maneuver",
+      presentationTargetSourceId: proposal.id,
       summary: `${possessive(actor.displayName)} feint ${succeeded ? "succeeded" : "failed"}.`,
       summaryFacts: {
         contest: "feint",
@@ -537,6 +617,9 @@ function projectAdjustDistance(input: {
         category: "response",
         detailResultId: proposal.id,
         eventId: `${input.event.id}:response`,
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         summary:
           response === "allowed"
             ? `${target.displayName} allowed the movement.`
@@ -557,6 +640,9 @@ function projectAdjustDistance(input: {
         category: "contest",
         detailResultId: proposal.id,
         eventId: `${input.event.id}:contest`,
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         summary: `${actor.displayName} ${won ? "won" : "lost"} the distance contest.`,
         summaryFacts: {
           contest: "adjust_distance",
@@ -568,13 +654,20 @@ function projectAdjustDistance(input: {
   }
   const nextDistance = numberFact(input.event.facts.involvedOutcome, "committedDistance");
   const previousDistance = numberFact(input.event.facts.involvedOutcome, "previousDistance");
-  if (nextDistance !== undefined && previousDistance !== undefined && nextDistance !== previousDistance) {
+  if (
+    nextDistance !== undefined &&
+    previousDistance !== undefined &&
+    nextDistance !== previousDistance
+  ) {
     result.push(
       baseCandidate({
         ...common,
         category: "movement",
         detailResultId: proposal.id,
         eventId: `${input.event.id}:distance`,
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         semanticOrder: 1,
         summary: `Distance between ${actor.displayName} and ${target.displayName} changed from ${previousDistance} to ${nextDistance}.`,
         summaryFacts: { kind: "distance_changed", nextDistance, previousDistance },
@@ -595,7 +688,8 @@ function projectDistanceApplied(input: {
   const target = subject(participantIds[1], input.labels);
   const previousDistance = numberFact(input.event.facts.involvedOutcome, "previousDistance");
   const nextDistance = numberFact(input.event.facts.involvedOutcome, "appliedDistance");
-  if (!actor || !target || previousDistance === undefined || nextDistance === undefined) return undefined;
+  if (!actor || !target || previousDistance === undefined || nextDistance === undefined)
+    return undefined;
   return baseCandidate({
     actor,
     category: "movement",
@@ -604,6 +698,12 @@ function projectDistanceApplied(input: {
     eventId: `${input.event.id}:distance`,
     occurredAt: input.event.occurredAt,
     phase: "round_end",
+    presentationTargetId: presentationTargetId(
+      "maneuver",
+      input.event.distanceProposalId ?? input.event.id,
+    ),
+    presentationTargetKind: "maneuver",
+    presentationTargetSourceId: input.event.distanceProposalId ?? input.event.id,
     proposalId: input.event.distanceProposalId,
     roundNumber: input.event.roundNumber,
     sourceEventIds: [input.event.id],
@@ -631,7 +731,12 @@ function maneuverAttempts(input: {
     const sourceEvent = input.events.find(
       (event) => stringFact(event.facts.involvedOutcome, "proposalId") === proposal.id,
     );
-    const direction = proposal.direction === "closer" ? "move closer to" : proposal.direction === "farther" ? "move farther from" : "maintain distance from";
+    const direction =
+      proposal.direction === "closer"
+        ? "move closer to"
+        : proposal.direction === "farther"
+          ? "move farther from"
+          : "maintain distance from";
     attempts.push(
       baseCandidate({
         actor,
@@ -641,6 +746,9 @@ function maneuverAttempts(input: {
         eventId: `${proposal.id}:attempt`,
         occurredAt: sourceEvent?.occurredAt ?? proposal.attackerRoll?.rolledAt,
         phase: "phase1",
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         proposalId: proposal.id,
         roundNumber: proposal.roundNumber,
         semanticOrder: -1,
@@ -676,6 +784,9 @@ function maneuverAttempts(input: {
         eventId: `${proposal.id}:attempt`,
         occurredAt: sourceEvent?.occurredAt ?? proposal.attackerRoll?.rolledAt,
         phase: "phase1",
+        presentationTargetId: presentationTargetId("maneuver", proposal.id),
+        presentationTargetKind: "maneuver",
+        presentationTargetSourceId: proposal.id,
         proposalId: proposal.id,
         roundNumber: proposal.roundNumber,
         semanticOrder: -1,
@@ -816,10 +927,18 @@ export function buildCombatLogProjection(input: {
     }
   }
 
-  const uniqueCandidates = [...new Map(candidates.map((candidate) => [candidate.id, candidate])).values()];
-  const events = uniqueCandidates.sort(compareCandidates).map(({ semanticOrder: _, sourceSequence: __, ...event }, sequence) => ({
-    ...event,
-    sequence,
-  }));
-  return deepFreeze({ encounterId: input.encounterId, events, sourceRevision: input.sourceRevision });
+  const uniqueCandidates = [
+    ...new Map(candidates.map((candidate) => [candidate.id, candidate])).values(),
+  ];
+  const events = uniqueCandidates
+    .sort(compareCandidates)
+    .map(({ semanticOrder: _, sourceSequence: __, ...event }, sequence) => ({
+      ...event,
+      sequence,
+    }));
+  return deepFreeze({
+    encounterId: input.encounterId,
+    events,
+    sourceRevision: input.sourceRevision,
+  });
 }

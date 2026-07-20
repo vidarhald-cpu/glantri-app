@@ -236,9 +236,16 @@ describe("CombatLogProjection", () => {
     expect(summaries).toContain(
       "The Gladiator attacked Scyrian Cavalry with Long Sword. The attack missed.",
     );
-    expect(result.events.find((entry) => entry.summaryFacts.kind === "attack_resolved")).toMatchObject(
-      { attackResultId: "attack-hit", detailResultId: "attack-hit", opportunityId: "opportunity-1" },
-    );
+    expect(
+      result.events.find((entry) => entry.summaryFacts.kind === "attack_resolved"),
+    ).toMatchObject({
+      attackResultId: "attack-hit",
+      detailResultId: "attack-hit",
+      opportunityId: "opportunity-1",
+      presentationTargetId: "combat-presentation:attack:attack-hit",
+      presentationTargetKind: "attack",
+      presentationTargetSourceId: "attack-hit",
+    });
     expect(JSON.stringify(result)).not.toMatch(/rollD20|modifierTotal|calculation|private/);
   });
 
@@ -336,9 +343,9 @@ describe("CombatLogProjection", () => {
       "Scyrian Cavalry attempted to resist The Gladiator’s feint.",
       "The Gladiator’s feint failed.",
     ]);
-    expect(result.events.some((entry) => entry.sourceEventIds.includes("feint-proposed-event"))).toBe(
-      false,
-    );
+    expect(
+      result.events.some((entry) => entry.sourceEventIds.includes("feint-proposed-event")),
+    ).toBe(false);
   });
 
   it("projects Adjust Distance attempt, response, final contest, and committed movement", () => {
@@ -408,6 +415,9 @@ describe("CombatLogProjection", () => {
     ]);
     expect(result.events.at(-1)).toMatchObject({
       detailResultId: proposal.id,
+      presentationTargetId: `combat-presentation:maneuver:${proposal.id}`,
+      presentationTargetKind: "maneuver",
+      presentationTargetSourceId: proposal.id,
       proposalId: proposal.id,
       summaryFacts: { kind: "distance_changed", nextDistance: 2, previousDistance: 3 },
     });
@@ -551,7 +561,10 @@ describe("CombatLogProjection", () => {
       },
     });
 
-    expect(gm.combatLog).toMatchObject({ encounterId: "encounter-1", sourceRevision: "revision-7" });
+    expect(gm.combatLog).toMatchObject({
+      encounterId: "encounter-1",
+      sourceRevision: "revision-7",
+    });
     expect(player.combatLog).toBeUndefined();
   });
 });

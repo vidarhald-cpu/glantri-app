@@ -64,8 +64,30 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Timeline controls; not part of the current attack/parry step.");
     expect(source).toContain("<CombatLog");
     expect(source).toContain("events={combatLogProjection.events}");
-    expect(source).toContain("selectedCombatLogEventId={selectedCombatLogEventId}");
+    expect(source).toContain(
+      "selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}",
+    );
+    expect(source).toContain(
+      "selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}",
+    );
     expect(source).not.toContain('aria-label="Latest combat event"');
+  });
+
+  it("binds live Action Outcome only to Combat Log selection", () => {
+    const source = readPanelSource();
+    const handlerStart = source.indexOf("const handleCombatLogSelection = useCallback");
+    const handlerEnd = source.indexOf("const selectedTimelineRoundState", handlerStart);
+    const handler = source.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handler).toContain("selectCombatLogEvent({");
+    expect(handler).not.toContain("setInspectionSelection");
+    expect(handler).not.toContain("setRoundState");
+    expect(source).toContain("retainLatestWhenEmpty: false");
+    expect(source).not.toContain("retainLatestWhenEmpty: !inspectorIsHistorical");
+    expect(source).not.toContain("const inspectorActionResult =");
+    expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
   });
 
   it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
@@ -482,7 +504,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Critical roll required");
     expect(source).toContain("Result: No critical effect");
     expect(source).toContain("Result: critical roll");
-    expect(source).toContain("sections: inspectorPhaseResolutionLines.sections");
+    expect(source).not.toContain("inspectorPhaseResolutionLines");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
     expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
     expect(source).toContain("targetLocation:");
@@ -512,20 +534,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("formatCombatAttackResultMainLine");
     expect(source).toContain("formatCombatAttackResultLine");
-    expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
-    expect(source).toContain("inspectorCanShowLatestRelevantAttackResult");
-    expect(source).toContain("inspectorLatestRelevantAttackResult");
-    expect(source).toContain(
-      "!inspectorIsHistorical && inspectorCanShowLatestRelevantAttackResult",
-    );
+    expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).not.toContain("inspectorCanShowLatestRelevantAttackResult");
+    expect(source).not.toContain("inspectorLatestRelevantAttackResult");
     expect(source).toContain("buildHistoricalCombatActionResult");
     expect(source).toContain('interpretedResult: "No recorded result for this step."');
     expect(source).toContain('snapshot.actionResultStatus === "skipped"');
     expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
-    expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
+    expect(source).toContain("createDefaultCombatLogSelection(combatLogProjection)");
+    expect(source).toContain("reconcileCombatLogSelection({ current, projection:");
+    expect(source).toContain("selectCombatLogEvent({");
+    expect(source).toContain("resolveCombatLogPresentationTargetEvents({");
     expect(source).toContain("!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression");
     expect(source).toContain("readOnly={inspectorIsHistorical}");
-    expect(source).toContain("? inspectorHistoricalActionResult");
+    expect(source).toContain("inspectorIsHistorical && inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");
     expect(source).toContain("selectCombatEventsForTrackerCell");
@@ -538,11 +560,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Legacy result · canonical event history unavailable");
     expect(source).toContain("Some historical result details are unavailable.");
     expect(source).toContain("deriveCombatHistoryStepOutcome");
-    expect(source).toContain(") : inspectorActionResult ? (");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
-    expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
-      source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
-    );
+    expect(source).toContain('title="Action Outcome"');
+    expect(source).toContain("selectedCombatLogActionOutcomeEvents");
+    expect(source).toContain("selectedCombatLogActionOutcomeEmptyMessage");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
     expect(source).toContain("inspectorPhaseResolutionStatus");
@@ -592,7 +613,7 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain('step === "phase_2_actions"');
     expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
-    expect(source).toContain("formatInitiativeRankLabel");
+    expect(source).toContain("formatSnapshotInitiativeRankLabel");
     expect(source).toContain("rankLabel");
     expect(source).toContain("rank.tiedCount > 1");
     expect(source).toContain("tied with ${rank.tiedCount}");
@@ -788,8 +809,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
     expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
     expect(source).toContain("projectedBoundaryTransitionAction");
-    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
-    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
+    expect(source).not.toContain("latestCombatEventSummary");
+    expect(source).toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("commitRoundEndDistanceControl(");
     expect(source).toContain("inspectorRoundEndDistanceAction.proposal.id");
   });
@@ -1059,10 +1080,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("setCombatExperienceDifficultyOnServer");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
-    expect(source).toContain("formatCombatExperienceCalculation");
+    expect(source).not.toContain("formatCombatExperienceCalculation");
     expect(source).not.toContain("formatCombatExperienceEffectiveTableLine");
     expect(source).not.toContain("Effective CE table result");
-    expect(source).toContain("formatCombatExperienceEffectLine");
+    expect(source).not.toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
     expect(source).toContain("const inspectorCombatExperienceIsCombatStart =");
     expect(source).toContain("visibility: encounter.roleplayState?.visibility");
@@ -1133,8 +1154,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('"Continue and roll CE"');
     expect(source).toContain('"Back out of attack (-2 DB/Parry penalty)"');
     expect(source).toContain('"Back out of attack (no CE roll)"');
-    expect(source).toContain("inspectorPhaseInitiativeChoiceResultPanel");
-    expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");
+    expect(source).not.toContain("inspectorPhaseInitiativeChoiceResultPanel");
+    expect(source).not.toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).toContain('<option value="continue">');
     expect(source).toContain("inspectorSelectionIsCurrentProgression");
     expect(source).toContain("? inspectorPreActionControls");
