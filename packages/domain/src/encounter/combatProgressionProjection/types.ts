@@ -170,6 +170,8 @@ export interface CombatProgressionTask {
   readonly id: string;
   readonly identity: CombatProgressionTaskIdentity;
   readonly kind: CombatProgressionTaskKind;
+  /** Visible combatant on the other side of this task, when the task has pair/target context. */
+  readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
   readonly processId: string;
   readonly stageId: string;
@@ -283,6 +285,8 @@ export interface CombatProgressionPresentationTask {
     readonly phase?: CombatRoundPhase;
   };
   readonly kind: CombatProgressionTaskKind;
+  /** Sanitized opponent context for shared tracker presentation. */
+  readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
   readonly processId: string;
   readonly stageId: string;

@@ -34,7 +34,7 @@ function buildAdapterManeuverProcess(
   context: ProjectionBuildContext,
   plan: CombatManeuverProcessPlan,
 ): CombatProgressionProcess {
-  const trackerOwner = context.identities.get(plan.ownerParticipantId);
+  const maneuverOwner = context.identities.get(plan.ownerParticipantId);
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const owner =
@@ -53,7 +53,7 @@ function buildAdapterManeuverProcess(
             : prerequisite.kind === "target"
               ? "The maneuver target is missing or invalid."
               : "The maneuver is waiting for its Phase 1 action turn.",
-        owner: trackerOwner,
+        owner: maneuverOwner,
         type:
           prerequisite.kind === "proposal"
             ? "proposal_pending"
@@ -87,7 +87,9 @@ function buildAdapterManeuverProcess(
                 key: `${task.proposalId}:${task.kind}`,
                 kind: task.kind,
                 owner,
-                trackerOwner,
+                // Participant-owned maneuver input belongs to the required actor's row. GM review
+                // remains associated with the maneuver initiator's action facet.
+                trackerOwner: owner?.kind === "combatant" ? owner : maneuverOwner,
                 trackerStep: "A1" as const,
               },
             ]
@@ -172,7 +174,11 @@ function buildLegacyAttackProcess(
         {
           dependencies,
           expectedCommand: "roll_attack",
-          identity: { opportunityId: candidate?.id, phase },
+          identity: {
+            opponentParticipantId: candidate?.targetParticipantId,
+            opportunityId: candidate?.id,
+            phase,
+          },
           kind: "attack",
           owner,
           trackerOwner: owner,
@@ -211,6 +217,7 @@ function buildLegacyAttackProcess(
                 })
               : undefined,
             opportunityId: attack?.attackOpportunityId,
+            opponentParticipantId: attack?.attackerParticipantId,
             phase,
           },
           kind: "parry",
@@ -248,6 +255,7 @@ function buildLegacyAttackProcess(
           {
             dependencies: missingSource,
             expectedCommand: "roll_hit_location",
+            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "hit_location",
             owner: attacker,
             trackerOwner: facetOwner,
@@ -261,6 +269,7 @@ function buildLegacyAttackProcess(
         tasks: [
           {
             expectedCommand: "roll_critical",
+            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "critical",
             owner: attacker,
             trackerOwner: facetOwner,
@@ -275,6 +284,7 @@ function buildLegacyAttackProcess(
           {
             allowedActors: ["gm"],
             expectedCommand: "resolve_damage",
+            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "damage_review",
             owner: GM_IDENTITY,
             trackerOwner: facetOwner,
@@ -291,6 +301,7 @@ function buildLegacyAttackProcess(
           {
             allowedActors: ["gm"],
             expectedCommand: "commit_phase_damage",
+            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
             kind: "damage_review",
             owner: GM_IDENTITY,
             trackerOwner: facetOwner,
@@ -386,6 +397,8 @@ function buildAdapterAttackProcess(
                 expectedCommand: task.expectedCommand,
                 identity: {
                   attackResultId: task.attackResultId,
+                  opponentParticipantId:
+                    task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
                   phase: task.phase,
                 },

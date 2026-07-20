@@ -221,6 +221,9 @@ function buildTask(
       ...spec.identity,
     },
     kind: spec.kind,
+    opponent: spec.identity?.opponentParticipantId
+      ? context.identities.get(spec.identity.opponentParticipantId)
+      : undefined,
     owner: spec.owner,
     processId: getCombatProgressionProcessId(context, processKind, processKey),
     stageId: stageId(context, processKind, stageKind, processKey, stageKey),

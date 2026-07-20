@@ -1379,8 +1379,36 @@ describe("authorizeCombatProgressionTask", () => {
         proposalId: "distance-proposal",
       }),
       kind: "adjust_distance_response",
+      opponent: { label: "Hero", participantId: "hero" },
       owner: { participantId: "guard" },
+      trackerFacet: { owner: { participantId: "guard" }, step: "A1" },
     });
+    const gmPresentation = projectCombatProgressionPresentation({
+      projection: responseProjection,
+      viewer: { kind: "gm" },
+    });
+    const hiddenOpponentPresentation = projectCombatProgressionPresentation({
+      projection: responseProjection,
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["guard"]),
+      },
+    });
+    const gmResponseTask = gmPresentation.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "adjust_distance_response");
+    const playerResponseTask = hiddenOpponentPresentation.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "adjust_distance_response");
+    expect(gmResponseTask?.opponent).toMatchObject({ label: "Hero", participantId: "hero" });
+    expect(playerResponseTask).toMatchObject({
+      kind: "adjust_distance_response",
+      opponent: undefined,
+      owner: { participantId: "guard" },
+      trackerFacet: { owner: { participantId: "guard" } },
+    });
+    expect(JSON.stringify(hiddenOpponentPresentation)).not.toContain("hero");
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "guard" },

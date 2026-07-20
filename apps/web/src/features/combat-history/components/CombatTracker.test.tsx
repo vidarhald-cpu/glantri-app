@@ -10,6 +10,7 @@ import { CombatTracker } from "./CombatTracker";
 const model: CombatTrackerModel = {
   cells: {
     "1:participant-a:select_actions": {
+      attention: "ordinary",
       cellKey: "1:participant-a:select_actions",
       completed: true,
       current: true,
@@ -17,6 +18,14 @@ const model: CombatTrackerModel = {
       executionGroupIds: ["group-1"],
       gmProxyAvailable: true,
       historical: false,
+      hover: {
+        actionLabel: "Declaration",
+        actorLabel: "Aldren",
+        gmActionRequired: false,
+        requiredActorLabel: "Aldren",
+        text: "Declaration submitted for Aldren.",
+        waiting: false,
+      },
       hoverText: "Aldren · Round 1 · S: declaration submitted.",
       initiativeValue: false,
       inspectable: true,

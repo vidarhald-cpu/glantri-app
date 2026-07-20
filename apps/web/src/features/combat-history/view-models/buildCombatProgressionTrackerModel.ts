@@ -7,6 +7,10 @@ import {
 
 import type { CombatTrackerLiveFacet } from "../types";
 import { buildCombatTrackerCellKey } from "./buildCombatTrackerModel";
+import {
+  buildCombatTrackerTaskHover,
+  classifyCombatTrackerTaskAttention,
+} from "./combatTrackerTaskPresentation";
 
 export interface CombatProgressionTrackerIndex {
   readonly byCellKey: Readonly<Record<string, CombatTrackerLiveFacet>>;
@@ -63,11 +67,27 @@ export function buildCombatProgressionTrackerIndex(
   const byCellKey: Record<string, CombatTrackerLiveFacet> = {};
   for (const [cellKey, tasks] of tasksByCellKey) {
     const progressionTasks = tasks.filter((task) => task.contributesToProgression);
+    const attention = progressionTasks.some(
+      (task) => classifyCombatTrackerTaskAttention(task) === "exceptional",
+    )
+      ? "exceptional"
+      : "ordinary";
+    const primaryTask = [...(progressionTasks.length > 0 ? progressionTasks : tasks)].sort(
+      (left, right) => {
+        const attentionDifference =
+          Number(classifyCombatTrackerTaskAttention(right) === "exceptional") -
+          Number(classifyCombatTrackerTaskAttention(left) === "exceptional");
+        if (attentionDifference !== 0) return attentionDifference;
+        return Number(right.state === "executable") - Number(left.state === "executable");
+      },
+    )[0]!;
     byCellKey[cellKey] = {
+      attention,
       current: progressionTasks.length > 0,
       executable: progressionTasks.some((task) => task.state === "executable"),
       executionGroupIds: unique(tasks.map((task) => task.executionGroupId)),
       gmProxyAvailable: tasks.some((task) => task.actorAccess.gm),
+      hover: buildCombatTrackerTaskHover(primaryTask),
       ownerParticipantIds: unique(
         tasks.flatMap((task) =>
           task.owner?.kind === "combatant" ? [task.owner.participantId] : [],

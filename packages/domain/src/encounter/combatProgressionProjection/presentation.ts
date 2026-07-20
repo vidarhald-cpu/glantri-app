@@ -73,6 +73,7 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       phase: task.identity.phase,
     },
     kind: task.kind,
+    opponent: task.opponent,
     owner: task.owner,
     processId: task.processId,
     stageId: task.stageId,
@@ -125,6 +126,7 @@ export function projectCombatProgressionPresentation(input: {
               task.owner?.kind === "combatant"
                 ? visibleIdentity(task.owner, input.viewer)
                 : task.owner,
+            opponent: visibleIdentity(task.opponent, input.viewer),
             trackerFacet: {
               ...task.trackerFacet,
               owner: visibleIdentity(task.trackerFacet.owner, input.viewer),

@@ -1,7 +1,10 @@
 import type {
   CombatHistoryProjection,
+  CombatProgressionBoundaryKind,
   CombatProgressionPresentationProjection,
   CombatProgressionPresentationTask,
+  CombatProgressionTaskKind,
+  CombatRoundCursorStep,
   ProjectedCombatHistoryEvent,
   ProjectedCombatHistorySnapshot,
 } from "@glantri/domain";
@@ -54,52 +57,83 @@ function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection
 
 function liveProgression(
   input: {
-    kind?:
-      | "adjust_distance_adjustment"
-      | "adjust_distance_attacker_roll"
-      | "adjust_distance_commit"
-      | "adjust_distance_defender_roll"
-      | "adjust_distance_response"
-      | "attack"
-      | "feint_attacker_roll"
-      | "feint_commit"
-      | "feint_defender_roll"
-      | "parry";
+    boundary?: CombatProgressionBoundaryKind;
+    gmOwned?: boolean;
+    kind?: CombatProgressionTaskKind;
+    opponentId?: string;
+    opponentLabel?: string;
     ownerId?: string;
+    ownerLabel?: string;
     state?: "executable" | "waiting";
-    step?: "A1" | "P1";
+    step?: CombatRoundCursorStep;
+    targetBoundary?: CombatProgressionBoundaryKind;
+    trackerOwnerId?: string;
   } = {},
 ): CombatProgressionPresentationProjection {
   const kind = input.kind ?? "attack";
   const ownerId = input.ownerId ?? "aria";
+  const ownerLabel = input.ownerLabel ?? (ownerId === "aria" ? "Aria" : "Borin");
+  const trackerOwnerId = input.trackerOwnerId ?? ownerId;
+  const trackerOwnerLabel = trackerOwnerId === "aria" ? "Aria" : "Borin";
   const step = input.step ?? "A1";
   const task: CombatProgressionPresentationTask = {
-    actorAccess: { combatant: true, gm: true },
+    actorAccess: { combatant: !input.gmOwned, gm: true },
     contributesToProgression: true,
     executionGroupId: "group-1",
     id: "task-1",
     identity: { executionGroupId: "group-1", phase: "phase1" },
     kind,
-    owner: { kind: "combatant", label: "Aria", participantId: ownerId },
+    opponent: input.opponentId
+      ? {
+          kind: "combatant",
+          label: input.opponentLabel ?? input.opponentId,
+          participantId: input.opponentId,
+        }
+      : undefined,
+    owner: input.gmOwned
+      ? { id: "gm", kind: "gm", label: "Game Master" }
+      : { kind: "combatant", label: ownerLabel, participantId: ownerId },
     processId: "process-1",
     stageId: "stage-1",
     state: input.state ?? "executable",
     trackerFacet: {
-      owner: { kind: "combatant", label: "Aria", participantId: ownerId },
+      owner: {
+        kind: "combatant",
+        label: trackerOwnerLabel,
+        participantId: trackerOwnerId,
+      },
       step,
     },
+    transition: input.targetBoundary
+      ? {
+          currentBoundary: input.boundary ?? "phase1_resolution",
+          requiredCompletedProcessIds: ["process-1"],
+          targetBoundary: input.targetBoundary,
+        }
+      : undefined,
   };
   return {
     awaitingGmTransition: false,
-    boundary: { id: "boundary-1", kind: "phase1_resolution", roundNumber: 1 },
+    boundary: {
+      id: "boundary-1",
+      kind: input.boundary ?? "phase1_resolution",
+      roundNumber: 1,
+    },
     processes: [
       {
         id: "process-1",
-        kind: kind.startsWith("feint_")
-          ? "feint"
-          : kind.startsWith("adjust_distance_")
-            ? "adjust_distance"
-            : "attack",
+        kind:
+          kind === "submit_declaration"
+            ? "declaration"
+            : kind === "combat_experience"
+              ? "combat_experience"
+              : kind === "roll_initiative" || kind === "commit_initiative"
+                ? "initiative"
+                : kind.startsWith("feint_")
+                  ? "feint"
+                  : kind.startsWith("adjust_distance_")
+                    ? "adjust_distance"
+                    : "attack",
         stages: [
           {
             executionGroups: [
@@ -121,7 +155,14 @@ function liveProgression(
             ],
             executionStrategy: "single_task",
             id: "stage-1",
-            kind: step === "P1" ? "defense" : "attack",
+            kind:
+              step === "P1" || step === "P2"
+                ? "defense"
+                : step === "DE"
+                  ? "input"
+                  : step === "i1" || step === "i2"
+                    ? "roll"
+                    : "attack",
             processId: "process-1",
             state: "active",
             // Keep the compatibility adapter empty so these tests prove group-backed traversal.
@@ -159,6 +200,167 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(serialized).not.toContain("hidden-participant");
     expect(serialized).not.toContain("Hidden foe");
   });
+
+  it("uses ordinary declaration dots, exceptional CE attention, and completed declaration checks", () => {
+    const ordinary = history([]);
+    ordinary.progression = liveProgression({
+      boundary: "declaration",
+      kind: "submit_declaration",
+      step: "DE",
+    });
+    const ce = history([]);
+    ce.progression = liveProgression({
+      boundary: "declaration",
+      kind: "combat_experience",
+      step: "DE",
+    });
+    const submitted = history([
+      event({ ownerParticipantId: "aria", step: "select_actions", type: "declaration" }),
+    ]);
+    submitted.progression = liveProgression({
+      boundary: "declaration",
+      gmOwned: true,
+      kind: "gm_advance_boundary",
+      step: "DE",
+      targetBoundary: "phase1_modifier_review",
+    });
+
+    expect(
+      buildProjectedCombatTrackerModel({ history: ordinary }).cells["1:aria:select_actions"],
+    ).toMatchObject({
+      attention: "ordinary",
+      current: true,
+      executable: true,
+      marker: "·",
+      status: "open",
+    });
+    expect(
+      buildProjectedCombatTrackerModel({ history: ordinary }).cells["1:aria:select_actions"]
+        .hoverText,
+    ).toContain("Declaration open for Aria.");
+    expect(
+      buildProjectedCombatTrackerModel({ history: ce }).cells["1:aria:select_actions"],
+    ).toMatchObject({
+      attention: "exceptional",
+      marker: "?",
+    });
+    expect(
+      buildProjectedCombatTrackerModel({ history: submitted }).cells["1:aria:select_actions"],
+    ).toMatchObject({
+      marker: "✓",
+      status: "completed",
+    });
+  });
+
+  it("returns from completed CE to an ordinary pending declaration dot", () => {
+    const projection = history([]);
+    projection.progression = liveProgression({
+      boundary: "declaration",
+      kind: "submit_declaration",
+      step: "DE",
+    });
+
+    expect(
+      buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:select_actions"],
+    ).toMatchObject({ attention: "ordinary", marker: "·" });
+  });
+
+  it("keeps uncommitted initiative ordinary and shows its number only after GM commit", () => {
+    const projection = history([
+      event({
+        facts: { involvedOutcome: { total: 8 }, publicOutcome: {} },
+        step: "initiative_phase_1",
+        type: "initiative",
+      }),
+    ]);
+    projection.progression = liveProgression({
+      boundary: "phase1_initiative",
+      kind: "roll_initiative",
+      step: "i1",
+    });
+
+    const beforeCommit = buildProjectedCombatTrackerModel({ history: projection });
+    projection.progression = liveProgression({
+      boundary: "phase1_resolution",
+      kind: "attack",
+      step: "A1",
+    });
+    const afterCommit = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(beforeCommit.cells["1:aria:initiative_phase_1"]).toMatchObject({
+      attention: "ordinary",
+      marker: "·",
+    });
+    expect(afterCommit.cells["1:aria:initiative_phase_1"]).toMatchObject({
+      initiativeValue: true,
+      marker: "8",
+    });
+  });
+
+  it("keeps an ordinary current attack open without exceptional attention", () => {
+    const projection = history([]);
+    projection.progression = liveProgression({
+      kind: "attack",
+      opponentId: "borin",
+      opponentLabel: "Borin",
+    });
+
+    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
+      "1:aria:phase_1_actions"
+    ];
+    expect(cell).toMatchObject({ attention: "ordinary", marker: "·", status: "open" });
+    expect(cell.hoverText).toContain("Aria may make phase 1 attack against Borin.");
+  });
+
+  it("keeps GM boundary readiness ordinary and uses the transition task for hover", () => {
+    const projection = history([]);
+    projection.progression = liveProgression({
+      boundary: "phase1_modifier_review",
+      gmOwned: true,
+      kind: "gm_advance_boundary",
+      step: "M1",
+      targetBoundary: "phase1_initiative",
+      trackerOwnerId: "aria",
+    });
+
+    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
+      "1:aria:review_action_modifiers"
+    ];
+    expect(cell).toMatchObject({ attention: "ordinary", marker: "·" });
+    expect(cell.hoverText).toContain("Awaiting GM: Open Phase 1 initiative.");
+  });
+
+  it.each([
+    ["combat_experience", "DE"],
+    ["double_attack_decision", "M2"],
+    ["hit_location", "D1"],
+    ["critical", "D1"],
+    ["damage_review", "D1"],
+    ["health_review", "SU"],
+    ["distance_roll", "SU"],
+  ] satisfies [CombatProgressionTaskKind, CombatRoundCursorStep][])(
+    "marks current exceptional %s work as requiring attention",
+    (kind, step) => {
+      const projection = history([]);
+      projection.progression = liveProgression({
+        boundary: step === "SU" ? "round_end" : undefined,
+        kind,
+        step,
+      });
+      const expectedStep =
+        step === "DE"
+          ? "select_actions"
+          : step === "M2"
+            ? "review_phase_2_modifiers"
+            : step === "SU"
+              ? "round_summary"
+              : "phase_1_damage";
+
+      expect(
+        buildProjectedCombatTrackerModel({ history: projection }).cells[`1:aria:${expectedStep}`],
+      ).toMatchObject({ attention: "exceptional", marker: "?" });
+    },
+  );
 
   it("uses projected not-applicable and not-required reasons for compact dash cells", () => {
     const projection = history([]);
@@ -238,12 +440,12 @@ describe("buildProjectedCombatTrackerModel", () => {
   it.each([
     ["feint_committed", "committed", "✓", "feint result committed."],
     ["feint_impossible", "not_applicable", "–", "feint ruled impossible; no roll required."],
-    ["feint_roll", "recorded", "?", "feint opposed roll in progress."],
-    ["feint_result", "proposed", "?", "feint result awaiting GM review."],
+    ["feint_roll", "recorded", "?", "Awaiting GM: Review Feint for Aria."],
+    ["feint_result", "proposed", "?", "Awaiting GM: Review Feint for Aria."],
   ] as const)("projects %s into the Phase 1 action marker", (type, status, marker, hover) => {
     const projection = history([event({ status, type })]);
     if (type === "feint_roll" || type === "feint_result") {
-      projection.progression = liveProgression({ kind: "feint_commit" });
+      projection.progression = liveProgression({ gmOwned: true, kind: "feint_commit" });
     }
     const model = buildProjectedCombatTrackerModel({
       history: projection,
@@ -320,10 +522,16 @@ describe("buildProjectedCombatTrackerModel", () => {
   it("maps defense ownership and execution groups from projected tasks", () => {
     const projection = history([]);
     projection.rows.push({ displayName: "Borin", participantId: "borin" });
-    projection.progression = liveProgression({ kind: "parry", ownerId: "borin", step: "P1" });
-    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
-      "1:borin:review_phase_2_actions"
-    ];
+    projection.progression = liveProgression({
+      kind: "parry",
+      opponentId: "aria",
+      opponentLabel: "Aria",
+      ownerId: "borin",
+      ownerLabel: "Borin",
+      step: "P1",
+    });
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+    const cell = model.cells["1:borin:review_phase_2_actions"];
 
     expect(cell).toMatchObject({
       current: true,
@@ -336,6 +544,59 @@ describe("buildProjectedCombatTrackerModel", () => {
       stageIds: ["stage-1"],
       taskKinds: ["parry"],
     });
+    expect(cell.hoverText).toContain("Borin must respond to Aria’s attack.");
+    expect(model.cells["1:aria:review_phase_2_actions"].marker).toBe("·");
+  });
+
+  it("keeps visible GM/player marker semantics equal when opponent identity is sanitized", () => {
+    const gm = history([]);
+    gm.progression = liveProgression({
+      kind: "parry",
+      opponentId: "borin",
+      opponentLabel: "Borin",
+      step: "P1",
+    });
+    const player = history([]);
+    player.progression = liveProgression({ kind: "parry", step: "P1" });
+
+    const gmCell = buildProjectedCombatTrackerModel({ history: gm }).cells[
+      "1:aria:review_phase_2_actions"
+    ];
+    const playerCell = buildProjectedCombatTrackerModel({ history: player }).cells[
+      "1:aria:review_phase_2_actions"
+    ];
+    const gmPlayerCell = buildProjectedCombatTrackerModel({ history: player }).cells[
+      "1:aria:review_phase_2_actions"
+    ];
+
+    expect(playerCell).toMatchObject({
+      attention: gmCell.attention,
+      marker: gmCell.marker,
+      status: gmCell.status,
+      taskIds: gmCell.taskIds,
+    });
+    expect(gmPlayerCell).toMatchObject({ marker: playerCell.marker, status: playerCell.status });
+    expect(gmCell.hoverText).toContain("Borin’s attack");
+    expect(playerCell.hoverText).toContain("another combatant’s attack");
+    expect(playerCell.hoverText).not.toContain("Borin");
+  });
+
+  it("preserves immutable historical attack markers without live attention classification", () => {
+    const projection = history([]);
+    projection.activeRound = { events: [], roundNumber: 2, snapshots: [] };
+    projection.archivedRounds = [
+      {
+        events: [event({ facts: { publicOutcome: { hit: true } } })],
+        roundNumber: 1,
+        snapshots: [],
+      },
+    ];
+    projection.progression = { ...liveProgression(), roundNumber: 2 };
+
+    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
+      "1:aria:phase_1_actions"
+    ];
+    expect(cell).toMatchObject({ historical: true, marker: "H", status: "historical" });
   });
 
   it("keeps canonical current work independent from local inspector selection", () => {
@@ -351,7 +612,7 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(model.cells["1:aria:phase_1_damage"].selected).toBe(true);
   });
 
-  it("represents actively waiting projected work without making it executable", () => {
+  it("represents ordinary waiting work without exceptional attention", () => {
     const projection = history([]);
     projection.progression = liveProgression({ state: "waiting" });
     const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
@@ -361,7 +622,7 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(cell).toMatchObject({
       current: true,
       executable: false,
-      marker: "?",
+      marker: "·",
       status: "waiting",
       waiting: true,
     });

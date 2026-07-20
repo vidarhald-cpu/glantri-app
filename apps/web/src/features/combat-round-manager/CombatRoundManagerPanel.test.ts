@@ -11,6 +11,7 @@ function readSource(): string {
     sourcePath,
     join(combatHistoryPath, "components/CombatTracker.tsx"),
     join(combatHistoryPath, "view-models/buildCombatTrackerModel.ts"),
+    join(combatHistoryPath, "view-models/combatTrackerTaskPresentation.ts"),
   ]
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
@@ -124,10 +125,10 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
-    expect(source).toContain('kinds.has("combat_experience")');
-    expect(source).toContain("Combat Experience work pending.");
+    expect(source).toContain('case "combat_experience"');
+    expect(source).toContain("Combat Experience roll required for");
     expect(source).toContain('marker: "?"');
-    expect(source).toContain('return "required"');
+    expect(source).toContain('liveFacet.attention === "exceptional"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(source).toContain("Phase Combat Experience");
     expect(source).toContain("CE roll required — attacked while attacking.");
@@ -661,7 +662,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitRoundEndDistanceControlOnServer");
     expect(source).toContain("rollRoundEndHealthCheckOnServer");
     expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
-    expect(source).toContain('kinds.has("health_review")');
+    expect(source).toContain('case "health_review"');
+    expect(source).toContain("Health check required for");
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
     expect(source).not.toContain("getNextCombatRoundEndTask");
@@ -678,8 +680,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("No participant-owned round-end changes proposed.");
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");
-    expect(source).toContain('kinds.has("distance_roll")');
-    expect(source).toContain("distance-control roll pending.");
+    expect(source).toContain('case "distance_roll"');
+    expect(source).toContain("must roll distance control");
     expect(source).toContain(
       "Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}",
     );

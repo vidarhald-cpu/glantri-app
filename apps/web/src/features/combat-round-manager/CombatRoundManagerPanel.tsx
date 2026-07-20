@@ -8606,6 +8606,15 @@ export default function CombatRoundManagerPanel({
               }
             : undefined,
           inspectable: true,
+          initiativeCommitted:
+            step === "initiative_phase_1" || step === "initiative_phase_2"
+              ? timelineRoundState.commands.some(
+                  (command) =>
+                    command.type === "commit_phase_initiative_resolution" &&
+                    command.roundNumber === timelineRoundState.roundNumber &&
+                    command.phase === (step === "initiative_phase_1" ? "phase1" : "phase2"),
+                )
+              : undefined,
           initiativeTotal: getCombatRoundInitiativeTotal(initiative),
           participantId: timelineParticipant.participantId,
           participantLabel: timelineParticipant.label,

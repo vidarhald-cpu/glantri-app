@@ -1,4 +1,4 @@
-import type { CombatRoundAttackRollResult } from "@glantri/domain";
+import type { CombatProgressionTaskKind, CombatRoundAttackRollResult } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import type { CombatTrackerCellFacts } from "../types";
@@ -18,18 +18,30 @@ function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCe
   };
 }
 
-function live(
-  taskKind:
-    | "adjust_distance_attacker_roll"
-    | "distance_roll"
-    | "effect_review"
-    | "attack" = "attack",
-) {
+function live(taskKind: CombatProgressionTaskKind = "attack") {
+  const exceptional = new Set<CombatProgressionTaskKind>([
+    "adjust_distance_attacker_roll",
+    "combat_experience",
+    "distance_roll",
+    "health_review",
+    "parry",
+  ]).has(taskKind);
   return {
+    attention: exceptional ? ("exceptional" as const) : ("ordinary" as const),
     current: true,
     executable: true,
     executionGroupIds: ["group-1"],
     gmProxyAvailable: true,
+    hover: {
+      actionLabel: taskKind,
+      gmActionRequired: taskKind === "effect_review",
+      requiredActorLabel: taskKind === "effect_review" ? "Game Master" : "Aldren",
+      text:
+        taskKind === "effect_review"
+          ? "Awaiting GM: Review round-end effects for Aldren."
+          : `${taskKind} required for Aldren.`,
+      waiting: false,
+    },
     ownerParticipantIds: ["participant-a"],
     processIds: ["process-1"],
     stageIds: ["stage-1"],
@@ -83,6 +95,43 @@ describe("buildCombatTrackerModel", () => {
     expect(result.cells["1:participant-a:phase_1_actions"]).toMatchObject({
       marker: "·",
       markerKind: "not_reached",
+    });
+  });
+
+  it("keeps a submitted declaration complete while its ordinary GM transition is current", () => {
+    const result = model([
+      facts({
+        progression: live("gm_advance_boundary"),
+        status: "submitted",
+        step: "select_actions",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:select_actions"]).toMatchObject({
+      attention: "ordinary",
+      marker: "✓",
+      status: "completed",
+    });
+  });
+
+  it("separates ordinary declaration input from exceptional CE attention", () => {
+    const result = model([
+      facts({ progression: live("submit_declaration"), step: "select_actions" }),
+      facts({
+        participantId: "participant-b",
+        participantLabel: "Bera",
+        progression: live("combat_experience"),
+        step: "select_actions",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:select_actions"]).toMatchObject({
+      attention: "ordinary",
+      marker: "·",
+    });
+    expect(result.cells["1:participant-b:select_actions"]).toMatchObject({
+      attention: "exceptional",
+      marker: "?",
     });
   });
 
@@ -166,7 +215,6 @@ describe("buildCombatTrackerModel", () => {
           requestedDistance: 2,
           status: "committed",
         },
-        progression: live("adjust_distance_attacker_roll"),
         status: "complete",
         step: "phase_1_actions",
       }),
@@ -200,7 +248,12 @@ describe("buildCombatTrackerModel", () => {
 
   it("renders initiative totals and pending markers with the existing legend meanings", () => {
     const result = model([
-      facts({ initiativeTotal: 8, status: "gmEdited", step: "initiative_phase_1" }),
+      facts({
+        initiativeCommitted: true,
+        initiativeTotal: 8,
+        status: "gmEdited",
+        step: "initiative_phase_1",
+      }),
       facts({
         participantId: "participant-b",
         participantLabel: "Bera",
@@ -218,10 +271,36 @@ describe("buildCombatTrackerModel", () => {
       markerKind: "roll_result",
     });
     expect(result.cells["1:participant-b:round_summary"].marker).toBe("?");
-    expect(result.legend.map((item) => item.kind)).toEqual(["required", "roll_result"]);
+    expect(result.legend.map((item) => item.kind)).toEqual([
+      "not_reached",
+      "required",
+      "complete",
+      "skipped",
+      "attack_hit",
+      "attack_miss",
+      "roll_result",
+    ]);
   });
 
-  it("renders projected Round End effect review as current SU work", () => {
+  it("does not display an uncommitted initiative roll as committed initiative", () => {
+    const result = model([
+      facts({
+        initiativeCommitted: false,
+        initiativeTotal: 8,
+        progression: live("attack"),
+        status: "submitted",
+        step: "initiative_phase_1",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:initiative_phase_1"]).toMatchObject({
+      attention: "ordinary",
+      initiativeValue: false,
+      marker: "·",
+    });
+  });
+
+  it("renders projected routine effect review as ordinary current SU work", () => {
     const result = buildCombatTrackerModel({
       cellFacts: [facts({ progression: live("effect_review"), step: "round_summary" })],
       rounds: [{ currentStep: "round_summary", roundNumber: 1 }],
@@ -231,9 +310,10 @@ describe("buildCombatTrackerModel", () => {
 
     expect(result.cells["1:participant-a:round_summary"]).toMatchObject({
       current: true,
-      hoverText: expect.stringContaining("effect review pending"),
-      marker: "?",
-      markerKind: "required",
+      hoverText: expect.stringContaining("Awaiting GM: Review round-end effects for Aldren"),
+      marker: "·",
+      markerKind: "not_reached",
+      status: "open",
     });
   });
 
