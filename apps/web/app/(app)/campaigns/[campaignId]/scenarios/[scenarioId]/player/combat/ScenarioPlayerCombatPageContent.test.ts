@@ -37,6 +37,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatActionSelectorPanel");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("PlayerCombatActionResultPanel");
+    expect(source).toContain("<CombatLog");
+    expect(source).toContain("combatHistory?.combatLog");
+    expect(source).toContain("handleCombatLogSelection");
     expect(source).toContain("playerCombatPanelRowStyle");
     expect(source).toContain("EquipmentLoadoutModule");
     expect(source).toContain("PlayerCombatModifierPanel");

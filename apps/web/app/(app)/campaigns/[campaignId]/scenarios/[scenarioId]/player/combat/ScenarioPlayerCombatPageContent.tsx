@@ -60,6 +60,7 @@ import {
   buildConciseDodgeCalculationRows,
   buildCurrentActionPresentation,
   buildProjectedCombatTrackerModel,
+  CombatLog,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
   getCombatProgressionPresentationTasks,
@@ -67,7 +68,12 @@ import {
   isCombatViewRevisionUnchanged,
   PlayerCombatHistoryInspector,
   resolveProjectedCombatHistoryPanelSnapshot,
+  createDefaultCombatLogSelection,
+  reconcileCombatLogSelection,
+  selectCombatLogEvent,
   type CombatHistoryInspectionSelection,
+  type CombatLogEventSelection,
+  type CombatLogPresentationSelection,
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 
@@ -1122,6 +1128,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
   const [combatHistory, setCombatHistory] = useState<CombatHistoryProjection>();
+  const [combatLogSelection, setCombatLogSelection] =
+    useState<CombatLogPresentationSelection>();
   const acceptedEncounterUpdatedAtRef = useRef<string | undefined>(undefined);
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
@@ -1450,6 +1458,7 @@ export default function ScenarioPlayerCombatPageContent({
   useEffect(() => {
     setActionRollResult(null);
     setCombatHistory(undefined);
+    setCombatLogSelection(undefined);
     setHistoryInspection(undefined);
   }, [selectedParticipantId]);
 
@@ -1497,6 +1506,27 @@ export default function ScenarioPlayerCombatPageContent({
           })
         : undefined,
     [combatHistory, historyInspection],
+  );
+  const playerCombatLog = combatHistory?.combatLog;
+  useEffect(() => {
+    if (!playerCombatLog) {
+      setCombatLogSelection(undefined);
+      return;
+    }
+    setCombatLogSelection((current) =>
+      current
+        ? reconcileCombatLogSelection({ current, projection: playerCombatLog })
+        : createDefaultCombatLogSelection(playerCombatLog),
+    );
+  }, [playerCombatLog]);
+  const handleCombatLogSelection = useCallback(
+    (selection: CombatLogEventSelection) => {
+      if (!playerCombatLog) return;
+      setCombatLogSelection(
+        selectCombatLogEvent({ eventId: selection.combatLogEventId, projection: playerCombatLog }),
+      );
+    },
+    [playerCombatLog],
   );
   const inspectedHistoryRound = useMemo(
     () =>
@@ -3766,6 +3796,15 @@ export default function ScenarioPlayerCombatPageContent({
             }
           />
         </section>
+      ) : null}
+
+      {playerCombatLog ? (
+        <CombatLog
+          events={playerCombatLog.events}
+          onSelect={handleCombatLogSelection}
+          selectedCombatLogEventId={combatLogSelection?.selectedCombatLogEventId}
+          selectedPresentationTargetId={combatLogSelection?.selectedPresentationTargetId}
+        />
       ) : null}
 
       {historyInspection ? (

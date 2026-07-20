@@ -286,9 +286,10 @@ audit history. It excludes calculations, dice, modifiers, table lookups, proposa
 and routine GM review mechanics.
 
 The canonical log is a GM-full projection of discrete structured events. Viewer-specific identity
-and field sanitization happens after that projection. The log can be viewed while a round is open
-and recalled from the same immutable round facts after the round closes. Until that sanitization is
-implemented, the rendered Combat Log remains GM-only.
+and field sanitization happens after that projection through `projectCombatLogForViewer`. The same
+sanitized structural log is delivered to Player Combat and GM Player Combat; GM retains the
+full projection. The log can be viewed while a round is open and recalled from the same immutable
+round facts after the round closes.
 
 ### 7.1 Event model
 

@@ -5,6 +5,7 @@ import {
   completedCombatRoundSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
+  projectCombatLogForViewer,
   projectCombatHistory,
   type CombatRoundState,
   type CombatStepEvent,
@@ -538,7 +539,7 @@ describe("CombatLogProjection", () => {
     expect(result.events.map((entry) => entry.sequence)).toEqual([0, 1]);
   });
 
-  it("adds the GM-full log to combat history without exposing it to player history", () => {
+  it("projects the same ordered log through GM and player viewer boundaries", () => {
     const roundState = state();
     const participants = roundState.participants.map((participant) => ({
       displayName: participant.label,
@@ -565,6 +566,85 @@ describe("CombatLogProjection", () => {
       encounterId: "encounter-1",
       sourceRevision: "revision-7",
     });
-    expect(player.combatLog).toBeUndefined();
+    expect(player.combatLog).toMatchObject({
+      encounterId: "encounter-1",
+      sourceRevision: "revision-7",
+    });
+    expect(player.combatLog?.events).toHaveLength(gm.combatLog?.events.length ?? 0);
+  });
+
+  it("uses viewer-relative wording and removes private presentation targets for uninvolved players", () => {
+    const roundState = state({
+      events: [
+        event({
+          actorParticipantId: "gladiator",
+          attackResultId: "attack-result-1",
+          facts: {
+            gmReview: {},
+            involvedOutcome: {},
+            publicOutcome: { hit: true },
+            rollerPrivate: {},
+          },
+          id: "attack-event",
+          sequence: 1,
+          targetParticipantId: "scyrian",
+          type: "attack",
+        }),
+      ],
+    });
+    const projection = project(roundState);
+    const actorView = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["gladiator"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+    const targetView = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["scyrian"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+    const otherView = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["other"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["other"]),
+      },
+    });
+
+    const actorEvent = actorView.events.find((entry) => entry.id.includes("attack-event"));
+    const targetEvent = targetView.events.find((entry) => entry.id.includes("attack-event"));
+    const otherEvent = otherView.events.find((entry) => entry.id.includes("attack-event"));
+    expect(actorEvent?.summary).toContain("you attacked Scyrian Cavalry");
+    expect(targetEvent?.summary).toContain("The Gladiator attacked you");
+    expect(actorEvent?.presentationTargetId).toBeDefined();
+    expect(targetEvent?.presentationTargetId).toBeDefined();
+    expect(otherEvent?.summary).toContain("another combatant");
+    expect(otherEvent?.presentationTargetId).toBeUndefined();
+    expect(otherEvent?.detailResultId).toBeUndefined();
+    expect(otherEvent?.attackResultId).toBeUndefined();
+    expect(otherEvent?.sequence).toBe(actorEvent?.sequence);
+    expect(otherEvent?.sourceRevision).toBe("revision-7");
+  });
+
+  it("preserves event identity, category, ordering, and state during sanitization", () => {
+    const projection = project(state());
+    const player = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["gladiator"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+    expect(player.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state])).toEqual(
+      projection.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state]),
+    );
   });
 });

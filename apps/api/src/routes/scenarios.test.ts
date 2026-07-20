@@ -2665,6 +2665,15 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("GM only");
     expect(JSON.stringify(response.json())).not.toContain("rollD20");
     expect(response.json().history.progression).toBeDefined();
+    expect(response.json().history.combatLog).toMatchObject({
+      encounterId: "encounter-1",
+      sourceRevision: encounter.updatedAt,
+    });
+    expect(response.json().history.combatLog.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "round", state: "final" }),
+      ]),
+    );
     const progressionTasks = response
       .json()
       .history.progression.processes.flatMap((process: { stages: Array<{ tasks: unknown[] }> }) =>

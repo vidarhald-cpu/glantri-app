@@ -30,8 +30,17 @@ export type CombatLogPresentationTargetKind =
 
 export interface CombatLogSubjectPresentation {
   readonly displayName: string;
-  readonly participantId: string;
+  /** Omitted when a viewer is not allowed to identify this subject. */
+  readonly participantId?: string;
 }
+
+export type CombatLogViewer =
+  | { readonly kind: "gm" }
+  | {
+      readonly controlledParticipantIds: ReadonlySet<string>;
+      readonly kind: "player";
+      readonly visibleParticipantIds: ReadonlySet<string>;
+    };
 
 export type CombatLogSummaryFacts =
   | { readonly kind: "round_opened"; readonly roundNumber: number }
@@ -119,6 +128,102 @@ export interface CombatLogProjection {
   /** Oldest-to-newest. Consumers must opt in explicitly if they display another order. */
   readonly events: readonly CombatLogEventPresentation[];
   readonly sourceRevision: string;
+}
+
+function possessiveDisplayName(name: string): string {
+  if (name === "you") return "your";
+  if (name === "another combatant") return "another combatant's";
+  return name.endsWith("s") ? `${name}'` : `${name}’s`;
+}
+
+function replaceSubjectWording(summary: string, subject: CombatLogSubjectPresentation, replacement: string): string {
+  const possessive = possessiveDisplayName(subject.displayName);
+  const replacementPossessive = possessiveDisplayName(replacement);
+  return summary
+    .split(possessive)
+    .join(replacementPossessive)
+    .split(subject.displayName)
+    .join(replacement);
+}
+
+function projectSubjectForViewer(input: {
+  subject: CombatLogSubjectPresentation | undefined;
+  viewer: CombatLogViewer;
+}): { subject?: CombatLogSubjectPresentation; replacement: string | undefined; involved: boolean } {
+  if (!input.subject) return { involved: false, replacement: undefined };
+  if (input.viewer.kind === "gm") {
+    return { involved: false, replacement: input.subject.displayName, subject: input.subject };
+  }
+
+  const participantId = input.subject.participantId;
+  const involved = Boolean(
+    participantId && input.viewer.controlledParticipantIds.has(participantId),
+  );
+  const visible = Boolean(
+    participantId && input.viewer.visibleParticipantIds.has(participantId),
+  );
+  if (involved) {
+    return {
+      involved: true,
+      replacement: "you",
+      subject: { displayName: "you", participantId },
+    };
+  }
+  if (visible) {
+    return { involved: false, replacement: input.subject.displayName, subject: input.subject };
+  }
+  return {
+    involved: false,
+    replacement: "another combatant",
+    subject: { displayName: "another combatant" },
+  };
+}
+
+/**
+ * Transforms one canonical GM-full log without creating or reordering events.
+ * The viewer stage only changes structured subjects, wording, and inspectability.
+ */
+export function projectCombatLogForViewer(input: {
+  projection: CombatLogProjection;
+  viewer: CombatLogViewer;
+}): CombatLogProjection {
+  if (input.viewer.kind === "gm") return input.projection;
+
+  return deepFreeze({
+    ...input.projection,
+    events: input.projection.events.map((event) => {
+      const actor = projectSubjectForViewer({ subject: event.actor, viewer: input.viewer });
+      const target = projectSubjectForViewer({ subject: event.target, viewer: input.viewer });
+      const summary =
+        actor.replacement && event.actor
+          ? replaceSubjectWording(event.summary, event.actor, actor.replacement)
+          : event.summary;
+      const targetSummary =
+        target.replacement && event.target
+          ? replaceSubjectWording(summary, event.target, target.replacement)
+          : summary;
+      const mayInspect = actor.involved || target.involved;
+      return {
+        ...event,
+        actor: actor.subject,
+        target: target.subject,
+        summary: targetSummary,
+        ...(mayInspect
+          ? {}
+          : {
+              attackResultId: undefined,
+              detailResultId: undefined,
+              opportunityId: undefined,
+              presentationTargetId: undefined,
+              presentationTargetKind: undefined,
+              presentationTargetSourceId: undefined,
+              processId: undefined,
+              proposalId: undefined,
+              taskId: undefined,
+            }),
+      };
+    }),
+  });
 }
 
 interface Candidate extends Omit<CombatLogEventPresentation, "sequence"> {
@@ -291,7 +396,7 @@ function projectDeclaration(input: {
   if (!actor) return undefined;
   const actionId = stringFact(input.event.facts.involvedOutcome, "actionId");
   const label = actionLabel(actionId);
-  const target = subject(targetFromDeclaration(actor.participantId, input.state), input.labels);
+  const target = subject(targetFromDeclaration(actor.participantId!, input.state), input.labels);
   const targetText = target ? ` against ${target.displayName}` : "";
   return {
     ...baseCandidate({
