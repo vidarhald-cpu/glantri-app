@@ -14,6 +14,7 @@ export * from "./encounter/armorModifier";
 export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatRoundEndProcesses";
 export * from "./encounter/combatActionProcesses";
+export * from "./encounter/combatAttackModifierValidation";
 export * from "./encounter/combatProgressionProjection";
 export * from "./encounter/combatHistoryProjection";
 export * from "./encounter/combatStepEvents";

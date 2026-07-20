@@ -63,7 +63,23 @@ describe("combat history projection", () => {
       ],
       roundNumber: 1,
     });
+    const currentAttackModifierValidation = {
+      actionId: "attack_parry",
+      attackerModifierFingerprint: "v1:attacker",
+      attackerParticipantId: "aria",
+      defenderDbParryRaw: -2,
+      defenderModifierFingerprint: "v1:defender",
+      defenderParticipantId: "borin",
+      encounterId: "encounter-1",
+      expectedRevision: "revision-7",
+      obSkillRaw: -2,
+      pairKey: "aria::borin",
+      phase: "phase1" as const,
+      taskId: "attack-task",
+    };
+    const originalValidation = structuredClone(currentAttackModifierValidation);
     const projection = projectCombatHistory({
+      currentAttackModifierValidation,
       participants,
       sourceUpdatedAt: "revision-7",
       state,
@@ -72,6 +88,8 @@ describe("combat history projection", () => {
     const serialized = JSON.stringify(projection.progression);
 
     expect(projection.sourceUpdatedAt).toBe("revision-7");
+    expect(projection.currentAttackModifierValidation).toEqual(originalValidation);
+    expect(currentAttackModifierValidation).toEqual(originalValidation);
     expect(projection.progression).toMatchObject({
       boundary: { kind: "declaration", roundNumber: 1 },
       roundNumber: 1,

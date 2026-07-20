@@ -170,6 +170,7 @@ import {
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
+import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 
 interface ScenarioPlayerCombatPageContentProps {
@@ -2645,6 +2646,21 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
+    const modifierRequest = buildPlayerCombatAttackModifierRequest({
+      attackerParticipantId: selectedRoundParticipant?.participantId ?? "",
+      defenderParticipantId: targetIdentity.encounterParticipantId,
+      encounterId,
+      encounterRevision: encounterSession?.updatedAt,
+      phase: currentAttackPhase,
+      task: projectedRollTask,
+      validation: combatHistory?.currentAttackModifierValidation,
+    });
+
+    if (!modifierRequest) {
+      setError("Combat modifiers changed. Refresh combat before rolling.");
+      return;
+    }
+
     let ob: number;
 
     try {
@@ -2666,10 +2682,15 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
         actionId: selectedActionId || `${currentAttackPhase}_attack`,
+        attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
+        defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
+        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         encounterId,
+        expectedRevision: modifierRequest.expectedRevision,
+        modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         ob,
-        obSkillRaw: liveCombatModifiers.obSkillRaw,
+        obSkillRaw: modifierRequest.obSkillRaw,
         phase: currentAttackPhase,
         scenarioParticipantId: selectedParticipant.id,
         weaponCriticalCode: phaseAttackStats.weaponCriticalCode,

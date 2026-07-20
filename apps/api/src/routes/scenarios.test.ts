@@ -750,6 +750,101 @@ function makeCanonicalAttackModifierParticipantState() {
   };
 }
 
+function makePostAdjustDistanceAttackFixture() {
+  const distanceSkillObEntry = {
+    durationRounds: 1,
+    generated: true,
+    id: "generated:distance:phase1:ob-skill",
+    notes: "short distance",
+    scope: "until",
+    sourceActionId: "attack_parry",
+    sourceEncounterId: "encounter-1",
+    sourcePhase: "phase1",
+    sourceRoundNumber: 1,
+    sourceRule: "distance-ob-skill-phase1",
+    value: -2,
+  };
+  const adjustDistanceDbEntry = {
+    ...adjustRangePhase1DbParryModifierEntry,
+    expiresAtRound: 1,
+    sourceEncounterId: "encounter-1",
+    sourceRoundNumber: 1,
+  };
+  const roundState = combatRoundStateSchema.parse(
+    makeOpenPhase1AttackRoundState({
+      distance: 2,
+      modifierEntries: [distanceSkillObEntry],
+      snapshotOb: "8",
+    }),
+  );
+  roundState.participants[1].declaration = {
+    actionId: "adjust_range_attack",
+    adjustDistance: {
+      currentDistance: 3,
+      requestedDistance: 2,
+      targetParticipantId: "encounter-participant-1",
+    },
+    attackOpportunities: [
+      {
+        id: "adjust-distance-phase2-attack",
+        origin: "adjust_range_attack",
+        phase: "phase2",
+        slot: "attack_2",
+        status: "committed",
+        targetParticipantId: "encounter-participant-1",
+      },
+    ],
+    phaseContexts: {
+      phase2: {
+        modifierBuckets: emptyModifierBuckets(),
+        targetParticipantId: "encounter-participant-1",
+      },
+    },
+    roundNumber: 1,
+    submittedAt: "2026-01-01T00:01:00.000Z",
+    submittedBy: "player",
+  };
+
+  return {
+    distanceSkillObEntry,
+    encounter: {
+      combatRoundState: roundState,
+      participants: makeTwoCombatEncounterParticipants(),
+    },
+    participants: [
+      makeCombatScenarioParticipant({
+        id: "participant-1",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                ...emptyModifierBuckets(),
+                situationObSkill: [distanceSkillObEntry],
+              },
+            },
+          },
+        },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                ...emptyModifierBuckets(),
+                situationDb: [adjustDistanceDbEntry],
+              },
+            },
+          },
+        },
+      }),
+    ],
+  };
+}
+
 function makeWeaponEquipmentState(input: {
   characterId?: string;
   name: string;
@@ -9792,6 +9887,175 @@ describe("scenarios route contract", () => {
       },
     );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("binds a post-Adjust Distance player attack to current canonical modifier contributions", async () => {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    const { encounter } = setupCombatDeclarationRoute({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    expect(historyResponse.statusCode, JSON.stringify(historyResponse.json())).toBe(200);
+    const validation = historyResponse.json().history.currentAttackModifierValidation;
+    expect(validation).toMatchObject({
+      actionId: "attack_parry",
+      attackerModifierFingerprint: "v1:82d757a9",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDbParryRaw: -2,
+      defenderModifierFingerprint: "v1:920ced12",
+      defenderParticipantId: "encounter-participant-2",
+      encounterId: "encounter-1",
+      expectedRevision: encounter.updatedAt,
+      obSkillRaw: -2,
+      pairKey: "participant-1::participant-2",
+      phase: "phase1",
+      taskId: expect.any(String),
+    });
+    const reloadResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    expect(reloadResponse.json().history.currentAttackModifierValidation).toEqual(validation);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const gmProxyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history?perspectiveParticipantId=encounter-participant-1",
+    });
+    expect(gmProxyResponse.json().history.currentAttackModifierValidation).toEqual(validation);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+
+    const attackResponse = await app.inject({
+      method: "POST",
+      payload: {
+        attackerModifierFingerprint: validation.attackerModifierFingerprint,
+        defenderDbParryRaw: validation.defenderDbParryRaw,
+        defenderModifierFingerprint: validation.defenderModifierFingerprint,
+        defenderScenarioParticipantId: "participant-2",
+        expectedRevision: validation.expectedRevision,
+        modifierValidationTaskId: validation.taskId,
+        ob: 8,
+        obSkillRaw: validation.obSkillRaw,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls
+        .at(-1)?.[0]
+        ?.session.combatRoundState.commands.at(-1),
+    ).toMatchObject({
+      facts: { obSkillRaw: -2 },
+      participantId: "encounter-participant-1",
+      type: "roll_attack",
+    });
+  });
+
+  it("still rejects a stale defender total for the post-Adjust Distance attack", async () => {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    setupCombatDeclarationRoute({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderDbParryRaw: 0,
+        defenderScenarioParticipantId: "participant-2",
+        ob: 8,
+        obSkillRaw: -2,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Defender modifiers changed. Refresh combat before rolling.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale defender contribution set even when its raw total is unchanged", async () => {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    setupCombatDeclarationRoute({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderDbParryRaw: -2,
+        defenderModifierFingerprint: "v1:stale",
+        defenderScenarioParticipantId: "participant-2",
+        ob: 8,
+        obSkillRaw: -2,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Defender modifiers changed. Refresh combat before rolling.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects a modifier descriptor from an older encounter revision", async () => {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    setupCombatDeclarationRoute({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderDbParryRaw: -2,
+        defenderScenarioParticipantId: "participant-2",
+        expectedRevision: "2025-12-31T23:59:59.000Z",
+        ob: 8,
+        obSkillRaw: -2,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "stale_revision",
+      error: "Combat modifiers changed. Refresh combat before rolling.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("does not replace or duplicate generated distance rows in the attack route", async () => {

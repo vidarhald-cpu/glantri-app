@@ -665,10 +665,14 @@ export async function rollCombatInitiativeOnServer(input: {
 
 export async function rollCombatAttackOnServer(input: {
   actionId?: string;
+  attackerModifierFingerprint?: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
+  defenderModifierFingerprint?: string;
   defenderParticipantId: string;
   encounterId: string;
+  expectedRevision?: string;
+  modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
   phase: "phase1" | "phase2";
@@ -692,9 +696,13 @@ export async function rollCombatAttackOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
     body: JSON.stringify({
       actionId: input.actionId,
+      attackerModifierFingerprint: input.attackerModifierFingerprint,
       defenderDb: input.defenderDb,
       defenderDbParryRaw: input.defenderDbParryRaw,
+      defenderModifierFingerprint: input.defenderModifierFingerprint,
       defenderParticipantId: input.defenderParticipantId,
+      expectedRevision: input.expectedRevision,
+      modifierValidationTaskId: input.modifierValidationTaskId,
       ob: input.ob,
       obSkillRaw: input.obSkillRaw,
       phase: input.phase,

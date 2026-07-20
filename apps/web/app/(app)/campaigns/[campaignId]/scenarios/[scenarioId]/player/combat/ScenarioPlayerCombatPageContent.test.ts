@@ -116,7 +116,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("entry.id === participant.id ? participant : entry");
     expect(source).toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
-    expect(source).toContain("obSkillRaw: liveCombatModifiers.obSkillRaw");
+    expect(source).toContain("buildPlayerCombatAttackModifierRequest");
+    expect(source).toContain("defenderDbParryRaw: modifierRequest.defenderDbParryRaw");
+    expect(source).toContain("expectedRevision: modifierRequest.expectedRevision");
+    expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
     expect(source).toContain("rollCombatParryOnServer");
     expect(source).toContain("dbParryRaw: getMergedCombatDbParryModifierTotal({");
     expect(source).toContain("baseDefenseStats: buildPlayerCombatDefenseStats({");

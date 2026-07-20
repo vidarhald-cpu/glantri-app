@@ -8,6 +8,7 @@ import {
   buildCombatProgressionProjection,
   projectCombatProgressionPresentation,
   type CombatProgressionPresentationProjection,
+  type CombatProgressionProjection,
 } from "./combatProgressionProjection";
 
 export type CombatHistoryViewer =
@@ -122,11 +123,30 @@ export interface ProjectedCombatHistoryRound {
 export interface CombatHistoryProjection {
   activeRound: ProjectedCombatHistoryRound;
   archivedRounds: ProjectedCombatHistoryRound[];
+  /** Player-safe canonical modifier totals bound to the currently executable attack task. */
+  currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   /** Sanitized canonical live progression for the same encounter revision. */
   progression?: CombatProgressionPresentationProjection;
   rows: ProjectedCombatHistoryRow[];
   /** Encounter revision used to build this projection. */
   sourceUpdatedAt?: string;
+}
+
+export interface CombatAttackModifierValidationProjection {
+  actionId: string;
+  attackerModifierFingerprint: string;
+  attackerParticipantId: string;
+  defenderDbParryRaw: number;
+  defenderModifierFingerprint: string;
+  defenderParticipantId: string;
+  encounterId: string;
+  expectedRevision: string;
+  obSkillRaw: number;
+  opportunityId?: string;
+  pairKey: string;
+  phase: "phase1" | "phase2";
+  proposalId?: string;
+  taskId: string;
 }
 
 export interface CombatHistoryParticipantInput {
@@ -518,13 +538,15 @@ function projectRound(input: {
 }
 
 export function projectCombatHistory(input: {
+  currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   participants: readonly CombatHistoryParticipantInput[];
+  progressionProjection?: CombatProgressionProjection;
   sourceUpdatedAt?: string;
   state: CombatRoundState;
   viewer: CombatHistoryViewer;
 }): CombatHistoryProjection {
   const progression = projectCombatProgressionPresentation({
-    projection: buildCombatProgressionProjection(input.state),
+    projection: input.progressionProjection ?? buildCombatProgressionProjection(input.state),
     viewer: input.viewer,
   });
   const visibleParticipants = input.participants.filter((participant) =>
@@ -554,6 +576,7 @@ export function projectCombatHistory(input: {
       viewer: input.viewer,
     }),
     archivedRounds,
+    currentAttackModifierValidation: input.currentAttackModifierValidation,
     progression,
     rows: visibleParticipants.map((participant) => ({
       displayName: participant.displayName,
