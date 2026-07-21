@@ -880,6 +880,10 @@ describe("CombatRoundManagerPanel", () => {
 
   it("submits Start next round from one revision-bound projected action", () => {
     const source = readPanelSource();
+    const roundStateSetter = source.slice(
+      source.indexOf("const setRoundState = useCallback("),
+      source.indexOf("const acceptCanonicalEncounterState = useCallback("),
+    );
     const handler = source.slice(
       source.indexOf("async function commitCurrentStep()"),
       source.indexOf("async function persistRoundState"),
@@ -892,6 +896,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("taskId: boundaryTransitionAction.taskId");
     expect(source).not.toContain("expectedRevision: encounter.updatedAt");
     expect(source).toContain("boundaryTransitionInFlightRef.current");
+    expect(roundStateSetter).toContain("canAcceptCombatRoundViewRevision({");
+    expect(roundStateSetter).toContain("acceptedEncounterRevisionRef.current = {");
     expect(source).toContain('caughtError.payload.code === "stale_revision"');
     expect(source).toContain("await loadEncounterById(boundaryTransitionAction.encounterId)");
     expect(source).toContain(

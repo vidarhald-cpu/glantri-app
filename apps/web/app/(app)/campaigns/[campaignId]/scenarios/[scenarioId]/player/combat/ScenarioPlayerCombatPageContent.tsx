@@ -45,6 +45,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   lookupCombatCriticalModifier,
+  resolveEncounterParticipantByRollParticipantId,
   validateCombatDeclarationTargets,
   type EncounterSession,
   type ScenarioParticipantCombatContext,
@@ -1481,12 +1482,10 @@ export default function ScenarioPlayerCombatPageContent({
     combatRoundState?.roundNumber ?? encounterSession?.currentRound ?? undefined;
   const selectedEncounterParticipant = useMemo(
     () =>
-      encounterSession?.participants.find(
-        (participant) =>
-          participant.scenarioParticipantId === selectedParticipant?.id ||
-          participant.id === selectedParticipant?.id ||
-          (participant.characterId && participant.characterId === selectedParticipant?.characterId),
-      ),
+      resolveEncounterParticipantByRollParticipantId({
+        participantId: selectedParticipant?.id ?? selectedParticipant?.characterId,
+        participants: encounterSession?.participants ?? [],
+      }),
     [encounterSession?.participants, selectedParticipant],
   );
   const selectedRoundParticipant = useMemo(

@@ -364,6 +364,35 @@ export interface EffectiveEncounterParticipants {
   source: "defaultFallback" | "explicit";
 }
 
+export interface ResolvedEncounterParticipantForViewer {
+  active: true;
+  access: "gm_perspective" | "player_controlled";
+  characterId?: string;
+  encounterParticipant: EncounterParticipant;
+  encounterParticipantId: string;
+  membershipSource: EffectiveEncounterParticipants["source"];
+  scenarioParticipant: ScenarioParticipant;
+  scenarioParticipantId: string;
+  visible: true;
+}
+
+export type EncounterParticipantViewer = { kind: "gm" } | { kind: "player"; userId: string };
+
+function encounterParticipantMatchesScenarioParticipant(input: {
+  encounterParticipant: EncounterParticipant;
+  scenarioParticipant: ScenarioParticipant;
+}): boolean {
+  return (
+    input.encounterParticipant.scenarioParticipantId === input.scenarioParticipant.id ||
+    input.encounterParticipant.id === input.scenarioParticipant.id ||
+    input.encounterParticipant.id === `scenario-${input.scenarioParticipant.id}` ||
+    Boolean(
+      input.scenarioParticipant.characterId &&
+      input.encounterParticipant.characterId === input.scenarioParticipant.characterId
+    )
+  );
+}
+
 export function resolveEncounterParticipantMembership(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
@@ -375,7 +404,25 @@ export function resolveEncounterParticipantMembership(input: {
   if (explicitMode) {
     return {
       explicitMode: true,
-      participants: input.encounter.participants,
+      participants: input.encounter.participants.map((encounterParticipant) => {
+        const matchingScenarioParticipants = input.scenarioParticipants.filter(
+          (scenarioParticipant) =>
+            encounterParticipantMatchesScenarioParticipant({
+              encounterParticipant,
+              scenarioParticipant,
+            })
+        );
+        const scenarioParticipant =
+          matchingScenarioParticipants.length === 1 ? matchingScenarioParticipants[0] : undefined;
+
+        return scenarioParticipant
+          ? {
+              ...encounterParticipant,
+              characterId: encounterParticipant.characterId ?? scenarioParticipant.characterId,
+              scenarioParticipantId: scenarioParticipant.id,
+            }
+          : encounterParticipant;
+      }),
       source: "explicit",
     };
   }
@@ -423,9 +470,105 @@ export function resolveEncounterParticipantByRollParticipantId(input: {
     input.participants.find(
       (participant) =>
         participant.scenarioParticipantId === input.participantId ||
+        (participant.scenarioParticipantId &&
+          `scenario-${participant.scenarioParticipantId}` === input.participantId) ||
         participant.characterId === input.participantId
     )
   );
+}
+
+/**
+ * Resolves one viewer-facing participant through the effective encounter roster.
+ *
+ * This is the canonical access/alias boundary for explicit encounter rows and
+ * the legacy scenario fallback. Ambiguous aliases fail closed.
+ */
+export function resolveEncounterParticipantForViewer(input: {
+  characterId?: string | null;
+  encounter: EncounterSession;
+  requestedParticipantId?: string | null;
+  scenarioParticipants: ScenarioParticipant[];
+  viewer: EncounterParticipantViewer;
+}): ResolvedEncounterParticipantForViewer | undefined {
+  if (input.encounter.status === "archived") {
+    return undefined;
+  }
+
+  const membership = resolveEncounterParticipantMembership(input);
+  const activeScenarioParticipants = input.scenarioParticipants.filter(
+    (participant) =>
+      participant.scenarioId === input.encounter.scenarioId &&
+      participant.isActive &&
+      (input.viewer.kind === "gm" || participant.role === "player_character")
+  );
+  const requestedId = input.requestedParticipantId?.trim() || undefined;
+  const characterId = input.characterId?.trim() || undefined;
+  const exactEncounterParticipant = requestedId
+    ? membership.participants.find((participant) => participant.id === requestedId)
+    : undefined;
+  const scenarioCandidates = activeScenarioParticipants.filter((scenarioParticipant) => {
+    if (
+      input.viewer.kind === "player" &&
+      scenarioParticipant.controlledByUserId !== input.viewer.userId
+    ) {
+      return false;
+    }
+
+    if (characterId && scenarioParticipant.characterId !== characterId) {
+      return false;
+    }
+
+    if (!requestedId) {
+      return true;
+    }
+
+    return (
+      scenarioParticipant.id === requestedId ||
+      scenarioParticipant.characterId === requestedId ||
+      Boolean(
+        exactEncounterParticipant &&
+        encounterParticipantMatchesScenarioParticipant({
+          encounterParticipant: exactEncounterParticipant,
+          scenarioParticipant,
+        })
+      )
+    );
+  });
+  const matches = scenarioCandidates.flatMap((scenarioParticipant) =>
+    membership.participants
+      .filter((encounterParticipant) =>
+        encounterParticipantMatchesScenarioParticipant({
+          encounterParticipant,
+          scenarioParticipant,
+        })
+      )
+      .map((encounterParticipant) => ({ encounterParticipant, scenarioParticipant }))
+  );
+  const uniqueMatches = matches.filter(
+    (match, index) =>
+      matches.findIndex(
+        (candidate) =>
+          candidate.encounterParticipant.id === match.encounterParticipant.id &&
+          candidate.scenarioParticipant.id === match.scenarioParticipant.id
+      ) === index
+  );
+
+  if (uniqueMatches.length !== 1) {
+    return undefined;
+  }
+
+  const { encounterParticipant, scenarioParticipant } = uniqueMatches[0]!;
+  return Object.freeze({
+    active: true,
+    access: input.viewer.kind === "gm" ? "gm_perspective" : "player_controlled",
+    characterId: scenarioParticipant.characterId ?? encounterParticipant.characterId,
+    encounterParticipant,
+    encounterParticipantId: encounterParticipant.id,
+    membershipSource: membership.source,
+    scenarioParticipant,
+    scenarioParticipantId: scenarioParticipant.id,
+    visible: true,
+  });
 }
 
 export function formatEncounterParticipantMembershipLabel(input: {
@@ -448,27 +591,17 @@ export function isUserAssignedToEncounterMembership(input: {
     return false;
   }
 
-  const controlledScenarioParticipants = input.scenarioParticipants.filter(
+  return input.scenarioParticipants.some(
     (participant) =>
-      participant.isActive &&
-      participant.role === "player_character" &&
-      participant.controlledByUserId === input.userId
-  );
-  const controlledScenarioParticipantIds = new Set(
-    controlledScenarioParticipants.map((participant) => participant.id)
-  );
-  const controlledCharacterIds = new Set(
-    controlledScenarioParticipants
-      .map((participant) => participant.characterId)
-      .filter((characterId): characterId is string => Boolean(characterId))
-  );
-  const membership = resolveEncounterParticipantMembership(input);
-
-  return membership.participants.some(
-    (participant) =>
-      (participant.scenarioParticipantId &&
-        controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||
-      (participant.characterId && controlledCharacterIds.has(participant.characterId))
+      participant.controlledByUserId === input.userId &&
+      Boolean(
+        resolveEncounterParticipantForViewer({
+          encounter: input.encounter,
+          requestedParticipantId: participant.id,
+          scenarioParticipants: input.scenarioParticipants,
+          viewer: { kind: "player", userId: input.userId! },
+        })
+      )
   );
 }
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;

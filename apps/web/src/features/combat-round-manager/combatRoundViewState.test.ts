@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { combatRoundStateSchema } from "@glantri/domain";
 
-import { updateCombatRoundViewState } from "./combatRoundViewState";
+import {
+  canAcceptCombatRoundViewRevision,
+  updateCombatRoundViewState,
+} from "./combatRoundViewState";
 
 describe("combat round view state", () => {
   it("keeps the accepted mutation revision on local state updates", () => {
@@ -14,24 +17,77 @@ describe("combat round view state", () => {
       updateCombatRoundViewState({
         current: {
           encounterId: "encounter-1",
-          encounterRevision: "revision-7",
+          encounterRevision: "2026-07-21T09:00:07.000Z",
+          state,
         },
         encounterId: "encounter-1",
         state,
       }),
     ).toEqual({
       encounterId: "encounter-1",
-      encounterRevision: "revision-7",
+      encounterRevision: "2026-07-21T09:00:07.000Z",
       state,
     });
 
     expect(
       updateCombatRoundViewState({
-        current: { encounterId: "encounter-1", encounterRevision: "revision-7" },
+        current: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:07.000Z",
+          state,
+        },
         encounterId: "encounter-1",
-        encounterRevision: "revision-8",
+        encounterRevision: "2026-07-21T09:00:08.000Z",
         state,
       }).encounterRevision,
-    ).toBe("revision-8");
+    ).toBe("2026-07-21T09:00:08.000Z");
+  });
+
+  it("does not let a delayed mutation response recreate an obsolete boundary descriptor", () => {
+    const declaration = combatRoundStateSchema.parse({
+      currentStep: "select_actions",
+      roundNumber: 1,
+    });
+    const modifierReview = combatRoundStateSchema.parse({
+      currentStep: "review_action_modifiers",
+      roundNumber: 1,
+    });
+    const accepted = {
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-21T09:00:08.000Z",
+      state: modifierReview,
+    };
+
+    expect(
+      canAcceptCombatRoundViewRevision({
+        accepted,
+        candidateEncounterId: "encounter-1",
+        candidateRevision: "2026-07-21T09:00:07.000Z",
+      }),
+    ).toBe(false);
+    expect(
+      updateCombatRoundViewState({
+        current: accepted,
+        encounterId: "encounter-1",
+        encounterRevision: "2026-07-21T09:00:07.000Z",
+        state: declaration,
+      }),
+    ).toBe(accepted);
+    expect(
+      updateCombatRoundViewState({
+        current: accepted,
+        encounterId: "encounter-1",
+        encounterRevision: "2026-07-21T09:00:08.000Z",
+        state: modifierReview,
+      }),
+    ).toEqual(accepted);
+    expect(
+      updateCombatRoundViewState({
+        current: accepted,
+        encounterId: "encounter-1",
+        encounterRevision: "2026-07-21T09:00:08.000Z",
+        state: declaration,
+      }),
+    ).toBe(accepted);
   });
 });

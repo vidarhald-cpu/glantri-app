@@ -128,7 +128,6 @@ import {
   createDefaultCombatLogSelection,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
-  isCombatViewRevisionAtLeast,
   reconcileCombatLogSelection,
   resolveCombatLogPresentationTargetEvents,
   resolveCombatHistoryPanelSnapshot,
@@ -213,7 +212,11 @@ import {
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
-import { updateCombatRoundViewState } from "./combatRoundViewState";
+import {
+  canAcceptCombatRoundViewRevision,
+  type CombatRoundViewState,
+  updateCombatRoundViewState,
+} from "./combatRoundViewState";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildCombatAttackSourceRef,
@@ -273,12 +276,6 @@ interface CombatRoundManagerPanelProps {
   onEncounterUpdated?: (encounter: EncounterSession) => void;
   onScenarioParticipantsUpdated?: (participants: ScenarioParticipant[]) => void;
   scenarioParticipants?: ScenarioParticipant[];
-}
-
-interface CombatRoundViewState {
-  encounterId: string;
-  encounterRevision?: string;
-  state: CombatRoundState;
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
@@ -3798,6 +3795,26 @@ export default function CombatRoundManagerPanel({
   });
   const setRoundState = useCallback(
     (state: CombatRoundState, encounterRevision?: string) => {
+      if (
+        encounterRevision &&
+        !canAcceptCombatRoundViewRevision({
+          accepted: {
+            encounterId: acceptedEncounterRevisionRef.current.encounterId,
+            encounterRevision: acceptedEncounterRevisionRef.current.updatedAt,
+          },
+          candidateEncounterId: encounter.id,
+          candidateRevision: encounterRevision,
+        })
+      ) {
+        return;
+      }
+
+      if (encounterRevision) {
+        acceptedEncounterRevisionRef.current = {
+          encounterId: encounter.id,
+          updatedAt: encounterRevision,
+        };
+      }
       setRoundView((current) =>
         updateCombatRoundViewState({
           current,
@@ -3817,10 +3834,13 @@ export default function CombatRoundManagerPanel({
       const accepted = acceptedEncounterRevisionRef.current;
 
       if (
-        accepted.encounterId === nextEncounter.id &&
-        !isCombatViewRevisionAtLeast({
-          acceptedUpdatedAt: accepted.updatedAt,
-          candidateUpdatedAt: nextEncounter.updatedAt,
+        !canAcceptCombatRoundViewRevision({
+          accepted: {
+            encounterId: accepted.encounterId,
+            encounterRevision: accepted.updatedAt,
+          },
+          candidateEncounterId: nextEncounter.id,
+          candidateRevision: nextEncounter.updatedAt,
         })
       ) {
         return false;
@@ -3830,11 +3850,14 @@ export default function CombatRoundManagerPanel({
         encounterId: nextEncounter.id,
         updatedAt: nextEncounter.updatedAt,
       };
-      setRoundView({
-        encounterId: nextEncounter.id,
-        encounterRevision: nextEncounter.updatedAt,
-        state,
-      });
+      setRoundView((current) =>
+        updateCombatRoundViewState({
+          current,
+          encounterId: nextEncounter.id,
+          encounterRevision: nextEncounter.updatedAt,
+          state,
+        }),
+      );
       return true;
     },
     [],

@@ -111,6 +111,7 @@ import {
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
   resolveEncounterParticipantByRollParticipantId,
+  resolveEncounterParticipantForViewer,
   resolveEncounterParticipantMembership,
   normalizeCombatRollAdjustment,
   resolveCombatDodgeModifiers,
@@ -1409,8 +1410,10 @@ function buildDistanceDefaultWeaponsByParticipantId(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
 }): Record<string, readonly CombatDistanceWeaponLike[]> {
+  const membership = resolveEncounterParticipantMembership(input);
+
   return Object.fromEntries(
-    input.encounter.participants.map((encounterParticipant) => {
+    membership.participants.map((encounterParticipant) => {
       const scenarioParticipant = input.scenarioParticipants.find(
         (participant) =>
           participant.id === encounterParticipant.scenarioParticipantId ||
@@ -1450,8 +1453,13 @@ function initializeMaterializedCombatRoundState(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
 }): CombatRoundState {
+  const membership = resolveEncounterParticipantMembership(input);
+  const effectiveEncounter =
+    membership.participants === input.encounter.participants
+      ? input.encounter
+      : { ...input.encounter, participants: membership.participants };
   const roundState = initializeCombatRoundState({
-    encounter: input.encounter,
+    encounter: effectiveEncounter,
     weaponsByParticipantId: buildDistanceDefaultWeaponsByParticipantId(input),
   });
 
@@ -1775,21 +1783,35 @@ function getEncounterParticipantsControlledByUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): EncounterSession["participants"] {
-  const membership = resolveEncounterParticipantMembership({
-    encounter: input.encounter,
-    scenarioParticipants: input.scenarioParticipants,
-  });
-
-  return membership.participants.filter((encounterParticipant) => {
-    const scenarioParticipant = input.scenarioParticipants.find(
-      (participant) =>
-        participant.id === encounterParticipant.scenarioParticipantId ||
-        participant.id === encounterParticipant.id ||
-        (encounterParticipant.characterId &&
-          participant.characterId === encounterParticipant.characterId),
+  return input.scenarioParticipants
+    .map((scenarioParticipant) =>
+      resolveEncounterParticipantForViewer({
+        encounter: input.encounter,
+        requestedParticipantId: scenarioParticipant.id,
+        scenarioParticipants: input.scenarioParticipants,
+        viewer: { kind: "player", userId: input.userId },
+      }),
+    )
+    .filter((resolution): resolution is NonNullable<typeof resolution> => Boolean(resolution))
+    .map((resolution) => resolution.encounterParticipant)
+    .filter(
+      (participant, index, participants) =>
+        participants.findIndex((candidate) => candidate.id === participant.id) === index,
     );
+}
 
-    return scenarioParticipant?.controlledByUserId === input.userId;
+function resolveCombatParticipantForRequest(input: {
+  accessMode: "gm" | "player";
+  encounter: EncounterSession;
+  requestedParticipantId: string;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}) {
+  return resolveEncounterParticipantForViewer({
+    encounter: input.encounter,
+    requestedParticipantId: input.requestedParticipantId,
+    scenarioParticipants: input.scenarioParticipants,
+    viewer: input.accessMode === "gm" ? { kind: "gm" } : { kind: "player", userId: input.userId },
   });
 }
 
@@ -2235,9 +2257,44 @@ function buildPlayerSafeEncounterForUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): EncounterSession {
+  if (!Array.isArray(input.encounter.participants)) {
+    return {
+      ...input.encounter,
+      combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
+      roleplayState: input.encounter.roleplayState
+        ? buildPlayerSafeRoleplayStateForUser(input)
+        : undefined,
+    };
+  }
+
+  const membership = resolveEncounterParticipantMembership(input);
+  const { visibleParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
+
   return {
     ...input.encounter,
     combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
+    participants: membership.participants
+      .filter((participant) =>
+        getCombatDistanceParticipantAliases(participant).some((alias) =>
+          visibleParticipantIds.has(alias),
+        ),
+      )
+      .map((participant) => {
+        const resolution = resolveEncounterParticipantForViewer({
+          encounter: input.encounter,
+          requestedParticipantId: participant.id,
+          scenarioParticipants: input.scenarioParticipants,
+          viewer: { kind: "gm" },
+        });
+
+        return resolution
+          ? {
+              ...participant,
+              characterId: resolution.characterId ?? participant.characterId,
+              scenarioParticipantId: resolution.scenarioParticipantId,
+            }
+          : participant;
+      }),
     roleplayState: input.encounter.roleplayState
       ? buildPlayerSafeRoleplayStateForUser(input)
       : undefined,
@@ -2601,11 +2658,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
       const perspectiveParticipant =
         access.mode === "gm" && typeof requestedPerspectiveParticipantId === "string"
-          ? membership.participants.find((participant) =>
-              getCombatDistanceParticipantAliases(participant).includes(
-                requestedPerspectiveParticipantId,
-              ),
-            )
+          ? resolveEncounterParticipantForViewer({
+              encounter,
+              requestedParticipantId: requestedPerspectiveParticipantId,
+              scenarioParticipants,
+              viewer: { kind: "gm" },
+            })?.encounterParticipant
           : undefined;
       if (
         access.mode === "gm" &&
@@ -2907,22 +2965,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatDeclarationBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
@@ -3544,26 +3596,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(
           encounter.scenarioId,
         );
-        const scenarioParticipant = scenarioParticipants.find(
-          (entry) => entry.id === scenarioParticipantId,
-        );
-        if (!scenarioParticipant?.isActive)
-          return reply.code(403).send({ error: "Participant is not active." });
-        if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) {
-          return reply.code(403).send({ error: "Player does not control this participant." });
-        }
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = membership.participants.find(
-          (entry) =>
-            entry.scenarioParticipantId === scenarioParticipant.id ||
-            entry.id === scenarioParticipant.id ||
-            (scenarioParticipant.characterId &&
-              entry.characterId === scenarioParticipant.characterId),
-        );
-        if (!encounterParticipant)
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
+        if (!scenarioParticipant || !encounterParticipant)
           return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
         const roundState = initializeMaterializedCombatRoundState({
           encounter,
@@ -3633,18 +3675,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(
           encounter.scenarioId,
         );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const scenarioParticipant = scenarioParticipants.find(
-          (entry) => entry.id === scenarioParticipantId && entry.isActive,
-        );
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (entry) => entry.scenarioParticipantId === scenarioParticipant.id,
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
         if (!scenarioParticipant || !encounterParticipant)
           return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
         if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
@@ -3702,12 +3741,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : savedEncounter,
         };
       } catch (error) {
-        return reply
-          .code(400)
-          .send({
-            error:
-              error instanceof Error ? error.message : "Unable to record the maneuver response.",
-          });
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to record the maneuver response.",
+        });
       }
     },
   );
@@ -3774,12 +3810,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         return { encounter: savedEncounter };
       } catch (error) {
-        return reply
-          .code(400)
-          .send({
-            error:
-              error instanceof Error ? error.message : "Unable to confirm the maneuver adjustment.",
-          });
+        return reply.code(400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to confirm the maneuver adjustment.",
+        });
       }
     },
   );
@@ -3805,15 +3839,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const scenarioParticipants = await scenarioService.listScenarioParticipants(
         encounter.scenarioId,
       );
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
+        encounter,
+        requestedParticipantId: scenarioParticipantId,
+        scenarioParticipants,
+        userId: user.id,
+      });
       const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
-      const scenarioParticipant = scenarioParticipants.find(
-        (entry) => entry.id === scenarioParticipantId && entry.isActive,
-      );
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (entry) => entry.scenarioParticipantId === scenarioParticipant.id,
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
       if (!scenarioParticipant || !encounterParticipant)
         return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
       if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
@@ -3831,13 +3866,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ? proposal.defenderParticipantId
         : proposal.attackerParticipantId;
       if (expectedParticipantId !== encounterParticipant.id)
-        return reply
-          .code(409)
-          .send({
-            error: proposal.attackerRoll
-              ? "The defender must roll Dodge."
-              : "The attacker must roll Dodge.",
-          });
+        return reply.code(409).send({
+          error: proposal.attackerRoll
+            ? "The defender must roll Dodge."
+            : "The attacker must roll Dodge.",
+        });
       const authorization = authorizeCombatProgressionTask({
         actor:
           access.mode === "gm"
@@ -4057,12 +4090,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         return { encounter: savedEncounter, participants };
       } catch (error) {
-        return reply
-          .code(400)
-          .send({
-            error:
-              error instanceof Error ? error.message : "Unable to commit the distance adjustment.",
-          });
+        return reply.code(400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to commit the distance adjustment.",
+        });
       }
     },
   );
@@ -4147,15 +4178,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const scenarioParticipants = await scenarioService.listScenarioParticipants(
         encounter.scenarioId,
       );
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
+        encounter,
+        requestedParticipantId: scenarioParticipantId,
+        scenarioParticipants,
+        userId: user.id,
+      });
       const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === scenarioParticipantId && participant.isActive,
-      );
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) => participant.scenarioParticipantId === scenarioParticipant.id,
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
       if (!scenarioParticipant || !encounterParticipant) {
         return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
       }
@@ -4496,22 +4528,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatInitiativeBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
@@ -4865,22 +4890,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         const body = parseCombatExperienceBody(request.body);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const scenarioParticipant = scenarioParticipants.find(
-          (participant) => participant.id === body.scenarioParticipantId,
-        );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: body.scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (participant) =>
-                participant.scenarioParticipantId === scenarioParticipant.id ||
-                participant.id === scenarioParticipant.id ||
-                (scenarioParticipant.characterId &&
-                  participant.characterId === scenarioParticipant.characterId),
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
 
         if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
           return reply.code(403).send({
@@ -5034,22 +5052,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         const body = parseRoundEndDistanceControlRollBody(request.body);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const scenarioParticipant = scenarioParticipants.find(
-          (participant) => participant.id === body.scenarioParticipantId,
-        );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: body.scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (participant) =>
-                participant.scenarioParticipantId === scenarioParticipant.id ||
-                participant.id === scenarioParticipant.id ||
-                (scenarioParticipant.characterId &&
-                  participant.characterId === scenarioParticipant.characterId),
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
 
         if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
           return reply.code(403).send({
@@ -5355,22 +5366,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           "Round-end participant review payload",
         );
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const scenarioParticipant = scenarioParticipants.find(
-          (participant) => participant.id === body.scenarioParticipantId && participant.isActive,
-        );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: body.scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (participant) =>
-                participant.scenarioParticipantId === scenarioParticipant.id ||
-                participant.id === scenarioParticipant.id ||
-                (scenarioParticipant.characterId &&
-                  participant.characterId === scenarioParticipant.characterId),
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
         if (!scenarioParticipant || !encounterParticipant) {
           return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
         }
@@ -5464,22 +5468,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseRoundEndHealthCheckRollBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
@@ -5611,22 +5608,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         const body = parsePhaseAttackBackOutBody(request.body);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const scenarioParticipant = scenarioParticipants.find(
-          (participant) => participant.id === body.scenarioParticipantId,
-        );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: body.scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (participant) =>
-                participant.scenarioParticipantId === scenarioParticipant.id ||
-                participant.id === scenarioParticipant.id ||
-                (scenarioParticipant.characterId &&
-                  participant.characterId === scenarioParticipant.characterId),
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
 
         if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
           return reply.code(403).send({
@@ -5741,22 +5731,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         const body = parsePhaseAttackBackOutBody(request.body);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const scenarioParticipant = scenarioParticipants.find(
-          (participant) => participant.id === body.scenarioParticipantId,
-        );
-        const membership = resolveEncounterParticipantMembership({
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
           encounter,
+          requestedParticipantId: body.scenarioParticipantId,
           scenarioParticipants,
+          userId: user.id,
         });
-        const encounterParticipant = scenarioParticipant
-          ? membership.participants.find(
-              (participant) =>
-                participant.scenarioParticipantId === scenarioParticipant.id ||
-                participant.id === scenarioParticipant.id ||
-                (scenarioParticipant.characterId &&
-                  participant.characterId === scenarioParticipant.characterId),
-            )
-          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
 
         if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
           return reply.code(403).send({
@@ -6773,35 +6756,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatAttackBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
-      const defenderEncounterParticipant = membership.participants.find(
-        (participant) =>
-          participant.id === body.defenderParticipantId ||
-          participant.scenarioParticipantId === body.defenderParticipantId ||
-          participant.characterId === body.defenderParticipantId,
-      );
-      const defenderScenarioParticipant = scenarioParticipants.find(
-        (participant) =>
-          participant.id === defenderEncounterParticipant?.scenarioParticipantId ||
-          participant.id === defenderEncounterParticipant?.id ||
-          (participant.characterId &&
-            participant.characterId === defenderEncounterParticipant?.characterId),
-      );
+      const defenderResolution = resolveEncounterParticipantForViewer({
+        encounter,
+        requestedParticipantId: body.defenderParticipantId,
+        scenarioParticipants,
+        viewer: { kind: "gm" },
+      });
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
+      const defenderEncounterParticipant = defenderResolution?.encounterParticipant;
+      const defenderScenarioParticipant = defenderResolution?.scenarioParticipant;
 
       if (
         !scenarioParticipant ||
@@ -7151,22 +7123,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatParryBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
@@ -7434,22 +7400,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatAttackerPrivilegedRollBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
@@ -7639,22 +7598,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseCombatAttackerPrivilegedRollBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-      const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId,
-      );
-      const membership = resolveEncounterParticipantMembership({
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
         encounter,
+        requestedParticipantId: body.scenarioParticipantId,
         scenarioParticipants,
+        userId: user.id,
       });
-      const encounterParticipant = scenarioParticipant
-        ? membership.participants.find(
-            (participant) =>
-              participant.scenarioParticipantId === scenarioParticipant.id ||
-              participant.id === scenarioParticipant.id ||
-              (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId),
-          )
-        : undefined;
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({

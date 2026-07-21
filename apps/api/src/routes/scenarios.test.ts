@@ -2670,9 +2670,7 @@ describe("scenarios route contract", () => {
       sourceRevision: encounter.updatedAt,
     });
     expect(response.json().history.combatLog.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ category: "round", state: "final" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ category: "round", state: "final" })]),
     );
     const progressionTasks = response
       .json()
@@ -3661,6 +3659,124 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
+  });
+
+  it("accepts a player combat mutation through the canonical legacy participant alias", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            ...makeCombatEncounter().participants[0],
+            id: "scenario-participant-1",
+            scenarioParticipantId: undefined,
+          },
+        ],
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: emptyModifierBuckets(),
+            targetParticipantId: "encounter-target-1",
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          combatRoundState: expect.objectContaining({
+            participants: [
+              expect.objectContaining({
+                participantId: "scenario-participant-1",
+                stepStatuses: expect.objectContaining({ select_actions: "submitted" }),
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("returns the same effective fallback roster used by player access and combat history", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: undefined,
+        participantMembershipMode: undefined,
+        participants: [],
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const [encounterResponse, historyResponse] = await Promise.all([
+      app.inject({ method: "GET", url: "/encounters/encounter-1" }),
+      app.inject({ method: "GET", url: "/encounters/encounter-1/combat-history" }),
+    ]);
+    await app.close();
+
+    expect(encounterResponse.statusCode).toBe(200);
+    expect(historyResponse.statusCode).toBe(200);
+    expect(encounterResponse.json().encounter.participants).toEqual([
+      expect.objectContaining({
+        id: "scenario-fallback-participant-1",
+        scenarioParticipantId: "participant-1",
+      }),
+    ]);
+    expect(historyResponse.json().history.rows).toEqual([
+      expect.objectContaining({ participantId: "scenario-fallback-participant-1" }),
+    ]);
+  });
+
+  it("accepts the projected fallback encounter alias for the controlling player", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: undefined,
+        currentRound: 2,
+        participantMembershipMode: undefined,
+        participants: [],
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: emptyModifierBuckets(),
+            targetParticipantId: "encounter-target-1",
+          },
+        },
+        scenarioParticipantId: "scenario-fallback-participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .participants[0],
+    ).toMatchObject({
+      participantId: "scenario-fallback-participant-1",
+      stepStatuses: { select_actions: "submitted" },
+    });
   });
 
   it("lets a GM recommit the canonical declaration during DE without duplicate phase attacks", async () => {

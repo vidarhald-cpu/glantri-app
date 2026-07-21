@@ -66,6 +66,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("visibleAtStep: currentCombatStep");
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("buildCurrentActionPresentation");
+    expect(source).toContain("resolveEncounterParticipantByRollParticipantId({");
+    expect(source).toContain("buildCombatParticipantCandidates({");
     expect(source).toContain("encounterRevision: combatHistory?.sourceUpdatedAt");
     expect(source).toContain("presentation={currentActionPresentation}");
     expect(source).toContain("onDeclareAction={invokePlayerCurrentAction}");
