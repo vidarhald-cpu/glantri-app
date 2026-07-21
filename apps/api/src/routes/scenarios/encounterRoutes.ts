@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import type { FastifyPluginAsync } from "fastify";
 
 import {
@@ -997,7 +999,10 @@ function combatRoundStatesDiffer(
   left: CombatRoundState | undefined,
   right: CombatRoundState | undefined,
 ): boolean {
-  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+  // Domain mutations and schema reloads may produce different object-key insertion orders for the
+  // same round facts. A read-side normalization write must be reserved for semantic repairs;
+  // otherwise polling advances encounter.updatedAt after a command response has already returned.
+  return !isDeepStrictEqual(left ?? null, right ?? null);
 }
 
 function combatContextsDiffer(

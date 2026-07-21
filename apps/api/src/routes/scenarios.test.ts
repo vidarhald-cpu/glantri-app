@@ -17,6 +17,7 @@ import {
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
   initializeCombatRoundState,
+  encounterSessionSchema,
   prepareCombatRoundEndReview,
   rollCombatRoundCombatExperience,
   rollCombatRoundEndDistanceControl,
@@ -3680,6 +3681,175 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
+  });
+
+  it("keeps final DE and M1 mutation revisions authoritative through reads and immediate advances", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounter({
+      currentRound: 2,
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const firstDeclaration = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-07-21T10:00:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: { roundNumber: 2 },
+      participantId: "encounter-participant-1",
+      state: initializeCombatRoundState({ encounter: baseEncounter }),
+      submittedBy: "gm",
+    });
+    const participants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: { displayName: "City guard" },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: {
+        ...baseEncounter,
+        combatRoundState: firstDeclaration,
+      },
+      participants,
+      user: mocks.adminUser,
+    });
+    const persistEncounter = mocks.encounterService.updateEncounter.getMockImplementation() as (
+      update: { session: EncounterSession },
+    ) => Promise<EncounterSession>;
+    const persistedRevisions = [
+      "2026-07-21T10:00:01.000Z",
+      "2026-07-21T10:00:02.000Z",
+      "2026-07-21T10:00:03.000Z",
+      "2026-07-21T10:00:04.000Z",
+      "2026-07-21T10:00:05.000Z",
+    ];
+    let persistedRevisionIndex = 0;
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => {
+        const persisted = encounterSessionSchema.parse({
+          ...update.session,
+          updatedAt: persistedRevisions[persistedRevisionIndex++],
+        });
+        await persistEncounter({ session: persisted });
+        return persisted;
+      },
+    );
+    const app = await buildScenarioTestApp();
+
+    const declarationResponse = await app.inject({
+      method: "POST",
+      payload: {
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    const declarationEncounter = declarationResponse.json().encounter as EncounterSession;
+    const mutationRevision = declarationEncounter.updatedAt;
+    const finalPersistedRevision = mutable.encounter.updatedAt;
+    const rematerializedState = initializeCombatRoundState({
+      encounter: declarationEncounter,
+    });
+    const refreshResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    const boundaryTask = buildCombatProgressionProjection(rematerializedState)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "gm_advance_boundary");
+    const boundaryResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "declaration",
+        expectedRevision: mutationRevision,
+        targetBoundary: "phase1_modifier_review",
+        taskId: boundaryTask?.id,
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    const firstReviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    const finalReviewResponse = await app.inject({
+      method: "POST",
+      payload: {
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    const finalReviewEncounter = finalReviewResponse.json().encounter as EncounterSession;
+    const finalReviewRevision = finalReviewEncounter.updatedAt;
+    const reviewRefreshResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    const reviewBoundaryTask = buildCombatProgressionProjection(
+      initializeCombatRoundState({ encounter: finalReviewEncounter }),
+    )
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "gm_advance_boundary");
+    const initiativeBoundaryResponse = await app.inject({
+      method: "POST",
+      payload: {
+        expectedBoundary: "phase1_modifier_review",
+        expectedRevision: finalReviewRevision,
+        targetBoundary: "phase1_initiative",
+        taskId: reviewBoundaryTask?.id,
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+
+    await app.close();
+
+    expect(declarationResponse.statusCode, JSON.stringify(declarationResponse.json())).toBe(200);
+    expect(mutationRevision).toBe("2026-07-21T10:00:01.000Z");
+    expect(finalPersistedRevision).toBe(mutationRevision);
+    expect(rematerializedState).toEqual(declarationEncounter.combatRoundState);
+    expect(JSON.stringify(rematerializedState)).not.toBe(
+      JSON.stringify(declarationEncounter.combatRoundState),
+    );
+    expect(refreshResponse.statusCode).toBe(200);
+    expect(refreshResponse.json().encounter.updatedAt).toBe(mutationRevision);
+    expect(boundaryTask).toMatchObject({
+      kind: "gm_advance_boundary",
+      transition: {
+        currentBoundary: "declaration",
+        targetBoundary: "phase1_modifier_review",
+      },
+    });
+    expect(boundaryResponse.statusCode, JSON.stringify(boundaryResponse.json())).toBe(200);
+    expect(boundaryResponse.json().encounter.updatedAt).toBe("2026-07-21T10:00:02.000Z");
+    expect(firstReviewResponse.statusCode, JSON.stringify(firstReviewResponse.json())).toBe(200);
+    expect(finalReviewResponse.statusCode, JSON.stringify(finalReviewResponse.json())).toBe(200);
+    expect(finalReviewRevision).toBe("2026-07-21T10:00:04.000Z");
+    expect(mutable.encounter.updatedAt).toBe("2026-07-21T10:00:05.000Z");
+    expect(reviewRefreshResponse.statusCode).toBe(200);
+    expect(reviewRefreshResponse.json().encounter.updatedAt).toBe(finalReviewRevision);
+    expect(reviewBoundaryTask).toMatchObject({
+      kind: "gm_advance_boundary",
+      transition: {
+        currentBoundary: "phase1_modifier_review",
+        targetBoundary: "phase1_initiative",
+      },
+    });
+    expect(
+      initiativeBoundaryResponse.statusCode,
+      JSON.stringify(initiativeBoundaryResponse.json()),
+    ).toBe(200);
+    expect(initiativeBoundaryResponse.json().encounter.updatedAt).toBe(
+      "2026-07-21T10:00:05.000Z",
+    );
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(5);
   });
 
   it("accepts a player combat mutation through the canonical legacy participant alias", async () => {
@@ -12349,6 +12519,7 @@ describe("scenarios route contract", () => {
     const combatEncounter = makeCombatEncounter() as EncounterSession;
     const baseState = initializeCombatRoundState({ encounter: combatEncounter });
     setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
       encounter: {
         combatRoundState: {
           ...baseState,
@@ -12486,6 +12657,7 @@ describe("scenarios route contract", () => {
       selectedStep: "phase_1_actions" as const,
     };
     setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
       encounter: {
         combatRoundState: staleRoundState,
         participants: combatEncounter.participants,

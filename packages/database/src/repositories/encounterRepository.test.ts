@@ -78,6 +78,7 @@ describe("encounterRepository trusted identifiers", () => {
 
   it("updates the trusted encounter id instead of the body id", async () => {
     const repository = createPrismaEncounterRepository();
+    const persistedUpdatedAt = "2026-01-01T00:00:01.000Z";
     mocks.prisma.encounter.update.mockImplementation(async ({ data, where }) => ({
       campaignId: data.campaignId,
       createdAt: new Date(baseSession.createdAt),
@@ -86,7 +87,7 @@ describe("encounterRepository trusted identifiers", () => {
       scenarioId: data.scenarioId,
       sessionJson: data.sessionJson,
       status: data.status,
-      updatedAt: new Date(baseSession.updatedAt),
+      updatedAt: new Date(persistedUpdatedAt),
     }));
 
     const encounter = await repository.updateEncounter({
@@ -117,6 +118,10 @@ describe("encounterRepository trusted identifiers", () => {
       campaignId: "campaign-1",
       id: "encounter-1",
       scenarioId: "scenario-1",
+      updatedAt: persistedUpdatedAt,
+    });
+    expect(mocks.prisma.encounter.update.mock.calls[0]?.[0].data.sessionJson).toMatchObject({
+      updatedAt: baseSession.updatedAt,
     });
   });
 });
