@@ -1,5 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
-
 import type { FastifyPluginAsync } from "fastify";
 
 import {
@@ -183,6 +181,7 @@ import {
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
+import { combatRoundStatesDiffer } from "./combatRoundPersistence";
 import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 
@@ -993,16 +992,6 @@ function parseCombatSummaryInteger(value: string | undefined, label: string): nu
   }
 
   return parsed;
-}
-
-function combatRoundStatesDiffer(
-  left: CombatRoundState | undefined,
-  right: CombatRoundState | undefined,
-): boolean {
-  // Domain mutations and schema reloads may produce different object-key insertion orders for the
-  // same round facts. A read-side normalization write must be reserved for semantic repairs;
-  // otherwise polling advances encounter.updatedAt after a command response has already returned.
-  return !isDeepStrictEqual(left ?? null, right ?? null);
 }
 
 function combatContextsDiffer(

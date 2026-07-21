@@ -3728,10 +3728,14 @@ describe("scenarios route contract", () => {
     let persistedRevisionIndex = 0;
     mocks.encounterService.updateEncounter.mockImplementation(
       async (update: { session: EncounterSession }) => {
-        const persisted = encounterSessionSchema.parse({
-          ...update.session,
-          updatedAt: persistedRevisions[persistedRevisionIndex++],
-        });
+        const persisted = encounterSessionSchema.parse(
+          JSON.parse(
+            JSON.stringify({
+              ...update.session,
+              updatedAt: persistedRevisions[persistedRevisionIndex++],
+            }),
+          ),
+        );
         await persistEncounter({ session: persisted });
         return persisted;
       },
@@ -3752,10 +3756,20 @@ describe("scenarios route contract", () => {
     const rematerializedState = initializeCombatRoundState({
       encounter: declarationEncounter,
     });
-    const refreshResponse = await app.inject({
-      method: "GET",
-      url: "/encounters/encounter-1",
-    });
+    const [refreshResponse, historyResponse, overlappingRefreshResponse] = await Promise.all([
+      app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1",
+      }),
+      app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1/combat-history",
+      }),
+      app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1",
+      }),
+    ]);
     const boundaryTask = buildCombatProgressionProjection(rematerializedState)
       .boundary.processes.flatMap((process) => process.stages)
       .flatMap((stage) => stage.tasks)
@@ -3815,11 +3829,19 @@ describe("scenarios route contract", () => {
     expect(mutationRevision).toBe("2026-07-21T10:00:01.000Z");
     expect(finalPersistedRevision).toBe(mutationRevision);
     expect(rematerializedState).toEqual(declarationEncounter.combatRoundState);
+    expect(Object.hasOwn(rematerializedState, "activeParticipantId")).toBe(true);
+    expect(
+      Object.hasOwn(declarationEncounter.combatRoundState ?? {}, "activeParticipantId"),
+    ).toBe(false);
     expect(JSON.stringify(rematerializedState)).not.toBe(
       JSON.stringify(declarationEncounter.combatRoundState),
     );
     expect(refreshResponse.statusCode).toBe(200);
     expect(refreshResponse.json().encounter.updatedAt).toBe(mutationRevision);
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().history.sourceUpdatedAt).toBe(mutationRevision);
+    expect(overlappingRefreshResponse.statusCode).toBe(200);
+    expect(overlappingRefreshResponse.json().encounter.updatedAt).toBe(mutationRevision);
     expect(boundaryTask).toMatchObject({
       kind: "gm_advance_boundary",
       transition: {
