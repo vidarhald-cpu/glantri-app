@@ -73,12 +73,14 @@ function task(input: {
   };
 }
 
-function progression(input: {
-  awaitingGmTransition?: boolean;
-  boundary?: CombatProgressionBoundaryKind;
-  conflicted?: boolean;
-  tasks?: readonly CombatProgressionPresentationTask[];
-} = {}): CombatProgressionPresentationProjection {
+function progression(
+  input: {
+    awaitingGmTransition?: boolean;
+    boundary?: CombatProgressionBoundaryKind;
+    conflicted?: boolean;
+    tasks?: readonly CombatProgressionPresentationTask[];
+  } = {},
+): CombatProgressionPresentationProjection {
   const tasks = input.tasks ?? [];
   const boundary = input.boundary ?? "phase1_resolution";
   return {
@@ -155,7 +157,7 @@ describe("CurrentActionPresentation", () => {
       actor: { id: "aria", label: "Aria" },
       boundary: "phase1_resolution",
       encounterRevision: "2026-07-20T12:00:00.000Z",
-      heading: "Single Attack · Aria → Borin · Phase 1",
+      heading: "Phase 1",
       primaryAction: {
         descriptor: {
           commandType: "roll_attack",
@@ -163,43 +165,47 @@ describe("CurrentActionPresentation", () => {
           opportunityId: "opportunity-1",
           taskId: "task:attack",
         },
-        label: "Roll Phase 1 attack",
+        label: "Roll attack",
       },
       target: { id: "borin", label: "Borin" },
-      taskHeading: "Single Attack — attack roll",
+      taskHeading: "Roll attack",
       weapon: { label: "Long Sword" },
     });
-    expect(result?.summary).toBe("Aria is attacking Borin with Long Sword.");
-    expect(result?.reason).toBe("This attack follows the declared Single Attack.");
-    expect(result?.expectedNextProcess?.label).toContain("defender may parry");
+    expect(result?.summary).toBe("Aria is attacking Borin.");
+    expect(result?.requiredNow).toBe("Roll attack.");
+    expect(result?.reason).toBe("");
+    expect(result?.expectedNextProcess).toBeUndefined();
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result?.primaryAction.descriptor)).toBe(true);
   });
 
-  it("presents parry with the attacker, defender, required responder, reason, and next work", () => {
-    const result = build([
-      task({
-        actor: borin,
-        command: "roll_parry",
-        kind: "parry",
-        owner: aria,
-        responder: aria,
-        target: aria,
-      }),
-    ], "player");
+  it("presents parry with the attacker, defender, and direct required action", () => {
+    const result = build(
+      [
+        task({
+          actor: borin,
+          command: "roll_parry",
+          kind: "parry",
+          owner: aria,
+          responder: aria,
+          target: aria,
+        }),
+      ],
+      "player",
+    );
 
-    expect(result?.heading).toBe("Parry · Borin → Aria · Phase 1");
+    expect(result?.heading).toBe("Phase 1");
+    expect(result?.summary).toBe("Aria is defending against Borin's attack.");
     expect(result?.requiredActor.label).toBe("Aria");
     expect(result?.primaryAction.label).toBe("Roll parry");
-    expect(result?.reason).toContain("defensive response");
-    expect(result?.expectedNextProcess?.label).toContain("post-hit work");
+    expect(result?.requiredNow).toBe("Roll parry.");
   });
 
   it.each([
-    ["feint_attacker_roll", "Roll Feint", "attacker roll"],
-    ["feint_defender_roll", "Roll Feint resistance", "defender roll"],
-    ["feint_commit", "Commit Feint result", "GM proposal commit"],
-  ] as const)("presents %s from the canonical Feint task", (kind, button, inputLabel) => {
+    ["feint_attacker_roll", "Roll Feint", "Roll Feint."],
+    ["feint_defender_roll", "Roll Feint resistance", "Roll Feint resistance."],
+    ["feint_commit", "Commit Feint result", "Commit the Feint result."],
+  ] as const)("presents %s from the canonical Feint task", (kind, button, requiredNow) => {
     const gmOnly = kind === "feint_commit";
     const result = build([
       task({
@@ -215,17 +221,18 @@ describe("CurrentActionPresentation", () => {
     ]);
 
     expect(result?.actionName).toBe("Feint-Attack");
-    expect(result?.taskHeading).toContain(inputLabel);
+    expect(result?.summary).toBe("Aria is attempting to feint Borin.");
+    expect(result?.requiredNow).toBe(requiredNow);
     expect(result?.primaryAction.label).toBe(button);
     expect(result?.primaryAction.descriptor?.proposalId).toBe("proposal-feint");
   });
 
   it.each([
-    ["adjust_distance_response", "Confirm defender response"],
-    ["adjust_distance_adjustment", "Confirm maneuver adjustment"],
-    ["adjust_distance_attacker_roll", "Roll attacker Dodge"],
-    ["adjust_distance_defender_roll", "Roll defender Dodge"],
-    ["adjust_distance_commit", "Commit distance adjustment"],
+    ["adjust_distance_response", "Choose whether to oppose"],
+    ["adjust_distance_adjustment", "Confirm Dodge adjustment"],
+    ["adjust_distance_attacker_roll", "Roll Dodge"],
+    ["adjust_distance_defender_roll", "Roll Dodge"],
+    ["adjust_distance_commit", "Commit distance result"],
   ] as const)("presents %s with canonical distance context", (kind, button) => {
     const gmOnly = kind === "adjust_distance_adjustment" || kind === "adjust_distance_commit";
     const result = build([
@@ -242,14 +249,12 @@ describe("CurrentActionPresentation", () => {
       }),
     ]);
 
-    expect(result?.summary).toBe(
-      "Aria is attempting to move from distance 3 to distance 2 against Borin.",
-    );
+    expect(result?.summary).toBe("Aria is attempting to move closer.");
+    expect(result?.distance).toEqual({ current: 3, requested: 2 });
     expect(result?.primaryAction.label).toBe(button);
-    expect(result?.expectedNextProcess?.label).toBeTruthy();
   });
 
-  it("presents the Double Attack decision and its two outcomes", () => {
+  it("presents the Double Attack decision without future-work explanation", () => {
     const result = build([
       task({
         actionKind: "double_attack",
@@ -260,17 +265,17 @@ describe("CurrentActionPresentation", () => {
       }),
     ]);
 
-    expect(result?.taskHeading).toBe("Double Attack — Continue or Cancel decision");
-    expect(result?.reason).toContain("first attack is complete");
-    expect(result?.expectedNextProcess?.label).toContain("Continue opens Attack 2");
+    expect(result?.summary).toBe("Aria has completed the first attack.");
+    expect(result?.requiredNow).toBe("Choose Continue or Cancel.");
+    expect(result?.primaryAction.label).toBe("Choose Continue or Cancel");
   });
 
   it.each([
     ["combat_experience", "Roll Combat Experience", "Combat Experience"],
-    ["health_review", "Roll Health check", "Health Review"],
+    ["health_review", "Roll Health", "Health Review"],
     ["distance_roll", "Roll distance control", "Distance Control"],
-    ["effect_review", "Commit participant SU review", "Effect Review"],
-    ["round_end_prepare", "Prepare round-end review", "Round End"],
+    ["effect_review", "Complete effect review", "Effect Review"],
+    ["round_end_prepare", "Begin round end", "Round End"],
   ] as const)("presents %s without consulting prior results", (kind, button, action) => {
     const result = build([
       task({
@@ -293,7 +298,7 @@ describe("CurrentActionPresentation", () => {
 
     expect(result?.actionName).toBe(action);
     expect(result?.primaryAction.label).toBe(button);
-    if (kind === "health_review") expect(result?.reason).toBe("Bleeding requires review.");
+    expect(result?.reason).toBe("");
   });
 
   it("includes the canonical Combat Experience difficulty", () => {
@@ -307,7 +312,8 @@ describe("CurrentActionPresentation", () => {
     ]);
 
     expect(result?.difficulty).toBe(26);
-    expect(result?.summary).toBe("Aria must resolve Combat Experience at difficulty 26.");
+    expect(result?.summary).toBe("Aria needs a Combat Experience roll.");
+    expect(result?.requiredNow).toBe("Roll Combat Experience.");
   });
 
   it("presents an explicit GM boundary transition and immutable target", () => {
@@ -325,10 +331,13 @@ describe("CurrentActionPresentation", () => {
     };
     const result = build([transitionTask]);
 
-    expect(result?.primaryAction.label).toBe("Open Phase 2 modifier review");
+    expect(result?.heading).toBe("Phase 1");
+    expect(result?.summary).toBe("Phase 1 is complete.");
+    expect(result?.requiredNow).toBe("Open Phase 2 modifier review.");
+    expect(result?.primaryAction.label).toBe("Open Phase 2");
     expect(result?.primaryAction.descriptor?.targetBoundary).toBe("phase2_modifier_review");
     expect(result?.requiredActor.label).toBe("GM");
-    expect(result?.reason).toContain("does not open the next combat boundary automatically");
+    expect(result?.reason).toBe("");
   });
 
   it("shows player-safe Waiting for GM without exposing the hidden GM task descriptor", () => {
@@ -340,19 +349,24 @@ describe("CurrentActionPresentation", () => {
     });
 
     expect(result).toMatchObject({
+      heading: "Phase 1",
       primaryAction: { enabled: false, label: "Waiting for GM" },
       requiredActor: { label: "GM" },
+      requiredNow: "Waiting for GM.",
       status: "awaiting_gm",
+      summary: "Phase 1 is complete.",
     });
     expect(result?.primaryAction).not.toHaveProperty("descriptor");
   });
 
   it("shows Waiting for another combatant when the visible task belongs to someone else", () => {
-    const result = build([
-      task({ actor: borin, kind: "attack", owner: borin, target: aria }),
-    ], "player");
+    const result = build(
+      [task({ actor: borin, kind: "attack", owner: borin, target: aria })],
+      "player",
+    );
 
     expect(result?.status).toBe("waiting");
+    expect(result?.requiredNow).toBe("Waiting for another combatant.");
     expect(result?.primaryAction).toMatchObject({
       enabled: false,
       label: "Waiting for another combatant",
@@ -460,7 +474,117 @@ describe("CurrentActionPresentation", () => {
 
     expect(result).toMatchObject({
       primaryAction: { enabled: false, label: "Action unavailable" },
+      requiredNow: "Waiting for GM.",
+      summary: "Combat information is temporarily unavailable.",
       status: "conflicted",
     });
   });
+
+  it.each([
+    [
+      "submit_declaration",
+      "Choose your action for this round.",
+      "Choose your declaration.",
+      "Choose declaration",
+    ],
+    ["roll_initiative", "Initiative is open for Aria.", "Roll initiative.", "Roll initiative"],
+    ["commit_initiative", "Initiative is complete.", "Commit initiative.", "Commit initiative"],
+    ["health_review", "Aria needs a Health roll.", "Roll Health.", "Roll Health"],
+  ] as const)("uses minimal in-game wording for %s", (kind, summary, requiredNow, button) => {
+    const result = build([task({ actor: aria, kind })]);
+
+    expect(result).toMatchObject({ summary, requiredNow, primaryAction: { label: button } });
+  });
+
+  it("does not expose progression terminology in rendered presentation copy", () => {
+    const transitionTask = {
+      ...task({ command: "advance_combat_boundary", gmOnly: true, kind: "gm_advance_boundary" }),
+      transition: {
+        currentBoundary: "declaration" as const,
+        requiredCompletedProcessIds: ["declaration-process"],
+        targetBoundary: "phase1_modifier_review" as const,
+      },
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-1",
+      progression: progression({ boundary: "declaration", tasks: [transitionTask] }),
+      viewer: { kind: "gm" },
+    });
+    const visibleCopy = [
+      result?.heading,
+      result?.summary,
+      result?.requiredNow,
+      result?.primaryAction.label,
+    ].join(" ");
+
+    expect(visibleCopy).toBe(
+      "Declaration Declarations are complete. Open Phase 1 modifier review. Open Phase 1",
+    );
+    expect(visibleCopy).not.toMatch(
+      /boundary|canonical|child work|execution group|progression|proposal|stage|task/i,
+    );
+  });
+
+  it("uses concise GM modifier-review wording", () => {
+    const result = build([
+      task({
+        actor: aria,
+        command: "review_modifiers_phase1",
+        gmOnly: true,
+        kind: "modifier_review",
+      }),
+    ]);
+
+    expect(result).toMatchObject({
+      heading: "Phase 1",
+      primaryAction: { label: "Complete modifier review" },
+      requiredNow: "Complete modifier review.",
+      summary: "Phase 1 modifiers are ready for review.",
+    });
+  });
+
+  it.each([
+    [
+      "phase2_resolution",
+      "round_end",
+      "Phase 2",
+      "Phase 2 is complete.",
+      "Begin round end.",
+      "Begin round end",
+    ],
+    [
+      "round_end",
+      "round_boundary",
+      "Round end",
+      "The round is complete.",
+      "Start the next round.",
+      "Start next round",
+    ],
+  ] as const)(
+    "uses concise GM wording from %s to %s",
+    (currentBoundary, targetBoundary, heading, summary, requiredNow, button) => {
+      const transitionTask = {
+        ...task({ command: "advance_combat_boundary", gmOnly: true, kind: "gm_advance_boundary" }),
+        transition: {
+          currentBoundary,
+          requiredCompletedProcessIds: ["completed-process"],
+          targetBoundary,
+        },
+      };
+      const result = buildCurrentActionPresentation({
+        encounterId: "encounter-1",
+        encounterRevision: "revision-1",
+        progression: progression({ boundary: currentBoundary, tasks: [transitionTask] }),
+        viewer: { kind: "gm" },
+      });
+
+      expect(result).toMatchObject({
+        heading,
+        primaryAction: { label: button },
+        requiredNow,
+        summary,
+      });
+    },
+  );
 });

@@ -1305,24 +1305,33 @@ export function PlayerCombatActionButtonPanel({
     <section style={playerCombatPanelCardStyle}>
       <strong>Current action</strong>
       {presentation ? (
-        <div style={{ display: "grid", gap: "0.45rem" }}>
+        <div style={{ display: "grid", gap: "0.35rem" }}>
           <strong>{presentation.heading}</strong>
-          <div style={{ fontWeight: 650 }}>{presentation.taskHeading}</div>
           <div>{presentation.summary}</div>
-          <div>
-            <strong>Reason: </strong>
-            {presentation.reason}
-          </div>
-          <div>
-            <strong>Required now: </strong>
-            {presentation.requiredNow}
-          </div>
-          {presentation.expectedNextProcess ? (
-            <div>
-              <strong>Next: </strong>
-              {presentation.expectedNextProcess.label}
+          {presentation.weapon || presentation.distance || presentation.difficulty !== undefined ? (
+            <div
+              style={{
+                color: "#4f5f57",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.25rem 0.8rem",
+              }}
+            >
+              {presentation.weapon ? <span>Weapon: {presentation.weapon.label}</span> : null}
+              {presentation.distance?.current !== undefined ? (
+                <span>
+                  Distance: {presentation.distance.current}
+                  {presentation.distance.requested !== undefined
+                    ? ` → ${presentation.distance.requested}`
+                    : ""}
+                </span>
+              ) : null}
+              {presentation.difficulty !== undefined ? (
+                <span>Difficulty: {presentation.difficulty}</span>
+              ) : null}
             </div>
           ) : null}
+          <div style={{ fontWeight: 650 }}>{presentation.requiredNow}</div>
         </div>
       ) : null}
       {preActionControls ? (

@@ -138,7 +138,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   feint_attacker_roll: "Feint",
   feint_commit: "Feint",
   feint_defender_roll: "Feint",
-  gm_advance_boundary: "Combat Progression",
+  gm_advance_boundary: "GM Action",
   health_review: "Health Review",
   hit_location: "Hit Location",
   modifier_review: "Modifier Review",
@@ -149,43 +149,12 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   submit_declaration: "Declaration",
 };
 
-const INPUT_LABELS: Record<CombatProgressionTaskKind, string> = {
-  adjust_distance_adjustment: "GM adjustment",
-  adjust_distance_attacker_roll: "attacker Dodge roll",
-  adjust_distance_commit: "GM proposal commit",
-  adjust_distance_defender_roll: "defender Dodge roll",
-  adjust_distance_response: "defender response",
-  attack: "attack roll",
-  combat_experience: "Combat Experience input",
-  commit_initiative: "GM initiative commit",
-  critical: "critical roll",
-  damage_review: "GM damage review",
-  distance_commit: "GM distance commit",
-  distance_roll: "Dodge roll",
-  double_attack_decision: "Continue or Cancel decision",
-  effect_review: "GM effect review",
-  feint_attacker_roll: "attacker roll",
-  feint_commit: "GM proposal commit",
-  feint_defender_roll: "defender roll",
-  gm_advance_boundary: "GM boundary transition",
-  health_review: "Health check",
-  hit_location: "hit-location roll",
-  modifier_review: "GM modifier review",
-  parry: "defender response",
-  participant_review: "participant review",
-  roll_initiative: "initiative roll",
-  round_end_prepare: "GM round-end preparation",
-  submit_declaration: "declaration",
-};
-
 function taskList(
   progression: CombatProgressionPresentationProjection | undefined,
 ): CombatProgressionPresentationTask[] {
   if (progression?.taskVisibility !== "available") return [];
   return progression.processes.flatMap((process) =>
-    process.stages.flatMap((stage) =>
-      stage.executionGroups.flatMap((group) => group.tasks),
-    ),
+    process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
   );
 }
 
@@ -241,8 +210,7 @@ function selectTask(
       (task) => task.state === "executable" && viewerMayInvokeTask(task, viewer),
     ) ??
     progressionTasks.find(
-      (task) =>
-        viewer.kind === "player" && taskInvolvesControlledParticipant(task, controlled),
+      (task) => viewer.kind === "player" && taskInvolvesControlledParticipant(task, controlled),
     ) ??
     progressionTasks.find((task) => task.state === "executable") ??
     progressionTasks[0]
@@ -311,157 +279,139 @@ function summaryFor(input: {
   const target = input.target?.label;
   const distance = input.task.presentationContext?.distance;
   switch (input.task.kind) {
+    case "submit_declaration":
+      return "Choose your action for this round.";
     case "adjust_distance_response":
     case "adjust_distance_adjustment":
     case "adjust_distance_attacker_roll":
     case "adjust_distance_defender_roll":
     case "adjust_distance_commit":
-      return distance?.current !== undefined && distance.requested !== undefined
-        ? `${actor} is attempting to move from distance ${distance.current} to distance ${distance.requested}${target ? ` against ${target}` : ""}.`
-        : `${actor} is attempting to adjust distance${target ? ` against ${target}` : ""}.`;
+      if (distance?.current !== undefined && distance.requested !== undefined) {
+        const direction =
+          distance.requested < distance.current
+            ? "move closer"
+            : distance.requested > distance.current
+              ? "move farther away"
+              : "maintain the distance";
+        return `${actor} is attempting to ${direction}.`;
+      }
+      return `${actor} is attempting to adjust the distance${target ? ` to ${target}` : ""}.`;
     case "attack":
-      return `${actor} is attacking${target ? ` ${target}` : ""}${input.task.presentationContext?.weapon?.label ? ` with ${input.task.presentationContext.weapon.label}` : ""}.`;
+      return `${actor} is attacking${target ? ` ${target}` : ""}.`;
     case "parry":
-      return `${target ?? "The defender"} is responding to ${actor}'s attack.`;
+      return `${target ?? "The defender"} is defending against ${actor}'s attack.`;
     case "feint_attacker_roll":
     case "feint_defender_roll":
     case "feint_commit":
-      return `${actor} is attempting a ${input.task.presentationContext?.actionKind === "feint_attack" ? "Feint" : input.action}${target ? ` against ${target}` : ""}.`;
+      return `${actor} is attempting to feint${target ? ` ${target}` : ""}.`;
     case "gm_advance_boundary":
-      return `All required work in ${BOUNDARY_LABELS[input.task.transition?.currentBoundary ?? "declaration"]} is complete.`;
+      return boundaryCompleteSummary(input.task.transition?.currentBoundary ?? "declaration");
     case "commit_initiative":
-      return "All required initiative rolls and choices are complete.";
+      return "Initiative is complete.";
+    case "roll_initiative":
+      return `Initiative is open for ${actor}.`;
+    case "modifier_review":
+      return `${phaseLabel(input.task.identity.phase, "phase1_modifier_review")} modifiers are ready for review.`;
     case "health_review":
-      return `${actor} requires a round-end Health check.`;
+      return `${actor} needs a Health roll.`;
     case "combat_experience":
-      return input.task.presentationContext?.difficulty !== undefined
-        ? `${actor} must resolve Combat Experience at difficulty ${input.task.presentationContext.difficulty}.`
-        : `${actor} must resolve Combat Experience.`;
+      return `${actor} needs a Combat Experience roll.`;
     case "distance_roll":
     case "distance_commit":
-      return `${actor} is resolving round-end distance control${target ? ` with ${target}` : ""}.`;
+      return `${actor} is resolving distance control${target ? ` with ${target}` : ""}.`;
+    case "double_attack_decision":
+      return `${actor} has completed the first attack.`;
+    case "round_end_prepare":
+      return "The combat phases are complete.";
+    case "effect_review":
+      return `Review ${actor}'s active effects.`;
+    case "participant_review":
+      return `Review ${actor} for the end of the round.`;
     default:
       return target
-        ? `${input.action} is in progress for ${actor} against ${target}.`
-        : `${input.action} is in progress for ${actor}.`;
+        ? `${actor} is resolving ${input.action} against ${target}.`
+        : `${actor} is resolving ${input.action}.`;
   }
 }
 
-function reasonFor(task: CombatProgressionPresentationTask, action: string): string {
-  if (task.presentationContext?.reason) return task.presentationContext.reason;
-  switch (task.kind) {
-    case "attack":
-      return `This attack follows the declared ${action}.`;
-    case "parry":
-      return "The attack hit or threatened the defender and permits a defensive response.";
-    case "adjust_distance_response":
-      return "The defender must choose whether to allow or oppose the requested movement.";
-    case "adjust_distance_adjustment":
-      return "The movement is opposed, so the GM must confirm the roll adjustment.";
-    case "adjust_distance_attacker_roll":
-    case "adjust_distance_defender_roll":
-      return "The movement is opposed and requires both Dodge results.";
-    case "adjust_distance_commit":
-      return "The distance proposal is ready for GM review and commit.";
-    case "feint_attacker_roll":
-    case "feint_defender_roll":
-      return "The Feint contest requires both participants' relevant skill results.";
-    case "feint_commit":
-      return "Both Feint inputs are complete and the proposal is ready for GM commit.";
-    case "double_attack_decision":
-      return "The first attack is complete and the second attack requires an explicit decision.";
-    case "combat_experience":
-      return "Combat Experience must be resolved before the blocked combat work can continue.";
-    case "health_review":
-      return "A round-end condition requires a Health check before review can continue.";
-    case "gm_advance_boundary":
-      return "Completing child work does not open the next combat boundary automatically.";
-    case "commit_initiative":
-      return "The GM must commit initiative before phase execution order opens.";
-    case "submit_declaration":
-      return "A declaration is required before combat can progress to modifier review.";
+function boundaryCompleteSummary(boundary: CombatProgressionBoundaryKind): string {
+  switch (boundary) {
+    case "declaration":
+      return "Declarations are complete.";
+    case "phase1_modifier_review":
+      return "Phase 1 modifier review is complete.";
+    case "phase1_initiative":
+      return "Phase 1 initiative is complete.";
+    case "phase1_resolution":
+      return "Phase 1 is complete.";
+    case "phase2_modifier_review":
+      return "Phase 2 modifier review is complete.";
+    case "phase2_initiative":
+      return "Phase 2 initiative is complete.";
+    case "phase2_resolution":
+      return "Phase 2 is complete.";
+    case "round_end":
+    case "round_boundary":
+      return "The round is complete.";
+  }
+}
+
+function boundaryInstruction(target: CombatProgressionBoundaryKind | undefined): string {
+  switch (target) {
+    case "declaration":
+      return "Open declarations.";
+    case "phase1_modifier_review":
+      return "Open Phase 1 modifier review.";
+    case "phase1_initiative":
+      return "Open Phase 1 initiative.";
+    case "phase1_resolution":
+      return "Open Phase 1 actions.";
+    case "phase2_modifier_review":
+      return "Open Phase 2 modifier review.";
+    case "phase2_initiative":
+      return "Open Phase 2 initiative.";
+    case "phase2_resolution":
+      return "Open Phase 2 actions.";
+    case "round_end":
+      return "Begin round end.";
+    case "round_boundary":
+      return "Start the next round.";
     default:
-      return `This input is required to complete the current ${action} stage.`;
+      return "Continue combat.";
   }
 }
 
-function nextFor(task: CombatProgressionPresentationTask): { label: string; processId?: string } {
-  switch (task.kind) {
-    case "attack":
-      return { label: "If the attack succeeds, the defender may parry." };
-    case "parry":
-      return { label: "The attack either completes or proceeds to post-hit work." };
-    case "hit_location":
-      return { label: "Critical or damage review follows as required." };
-    case "critical":
-      return { label: "Damage and effects review follows." };
-    case "damage_review":
-      return { label: "The attack process completes after accepted damage and effects." };
-    case "adjust_distance_response":
-      return { label: "Allow resolves the movement; oppose proceeds to adjustment and Dodge." };
-    case "adjust_distance_adjustment":
-      return { label: "The participants roll Dodge after the adjustment is confirmed." };
-    case "adjust_distance_attacker_roll":
-    case "adjust_distance_defender_roll":
-      return { label: "The higher Dodge result determines whether the distance changes." };
-    case "adjust_distance_commit":
-      return { label: "The maneuver completes; its later attack remains boundary-controlled." };
-    case "feint_attacker_roll":
-      return { label: "The defender's Feint resistance roll follows." };
-    case "feint_defender_roll":
-      return { label: "The GM reviews and commits the Feint proposal." };
-    case "feint_commit":
-      return { label: "The maneuver completes; its later attack remains boundary-controlled." };
-    case "double_attack_decision":
-      return { label: "Continue opens Attack 2 later; Cancel completes Double Attack." };
-    case "roll_initiative":
-      return { label: "After all rolls and choices, the GM commits initiative." };
-    case "commit_initiative":
-      return { label: "The committed phase execution order becomes active." };
-    case "submit_declaration":
-      return { label: "Remaining declarations continue, then the GM opens modifier review." };
-    case "combat_experience":
-      return { label: "The blocked declaration, initiative choice, or review resumes." };
-    case "health_review":
-      return { label: "Round-end participant and effect review continues." };
-    case "distance_roll":
-      return { label: "The remaining roll or GM distance commit follows." };
-    case "distance_commit":
-      return { label: "Round-end participant review continues." };
-    case "effect_review":
-    case "participant_review":
-      return { label: "The next ordered round-end participant or effect is reviewed." };
-    case "round_end_prepare":
-      return { label: "Distance and participant round-end processes become available." };
-    case "gm_advance_boundary":
-      return {
-        label: task.transition
-          ? `${BOUNDARY_LABELS[task.transition.targetBoundary]} becomes active.`
-          : "The next combat boundary becomes active.",
-      };
-    case "modifier_review":
-      return { label: "The next participant review or initiative boundary follows." };
+function boundaryButtonLabel(target: CombatProgressionBoundaryKind | undefined): string {
+  switch (target) {
+    case "phase1_modifier_review":
+      return "Open Phase 1";
+    case "phase2_modifier_review":
+      return "Open Phase 2";
+    case "round_boundary":
+      return "Start next round";
+    default:
+      return boundaryInstruction(target).replace(/\.$/, "");
   }
 }
 
 function buttonLabel(task: CombatProgressionPresentationTask): string {
   switch (task.kind) {
     case "submit_declaration":
-      return "Submit declaration";
+      return "Choose declaration";
     case "combat_experience":
       return task.expectedCommand === "set_combat_experience_difficulty"
         ? "Open Combat Experience"
         : "Roll Combat Experience";
     case "modifier_review":
-      return "Commit modifier review";
+      return "Complete modifier review";
     case "roll_initiative":
-      return `Roll ${task.identity.phase === "phase2" ? "Phase 2" : "Phase 1"} initiative`;
+      return "Roll initiative";
     case "commit_initiative":
-      return `Commit ${task.identity.phase === "phase2" ? "Phase 2" : "Phase 1"} initiative`;
+      return "Commit initiative";
     case "double_attack_decision":
-      return "Confirm Attack 2 decision";
+      return "Choose Continue or Cancel";
     case "attack":
-      return `Roll ${task.identity.phase === "phase2" ? "Phase 2" : "Phase 1"} attack`;
+      return "Roll attack";
     case "parry":
       return "Roll parry";
     case "hit_location":
@@ -469,7 +419,7 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "critical":
       return "Roll critical";
     case "damage_review":
-      return "Commit damage review";
+      return "Commit damage";
     case "feint_attacker_roll":
       return "Roll Feint";
     case "feint_defender_roll":
@@ -477,77 +427,131 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "feint_commit":
       return "Commit Feint result";
     case "adjust_distance_response":
-      return "Confirm defender response";
+      return "Choose whether to oppose";
     case "adjust_distance_adjustment":
-      return "Confirm maneuver adjustment";
+      return "Confirm Dodge adjustment";
     case "adjust_distance_attacker_roll":
-      return "Roll attacker Dodge";
+      return "Roll Dodge";
     case "adjust_distance_defender_roll":
-      return "Roll defender Dodge";
+      return "Roll Dodge";
     case "adjust_distance_commit":
-      return "Commit distance adjustment";
+      return "Commit distance result";
     case "distance_roll":
       return "Roll distance control";
     case "distance_commit":
       return "Apply distance control";
     case "health_review":
-      return "Roll Health check";
+      return "Roll Health";
     case "effect_review":
-      return "Commit participant SU review";
+      return "Complete effect review";
     case "participant_review":
       return "Complete participant review";
     case "round_end_prepare":
-      return "Prepare round-end review";
+      return "Begin round end";
     case "gm_advance_boundary":
-      return task.transition?.targetBoundary === "round_boundary"
-        ? "Start next round"
-        : `Open ${BOUNDARY_LABELS[task.transition?.targetBoundary ?? "declaration"]}`;
+      return boundaryButtonLabel(task.transition?.targetBoundary);
   }
 }
 
-function waitingLabel(
+function requiredNowFor(
   task: CombatProgressionPresentationTask,
-  viewerMayInvoke: boolean,
+  status: CurrentActionPresentation["status"],
 ): string {
+  if (status === "awaiting_gm") return "Waiting for GM.";
+  if (status === "waiting") return "Waiting for another combatant.";
+  switch (task.kind) {
+    case "submit_declaration":
+      return "Choose your declaration.";
+    case "combat_experience":
+      return task.expectedCommand === "set_combat_experience_difficulty"
+        ? "Set the Combat Experience difficulty."
+        : "Roll Combat Experience.";
+    case "modifier_review":
+      return "Complete modifier review.";
+    case "roll_initiative":
+      return "Roll initiative.";
+    case "commit_initiative":
+      return "Commit initiative.";
+    case "double_attack_decision":
+      return "Choose Continue or Cancel.";
+    case "attack":
+      return "Roll attack.";
+    case "parry":
+      return "Roll parry.";
+    case "hit_location":
+      return "Roll hit location.";
+    case "critical":
+      return "Roll critical.";
+    case "damage_review":
+      return "Commit damage.";
+    case "feint_attacker_roll":
+      return "Roll Feint.";
+    case "feint_defender_roll":
+      return "Roll Feint resistance.";
+    case "feint_commit":
+      return "Commit the Feint result.";
+    case "adjust_distance_response":
+      return "Choose whether to oppose.";
+    case "adjust_distance_adjustment":
+      return "Confirm the Dodge adjustment.";
+    case "adjust_distance_attacker_roll":
+    case "adjust_distance_defender_roll":
+      return "Roll Dodge.";
+    case "adjust_distance_commit":
+      return "Commit the distance result.";
+    case "distance_roll":
+      return "Roll distance control.";
+    case "distance_commit":
+      return "Apply the distance result.";
+    case "health_review":
+      return "Roll Health.";
+    case "effect_review":
+      return "Complete the effect review.";
+    case "participant_review":
+      return "Complete the participant review.";
+    case "round_end_prepare":
+      return "Begin round end.";
+    case "gm_advance_boundary":
+      return boundaryInstruction(task.transition?.targetBoundary);
+  }
+}
+
+function waitingLabel(task: CombatProgressionPresentationTask, viewerMayInvoke: boolean): string {
   if (viewerMayInvoke && task.state === "executable") return buttonLabel(task);
   return task.actorAccess.gm && !task.actorAccess.combatant
     ? "Waiting for GM"
     : "Waiting for another combatant";
 }
 
-function specialPresentation(input: BuildCurrentActionPresentationInput): CurrentActionPresentation {
+function specialPresentation(
+  input: BuildCurrentActionPresentationInput,
+): CurrentActionPresentation {
   const boundary = input.progression?.boundary.kind ?? "declaration";
   const conflicted = input.progression?.taskVisibility === "conflicted";
   const awaitingGm = !conflicted && Boolean(input.progression?.awaitingGmTransition);
-  const actionName = conflicted ? "Combat progression" : "Combat progression";
+  const actionName = "GM Action";
   const status = conflicted ? "conflicted" : "awaiting_gm";
   const summary = conflicted
-    ? "The current combat task cannot be presented safely because progression facts conflict."
-    : `Required work in ${BOUNDARY_LABELS[boundary]} is complete.`;
+    ? "Combat information is temporarily unavailable."
+    : boundaryCompleteSummary(boundary);
   return Object.freeze({
     actionName,
     boundary,
     encounterId: input.encounterId,
     encounterRevision: input.encounterRevision ?? "",
-    heading: `${actionName} · ${BOUNDARY_LABELS[boundary]}`,
+    heading: BOUNDARY_LABELS[boundary],
     primaryAction: {
       enabled: false,
       gmProxyAvailable: false,
       label: awaitingGm ? "Waiting for GM" : "Action unavailable",
       viewerMayInvoke: false,
     },
-    reason: conflicted
-      ? "Ambiguous progression must be repaired before an action is offered."
-      : "The GM explicitly opens each top-level combat boundary.",
+    reason: "",
     requiredActor: { hidden: false, id: "gm", label: "GM" },
-    requiredNow: conflicted
-      ? "The GM must refresh or repair combat progression."
-      : "The GM must advance combat when ready.",
+    requiredNow: "Waiting for GM.",
     status,
     summary,
-    taskHeading: conflicted
-      ? "Combat progression — review required"
-      : "Combat progression — GM advancement",
+    taskHeading: awaitingGm ? "Waiting for GM" : "Action unavailable",
   });
 }
 
@@ -578,10 +582,10 @@ export function buildCurrentActionPresentation(
         ? "executable"
         : "waiting";
   const phase = task.identity.phase;
-  const actionPhaseLabel = phaseLabel(phase, input.progression.boundary.kind);
-  const headingSubjects = actor
-    ? ` · ${actor.label}${target ? ` → ${target.label}` : ""}`
-    : "";
+  const actionPhaseLabel =
+    task.kind === "gm_advance_boundary"
+      ? BOUNDARY_LABELS[task.transition?.currentBoundary ?? input.progression.boundary.kind]
+      : phaseLabel(phase, input.progression.boundary.kind);
   const descriptor = Object.freeze({
     attackResultId: task.identity.attackResultId,
     commandType: task.expectedCommand,
@@ -600,13 +604,7 @@ export function buildCurrentActionPresentation(
     taskId: task.id,
   } satisfies CurrentActionCommandDescriptor);
   const summary = summaryFor({ action, actor, target, task });
-  const reason = reasonFor(task, action);
-  const requiredNow =
-    status === "awaiting_gm"
-      ? `The GM must ${INPUT_LABELS[task.kind].toLowerCase()}.`
-      : status === "waiting"
-        ? `${required.label} must provide the ${INPUT_LABELS[task.kind]}.`
-        : `${required.label} must provide the ${INPUT_LABELS[task.kind]}.`;
+  const requiredNow = requiredNowFor(task, status);
 
   return Object.freeze({
     actionKind: task.presentationContext?.actionKind,
@@ -618,8 +616,7 @@ export function buildCurrentActionPresentation(
     encounterId: input.encounterId,
     encounterRevision: input.encounterRevision,
     executionGroupId: task.executionGroupId,
-    expectedNextProcess: nextFor(task),
-    heading: `${action}${headingSubjects} · ${actionPhaseLabel}`,
+    heading: actionPhaseLabel,
     phase,
     primaryAction: {
       descriptor,
@@ -629,7 +626,7 @@ export function buildCurrentActionPresentation(
       viewerMayInvoke,
     },
     processId: task.processId,
-    reason,
+    reason: "",
     requiredActor: required,
     requiredNow,
     skill: task.presentationContext?.skill?.label
@@ -642,7 +639,7 @@ export function buildCurrentActionPresentation(
     status,
     summary,
     target,
-    taskHeading: `${action} — ${INPUT_LABELS[task.kind]}`,
+    taskHeading: requiredNow.replace(/\.$/, ""),
     taskId: task.id,
     taskKind: task.kind,
     trackerFacet: task.trackerFacet.step,
