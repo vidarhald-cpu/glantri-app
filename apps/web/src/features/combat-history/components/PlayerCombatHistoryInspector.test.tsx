@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { ProjectedCombatHistorySnapshot } from "@glantri/domain";
@@ -147,11 +147,8 @@ describe("PlayerCombatHistoryInspector", () => {
       actionResultPanel,
     ]);
 
-    const historicalButton = screen.getByRole("button", { name: "Historical inspection" });
-    expect((historicalButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Historical inspection" })).toBeNull();
     expect(screen.getByText("No historical action control recorded.")).toBeTruthy();
-    fireEvent.click(historicalButton);
-    expect((historicalButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows explicit panel messages instead of generic projected-data summaries", () => {

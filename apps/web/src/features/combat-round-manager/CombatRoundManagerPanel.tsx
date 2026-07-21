@@ -5214,8 +5214,6 @@ export default function CombatRoundManagerPanel({
   const inspectorDamageReviewCommitReadiness =
     inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
   const projectedFeintOwnerParticipantId = projectedFeintTask?.trackerFacet.owner?.participantId;
-  const projectedAdjustDistanceOwnerParticipantId =
-    projectedAdjustDistanceTask?.trackerFacet.owner?.participantId;
   const inspectorFeintProposal =
     selectedRoundIsActive &&
     projectedFeintOwnerParticipantId === inspector.participant?.participantId
@@ -5226,22 +5224,17 @@ export default function CombatRoundManagerPanel({
         )
       : undefined;
   const inspectorAdjustDistanceProposal =
-    selectedRoundIsActive &&
-    projectedAdjustDistanceOwnerParticipantId === inspector.participant?.participantId
+    selectedRoundIsActive && projectedAdjustDistanceTask?.identity.proposalId
       ? roundState.adjustDistanceProposals.find(
           (proposal) =>
             proposal.status !== "committed" &&
-            proposal.attackerParticipantId === projectedAdjustDistanceOwnerParticipantId,
+            proposal.id === projectedAdjustDistanceTask.identity.proposalId,
         )
       : undefined;
   const inspectorAdjustDistanceExpectedParticipantId = inspectorAdjustDistanceProposal
-    ? inspectorAdjustDistanceProposal.status === "awaiting_defender_response"
-      ? inspectorAdjustDistanceProposal.defenderParticipantId
-      : inspectorAdjustDistanceProposal.status === "awaiting_rolls"
-        ? inspectorAdjustDistanceProposal.attackerRoll
-          ? inspectorAdjustDistanceProposal.defenderParticipantId
-          : inspectorAdjustDistanceProposal.attackerParticipantId
-        : undefined
+    ? projectedAdjustDistanceTask?.owner?.kind === "combatant"
+      ? projectedAdjustDistanceTask.owner.participantId
+      : undefined
     : undefined;
   const inspectorAdjustDistanceExpectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspectorAdjustDistanceExpectedParticipantId,
@@ -5503,9 +5496,6 @@ export default function CombatRoundManagerPanel({
                 inspectorSelectedAttackAlreadyRolled ||
                 inspectorDamageCommitted ||
                 Boolean(inspectorSnapshot));
-  const inspectorEffectiveActionButtonLabel = inspectorSkipActionSelected
-    ? "Skip current action"
-    : inspectorActionButtonLabel;
   const inspectorEffectiveActionButtonDisabled = inspectorSkipActionSelected
     ? saving ||
       Boolean(inspectorSnapshot) ||
@@ -7251,20 +7241,29 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function advanceInspectorAdjustDistance() {
-    if (!inspectorAdjustDistanceProposal || saving) return;
+  async function advanceInspectorAdjustDistance(descriptor: CurrentActionCommandDescriptor) {
+    const proposal = roundState.adjustDistanceProposals.find(
+      (candidate) => candidate.id === descriptor.proposalId,
+    );
+    if (!proposal || saving) return;
     setSaving(true);
     try {
       let nextEncounter: EncounterSession;
-      if (inspectorAdjustDistanceProposal.status === "awaiting_defender_response") {
+      if (
+        descriptor.commandType === "respond_adjust_distance" &&
+        proposal.status === "awaiting_defender_response"
+      ) {
         if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
         nextEncounter = await respondCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
-          proposalId: inspectorAdjustDistanceProposal.id,
+          proposalId: proposal.id,
           response: inspectorAdjustDistanceResponse,
           scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
         });
-      } else if (inspectorAdjustDistanceProposal.status === "awaiting_gm_adjustment") {
+      } else if (
+        descriptor.commandType === "review_adjust_distance_roll_adjustment" &&
+        proposal.status === "awaiting_gm_adjustment"
+      ) {
         const draft = inspectorAdjustDistanceAdjustmentDraftRef.current?.getDraft() ?? {
           note: "",
           participantId: "",
@@ -7273,25 +7272,34 @@ export default function CombatRoundManagerPanel({
         const request = buildAdjustDistanceGmAdjustmentRequest(draft);
         nextEncounter = await reviewCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
-          proposalId: inspectorAdjustDistanceProposal.id,
+          proposalId: proposal.id,
           ...request,
         });
-      } else if (inspectorAdjustDistanceProposal.status === "awaiting_rolls") {
+      } else if (
+        descriptor.commandType === "roll_adjust_distance" &&
+        proposal.status === "awaiting_rolls"
+      ) {
         if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
         nextEncounter = await rollCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
-          proposalId: inspectorAdjustDistanceProposal.id,
+          proposalId: proposal.id,
           scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
         });
-      } else if (inspectorAdjustDistanceProposal.status === "awaiting_review") {
+      } else if (
+        descriptor.commandType === "commit_adjust_distance" &&
+        proposal.status === "awaiting_review"
+      ) {
         nextEncounter = await commitCombatAdjustDistanceOnServer({
           committedDistance: Number.parseInt(inspectorAdjustDistanceCommittedDistance, 10),
           encounterId: encounter.id,
           notes: inspectorAdjustDistanceReviewNote || undefined,
           outcome: inspectorAdjustDistanceOutcome,
-          proposalId: inspectorAdjustDistanceProposal.id,
+          proposalId: proposal.id,
         });
-      } else return;
+      } else {
+        setSaveError("Combat state changed. Review the current action before continuing.");
+        return;
+      }
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       setRoundState(nextRoundState, nextEncounter.updatedAt);
       setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
@@ -9438,7 +9446,6 @@ export default function CombatRoundManagerPanel({
                       </>
                     ) : null}
                     <PlayerCombatActionButtonPanel
-                      buttonLabel={inspectorEffectiveActionButtonLabel}
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
                         if (
@@ -9454,8 +9461,12 @@ export default function CombatRoundManagerPanel({
                         }
                         void (projectedBoundaryTransitionAction
                           ? commitCurrentStep()
-                          : inspectorAdjustDistanceProposal
-                            ? advanceInspectorAdjustDistance()
+                          : descriptor.commandType === "respond_adjust_distance" ||
+                              descriptor.commandType ===
+                                "review_adjust_distance_roll_adjustment" ||
+                              descriptor.commandType === "roll_adjust_distance" ||
+                              descriptor.commandType === "commit_adjust_distance"
+                            ? advanceInspectorAdjustDistance(descriptor)
                             : inspectorFeintProposal?.status === "awaiting_rolls"
                               ? rollInspectorFeint()
                               : inspectorFeintProposal?.status === "awaiting_review"

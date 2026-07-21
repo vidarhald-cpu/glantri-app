@@ -199,7 +199,6 @@ export function PlayerCombatHistoryInspector(input: {
           <MissingHistoricalPanel title="Combat modifiers" />
         )}
         <PlayerCombatActionButtonPanel
-          buttonLabel="Historical inspection"
           disabled
           statusText="No historical action control recorded."
         />

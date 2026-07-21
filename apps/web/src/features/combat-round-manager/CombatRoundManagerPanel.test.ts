@@ -102,7 +102,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('step="1"');
     expect(source).toContain("GM note (private, optional)");
     expect(source).toContain("Typical range: -4 to +4 (guidance only)");
-    expect(source).toContain("if (!inspectorAdjustDistanceProposal || saving) return;");
+    expect(source).toContain("proposal.id === projectedAdjustDistanceTask.identity.proposalId");
+    expect(source).toContain(
+      "async function advanceInspectorAdjustDistance(descriptor: CurrentActionCommandDescriptor)",
+    );
+    expect(source).toContain('descriptor.commandType === "commit_adjust_distance"');
+    expect(source).toContain("candidate.id === descriptor.proposalId");
+    expect(source).not.toContain(
+      "projectedAdjustDistanceTask?.trackerFacet.owner?.participantId",
+    );
   });
 
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {
@@ -323,7 +331,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
-    expect(source).toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
+    expect(source).toContain("presentation={currentActionPresentation}");
+    expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).not.toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("inspectorStatusSuffix");
     expect(source).toContain('" Declared."');
@@ -438,7 +447,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(">Action outcome</span>");
     expect(source).toContain('<option value="normal">{inspectorActionButtonLabel}</option>');
     expect(source).toContain('<option value="skip">Skip current action</option>');
-    expect(source).toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
+    expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");
     expect(source).toContain("? skipInspectorCurrentPhaseAction()");
     expect(source).not.toContain(
@@ -1172,7 +1181,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("? backOutInspectorPhaseAttack()");
     expect(source).toContain("inspectorSkipActionOutcomeSelectorAvailable");
     expect(source).toContain("inspectorCurrentActionOutcomeControls");
-    expect(source).toContain("inspectorEffectiveActionButtonLabel");
+    expect(source).not.toContain("inspectorEffectiveActionButtonLabel");
     expect(source).toContain("inspectorEffectiveActionButtonDisabled");
     expect(source).toContain("inspectorSkipActionSelected");
     expect(source).not.toMatch(/secondaryButtonLabel=\{[^}]*Back out of attack/s);

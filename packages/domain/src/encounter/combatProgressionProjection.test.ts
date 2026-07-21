@@ -1560,13 +1560,74 @@ describe("authorizeCombatProgressionTask", () => {
 
     const commitProjection = buildCombatProgressionProjection(
       buildState({
-        defenderResponse: "allow",
-        standardOutcome: "allowed",
+        attackerRoll: {
+          dodgeSkillTotal: 6,
+          finalTotal: 17,
+          id: "distance-attacker-roll",
+          participantId: "hero",
+          rollD20: 11,
+          rollTotal: 11,
+          rolledAt: "2026-07-19T10:00:00.000Z",
+        },
+        attackerRollRecorded: true,
+        defenderResponse: "oppose",
+        defenderRoll: {
+          dodgeSkillTotal: 5,
+          finalTotal: 14,
+          id: "distance-defender-roll",
+          participantId: "guard",
+          rollD20: 9,
+          rollTotal: 9,
+          rolledAt: "2026-07-19T10:00:01.000Z",
+        },
+        defenderRollRecorded: true,
+        gmRollAdjustment: { participantId: "hero", value: 1 },
+        standardOutcome: "successful",
         standardProposedDistance: 2,
         status: "awaiting_review",
       }),
     );
     expect(taskKinds(commitProjection)).toEqual(["adjust_distance_commit"]);
+    const commitTask = commitProjection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "adjust_distance_commit");
+    expect(commitTask).toMatchObject({
+      allowedActors: ["gm"],
+      expectedCommand: "commit_adjust_distance",
+      identity: expect.objectContaining({
+        opportunityId: "distance-opportunity",
+        pairId: "guard::hero",
+        proposalId: "distance-proposal",
+      }),
+      owner: { kind: "gm" },
+      state: "executable",
+      trackerFacet: { owner: undefined, step: "A1" },
+    });
+    const playerCommitTasks = ["hero", "guard"].map((participantId) =>
+      projectCombatProgressionPresentation({
+        projection: commitProjection,
+        viewer: {
+          controlledParticipantIds: new Set([participantId]),
+          kind: "player",
+          visibleParticipantIds: new Set(["hero", "guard"]),
+        },
+      })
+        .processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "adjust_distance_commit"),
+    );
+    expect(playerCommitTasks).toEqual([
+      expect.objectContaining({
+        actorAccess: { combatant: false, gm: true },
+        id: commitTask?.id,
+        state: "executable",
+      }),
+      expect.objectContaining({
+        actorAccess: { combatant: false, gm: true },
+        id: commitTask?.id,
+        state: "executable",
+      }),
+    ]);
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },

@@ -44,8 +44,13 @@ function task(input: {
       executionGroupId: `group:${input.id ?? input.kind}`,
       opportunityId: "opportunity-1",
       opponentParticipantId: input.target?.participantId,
+      pairId: input.kind.startsWith("adjust_distance") ? "aria::borin" : undefined,
       phase: input.phase ?? "phase1",
-      proposalId: input.kind.includes("feint") ? "proposal-feint" : undefined,
+      proposalId: input.kind.includes("feint")
+        ? "proposal-feint"
+        : input.kind.startsWith("adjust_distance")
+          ? "proposal-distance"
+          : undefined,
     },
     kind: input.kind,
     opponent: input.target,
@@ -235,11 +240,19 @@ describe("CurrentActionPresentation", () => {
     ["adjust_distance_commit", "Commit distance result"],
   ] as const)("presents %s with canonical distance context", (kind, button) => {
     const gmOnly = kind === "adjust_distance_adjustment" || kind === "adjust_distance_commit";
+    const command =
+      kind === "adjust_distance_response"
+        ? "respond_adjust_distance"
+        : kind === "adjust_distance_adjustment"
+          ? "review_adjust_distance_roll_adjustment"
+          : kind === "adjust_distance_commit"
+            ? "commit_adjust_distance"
+            : "roll_adjust_distance";
     const result = build([
       task({
         actionKind: "adjust_distance_attack",
         actor: aria,
-        command: "roll_adjust_distance",
+        command,
         currentDistance: 3,
         gmOnly,
         kind,
@@ -252,6 +265,64 @@ describe("CurrentActionPresentation", () => {
     expect(result?.summary).toBe("Aria is attempting to move closer.");
     expect(result?.distance).toEqual({ current: 3, requested: 2 });
     expect(result?.primaryAction.label).toBe(button);
+    expect(result?.primaryAction.enabled).toBe(true);
+    expect(result?.primaryAction.viewerMayInvoke).toBe(true);
+    expect(result?.primaryAction.descriptor).toMatchObject({
+      commandType: command,
+      expectedRevision: "2026-07-20T12:00:00.000Z",
+      pairId: "aria::borin",
+      proposalId: "proposal-distance",
+      taskId: `task:${kind}`,
+    });
+  });
+
+  it("shows an involved player the resolved Adjust Distance contest while withholding its GM command", () => {
+    const commitTask = task({
+      actionKind: "adjust_distance_attack",
+      actor: aria,
+      command: "commit_adjust_distance",
+      currentDistance: 3,
+      gmOnly: true,
+      kind: "adjust_distance_commit",
+      requestedDistance: 2,
+      target: borin,
+    });
+    const player = build([commitTask], "player");
+    const defender = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-20T12:00:00.000Z",
+      progression: progression({ tasks: [commitTask] }),
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+    const gmPlayer = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-20T12:00:00.000Z",
+      progression: progression({ tasks: [commitTask] }),
+      viewer: {
+        controlledParticipantIds: new Set(["aria"]),
+        kind: "player",
+        mayProxy: true,
+      },
+    });
+
+    expect(player).toMatchObject({
+      primaryAction: {
+        enabled: false,
+        label: "Waiting for GM",
+        viewerMayInvoke: false,
+      },
+      requiredNow: "Waiting for GM.",
+      summary: "Aria is attempting to move closer.",
+      taskKind: "adjust_distance_commit",
+    });
+    expect(player?.primaryAction.descriptor).toBeUndefined();
+    expect(defender).toMatchObject({
+      primaryAction: { viewerMayInvoke: false },
+      requiredNow: "Waiting for GM.",
+      summary: "Aria is attempting to move closer.",
+    });
+    expect(defender?.primaryAction.descriptor).toBeUndefined();
+    expect(gmPlayer).toEqual(player);
   });
 
   it("presents the Double Attack decision without future-work explanation", () => {

@@ -39,7 +39,16 @@ function taskIsVisible(
   if (task.kind === "submit_declaration" && !task.allowedActors.includes("combatant")) {
     return false;
   }
-  if (!facetOwner) return false;
+  if (!facetOwner) {
+    // The resolved Adjust Distance commit is intentionally process-owned rather than attached to
+    // either participant's tracker row. Both involved participants still need its safe situation
+    // and completion state so their Current Action can say that the GM is resolving the contest.
+    if (task.kind !== "adjust_distance_commit") return false;
+    return [task.presentationContext?.actor, task.presentationContext?.target].some(
+      (identity) =>
+        identity !== undefined && viewer.controlledParticipantIds.has(identity.participantId),
+    );
+  }
   if (facetOwner && !viewer.visibleParticipantIds.has(facetOwner.participantId)) return false;
 
   // Initiative choices and later private participant workflows remain visible only to their owner.

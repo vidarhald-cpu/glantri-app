@@ -619,7 +619,7 @@ export function buildCurrentActionPresentation(
     heading: actionPhaseLabel,
     phase,
     primaryAction: {
-      descriptor,
+      descriptor: viewerMayInvoke ? descriptor : undefined,
       enabled: status === "executable",
       gmProxyAvailable,
       label: waitingLabel(task, viewerMayInvoke),

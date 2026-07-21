@@ -230,7 +230,7 @@ describe("PlayerCombatActionButtonPanel", () => {
     expect(onAction).toHaveBeenCalledWith(descriptor);
   });
 
-  it("keeps a contextual waiting presentation non-actionable", () => {
+  it("shows contextual waiting state without rendering a fallback action", () => {
     render(
       <PlayerCombatActionButtonPanel
         presentation={{
@@ -255,7 +255,15 @@ describe("PlayerCombatActionButtonPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Waiting for another combatant" })).toBeDisabled();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByText("Aria is waiting for another combatant's parry.")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for another combatant.")).toBeInTheDocument();
+  });
+
+  it("renders no primary button without a canonical current task", () => {
+    render(<PlayerCombatActionButtonPanel />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText("Declare action")).not.toBeInTheDocument();
   });
 });

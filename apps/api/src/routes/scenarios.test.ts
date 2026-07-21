@@ -14490,6 +14490,16 @@ describe("scenarios route contract", () => {
       },
       url: "/encounters/encounter-1/combat-round/roll-adjust-distance",
     });
+    const resolvedProposal = mutable.encounter.combatRoundState?.adjustDistanceProposals[0];
+    const committed = await app.inject({
+      method: "POST",
+      payload: {
+        committedDistance: resolvedProposal?.standardProposedDistance,
+        outcome: resolvedProposal?.standardOutcome,
+        proposalId: "distance-proposal",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-adjust-distance",
+    });
 
     randomSpy.mockRestore();
     await app.close();
@@ -14497,11 +14507,16 @@ describe("scenarios route contract", () => {
     expect(defenderFirst.statusCode, JSON.stringify(defenderFirst.json())).toBe(200);
     expect(duplicateDefender.statusCode).toBe(409);
     expect(attackerSecond.statusCode, JSON.stringify(attackerSecond.json())).toBe(200);
+    expect(committed.statusCode, JSON.stringify(committed.json())).toBe(200);
     expect(mutable.encounter.combatRoundState?.adjustDistanceProposals[0]).toMatchObject({
       attackerRollRecorded: true,
       defenderRollRecorded: true,
-      status: "awaiting_review",
+      status: "committed",
     });
+    expect(mutable.encounter.combatRoundState?.currentStep).toBe("phase_1_actions");
+    expect(
+      mutable.encounter.combatRoundState?.participants[0]?.attackResults.phase2,
+    ).toBeUndefined();
   });
 
   it("rejects player roleplay rolls for silent assignments", async () => {

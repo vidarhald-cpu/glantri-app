@@ -208,7 +208,6 @@ interface PlayerCombatAttackTargetSelectorProps {
 }
 
 interface PlayerCombatActionButtonPanelProps {
-  buttonLabel?: string;
   disabled?: boolean;
   onDeclareAction?: (descriptor?: CurrentActionCommandDescriptor) => void;
   preActionControls?: ReactNode;
@@ -1283,7 +1282,6 @@ export function PlayerCombatActionSelectorPanel({
 }
 
 export function PlayerCombatActionButtonPanel({
-  buttonLabel = "Declare action",
   disabled = false,
   onDeclareAction,
   preActionControls,
@@ -1296,11 +1294,13 @@ export function PlayerCombatActionButtonPanel({
   validationMessage,
 }: PlayerCombatActionButtonPanelProps) {
   const primaryAction = presentation?.primaryAction;
-  const effectiveButtonLabel = primaryAction?.label ?? buttonLabel;
   const actionDisabled =
     disabled ||
     saving ||
     Boolean(primaryAction && (!primaryAction.enabled || !primaryAction.viewerMayInvoke));
+  const primaryActionAvailable = Boolean(
+    presentation?.taskId && primaryAction?.descriptor && primaryAction.viewerMayInvoke,
+  );
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Current action</strong>
@@ -1337,25 +1337,27 @@ export function PlayerCombatActionButtonPanel({
       {preActionControls ? (
         <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
       ) : null}
-      <button
-        disabled={actionDisabled}
-        onClick={() => onDeclareAction?.(primaryAction?.descriptor)}
-        style={{
-          background: actionDisabled ? "#e4e0d6" : "#ded4b1",
-          border: "1px solid #bdb39a",
-          borderRadius: 10,
-          color: actionDisabled ? "#8a8477" : "#2f2415",
-          cursor: actionDisabled ? "not-allowed" : "pointer",
-          justifySelf: "center",
-          minHeight: 70,
-          padding: "0.75rem 0.9rem",
-          textAlign: "center",
-          width: "80%",
-        }}
-        type="button"
-      >
-        <strong>{saving ? "Saving..." : effectiveButtonLabel}</strong>
-      </button>
+      {primaryActionAvailable ? (
+        <button
+          disabled={actionDisabled}
+          onClick={() => onDeclareAction?.(primaryAction?.descriptor)}
+          style={{
+            background: actionDisabled ? "#e4e0d6" : "#ded4b1",
+            border: "1px solid #bdb39a",
+            borderRadius: 10,
+            color: actionDisabled ? "#8a8477" : "#2f2415",
+            cursor: actionDisabled ? "not-allowed" : "pointer",
+            justifySelf: "center",
+            minHeight: 70,
+            padding: "0.75rem 0.9rem",
+            textAlign: "center",
+            width: "80%",
+          }}
+          type="button"
+        >
+          <strong>{saving ? "Saving..." : primaryAction?.label}</strong>
+        </button>
+      ) : null}
       {secondaryButtonLabel ? (
         <button
           disabled={secondaryButtonDisabled || saving}
