@@ -53,6 +53,9 @@ function markerForEvents(input: {
   if (input.initiativeCommitted && typeof initiativeTotal === "number") {
     return { kind: "roll_result", marker: String(initiativeTotal) };
   }
+  if (initiative) {
+    return { kind: "complete", marker: "✓" };
+  }
 
   const attack = input.events.find((event) => event.type === "attack");
   if (attack) {
@@ -79,6 +82,9 @@ function markerForEvents(input: {
     .reverse()
     .find((event) => event.type.startsWith("adjust_distance_"));
   if (adjustDistanceEvent?.type === "adjust_distance_committed") {
+    return { kind: "complete", marker: "✓" };
+  }
+  if (adjustDistanceEvent?.type === "adjust_distance_roll" && !input.liveFacet?.current) {
     return { kind: "complete", marker: "✓" };
   }
   if (adjustDistanceEvent && !input.liveFacet?.current)
@@ -140,6 +146,7 @@ function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown
 
 export function formatProjectedCombatTrackerHoverDetail(
   events: readonly ProjectedCombatHistoryEvent[],
+  options: { revealInitiativeTotal?: boolean } = {},
 ): string | undefined {
   if (events.some((event) => event.type === "feint_impossible")) {
     return "feint ruled impossible; no roll required.";
@@ -153,6 +160,7 @@ export function formatProjectedCombatTrackerHoverDetail(
   const initiativeTotal =
     initiative &&
     (projectedFact(initiative, "total") ?? initiative.facts.privateCalculation?.total);
+  if (initiative && !options.revealInitiativeTotal) return "initiative roll recorded.";
   if (typeof initiativeTotal === "number") return `initiative total ${initiativeTotal}.`;
 
   const attack = events.find((event) => event.type === "attack");
@@ -341,15 +349,16 @@ export function buildProjectedCombatTrackerModel(input: {
           input.selected?.participantId === row.participantId &&
           input.selected.roundNumber === round.roundNumber &&
           input.selected.step === step;
+        const initiativeCommitted = initiativeIsCommitted({
+          historical: round.roundNumber !== activeRoundNumber,
+          progression: input.history.progression,
+          step,
+        });
         const marker = markerForEvents({
           events: cellEvents,
           hasSnapshot: Boolean(snapshot),
           historical: round.roundNumber !== activeRoundNumber,
-          initiativeCommitted: initiativeIsCommitted({
-            historical: round.roundNumber !== activeRoundNumber,
-            progression: input.history.progression,
-            step,
-          }),
+          initiativeCommitted,
           liveFacet,
           stepOutcome: snapshot?.stepOutcome,
         });
@@ -357,7 +366,9 @@ export function buildProjectedCombatTrackerModel(input: {
         const hoverDetail =
           liveFacet?.hover.text ??
           snapshot?.stepOutcome?.message ??
-          formatProjectedCombatTrackerHoverDetail(cellEvents);
+          formatProjectedCombatTrackerHoverDetail(cellEvents, {
+            revealInitiativeTotal: initiativeCommitted,
+          });
         const fallbackHoverText = inspectable ? "Recorded history is incomplete." : "Not opened.";
         const hover =
           liveFacet?.hover ??

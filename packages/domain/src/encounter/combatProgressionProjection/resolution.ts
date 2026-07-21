@@ -60,13 +60,6 @@ function buildAdapterManeuverProcess(
       ? context.state.adjustDistanceProposals.find((proposal) => proposal.id === plan.proposalId)
       : undefined;
   const stages: StageSpec[] = plan.stages.map((stage) => {
-    const task = stage.task;
-    const owner =
-      task?.ownerRole === "gm"
-        ? GM_IDENTITY
-        : task?.ownerParticipantId
-          ? context.identities.get(task.ownerParticipantId)
-          : undefined;
     const dependencies: TaskDependency[] = [];
     for (const prerequisite of plan.prerequisites) {
       if (prerequisite.satisfied) continue;
@@ -86,67 +79,87 @@ function buildAdapterManeuverProcess(
               : "participant_input_pending",
       });
     }
-    return {
+    const taskDescriptors = stage.state === "ready" ? (stage.tasks ?? (stage.task ? [stage.task] : [])) : [];
+    const taskSpecs: TaskSpec[] = taskDescriptors.map((task) => {
+      const owner =
+        task.ownerRole === "gm"
+          ? GM_IDENTITY
+          : task.ownerParticipantId
+            ? context.identities.get(task.ownerParticipantId)
+            : undefined;
+      return {
+        allowedActors: task.ownerRole === "gm" ? (["gm"] as const) : undefined,
+        dependencies,
+        expectedCommand: task.expectedCommand,
+        identity: {
+          opportunityId: task.opportunityId,
+          opponentParticipantId:
+            task.ownerParticipantId === plan.targetParticipantId
+              ? plan.ownerParticipantId
+              : plan.targetParticipantId,
+          pairId: task.pairId,
+          phase: task.phase,
+          proposalId: task.proposalId,
+        },
+        key: `${task.proposalId}:${task.kind}`,
+        kind: task.kind,
+        owner,
+        presentationContext: {
+          actionKind: plan.actionKind,
+          actor: maneuverOwner,
+          distance: adjustDistanceProposal
+            ? {
+                current: adjustDistanceProposal.currentDistance,
+                direction: adjustDistanceProposal.direction,
+                requested: adjustDistanceProposal.requestedDistance,
+              }
+            : undefined,
+          responder: owner?.kind === "combatant" ? owner : undefined,
+          skill:
+            task.kind === "feint_attacker_roll"
+              ? {
+                  id: feintProposal?.attackerSkillId,
+                  label: feintProposal?.attackerSkillLabel,
+                }
+              : task.kind === "feint_defender_roll"
+                ? {
+                    id: feintProposal?.defenderSkillId,
+                    label: feintProposal?.defenderSkillLabel,
+                  }
+                : task.kind === "adjust_distance_attacker_roll" ||
+                    task.kind === "adjust_distance_defender_roll"
+                  ? { label: "Dodge" }
+                  : undefined,
+          target: maneuverTarget,
+        },
+        // Participant-owned maneuver input belongs to the required actor's row. The final GM
+        // commit is process work and must not leave a participant roll marker pending.
+        trackerOwner:
+          task.kind === "adjust_distance_commit"
+            ? undefined
+            : owner?.kind === "combatant"
+              ? owner
+              : maneuverOwner,
+        trackerStep: "A1" as const,
+      };
+    });
+    const base: StageSpec = {
       kind: maneuverStageKind(stage),
       state:
         stage.state === "ready" ? "active" : stage.state === "pending" ? "pending" : "complete",
       strategy: stage.executionStrategy,
-      tasks:
-        stage.state === "ready" && task
-          ? [
-              {
-                allowedActors: task.ownerRole === "gm" ? (["gm"] as const) : undefined,
-                dependencies,
-                expectedCommand: task.expectedCommand,
-                identity: {
-                  opportunityId: task.opportunityId,
-                  opponentParticipantId:
-                    task.ownerParticipantId === plan.targetParticipantId
-                      ? plan.ownerParticipantId
-                      : plan.targetParticipantId,
-                  pairId: task.pairId,
-                  phase: task.phase,
-                  proposalId: task.proposalId,
-                },
-                key: `${task.proposalId}:${task.kind}`,
-                kind: task.kind,
-                owner,
-                presentationContext: {
-                  actionKind: plan.actionKind,
-                  actor: maneuverOwner,
-                  distance: adjustDistanceProposal
-                    ? {
-                        current: adjustDistanceProposal.currentDistance,
-                        direction: adjustDistanceProposal.direction,
-                        requested: adjustDistanceProposal.requestedDistance,
-                      }
-                    : undefined,
-                  responder: owner?.kind === "combatant" ? owner : undefined,
-                  skill:
-                    task.kind === "feint_attacker_roll"
-                      ? {
-                          id: feintProposal?.attackerSkillId,
-                          label: feintProposal?.attackerSkillLabel,
-                        }
-                      : task.kind === "feint_defender_roll"
-                        ? {
-                            id: feintProposal?.defenderSkillId,
-                            label: feintProposal?.defenderSkillLabel,
-                          }
-                        : task.kind === "adjust_distance_attacker_roll" ||
-                            task.kind === "adjust_distance_defender_roll"
-                          ? { label: "Dodge" }
-                          : undefined,
-                  target: maneuverTarget,
-                },
-                // Participant-owned maneuver input belongs to the required actor's row. GM review
-                // remains associated with the maneuver initiator's action facet.
-                trackerOwner: owner?.kind === "combatant" ? owner : maneuverOwner,
-                trackerStep: "A1" as const,
-              },
-            ]
-          : [],
     };
+    return stage.executionStrategy === "parallel_all" && taskSpecs.length > 0
+      ? {
+          ...base,
+          executionGroups: [
+            {
+              key: `${plan.proposalId}:${stage.kind}`,
+              tasks: taskSpecs,
+            },
+          ],
+        }
+      : { ...base, tasks: taskSpecs };
   });
   return buildProcess(context, plan.maneuverKind, stages, {
     key: plan.proposalId,

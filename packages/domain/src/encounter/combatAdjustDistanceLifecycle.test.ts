@@ -103,6 +103,67 @@ describe("Adjust Distance-Attack lifecycle", () => {
     expect(state.participants[0]?.declaration?.attackOpportunities?.[0]).toEqual(expect.objectContaining({ phase: "phase2", status: "committed" }));
   });
 
+  it("accepts either opposed Dodge roll first, rejects duplicates, and restores the parallel gate on undo", () => {
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
+    state = reviewCombatRoundAdjustDistanceRollAdjustment({
+      command: { createdAt },
+      participantId: "scyrian",
+      proposalId: "proposal",
+      state,
+      value: 2,
+    });
+
+    const defenderFirst = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt: "2026-07-17T08:00:01.000Z" },
+      proposalId: "proposal",
+      result: roll("gladiator", 18, "defender-roll"),
+      state,
+    });
+    expect(defenderFirst.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: false,
+        defenderRollRecorded: true,
+        status: "awaiting_rolls",
+      }),
+    );
+    expect(() =>
+      recordCombatRoundAdjustDistanceRoll({
+        command: { createdAt: "2026-07-17T08:00:02.000Z" },
+        proposalId: "proposal",
+        result: roll("gladiator", 19, "duplicate-defender-roll"),
+        state: defenderFirst,
+      }),
+    ).toThrow("The defender has already rolled Dodge.");
+
+    const resolved = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt: "2026-07-17T08:00:03.000Z" },
+      proposalId: "proposal",
+      result: roll("scyrian", 20, "attacker-roll"),
+      state: defenderFirst,
+    });
+    expect(resolved.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: true,
+        defenderRollRecorded: true,
+        status: "awaiting_review",
+      }),
+    );
+
+    const undone = undoLatestCombatRoundCommand({ state: resolved });
+    expect(undone?.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: false,
+        defenderRollRecorded: true,
+        status: "awaiting_rolls",
+      }),
+    );
+  });
+
   it("Allow skips both Dodge rolls but still requires a GM commit", () => {
     const state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
     expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ standardOutcome: "allowed", standardProposedDistance: 2, status: "awaiting_review" }));

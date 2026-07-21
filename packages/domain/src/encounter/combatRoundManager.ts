@@ -15496,7 +15496,10 @@ function recordAdjustDistanceCommand(input: {
         rollerPrivate: input.rollerPrivate,
       },
       involvedParticipantIds: [input.proposal.attackerParticipantId, input.proposal.defenderParticipantId],
-      ownerParticipantId: input.proposal.attackerParticipantId,
+      ownerParticipantId:
+        input.draftType === "adjust_distance_roll"
+          ? input.participantId
+          : input.proposal.attackerParticipantId,
       phase: "phase1", status: input.draftType === "adjust_distance_committed" ? "committed" : "recorded",
       step: "phase_1_actions", type: input.draftType,
     },
@@ -15519,9 +15522,18 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const previousProposal = normalized.adjustDistanceProposals.find((p) => p.id === input.proposalId);
   if (!previousProposal || previousProposal.status !== "awaiting_rolls") throw new RangeError("Distance-adjustment rolls are not currently available.");
-  const side = previousProposal.attackerRoll ? "defender" : "attacker";
-  const expectedParticipantId = side === "attacker" ? previousProposal.attackerParticipantId : previousProposal.defenderParticipantId;
-  if (input.result.participantId !== expectedParticipantId) throw new RangeError(side === "attacker" ? "The attacker must roll Dodge." : "The defender must roll Dodge.");
+  const side =
+    input.result.participantId === previousProposal.attackerParticipantId
+      ? "attacker"
+      : input.result.participantId === previousProposal.defenderParticipantId
+        ? "defender"
+        : undefined;
+  if (!side) throw new RangeError("Only a participant in this distance contest may roll Dodge.");
+  if (side === "attacker" && previousProposal.attackerRoll)
+    throw new RangeError("The attacker has already rolled Dodge.");
+  if (side === "defender" && previousProposal.defenderRoll)
+    throw new RangeError("The defender has already rolled Dodge.");
+  const expectedParticipantId = input.result.participantId;
   const attackerRoll = side === "attacker" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.attackerRoll;
   const defenderRoll = side === "defender" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.defenderRoll;
   const standard = attackerRoll && defenderRoll ? resolveCombatAdjustDistanceStandardProposal({ attackerTotal: attackerRoll.finalTotal, currentDistance: previousProposal.currentDistance, defenderTotal: defenderRoll.finalTotal, requestedDistance: previousProposal.requestedDistance }) : undefined;

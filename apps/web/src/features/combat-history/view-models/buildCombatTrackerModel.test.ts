@@ -21,6 +21,7 @@ function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCe
 function live(taskKind: CombatProgressionTaskKind = "attack") {
   const exceptional = new Set<CombatProgressionTaskKind>([
     "adjust_distance_attacker_roll",
+    "adjust_distance_defender_roll",
     "combat_experience",
     "distance_roll",
     "health_review",
@@ -282,12 +283,12 @@ describe("buildCombatTrackerModel", () => {
     ]);
   });
 
-  it("does not display an uncommitted initiative roll as committed initiative", () => {
+  it("marks a recorded initiative roll complete without exposing its uncommitted value", () => {
     const result = model([
       facts({
         initiativeCommitted: false,
+        initiativeRollRecorded: true,
         initiativeTotal: 8,
-        progression: live("attack"),
         status: "submitted",
         step: "initiative_phase_1",
       }),
@@ -296,7 +297,51 @@ describe("buildCombatTrackerModel", () => {
     expect(result.cells["1:participant-a:initiative_phase_1"]).toMatchObject({
       attention: "ordinary",
       initiativeValue: false,
+      hoverText: expect.stringContaining("initiative roll recorded"),
+      marker: "✓",
+    });
+    expect(result.cells["1:participant-a:initiative_phase_1"].hoverText).not.toContain("8");
+  });
+
+  it("keeps an initiative cell unopened until its roll is recorded", () => {
+    const result = model([
+      facts({
+        initiativeCommitted: false,
+        initiativeRollRecorded: false,
+        step: "initiative_phase_1",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:initiative_phase_1"]).toMatchObject({
+      initiativeValue: false,
       marker: "·",
+    });
+  });
+
+  it("keeps Adjust Distance roll completion on the participant who recorded it", () => {
+    const result = model([
+      facts({
+        adjustDistanceRollRecorded: true,
+        step: "phase_1_actions",
+      }),
+      facts({
+        participantId: "participant-b",
+        participantLabel: "Bera",
+        progression: {
+          ...live("adjust_distance_defender_roll"),
+          ownerParticipantIds: ["participant-b"],
+        },
+        step: "phase_1_actions",
+      }),
+    ]);
+
+    expect(result.cells["1:participant-a:phase_1_actions"]).toMatchObject({
+      marker: "✓",
+      status: "completed",
+    });
+    expect(result.cells["1:participant-b:phase_1_actions"]).toMatchObject({
+      marker: "?",
+      status: "open",
     });
   });
 

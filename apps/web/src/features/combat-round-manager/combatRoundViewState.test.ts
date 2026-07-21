@@ -3,6 +3,7 @@ import { combatRoundStateSchema } from "@glantri/domain";
 
 import {
   canAcceptCombatRoundViewRevision,
+  getCombatRoundDescriptorRevision,
   updateCombatRoundViewState,
 } from "./combatRoundViewState";
 
@@ -89,5 +90,47 @@ describe("combat round view state", () => {
         state: declaration,
       }),
     ).toBe(accepted);
+  });
+
+  it("suppresses a descriptor while its task set trails the accepted encounter revision", () => {
+    expect(
+      getCombatRoundDescriptorRevision({
+        acceptedEncounter: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:08.000Z",
+        },
+        currentView: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:07.000Z",
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("binds a descriptor only to the synchronized or newer accepted task set", () => {
+    expect(
+      getCombatRoundDescriptorRevision({
+        acceptedEncounter: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:08.000Z",
+        },
+        currentView: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:08.000Z",
+        },
+      }),
+    ).toBe("2026-07-21T09:00:08.000Z");
+    expect(
+      getCombatRoundDescriptorRevision({
+        acceptedEncounter: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:08.000Z",
+        },
+        currentView: {
+          encounterId: "encounter-1",
+          encounterRevision: "2026-07-21T09:00:09.000Z",
+        },
+      }),
+    ).toBe("2026-07-21T09:00:09.000Z");
   });
 });

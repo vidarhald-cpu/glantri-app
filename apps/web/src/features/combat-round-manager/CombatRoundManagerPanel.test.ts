@@ -890,7 +890,8 @@ describe("CombatRoundManagerPanel", () => {
     );
 
     expect(source).toContain("buildCombatBoundaryTransitionAction({");
-    expect(source).toContain("encounterRevision: roundView.encounterRevision");
+    expect(source).toContain("encounterRevision: descriptorRevision");
+    expect(source).toContain("getCombatRoundDescriptorRevision({");
     expect(source).toContain("const boundaryTransitionAction = projectedBoundaryTransitionAction");
     expect(source).toContain("expectedRevision: boundaryTransitionAction.expectedRevision");
     expect(source).toContain("taskId: boundaryTransitionAction.taskId");

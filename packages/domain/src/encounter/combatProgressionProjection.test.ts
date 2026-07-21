@@ -580,7 +580,7 @@ describe("CombatProgressionProjection", () => {
     }).toThrow(TypeError);
   });
 
-  it("places every task in one deterministic ordered execution group", () => {
+  it("places every task in exactly one deterministic execution group", () => {
     const source = state({ cursorParticipantId: "hero", cursorStep: "DE" });
     const first = buildCombatProgressionProjection(source);
     const reloaded = buildCombatProgressionProjection(
@@ -599,23 +599,26 @@ describe("CombatProgressionProjection", () => {
       );
       expect(stage.tasks).toEqual(stage.executionGroups.flatMap((group) => group.tasks));
       for (const group of stage.executionGroups) {
-        expect(group.tasks).toHaveLength(1);
+        expect(group.tasks.length).toBeGreaterThan(0);
         expect(group.executionStrategy).toBe(stage.executionStrategy);
         expect(group.activationBoundary).toEqual({
           id: first.boundary.id,
           kind: first.boundary.kind,
           roundNumber: first.roundNumber,
         });
-        expect(group.blockerIds).toEqual(group.tasks[0]?.blockerIds);
+        expect(group.blockerIds).toEqual(
+          [...new Set(group.tasks.flatMap((task) => task.blockerIds))].sort(),
+        );
         expect(group.diagnostics).toEqual([]);
         expect("futureActivationBoundary" in group).toBe(true);
         expect(group.futureActivationBoundary).toBeUndefined();
-        expect(group.tasks[0]).toBe(stage.tasks[group.position]);
-        expect(group.tasks[0]).toMatchObject({
-          executionGroupId: group.id,
-          identity: { executionGroupId: group.id },
-          stageId: stage.id,
-        });
+        for (const task of group.tasks) {
+          expect(task).toMatchObject({
+            executionGroupId: group.id,
+            identity: { executionGroupId: group.id },
+            stageId: stage.id,
+          });
+        }
       }
     }
     expect(reloaded.boundary.processes).toEqual(first.boundary.processes);
@@ -1484,6 +1487,76 @@ describe("authorizeCombatProgressionTask", () => {
         proposalId: "distance-proposal",
       }),
     ).toMatchObject({ code: "stale_proposal", ok: false });
+
+    const rollProjection = buildCombatProgressionProjection(
+      buildState({
+        defenderResponse: "oppose",
+        gmRollAdjustment: { participantId: "hero", value: 1 },
+        status: "awaiting_rolls",
+      }),
+    );
+    const rollStage = rollProjection.boundary.processes
+      .flatMap((process) => process.stages)
+      .find((stage) => stage.kind === "opposed_rolls");
+    expect(rollStage).toMatchObject({
+      executionStrategy: "parallel_all",
+      state: "active",
+    });
+    expect(rollStage?.executionGroups).toHaveLength(1);
+    expect(rollStage?.executionGroups[0]?.tasks.map((task) => task.kind)).toEqual([
+      "adjust_distance_attacker_roll",
+      "adjust_distance_defender_roll",
+    ]);
+    expect(new Set(rollStage?.executionGroups[0]?.tasks.map((task) => task.executionGroupId))).toEqual(
+      new Set([rollStage?.executionGroups[0]?.id]),
+    );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "roll_adjust_distance",
+        pairId: "guard::hero",
+        participantId: "hero",
+        phase: "phase1",
+        projection: rollProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "guard" },
+        commandType: "roll_adjust_distance",
+        pairId: "guard::hero",
+        participantId: "guard",
+        phase: "phase1",
+        projection: rollProjection,
+        proposalId: "distance-proposal",
+      }),
+    ).toMatchObject({ ok: true });
+
+    const attackerRecordedProjection = buildCombatProgressionProjection(
+      buildState({
+        attackerRoll: {
+          dodgeSkillTotal: 6,
+          finalTotal: 17,
+          id: "distance-attacker-roll",
+          participantId: "hero",
+          rollD20: 11,
+          rollTotal: 11,
+          rolledAt: "2026-07-19T10:00:00.000Z",
+        },
+        attackerRollRecorded: true,
+        defenderResponse: "oppose",
+        gmRollAdjustment: { participantId: "hero", value: 1 },
+        status: "awaiting_rolls",
+      }),
+    );
+    const remainingRollGroup = attackerRecordedProjection.boundary.processes
+      .flatMap((process) => process.stages)
+      .find((stage) => stage.kind === "opposed_rolls")?.executionGroups[0];
+    expect(remainingRollGroup?.id).toBe(rollStage?.executionGroups[0]?.id);
+    expect(remainingRollGroup?.tasks.map((task) => task.kind)).toEqual([
+      "adjust_distance_defender_roll",
+    ]);
 
     const commitProjection = buildCombatProgressionProjection(
       buildState({

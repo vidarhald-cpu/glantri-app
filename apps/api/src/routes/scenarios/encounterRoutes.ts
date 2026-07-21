@@ -3862,15 +3862,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .code(409)
           .send({ error: "Distance-adjustment rolls are not currently available." });
-      const expectedParticipantId = proposal.attackerRoll
-        ? proposal.defenderParticipantId
-        : proposal.attackerParticipantId;
-      if (expectedParticipantId !== encounterParticipant.id)
+      const side =
+        encounterParticipant.id === proposal.attackerParticipantId
+          ? "attacker"
+          : encounterParticipant.id === proposal.defenderParticipantId
+            ? "defender"
+            : undefined;
+      if (!side)
         return reply.code(409).send({
-          error: proposal.attackerRoll
-            ? "The defender must roll Dodge."
-            : "The attacker must roll Dodge.",
+          error: "Only a participant in this distance contest may roll Dodge.",
         });
+      if (
+        (side === "attacker" && proposal.attackerRoll) ||
+        (side === "defender" && proposal.defenderRoll)
+      )
+        return reply.code(409).send({ error: "This participant has already rolled Dodge." });
       const authorization = authorizeCombatProgressionTask({
         actor:
           access.mode === "gm"
@@ -3969,7 +3975,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         dodgeSkillTotal: profile.dodgeSkillTotal,
         finalTotal: roll.dieResult + profile.dodgeSkillTotal + dodgeResolution.total,
         generalFatigueModifier,
-        id: `${proposal.id}:roll:${proposal.attackerRoll ? "defender" : "attacker"}`,
+        id: `${proposal.id}:roll:${side}`,
         openEndedD10s: roll.openEndedD10s,
         participantId: encounterParticipant.id,
         rollD20: roll.rollD20,

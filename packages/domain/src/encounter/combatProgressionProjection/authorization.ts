@@ -158,7 +158,7 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     boundary: "phase1_resolution",
     kind: ["adjust_distance_attacker_roll", "adjust_distance_defender_roll"],
     process: "adjust_distance",
-    stage: ["attacker_roll", "defender_roll"],
+    stage: "opposed_rolls",
   },
   commit_adjust_distance: {
     boundary: "phase1_resolution",

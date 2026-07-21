@@ -51,6 +51,7 @@ export type CombatManeuverStageKind =
   | "gm_adjustment"
   | "attacker_roll"
   | "defender_roll"
+  | "opposed_rolls"
   | "proposal_review"
   | "proposal_commit";
 
@@ -74,11 +75,12 @@ export interface CombatManeuverTaskDescriptor {
 }
 
 export interface CombatManeuverProcessStagePlan {
-  readonly executionStrategy: "gm_review" | "ordered_all" | "single_task";
+  readonly executionStrategy: "gm_review" | "ordered_all" | "parallel_all" | "single_task";
   readonly id: string;
   readonly kind: CombatManeuverStageKind;
   readonly state: CombatActionProcessStageState;
   readonly task?: CombatManeuverTaskDescriptor;
+  readonly tasks?: readonly CombatManeuverTaskDescriptor[];
   readonly trackerFacet: "attack";
 }
 
@@ -528,6 +530,7 @@ function maneuverStage(input: {
   state: CombatActionProcessStageState;
   strategy?: CombatManeuverProcessStagePlan["executionStrategy"];
   task?: CombatManeuverTaskDescriptor;
+  tasks?: readonly CombatManeuverTaskDescriptor[];
 }): CombatManeuverProcessStagePlan {
   return {
     executionStrategy: input.strategy ?? "single_task",
@@ -535,6 +538,7 @@ function maneuverStage(input: {
     kind: input.kind,
     state: input.state,
     task: input.task,
+    tasks: input.tasks,
     trackerFacet: "attack",
   };
 }
@@ -763,18 +767,11 @@ function buildAdjustDistanceManeuver(input: {
       : proposal?.status === "awaiting_gm_adjustment"
         ? "ready"
         : "pending";
-  const attackerState: CombatActionProcessStageState = allowed
+  const opposedRollsState: CombatActionProcessStageState = allowed
     ? "skipped"
-    : complete || proposal?.attackerRoll
+    : complete || (proposal?.attackerRoll && proposal.defenderRoll)
       ? "complete"
       : proposal?.status === "awaiting_rolls"
-        ? "ready"
-        : "pending";
-  const defenderState: CombatActionProcessStageState = allowed
-    ? "skipped"
-    : complete || proposal?.defenderRoll
-      ? "complete"
-      : proposal?.status === "awaiting_rolls" && proposal.attackerRoll
         ? "ready"
         : "pending";
   const reviewState: CombatActionProcessStageState =
@@ -841,38 +838,35 @@ function buildAdjustDistanceManeuver(input: {
             : undefined,
       }),
       maneuverStage({
-        kind: "attacker_roll",
+        kind: "opposed_rolls",
         processId,
-        state: attackerState,
-        strategy: "ordered_all",
-        task:
-          attackerState === "ready"
-            ? maneuverTask({
+        state: opposedRollsState,
+        strategy: "parallel_all",
+        tasks:
+          opposedRollsState === "ready"
+            ? [
+                !proposal?.attackerRoll
+                  ? maneuverTask({
                 expectedCommand: "roll_adjust_distance",
                 kind: "adjust_distance_attacker_roll",
                 opportunityId,
                 ownerParticipantId: input.ownerParticipantId,
                 pairId,
                 proposalId,
-              })
-            : undefined,
-      }),
-      maneuverStage({
-        kind: "defender_roll",
-        processId,
-        state: defenderState,
-        strategy: "ordered_all",
-        task:
-          defenderState === "ready"
-            ? maneuverTask({
-                expectedCommand: "roll_adjust_distance",
-                kind: "adjust_distance_defender_roll",
-                opportunityId,
-                ownerParticipantId: targetParticipantId,
-                pairId,
-                proposalId,
-              })
-            : undefined,
+                    })
+                  : undefined,
+                !proposal?.defenderRoll
+                  ? maneuverTask({
+                      expectedCommand: "roll_adjust_distance",
+                      kind: "adjust_distance_defender_roll",
+                      opportunityId,
+                      ownerParticipantId: targetParticipantId,
+                      pairId,
+                      proposalId,
+                    })
+                  : undefined,
+              ].filter((task): task is CombatManeuverTaskDescriptor => Boolean(task))
+            : [],
       }),
       maneuverStage({
         kind: "proposal_review",

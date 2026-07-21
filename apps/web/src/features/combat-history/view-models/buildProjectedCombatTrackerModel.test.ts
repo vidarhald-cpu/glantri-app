@@ -177,6 +177,46 @@ function liveProgression(
   };
 }
 
+function parallelAdjustDistanceProgression(
+  pending: readonly ("aria" | "borin")[],
+): CombatProgressionPresentationProjection {
+  const base = liveProgression({ kind: "adjust_distance_attacker_roll" });
+  const tasks = pending.map((participantId, index) => {
+    const source = liveProgression({
+      kind:
+        participantId === "aria"
+          ? "adjust_distance_attacker_roll"
+          : "adjust_distance_defender_roll",
+      ownerId: participantId,
+      ownerLabel: participantId === "aria" ? "Aria" : "Borin",
+      trackerOwnerId: participantId,
+    }).processes[0]!.stages[0]!.executionGroups[0]!.tasks[0]!;
+    return { ...source, id: `task-${index + 1}` };
+  });
+  const stage = base.processes[0]!.stages[0]!;
+  return {
+    ...base,
+    processes: [
+      {
+        ...base.processes[0]!,
+        stages: [
+          {
+            ...stage,
+            executionGroups: [
+              {
+                ...stage.executionGroups[0]!,
+                executionStrategy: "parallel_all",
+                tasks,
+              },
+            ],
+            executionStrategy: "parallel_all",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe("buildProjectedCombatTrackerModel", () => {
   it("builds the shared tracker model using projected rows and cell events", () => {
     const projection = history([event({ facts: { publicOutcome: { grazing: true } } })]);
@@ -266,7 +306,7 @@ describe("buildProjectedCombatTrackerModel", () => {
     ).toMatchObject({ attention: "ordinary", marker: "·" });
   });
 
-  it("keeps uncommitted initiative ordinary and shows its number only after GM commit", () => {
+  it("marks recorded initiative complete and shows its number only after GM commit", () => {
     const projection = history([
       event({
         facts: { involvedOutcome: { total: 8 }, publicOutcome: {} },
@@ -290,8 +330,10 @@ describe("buildProjectedCombatTrackerModel", () => {
 
     expect(beforeCommit.cells["1:aria:initiative_phase_1"]).toMatchObject({
       attention: "ordinary",
-      marker: "·",
+      initiativeValue: false,
+      marker: "✓",
     });
+    expect(beforeCommit.cells["1:aria:initiative_phase_1"].hoverText).not.toContain("8");
     expect(afterCommit.cells["1:aria:initiative_phase_1"]).toMatchObject({
       initiativeValue: true,
       marker: "8",
@@ -421,7 +463,7 @@ describe("buildProjectedCombatTrackerModel", () => {
   });
 
   it.each([
-    ["initiative", { total: 8 }, "initiative total 8."],
+    ["initiative", { total: 8 }, "initiative roll recorded."],
     ["parry", { success: false, status: "resolved" }, "parry failed."],
     ["damage_committed", { status: "committed" }, "damage committed."],
   ] as const)("formats projected %s status in tracker hover", (type, outcome, expected) => {
@@ -472,18 +514,47 @@ describe("buildProjectedCombatTrackerModel", () => {
     });
   });
 
-  it("does not mark future Adjust Distance work before its projected stage opens", () => {
+  it("shows a recorded Adjust Distance input complete and marks only an open task exceptional", () => {
     const projection = history([event({ status: "recorded", type: "adjust_distance_roll" })]);
     expect(
       buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:phase_1_actions"]
         .marker,
-    ).toBe("·");
+    ).toBe("✓");
 
     projection.progression = liveProgression({ kind: "adjust_distance_attacker_roll" });
     expect(
       buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:phase_1_actions"]
         .marker,
     ).toBe("?");
+  });
+
+  it("keeps both opposed Adjust Distance participants attentive until each records their input", () => {
+    const projection = history([]);
+    projection.rows.push({ displayName: "Borin", participantId: "borin" });
+    projection.progression = parallelAdjustDistanceProgression(["aria", "borin"]);
+
+    const bothPending = buildProjectedCombatTrackerModel({ history: projection });
+    expect(bothPending.cells["1:aria:phase_1_actions"]).toMatchObject({
+      executionGroupIds: ["group-1"],
+      marker: "?",
+    });
+    expect(bothPending.cells["1:borin:phase_1_actions"]).toMatchObject({
+      executionGroupIds: ["group-1"],
+      marker: "?",
+    });
+
+    projection.activeRound!.events.push(
+      event({
+        id: "aria-distance-roll",
+        ownerParticipantId: "aria",
+        status: "recorded",
+        type: "adjust_distance_roll",
+      }),
+    );
+    projection.progression = parallelAdjustDistanceProgression(["borin"]);
+    const oneRecorded = buildProjectedCombatTrackerModel({ history: projection });
+    expect(oneRecorded.cells["1:aria:phase_1_actions"].marker).toBe("✓");
+    expect(oneRecorded.cells["1:borin:phase_1_actions"].marker).toBe("?");
   });
 
   it.each([

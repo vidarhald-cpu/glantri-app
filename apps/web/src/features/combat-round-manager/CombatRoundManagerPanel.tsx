@@ -215,6 +215,7 @@ import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/pl
 import {
   canAcceptCombatRoundViewRevision,
   type CombatRoundViewState,
+  getCombatRoundDescriptorRevision,
   updateCombatRoundViewState,
 } from "./combatRoundViewState";
 import {
@@ -4038,9 +4039,16 @@ export default function CombatRoundManagerPanel({
   const projectedBoundaryTransitionTask = projectedCurrentTasks.find(
     (task) => task.kind === "gm_advance_boundary" && task.state === "executable" && task.transition,
   );
+  const descriptorRevision = getCombatRoundDescriptorRevision({
+    acceptedEncounter: {
+      encounterId: encounter.id,
+      encounterRevision: encounter.updatedAt,
+    },
+    currentView: roundView,
+  });
   const projectedBoundaryTransitionAction = buildCombatBoundaryTransitionAction({
     encounterId: roundView.encounterId,
-    encounterRevision: roundView.encounterRevision,
+    encounterRevision: descriptorRevision,
     task: projectedBoundaryTransitionTask,
   });
   const projectedDoubleAttackDecisionTask = projectedCurrentTasks.find(
@@ -4069,11 +4077,11 @@ export default function CombatRoundManagerPanel({
     () =>
       buildCurrentActionPresentation({
         encounterId: roundView.encounterId,
-        encounterRevision: roundView.encounterRevision,
+        encounterRevision: descriptorRevision,
         progression: combatProgressionPresentation,
         viewer: { kind: "gm" },
       }),
-    [combatProgressionPresentation, roundView.encounterId, roundView.encounterRevision],
+    [combatProgressionPresentation, descriptorRevision, roundView.encounterId],
   );
   const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner
     ? {
@@ -8504,6 +8512,17 @@ export default function CombatRoundManagerPanel({
           step === "phase_1_actions"
             ? adjustDistanceByAttackerId.get(timelineParticipant.participantId)
             : undefined;
+        const trackerAdjustDistanceRollRecorded =
+          step === "phase_1_actions"
+            ? timelineRoundState.adjustDistanceProposals.some(
+                (proposal) =>
+                  proposal.roundNumber === timelineRoundState.roundNumber &&
+                  ((proposal.attackerParticipantId === timelineParticipant.participantId &&
+                    proposal.attackerRollRecorded) ||
+                    (proposal.defenderParticipantId === timelineParticipant.participantId &&
+                      proposal.defenderRollRecorded)),
+              )
+            : false;
         trackerCellFacts.push({
           adjustDistance: trackerAdjustDistanceProposal
             ? {
@@ -8519,6 +8538,7 @@ export default function CombatRoundManagerPanel({
                   trackerAdjustDistanceProposal.status === "committed" ? "committed" : "pending",
               }
             : undefined,
+          adjustDistanceRollRecorded: trackerAdjustDistanceRollRecorded,
           actionResultStatus: trackerSnapshot?.actionResultStatus,
           attackAttackerLabel: trackerAttackResult
             ? timelineRoundState.participants.find(
@@ -8561,6 +8581,7 @@ export default function CombatRoundManagerPanel({
                     command.phase === (step === "initiative_phase_1" ? "phase1" : "phase2"),
                 )
               : undefined,
+          initiativeRollRecorded: Boolean(initiative),
           initiativeTotal: getCombatRoundInitiativeTotal(initiative),
           participantId: timelineParticipant.participantId,
           participantLabel: timelineParticipant.label,

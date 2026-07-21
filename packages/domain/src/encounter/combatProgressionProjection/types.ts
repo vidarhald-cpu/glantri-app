@@ -51,6 +51,7 @@ export type CombatProgressionStageKind =
   | "health"
   | "hit_location"
   | "gm_adjustment"
+  | "opposed_rolls"
   | "input"
   | "attacker_roll"
   | "defender_roll"
@@ -220,8 +221,8 @@ export interface CombatProgressionExecutionGroupDiagnostic {
 }
 
 /**
- * The scheduling unit between a stage and its tasks. Slice 7 deliberately projects one task per
- * group; the array shape leaves room for simultaneous initiative work without enabling it.
+ * The scheduling unit between a stage and its tasks. Most groups contain one task; explicitly
+ * parallel mini-processes may place multiple independently executable tasks in one stable group.
  */
 export interface CombatProgressionExecutionGroup {
   readonly activationBoundary: CombatProgressionExecutionGroupBoundaryMetadata;

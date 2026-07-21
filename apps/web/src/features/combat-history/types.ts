@@ -92,8 +92,10 @@ export interface CombatTrackerCellFacts {
     defenderLabel?: string;
     status: "pending" | "committed";
   };
+  adjustDistanceRollRecorded?: boolean;
   inspectable: boolean;
   initiativeCommitted?: boolean;
+  initiativeRollRecorded?: boolean;
   initiativeTotal?: number;
   participantId: string;
   participantLabel: string;

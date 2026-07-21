@@ -30,6 +30,30 @@ export function canAcceptCombatRoundViewRevision(input: {
 }
 
 /**
+ * Returns the revision that may safely back an actionable descriptor. A newly accepted encounter
+ * prop can render before the synchronization effect updates the round view; that transient older
+ * task set must never remain clickable.
+ */
+export function getCombatRoundDescriptorRevision(input: {
+  acceptedEncounter: CombatRoundViewStateRevision;
+  currentView: CombatRoundViewStateRevision;
+}): string | undefined {
+  if (
+    input.acceptedEncounter.encounterId !== input.currentView.encounterId ||
+    !input.currentView.encounterRevision ||
+    !canAcceptCombatRoundViewRevision({
+      accepted: input.acceptedEncounter,
+      candidateEncounterId: input.currentView.encounterId,
+      candidateRevision: input.currentView.encounterRevision,
+    })
+  ) {
+    return undefined;
+  }
+
+  return input.currentView.encounterRevision;
+}
+
+/**
  * Applies a local state-only update without dropping the accepted encounter
  * revision that binds projected commands. Canonical server responses use the
  * separate acceptance path in the round manager.

@@ -95,9 +95,8 @@ function markerMeaning(kind: CombatTrackerMarkerKind): CombatTrackerLegendItem {
 export function getCombatTrackerCellMarkerKind(
   input: CombatTrackerCellFacts,
 ): CombatTrackerMarkerKind {
-  if (input.initiativeTotal !== undefined) {
-    return input.initiativeCommitted ? "roll_result" : "not_reached";
-  }
+  if (input.initiativeCommitted && input.initiativeTotal !== undefined) return "roll_result";
+  if (input.initiativeRollRecorded) return "complete";
   if (
     !attackPhase(input.step) &&
     input.progression?.current &&
@@ -110,6 +109,9 @@ export function getCombatTrackerCellMarkerKind(
     if (input.feint.status === "committed") return "complete";
     if (input.feint.status === "impossible") return "skipped";
     return getCombatTrackerPendingMarkerKind(input.progression);
+  }
+  if (input.step === "phase_1_actions" && input.adjustDistanceRollRecorded) {
+    return "complete";
   }
   if (input.step === "phase_1_actions" && input.adjustDistance) {
     return input.adjustDistance.status === "committed"
@@ -236,6 +238,8 @@ function stepNoun(step: CombatRoundStep): string {
 }
 
 function cellDetail(input: CombatTrackerCellFacts): string {
+  if (input.initiativeRollRecorded && !input.initiativeCommitted)
+    return "initiative roll recorded; awaiting GM commit.";
   if (input.progression?.current) {
     return input.progression.hover.text;
   }
@@ -255,6 +259,9 @@ function cellDetail(input: CombatTrackerCellFacts): string {
     return input.feint.status === "pending"
       ? "feint opposed rolls/review pending."
       : "feint pending.";
+  }
+  if (input.step === "phase_1_actions" && input.adjustDistanceRollRecorded) {
+    return "Dodge roll recorded for the distance contest.";
   }
   if (input.step === "phase_1_actions" && input.adjustDistance) {
     const target = input.adjustDistance.defenderLabel

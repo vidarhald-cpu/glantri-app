@@ -65,6 +65,11 @@ export interface TaskSpec {
 }
 
 export interface StageSpec {
+  executionGroups?: readonly {
+    key?: string;
+    strategy?: CombatProgressionExecutionStrategy;
+    tasks: readonly TaskSpec[];
+  }[];
   key?: string;
   kind: CombatProgressionStageKind;
   state: CombatProgressionStageState;
@@ -240,35 +245,39 @@ function buildExecutionGroup(
   context: ProjectionBuildContext,
   processKind: CombatProgressionProcessKind,
   stage: StageSpec,
-  taskSpec: TaskSpec,
+  groupSpec: NonNullable<StageSpec["executionGroups"]>[number],
   position: number,
   processKey?: string,
 ): CombatProgressionExecutionGroup {
   const currentStageId = stageId(context, processKind, stage.kind, processKey, stage.key);
+  const firstTask = groupSpec.tasks[0];
   const ownerKey =
-    taskSpec.owner?.kind === "combatant"
-      ? taskSpec.owner.participantId
-      : taskSpec.owner?.kind === "gm"
+    firstTask?.owner?.kind === "combatant"
+      ? firstTask.owner.participantId
+      : firstTask?.owner?.kind === "gm"
         ? "gm"
         : "unowned";
-  const taskKey = taskSpec.key ?? ownerKey;
-  const id = `${currentStageId}:execution-group:${position}:${taskSpec.kind}:${taskKey}`;
-  const task = buildTask(context, processKind, stage.kind, taskSpec, id, processKey, stage.key);
+  const taskKey = groupSpec.key ?? firstTask?.key ?? ownerKey;
+  const groupKey = groupSpec.key ?? `${firstTask?.kind ?? "task"}:${taskKey}`;
+  const id = `${currentStageId}:execution-group:${position}:${groupKey}`;
+  const tasks = groupSpec.tasks.map((taskSpec) =>
+    buildTask(context, processKind, stage.kind, taskSpec, id, processKey, stage.key),
+  );
   return {
     activationBoundary: {
       id: context.boundaryId,
       kind: context.boundaryKind,
       roundNumber: context.roundNumber,
     },
-    blockerIds: task.blockerIds,
+    blockerIds: [...new Set(tasks.flatMap((task) => task.blockerIds))],
     completionState: stage.state === "complete" ? "complete" : "incomplete",
     diagnostics: [],
-    executionStrategy: stage.strategy,
+    executionStrategy: groupSpec.strategy ?? stage.strategy,
     futureActivationBoundary: undefined,
     id,
     position,
     stageId: currentStageId,
-    tasks: [task],
+    tasks,
   };
 }
 
@@ -310,8 +319,11 @@ export function buildProcess(
     kind,
     ...(options.planId ? { planId: options.planId } : {}),
     stages: stages.map((stage) => {
-      const executionGroups = (stage.tasks ?? []).map((task, position) =>
-        buildExecutionGroup(context, kind, stage, task, position, options.key),
+      const groupSpecs =
+        stage.executionGroups ??
+        (stage.tasks ?? []).map((task) => ({ strategy: stage.strategy, tasks: [task] }));
+      const executionGroups = groupSpecs.map((group, position) =>
+        buildExecutionGroup(context, kind, stage, group, position, options.key),
       );
       return {
         executionGroups,
