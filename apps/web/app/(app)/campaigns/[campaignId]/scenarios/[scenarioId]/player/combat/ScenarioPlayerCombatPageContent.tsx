@@ -11,7 +11,6 @@ import {
   type CombatRoundInitiativeRank,
   type CombatRoundParryResolution,
   type CombatRoundPhase,
-  type CombatRoundPhaseInitiativeChoice,
   type CombatRoundPhaseResolutionResult,
   type CombatRoundEndHealthRollProposal,
   type CombatRoundStep,
@@ -19,7 +18,6 @@ import {
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
-  getCombatRoundAttackResultById,
   getCombatRoundArmorCriticalModifierForDamageResult,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundCombatExperienceDifficulty,
@@ -29,12 +27,9 @@ import {
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
-  getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundRequiredCombatExperienceTrigger,
   getDistanceEdgeBetweenParticipantAliases,
   getCombatDistanceParticipantAliases,
-  getCombatRoundInitiativeRanks,
-  getCombatRoundInitiativeTotal,
   getMergedCombatDbParryModifierTotal,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepForCursorStep,
@@ -54,14 +49,14 @@ import {
   type ScenarioPlayerVisibleParticipant,
   type MovementIntent,
   type WeaponTemplate,
-  buildCombatRoundPhaseResolutionResult,
 } from "@glantri/domain";
 
 import {
-  buildConciseDodgeCalculationRows,
   buildCurrentActionPresentation,
+  buildCombatStepResultPresentation,
   buildProjectedCombatTrackerModel,
   CombatLog,
+  CombatStepResultList,
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
   getCombatProgressionPresentationTasks,
@@ -84,13 +79,11 @@ import {
 } from "@/features/equipment/loadoutModule";
 import {
   buildPlayerCombatModifierRows,
-  formatCombatInitiativeFormula,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatActionButtonPanel,
-  PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
@@ -122,10 +115,6 @@ import {
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
-import {
-  getLatestRelevantPlayerCombatAttackResult,
-  selectPlayerCombatActionResultPanel,
-} from "@/features/player-combat/playerCombatResultSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
@@ -194,18 +183,10 @@ interface ScenarioPlayerCombatPageContentProps {
 type PhaseAttackChoiceSelection = "continue" | "back_out";
 type DoubleAttackPhase2Decision = "continue" | "cancel";
 
-type PlayerCombatActionResultSectionView = {
+type _PlayerCombatActionResultSectionView = {
   calculationLines: readonly string[];
   resultLine?: string;
   title: string;
-};
-
-type PlayerCombatActionResultPanelView = {
-  detailLines?: readonly string[];
-  interpretedResult: string;
-  rankLabel?: string;
-  resultLabel?: string;
-  sections?: readonly PlayerCombatActionResultSectionView[];
 };
 
 const panelStyle = {
@@ -229,7 +210,7 @@ function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | 
   return undefined;
 }
 
-function formatCombatAttackResultLine(input: {
+function _formatCombatAttackResultLine(input: {
   participantId?: string;
   result: CombatRoundAttackRollResult;
 }): string {
@@ -274,72 +255,6 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
   }
 
   return `${result.label} ${result.modifierValue}, duration ${result.durationRounds}`;
-}
-
-function formatCombatExperienceResultLine(result: CombatRoundCombatExperienceResult): string {
-  const isPhaseResult = result.trigger !== "combat_start";
-
-  if (result.noRollRequired) {
-    return "Result: Active, no modifier";
-  }
-
-  if (
-    isPhaseResult &&
-    result.effectiveTableTotal !== undefined &&
-    result.effectiveTableTotal <= 5
-  ) {
-    return "Result: attack cancelled";
-  }
-
-  if (isPhaseResult && result.modifierValue < 0) {
-    return `Result: OB ${result.modifierValue}`;
-  }
-
-  if (!result.needsEffectRow || result.modifierValue === 0) {
-    return "Result: Active, no modifier";
-  }
-
-  return `Result: ${result.label}, General ${result.modifierValue} for ${result.durationRounds} round${
-    result.durationRounds === 1 ? "" : "s"
-  }`;
-}
-
-function buildPhaseInitiativeChoiceResultPanel(choice?: CombatRoundPhaseInitiativeChoice): {
-  interpretedResult: string;
-  rankLabel?: string;
-  resultLabel?: string;
-} | null {
-  if (!choice) {
-    return null;
-  }
-
-  if (choice.choice === "roll_ce_result" && choice.combatExperience) {
-    return {
-      interpretedResult: choice.combatExperience.noRollRequired
-        ? `Combat Experience ${choice.combatExperience.skillTotal} vs difficulty ${choice.combatExperience.difficulty}`
-        : `Combat Experience ${choice.combatExperience.skillTotal} + roll ${choice.combatExperience.rollTotal} = ${choice.combatExperience.finalTotal} vs ${choice.combatExperience.difficulty}`,
-      rankLabel: "Combat Experience",
-      resultLabel: formatCombatExperienceResultLine(choice.combatExperience),
-    };
-  }
-
-  if (choice.choice === "back_out") {
-    return {
-      interpretedResult: "Back out of attack",
-      rankLabel: "Phase Combat Experience",
-      resultLabel: "Result: attack cancelled/backed out",
-    };
-  }
-
-  if (choice.choice === "continue_without_ce") {
-    return {
-      interpretedResult: "Continue attack",
-      rankLabel: "Phase Combat Experience",
-      resultLabel: "Result: no CE roll required",
-    };
-  }
-
-  return null;
 }
 
 function formatRoundEndHealthCheckReason(input: {
@@ -731,7 +646,7 @@ function isPlayerVisibleDamageResolution(input: {
   );
 }
 
-function getLatestPlayerVisibleDamageResolution(input: {
+function _getLatestPlayerVisibleDamageResolution(input: {
   participantId?: string;
   resolutions: readonly CombatRoundPhaseResolutionResult[];
 }): CombatRoundPhaseResolutionResult | undefined {
@@ -745,7 +660,7 @@ function getLatestPlayerVisibleDamageResolution(input: {
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 }
 
-function formatCombatPhaseResolutionResultLines(input: {
+function _formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
@@ -800,14 +715,14 @@ function formatCombatPhaseResolutionResultLines(input: {
           ? parryLine
           : `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
 
-  const attackLine = `${formatCombatAttackResultLine({
+  const attackLine = `${_formatCombatAttackResultLine({
     participantId: input.participantId,
     result: input.attackResult,
   })} · Result: ${input.attackResult.tableResult}`;
-  const sections: PlayerCombatActionResultSectionView[] = [
+  const sections: _PlayerCombatActionResultSectionView[] = [
     {
       calculationLines: [
-        formatCombatAttackResultLine({
+        _formatCombatAttackResultLine({
           participantId: input.participantId,
           result: input.attackResult,
         }),
@@ -1065,7 +980,7 @@ function buildPlayerCombatDeclarationDraftKey(input: {
   ].join(":");
 }
 
-function formatPlayerCombatInitiativeRank(input: {
+function _formatPlayerCombatInitiativeRank(input: {
   participantId?: string;
   ranks: Record<string, CombatRoundInitiativeRank>;
   value: number | undefined;
@@ -1176,11 +1091,6 @@ export default function ScenarioPlayerCombatPageContent({
     useState<PhaseAttackChoiceSelection>("continue");
   const [doubleAttackPhase2Decision, setDoubleAttackPhase2Decision] =
     useState<DoubleAttackPhase2Decision>("continue");
-  const [actionRollResult, setActionRollResult] = useState<{
-    interpretedResult: string;
-    phaseLabel?: string;
-    value: number;
-  } | null>(null);
   const isGameMaster = Boolean(
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
   );
@@ -1458,7 +1368,6 @@ export default function ScenarioPlayerCombatPageContent({
   ]);
 
   useEffect(() => {
-    setActionRollResult(null);
     setCombatHistory(undefined);
     setCombatLogSelection(undefined);
     setHistoryInspection(undefined);
@@ -1650,6 +1559,33 @@ export default function ScenarioPlayerCombatPageContent({
       combatHistory?.sourceUpdatedAt,
       encounterId,
       isGameMaster,
+      selectedRoundParticipant,
+    ],
+  );
+  const currentStepResultPresentation = useMemo(
+    () =>
+      playerCombatLog &&
+      combatHistory?.sourceUpdatedAt &&
+      combatHistory.progression &&
+      selectedRoundParticipant
+        ? buildCombatStepResultPresentation({
+            boundary: combatHistory.progression.boundary.kind,
+            combatLog: playerCombatLog,
+            encounterId: encounterId ?? playerCombatLog.encounterId,
+            encounterRevision: combatHistory.sourceUpdatedAt,
+            events: combatHistory.activeRound.events,
+            participantId: selectedRoundParticipant.participantId,
+            roundNumber: combatHistory.activeRound.roundNumber,
+            viewer: { kind: "player" },
+          })
+        : undefined,
+    [
+      combatHistory?.activeRound.events,
+      combatHistory?.activeRound.roundNumber,
+      combatHistory?.progression,
+      combatHistory?.sourceUpdatedAt,
+      encounterId,
+      playerCombatLog,
       selectedRoundParticipant,
     ],
   );
@@ -1975,67 +1911,6 @@ export default function ScenarioPlayerCombatPageContent({
         return expectedParticipantId === selectedRoundParticipant.participantId;
       })
     : undefined;
-  // The task selector above intentionally follows the canonical next roller.
-  // The result panel uses the persisted proposal separately so a roller keeps
-  // seeing their own Dodge result while the opponent's task is pending.
-  const selectedAdjustDistanceDisplayProposal = combatRoundState?.adjustDistanceProposals.find(
-    (proposal) =>
-      selectedRoundParticipant &&
-      proposal.roundNumber === combatRoundState.roundNumber &&
-      (proposal.attackerParticipantId === selectedRoundParticipant.participantId ||
-        proposal.defenderParticipantId === selectedRoundParticipant.participantId) &&
-      (proposal.attackerParticipantId === selectedRoundParticipant.participantId
-        ? proposal.attackerRollRecorded && Boolean(proposal.attackerRoll)
-        : proposal.defenderRollRecorded && Boolean(proposal.defenderRoll)),
-  );
-  const selectedAdjustDistanceOwnRoll = selectedAdjustDistanceDisplayProposal
-    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId ===
-      selectedRoundParticipant?.participantId
-      ? selectedAdjustDistanceDisplayProposal.attackerRoll
-      : selectedAdjustDistanceDisplayProposal.defenderRoll
-    : undefined;
-  const selectedAdjustDistanceOpponentRoll = selectedAdjustDistanceDisplayProposal
-    ? selectedAdjustDistanceDisplayProposal.attackerParticipantId ===
-      selectedRoundParticipant?.participantId
-      ? selectedAdjustDistanceDisplayProposal.defenderRoll
-      : selectedAdjustDistanceDisplayProposal.attackerRoll
-    : undefined;
-  const selectedAdjustDistanceRollOutcome = selectedAdjustDistanceOwnRoll
-    ? selectedAdjustDistanceOpponentRoll
-      ? selectedAdjustDistanceDisplayProposal?.status === "committed"
-        ? `Distance adjustment ${selectedAdjustDistanceDisplayProposal.review?.acceptedOutcome ?? "resolved"}.`
-        : "Distance proposal awaiting GM review."
-      : "Awaiting opponent roll."
-    : undefined;
-  const selectedAdjustDistanceResultPanel = selectedAdjustDistanceOwnRoll
-    ? {
-        interpretedResult:
-          selectedRoundParticipant?.participantId ===
-          selectedAdjustDistanceDisplayProposal?.attackerParticipantId
-            ? "Dodge roll to adjust distance"
-            : "Dodge roll to resist the distance adjustment",
-        rankLabel: "Dodge roll",
-        sections: [
-          {
-            calculationLines: buildConciseDodgeCalculationRows({
-              calculation: {
-                dodgeSkillTotal: selectedAdjustDistanceOwnRoll.dodgeSkillTotal,
-                finalTotal: selectedAdjustDistanceOwnRoll.finalTotal,
-                generalFatigueModifier: selectedAdjustDistanceOwnRoll.generalFatigueModifier,
-                openEndedD10s: selectedAdjustDistanceOwnRoll.openEndedD10s,
-                rollD20: selectedAdjustDistanceOwnRoll.rollD20,
-                rollTotal: selectedAdjustDistanceOwnRoll.rollTotal,
-                situationalAdjustment: selectedAdjustDistanceOwnRoll.situationalAdjustment,
-              },
-              eventId: `${selectedAdjustDistanceDisplayProposal?.id ?? "adjust-distance"}:own-roll`,
-              outcome: selectedAdjustDistanceRollOutcome,
-            }).map((row) => row.text),
-            resultLine: selectedAdjustDistanceRollOutcome,
-            title: "Dodge",
-          },
-        ],
-      }
-    : null;
   const currentModifierPhase = getPlayerCombatModifierDisplayPhase({
     actionId: selectedActionId,
     step: currentCombatStep,
@@ -2559,12 +2434,6 @@ export default function ScenarioPlayerCombatPageContent({
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
       acceptEncounterSession(encounter);
-      setActionRollResult({
-        interpretedResult:
-          "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
-        phaseLabel: descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
-        value: 0,
-      });
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -2597,11 +2466,6 @@ export default function ScenarioPlayerCombatPageContent({
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
       acceptEncounterSession(encounter);
-      setActionRollResult({
-        interpretedResult: "Continue attack submitted; waiting for GM to commit initiative.",
-        phaseLabel: descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
-        value: 0,
-      });
       setError(undefined);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to continue attack.");
@@ -3120,62 +2984,11 @@ export default function ScenarioPlayerCombatPageContent({
           state: combatRoundState,
         })
       : undefined;
-  const selectedVisibleCombatExperienceResult =
-    selectedPhaseInitiativeChoice?.combatExperience ?? selectedCombatExperienceResult;
   const currentAttackPhaseContext = currentAttackPhase
     ? (selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase] ??
       phaseCombatContextDrafts[currentAttackPhase])
     : undefined;
   const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
-  const selectedCurrentAttackResult =
-    combatRoundState && selectedRoundParticipant && currentAttackPhase
-      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-          participantId: selectedRoundParticipant.participantId,
-          phase: currentAttackPhase,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedCurrentAttackResultPanel = selectedCurrentAttackResult
-    ? {
-        interpretedResult: selectedCurrentAttackResult.tableResult,
-        sections: [
-          {
-            calculationLines: [
-              formatCombatAttackResultLine({
-                participantId: selectedRoundParticipant?.participantId,
-                result: selectedCurrentAttackResult,
-              }),
-            ],
-            resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`,
-            title: "To hit",
-          },
-        ],
-      }
-    : null;
-  const selectedLatestRelevantAttackResult =
-    combatRoundState && selectedRoundParticipant
-      ? getLatestRelevantPlayerCombatAttackResult({
-          participantId: selectedRoundParticipant.participantId,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedLatestRelevantAttackResultPanel = selectedLatestRelevantAttackResult
-    ? {
-        interpretedResult: selectedLatestRelevantAttackResult.tableResult,
-        sections: [
-          {
-            calculationLines: [
-              formatCombatAttackResultLine({
-                participantId: selectedRoundParticipant?.participantId,
-                result: selectedLatestRelevantAttackResult,
-              }),
-            ],
-            resultLine: `Result: ${selectedLatestRelevantAttackResult.tableResult}`,
-            title: "To hit",
-          },
-        ],
-      }
-    : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
   const selectedCurrentIncomingResolutionAttackResult =
     combatRoundState && selectedRoundParticipant && currentResolutionPhase
@@ -3195,34 +3008,6 @@ export default function ScenarioPlayerCombatPageContent({
       : undefined;
   const selectedCurrentResolutionAttackResult =
     selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult;
-  const selectedCurrentPhaseResolutionResult =
-    combatRoundState && selectedCurrentResolutionAttackResult
-      ? (getCombatRoundPhaseResolutionResultForAttack({
-          attackResult: selectedCurrentResolutionAttackResult,
-          state: combatRoundState,
-        }) ??
-        buildCombatRoundPhaseResolutionResult({
-          attackResult: selectedCurrentResolutionAttackResult,
-          roundNumber: combatRoundState.roundNumber,
-          updatedAt: selectedCurrentResolutionAttackResult.rolledAt,
-        }))
-      : undefined;
-  const selectedCurrentPhaseResolutionLines =
-    selectedCurrentResolutionAttackResult && selectedCurrentPhaseResolutionResult
-      ? formatCombatPhaseResolutionResultLines({
-          attackResult: selectedCurrentResolutionAttackResult,
-          participantId: selectedRoundParticipant?.participantId,
-          resolution: selectedCurrentPhaseResolutionResult,
-        })
-      : undefined;
-  const selectedCurrentPhaseResolutionResultPanel = selectedCurrentPhaseResolutionLines
-    ? {
-        interpretedResult: selectedCurrentPhaseResolutionLines.statusLine,
-        rankLabel: selectedCurrentPhaseResolutionLines.attackLine,
-        resultLabel: selectedCurrentPhaseResolutionLines.proposalLine,
-        sections: selectedCurrentPhaseResolutionLines.sections,
-      }
-    : null;
   const currentParryDefenseStats = currentResolutionPhase
     ? buildPlayerCombatDefenseStats({
         mainHandParryItemLabel:
@@ -3245,169 +3030,6 @@ export default function ScenarioPlayerCombatPageContent({
           (resolution) => resolution.attackResultId === currentRollAction.attackResultId,
         )
       : undefined;
-  const selectedAttackerPrivilegedAttackResult =
-    combatRoundState && selectedAttackerPrivilegedResolution
-      ? getCombatRoundAttackResultById({
-          attackResultId: selectedAttackerPrivilegedResolution.attackResultId,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedAttackerPrivilegedResolutionLines =
-    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
-      ? formatCombatPhaseResolutionResultLines({
-          attackResult: selectedAttackerPrivilegedAttackResult,
-          participantId: selectedRoundParticipant?.participantId,
-          resolution: selectedAttackerPrivilegedResolution,
-        })
-      : undefined;
-  const selectedAttackerPrivilegedResultPanel = selectedAttackerPrivilegedResolutionLines
-    ? {
-        interpretedResult: selectedAttackerPrivilegedResolutionLines.statusLine,
-        rankLabel: selectedAttackerPrivilegedResolutionLines.attackLine,
-        resultLabel: selectedAttackerPrivilegedResolutionLines.proposalLine,
-        sections: selectedAttackerPrivilegedResolutionLines.sections,
-      }
-    : null;
-  const selectedInvolvedDamageResolution =
-    combatRoundState && selectedRoundParticipant
-      ? getLatestPlayerVisibleDamageResolution({
-          participantId: selectedRoundParticipant.participantId,
-          resolutions: combatRoundState.phaseResolutionResults,
-        })
-      : undefined;
-  const selectedInvolvedDamageAttackResult =
-    combatRoundState && selectedInvolvedDamageResolution
-      ? getCombatRoundAttackResultById({
-          attackResultId: selectedInvolvedDamageResolution.attackResultId,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedInvolvedDamageResolutionLines =
-    selectedInvolvedDamageAttackResult && selectedInvolvedDamageResolution
-      ? formatCombatPhaseResolutionResultLines({
-          attackResult: selectedInvolvedDamageAttackResult,
-          participantId: selectedRoundParticipant?.participantId,
-          resolution: selectedInvolvedDamageResolution,
-        })
-      : undefined;
-  const selectedInvolvedDamageResultPanel = selectedInvolvedDamageResolutionLines
-    ? {
-        interpretedResult: selectedInvolvedDamageResolutionLines.statusLine,
-        rankLabel: selectedInvolvedDamageResolutionLines.attackLine,
-        resultLabel: selectedInvolvedDamageResolutionLines.proposalLine,
-        sections: selectedInvolvedDamageResolutionLines.sections,
-      }
-    : null;
-  const phase1InitiativeRanks = useMemo(
-    () =>
-      combatRoundState
-        ? getCombatRoundInitiativeRanks({ phase: "phase1", state: combatRoundState })
-        : {},
-    [combatRoundState],
-  );
-  const phase2InitiativeRanks = useMemo(
-    () =>
-      combatRoundState
-        ? getCombatRoundInitiativeRanks({ phase: "phase2", state: combatRoundState })
-        : {},
-    [combatRoundState],
-  );
-  const latestRolledInitiativePhase = selectedRoundParticipant?.initiatives.phase2
-    ? "phase2"
-    : selectedRoundParticipant?.initiatives.phase1
-      ? "phase1"
-      : undefined;
-  const currentResultPhase =
-    currentModifierPhase ?? currentInitiativePhase ?? latestRolledInitiativePhase;
-  const selectedRelevantInitiative = currentResultPhase
-    ? selectedRoundParticipant?.initiatives[currentResultPhase]
-    : undefined;
-  const selectedRelevantInitiativeComplete = Boolean(
-    currentResultPhase && combatHistory?.progression?.executionOrder?.phase === currentResultPhase,
-  );
-  const selectedRelevantInitiativeRankLabel =
-    currentResultPhase && selectedRelevantInitiativeComplete
-      ? formatPlayerCombatInitiativeRank({
-          participantId: selectedRoundParticipant?.participantId,
-          ranks: currentResultPhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
-          value: getCombatRoundInitiativeTotal(selectedRelevantInitiative),
-        })
-      : undefined;
-  const selectedRelevantInitiativeResultPanel = selectedRelevantInitiative
-    ? {
-        interpretedResult: formatCombatInitiativeFormula(selectedRelevantInitiative),
-        sections: [
-          {
-            calculationLines: [formatCombatInitiativeFormula(selectedRelevantInitiative)],
-            resultLine: selectedRelevantInitiativeComplete
-              ? `Result: ${selectedRelevantInitiativeRankLabel ?? `Initiative ${selectedRelevantInitiative.total}`}`
-              : "Result: Initiative rolled — waiting for others",
-            title: "Initiative",
-          },
-        ],
-      }
-    : null;
-  const selectedPhaseInitiativeChoiceResultPanel = buildPhaseInitiativeChoiceResultPanel(
-    selectedPhaseInitiativeChoice,
-  );
-  const selectedFallbackCombatExperienceResult = selectedPhaseInitiativeChoiceResultPanel
-    ? undefined
-    : selectedVisibleCombatExperienceResult;
-  const selectedCombatExperienceResultPanel = selectedFallbackCombatExperienceResult
-    ? {
-        interpretedResult: selectedFallbackCombatExperienceResult.noRollRequired
-          ? `Combat Experience ${selectedFallbackCombatExperienceResult.skillTotal} vs difficulty ${selectedFallbackCombatExperienceResult.difficulty}`
-          : `Combat Experience ${selectedFallbackCombatExperienceResult.skillTotal} + roll ${selectedFallbackCombatExperienceResult.rollTotal} = ${selectedFallbackCombatExperienceResult.finalTotal} vs ${selectedFallbackCombatExperienceResult.difficulty}`,
-        rankLabel: "Combat Experience",
-        resultLabel: formatCombatExperienceResultLine(selectedFallbackCombatExperienceResult),
-      }
-    : null;
-  const selectedHealthCheckResultPanel =
-    selectedVisibleHealthRoll?.result && selectedHealthRollDamageProposal
-      ? {
-          interpretedResult: `${selectedVisibleHealthRoll.label}`,
-          rankLabel: "Round-end health check",
-          sections: [
-            {
-              calculationLines: [
-                `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown(
-                  {
-                    dieResult: selectedVisibleHealthRoll.result.rollTotal,
-                    openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
-                    rollD20: selectedVisibleHealthRoll.result.rollD20,
-                  },
-                )} = ${selectedVisibleHealthRoll.result.finalTotal}`,
-                `Reason: ${formatRoundEndHealthCheckReason({
-                  damageLabel: selectedHealthRollDamageProposal.label,
-                  proposal: selectedVisibleHealthRoll,
-                })}`,
-              ],
-              resultLine: formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll),
-              title: "Health check",
-            },
-          ],
-        }
-      : selectedVisibleHealthRoll?.result
-        ? {
-            interpretedResult: `${selectedVisibleHealthRoll.label}`,
-            rankLabel: "Round-end health check",
-            sections: [
-              {
-                calculationLines: [
-                  `Health ${selectedVisibleHealthRoll.healthStat} + roll ${formatOpenEndedD20RollBreakdown(
-                    {
-                      dieResult: selectedVisibleHealthRoll.result.rollTotal,
-                      openEndedD10s: selectedVisibleHealthRoll.result.openEndedD10s,
-                      rollD20: selectedVisibleHealthRoll.result.rollD20,
-                    },
-                  )} = ${selectedVisibleHealthRoll.result.finalTotal}`,
-                ],
-                resultLine: formatRoundEndHealthCheckResultLine(selectedVisibleHealthRoll),
-                title: "Health check",
-              },
-            ],
-          }
-        : null;
   const selectedDistanceControlCommittedDistance =
     selectedDistanceControlProposal?.proposal.status === "committed"
       ? (selectedDistanceControlProposal.proposal.appliedDistance ??
@@ -3420,48 +3042,6 @@ export default function ScenarioPlayerCombatPageContent({
         proposalStatus: selectedDistanceControlProposal.proposal.status,
       })
     : undefined;
-  const selectedDistanceControlResultPanel = selectedDistanceControlProposal?.ownSide.result
-    ? {
-        interpretedResult: `Dodge ${selectedDistanceControlProposal.ownSide.dodgeSkillTotal} + Gen/Fatigue ${selectedDistanceControlProposal.ownSide.generalFatigueModifier} + roll ${selectedDistanceControlProposal.ownSide.result.rollTotal} = ${selectedDistanceControlProposal.ownSide.result.finalTotal}`,
-        rankLabel: "Distance control",
-        sections: [
-          {
-            calculationLines: [
-              ...buildConciseDodgeCalculationRows({
-                calculation: {
-                  dodgeSkillTotal: selectedDistanceControlProposal.ownSide.dodgeSkillTotal,
-                  finalTotal: selectedDistanceControlProposal.ownSide.result.finalTotal,
-                  generalFatigueModifier:
-                    selectedDistanceControlProposal.ownSide.generalFatigueModifier,
-                  openEndedD10s: selectedDistanceControlProposal.ownSide.result.openEndedD10s,
-                  rollD20: selectedDistanceControlProposal.ownSide.result.rollD20,
-                  rollTotal: selectedDistanceControlProposal.ownSide.result.rollTotal,
-                },
-                eventId: `${selectedDistanceControlProposal.proposal.id}:own-roll`,
-                outcome:
-                  selectedDistanceControlCommittedDistance !== undefined
-                    ? `Distance ${selectedDistanceControlCommittedDistance} next round`
-                    : "Distance-control roll recorded",
-              }).map((row) => row.text),
-              `Preference: ${
-                selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"
-              }`,
-            ],
-            resultLine:
-              selectedDistanceControlCommittedDistance !== undefined
-                ? `Result: distance ${selectedDistanceControlCommittedDistance} next round`
-                : "Result: distance-control roll recorded",
-            title: "Distance control",
-          },
-        ],
-      }
-    : selectedDistanceControlCommittedDistance !== undefined
-      ? {
-          interpretedResult: `Distance control committed: distance ${selectedDistanceControlCommittedDistance} next round`,
-          rankLabel: "Distance control",
-          resultLabel: `Distance control committed: distance ${selectedDistanceControlCommittedDistance} next round`,
-        }
-      : null;
   const currentInitiativeRollCounts =
     currentInitiativePhase && combatRoundState
       ? {
@@ -4346,22 +3926,9 @@ export default function ScenarioPlayerCombatPageContent({
                 }
               />
             </div>
-            <PlayerCombatActionResultPanel
-              result={selectPlayerCombatActionResultPanel<PlayerCombatActionResultPanelView>({
-                actionRoll: actionRollResult,
-                adjustDistance: selectedAdjustDistanceResultPanel,
-                attackerPrivileged: selectedAttackerPrivilegedResultPanel,
-                combatExperience: selectedCombatExperienceResultPanel,
-                currentAttack: selectedCurrentAttackResultPanel,
-                currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel,
-                distanceControl: selectedDistanceControlResultPanel,
-                healthCheck: selectedHealthCheckResultPanel,
-                involvedDamage: selectedInvolvedDamageResultPanel,
-                latestAttack: selectedLatestRelevantAttackResultPanel,
-                phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel,
-                relevantInitiative: selectedRelevantInitiativeResultPanel,
-              })}
-            />
+            {currentStepResultPresentation ? (
+              <CombatStepResultList presentation={currentStepResultPresentation} />
+            ) : null}
           </div>
         </section>
       ) : (

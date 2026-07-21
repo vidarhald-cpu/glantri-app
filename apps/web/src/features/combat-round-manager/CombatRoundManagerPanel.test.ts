@@ -73,7 +73,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('aria-label="Latest combat event"');
   });
 
-  it("binds live Action Outcome only to Combat Log selection", () => {
+  it("keeps Combat Log selection independent from live current-step results", () => {
     const source = readPanelSource();
     const handlerStart = source.indexOf("const handleCombatLogSelection = useCallback");
     const handlerEnd = source.indexOf("const selectedTimelineRoundState", handlerStart);
@@ -88,6 +88,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("const inspectorActionResult =");
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
+    expect(source).toContain("buildCombatStepResultPresentation({");
+    expect(source).toContain("<CombatStepResultList presentation={gmCurrentStepResultPresentation}");
+    expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
   });
 
   it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
@@ -544,7 +547,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("createDefaultCombatLogSelection(combatLogProjection)");
     expect(source).toContain("reconcileCombatLogSelection({ current, projection:");
     expect(source).toContain("selectCombatLogEvent({");
-    expect(source).toContain("resolveCombatLogPresentationTargetEvents({");
+    expect(source).toContain("buildCombatStepResultPresentation({");
     expect(source).toContain("!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression");
     expect(source).toContain("readOnly={inspectorIsHistorical}");
     expect(source).toContain("inspectorIsHistorical && inspectorHistoricalActionResult");
@@ -554,16 +557,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("projectGmCombatEvents");
     expect(source).toContain("inspectorCanonicalActionResultEvents");
     expect(source).toContain("inspectorHasCanonicalActionResult");
-    expect(source).toContain(
-      "<CombatEventResultList events={inspectorCanonicalActionResultEvents} />",
-    );
+    expect(source).toContain("events={inspectorCanonicalActionResultEvents}");
+    expect(source).toContain("Historical result — Round");
     expect(source).not.toContain("Legacy result · canonical event history unavailable");
     expect(source).toContain("Some historical result details are unavailable.");
     expect(source).toContain("deriveCombatHistoryStepOutcome");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
-    expect(source).toContain('title="Action Outcome"');
-    expect(source).toContain("selectedCombatLogActionOutcomeEvents");
-    expect(source).toContain("selectedCombatLogActionOutcomeEmptyMessage");
+    expect(source).toContain("gmCurrentStepResultPresentation");
+    expect(source).toContain("<CombatStepResultList presentation={gmCurrentStepResultPresentation}");
+    expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
     expect(source).toContain("inspectorPhaseResolutionStatus");
@@ -810,7 +812,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
     expect(source).toContain("projectedBoundaryTransitionAction");
     expect(source).not.toContain("latestCombatEventSummary");
-    expect(source).toContain("selectedCombatLogActionOutcomeEvents");
+    expect(source).toContain("gmCurrentStepResultPresentation");
     expect(source).toContain("commitRoundEndDistanceControl(");
     expect(source).toContain("inspectorRoundEndDistanceAction.proposal.id");
   });

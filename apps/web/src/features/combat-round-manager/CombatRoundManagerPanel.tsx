@@ -118,18 +118,19 @@ import {
 import {
   buildCombatTrackerModel,
   buildCombatProgressionTrackerIndex,
+  buildCombatStepResultPresentation,
   buildCombatTrackerCellKey,
   buildConciseDodgeCalculationRows,
   buildCurrentActionPresentation,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatLog,
+  CombatStepResultList,
   CombatTracker,
   createDefaultCombatLogSelection,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
   reconcileCombatLogSelection,
-  resolveCombatLogPresentationTargetEvents,
   resolveCombatHistoryPanelSnapshot,
   selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
@@ -4097,6 +4098,34 @@ export default function CombatRoundManagerPanel({
     state: selectedTimelineRoundState,
     step: inspectionSelection.step,
   });
+  const gmCurrentStepResultPresentation = useMemo(
+    () =>
+      inspector.participant
+        ? buildCombatStepResultPresentation({
+            boundary: combatProgressionPresentation.boundary.kind,
+            combatLog: combatLogProjection,
+            encounterId: encounter.id,
+            encounterRevision: descriptorRevision ?? combatLogProjection.sourceRevision,
+            events: projectGmCombatEvents({
+              events: roundState.events,
+              participants: roundState.participants,
+            }),
+            participantId: inspector.participant.participantId,
+            roundNumber: roundState.roundNumber,
+            viewer: { kind: "gm" },
+          })
+        : undefined,
+    [
+      combatLogProjection,
+      combatProgressionPresentation.boundary.kind,
+      descriptorRevision,
+      encounter.id,
+      inspector.participant,
+      roundState.events,
+      roundState.participants,
+      roundState.roundNumber,
+    ],
+  );
   const inspectorSelectionIsCurrentProgression =
     selectedRoundIsActive &&
     Boolean(
@@ -5884,35 +5913,6 @@ export default function CombatRoundManagerPanel({
           snapshot: inspectorSnapshot,
         })
     : undefined;
-  const selectedCombatLogEvent = useMemo(
-    () =>
-      combatLogProjection.events.find(
-        (event) => event.id === combatLogSelection.selectedCombatLogEventId,
-      ),
-    [combatLogProjection.events, combatLogSelection.selectedCombatLogEventId],
-  );
-  const selectedCombatLogActionOutcomeSourceEvents = useMemo(
-    () =>
-      resolveCombatLogPresentationTargetEvents({
-        projection: combatLogProjection,
-        roundStates: timelineRoundStates,
-        selection: combatLogSelection,
-      }),
-    [combatLogProjection, combatLogSelection, timelineRoundStates],
-  );
-  const selectedCombatLogActionOutcomeEvents = useMemo(
-    () =>
-      projectGmCombatEvents({
-        events: selectedCombatLogActionOutcomeSourceEvents,
-        participants: roundState.participants,
-      }),
-    [roundState.participants, selectedCombatLogActionOutcomeSourceEvents],
-  );
-  const selectedCombatLogActionOutcomeEmptyMessage = !selectedCombatLogEvent
-    ? "Select a Combat Log event to view its Action Outcome."
-    : !selectedCombatLogEvent.presentationTargetId
-      ? "The selected Combat Log event has no Action Outcome details."
-      : "Action Outcome details are unavailable for the selected Combat Log event.";
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorHistoricalStatusLabel = inspectorHistoricalStepOutcome
     ? inspectorHistoricalStepOutcome.category === "not_required"
@@ -9536,7 +9536,10 @@ export default function CombatRoundManagerPanel({
                     />
                   </div>
                   {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
-                    <CombatEventResultList events={inspectorCanonicalActionResultEvents} />
+                    <CombatEventResultList
+                      events={inspectorCanonicalActionResultEvents}
+                      title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
+                    />
                   ) : inspectorIsHistorical && inspectorHistoricalActionResult ? (
                     <div style={{ display: "grid", gap: "0.3rem" }}>
                       {inspectorShowsLegacyResultFallback ? (
@@ -9544,16 +9547,17 @@ export default function CombatRoundManagerPanel({
                           Some historical result details are unavailable.
                         </div>
                       ) : null}
-                      <PlayerCombatActionResultPanel result={inspectorHistoricalActionResult} />
+                      <PlayerCombatActionResultPanel
+                        result={inspectorHistoricalActionResult}
+                        title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
+                      />
                     </div>
                   ) : inspectorIsHistorical ? (
-                    <PlayerCombatActionResultPanel result={null} />
+                    <PlayerCombatActionResultPanel result={null} title="Historical result" />
+                  ) : gmCurrentStepResultPresentation ? (
+                    <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
                   ) : (
-                    <CombatEventResultList
-                      emptyMessage={selectedCombatLogActionOutcomeEmptyMessage}
-                      events={selectedCombatLogActionOutcomeEvents}
-                      title="Action Outcome"
-                    />
+                    <PlayerCombatActionResultPanel result={null} />
                   )}
                 </div>
               </>

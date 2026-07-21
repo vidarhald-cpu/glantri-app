@@ -102,7 +102,7 @@ describe("PlayerCombatHistoryInspector", () => {
     expect(screen.getAllByText("Sword / shield")).toHaveLength(2);
     expect(screen.getByText("General/Fatigue")).toBeTruthy();
     expect(screen.getByText("Current action")).toBeTruthy();
-    expect(screen.getByLabelText("Action result")).toBeTruthy();
+    expect(screen.getByLabelText(/Historical result/)).toBeTruthy();
     expect(container.textContent).not.toContain("Bucket Key");
     expect(container.textContent).not.toContain("Source Rule");
     expect(container.textContent).not.toContain("internal-rule-key");
@@ -138,7 +138,7 @@ describe("PlayerCombatHistoryInspector", () => {
 
     const modifierPanel = screen.getByText("Combat modifiers").closest("section");
     const currentActionPanel = screen.getByText("Current action").closest("section");
-    const actionResultPanel = screen.getByLabelText("Action result");
+    const actionResultPanel = screen.getByLabelText(/Historical result/);
     expect(modifierPanel?.parentElement).toBe(currentActionPanel?.parentElement);
     expect(currentActionPanel?.parentElement).toBe(actionResultPanel.parentElement);
     expect(Array.from(currentActionPanel?.parentElement?.children ?? [])).toEqual([

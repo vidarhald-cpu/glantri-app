@@ -206,6 +206,11 @@ export function PlayerCombatHistoryInspector(input: {
         <CombatEventResultList
           emptyMessage={input.snapshot?.stepOutcome?.message ?? historicalDataMissingMessage}
           events={input.events}
+          title={
+            input.snapshot
+              ? `Historical result — Round ${input.snapshot.roundNumber} · ${input.snapshot.step.replaceAll("_", " ")}`
+              : "Historical result"
+          }
         />
       </div>
     </section>

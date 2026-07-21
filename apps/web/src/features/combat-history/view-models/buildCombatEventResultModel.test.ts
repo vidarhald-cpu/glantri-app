@@ -155,7 +155,7 @@ describe("buildCombatEventResultModel", () => {
       "Modifier: +2",
       "Die roll: 3",
       "Result: 21",
-      "Outcome: Awaiting opponent roll",
+      "Outcome: Roll recorded",
       "Maneuver adjustment: +2",
     ]);
   });

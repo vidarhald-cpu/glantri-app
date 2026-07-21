@@ -177,7 +177,7 @@ export function buildConciseDodgeCalculationRows(input: {
     { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
     {
       key: `${input.eventId}:calculation:outcome`,
-      text: `Outcome: ${standardOutcome ?? "Awaiting opponent roll"}`,
+      text: `Outcome: ${standardOutcome ?? "Roll recorded"}`,
     },
   ];
   for (const [index, detail] of (input.detailRows ?? []).entries()) {

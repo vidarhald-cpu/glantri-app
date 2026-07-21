@@ -239,6 +239,7 @@ interface PlayerCombatActionResultPanelProps {
     resultLabel?: string;
     sections?: readonly PlayerCombatActionResultSection[];
   } | null;
+  title?: string;
 }
 
 export const playerCombatPanelCardStyle = {
@@ -1368,15 +1369,19 @@ export function PlayerCombatActionButtonPanel({
   );
 }
 
-export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResultPanelProps) {
+export function PlayerCombatActionResultPanel({
+  result,
+  title = "Action result",
+}: PlayerCombatActionResultPanelProps) {
   return (
     <section
+      aria-label={title}
       style={{
         ...playerCombatPanelCardStyle,
         alignContent: "start",
       }}
     >
-      <strong>Action result</strong>
+      <strong>{title}</strong>
       <div
         style={{
           alignItems: "center",
