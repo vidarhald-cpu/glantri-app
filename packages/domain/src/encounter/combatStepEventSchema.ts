@@ -5,6 +5,7 @@ const factRecordSchema = z.record(z.string(), z.unknown());
 
 export const combatStepEventTypeSchema = z.enum([
   "declaration",
+  "combat_experience",
   "initiative",
   "attack",
   "parry",

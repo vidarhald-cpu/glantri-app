@@ -1,4 +1,5 @@
 import type { CombatStepEvent, CombatStepEventFacts } from "./combatStepEventSchema";
+import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import {
   buildCombatLogProjection,
   projectCombatLogForViewer,
@@ -557,6 +558,39 @@ function projectRound(input: {
   };
 }
 
+function eventsWithDerivedCombatExperience(input: {
+  commands: CompletedCombatRound["commands"] | CombatRoundState["commands"];
+  encounterId: string;
+  events: readonly CombatStepEvent[];
+  participants: CompletedCombatRound["participants"] | CombatRoundState["participants"];
+  phaseResolutionResults:
+    | CompletedCombatRound["phaseResolutionResults"]
+    | CombatRoundState["phaseResolutionResults"];
+  roundEndReview:
+    | CompletedCombatRound["roundEndReview"]
+    | CombatRoundState["roundEndReview"];
+  roundNumber: number;
+  stepSnapshots: CompletedCombatRound["stepSnapshots"] | CombatRoundState["stepSnapshots"];
+}): CombatStepEvent[] {
+  const existingCommandIds = new Set(
+    input.events.flatMap((event) => (event.commandId ? [event.commandId] : [])),
+  );
+  const derived = deriveLegacyCombatStepEvents({
+    commands: input.commands,
+    encounterId: input.encounterId,
+    participants: input.participants,
+    phaseResolutionResults: input.phaseResolutionResults,
+    roundEndReview: input.roundEndReview,
+    roundNumber: input.roundNumber,
+    stepSnapshots: input.stepSnapshots,
+  }).filter(
+    (event) =>
+      event.type === "combat_experience" &&
+      (!event.commandId || !existingCommandIds.has(event.commandId)),
+  );
+  return [...input.events, ...derived];
+}
+
 export function projectCombatHistory(input: {
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   participants: readonly CombatHistoryParticipantInput[];
@@ -577,7 +611,16 @@ export function projectCombatHistory(input: {
   );
   const archivedRounds = input.state.rounds.map((round: CompletedCombatRound) =>
     projectRound({
-      events: round.events,
+      events: eventsWithDerivedCombatExperience({
+        commands: round.commands,
+        encounterId: round.encounterId ?? input.state.encounterId ?? "combat-history",
+        events: round.events,
+        participants: round.participants,
+        phaseResolutionResults: round.phaseResolutionResults,
+        roundEndReview: round.roundEndReview,
+        roundNumber: round.roundNumber,
+        stepSnapshots: round.stepSnapshots,
+      }),
       labels,
       participants: visibleParticipants,
       roundNumber: round.roundNumber,
@@ -588,7 +631,16 @@ export function projectCombatHistory(input: {
 
   return {
     activeRound: projectRound({
-      events: input.state.events,
+      events: eventsWithDerivedCombatExperience({
+        commands: input.state.commands,
+        encounterId: input.state.encounterId ?? "combat-history",
+        events: input.state.events,
+        participants: input.state.participants,
+        phaseResolutionResults: input.state.phaseResolutionResults,
+        roundEndReview: input.state.roundEndReview,
+        roundNumber: input.state.roundNumber,
+        stepSnapshots: input.state.stepSnapshots,
+      }),
       labels,
       participants: visibleParticipants,
       roundNumber: input.state.roundNumber,
@@ -604,6 +656,8 @@ export function projectCombatHistory(input: {
               sourceRevision: input.sourceUpdatedAt,
               state: input.state,
             }),
+            unpublishedDeclarationRoundNumber:
+              progression.boundary.kind === "declaration" ? input.state.roundNumber : undefined,
             viewer: input.viewer,
           }),
         }

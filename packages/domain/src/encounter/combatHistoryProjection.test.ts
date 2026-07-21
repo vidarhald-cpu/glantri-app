@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  combatRoundCommandSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
   buildCombatRoundAttackRollResult,
@@ -80,6 +81,112 @@ describe("combat history projection", () => {
     expect(projected?.facts.involvedOutcome).toBeUndefined();
     expect(projected?.facts.gmReview).toBeUndefined();
     expect(JSON.stringify(projected)).not.toContain("privateNote");
+  });
+
+  it("shows Combat Experience outcome and calculation only to the GM and roller", () => {
+    const combatExperience = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: {},
+        involvedOutcome: { difficulty: 26, finalTotal: 27, success: true },
+        publicOutcome: {},
+        rollerPrivate: { rollD20: 17, rollTotal: 17, skillTotal: 10 },
+      },
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      step: "select_actions",
+      type: "combat_experience",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "aria", role: "roller" },
+        ],
+        involvedParticipantIds: ["aria"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    const gm = projectCombatHistoryEvent({
+      event: combatExperience,
+      participants,
+      viewer: { kind: "gm" },
+    });
+    const own = projectCombatHistoryEvent({
+      event: combatExperience,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const other = projectCombatHistoryEvent({
+      event: combatExperience,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(gm?.facts).toMatchObject({
+      involvedOutcome: { difficulty: 26, finalTotal: 27, success: true },
+      privateCalculation: { rollD20: 17, rollTotal: 17, skillTotal: 10 },
+    });
+    expect(own?.facts).toMatchObject({
+      involvedOutcome: { difficulty: 26, finalTotal: 27, success: true },
+      privateCalculation: { rollD20: 17, rollTotal: 17, skillTotal: 10 },
+    });
+    expect(other).toBeUndefined();
+  });
+
+  it("reconstructs the live Combat Experience presentation event from persisted command facts", () => {
+    const command = combatRoundCommandSchema.parse({
+      afterCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
+      beforeCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
+      createdAt: "2026-01-01T00:01:00.000Z",
+      facts: {
+        difficulty: 26,
+        finalTotal: 27,
+        openEndedD10s: [],
+        resultBand: "active",
+        resultLabel: "Active",
+        rollD20: 17,
+        rollTotal: 17,
+        skillTotal: 10,
+      },
+      id: "ce-command",
+      participantId: "aria",
+      roundNumber: 1,
+      step: "DE",
+      type: "roll_combat_experience",
+    });
+    const state = combatRoundStateSchema.parse({
+      commands: [command],
+      currentStep: "select_actions",
+      encounterId: "encounter-1",
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 1,
+    });
+
+    const projection = projectCombatHistory({
+      participants,
+      sourceUpdatedAt: "revision-ce",
+      state,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projection.activeRound.events).toContainEqual(
+      expect.objectContaining({
+        facts: expect.objectContaining({
+          involvedOutcome: expect.objectContaining({
+            difficulty: 26,
+            finalTotal: 27,
+            success: true,
+          }),
+          privateCalculation: expect.objectContaining({ rollD20: 17, skillTotal: 10 }),
+        }),
+        type: "combat_experience",
+      }),
+    );
+    expect(projection.combatLog?.events.some((event) => event.category !== "round")).toBe(false);
   });
 
   it("delivers player-safe live progression from the same state revision", () => {

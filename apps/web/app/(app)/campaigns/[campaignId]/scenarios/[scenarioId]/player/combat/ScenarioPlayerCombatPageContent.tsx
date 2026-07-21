@@ -3421,6 +3421,7 @@ export default function ScenarioPlayerCombatPageContent({
               actionId={selectedActionId}
               additionalActionNotes={additionalActionNotes}
               controlsDisabled={declarationControlsDisabled}
+              declarationRecorded={selectedParticipantStoredDeclarationThisRound}
               distancePreferenceOptions={distancePreferenceOptions}
               movementId={selectedMovementId}
               movementIntent={selectedMovementIntent}

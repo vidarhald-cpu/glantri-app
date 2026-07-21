@@ -88,6 +88,33 @@ export interface BuildCurrentActionPresentationInput {
   readonly viewer: CurrentActionViewerContext;
 }
 
+/**
+ * Labels an already-authorized declaration command as an edit only when its immutable descriptor
+ * belongs to the inspected participant. This never creates or retargets an action.
+ */
+export function labelCurrentActionAsDeclarationEdit(input: {
+  readonly participantId?: string;
+  readonly presentation?: CurrentActionPresentation | null;
+}): CurrentActionPresentation | null | undefined {
+  const presentation = input.presentation;
+  if (
+    !presentation ||
+    presentation.taskKind !== "submit_declaration" ||
+    !input.participantId ||
+    presentation.primaryAction.descriptor?.participantId !== input.participantId
+  ) {
+    return presentation;
+  }
+  return Object.freeze({
+    ...presentation,
+    primaryAction: Object.freeze({
+      ...presentation.primaryAction,
+      label: "Update declaration",
+    }),
+    requiredNow: "Update the declaration.",
+  });
+}
+
 const BOUNDARY_LABELS: Record<CombatProgressionBoundaryKind, string> = {
   declaration: "Declaration",
   phase1_initiative: "Phase 1 initiative",
@@ -397,7 +424,7 @@ function boundaryButtonLabel(target: CombatProgressionBoundaryKind | undefined):
 function buttonLabel(task: CombatProgressionPresentationTask): string {
   switch (task.kind) {
     case "submit_declaration":
-      return "Choose declaration";
+      return "Declare action";
     case "combat_experience":
       return task.expectedCommand === "set_combat_experience_difficulty"
         ? "Open Combat Experience"
@@ -461,7 +488,7 @@ function requiredNowFor(
   if (status === "waiting") return "Waiting for another combatant.";
   switch (task.kind) {
     case "submit_declaration":
-      return "Choose your declaration.";
+      return "Declare your action.";
     case "combat_experience":
       return task.expectedCommand === "set_combat_experience_difficulty"
         ? "Set the Combat Experience difficulty."

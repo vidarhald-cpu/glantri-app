@@ -24,6 +24,7 @@ export interface CombatEventResultModel {
 
 const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   attack: "Attack",
+  combat_experience: "Combat Experience",
   critical: "Critical",
   damage_committed: "Damage committed",
   damage_proposed: "Damage proposed",
@@ -234,6 +235,23 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
   const roller = identity(event, "roller") ?? identity(event, "actor");
 
   switch (event.type) {
+    case "combat_experience": {
+      const success = factValue(event, "success");
+      const finalTotal = factLabel(factValue(event, "finalTotal"));
+      const difficulty = factLabel(factValue(event, "difficulty"));
+      return {
+        outcomeRows: resultRow(
+          event,
+          finalTotal && difficulty ? `Result: ${finalTotal} vs ${difficulty}` : undefined,
+        ),
+        summary:
+          success === true
+            ? `${roller ?? "Participant"} succeeded the Combat Experience roll.`
+            : success === false
+              ? `${roller ?? "Participant"} failed the Combat Experience roll.`
+              : `${roller ?? "Participant"} completed the Combat Experience roll.`,
+      };
+    }
     case "attack": {
       const weapon = event.facts.involvedOutcome?.weaponName;
       return {

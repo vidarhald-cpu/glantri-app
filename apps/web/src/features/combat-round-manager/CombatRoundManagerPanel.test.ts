@@ -331,7 +331,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
-    expect(source).toContain("presentation={currentActionPresentation}");
+    expect(source).toContain("labelCurrentActionAsDeclarationEdit");
+    expect(source).toContain("presentation: currentActionPresentation");
     expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).not.toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("inspectorStatusSuffix");

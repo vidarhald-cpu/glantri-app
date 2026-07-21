@@ -185,15 +185,28 @@ function projectSubjectForViewer(input: {
  */
 export function projectCombatLogForViewer(input: {
   projection: CombatLogProjection;
+  /** The active declaration round remains private between participants until the GM closes it. */
+  unpublishedDeclarationRoundNumber?: number;
   viewer: CombatLogViewer;
 }): CombatLogProjection {
   if (input.viewer.kind === "gm") return input.projection;
+  const viewer = input.viewer;
 
   return deepFreeze({
     ...input.projection,
-    events: input.projection.events.map((event) => {
-      const actor = projectSubjectForViewer({ subject: event.actor, viewer: input.viewer });
-      const target = projectSubjectForViewer({ subject: event.target, viewer: input.viewer });
+    events: input.projection.events
+      .filter(
+        (event) =>
+          event.category !== "declaration" ||
+          event.roundNumber !== input.unpublishedDeclarationRoundNumber ||
+          Boolean(
+            event.actor?.participantId &&
+              viewer.controlledParticipantIds.has(event.actor.participantId),
+          ),
+      )
+      .map((event) => {
+      const actor = projectSubjectForViewer({ subject: event.actor, viewer });
+      const target = projectSubjectForViewer({ subject: event.target, viewer });
       const summary =
         actor.replacement && event.actor
           ? replaceSubjectWording(event.summary, event.actor, actor.replacement)
@@ -222,7 +235,7 @@ export function projectCombatLogForViewer(input: {
               taskId: undefined,
             }),
       };
-    }),
+      }),
   });
 }
 

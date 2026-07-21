@@ -102,7 +102,9 @@ function eventBelongsToBoundary(
   boundary: CombatProgressionBoundaryKind,
 ): boolean {
   if (event.category === "round") return false;
-  if (boundary === "declaration") return event.phase === "declaration";
+  // Declaration details are published through the Combat Log after DE closes. The live result
+  // panel is reserved for declaration prerequisites such as Combat Experience while DE is open.
+  if (boundary === "declaration") return false;
   if (boundary === "phase1_resolution") return event.phase === "phase1";
   if (boundary === "phase2_resolution") return event.phase === "phase2";
   if (boundary === "round_end" || boundary === "round_boundary") {
@@ -318,7 +320,7 @@ function identityLabel(
 
 function identitySubject(
   event: ProjectedCombatHistoryEvent,
-  role: "actor" | "attacker" | "defender" | "target",
+  role: "actor" | "attacker" | "defender" | "roller" | "target",
 ): CombatPresentationSubject | undefined {
   const identity = event.identities.find((candidate) => candidate.role === role);
   return identity
@@ -361,6 +363,42 @@ function supplementalEntries(input: {
   );
 
   return input.events.flatMap((event): OrderedEntry[] => {
+    if (event.type === "combat_experience" && !loggedSourceIds.has(event.id)) {
+      const participant = identitySubject(event, "actor") ?? identitySubject(event, "roller");
+      const finalTotal = visibleOutcome(event, "finalTotal");
+      const difficulty = visibleOutcome(event, "difficulty");
+      const success = visibleOutcome(event, "success");
+      return [
+        {
+          entry: {
+            actor: participant,
+            calculations: calculationsForEvents({
+              events: [event],
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
+            category: "review",
+            heading: "Combat Experience",
+            id: `current-step:${event.id}`,
+            outcome:
+              typeof finalTotal === "number" && typeof difficulty === "number"
+                ? `Result: ${finalTotal} vs ${difficulty}`
+                : undefined,
+            sourceEventIds: [event.id],
+            state: "final",
+            summary:
+              success === true
+                ? "Succeeded."
+                : success === false
+                  ? "Failed."
+                  : "Combat Experience roll completed.",
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
+
     if (event.type === "adjust_distance_result") {
       const id = proposalId(event);
       if (!id || loggedContestProposalIds.has(id)) return [];

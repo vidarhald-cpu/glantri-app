@@ -2096,6 +2096,13 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   }
 
   if (
+    input.command.type === "roll_combat_experience" &&
+    !input.controlledEncounterParticipantIds.has(input.command.participantId)
+  ) {
+    return undefined;
+  }
+
+  if (
     input.command.type === "roll_round_end_distance_control" ||
     input.command.type === "commit_round_end_distance_control"
   ) {
@@ -2225,7 +2232,10 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         ? participant
         : {
             ...participant,
-            declaration: participant.declaration
+            declaration:
+              roundState.currentStep === "select_actions"
+                ? undefined
+                : participant.declaration
               ? {
                   ...participant.declaration,
                   additionalActionNotes: undefined,

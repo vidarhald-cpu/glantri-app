@@ -70,6 +70,7 @@ function log(events: readonly CombatLogEventPresentation[]): CombatLogProjection
 
 function build(input: {
   boundary?:
+    | "declaration"
     | "phase1_resolution"
     | "phase2_modifier_review"
     | "phase2_resolution"
@@ -413,6 +414,86 @@ describe("buildCombatStepResultPresentation", () => {
     expect(roundEnd.entries).toHaveLength(1);
     expect(roundEnd.entries[0]).toMatchObject({ category: "review", state: "final" });
     expect(laterPhase.entries).toEqual([]);
+  });
+
+  it("shows a rolled Combat Experience result immediately and clears it after declaration", () => {
+    const combatExperience = historyEvent("combat_experience", 1, {
+      facts: {
+        involvedOutcome: {
+          difficulty: 26,
+          finalTotal: 27,
+          resultBand: "active",
+          resultLabel: "Active",
+          success: true,
+        },
+        privateCalculation: {
+          difficulty: 26,
+          finalTotal: 27,
+          openEndedD10s: [],
+          rollD20: 17,
+          rollTotal: 17,
+          skillTotal: 10,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      phase: undefined,
+      step: "select_actions",
+    });
+
+    const declaration = build({ boundary: "declaration", events: [combatExperience] });
+    const modifierReview = build({
+      boundary: "phase2_modifier_review",
+      events: [combatExperience],
+    });
+
+    expect(declaration.entries).toHaveLength(1);
+    expect(declaration.entries[0]).toMatchObject({
+      category: "review",
+      heading: "Combat Experience",
+      outcome: "Result: 27 vs 26",
+      state: "final",
+      summary: "Succeeded.",
+    });
+    expect(declaration.entries[0]?.calculations[0]).toMatchObject({
+      collapsedByDefault: true,
+      title: "Combat Experience",
+      visibility: "own",
+    });
+    expect(modifierReview.entries).toEqual([]);
+    expect(JSON.stringify(declaration)).not.toContain("combat log");
+  });
+
+  it("does not render declaration content in live results before publication", () => {
+    const ownDeclaration = logEvent("log:own-declaration", 1, {
+      actor: { displayName: "The Gladiator", participantId: "gladiator" },
+      category: "declaration",
+      phase: "declaration",
+      summary: "you declared Single Attack against Scyrian cavalry guy.",
+      summaryFacts: {
+        actionId: "attack_parry",
+        actionLabel: "Single Attack",
+        kind: "declaration_submitted",
+      },
+    });
+
+    expect(
+      build({ boundary: "declaration", logEvents: [ownDeclaration] }).entries,
+    ).toEqual([]);
   });
 
   it("preserves safe hidden-identity wording without exposing a participant id", () => {

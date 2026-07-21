@@ -7,7 +7,10 @@ import type {
 } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
-import { buildCurrentActionPresentation } from "./currentActionPresentation";
+import {
+  buildCurrentActionPresentation,
+  labelCurrentActionAsDeclarationEdit,
+} from "./currentActionPresentation";
 
 const aria = { kind: "combatant" as const, label: "Aria", participantId: "aria" };
 const borin = { kind: "combatant" as const, label: "Borin", participantId: "borin" };
@@ -555,8 +558,8 @@ describe("CurrentActionPresentation", () => {
     [
       "submit_declaration",
       "Choose your action for this round.",
-      "Choose your declaration.",
-      "Choose declaration",
+      "Declare your action.",
+      "Declare action",
     ],
     ["roll_initiative", "Initiative is open for Aria.", "Roll initiative.", "Roll initiative"],
     ["commit_initiative", "Initiative is complete.", "Commit initiative.", "Commit initiative"],
@@ -565,6 +568,25 @@ describe("CurrentActionPresentation", () => {
     const result = build([task({ actor: aria, kind })]);
 
     expect(result).toMatchObject({ summary, requiredNow, primaryAction: { label: button } });
+  });
+
+  it("labels a matching GM declaration edit without retargeting its descriptor", () => {
+    const presentation = build([task({ actor: aria, kind: "submit_declaration" })]);
+    const edited = labelCurrentActionAsDeclarationEdit({
+      participantId: "aria",
+      presentation,
+    });
+
+    expect(edited).toMatchObject({
+      primaryAction: {
+        descriptor: presentation?.primaryAction.descriptor,
+        label: "Update declaration",
+      },
+      requiredNow: "Update the declaration.",
+    });
+    expect(
+      labelCurrentActionAsDeclarationEdit({ participantId: "borin", presentation }),
+    ).toBe(presentation);
   });
 
   it("does not expose progression terminology in rendered presentation copy", () => {

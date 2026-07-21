@@ -1,10 +1,35 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PlayerCombatActionButtonPanel, PlayerCombatModifierPanel } from "./PlayerCombatPanels";
+import {
+  PlayerCombatActionButtonPanel,
+  PlayerCombatActionSelectorPanel,
+  PlayerCombatModifierPanel,
+} from "./PlayerCombatPanels";
 
 afterEach(() => {
   cleanup();
+});
+
+describe("PlayerCombatActionSelectorPanel", () => {
+  it("keeps the selector prompt and shows the completed declaration state", () => {
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId=""
+        additionalActionNotes=""
+        declarationRecorded
+        movementId=""
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: "Choose action" })).toBeInTheDocument();
+    expect(screen.getByText("Action declared.")).toBeInTheDocument();
+  });
 });
 
 describe("PlayerCombatModifierPanel", () => {

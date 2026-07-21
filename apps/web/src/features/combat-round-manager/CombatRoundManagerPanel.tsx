@@ -130,6 +130,7 @@ import {
   createDefaultCombatLogSelection,
   formatSignedCombatModifier,
   getCombatProgressionPresentationTasks,
+  labelCurrentActionAsDeclarationEdit,
   reconcileCombatLogSelection,
   resolveCombatHistoryPanelSnapshot,
   selectCombatLogEvent,
@@ -8802,6 +8803,7 @@ export default function CombatRoundManagerPanel({
                         inspectorIsHistorical ||
                         inspectorCombatExperienceRequired
                       }
+                      declarationRecorded={Boolean(inspector.participant?.declaration)}
                       distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
                       movementId={inspectorDisplayDraft.movementId}
                       movementIntent={inspectorDisplayDraft.movementIntent}
@@ -9527,7 +9529,14 @@ export default function CombatRoundManagerPanel({
                           ? inspectorPreActionControls
                           : undefined
                       }
-                      presentation={currentActionPresentation}
+                      presentation={
+                        inspector.participant?.declaration
+                          ? labelCurrentActionAsDeclarationEdit({
+                              participantId: inspector.participant.participantId,
+                              presentation: currentActionPresentation,
+                            })
+                          : currentActionPresentation
+                      }
                       saving={saving}
                       statusText={
                         projectedBoundaryTransitionAction

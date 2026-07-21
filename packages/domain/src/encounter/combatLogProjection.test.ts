@@ -426,6 +426,7 @@ describe("CombatLogProjection", () => {
 
   it("excludes routine mechanics and proposal-only results", () => {
     const excludedTypes = [
+      "combat_experience",
       "initiative",
       "damage_proposed",
       "health_check",
@@ -645,6 +646,81 @@ describe("CombatLogProjection", () => {
     });
     expect(player.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state])).toEqual(
       projection.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state]),
+    );
+  });
+
+  it("keeps the active declaration private from other players until the GM closes it", () => {
+    const projection = project(
+      state({
+        participants: [
+          {
+            attackResults: {},
+            declaration: {
+              actionId: "attack_parry",
+              phaseContexts: {
+                phase1: {
+                  modifierBuckets: {
+                    general: [],
+                    situationDb: [],
+                    situationInitiative: [],
+                    situationObSkill: [],
+                  },
+                  targetParticipantId: "scyrian",
+                },
+              },
+              roundNumber: 1,
+              submittedAt: "2026-07-21T10:00:00.000Z",
+              submittedBy: "player",
+            },
+            initiatives: {},
+            label: "The Gladiator",
+            participantId: "gladiator",
+            stepStatuses: {},
+          },
+          {
+            attackResults: {},
+            initiatives: {},
+            participantId: "scyrian",
+            label: "Scyrian Cavalry",
+            stepStatuses: {},
+          },
+        ],
+      }),
+    );
+    const viewer = {
+      controlledParticipantIds: new Set(["scyrian"]),
+      kind: "player" as const,
+      visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+    };
+
+    const privateView = projectCombatLogForViewer({
+      projection,
+      unpublishedDeclarationRoundNumber: 1,
+      viewer,
+    });
+    const actorView = projectCombatLogForViewer({
+      projection,
+      unpublishedDeclarationRoundNumber: 1,
+      viewer: {
+        controlledParticipantIds: new Set(["gladiator"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+    const publishedView = projectCombatLogForViewer({ projection, viewer });
+
+    expect(privateView.events.some((event) => event.category === "declaration")).toBe(false);
+    expect(actorView.events).toContainEqual(
+      expect.objectContaining({
+        category: "declaration",
+        summary: "you declared Single Attack against Scyrian Cavalry.",
+      }),
+    );
+    expect(publishedView.events).toContainEqual(
+      expect.objectContaining({
+        category: "declaration",
+        summary: "The Gladiator declared Single Attack against you.",
+      }),
     );
   });
 });

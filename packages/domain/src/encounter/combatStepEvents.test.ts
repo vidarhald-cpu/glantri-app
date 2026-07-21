@@ -448,6 +448,63 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(proposal?.facts.involvedOutcome).not.toHaveProperty("notes");
   });
 
+  it("derives Combat Experience as an involved result without making its roll public", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          facts: {
+            difficulty: 26,
+            finalTotal: 27,
+            openEndedD10s: [],
+            resultBand: "active",
+            resultLabel: "Active",
+            rollD20: 17,
+            rollTotal: 17,
+            skillTotal: 10,
+          },
+          id: "command-combat-experience",
+          participantId: ATTACKER_ID,
+          type: "roll_combat_experience",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorParticipantId: ATTACKER_ID,
+      completeness: "legacy_derived",
+      facts: {
+        involvedOutcome: {
+          difficulty: 26,
+          finalTotal: 27,
+          resultBand: "active",
+          resultLabel: "Active",
+          success: true,
+        },
+        publicOutcome: {},
+        rollerPrivate: {
+          difficulty: 26,
+          finalTotal: 27,
+          rollD20: 17,
+          rollTotal: 17,
+          skillTotal: 10,
+        },
+      },
+      ownerParticipantId: ATTACKER_ID,
+      rollerParticipantId: ATTACKER_ID,
+      step: "select_actions",
+      type: "combat_experience",
+      visibility: {
+        involvedParticipantIds: [ATTACKER_ID],
+        outcomeScope: "involved",
+        rollerParticipantId: ATTACKER_ID,
+      },
+    });
+  });
+
   it("marks absent dice and linkage as incomplete without inventing values", () => {
     const incompleteInitiative = combatRoundParticipantStateSchema.parse({
       initiatives: { phase1: 7 },

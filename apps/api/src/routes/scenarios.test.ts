@@ -2604,6 +2604,119 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json().history.progression)).not.toContain("diagnostics");
   });
 
+  it("keeps opponent declaration content private during DE while preserving safe completion", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const baseState =
+      baseEncounter.combatRoundState ?? initializeCombatRoundState({ encounter: baseEncounter });
+    const ownDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        additionalActionNotes: "Own private plan",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-2",
+          },
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-1",
+      state: baseState,
+      submittedBy: "player",
+    });
+    const bothDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        additionalActionNotes: "Opponent private plan",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-1",
+          },
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-2",
+      state: ownDeclared,
+      submittedBy: "player",
+    });
+    const encounter = {
+      ...baseEncounter,
+      combatRoundState: bothDeclared,
+    };
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        { controlledByUserId: "player-1", id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    const encounterResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(historyResponse.statusCode).toBe(200);
+    const history = historyResponse.json().history;
+    expect(history.combatLog.events).toContainEqual(
+      expect.objectContaining({
+        category: "declaration",
+        summary: expect.stringContaining("you declared Single Attack"),
+      }),
+    );
+    expect(history.combatLog.events).not.toContainEqual(
+      expect.objectContaining({
+        category: "declaration",
+        actor: expect.objectContaining({ participantId: "encounter-participant-2" }),
+      }),
+    );
+    const declarationTasks = history.progression.processes
+      .flatMap((process: { stages: Array<{ executionGroups: Array<{ tasks: unknown[] }> }> }) =>
+        process.stages.flatMap((stage) =>
+          stage.executionGroups.flatMap((group) => group.tasks),
+        ),
+      )
+      .filter((task: { kind?: string }) => task.kind === "submit_declaration");
+    expect(declarationTasks).toEqual([]);
+
+    const safeParticipants = encounterResponse.json().encounter.combatRoundState.participants;
+    expect(
+      safeParticipants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.declaration,
+    ).toMatchObject({ actionId: "attack_parry" });
+    expect(
+      safeParticipants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-2",
+      )?.declaration,
+    ).toBeUndefined();
+    expect(JSON.stringify(historyResponse.json())).not.toContain("Opponent private plan");
+    expect(JSON.stringify(encounterResponse.json())).not.toContain("Opponent private plan");
+  });
+
   it("lets a GM request the selected participant's player-safe history perspective", async () => {
     const participants = [
       {

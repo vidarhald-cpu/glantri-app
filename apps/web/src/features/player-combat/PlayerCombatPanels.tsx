@@ -150,6 +150,7 @@ interface PlayerCombatActionSelectorPanelProps {
   actionOptions?: readonly PlayerEncounterOption<PlayerEncounterActionId>[];
   additionalActionNotes: string;
   controlsDisabled?: boolean;
+  declarationRecorded?: boolean;
   distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
   movementId: PlayerEncounterMovementId | "";
   movementIntent?: MovementIntent;
@@ -1104,6 +1105,7 @@ export function PlayerCombatActionSelectorPanel({
   actionOptions = PLAYER_ENCOUNTER_ACTION_OPTIONS,
   additionalActionNotes,
   controlsDisabled = false,
+  declarationRecorded = false,
   distancePreferenceOptions = [],
   movementId,
   movementIntent,
@@ -1163,6 +1165,11 @@ export function PlayerCombatActionSelectorPanel({
         label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
         sourceLabel={sourceLabel}
       />
+      {declarationRecorded ? (
+        <div style={{ color: "#3f5f46", fontSize: "0.88rem", fontWeight: 650 }}>
+          Action declared.
+        </div>
+      ) : null}
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
