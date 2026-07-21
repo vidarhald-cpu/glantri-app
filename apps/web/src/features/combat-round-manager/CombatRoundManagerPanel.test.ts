@@ -89,7 +89,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
     expect(source).toContain("buildCombatStepResultPresentation({");
-    expect(source).toContain("<CombatStepResultList presentation={gmCurrentStepResultPresentation}");
+    expect(source).toContain(
+      "<CombatStepResultList presentation={gmCurrentStepResultPresentation}",
+    );
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
   });
 
@@ -108,9 +110,10 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain('descriptor.commandType === "commit_adjust_distance"');
     expect(source).toContain("candidate.id === descriptor.proposalId");
-    expect(source).not.toContain(
-      "projectedAdjustDistanceTask?.trackerFacet.owner?.participantId",
-    );
+    expect(source).not.toContain("projectedAdjustDistanceTask?.trackerFacet.owner?.participantId");
+    expect(source).toContain("buildAdjustDistanceReviewPresentation({");
+    expect(source).toContain("inspectorAdjustDistanceReview.proposedDistance");
+    expect(source).toContain("inspectorAdjustDistanceReview?.legalDistances.map");
   });
 
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {
@@ -574,7 +577,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("deriveCombatHistoryStepOutcome");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
     expect(source).toContain("gmCurrentStepResultPresentation");
-    expect(source).toContain("<CombatStepResultList presentation={gmCurrentStepResultPresentation}");
+    expect(source).toContain(
+      "<CombatStepResultList presentation={gmCurrentStepResultPresentation}",
+    );
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
@@ -831,16 +836,16 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const projectedCurrentTasks = getCombatProgressionPresentationTasks");
-    expect(source).toContain(
-      "const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner",
-    );
+    expect(source).toContain("buildCombatRoundLiveInspectorContext(projectedCurrentTask)");
+    expect(source).toContain("getCombatRoundLiveInspectorSelection({");
     expect(source).toContain("function selectCurrentTask()");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("setInspectionSelection(");
     expect(source).toContain("resolveCombatRoundInspectionSelection({");
-    expect(source).toContain("scrollToCurrent: true");
-    expect(source).toContain('scrollMode: "center"');
+    expect(source).toContain("manualSelection: currentTaskSelection");
+    expect(source).toContain("participantId: currentTaskSelection.participantId");
+    expect(source).toContain('"center"');
     expect(source).toContain("disabled={saving || !currentTaskSelection}");
     expect(source).toContain("onClick={selectCurrentTask}");
     expect(source).not.toContain("selectCurrentTaskOnServer");

@@ -9,13 +9,47 @@ import type {
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
+  buildCombatRoundLiveInspectorContext,
   getCurrentCombatRoundTaskSelection,
   getCombatRoundManagerDisplayParticipantIds,
   getCombatRoundManagerInspectionSelection,
+  getCombatRoundLiveInspectorSelection,
   getNextCombatRoundParticipantSelection,
+  isCombatRoundInspectionSelectionLive,
   isSelectedCombatRoundStepCurrentForGm,
   isSelectedCombatRoundStepExecutable,
 } from "./combatRoundSelection";
+
+function presentationTask(input: {
+  id: string;
+  ownerParticipantId?: string;
+  step: "M1" | "M2" | "A1";
+}): CombatProgressionPresentationProjection["processes"][number]["stages"][number]["tasks"][number] {
+  const owner = input.ownerParticipantId
+    ? ({
+        kind: "combatant",
+        label: input.ownerParticipantId,
+        participantId: input.ownerParticipantId,
+      } as const)
+    : ({ id: "gm", kind: "gm", label: "Game Master" } as const);
+  return {
+    actorAccess: { combatant: false, gm: true },
+    contributesToProgression: true,
+    executionGroupId: `group:${input.id}`,
+    expectedCommand: input.step === "M1" ? "review_modifiers_phase1" : "commit_adjust_distance",
+    id: input.id,
+    identity: { executionGroupId: `group:${input.id}` },
+    kind: input.step === "A1" ? "adjust_distance_commit" : "modifier_review",
+    owner,
+    processId: `process:${input.id}`,
+    stageId: `stage:${input.id}`,
+    state: "executable",
+    trackerFacet: {
+      owner: owner.kind === "combatant" ? owner : undefined,
+      step: input.step,
+    },
+  };
+}
 
 function participant(input: { id: string; label: string }): EncounterParticipant {
   return {
@@ -227,6 +261,59 @@ describe("combat round manager selection", () => {
     });
     expect(state.selectedParticipantId).toBe("top");
     expect(state.selectedStep).toBe("initiative_phase_1");
+  });
+
+  it("selects the canonical participant-owned review instead of a completed cursor row", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const context = buildCombatRoundLiveInspectorContext(
+      presentationTask({ id: "review-bottom", ownerParticipantId: "bottom", step: "M2" }),
+    );
+
+    expect(getCombatRoundLiveInspectorSelection({ context, state: existing })).toEqual({
+      participantId: "bottom",
+      step: "review_phase_2_modifiers",
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "review_phase_2_modifiers" },
+      }),
+    ).toBe(true);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "top", step: "review_phase_2_modifiers" },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps an ownerless GM task live for any participant row in its phase facet", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const context = buildCombatRoundLiveInspectorContext(
+      presentationTask({ id: "distance-commit", step: "A1" }),
+    );
+
+    expect(context).toMatchObject({ scope: "phase", step: "phase_1_actions" });
+    expect(getCombatRoundLiveInspectorSelection({ context, state: existing })).toEqual({
+      participantId: "top",
+      step: "phase_1_actions",
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_actions" },
+      }),
+    ).toBe(true);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_damage" },
+      }),
+    ).toBe(false);
   });
 
   it("treats non-current inspected phase cells as inspection-only", () => {

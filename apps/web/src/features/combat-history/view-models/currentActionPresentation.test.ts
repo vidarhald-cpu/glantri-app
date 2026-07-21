@@ -240,7 +240,7 @@ describe("CurrentActionPresentation", () => {
     ["adjust_distance_adjustment", "Confirm Dodge adjustment"],
     ["adjust_distance_attacker_roll", "Roll Dodge"],
     ["adjust_distance_defender_roll", "Roll Dodge"],
-    ["adjust_distance_commit", "Commit distance result"],
+    ["adjust_distance_commit", "Apply distance"],
   ] as const)("presents %s with canonical distance context", (kind, button) => {
     const gmOnly = kind === "adjust_distance_adjustment" || kind === "adjust_distance_commit";
     const command =
@@ -270,6 +270,9 @@ describe("CurrentActionPresentation", () => {
     expect(result?.primaryAction.label).toBe(button);
     expect(result?.primaryAction.enabled).toBe(true);
     expect(result?.primaryAction.viewerMayInvoke).toBe(true);
+    if (kind === "adjust_distance_commit") {
+      expect(result?.requiredNow).toBe("Apply the distance.");
+    }
     expect(result?.primaryAction.descriptor).toMatchObject({
       commandType: command,
       expectedRevision: "2026-07-20T12:00:00.000Z",
@@ -584,9 +587,9 @@ describe("CurrentActionPresentation", () => {
       },
       requiredNow: "Update the declaration.",
     });
-    expect(
-      labelCurrentActionAsDeclarationEdit({ participantId: "borin", presentation }),
-    ).toBe(presentation);
+    expect(labelCurrentActionAsDeclarationEdit({ participantId: "borin", presentation })).toBe(
+      presentation,
+    );
   });
 
   it("does not expose progression terminology in rendered presentation copy", () => {
@@ -634,6 +637,35 @@ describe("CurrentActionPresentation", () => {
       primaryAction: { label: "Complete modifier review" },
       requiredNow: "Complete modifier review.",
       summary: "Phase 1 modifiers are ready for review.",
+    });
+  });
+
+  it("keeps Phase 2 modifier-review heading, summary, and command on the same task phase", () => {
+    const modifierTask = task({
+      actor: aria,
+      command: "review_modifiers_phase2",
+      gmOnly: true,
+      kind: "modifier_review",
+      phase: "phase2",
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-2",
+      progression: progression({
+        boundary: "phase2_modifier_review",
+        tasks: [modifierTask],
+      }),
+      viewer: { kind: "gm" },
+    });
+
+    expect(result).toMatchObject({
+      heading: "Phase 2",
+      phase: "phase2",
+      primaryAction: {
+        descriptor: { commandType: "review_modifiers_phase2", taskId: modifierTask.id },
+        enabled: true,
+      },
+      summary: "Phase 2 modifiers are ready for review.",
     });
   });
 

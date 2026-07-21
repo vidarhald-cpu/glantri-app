@@ -178,7 +178,12 @@ export function buildModifierReviewProcess(
   const pending = context.state.participants.filter(
     (participant) => !isCompleteStatus(participant.stepStatuses[step]),
   );
-  const activeId = context.state.currentCursor?.participantId;
+  const cursorParticipantId = context.state.currentCursor?.participantId;
+  // A completed review row can remain in the persisted compatibility cursor until the next
+  // command is recorded. Projection must still expose the first unresolved review as executable.
+  const activeId = pending.some((participant) => participant.participantId === cursorParticipantId)
+    ? cursorParticipantId
+    : pending[0]?.participantId;
   const tasks = pending.map<TaskSpec>((participant) => {
     const owner = context.identities.get(participant.participantId);
     return {
@@ -193,8 +198,10 @@ export function buildModifierReviewProcess(
               },
             ],
       expectedCommand,
+      identity: { phase },
       kind: "modifier_review",
       owner,
+      presentationContext: { actor: owner },
       trackerOwner: owner,
       trackerStep,
     };
@@ -274,12 +281,10 @@ export function buildModifierReviewProcesses(
                               actor: owner,
                               responder: owner,
                               target: context.identities.get(
-                                context.state.participants
-                                  .find(
-                                    (participant) =>
-                                      participant.participantId === gate.ownerParticipantId,
-                                  )
-                                  ?.declaration?.phaseContexts?.phase2?.targetParticipantId ?? "",
+                                context.state.participants.find(
+                                  (participant) =>
+                                    participant.participantId === gate.ownerParticipantId,
+                                )?.declaration?.phaseContexts?.phase2?.targetParticipantId ?? "",
                               ),
                             },
                             trackerOwner: owner,

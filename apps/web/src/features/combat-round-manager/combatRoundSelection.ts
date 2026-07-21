@@ -1,5 +1,6 @@
 import type {
   CombatProgressionPresentationProjection,
+  CombatProgressionPresentationTask,
   CombatRoundState,
   CombatRoundStep,
 } from "@glantri/domain";
@@ -8,6 +9,60 @@ import { getCombatRoundStepForCursorStep, isGlobalCombatRoundCursorStep } from "
 export interface CombatRoundSelectionTarget {
   participantId?: string;
   step: CombatRoundStep;
+}
+
+export interface CombatRoundLiveInspectorContext {
+  participantId?: string;
+  scope: "participant" | "phase";
+  step: CombatRoundStep;
+  taskId: string;
+}
+
+/**
+ * Maps a canonical projected task to inspector context without fabricating ownership for
+ * ownerless GM work. Phase-wide tasks remain live for every participant row in the same facet.
+ */
+export function buildCombatRoundLiveInspectorContext(
+  task: CombatProgressionPresentationTask | undefined,
+): CombatRoundLiveInspectorContext | undefined {
+  if (!task) return undefined;
+  const participantId = task.trackerFacet.owner?.participantId;
+  return {
+    participantId,
+    scope: participantId ? "participant" : "phase",
+    step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
+    taskId: task.id,
+  };
+}
+
+export function getCombatRoundLiveInspectorSelection(input: {
+  context?: CombatRoundLiveInspectorContext;
+  state: CombatRoundState;
+}): CombatRoundSelectionTarget | undefined {
+  const context = input.context;
+  if (!context) return undefined;
+  if (context.participantId) {
+    return { participantId: context.participantId, step: context.step };
+  }
+  const cursorParticipantId = input.state.currentCursor?.participantId;
+  const participantId = input.state.participants.some(
+    (participant) => participant.participantId === cursorParticipantId,
+  )
+    ? cursorParticipantId
+    : input.state.participants[0]?.participantId;
+  return { participantId, step: context.step };
+}
+
+export function isCombatRoundInspectionSelectionLive(input: {
+  context?: CombatRoundLiveInspectorContext;
+  selectedRoundIsActive: boolean;
+  selection?: CombatRoundSelectionTarget;
+}): boolean {
+  if (!input.selectedRoundIsActive || !input.context || !input.selection) return false;
+  if (input.selection.step !== input.context.step) return false;
+  return (
+    input.context.scope === "phase" || input.selection.participantId === input.context.participantId
+  );
 }
 
 export function getCurrentCombatRoundTaskSelection(

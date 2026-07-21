@@ -176,6 +176,34 @@ describe("CombatProgressionProjection", () => {
     },
   );
 
+  it("projects the first unresolved Phase 2 modifier review when the cursor row is complete", () => {
+    const current = state({
+      cursorParticipantId: "hero",
+      cursorStep: "M2",
+      currentStep: "review_phase_2_modifiers",
+      participantOverrides: [
+        { stepStatuses: { review_phase_2_modifiers: "gmEdited" } },
+        { stepStatuses: {} },
+      ],
+    });
+    const projection = buildCombatProgressionProjection(current);
+    const reviewTask = projection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((candidate) => candidate.kind === "modifier_review");
+
+    expect(reviewTask).toMatchObject({
+      allowedActors: ["gm"],
+      expectedCommand: "review_modifiers_phase2",
+      identity: { phase: "phase2" },
+      owner: { kind: "combatant", participantId: "guard" },
+      presentationContext: {
+        actor: { participantId: "guard" },
+      },
+      state: "executable",
+      trackerFacet: { owner: { participantId: "guard" }, step: "M2" },
+    });
+  });
+
   it.each([
     [
       "M1",
@@ -1507,9 +1535,9 @@ describe("authorizeCombatProgressionTask", () => {
       "adjust_distance_attacker_roll",
       "adjust_distance_defender_roll",
     ]);
-    expect(new Set(rollStage?.executionGroups[0]?.tasks.map((task) => task.executionGroupId))).toEqual(
-      new Set([rollStage?.executionGroups[0]?.id]),
-    );
+    expect(
+      new Set(rollStage?.executionGroups[0]?.tasks.map((task) => task.executionGroupId)),
+    ).toEqual(new Set([rollStage?.executionGroups[0]?.id]));
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "hero" },

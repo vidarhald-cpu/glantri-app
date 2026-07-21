@@ -338,7 +338,10 @@ function summaryFor(input: {
     case "roll_initiative":
       return `Initiative is open for ${actor}.`;
     case "modifier_review":
-      return `${phaseLabel(input.task.identity.phase, "phase1_modifier_review")} modifiers are ready for review.`;
+      return `${phaseLabel(
+        input.task.identity.phase,
+        input.task.trackerFacet.step === "M2" ? "phase2_modifier_review" : "phase1_modifier_review",
+      )} modifiers are ready for review.`;
     case "health_review":
       return `${actor} needs a Health roll.`;
     case "combat_experience":
@@ -462,7 +465,7 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "adjust_distance_defender_roll":
       return "Roll Dodge";
     case "adjust_distance_commit":
-      return "Commit distance result";
+      return "Apply distance";
     case "distance_roll":
       return "Roll distance control";
     case "distance_commit":
@@ -525,7 +528,7 @@ function requiredNowFor(
     case "adjust_distance_defender_roll":
       return "Roll Dodge.";
     case "adjust_distance_commit":
-      return "Commit the distance result.";
+      return "Apply the distance.";
     case "distance_roll":
       return "Roll distance control.";
     case "distance_commit":

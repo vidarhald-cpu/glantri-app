@@ -90,7 +90,6 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
-  getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
   getFinalCriticalRollIndexStatus,
   HIT_LOCATIONS,
@@ -252,13 +251,17 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
+  buildCombatRoundLiveInspectorContext,
   getCombatRoundManagerInspectionSelection,
   getCombatRoundManagerDisplayParticipantIds,
+  getCombatRoundLiveInspectorSelection,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
+  isCombatRoundInspectionSelectionLive,
   isGlobalCombatRoundParticipantStep,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
+import { buildAdjustDistanceReviewPresentation } from "./adjustDistanceReviewPresentation";
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 import {
@@ -4071,10 +4074,6 @@ export default function CombatRoundManagerPanel({
         "adjust_distance_commit",
       ].includes(task.kind) && task.state === "executable",
   );
-  const projectedCurrentTask =
-    projectedCurrentTasks.find(
-      (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
-    ) ?? projectedCurrentTasks[0];
   const currentActionPresentation = useMemo(
     () =>
       buildCurrentActionPresentation({
@@ -4085,15 +4084,30 @@ export default function CombatRoundManagerPanel({
       }),
     [combatProgressionPresentation, descriptorRevision, roundView.encounterId],
   );
-  const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner
-    ? {
-        participantId: projectedCurrentTask.trackerFacet.owner.participantId,
-        step: getCombatRoundStepForCursorStep(projectedCurrentTask.trackerFacet.step),
-      }
-    : combatProgressionPresentation.taskVisibility === "available"
-      ? getCurrentCombatRoundTaskSelection(roundState)
-      : undefined;
+  const projectedCurrentTask =
+    projectedCurrentTasks.find((task) => task.id === currentActionPresentation?.taskId) ??
+    projectedCurrentTasks.find(
+      (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
+    ) ??
+    projectedCurrentTasks[0];
+  const liveInspectorContext = buildCombatRoundLiveInspectorContext(projectedCurrentTask);
+  const currentTaskSelection = getCombatRoundLiveInspectorSelection({
+    context: liveInspectorContext,
+    state: roundState,
+  });
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
+  useEffect(() => {
+    if (!currentTaskSelection || manualSelectionRef.current || pendingSelectionRef.current) {
+      return;
+    }
+    setSelectedRoundNumber(roundState.roundNumber);
+    setInspectionSelection(currentTaskSelection);
+  }, [
+    currentTaskSelection?.participantId,
+    currentTaskSelection?.step,
+    liveInspectorContext?.taskId,
+    roundState.roundNumber,
+  ]);
   const inspector = buildCombatRoundInspector({
     participantId: inspectionSelection.participantId,
     state: selectedTimelineRoundState,
@@ -4128,20 +4142,18 @@ export default function CombatRoundManagerPanel({
     ],
   );
   const inspectorSelectionIsCurrentProgression =
-    selectedRoundIsActive &&
-    Boolean(
-      combatProgressionPresentation.taskVisibility === "available" &&
-      inspector.participant?.participantId &&
-      (combatProgressionTrackerIndex.byCellKey[
-        buildCombatTrackerCellKey({
-          participantId: inspector.participant.participantId,
-          roundNumber: roundState.roundNumber,
-          step: inspector.step,
-        })
-      ]?.current ||
-        (combatProgressionPresentation.boundary.kind === "declaration" &&
-          inspector.step === "select_actions")),
-    );
+    combatProgressionPresentation.taskVisibility === "available" &&
+    (isCombatRoundInspectionSelectionLive({
+      context: liveInspectorContext,
+      selectedRoundIsActive,
+      selection: {
+        participantId: inspector.participant?.participantId,
+        step: inspector.step,
+      },
+    }) ||
+      (selectedRoundIsActive &&
+        combatProgressionPresentation.boundary.kind === "declaration" &&
+        inspector.step === "select_actions"));
   const clearCurrentStepAvailable =
     canClearCombatRoundStep({
       state: roundState,
@@ -5232,6 +5244,10 @@ export default function CombatRoundManagerPanel({
             proposal.id === projectedAdjustDistanceTask.identity.proposalId,
         )
       : undefined;
+  const inspectorAdjustDistanceReview = buildAdjustDistanceReviewPresentation({
+    participantLabelsById: roundParticipantLabelsById,
+    proposal: inspectorAdjustDistanceProposal,
+  });
   const inspectorAdjustDistanceExpectedParticipantId = inspectorAdjustDistanceProposal
     ? projectedAdjustDistanceTask?.owner?.kind === "combatant"
       ? projectedAdjustDistanceTask.owner.participantId
@@ -5783,11 +5799,38 @@ export default function CombatRoundManagerPanel({
       ) : null}
       {inspectorAdjustDistanceProposal.status === "awaiting_review" ? (
         <>
-          <div>
-            {inspectorAdjustDistanceProposal.defenderResponse === "allow"
-              ? "Defender allowed the adjustment."
-              : `Dodge: ${inspectorAdjustDistanceProposal.attackerRoll?.finalTotal} vs ${inspectorAdjustDistanceProposal.defenderRoll?.finalTotal} · ${inspectorAdjustDistanceProposal.standardOutcome}`}
-          </div>
+          {inspectorAdjustDistanceReview ? (
+            <div style={{ display: "grid", gap: "0.25rem" }}>
+              <div>
+                <strong>Actor:</strong> {inspectorAdjustDistanceReview.actor.label}
+              </div>
+              <div>
+                <strong>Target:</strong> {inspectorAdjustDistanceReview.target.label}
+              </div>
+              <div>
+                <strong>Requested movement:</strong> distance{" "}
+                {inspectorAdjustDistanceReview.currentDistance} →{" "}
+                {inspectorAdjustDistanceReview.requestedDistance}
+              </div>
+              <div>{inspectorAdjustDistanceReview.outcome}</div>
+              {inspectorAdjustDistanceReview.winner && inspectorAdjustDistanceReview.loser ? (
+                <div>
+                  Winner: {inspectorAdjustDistanceReview.winner.label} · Loser:{" "}
+                  {inspectorAdjustDistanceReview.loser.label}
+                </div>
+              ) : null}
+              <div>
+                <strong>Proposed result:</strong> distance{" "}
+                {inspectorAdjustDistanceReview.proposedDistance}
+              </div>
+            </div>
+          ) : null}
+          {inspectorAdjustDistanceProposal.defenderResponse === "oppose" ? (
+            <div>
+              Dodge: {inspectorAdjustDistanceProposal.attackerRoll?.finalTotal} vs{" "}
+              {inspectorAdjustDistanceProposal.defenderRoll?.finalTotal}
+            </div>
+          ) : null}
           <div>
             Standard proposal: distance {inspectorAdjustDistanceProposal.standardProposedDistance}
           </div>
@@ -5816,7 +5859,7 @@ export default function CombatRoundManagerPanel({
               onChange={(event) => setInspectorAdjustDistanceCommittedDistance(event.target.value)}
               value={inspectorAdjustDistanceCommittedDistance}
             >
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+              {inspectorAdjustDistanceReview?.legalDistances.map((distance) => (
                 <option key={distance} value={distance}>
                   {distance}
                 </option>
@@ -6877,16 +6920,21 @@ export default function CombatRoundManagerPanel({
     setSelectedRoundNumber(roundState.roundNumber);
     setInspectionSelection(
       resolveCombatRoundInspectionSelection({
-        manualSelection: getCurrentCombatRoundTaskSelection(roundState),
+        manualSelection: currentTaskSelection,
         state: roundState,
       }),
     );
-    focusRoundTable({
-      scrollIntoView: false,
-      scrollMode: "center",
-      scrollToCurrent: true,
-      state: roundState,
-    });
+    focusRoundTable({ scrollIntoView: false });
+    if (currentTaskSelection?.participantId) {
+      scrollTimelineCellIntoView(
+        {
+          participantId: currentTaskSelection.participantId,
+          roundNumber: roundState.roundNumber,
+          step: currentTaskSelection.step,
+        },
+        "center",
+      );
+    }
   }
 
   function selectTimelineSelection(
@@ -9464,8 +9512,7 @@ export default function CombatRoundManagerPanel({
                         void (projectedBoundaryTransitionAction
                           ? commitCurrentStep()
                           : descriptor.commandType === "respond_adjust_distance" ||
-                              descriptor.commandType ===
-                                "review_adjust_distance_roll_adjustment" ||
+                              descriptor.commandType === "review_adjust_distance_roll_adjustment" ||
                               descriptor.commandType === "roll_adjust_distance" ||
                               descriptor.commandType === "commit_adjust_distance"
                             ? advanceInspectorAdjustDistance(descriptor)
