@@ -297,6 +297,19 @@ function shouldProjectPlayerEvent(input: {
 }): boolean {
   if (input.event.type === "damage_proposed") return false;
 
+  // Declaration completion is a safe progression fact for every visible
+  // participant.  It must survive player sanitization so the DE tracker cell
+  // can distinguish submitted work from an ordinary pending declaration.
+  // The declaration's private details remain protected by the field-level
+  // projection below.
+  if (
+    input.event.type === "declaration" &&
+    input.event.ownerParticipantId &&
+    input.viewer.visibleParticipantIds.has(input.event.ownerParticipantId)
+  ) {
+    return true;
+  }
+
   const involved = input.event.visibility.involvedParticipantIds.some((participantId) =>
     input.viewer.controlledParticipantIds.has(participantId),
   );

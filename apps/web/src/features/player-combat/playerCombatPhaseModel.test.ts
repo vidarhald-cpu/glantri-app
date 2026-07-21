@@ -868,6 +868,19 @@ describe("player combat phase model", () => {
     });
   });
 
+  it("resolves a fallback scenario-roster target when encounter membership is implicit", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [],
+        fallbackParticipantIds: ["scenario-defender"],
+        targetParticipantId: "scenario-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "scenario-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
   it("always exposes defense context for both Feint phases", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({

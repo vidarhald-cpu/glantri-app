@@ -53,6 +53,35 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("retains safe declaration completion facts for every visible participant", () => {
+    const declaration = event({
+      facts: {
+        gmReview: { privateNote: "hidden" },
+        involvedOutcome: { actionId: "attack_parry" },
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      ownerParticipantId: "borin",
+      type: "declaration",
+      visibility: {
+        identityRefs: [{ participantId: "borin", role: "actor" }],
+        involvedParticipantIds: ["borin"],
+        outcomeScope: "involved",
+      },
+    });
+
+    const projected = projectCombatHistoryEvent({
+      event: declaration,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projected?.ownerParticipantId).toBe("borin");
+    expect(projected?.facts.involvedOutcome).toBeUndefined();
+    expect(projected?.facts.gmReview).toBeUndefined();
+    expect(JSON.stringify(projected)).not.toContain("privateNote");
+  });
+
   it("delivers player-safe live progression from the same state revision", () => {
     const state = combatRoundStateSchema.parse({
       currentCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
@@ -99,6 +128,52 @@ describe("combat history projection", () => {
     expect(serialized).not.toContain("Hidden foe");
     expect(serialized).not.toContain("hidden");
     expect(serialized).not.toContain("diagnostic");
+  });
+
+  it("keeps both visible declaration completion events in the player live round", () => {
+    const state = combatRoundStateSchema.parse({
+      currentStep: "select_actions",
+      events: [
+        event({
+          id: "declaration-aria",
+          ownerParticipantId: "aria",
+          sequence: 1,
+          type: "declaration",
+          visibility: {
+            identityRefs: [{ participantId: "aria", role: "actor" }],
+            involvedParticipantIds: ["aria"],
+            outcomeScope: "involved",
+          },
+        }),
+        event({
+          id: "declaration-borin",
+          ownerParticipantId: "borin",
+          sequence: 2,
+          type: "declaration",
+          visibility: {
+            identityRefs: [{ participantId: "borin", role: "actor" }],
+            involvedParticipantIds: ["borin"],
+            outcomeScope: "involved",
+          },
+        }),
+      ],
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 1,
+    });
+
+    const projection = projectCombatHistory({
+      participants,
+      state,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projection.activeRound.events.map((entry) => entry.ownerParticipantId)).toEqual([
+      "aria",
+      "borin",
+    ]);
   });
 
   it("distinguishes historical non-applicability, non-required resolution, and explicit skips", () => {

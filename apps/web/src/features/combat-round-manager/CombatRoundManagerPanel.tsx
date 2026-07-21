@@ -208,10 +208,14 @@ import {
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import {
+  buildCombatParticipantCandidates,
+  type CombatParticipantRosterEntry,
+} from "@/features/player-combat/combatParticipantCandidates";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
+import { updateCombatRoundViewState } from "./combatRoundViewState";
 import {
   applyDefaultPlayerCombatPhaseContext,
-  buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
@@ -235,7 +239,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   getPlayerEncounterActionLabel,
   getPlayerEncounterMovementLabel,
-  getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
@@ -3794,8 +3797,15 @@ export default function CombatRoundManagerPanel({
     updatedAt: encounter.updatedAt,
   });
   const setRoundState = useCallback(
-    (state: CombatRoundState) => {
-      setRoundView({ encounterId: encounter.id, state });
+    (state: CombatRoundState, encounterRevision?: string) => {
+      setRoundView((current) =>
+        updateCombatRoundViewState({
+          current,
+          encounterId: encounter.id,
+          encounterRevision,
+          state,
+        }),
+      );
     },
     [encounter.id],
   );
@@ -4729,16 +4739,42 @@ export default function CombatRoundManagerPanel({
     [inspectorDraft.actionId, inspectorDraft.secondaryActionId, inspectorLoadoutModel],
   );
   const inspectorTargetOptions = useMemo(() => {
-    const options = getPlayerEncounterOpponentParticipants({
-      allowedParticipantIds: encounterScenarioParticipantIds,
-      isGameMaster: true,
-      participants: effectiveScenarioParticipants,
-      selectedParticipantId: selectedScenarioParticipant?.id,
-    });
-    return buildCanonicalCombatTargetOptions({
-      encounterParticipants: encounter.participants,
-      options,
-    });
+    const candidateRoster: { participants: readonly CombatParticipantRosterEntry[] } = {
+      participants: encounter.participants.length
+        ? encounter.participants
+        : effectiveScenarioParticipants
+            .filter((participant) => participant.isActive)
+            .map((participant) => ({
+              characterId: participant.characterId,
+              id: participant.id,
+              label: participant.snapshot.displayName,
+              scenarioParticipantId: participant.id,
+            })),
+    };
+    const purpose =
+      inspectorDraft.actionId === "feint_attack" ||
+      inspectorDraft.actionId === "adjust_range_attack"
+        ? "maneuver_target"
+        : "attack_target";
+    const allowedParticipantIds =
+      encounterScenarioParticipantIds.length > 0
+        ? encounterScenarioParticipantIds
+        : candidateRoster.participants.flatMap((participant) =>
+            getCombatDistanceParticipantAliases(participant),
+          );
+    return buildCombatParticipantCandidates({
+      activeParticipantIds: new Set(
+        effectiveScenarioParticipants
+          .filter((participant) => participant.isActive)
+          .map((participant) => participant.id),
+      ),
+      actingParticipantId: selectedScenarioParticipant?.id,
+      allowedParticipantIds,
+      encounter: candidateRoster,
+      purpose,
+    })
+      .filter((candidate) => candidate.selectable)
+      .map(({ displayName, participantId }) => ({ displayName, id: participantId }));
   }, [
     encounter.participants,
     effectiveScenarioParticipants,
@@ -6323,12 +6359,39 @@ export default function CombatRoundManagerPanel({
         total: row.total,
       }));
       const phaseContext = phaseSummary.phaseContext;
-      const targetOptions = getPlayerEncounterOpponentParticipants({
-        allowedParticipantIds: encounterScenarioParticipantIds,
-        isGameMaster: true,
-        participants: effectiveScenarioParticipants,
-        selectedParticipantId: scenarioParticipant?.id,
-      });
+      const targetOptions = buildCombatParticipantCandidates({
+        encounter:
+          encounter.participants.length > 0
+            ? encounter
+            : {
+                participants: effectiveScenarioParticipants
+                  .filter((participant) => participant.isActive)
+                  .map((participant) => ({
+                    characterId: participant.characterId,
+                    id: participant.id,
+                    label: participant.snapshot.displayName,
+                    scenarioParticipantId: participant.id,
+                  })),
+              },
+        activeParticipantIds: new Set(
+          effectiveScenarioParticipants
+            .filter((participant) => participant.isActive)
+            .map((participant) => participant.id),
+        ),
+        actingParticipantId: scenarioParticipant?.id,
+        allowedParticipantIds:
+          encounterScenarioParticipantIds.length > 0
+            ? encounterScenarioParticipantIds
+            : effectiveScenarioParticipants
+                .filter((participant) => participant.isActive)
+                .map((participant) => participant.id),
+        purpose:
+          draft.actionId === "feint_attack" || draft.actionId === "adjust_range_attack"
+            ? "maneuver_target"
+            : "attack_target",
+      })
+        .filter((candidate) => candidate.selectable)
+        .map(({ displayName, participantId }) => ({ displayName, id: participantId }));
       const buildPhasePanelSnapshot = (phaseKey: PlayerCombatPhaseKey) => {
         const summary = phaseSummaries[phaseKey];
         const context = summary.phaseContext ?? draft.phaseContexts[phaseKey];
@@ -6586,7 +6649,7 @@ export default function CombatRoundManagerPanel({
         pendingSelectionRef.current = undefined;
         manualSelectionRef.current = undefined;
         setInspectionSelection(nextInspectionSelection);
-        setRoundState(nextRoundState);
+        setRoundState(nextRoundState, nextEncounter.updatedAt);
         setSelectedRoundNumber(nextRoundState.roundNumber);
         onEncounterUpdated?.(nextEncounter);
         focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -6715,6 +6778,7 @@ export default function CombatRoundManagerPanel({
         },
       });
 
+      setRoundState(stateToPersist, nextEncounter.updatedAt);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: stateToPersist });
       setSaveError(undefined);
@@ -6750,7 +6814,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
@@ -7121,7 +7185,7 @@ export default function CombatRoundManagerPanel({
       }
 
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -7145,7 +7209,7 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: inspectorFeintExpectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
@@ -7198,7 +7262,7 @@ export default function CombatRoundManagerPanel({
         });
       } else return;
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
@@ -7231,7 +7295,7 @@ export default function CombatRoundManagerPanel({
       }));
       onScenarioParticipantsUpdated?.(participants);
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
@@ -7271,7 +7335,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -7314,7 +7378,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -7357,7 +7421,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -7388,7 +7452,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -7429,7 +7493,7 @@ export default function CombatRoundManagerPanel({
       });
 
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setCombatExperienceDifficultyDrafts((current) => ({
@@ -7500,7 +7564,7 @@ export default function CombatRoundManagerPanel({
       });
 
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, latestEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       if (Object.keys(participantOverrides).length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -7565,7 +7629,7 @@ export default function CombatRoundManagerPanel({
       }
 
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
@@ -7716,7 +7780,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -7796,7 +7860,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -7831,7 +7895,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -7864,7 +7928,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
@@ -7906,7 +7970,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setDamageReviewDrafts((current) => {
         const rest = { ...current };
@@ -8262,7 +8326,7 @@ export default function CombatRoundManagerPanel({
           pendingSelectionRef.current = undefined;
           manualSelectionRef.current = undefined;
           setInspectionSelection(nextInspectionSelection);
-          setRoundState(nextRoundState);
+          setRoundState(nextRoundState, nextEncounter.updatedAt);
           setSelectedRoundNumber(nextRoundState.roundNumber);
           if (inspectorDamageReviewKey) {
             setDamageReviewDrafts((current) => {
@@ -8296,7 +8360,7 @@ export default function CombatRoundManagerPanel({
         pendingSelectionRef.current = undefined;
         manualSelectionRef.current = undefined;
         setInspectionSelection(nextInspectionSelection);
-        setRoundState(nextRoundState);
+        setRoundState(nextRoundState, nextEncounter.updatedAt);
         setSelectedRoundNumber(nextRoundState.roundNumber);
         onEncounterUpdated?.(nextEncounter);
         focusRoundTable({ scrollToCurrent: true, state: nextRoundState });

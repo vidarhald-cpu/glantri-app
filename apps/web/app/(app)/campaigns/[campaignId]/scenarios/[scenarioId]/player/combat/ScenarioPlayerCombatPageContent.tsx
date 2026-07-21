@@ -101,8 +101,11 @@ import {
   sanitizePlayerCombatModifierContext,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
+  buildCombatParticipantCandidates,
+  type CombatParticipantRosterEntry,
+} from "@/features/player-combat/combatParticipantCandidates";
+import {
   applyDefaultPlayerCombatPhaseContext,
-  buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
@@ -129,7 +132,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
@@ -1128,8 +1130,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
   const [combatHistory, setCombatHistory] = useState<CombatHistoryProjection>();
-  const [combatLogSelection, setCombatLogSelection] =
-    useState<CombatLogPresentationSelection>();
+  const [combatLogSelection, setCombatLogSelection] = useState<CombatLogPresentationSelection>();
   const acceptedEncounterUpdatedAtRef = useRef<string | undefined>(undefined);
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
@@ -2214,6 +2215,7 @@ export default function ScenarioPlayerCombatPageContent({
       selectedActionId === "feint_attack"
         ? resolveCombatFeintDeclarationRequestTarget({
             encounterParticipants: encounterSession?.participants ?? [],
+            fallbackParticipantIds: targetOptions.map((option) => option.id),
             phaseContexts: phaseCombatContextDrafts,
           })
         : undefined;
@@ -2561,8 +2563,7 @@ export default function ScenarioPlayerCombatPageContent({
       setActionRollResult({
         interpretedResult:
           "Back out submitted; GM commit will cancel the attack and soften the phase DB/Parry penalty.",
-        phaseLabel:
-          descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
+        phaseLabel: descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
         value: 0,
       });
       setError(undefined);
@@ -2599,8 +2600,7 @@ export default function ScenarioPlayerCombatPageContent({
       acceptEncounterSession(encounter);
       setActionRollResult({
         interpretedResult: "Continue attack submitted; waiting for GM to commit initiative.",
-        phaseLabel:
-          descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
+        phaseLabel: descriptor.phase === "phase1" ? "Phase 1" : "Phase 2",
         value: 0,
       });
       setError(undefined);
@@ -2656,13 +2656,12 @@ export default function ScenarioPlayerCombatPageContent({
     const phaseAttackStats = phaseCombatLoadoutSummaries[attackPhase].attackStats;
     const targetIdentity = resolveCanonicalCombatTargetIdentity({
       encounterParticipants: encounterSession?.participants ?? [],
+      fallbackParticipantIds: targetOptions.map((option) => option.id),
       targetParticipantId: descriptor.opponentParticipantId,
     });
 
     if (!phaseAttackStats) {
-      setError(
-        `No ${attackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`,
-      );
+      setError(`No ${attackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`);
       return;
     }
 
@@ -2870,34 +2869,58 @@ export default function ScenarioPlayerCombatPageContent({
     selectedParticipant?.id,
   ]);
   const targetOptions = useMemo(() => {
-    const options = getPlayerEncounterOpponentParticipants({
-      allowedParticipantIds: encounterScenarioParticipantIds,
-      currentUserId: currentUser?.id,
-      isGameMaster: false,
-      participants: selectableParticipants,
-      projectionVisibleParticipants: playerPerspectiveVisibleParticipants,
-      selectedParticipantId: selectedParticipant?.id,
-    });
-    return buildCanonicalCombatTargetOptions({
-      encounterParticipants: encounterSession?.participants ?? [],
-      options,
-    });
+    const candidateRoster: { participants: readonly CombatParticipantRosterEntry[] } = {
+      participants: encounterSession?.participants.length
+        ? encounterSession.participants
+        : playerPerspectiveVisibleParticipants.map((participant) => ({
+            id: participant.id,
+            label: participant.displayName,
+            scenarioParticipantId: participant.id,
+          })),
+    };
+    const visibleParticipantIds = new Set(
+      (isGameMaster
+        ? candidateRoster.participants.flatMap((participant) =>
+            getCombatDistanceParticipantAliases(participant),
+          )
+        : playerPerspectiveVisibleParticipants.flatMap((participant) => [participant.id])) ?? [],
+    );
+    const allowedParticipantIds =
+      encounterScenarioParticipantIds.length > 0
+        ? encounterScenarioParticipantIds
+        : candidateRoster.participants.flatMap((participant) =>
+            getCombatDistanceParticipantAliases(participant),
+          );
+    const purpose =
+      selectedActionId === "feint_attack" || selectedActionId === "adjust_range_attack"
+        ? "maneuver_target"
+        : "attack_target";
+    return buildCombatParticipantCandidates({
+      actingParticipantId: selectedParticipant?.id,
+      allowedParticipantIds,
+      encounter: candidateRoster,
+      purpose,
+      visibleParticipantIds,
+    })
+      .filter((candidate) => candidate.selectable)
+      .map(({ displayName, participantId }) => ({ displayName, id: participantId }));
   }, [
-    currentUser?.id,
     encounterScenarioParticipantIds,
+    encounterSession,
+    isGameMaster,
     playerPerspectiveVisibleParticipants,
-    selectableParticipants,
-    encounterSession?.participants,
     selectedParticipant?.id,
+    selectedActionId,
   ]);
   const normalizedFeintPhaseContexts = useMemo(() => {
     if (selectedActionId !== "feint_attack") return phaseCombatContextDrafts;
     const resolution = resolveCombatFeintDeclarationRequestTarget({
       encounterParticipants: encounterSession?.participants ?? [],
+      fallbackParticipantIds: targetOptions.map((option) => option.id),
       phaseContexts: phaseCombatContextDrafts,
     });
     return resolution.ok ? resolution.phaseContexts : phaseCombatContextDrafts;
-  }, [encounterSession?.participants, phaseCombatContextDrafts, selectedActionId]);
+  }, [encounterSession?.participants, phaseCombatContextDrafts, selectedActionId, targetOptions]);
   const phaseCombatLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({

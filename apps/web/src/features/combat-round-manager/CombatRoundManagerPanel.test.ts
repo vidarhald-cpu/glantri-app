@@ -643,8 +643,8 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("phaseKey: input.phaseKey");
     expect(source).toContain("inspectorTargetOptions");
-    expect(source).toContain("getPlayerEncounterOpponentParticipants");
-    expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
+    expect(source).toContain("buildCombatParticipantCandidates");
+    expect(source).toContain("allowedParticipantIds");
     expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("historicalPhasePanel?.targetOptions ?? inspectorTargetOptions");
     expect(source).toContain("phaseModel.showDefenseContext");
@@ -925,7 +925,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(saveHandler).toContain("await saveCurrentCombatDamageReviewOnServer({");
     expect(saveHandler).toContain("review: buildCombatDamageReviewFromDraft({");
     expect(saveHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
-    expect(saveHandler).toContain("setRoundState(nextRoundState)");
+    expect(saveHandler).toContain("setRoundState(nextRoundState, nextEncounter.updatedAt)");
     expect(saveHandler).toContain("onEncounterUpdated?.(nextEncounter)");
     expect(saveHandler).not.toContain("reviewCombatRoundDamageResult({");
     expect(saveHandler).not.toContain("persistRoundState(");

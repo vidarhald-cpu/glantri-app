@@ -261,12 +261,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
     );
     expect(source).not.toContain("Distance matrix");
-    expect(source).toContain("getPlayerEncounterOpponentParticipants");
-    expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
+    expect(source).toContain("buildCombatParticipantCandidates");
+    expect(source).toContain("allowedParticipantIds");
     expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("playerPerspectiveVisibleParticipants");
-    expect(source).toContain("projectionVisibleParticipants: playerPerspectiveVisibleParticipants");
-    expect(source).toContain("selectedParticipantId: selectedParticipant?.id");
+    expect(source).toContain("visibleParticipantIds");
     expect(source).toContain("hasScenarioParticipantCombatDeclarationForEncounterRound");
     expect(source).toContain(
       "selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId",

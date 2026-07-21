@@ -75,6 +75,7 @@ export function buildCanonicalCombatTargetOptions(input: {
 
 export function resolveCanonicalCombatTargetIdentity(input: {
   encounterParticipants: EncounterSession["participants"];
+  fallbackParticipantIds?: readonly string[];
   targetParticipantId?: string;
 }):
   | {
@@ -89,6 +90,12 @@ export function resolveCanonicalCombatTargetIdentity(input: {
       candidate.scenarioParticipantId === input.targetParticipantId ||
       candidate.characterId === input.targetParticipantId,
   );
+  if (!participant && input.fallbackParticipantIds?.includes(input.targetParticipantId)) {
+    return {
+      encounterParticipantId: input.targetParticipantId,
+      scenarioParticipantId: input.targetParticipantId,
+    };
+  }
   return participant?.scenarioParticipantId
     ? {
         encounterParticipantId: participant.id,
@@ -105,6 +112,7 @@ export function resolveCanonicalCombatTargetIdentity(input: {
 export function resolveCombatFeintDeclarationRequestTarget(input: {
   encounterParticipants: EncounterSession["participants"];
   phaseContexts: CombatRoundPhaseContexts;
+  fallbackParticipantIds?: readonly string[];
 }): CombatFeintDeclarationTargetResolution {
   const phase1Target = input.phaseContexts.phase1?.targetParticipantId;
   const phase2Target = input.phaseContexts.phase2?.targetParticipantId;
@@ -124,6 +132,23 @@ export function resolveCombatFeintDeclarationRequestTarget(input: {
       : undefined;
   const targetParticipant = resolveTarget(selectedTarget);
   if (!targetParticipant) {
+    if (input.fallbackParticipantIds?.includes(selectedTarget)) {
+      return {
+        ok: true,
+        phaseContexts: {
+          ...input.phaseContexts,
+          phase1: scenarioParticipantCombatContextSchema.parse({
+            ...input.phaseContexts.phase1,
+            targetParticipantId: selectedTarget,
+          }),
+          phase2: scenarioParticipantCombatContextSchema.parse({
+            ...input.phaseContexts.phase2,
+            targetParticipantId: selectedTarget,
+          }),
+        },
+        targetParticipantId: selectedTarget,
+      };
+    }
     return {
       message: "The Feint target is no longer in this encounter.",
       ok: false,
