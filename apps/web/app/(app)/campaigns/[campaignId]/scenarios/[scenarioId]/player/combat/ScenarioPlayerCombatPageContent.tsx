@@ -139,6 +139,7 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  resolveCurrentCombatPhaseDamageOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
   rollCombatExperienceOnServer,
@@ -2806,6 +2807,67 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollGrazeDamage(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["resolve_damage"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "attackerParticipantId",
+        "criticalResultId",
+        "damageRollExpression",
+        "damageReviewId",
+        "defenderParticipantId",
+        "executionGroupId",
+        "expectedRevision",
+        "hitLocationResultId",
+        "participantId",
+        "phase",
+        "taskId",
+      ],
+    });
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor ||
+      selectedRoundParticipant?.participantId !== descriptor.participantId
+    ) {
+      setError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+
+    setSavingCombatContext(true);
+    try {
+      const { encounter } = await resolveCurrentCombatPhaseDamageOnServer({
+        attackResultId: descriptor.attackResultId!,
+        attackerParticipantId: descriptor.attackerParticipantId!,
+        commandType: "resolve_damage",
+        criticalResultId: descriptor.criticalResultId!,
+        damageRollExpression: descriptor.damageRollExpression,
+        damageReviewId: descriptor.damageReviewId!,
+        defenderParticipantId: descriptor.defenderParticipantId!,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        hitLocationResultId: descriptor.hitLocationResultId!,
+        opportunityId: descriptor.opportunityId,
+        phase: descriptor.phase!,
+        scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll graze damage.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   const combatLoadoutSummary = useMemo(
     () =>
       buildPlayerCombatLoadoutSummary({
@@ -3298,6 +3360,9 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_critical":
         void rollAttackerPrivilegedCombatDie("critical", descriptor);
+        return;
+      case "resolve_damage":
+        void rollGrazeDamage(descriptor);
         return;
       case "roll_parry":
         void rollCurrentParry(descriptor);

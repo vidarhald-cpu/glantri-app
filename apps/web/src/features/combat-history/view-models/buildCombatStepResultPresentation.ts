@@ -470,6 +470,60 @@ function supplementalEntries(input: {
       ];
     }
 
+    if (event.type === "damage_proposed" && visibleOutcome(event, "grazing") === true) {
+      const actor = identitySubject(event, "attacker") ?? identitySubject(event, "actor");
+      const target = identitySubject(event, "defender") ?? identitySubject(event, "target");
+      const rawDamage = visibleOutcome(event, "rawGrazingDamage");
+      const expression = visibleOutcome(event, "damageRollExpression");
+      if (typeof rawDamage !== "number") return [];
+      const actorIsViewedParticipant = actor?.id === input.participantId;
+      const actorLabel = actor?.label ?? "The attacker";
+      const targetLabel = target?.label ?? "the defender";
+      const calculations =
+        input.viewer.kind === "gm" || actorIsViewedParticipant
+          ? [
+              {
+                collapsedByDefault: true as const,
+                id: `${event.id}:graze-damage-calculation`,
+                lines: [
+                  ...(typeof expression === "string" ? [`Die: ${expression}`] : []),
+                  `Roll: ${rawDamage}`,
+                ],
+                title: "Graze damage",
+                visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
+              },
+            ]
+          : [];
+      const summary =
+        input.viewer.kind === "gm"
+          ? `${actorLabel} rolled ${rawDamage}${typeof expression === "string" ? ` on ${expression}` : ""} against ${targetLabel}. Review damage and effects.`
+          : actorIsViewedParticipant
+            ? `You rolled ${rawDamage}${typeof expression === "string" ? ` on ${expression}` : ""}. Damage is awaiting GM review.`
+            : `${actorLabel} rolled ${rawDamage} damage. Damage is awaiting GM review.`;
+      return [
+        {
+          entry: {
+            actor,
+            attackResultId:
+              typeof fact(event, "attackResultId") === "string"
+                ? (fact(event, "attackResultId") as string)
+                : undefined,
+            calculations,
+            category: "damage",
+            heading: "Graze damage",
+            id: `current-step:${event.id}:graze-roll`,
+            outcome: `Rolled ${rawDamage}${typeof expression === "string" ? ` on ${expression}` : ""}.`,
+            sourceEventIds: [event.id],
+            state: "final",
+            summary,
+            target,
+          },
+          order: event.sequence,
+          semanticOrder: 1,
+        },
+      ];
+    }
+
     if ((event.type === "hit_location" || event.type === "critical") && !loggedSourceIds.has(event.id)) {
       const model = buildCombatEventResultModel([event]).items[0];
       if (!model) return [];

@@ -285,6 +285,47 @@ describe("PlayerCombatActionButtonPanel", () => {
     expect(screen.getByText("Waiting for another combatant.")).toBeInTheDocument();
   });
 
+  it("shows the canonical graze die with the descriptor-bound damage action", () => {
+    const descriptor = {
+      commandType: "resolve_damage" as const,
+      damageRollExpression: "1d7",
+      encounterId: "encounter-1",
+      expectedBoundary: "phase1_resolution" as const,
+      expectedRevision: "revision-4",
+      taskId: "task-graze",
+    };
+    render(
+      <PlayerCombatActionButtonPanel
+        presentation={{
+          actionName: "Graze Damage",
+          boundary: "phase1_resolution",
+          damageRollExpression: "1d7",
+          encounterId: "encounter-1",
+          encounterRevision: "revision-4",
+          heading: "Phase 1",
+          primaryAction: {
+            descriptor,
+            enabled: true,
+            gmProxyAvailable: true,
+            label: "Roll damage",
+            viewerMayInvoke: true,
+          },
+          reason: "",
+          requiredActor: { hidden: false, id: "aria", label: "Aria" },
+          requiredNow: "Roll damage.",
+          status: "executable",
+          summary: "Aria hit Borin.",
+          taskHeading: "Roll damage",
+          taskId: "task-graze",
+          taskKind: "damage_roll",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Die: 1d7")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Roll damage" })).toBeEnabled();
+  });
+
   it("renders no primary button without a canonical current task", () => {
     render(<PlayerCombatActionButtonPanel />);
 

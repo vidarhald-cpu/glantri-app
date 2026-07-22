@@ -1315,7 +1315,10 @@ export function PlayerCombatActionButtonPanel({
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <strong>{presentation.heading}</strong>
           <div>{presentation.summary}</div>
-          {presentation.weapon || presentation.distance || presentation.difficulty !== undefined ? (
+          {presentation.weapon ||
+          presentation.distance ||
+          presentation.damageRollExpression ||
+          presentation.difficulty !== undefined ? (
             <div
               style={{
                 color: "#4f5f57",
@@ -1335,6 +1338,9 @@ export function PlayerCombatActionButtonPanel({
               ) : null}
               {presentation.difficulty !== undefined ? (
                 <span>Difficulty: {presentation.difficulty}</span>
+              ) : null}
+              {presentation.damageRollExpression ? (
+                <span>Die: {presentation.damageRollExpression}</span>
               ) : null}
             </div>
           ) : null}

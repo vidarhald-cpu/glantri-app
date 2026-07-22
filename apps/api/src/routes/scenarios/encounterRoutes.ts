@@ -67,6 +67,7 @@ import {
   getCombatRoundAttackResultId,
   getCombatRoundCriticalResultId,
   getCombatRoundDamageReviewId,
+  getCombatRoundGrazeDamageRollContext,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
   getDistanceEdgeBetweenParticipantAliases,
@@ -1075,8 +1076,10 @@ function parseCombatAttackerPrivilegedRollBody(
 type ParsedCombatDamageTaskBody = ParsedCombatDownstreamTaskIdentity & {
   commandType: "commit_phase_damage" | "resolve_damage";
   criticalResultId: string;
+  damageRollExpression?: string;
   damageReviewId: string;
   hitLocationResultId: string;
+  scenarioParticipantId?: string;
 };
 
 function parseCombatDamageTaskBody(body: unknown): ParsedCombatDamageTaskBody {
@@ -1088,8 +1091,16 @@ function parseCombatDamageTaskBody(body: unknown): ParsedCombatDamageTaskBody {
     ...parseCombatDownstreamTaskIdentity(value),
     commandType: value.commandType,
     criticalResultId: parseNonEmptyString(value.criticalResultId, "criticalResultId"),
+    damageRollExpression:
+      value.damageRollExpression === undefined
+        ? undefined
+        : parseNonEmptyString(value.damageRollExpression, "damageRollExpression"),
     damageReviewId: parseNonEmptyString(value.damageReviewId, "damageReviewId"),
     hitLocationResultId: parseNonEmptyString(value.hitLocationResultId, "hitLocationResultId"),
+    scenarioParticipantId:
+      value.scenarioParticipantId === undefined
+        ? undefined
+        : parseNonEmptyString(value.scenarioParticipantId, "scenarioParticipantId"),
   };
 }
 
@@ -3185,8 +3196,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         gmAuthorizedOperation &&
         roundState.participants.some(
           (participant) =>
-            participant.participantId === encounterParticipant.id &&
-            participant.declaration?.actionId === body.actionId,
+            participant.participantId === encounterParticipant.id && participant.declaration,
         ) &&
         (roundState.currentStep === "review_action_modifiers" ||
           roundState.currentStep === "review_phase_2_modifiers");
@@ -3279,6 +3289,70 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           code: authorization.code,
           error: "Declaration or modifier review is closed for this participant.",
         });
+      }
+
+      if (
+        gmModifierReviewOperation &&
+        (commandType === "review_modifiers_phase1" ||
+          commandType === "review_modifiers_phase2")
+      ) {
+        const roundParticipant = roundState.participants.find(
+          (participant) => participant.participantId === encounterParticipant.id,
+        );
+        const declaration = roundParticipant?.declaration;
+        if (!declaration) {
+          return reply.code(409).send({ error: "The reviewed participant has no declaration." });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const participant = await encounterService.updateScenarioParticipantState({
+          participantId: scenarioParticipant.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...scenarioParticipant.state,
+            combat: {
+              ...scenarioParticipant.state.combat,
+              combatContext: submittedCombatContext,
+            },
+          },
+        });
+        const reviewedDeclarationState = recordCombatRoundDeclaration({
+          declaration: {
+            ...declaration,
+            combatContext: submittedCombatContext,
+            phaseContexts: {
+              phase1: submittedPhaseContexts?.phase1 ?? declaration.phaseContexts?.phase1,
+              phase2: submittedPhaseContexts?.phase2 ?? declaration.phaseContexts?.phase2,
+            },
+          },
+          participantId: encounterParticipant.id,
+          state: roundState,
+          submittedBy: "gm",
+        });
+        const nextRoundState = recordCombatRoundParticipantStepReview({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          participantId: encounterParticipant.id,
+          state: reviewedDeclarationState,
+          step: roundState.currentStep,
+          submittedBy: "gm",
+        });
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          encounter: savedEncounter,
+          participant,
+        };
       }
 
       const submittedMovementIntent = normalizeCombatDeclarationMovementIntent({
@@ -8009,8 +8083,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         { campaignService, scenarioService },
         { scenarioId, userId: user.id, userRoles: user.roles },
       );
-      if (!access || access.mode !== "gm") {
-        return reply.code(403).send({ error: "Only GM users can resolve phase damage." });
+      if (!access) {
+        return reply.code(404).send({ error: "Encounter not found." });
       }
       const body = parseCombatDamageTaskBody(request.body);
       if (body.commandType !== "resolve_damage") {
@@ -8023,6 +8097,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const participantResolution = body.scenarioParticipantId
+        ? resolveCombatParticipantForRequest({
+            accessMode: access.mode,
+            encounter,
+            requestedParticipantId: body.scenarioParticipantId,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        : undefined;
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -8033,6 +8116,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       if (!attackResult) {
         return reply.code(404).send({ error: "Attack result not found." });
+      }
+      if (
+        access.mode !== "gm" &&
+        (!participantResolution?.scenarioParticipant.isActive ||
+          participantResolution.encounterParticipant.id !== attackResult.attackerParticipantId)
+      ) {
+        return reply.code(403).send({
+          error: "Only the attacking participant can roll graze damage.",
+        });
       }
       if (
         body.attackerParticipantId !== attackResult.attackerParticipantId ||
@@ -8054,7 +8146,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(409).send({ error: "The damage review identity is stale." });
       }
       const authorization = authorizeCombatProgressionTask({
-        actor: { kind: "gm" },
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : {
+                kind: "combatant",
+                participantId: participantResolution!.encounterParticipant.id,
+              },
         attackResultId: body.attackResultId,
         attackerParticipantId: body.attackerParticipantId,
         commandType: "resolve_damage",
@@ -8064,6 +8162,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         executionGroupId: body.executionGroupId,
         hitLocationResultId: body.hitLocationResultId,
         opportunityId: body.opportunityId,
+        participantId:
+          access.mode === "gm"
+            ? undefined
+            : participantResolution!.encounterParticipant.id,
         phase: body.phase,
         projection: buildCombatProgressionProjection(roundState),
         taskId: body.taskId,
@@ -8101,6 +8203,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (dmb === undefined || defenderDm === undefined) {
         return reply.code(409).send({ error: "Canonical damage inputs are not available." });
       }
+      if (attackResult.grazing) {
+        const canonicalDamageRollExpression = getCombatRoundGrazeDamageRollContext({
+          defenderDm,
+          dmb,
+        }).diceExpression;
+        if (body.damageRollExpression !== canonicalDamageRollExpression) {
+          return reply.code(409).send({
+            error: "The graze damage roll context is stale.",
+          });
+        }
+      }
       const defenderEncounterParticipant = encounter.participants.find((participant) =>
         participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
       );
@@ -8121,7 +8234,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         defenderDm,
         dmb,
         state: roundState,
-        submittedBy: "gm",
+        submittedBy: access.mode === "gm" ? "gm" : "player",
         updatedAt: submittedAt,
         weaponArmorClass: normalizeCombatArmorModifierClass(
           latestAttackerSnapshot?.attackSummary?.attackMode,
@@ -8140,7 +8253,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       return {
         commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
-        encounter: savedEncounter,
+        encounter:
+          access.mode === "gm"
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
       };
     } catch (error) {
       return reply.code(400).send({

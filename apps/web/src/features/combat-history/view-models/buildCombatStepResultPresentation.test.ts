@@ -478,6 +478,61 @@ describe("buildCombatStepResultPresentation", () => {
     expect(JSON.stringify(declaration)).not.toContain("combat log");
   });
 
+  it("presents a graze roll to both participants while keeping its calculation with the roller", () => {
+    const graze = historyEvent("damage_proposed", 7, {
+      facts: {
+        involvedOutcome: {
+          attackResultId: "attack-graze",
+          damageRollExpression: "1d7",
+          grazing: true,
+          rawGrazingDamage: 3,
+          totalDamage: 3,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "attacker",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "defender",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "scyrian",
+    });
+
+    const attacker = build({ events: [graze], participantId: "gladiator" });
+    const defender = build({ events: [graze], participantId: "scyrian" });
+    const gm = build({ events: [graze], participantId: "scyrian", viewer: "gm" });
+
+    expect(attacker.entries[0]).toMatchObject({
+      calculations: [
+        {
+          collapsedByDefault: true,
+          lines: ["Die: 1d7", "Roll: 3"],
+          visibility: "own",
+        },
+      ],
+      heading: "Graze damage",
+      summary: "You rolled 3 on 1d7. Damage is awaiting GM review.",
+    });
+    expect(defender.entries[0]).toMatchObject({
+      calculations: [],
+      summary: "The Gladiator rolled 3 damage. Damage is awaiting GM review.",
+    });
+    expect(gm.entries[0]).toMatchObject({
+      calculations: [expect.objectContaining({ visibility: "gm_full" })],
+      summary:
+        "The Gladiator rolled 3 on 1d7 against Scyrian cavalry guy. Review damage and effects.",
+    });
+  });
+
   it("does not render declaration content in live results before publication", () => {
     const ownDeclaration = logEvent("log:own-declaration", 1, {
       actor: { displayName: "The Gladiator", participantId: "gladiator" },

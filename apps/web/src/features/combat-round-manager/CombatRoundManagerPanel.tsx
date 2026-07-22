@@ -7067,6 +7067,14 @@ export default function CombatRoundManagerPanel({
       setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
+    if (
+      descriptor.commandType === "resolve_damage" &&
+      currentActionPresentation?.taskKind === "damage_roll" &&
+      !descriptor.damageRollExpression
+    ) {
+      setSaveError("The graze damage roll context is no longer available.");
+      return;
+    }
     const taskScenarioParticipant = scenarioParticipantForTask(descriptor);
     const taskEncounterParticipant = encounter.participants.find((participant) =>
       getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
@@ -7079,9 +7087,12 @@ export default function CombatRoundManagerPanel({
       setSaveError("Roll Combat Experience before declaring an action.");
       return;
     }
+    const isModifierReview =
+      descriptor.commandType === "review_modifiers_phase1" ||
+      descriptor.commandType === "review_modifiers_phase2";
 
     const feintTargetResolution =
-      inspectorDraft.actionId === "feint_attack"
+      !isModifierReview && inspectorDraft.actionId === "feint_attack"
         ? resolveCombatFeintDeclarationRequestTarget({
             encounterParticipants: encounter.participants,
             phaseContexts: inspectorDraft.phaseContexts,
@@ -7094,7 +7105,7 @@ export default function CombatRoundManagerPanel({
     let requestPhaseContexts = feintTargetResolution?.ok
       ? feintTargetResolution.phaseContexts
       : inspectorDraft.phaseContexts;
-    if (inspectorDraft.actionId === "adjust_range_attack") {
+    if (!isModifierReview && inspectorDraft.actionId === "adjust_range_attack") {
       const targetParticipantId =
         requestPhaseContexts.phase1?.targetParticipantId ??
         requestPhaseContexts.phase2?.targetParticipantId;
@@ -7115,11 +7126,13 @@ export default function CombatRoundManagerPanel({
         },
       };
     }
-    const targetValidation = validateCombatDeclarationTargets({
-      actionId: inspectorDraft.actionId || undefined,
-      phaseContexts: requestPhaseContexts,
-      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
-    });
+    const targetValidation = isModifierReview
+      ? { valid: true as const }
+      : validateCombatDeclarationTargets({
+          actionId: inspectorDraft.actionId || undefined,
+          phaseContexts: requestPhaseContexts,
+          secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+        });
 
     if (!targetValidation.valid) {
       setSaveError(targetValidation.message ?? "Select a target for each attack phase.");
@@ -7135,7 +7148,8 @@ export default function CombatRoundManagerPanel({
       const displayedParticipantIds = displayParticipants.map(
         (participant) => participant.participantId,
       );
-      const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
+      const { commandEnvelope, encounter: nextEncounter, participant } =
+        await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
         adjustDistance:
           inspectorDraft.actionId === "adjust_range_attack" &&
@@ -7202,7 +7216,11 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
-      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const commandState = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+      const nextRoundState = commandState.state;
       const nextSelection = shouldUsePersistedCursor
         ? undefined
         : getNextCombatRoundParticipantSelection({
@@ -7216,7 +7234,7 @@ export default function CombatRoundManagerPanel({
             pendingSelection: nextSelection,
             state: nextRoundState,
           })
-        : resolveCombatRoundInspectionSelection({ state: nextRoundState });
+        : commandState.inspectionSelection;
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
@@ -8302,6 +8320,7 @@ export default function CombatRoundManagerPanel({
             attackerParticipantId: descriptor.attackerParticipantId!,
             commandType: "resolve_damage",
             criticalResultId: descriptor.criticalResultId!,
+            damageRollExpression: descriptor.damageRollExpression,
             damageReviewId: descriptor.damageReviewId!,
             defenderParticipantId: descriptor.defenderParticipantId!,
             encounterId: encounter.id,
@@ -8310,6 +8329,7 @@ export default function CombatRoundManagerPanel({
             hitLocationResultId: descriptor.hitLocationResultId!,
             opportunityId: descriptor.opportunityId,
             phase: descriptor.phase!,
+            scenarioParticipantId: attackerScenarioParticipant?.id,
             taskId: descriptor.taskId,
           });
         const next = getCombatRoundManagerStateFromCommandEnvelope({

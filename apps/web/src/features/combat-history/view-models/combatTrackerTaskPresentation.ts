@@ -49,6 +49,7 @@ export function classifyCombatTrackerTaskAttention(
     case "adjust_distance_response":
     case "combat_experience":
     case "critical":
+    case "damage_roll":
     case "damage_review":
     case "distance_commit":
     case "distance_roll":
@@ -100,6 +101,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Hit location";
     case "critical":
       return "Critical";
+    case "damage_roll":
+      return "Graze damage";
     case "damage_review":
       return "Damage review";
     case "double_attack_decision":
@@ -242,6 +245,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} must roll the critical${opponent ? ` against ${opponent}` : ""}.`
           : "A critical roll is required.";
+        break;
+      case "damage_roll":
+        text = owner
+          ? `${owner} must roll graze damage${opponent ? ` against ${opponent}` : ""}.`
+          : "A graze damage roll is required.";
         break;
       case "distance_roll":
         text = owner

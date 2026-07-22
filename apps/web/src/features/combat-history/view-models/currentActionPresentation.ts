@@ -23,6 +23,7 @@ export interface CurrentActionCommandDescriptor {
   readonly attackerParticipantId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
+  readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly defenderParticipantId?: string;
   readonly encounterId: string;
@@ -52,6 +53,7 @@ export interface CurrentActionPresentation {
   readonly expectedNextProcess?: { readonly label: string; readonly processId?: string };
   readonly heading: string;
   readonly difficulty?: number;
+  readonly damageRollExpression?: string;
   readonly phase?: CombatRoundPhase;
   readonly primaryAction: {
     readonly descriptor?: CurrentActionCommandDescriptor;
@@ -191,6 +193,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   combat_experience: "Combat Experience",
   commit_initiative: "Initiative",
   critical: "Critical",
+  damage_roll: "Graze Damage",
   damage_review: "Damage Review",
   distance_commit: "Distance Control",
   distance_roll: "Distance Control",
@@ -363,6 +366,7 @@ function summaryFor(input: {
       return `${actor} hit ${target ?? "the defender"}.`;
     case "hit_location":
     case "critical":
+    case "damage_roll":
     case "damage_review":
       return `${actor} hit ${target ?? "the defender"}.`;
     case "feint_attacker_roll":
@@ -486,6 +490,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Roll hit location";
     case "critical":
       return "Roll critical";
+    case "damage_roll":
+      return "Roll damage";
     case "damage_review":
       return task.expectedCommand === "resolve_damage" ? "Resolve damage" : "Commit damage";
     case "feint_attacker_roll":
@@ -550,6 +556,8 @@ function requiredNowFor(
       return "Roll hit location.";
     case "critical":
       return "Roll critical.";
+    case "damage_roll":
+      return "Roll damage.";
     case "damage_review":
       return task.expectedCommand === "resolve_damage" ? "Resolve damage." : "Commit damage.";
     case "feint_attacker_roll":
@@ -659,6 +667,7 @@ export function buildCurrentActionPresentation(
     attackerParticipantId: task.identity.attackerParticipantId,
     commandType: task.expectedCommand,
     criticalResultId: task.identity.criticalResultId,
+    damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     defenderParticipantId: task.identity.defenderParticipantId,
     encounterId: input.encounterId,
@@ -686,6 +695,7 @@ export function buildCurrentActionPresentation(
     actor,
     boundary: input.progression.boundary.kind,
     distance: task.presentationContext?.distance,
+    damageRollExpression: task.presentationContext?.damageRollExpression,
     difficulty: task.presentationContext?.difficulty,
     encounterId: input.encounterId,
     encounterRevision: input.encounterRevision,

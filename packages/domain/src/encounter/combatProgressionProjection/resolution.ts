@@ -2,6 +2,7 @@ import {
   getCombatRoundCriticalResultId,
   getCombatRoundDamageReviewId,
   getCombatRoundDamageSubstate,
+  getCombatRoundGrazeDamageRollContext,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundAttackResultId,
   getCombatRoundHitLocationResultId,
@@ -98,6 +99,41 @@ function presentationActionKind(actionId: string | undefined): string | undefine
     default:
       return actionId;
   }
+}
+
+function projectedGrazeDamageRollExpression(input: {
+  attackerParticipantId?: string;
+  context: ProjectionBuildContext;
+  defenderParticipantId?: string;
+  phase: CombatRoundPhase;
+}): string | undefined {
+  if (!input.attackerParticipantId || !input.defenderParticipantId) return undefined;
+  const phaseStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+  const attackerSnapshot = [...input.context.state.stepSnapshots]
+    .reverse()
+    .find(
+      (snapshot) =>
+        snapshot.roundNumber === input.context.state.roundNumber &&
+        snapshot.participantId === input.attackerParticipantId &&
+        snapshot.phase === input.phase &&
+        snapshot.step === phaseStep &&
+        snapshot.attackSummary,
+    );
+  const defenderSnapshot = [...input.context.state.stepSnapshots]
+    .reverse()
+    .find(
+      (snapshot) =>
+        snapshot.roundNumber === input.context.state.roundNumber &&
+        snapshot.participantId === input.defenderParticipantId &&
+        snapshot.phase === input.phase &&
+        snapshot.step === phaseStep &&
+        snapshot.defenseSummary,
+    );
+  const dmb = Number(attackerSnapshot?.attackSummary?.dmb);
+  const defenderDm = Number(defenderSnapshot?.defenseSummary?.dm);
+  return Number.isInteger(dmb) && Number.isInteger(defenderDm)
+    ? getCombatRoundGrazeDamageRollContext({ defenderDm, dmb }).diceExpression
+    : undefined;
 }
 
 function maneuverStageKind(stage: CombatManeuverProcessStagePlan): CombatProgressionStageKind {
@@ -456,20 +492,30 @@ function buildLegacyAttackProcess(
         ],
       };
     } else if (damageSubstate === "location_rolled") {
+      const grazing = attack?.grazing === true;
+      const damageRollExpression = grazing
+        ? projectedGrazeDamageRollExpression({
+            attackerParticipantId: attack?.attackerParticipantId,
+            context,
+            defenderParticipantId: attack?.defenderParticipantId,
+            phase,
+          })
+        : undefined;
       stages[2] = {
         ...stages[2],
         tasks: [
           {
-            allowedActors: ["gm"],
             expectedCommand: "resolve_damage",
-            identity: downstreamIdentity,
-            kind: "damage_review",
-            owner: GM_IDENTITY,
+            identity: { ...downstreamIdentity, damageRollExpression },
+            kind: grazing ? "damage_roll" : "damage_review",
+            owner: grazing ? attacker : GM_IDENTITY,
             presentationContext: {
               actor: attacker,
+              damageRollExpression,
+              responder: grazing ? attacker : undefined,
               target: attack ? context.identities.get(attack.defenderParticipantId) : undefined,
             },
-            trackerOwner: undefined,
+            trackerOwner: grazing ? attacker : undefined,
             trackerStep: trackerDamage,
           },
         ],
@@ -548,9 +594,21 @@ function buildAdapterAttackProcess(
   const weaponLabel =
     attackResult?.weaponName ??
     attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
+  const damageRollExpression =
+    attackResult?.grazing
+      ? projectedGrazeDamageRollExpression({
+          attackerParticipantId: plan.ownerParticipantId,
+          context,
+          defenderParticipantId: plan.targetParticipantId,
+          phase: plan.phase,
+        })
+      : undefined;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
-    const taskKind = adapterStageTaskKind(stage);
+    const taskKind =
+      stage.kind === "damage" && task?.owner === "attacker"
+        ? ("damage_roll" as const)
+        : adapterStageTaskKind(stage);
     const owner =
       task?.owner === "gm" ? GM_IDENTITY : task?.owner === "defender" ? defender : attacker;
     // Tracker ownership follows the participant who must supply this stage's input.
@@ -594,7 +652,7 @@ function buildAdapterAttackProcess(
       state:
         stage.state === "ready" ? "active" : stage.state === "pending" ? "pending" : "complete",
       strategy:
-        task?.owner === "gm" || stage.kind === "damage" || stage.kind === "commit"
+        task?.owner === "gm" || stage.kind === "commit" || (stage.kind === "damage" && !task)
           ? "gm_review"
           : "single_task",
       tasks:
@@ -606,6 +664,8 @@ function buildAdapterAttackProcess(
                 expectedCommand: task.expectedCommand,
                 identity: {
                   ...downstreamIdentity,
+                  damageRollExpression:
+                    taskKind === "damage_roll" ? damageRollExpression : undefined,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
@@ -617,6 +677,8 @@ function buildAdapterAttackProcess(
                 presentationContext: {
                   actionKind: plan.actionKind,
                   actor: attacker,
+                  damageRollExpression:
+                    taskKind === "damage_roll" ? damageRollExpression : undefined,
                   responder: owner?.kind === "combatant" ? owner : undefined,
                   target: defender,
                   weapon:

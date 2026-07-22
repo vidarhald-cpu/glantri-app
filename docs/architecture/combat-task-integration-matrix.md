@@ -15,6 +15,7 @@ component or inspector state. It is an implementation audit, not a combat-rule s
 | `parry`                                        | Fully descriptor-bound | GM/player handlers and API require the exact parry task/group/revision and authoritative attack identities.                    |
 | `hit_location`                                 | Fully descriptor-bound | —                                                                                                                              |
 | `critical`                                     | Fully descriptor-bound | —                                                                                                                              |
+| `damage_roll`                                  | Fully descriptor-bound | Graze damage is rolled by the projected attacker (or GM proxy) using exact attack, opportunity, task, group, and revision identity. |
 | `damage_review`                                | Fully descriptor-bound | Both damage resolution and review commit are bound to exact attack/review identity.                                            |
 | `double_attack_decision`                       | Fully descriptor-bound | The decision value is form input; participant/opportunity/task identity comes only from the descriptor.                        |
 | `feint_attacker_roll` / `feint_defender_roll`  | Fully descriptor-bound | GM proxy and player rolls require exact participant, proposal, task, group, and revision identity.                              |

@@ -202,6 +202,7 @@ function stageTrackerFacet(kind: CombatActionProcessStageKind): "attack" | "dama
 
 function taskForStage(input: {
   attackResultId?: string;
+  grazing: boolean;
   kind: CombatActionProcessStageKind;
   opportunityId: string;
   phase: CombatRoundPhase;
@@ -219,7 +220,11 @@ function taskForStage(input: {
     case "hit_location":
       return { ...shared, expectedCommand: "roll_hit_location", owner: "attacker" };
     case "damage":
-      return { ...shared, expectedCommand: "resolve_damage", owner: "gm" };
+      return {
+        ...shared,
+        expectedCommand: "resolve_damage",
+        owner: input.grazing ? "attacker" : "gm",
+      };
     case "critical":
       return { ...shared, expectedCommand: "roll_critical", owner: "attacker" };
     case "commit":
@@ -353,6 +358,7 @@ function buildStandardAttackProcess(input: {
         states[kind] === "ready"
           ? taskForStage({
               attackResultId,
+              grazing: attack?.grazing === true,
               kind,
               opportunityId: input.opportunity.id,
               phase: input.opportunity.phase,

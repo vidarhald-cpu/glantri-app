@@ -44,23 +44,24 @@ function task(input: {
     expectedCommand: input.command ?? "roll_attack",
     id: input.id ?? `task:${input.kind}`,
     identity: {
-      attackResultId: ["parry", "hit_location", "critical", "damage_review"].includes(input.kind)
+      attackResultId: ["parry", "hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "attack-result-1"
         : undefined,
-      attackerParticipantId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+      attackerParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "aria"
         : undefined,
-      criticalResultId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+      criticalResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "attack-result-1:critical"
         : undefined,
-      damageReviewId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+      damageRollExpression: input.kind === "damage_roll" ? "1d7" : undefined,
+      damageReviewId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "attack-result-1:damage-review"
         : undefined,
-      defenderParticipantId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+      defenderParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "borin"
         : undefined,
       executionGroupId: `group:${input.id ?? input.kind}`,
-      hitLocationResultId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+      hitLocationResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
         ? "attack-result-1:hit-location"
         : undefined,
       opportunityId: "opportunity-1",
@@ -85,6 +86,7 @@ function task(input: {
           ? { current: input.currentDistance, requested: input.requestedDistance }
           : undefined,
       difficulty: input.difficulty,
+      damageRollExpression: input.kind === "damage_roll" ? "1d7" : undefined,
       reason: input.reason,
       responder: input.responder,
       target: input.target,
@@ -267,6 +269,7 @@ describe("CurrentActionPresentation", () => {
   it.each([
     ["hit_location", "roll_hit_location", "Roll hit location"],
     ["critical", "roll_critical", "Roll critical"],
+    ["damage_roll", "resolve_damage", "Roll damage"],
     ["damage_review", "resolve_damage", "Resolve damage"],
     ["damage_review", "commit_phase_damage", "Commit damage"],
   ] as const)("binds %s to all downstream result identities", (kind, command, label) => {
@@ -287,6 +290,7 @@ describe("CurrentActionPresentation", () => {
           attackResultId: "attack-result-1",
           attackerParticipantId: "aria",
           criticalResultId: "attack-result-1:critical",
+          damageRollExpression: kind === "damage_roll" ? "1d7" : undefined,
           damageReviewId: "attack-result-1:damage-review",
           defenderParticipantId: "borin",
           executionGroupId: `group:${kind}`,

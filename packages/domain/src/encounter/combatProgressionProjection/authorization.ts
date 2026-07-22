@@ -153,7 +153,7 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
   },
   resolve_damage: {
     boundary: resolutionBoundary,
-    kind: "damage_review",
+    kind: ["damage_roll", "damage_review"],
     process: "attack",
     stage: "damage",
   },

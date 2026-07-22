@@ -528,6 +528,71 @@ function makeCriticalRollMutationFixture() {
   };
 }
 
+function makeGrazeDamageMutationFixture() {
+  const encounterParticipants = makeTwoCombatEncounterParticipants();
+  const combatEncounter = makeCombatEncounter({ participants: encounterParticipants }) as EncounterSession;
+  const attackGraze = buildCombatRoundAttackRollResult({
+    actionId: "attack_parry",
+    attackerParticipantId: "encounter-participant-1",
+    defenderDb: 0,
+    defenderParticipantId: "encounter-participant-2",
+    ob: 0,
+    phase: "phase1",
+    rollD20: 11,
+    rollTotal: 11,
+    rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponName: "Broad sword",
+  });
+  const afterAttack = recordCombatRoundAttackResult({
+    command: { createdAt: attackGraze.rolledAt, createdByUserId: "player-1" },
+    participantId: "encounter-participant-1",
+    result: attackGraze,
+    state: initializeCombatRoundState({ encounter: combatEncounter }),
+    submittedBy: "player",
+  });
+  const afterParry = recordCombatRoundParryResult({
+    attackResult: attackGraze,
+    command: { createdAt: "2026-01-01T00:04:00.000Z", createdByUserId: "other-player" },
+    parryResolution: {
+      combinedParryScore: 1,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry failed",
+      rollD20: 1,
+      rollTotal: 1,
+      status: "resolved",
+      success: false,
+      targetNumber: 21,
+      total: 1,
+    },
+    state: afterAttack,
+    submittedBy: "player",
+    updatedAt: "2026-01-01T00:04:00.000Z",
+  });
+  const afterLocation = recordCombatRoundHitLocationRoll({
+    attackResult: attackGraze,
+    command: { createdAt: "2026-01-01T00:04:30.000Z", createdByUserId: "player-1" },
+    hitLocationRolls: [12],
+    rolledByParticipantId: "encounter-participant-1",
+    state: afterParry,
+    submittedBy: "player",
+    updatedAt: "2026-01-01T00:04:30.000Z",
+  });
+
+  return {
+    attackGraze,
+    encounterParticipants,
+    scenarioParticipants: [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+    ],
+    stateAfterLocation: afterLocation,
+  };
+}
+
 function buildDownstreamTaskPayload(
   state: CombatRoundState,
   expectedCommand: "commit_phase_damage" | "resolve_damage" | "roll_critical" | "roll_hit_location",
@@ -541,6 +606,7 @@ function buildDownstreamTaskPayload(
     attackerParticipantId: task.identity.attackerParticipantId,
     commandType: expectedCommand,
     criticalResultId: task.identity.criticalResultId,
+    damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     defenderParticipantId: task.identity.defenderParticipantId,
     executionGroupId: task.executionGroupId,
@@ -9294,7 +9360,7 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("allows a GM to review and override generated phase 2 modifiers", async () => {
+  it("reviews canonical phase 2 modifiers without reconstructing a stale Phase 1 weapon", async () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
@@ -9344,7 +9410,9 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        actionId: "parry_attack",
+        // The inspector can still hold an unrelated draft. The canonical review task and
+        // persisted declaration, not this draft, identify what is being reviewed.
+        actionId: "feint_attack",
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -9364,6 +9432,13 @@ describe("scenarios route contract", () => {
             situationObSkill: [],
           },
         },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "missing-phase-1-item",
+            opportunitySlot: "attack_1",
+            templateId: "missing-phase-1-template",
+          }),
+        },
         phaseContexts: {
           phase2: testCombatPhaseContext("encounter-target-1"),
         },
@@ -9379,6 +9454,9 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.review_phase_2_modifiers,
     ).toBe("gmEdited");
+    expect(updatedEncounter.combatRoundState.participants[0].declaration.actionId).toBe(
+      "parry_attack",
+    );
     expect(
       updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
         .situationInitiative,
@@ -11664,6 +11742,146 @@ describe("scenarios route contract", () => {
       dmb: 8,
     });
     expect(savedState.commands.at(-1)).toMatchObject({ type: "resolve_damage" });
+  });
+
+  it.each([
+    ["attacking player", mocks.playerUser, "participant-1"],
+    ["GM proxy", mocks.adminUser, undefined],
+  ] as const)("lets the %s roll graze damage before the ordinary GM review", async (
+    _viewer,
+    user,
+    scenarioParticipantId,
+  ) => {
+    const fixture = makeGrazeDamageMutationFixture();
+    const stateWithCanonicalSnapshots: CombatRoundState = {
+      ...fixture.stateAfterLocation,
+      stepSnapshots: [
+        {
+          attackSummary: {
+            attackMode: "C",
+            dmb: "8",
+            initiative: "3",
+            maxCrits: "FS",
+            ob: "10",
+            weaponName: "Broad sword",
+          },
+          committedAt: "2026-01-01T00:02:00.000Z",
+          id: "snapshot-graze-attacker",
+          participantId: "encounter-participant-1",
+          participantLabel: "The Gladiator",
+          phase: "phase1",
+          roundNumber: fixture.stateAfterLocation.roundNumber,
+          step: "phase_1_actions",
+        },
+        {
+          committedAt: "2026-01-01T00:02:00.000Z",
+          defenseSummary: {
+            db: "11",
+            dm: "0",
+            parry: "9",
+            sourceName: "Sword / shield",
+          },
+          id: "snapshot-graze-defender",
+          participantId: "encounter-participant-2",
+          participantLabel: "City guard",
+          phase: "phase1",
+          roundNumber: fixture.stateAfterLocation.roundNumber,
+          step: "phase_1_actions",
+        },
+      ],
+    };
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCanonicalSnapshots,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user,
+    });
+    const app = await buildScenarioTestApp();
+    const taskPayload = buildDownstreamTaskPayload(
+      stateWithCanonicalSnapshots,
+      "resolve_damage",
+    );
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        ...taskPayload,
+        scenarioParticipantId,
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-phase-damage",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    expect(savedState.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      attackResultId: taskPayload.attackResultId,
+      damageRoll: {
+        diceExpression: "1d7",
+        rawGrazingDamage: expect.any(Number),
+      },
+      grazing: true,
+    });
+    expect(savedState.commands.at(-1)).toMatchObject({
+      createdByUserId: user.id,
+      type: "resolve_damage",
+    });
+    expect(
+      buildCombatProgressionProjection(savedState)
+        .boundary.processes.flatMap((process) =>
+          process.stages.flatMap((stage) => stage.tasks),
+        )
+      .find((task) => task.kind === "damage_review"),
+    ).toMatchObject({ allowedActors: ["gm"], expectedCommand: "commit_phase_damage" });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCanonicalSnapshots,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user,
+    });
+    const staleApp = await buildScenarioTestApp();
+    const staleResponse = await staleApp.inject({
+      method: "POST",
+      payload: {
+        ...taskPayload,
+        damageRollExpression: "1d6",
+        scenarioParticipantId,
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-phase-damage",
+    });
+    await staleApp.close();
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json()).toEqual({ error: "The graze damage roll context is stale." });
+
+    if (_viewer === "attacking player") {
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: stateWithCanonicalSnapshots,
+          participants: fixture.encounterParticipants,
+        },
+        participants: fixture.scenarioParticipants,
+        user: { ...mocks.playerUser, id: "other-player" },
+      });
+      const defenderApp = await buildScenarioTestApp();
+      const defenderResponse = await defenderApp.inject({
+        method: "POST",
+        payload: {
+          ...taskPayload,
+          scenarioParticipantId: "participant-2",
+        },
+        url: "/encounters/encounter-1/combat-round/resolve-phase-damage",
+      });
+      await defenderApp.close();
+      expect(defenderResponse.statusCode).toBe(403);
+      expect(defenderResponse.json()).toEqual({
+        error: "Only the attacking participant can roll graze damage.",
+      });
+    }
   });
 
   it("saves the canonical current damage review without committing effects", async () => {

@@ -7883,6 +7883,32 @@ function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
   return damageMetadata;
 }
 
+export function getCombatRoundGrazeDamageRollContext(input: {
+  defenderDm: number;
+  dmb: number;
+}) {
+  const grazingReferenceHitLookupTotal = 12;
+  const grazingReferenceDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
+    defenderDm: input.defenderDm,
+    dmb: input.dmb,
+    hitLookupTotal: grazingReferenceHitLookupTotal,
+  });
+  const grazingReferenceDamageMetadata = getCombatRoundDamageMetadataForLookup(
+    grazingReferenceDamageLookupTotal,
+  );
+  const grazingReferenceDamage = grazingReferenceDamageMetadata.damage;
+  const dieSides = Math.max(1, grazingReferenceDamage);
+
+  return {
+    diceExpression: `1d${dieSides}`,
+    dieSides,
+    grazingReferenceDamage,
+    grazingReferenceDamageLookupTotal,
+    grazingReferenceHitLookupTotal,
+    minDamage: grazingReferenceDamageMetadata.minDamage,
+  } as const;
+}
+
 function combatRoundReviewHasOwnField(
   review: CombatRoundDamageReview | undefined,
   field: keyof CombatRoundDamageReview,
@@ -8532,34 +8558,27 @@ export function buildCombatRoundDamageResult(input: {
   let minDamage: number | undefined;
 
   if (input.attackResult.grazing) {
-    const grazingReferenceHitLookupTotal = 12;
-    const grazingReferenceDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
+    const grazingContext = getCombatRoundGrazeDamageRollContext({
       defenderDm: input.defenderDm,
       dmb: input.dmb,
-      hitLookupTotal: grazingReferenceHitLookupTotal,
     });
-    const grazingReferenceDamageMetadata = getCombatRoundDamageMetadataForLookup(
-      grazingReferenceDamageLookupTotal,
-    );
-    const grazingReferenceDamage = grazingReferenceDamageMetadata.damage;
-    const dieSides = Math.max(1, grazingReferenceDamage);
 
     damageRollTotal = rollCombatDamageDie({
       rng,
-      sides: dieSides,
+      sides: grazingContext.dieSides,
     });
-    damageLookupTotal = grazingReferenceDamageLookupTotal;
-    tableDamage = grazingReferenceDamageMetadata.damage;
-    minDamage = grazingReferenceDamageMetadata.minDamage;
+    damageLookupTotal = grazingContext.grazingReferenceDamageLookupTotal;
+    tableDamage = grazingContext.grazingReferenceDamage;
+    minDamage = grazingContext.minDamage;
     damageRoll = {
-      derivedFromLookupTotal: grazingReferenceHitLookupTotal,
-      derivedNormalDamageTotal: grazingReferenceDamage,
-      diceExpression: `1d${dieSides}`,
-      grazingDieSides: dieSides,
-      grazingReferenceDamage,
-      grazingReferenceDamageLookupTotal,
-      grazingReferenceHitLookupTotal,
-      grazingReferenceTableDamage: grazingReferenceDamage,
+      derivedFromLookupTotal: grazingContext.grazingReferenceHitLookupTotal,
+      derivedNormalDamageTotal: grazingContext.grazingReferenceDamage,
+      diceExpression: grazingContext.diceExpression,
+      grazingDieSides: grazingContext.dieSides,
+      grazingReferenceDamage: grazingContext.grazingReferenceDamage,
+      grazingReferenceDamageLookupTotal: grazingContext.grazingReferenceDamageLookupTotal,
+      grazingReferenceHitLookupTotal: grazingContext.grazingReferenceHitLookupTotal,
+      grazingReferenceTableDamage: grazingContext.grazingReferenceDamage,
       rawGrazingDamage: damageRollTotal,
       required: true,
       rolls: [damageRollTotal],
@@ -8799,7 +8818,15 @@ function recordCombatRoundResolveDamageCommand(input: {
       facts: {
         gmReview: input.damageResult.review ?? {},
         involvedOutcome: {
+          attackResultId: input.damageResult.attackResultId,
           criticalGrade: input.damageResult.criticalGrade,
+          ...(input.damageResult.grazing
+            ? {
+                damageRollExpression: input.damageResult.damageRoll.diceExpression,
+                grazing: true,
+                rawGrazingDamage: input.damageResult.damageRoll.rawGrazingDamage,
+              }
+            : {}),
           selectedHitLocation: input.damageResult.selectedHitLocation,
           totalDamage: input.damageResult.totalDamage,
         },
@@ -8814,6 +8841,7 @@ function recordCombatRoundResolveDamageCommand(input: {
       },
       ownerParticipantId: input.attackResult.defenderParticipantId,
       phase: input.attackResult.phase,
+      rollerParticipantId: input.attackResult.attackerParticipantId,
       sourceIds: [input.damageResult.attackResultId, damageResultId],
       status: "proposed",
       step: getCombatStepEventPhaseStep({ kind: "damage", phase: input.attackResult.phase }),

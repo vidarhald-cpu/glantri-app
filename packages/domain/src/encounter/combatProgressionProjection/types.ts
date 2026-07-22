@@ -83,6 +83,7 @@ export type CombatProgressionTaskKind =
   | "attack"
   | "combat_experience"
   | "critical"
+  | "damage_roll"
   | "damage_review"
   | "distance_commit"
   | "distance_roll"
@@ -149,6 +150,7 @@ export interface CombatProgressionTaskIdentity {
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
   readonly criticalResultId?: string;
+  readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId: string;
@@ -180,6 +182,7 @@ export interface CombatProgressionTaskPresentationContext {
     readonly requested?: number;
   };
   readonly difficulty?: number;
+  readonly damageRollExpression?: string;
   readonly reason?: string;
   readonly responder?: CombatantIdentity;
   readonly skill?: CombatProgressionPresentationReference;

@@ -149,8 +149,16 @@ export async function submitCombatDeclarationOnServer(input: {
     method: "movement" | "weapon";
     targetParticipantId: string;
   };
-}): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
-  const payload = await sendJson<{ encounter: EncounterSession; participant: ScenarioParticipant }>(
+}): Promise<{
+  commandEnvelope?: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  const payload = await sendJson<{
+    commandEnvelope?: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(
     `/encounters/${input.encounterId}/combat-declaration`,
     {
       body: JSON.stringify({
@@ -730,6 +738,7 @@ export interface CombatDownstreamTaskRequestIdentity {
   attackResultId: string;
   attackerParticipantId: string;
   criticalResultId: string;
+  damageRollExpression?: string;
   damageReviewId: string;
   defenderParticipantId: string;
   executionGroupId: string;
@@ -782,6 +791,7 @@ export async function resolveCurrentCombatPhaseDamageOnServer(
   input: CombatDownstreamTaskRequestIdentity & {
     commandType: "resolve_damage";
     encounterId: string;
+    scenarioParticipantId?: string;
   },
 ): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;

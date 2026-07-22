@@ -104,6 +104,7 @@ function visibleTaskIdentity(
       ? task.identity.attackerParticipantId
       : undefined,
     criticalResultId: task.identity.criticalResultId,
+    damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
       ? task.identity.defenderParticipantId

@@ -26,6 +26,7 @@ const EXCEPTIONAL_TASK_KINDS = [
   "adjust_distance_response",
   "combat_experience",
   "critical",
+  "damage_roll",
   "damage_review",
   "distance_commit",
   "distance_roll",
