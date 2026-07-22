@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCombatRoundAttackRollResult,
   combatRoundStateSchema,
+  recordCombatRoundAttackResult,
   recordCombatRoundGlobalParticipantCommand,
   undoLatestCombatRoundCommand,
   type CombatRoundCursorStep,
@@ -960,6 +961,19 @@ describe("authorizeCombatProgressionTask", () => {
     ).toMatchObject({ ok: true, task: { owner: { participantId: "guard" } } });
     expect(
       authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        attackResultId: task?.identity.attackResultId,
+        commandType: "roll_parry",
+        executionGroupId: task?.executionGroupId,
+        opportunityId: "hero-phase1-attack",
+        participantId: "guard",
+        phase: "phase1",
+        projection,
+        taskId: task?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { owner: { participantId: "guard" } } });
+    expect(
+      authorizeCombatProgressionTask({
         actor: player("guard"),
         attackResultId: "stale-attack",
         commandType: "roll_parry",
@@ -968,6 +982,82 @@ describe("authorizeCombatProgressionTask", () => {
         projection,
       }),
     ).toMatchObject({ code: "stale_opportunity", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: player("guard"),
+        attackResultId: task?.identity.attackResultId,
+        commandType: "roll_parry",
+        participantId: "guard",
+        phase: "phase1",
+        projection,
+        taskId: "stale-parry-task",
+      }),
+    ).toMatchObject({ code: "task_not_found", ok: false });
+  });
+
+  it("projects the recorded hit as one live defender task with canonical attack context", () => {
+    const initial = state({
+      cursorParticipantId: "hero",
+      cursorStep: "A1",
+      currentStep: "phase_1_actions",
+      overrides: {
+        phaseResolutionCursor: { participantId: "hero", phase: "phase1", substep: "attack" },
+      },
+      participantOverrides: [
+        {
+          declaration: {
+            actionId: "attack_parry",
+            phaseContexts: { phase1: { targetParticipantId: "scenario-guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+        },
+      ],
+    });
+    const hit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "hero",
+      defenderDb: 0,
+      defenderParticipantId: "guard",
+      ob: 80,
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 20,
+      rolledAt: "2026-07-19T10:00:00.000Z",
+      weaponName: "Long Sword",
+    });
+    const afterHit = recordCombatRoundAttackResult({
+      command: { createdAt: hit.rolledAt },
+      participantId: "hero",
+      result: hit,
+      state: initial,
+      submittedBy: "gm",
+    });
+    const projection = buildCombatProgressionProjection(afterHit);
+    const tasks = projection.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(afterHit.currentCursor).toMatchObject({ participantId: "guard", step: "P1" });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      allowedActors: ["combatant", "gm"],
+      expectedCommand: "roll_parry",
+      identity: {
+        attackResultId: "2:phase1:hero:guard",
+        opponentParticipantId: "hero",
+        phase: "phase1",
+      },
+      kind: "parry",
+      owner: { participantId: "guard" },
+      presentationContext: {
+        actor: { participantId: "hero" },
+        target: { participantId: "guard" },
+        weapon: { label: "Long Sword" },
+      },
+      state: "executable",
+      trackerFacet: { owner: { participantId: "guard" }, step: "P1" },
+    });
   });
 
   it("authorizes the adapter-derived Double Attack decision for its owner or GM", () => {

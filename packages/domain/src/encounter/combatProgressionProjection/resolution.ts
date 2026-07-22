@@ -468,10 +468,14 @@ function buildAdapterAttackProcess(
   const defender = plan.targetParticipantId
     ? context.identities.get(plan.targetParticipantId)
     : undefined;
+  const attackResult = context.state.participants.find(
+    (participant) => participant.participantId === plan.ownerParticipantId,
+  )?.attackResults[plan.phase];
   const attackSnapshot = [...context.state.stepSnapshots]
     .reverse()
     .find((snapshot) => snapshot.participantId === plan.ownerParticipantId);
-  const weaponLabel = attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
+  const weaponLabel =
+    attackResult?.weaponName ?? attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const taskKind = adapterStageTaskKind(stage);

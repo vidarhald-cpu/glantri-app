@@ -22,6 +22,7 @@ export interface CurrentActionCommandDescriptor {
   readonly attackResultId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly encounterId: string;
+  readonly executionGroupId?: string;
   readonly expectedBoundary: CombatProgressionBoundaryKind;
   readonly expectedRevision: string;
   readonly healthRollId?: string;
@@ -326,7 +327,7 @@ function summaryFor(input: {
     case "attack":
       return `${actor} is attacking${target ? ` ${target}` : ""}.`;
     case "parry":
-      return `${target ?? "The defender"} is defending against ${actor}'s attack.`;
+      return `${actor} hit ${target ?? "the defender"}.`;
     case "feint_attacker_roll":
     case "feint_defender_roll":
     case "feint_commit":
@@ -507,7 +508,7 @@ function requiredNowFor(
     case "attack":
       return "Roll attack.";
     case "parry":
-      return "Roll parry.";
+      return "Defend against the attack.";
     case "hit_location":
       return "Roll hit location.";
     case "critical":
@@ -620,6 +621,7 @@ export function buildCurrentActionPresentation(
     attackResultId: task.identity.attackResultId,
     commandType: task.expectedCommand,
     encounterId: input.encounterId,
+    executionGroupId: task.executionGroupId,
     expectedBoundary: input.progression.boundary.kind,
     expectedRevision: input.encounterRevision,
     healthRollId: task.identity.healthRollId,

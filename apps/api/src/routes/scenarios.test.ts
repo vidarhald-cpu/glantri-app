@@ -10981,6 +10981,10 @@ describe("scenarios route contract", () => {
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "initiative_phase_1",
     };
+    const projectedParryTask = buildCombatProgressionProjection(afterAttack)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "parry");
+    expect(projectedParryTask).toBeDefined();
     const canonicalDefenderState = {
       ...makeCombatScenarioParticipant().state,
       combat: {
@@ -11038,9 +11042,16 @@ describe("scenarios route contract", () => {
 
     const parryPayload = {
       attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+      attackerParticipantId: "encounter-participant-1",
+      defenderParticipantId: "encounter-participant-2",
+      executionGroupId: projectedParryTask?.executionGroupId,
+      expectedRevision: combatEncounter.updatedAt,
+      opportunityId: projectedParryTask?.identity.opportunityId,
       parryBase: 13,
       parrySourceLabel: "Sword / shield",
+      phase: "phase1",
       scenarioParticipantId: "participant-2",
+      taskId: projectedParryTask?.id,
       usedMainHand: true,
       usedOffHand: true,
     };
@@ -11052,6 +11063,20 @@ describe("scenarios route contract", () => {
     const staleRawResponse = await app.inject({
       method: "POST",
       payload: { ...parryPayload, dbParryRaw: -3 },
+      url: "/encounters/encounter-1/combat-round/roll-parry",
+    });
+    const staleTaskResponse = await app.inject({
+      method: "POST",
+      payload: { ...parryPayload, dbParryRaw: -2, taskId: "stale-parry-task" },
+      url: "/encounters/encounter-1/combat-round/roll-parry",
+    });
+    const staleRevisionResponse = await app.inject({
+      method: "POST",
+      payload: {
+        ...parryPayload,
+        dbParryRaw: -2,
+        expectedRevision: "2025-12-31T23:59:59.000Z",
+      },
       url: "/encounters/encounter-1/combat-round/roll-parry",
     });
 
@@ -11068,6 +11093,9 @@ describe("scenarios route contract", () => {
 
     expect(missingRawResponse.statusCode).toBe(400);
     expect(staleRawResponse.statusCode).toBe(409);
+    expect(staleTaskResponse.statusCode).toBe(409);
+    expect(staleRevisionResponse.statusCode).toBe(409);
+    expect(staleRevisionResponse.json()).toMatchObject({ code: "stale_revision" });
     expect(response.statusCode).toBe(200);
     const payload = response.json();
     expect(payload.commandEnvelope).toMatchObject({

@@ -14,6 +14,7 @@ import {
   getCombatRoundManagerDisplayParticipantIds,
   getCombatRoundManagerInspectionSelection,
   getCombatRoundLiveInspectorSelection,
+  getCombatRoundRenderedInspectorSelection,
   getNextCombatRoundParticipantSelection,
   isCombatRoundInspectionSelectionLive,
   isSelectedCombatRoundStepCurrentForGm,
@@ -109,6 +110,25 @@ function committedOrder(
 }
 
 describe("combat round manager selection", () => {
+  it("renders a replacement participant task live before local selection synchronization", () => {
+    const previous = { participantId: "top", step: "phase_1_actions" as const };
+    const parry = { participantId: "bottom", step: "review_phase_2_actions" as const };
+
+    expect(
+      getCombatRoundRenderedInspectorSelection({
+        currentTaskSelection: parry,
+        localSelection: previous,
+      }),
+    ).toEqual(parry);
+    expect(
+      getCombatRoundRenderedInspectorSelection({
+        currentTaskSelection: parry,
+        localSelection: previous,
+        manualSelection: previous,
+      }),
+    ).toEqual(previous);
+  });
+
   it("keeps participant order stable until the GM commits phase initiative", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const partialPhase2 = {

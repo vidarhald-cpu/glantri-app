@@ -64,7 +64,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
-  getCombatRoundAttackResultId,
+  getCombatRoundAttackResultById,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
@@ -255,6 +255,7 @@ import {
   getCombatRoundManagerInspectionSelection,
   getCombatRoundManagerDisplayParticipantIds,
   getCombatRoundLiveInspectorSelection,
+  getCombatRoundRenderedInspectorSelection,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isCombatRoundInspectionSelectionLive,
@@ -4108,10 +4109,16 @@ export default function CombatRoundManagerPanel({
     liveInspectorContext?.taskId,
     roundState.roundNumber,
   ]);
+  const renderedInspectionSelection = getCombatRoundRenderedInspectorSelection({
+    currentTaskSelection,
+    localSelection: inspectionSelection,
+    manualSelection: manualSelectionRef.current,
+    pendingSelection: pendingSelectionRef.current,
+  });
   const inspector = buildCombatRoundInspector({
-    participantId: inspectionSelection.participantId,
+    participantId: renderedInspectionSelection.participantId,
     state: selectedTimelineRoundState,
-    step: inspectionSelection.step,
+    step: renderedInspectionSelection.step,
   });
   const gmCurrentStepResultPresentation = useMemo(
     () =>
@@ -7884,11 +7891,25 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorParry() {
-    const attackResult = inspectorResolutionAttackResult;
-    const phase = inspectorResolutionPhase;
+  async function rollInspectorParry(descriptor: CurrentActionCommandDescriptor) {
+    const attackResult = descriptor.attackResultId
+      ? getCombatRoundAttackResultById({
+          attackResultId: descriptor.attackResultId,
+          state: roundState,
+        })
+      : undefined;
+    const phase = descriptor.phase;
 
-    if (!attackResult || !phase) {
+    if (
+      descriptor.commandType !== "roll_parry" ||
+      !descriptor.attackResultId ||
+      !attackResult ||
+      !phase ||
+      !descriptor.participantId ||
+      attackResult.defenderParticipantId !== descriptor.participantId ||
+      attackResult.attackerParticipantId !== descriptor.opponentParticipantId ||
+      attackResult.phase !== phase
+    ) {
       setSaveError("No attack result is available for parry.");
       return;
     }
@@ -7898,36 +7919,66 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    if (inspectorParryBase === undefined) {
-      setSaveError("Select at least one available parry source.");
-      return;
-    }
+    const defenderRoundParticipant = roundState.participants.find(
+      (participant) => participant.participantId === descriptor.participantId,
+    );
+    const defenderEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === descriptor.participantId,
+    );
+    const defenderScenarioParticipant = defenderEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: defenderEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
 
-    if (!inspectorParryDefenderScenarioParticipant) {
+    if (!defenderScenarioParticipant || !defenderRoundParticipant) {
       setSaveError("Defender scenario participant is required to roll parry.");
       return;
     }
 
-    const sources = inspectorParryDefenderPhaseSummary?.parrySources;
-    const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
-    const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
+    const defenderPhaseSummary = buildScenarioParticipantPhaseSummary({
+      declaration: defenderRoundParticipant.declaration,
+      phaseKey: phase,
+      scenarioParticipant: defenderScenarioParticipant,
+    });
+    const selectionKey = getCombatParrySelectionKey({
+      result: attackResult,
+      roundNumber: roundState.roundNumber,
+    });
+    const sources = defenderPhaseSummary.parrySources;
+    const selection = getCombatParrySourceSelection({
+      selection: selectionKey ? parrySourceSelections[selectionKey] : undefined,
+      sources,
+    });
+    const parryBase = getSelectedCombatParryBase({ selection, sources });
+
+    if (parryBase === undefined) {
+      setSaveError("Select at least one available parry source.");
+      return;
+    }
+
+    const usedMainHand = selection.usedMainHand && Boolean(sources?.mainHand);
+    const usedOffHand = selection.usedOffHand && Boolean(sources?.offHand);
 
     setSaving(true);
 
     try {
       const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
-        attackResultId: getCombatRoundAttackResultId({
-          result: attackResult,
-          roundNumber: roundState.roundNumber,
-        }),
+        attackResultId: descriptor.attackResultId,
+        attackerParticipantId: descriptor.opponentParticipantId,
         dbParryRaw: getMergedCombatDbParryModifierTotal({
-          combatContext: inspectorParryDefenderScenarioParticipant.state.combat.combatContext,
+          combatContext: defenderScenarioParticipant.state.combat.combatContext,
           phase,
         }),
+        defenderParticipantId: descriptor.participantId,
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId,
+        expectedRevision: descriptor.expectedRevision,
         mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
         offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
-        parryBase: inspectorParryBase,
+        opportunityId: descriptor.opportunityId,
+        parryBase,
         parrySourceLabel: formatSelectedCombatParrySourceName({
           selection: {
             usedMainHand,
@@ -7935,7 +7986,9 @@ export default function CombatRoundManagerPanel({
           },
           sources,
         }),
-        scenarioParticipantId: inspectorParryDefenderScenarioParticipant.id,
+        phase,
+        scenarioParticipantId: defenderScenarioParticipant.id,
+        taskId: descriptor.taskId,
         usedMainHand,
         usedOffHand,
       });
@@ -9516,6 +9569,8 @@ export default function CombatRoundManagerPanel({
                               descriptor.commandType === "roll_adjust_distance" ||
                               descriptor.commandType === "commit_adjust_distance"
                             ? advanceInspectorAdjustDistance(descriptor)
+                            : descriptor.commandType === "roll_parry"
+                              ? rollInspectorParry(descriptor)
                             : inspectorFeintProposal?.status === "awaiting_rolls"
                               ? rollInspectorFeint()
                               : inspectorFeintProposal?.status === "awaiting_review"
@@ -9546,9 +9601,7 @@ export default function CombatRoundManagerPanel({
                                                     ? commitCurrentStep()
                                                     : inspectorCurrentStepIsInitiative
                                                       ? rollInspectorInitiative()
-                                                      : inspectorCanRollParry
-                                                        ? rollInspectorParry()
-                                                        : inspectorCurrentResolutionPhase &&
+                                                      : inspectorCurrentResolutionPhase &&
                                                             (inspectorActionPhaseHasAttack ===
                                                               false ||
                                                               inspectorActionPhaseResolutionStatus?.substep ===

@@ -126,6 +126,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollInitiative");
     expect(source).toContain("rollPhaseAttack");
     expect(source).toContain("rollCurrentParry");
+    expect(source).toContain('descriptor.commandType !== "roll_parry"');
+    expect(source).toContain("taskId: descriptor.taskId");
+    expect(source).toContain("expectedRevision: descriptor.expectedRevision");
+    expect(source).not.toContain('currentRollAction?.kind !== "parry"');
     expect(source).toContain("currentInitiativePhase");
     expect(source).not.toContain("formatCombatInitiativeFormula");
     expect(source).toContain("buildEncounterInitiativeModifierCalculation");

@@ -46,7 +46,8 @@ function task(input: {
       attackResultId: input.kind === "parry" ? "attack-result-1" : undefined,
       executionGroupId: `group:${input.id ?? input.kind}`,
       opportunityId: "opportunity-1",
-      opponentParticipantId: input.target?.participantId,
+      opponentParticipantId:
+        input.kind === "parry" ? input.actor?.participantId : input.target?.participantId,
       pairId: input.kind.startsWith("adjust_distance") ? "aria::borin" : undefined,
       phase: input.phase ?? "phase1",
       proposalId: input.kind.includes("feint")
@@ -56,7 +57,7 @@ function task(input: {
           : undefined,
     },
     kind: input.kind,
-    opponent: input.target,
+    opponent: input.kind === "parry" ? input.actor : input.target,
     owner,
     presentationContext: {
       actionKind: input.actionKind,
@@ -203,10 +204,46 @@ describe("CurrentActionPresentation", () => {
     );
 
     expect(result?.heading).toBe("Phase 1");
-    expect(result?.summary).toBe("Aria is defending against Borin's attack.");
+    expect(result?.summary).toBe("Borin hit Aria.");
     expect(result?.requiredActor.label).toBe("Aria");
     expect(result?.primaryAction.label).toBe("Roll parry");
-    expect(result?.requiredNow).toBe("Roll parry.");
+    expect(result?.requiredNow).toBe("Defend against the attack.");
+    expect(result?.primaryAction.descriptor).toMatchObject({
+      attackResultId: "attack-result-1",
+      executionGroupId: expect.stringContaining("group:"),
+      opponentParticipantId: "borin",
+      participantId: "aria",
+      phase: "phase1",
+    });
+  });
+
+  it("keeps the attacker in the live parry context without exposing a defense command", () => {
+    const parryTask = task({
+      actor: borin,
+      command: "roll_parry",
+      kind: "parry",
+      owner: aria,
+      responder: aria,
+      target: aria,
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-20T12:00:00.000Z",
+      progression: progression({ tasks: [parryTask] }),
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: {
+        enabled: false,
+        label: "Waiting for another combatant",
+        viewerMayInvoke: false,
+      },
+      requiredNow: "Waiting for another combatant.",
+      summary: "Borin hit Aria.",
+      taskKind: "parry",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
   });
 
   it.each([

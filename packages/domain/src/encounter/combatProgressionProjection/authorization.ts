@@ -39,6 +39,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly phase?: CombatRoundPhase;
   readonly projection: CombatProgressionProjection;
   readonly proposalId?: string;
+  readonly taskId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
 }
 
@@ -343,11 +344,18 @@ export function authorizeCombatProgressionTask(
     return failure("stale_opportunity", "The attack result is stale or not executable.");
   }
 
-  const matchingTasks = input.executionGroupId
+  const executionGroupTasks = input.executionGroupId
     ? attackTasks.filter((task) => task.executionGroupId === input.executionGroupId)
     : attackTasks;
-  if (input.executionGroupId && matchingTasks.length === 0) {
+  if (input.executionGroupId && executionGroupTasks.length === 0) {
     return failure("task_not_found", "No task is executable in this execution group.");
+  }
+
+  const matchingTasks = input.taskId
+    ? executionGroupTasks.filter((task) => task.id === input.taskId)
+    : executionGroupTasks;
+  if (input.taskId && matchingTasks.length === 0) {
+    return failure("task_not_found", "The projected combat task is stale or no longer executable.");
   }
 
   if (matchingTasks.length !== 1 || hasRelevantDiagnostic(input.projection, matchingTasks)) {

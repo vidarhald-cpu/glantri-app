@@ -151,6 +151,7 @@ import type {
   CombatRoundCommand,
   CombatRoundEndDistanceControlSide,
   CombatRoundEndDistanceProposal,
+  CombatRoundPhase,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundPhaseResolutionResult,
@@ -898,12 +899,19 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
 
 function parseCombatParryBody(body: unknown): {
   attackResultId: string;
+  attackerParticipantId?: string;
   dbParryRaw: number;
+  defenderParticipantId?: string;
+  executionGroupId?: string;
+  expectedRevision?: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
+  opportunityId?: string;
   parryBase: number;
   parrySourceLabel?: string;
+  phase?: CombatRoundPhase;
   scenarioParticipantId: string;
+  taskId?: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 } {
@@ -918,11 +926,34 @@ function parseCombatParryBody(body: unknown): {
   return {
     ...parsed,
     attackResultId,
+    attackerParticipantId:
+      value.attackerParticipantId === undefined
+        ? undefined
+        : parseNonEmptyString(value.attackerParticipantId, "attackerParticipantId"),
     dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
+    defenderParticipantId:
+      value.defenderParticipantId === undefined
+        ? undefined
+        : parseNonEmptyString(value.defenderParticipantId, "defenderParticipantId"),
+    executionGroupId:
+      value.executionGroupId === undefined
+        ? undefined
+        : parseNonEmptyString(value.executionGroupId, "executionGroupId"),
+    expectedRevision:
+      value.expectedRevision === undefined
+        ? undefined
+        : parseNonEmptyString(value.expectedRevision, "expectedRevision"),
     mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
     offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
+    opportunityId:
+      value.opportunityId === undefined
+        ? undefined
+        : parseNonEmptyString(value.opportunityId, "opportunityId"),
     parryBase: parseInteger(value.parryBase, "parryBase"),
     parrySourceLabel,
+    phase: value.phase === undefined ? undefined : combatRoundPhaseSchema.parse(value.phase),
+    taskId:
+      value.taskId === undefined ? undefined : parseNonEmptyString(value.taskId, "taskId"),
     usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
     usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
   };
@@ -7164,6 +7195,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedRevision && body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
+
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -7172,6 +7210,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         attackResultId: body.attackResultId,
         state: roundState,
       });
+      if (
+        attackResult &&
+        ((body.attackerParticipantId &&
+          body.attackerParticipantId !== attackResult.attackerParticipantId) ||
+          (body.defenderParticipantId &&
+            body.defenderParticipantId !== attackResult.defenderParticipantId) ||
+          (body.phase && body.phase !== attackResult.phase))
+      ) {
+        return reply.code(409).send({
+          code: "stale_opportunity",
+          error: "Parry is not open for this attack.",
+        });
+      }
       const parryAuthorization = authorizeCombatProgressionTask({
         actor:
           access.mode === "gm"
@@ -7179,10 +7230,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : { kind: "combatant", participantId: encounterParticipant.id },
         attackResultId: body.attackResultId,
         commandType: "roll_parry",
-        opportunityId: attackResult?.attackOpportunityId,
+        executionGroupId: body.executionGroupId,
+        opportunityId: body.opportunityId ?? attackResult?.attackOpportunityId,
         participantId: encounterParticipant.id,
-        phase: attackResult?.phase,
+        phase: body.phase ?? attackResult?.phase,
         projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
       });
       if (!parryAuthorization.ok) {
         return reply.code(409).send({

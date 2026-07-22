@@ -353,6 +353,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollCombatAttackOnServer");
     expect(source).toContain("rollInspectorParry");
     expect(source).toContain("rollCombatParryCommandOnServer");
+    expect(source).toContain("async function rollInspectorParry(descriptor:");
+    expect(source).toContain('descriptor.commandType === "roll_parry"');
+    expect(source).toContain("taskId: descriptor.taskId");
+    expect(source).toContain("expectedRevision: descriptor.expectedRevision");
+    expect(source).toContain("getCombatRoundRenderedInspectorSelection");
+    expect(source).not.toContain("? rollInspectorParry()");
     expect(source).not.toContain("rollOpenEndedD20");
     expect(source).not.toContain("resolveCombatParry");
     expect(source).not.toContain("recordCombatRoundParryResult");

@@ -53,6 +53,23 @@ export function getCombatRoundLiveInspectorSelection(input: {
   return { participantId, step: context.step };
 }
 
+/**
+ * Keeps the rendered live inspector on the canonical task during the render in which a command
+ * replaces the task. Local selection remains authoritative only for explicit or pending
+ * inspection. This avoids briefly classifying the newly opened participant task as History while
+ * the synchronization effect catches up.
+ */
+export function getCombatRoundRenderedInspectorSelection(input: {
+  currentTaskSelection?: CombatRoundSelectionTarget;
+  localSelection: CombatRoundSelectionTarget;
+  manualSelection?: CombatRoundSelectionTarget;
+  pendingSelection?: CombatRoundSelectionTarget;
+}): CombatRoundSelectionTarget {
+  return !input.manualSelection && !input.pendingSelection && input.currentTaskSelection
+    ? input.currentTaskSelection
+    : input.localSelection;
+}
+
 export function isCombatRoundInspectionSelectionLive(input: {
   context?: CombatRoundLiveInspectorContext;
   selectedRoundIsActive: boolean;

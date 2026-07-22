@@ -2607,19 +2607,21 @@ export default function ScenarioPlayerCombatPageContent({
   }
 
   async function rollCurrentParry(descriptor: CurrentActionCommandDescriptor) {
+    const attackResult = selectedCurrentResolutionAttackResult;
     if (
       readOnlyInspection ||
       !selectedParticipant ||
       !encounterId ||
-      currentRollAction?.kind !== "parry" ||
+      descriptor.commandType !== "roll_parry" ||
       !descriptor.attackResultId ||
-      !descriptor.participantId
+      !descriptor.participantId ||
+      !descriptor.phase ||
+      !attackResult ||
+      selectedRoundParticipant?.participantId !== descriptor.participantId ||
+      attackResult.defenderParticipantId !== descriptor.participantId ||
+      attackResult.attackerParticipantId !== descriptor.opponentParticipantId ||
+      attackResult.phase !== descriptor.phase
     ) {
-      return;
-    }
-
-    if (!selectedCurrentResolutionAttackResult) {
-      setError("No attack result is available for parry.");
       return;
     }
 
@@ -2633,14 +2635,21 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const encounter = await rollCombatParryOnServer({
         attackResultId: descriptor.attackResultId,
+        attackerParticipantId: descriptor.opponentParticipantId,
         dbParryRaw: getMergedCombatDbParryModifierTotal({
           combatContext: selectedParticipant.state.combat.combatContext,
-          phase: currentResolutionPhase,
+          phase: descriptor.phase,
         }),
+        defenderParticipantId: descriptor.participantId,
         encounterId,
+        executionGroupId: descriptor.executionGroupId,
+        expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId,
         parryBase: currentParryBase,
         parrySourceLabel: currentParryDefenseStats?.sourceName,
+        phase: descriptor.phase,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
         usedMainHand: true,
         usedOffHand: true,
       });
