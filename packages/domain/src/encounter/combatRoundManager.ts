@@ -7908,6 +7908,21 @@ export function getCombatRoundDamageResultId(input: { attackResultId: string }):
   return `${input.attackResultId}:damage`;
 }
 
+/** Deterministic projected identity for the hit-location result owned by an attack. */
+export function getCombatRoundHitLocationResultId(input: { attackResultId: string }): string {
+  return `${input.attackResultId}:hit-location`;
+}
+
+/** Deterministic projected identity for the critical result owned by an attack. */
+export function getCombatRoundCriticalResultId(input: { attackResultId: string }): string {
+  return `${input.attackResultId}:critical`;
+}
+
+/** Deterministic projected identity for the mutable GM review of an attack's damage. */
+export function getCombatRoundDamageReviewId(input: { attackResultId: string }): string {
+  return `${input.attackResultId}:damage-review`;
+}
+
 function rollCombatDamageDie(input: { rng: () => number; sides: number }): number {
   if (!Number.isInteger(input.sides) || input.sides < 1) {
     throw new RangeError("Combat damage die must have at least one side.");

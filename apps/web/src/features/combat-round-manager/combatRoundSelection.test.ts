@@ -336,6 +336,44 @@ describe("combat round manager selection", () => {
     ).toBe(false);
   });
 
+  it("maps downstream participant and ownerless damage tasks to live D1 context", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const participantTask = presentationTask({
+      id: "hit-location-bottom",
+      ownerParticipantId: "bottom",
+      step: "A1",
+    });
+    const participantContext = buildCombatRoundLiveInspectorContext({
+      ...participantTask,
+      kind: "hit_location",
+      trackerFacet: { ...participantTask.trackerFacet, step: "D1" },
+    });
+    expect(
+      getCombatRoundLiveInspectorSelection({ context: participantContext, state: existing }),
+    ).toEqual({ participantId: "bottom", step: "phase_1_damage" });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context: participantContext,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_damage" },
+      }),
+    ).toBe(true);
+
+    const gmTask = presentationTask({ id: "damage-review", step: "A1" });
+    const gmContext = buildCombatRoundLiveInspectorContext({
+      ...gmTask,
+      kind: "damage_review",
+      trackerFacet: { ...gmTask.trackerFacet, step: "D1" },
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context: gmContext,
+        selectedRoundIsActive: true,
+        selection: { participantId: "middle", step: "phase_1_damage" },
+      }),
+    ).toBe(true);
+  });
+
   it("treats non-current inspected phase cells as inspection-only", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const state = {

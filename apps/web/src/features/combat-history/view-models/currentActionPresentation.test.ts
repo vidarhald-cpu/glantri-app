@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCurrentActionPresentation,
   labelCurrentActionAsDeclarationEdit,
+  resolveCombatTaskCommandContext,
 } from "./currentActionPresentation";
 
 const aria = { kind: "combatant" as const, label: "Aria", participantId: "aria" };
@@ -43,8 +44,25 @@ function task(input: {
     expectedCommand: input.command ?? "roll_attack",
     id: input.id ?? `task:${input.kind}`,
     identity: {
-      attackResultId: input.kind === "parry" ? "attack-result-1" : undefined,
+      attackResultId: ["parry", "hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "attack-result-1"
+        : undefined,
+      attackerParticipantId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "aria"
+        : undefined,
+      criticalResultId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "attack-result-1:critical"
+        : undefined,
+      damageReviewId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "attack-result-1:damage-review"
+        : undefined,
+      defenderParticipantId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "borin"
+        : undefined,
       executionGroupId: `group:${input.id ?? input.kind}`,
+      hitLocationResultId: ["hit_location", "critical", "damage_review"].includes(input.kind)
+        ? "attack-result-1:hit-location"
+        : undefined,
       opportunityId: "opportunity-1",
       opponentParticipantId:
         input.kind === "parry" ? input.actor?.participantId : input.target?.participantId,
@@ -242,6 +260,91 @@ describe("CurrentActionPresentation", () => {
       requiredNow: "Waiting for another combatant.",
       summary: "Borin hit Aria.",
       taskKind: "parry",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
+  });
+
+  it.each([
+    ["hit_location", "roll_hit_location", "Roll hit location"],
+    ["critical", "roll_critical", "Roll critical"],
+    ["damage_review", "resolve_damage", "Resolve damage"],
+    ["damage_review", "commit_phase_damage", "Commit damage"],
+  ] as const)("binds %s to all downstream result identities", (kind, command, label) => {
+    const gmOnly = kind === "damage_review";
+    const result = build([
+      task({
+        actor: aria,
+        command,
+        gmOnly,
+        kind,
+        owner: gmOnly ? undefined : aria,
+        target: borin,
+      }),
+    ]);
+    expect(result).toMatchObject({
+      primaryAction: {
+        descriptor: {
+          attackResultId: "attack-result-1",
+          attackerParticipantId: "aria",
+          criticalResultId: "attack-result-1:critical",
+          damageReviewId: "attack-result-1:damage-review",
+          defenderParticipantId: "borin",
+          executionGroupId: `group:${kind}`,
+          hitLocationResultId: "attack-result-1:hit-location",
+          opportunityId: "opportunity-1",
+          phase: "phase1",
+          taskId: `task:${kind}`,
+        },
+        label,
+      },
+      summary: "Aria hit Borin.",
+    });
+  });
+
+  it("fails closed when a downstream handler receives a mismatched descriptor", () => {
+    const presentation = build([
+      task({ actor: aria, command: "roll_critical", kind: "critical", target: borin }),
+    ]);
+    const descriptor = presentation?.primaryAction.descriptor;
+    expect(
+      resolveCombatTaskCommandContext({
+        descriptor,
+        expectedCommandTypes: ["roll_critical"],
+        presentation,
+        requiredFields: ["attackResultId", "criticalResultId", "executionGroupId"],
+      }),
+    ).toBe(descriptor);
+    expect(
+      resolveCombatTaskCommandContext({
+        descriptor: descriptor ? { ...descriptor, taskId: "stale-task" } : undefined,
+        expectedCommandTypes: ["roll_critical"],
+        presentation,
+        requiredFields: ["attackResultId", "criticalResultId", "executionGroupId"],
+      }),
+    ).toBeUndefined();
+  });
+
+  it("shows involved players safe context but no descriptor for GM damage review", () => {
+    const damageTask = task({
+      actor: aria,
+      command: "commit_phase_damage",
+      gmOnly: true,
+      kind: "damage_review",
+      owner: undefined,
+      target: borin,
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-20T12:00:00.000Z",
+      progression: progression({ tasks: [damageTask] }),
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: { enabled: false, label: "Waiting for GM", viewerMayInvoke: false },
+      requiredNow: "Waiting for GM.",
+      summary: "Aria hit Borin.",
+      taskKind: "damage_review",
     });
     expect(result?.primaryAction.descriptor).toBeUndefined();
   });

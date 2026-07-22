@@ -362,7 +362,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("rollOpenEndedD20");
     expect(source).not.toContain("resolveCombatParry");
     expect(source).not.toContain("recordCombatRoundParryResult");
-    expect(source).toContain("recordCombatRoundDamageResult");
+    expect(source).not.toContain("recordCombatRoundDamageResult");
+    expect(source).not.toContain("recordCombatRoundHitLocationRoll");
+    expect(source).not.toContain("recordCombatRoundCriticalRoll");
+    expect(source).toContain("invokeGmDownstreamCombatTask(descriptor)");
+    expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
     expect(source).toContain("advanceCurrentCombatPhaseResolutionOnServer");
     expect(source).toContain("completeCurrentCombatPhaseResolutionOnServer");
     expect(source).not.toContain("recordCombatRoundNoAttackPhaseReview");
@@ -385,8 +389,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatResolutionButtonLabel");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
     expect(source).toContain("getCombatRoundDamageSubstate");
-    expect(source).toContain("recordCombatRoundHitLocationRoll");
-    expect(source).toContain("recordCombatRoundCriticalRoll");
+    expect(source).toContain("rollCombatHitLocationOnServer");
+    expect(source).toContain("rollCombatCriticalOnServer");
     expect(source).toContain("formatCombatToHitCalculationLine");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("sourcePrefix");
@@ -529,11 +533,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("inspectorPhaseResolutionLines");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
     expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
-    expect(source).toContain("targetLocation:");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation",
     );
-    expect(source).toContain("damageProposal,");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("Effects: ${damageResult.review.additionalEffects");
@@ -546,10 +548,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
     expect(source).toContain("obSkillRaw: getMergedCombatSkillObModifierTotal({");
-    expect(source).toContain(
-      "weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)",
-    );
-    expect(source).toContain("armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage");
+    expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");
@@ -874,7 +873,7 @@ describe("CombatRoundManagerPanel", () => {
   it("routes current-step advance through a narrow encounter command", () => {
     const source = readSource();
 
-    expect(source).toContain("updateEncounterOnServer");
+    expect(source).not.toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
     expect(source).toContain("prepareCombatRoundEndReviewOnServer");
@@ -884,8 +883,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("advanceCombatRoundStep(");
     expect(source).toContain("attackResult");
     expect(source).not.toContain("autoPrepareRoundEndReviewState(nextRoundState)");
-    expect(source).toContain("combatRoundState: stateToPersist");
-    expect(source).toContain("currentRound: stateToPersist.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("phaseWeaponNames: {");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");

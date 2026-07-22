@@ -1,7 +1,10 @@
 import {
+  getCombatRoundCriticalResultId,
+  getCombatRoundDamageReviewId,
   getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundAttackResultId,
+  getCombatRoundHitLocationResultId,
   getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseResolutionResultForAttack,
   isCombatRoundPhaseResolutionComplete,
@@ -79,7 +82,8 @@ function buildAdapterManeuverProcess(
               : "participant_input_pending",
       });
     }
-    const taskDescriptors = stage.state === "ready" ? (stage.tasks ?? (stage.task ? [stage.task] : [])) : [];
+    const taskDescriptors =
+      stage.state === "ready" ? (stage.tasks ?? (stage.task ? [stage.task] : [])) : [];
     const taskSpecs: TaskSpec[] = taskDescriptors.map((task) => {
       const owner =
         task.ownerRole === "gm"
@@ -305,9 +309,7 @@ function buildLegacyAttackProcess(
                   )?.declaration?.actionId
                 : undefined,
             ),
-            actor: attack
-              ? context.identities.get(attack.attackerParticipantId)
-              : undefined,
+            actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
             responder: owner,
             target: owner,
           },
@@ -328,6 +330,25 @@ function buildLegacyAttackProcess(
       ? getCombatRoundPhaseResolutionResultForAttack({ attackResult: attack, state: context.state })
       : undefined;
     const damageSubstate = getCombatRoundDamageSubstate(resolution);
+    const attackResultId = attack
+      ? getCombatRoundAttackResultId({
+          result: attack,
+          roundNumber: context.state.roundNumber,
+        })
+      : undefined;
+    const downstreamIdentity = attackResultId
+      ? {
+          attackResultId,
+          attackerParticipantId: attack?.attackerParticipantId,
+          criticalResultId: getCombatRoundCriticalResultId({ attackResultId }),
+          damageReviewId: getCombatRoundDamageReviewId({ attackResultId }),
+          defenderParticipantId: attack?.defenderParticipantId,
+          hitLocationResultId: getCombatRoundHitLocationResultId({ attackResultId }),
+          opportunityId: attack?.attackOpportunityId,
+          opponentParticipantId: attack?.defenderParticipantId,
+          phase,
+        }
+      : { opponentParticipantId: attack?.defenderParticipantId, phase };
     const attacker = attack ? context.identities.get(attack.attackerParticipantId) : undefined;
     const missingSource = attack
       ? undefined
@@ -344,17 +365,15 @@ function buildLegacyAttackProcess(
           {
             dependencies: missingSource,
             expectedCommand: "roll_hit_location",
-            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
+            identity: downstreamIdentity,
             kind: "hit_location",
             owner: attacker,
             presentationContext: {
               actor: attacker,
               responder: attacker,
-              target: attack
-                ? context.identities.get(attack.defenderParticipantId)
-                : undefined,
+              target: attack ? context.identities.get(attack.defenderParticipantId) : undefined,
             },
-            trackerOwner: facetOwner,
+            trackerOwner: attacker,
             trackerStep: trackerDamage,
           },
         ],
@@ -365,17 +384,15 @@ function buildLegacyAttackProcess(
         tasks: [
           {
             expectedCommand: "roll_critical",
-            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
+            identity: downstreamIdentity,
             kind: "critical",
             owner: attacker,
             presentationContext: {
               actor: attacker,
               responder: attacker,
-              target: attack
-                ? context.identities.get(attack.defenderParticipantId)
-                : undefined,
+              target: attack ? context.identities.get(attack.defenderParticipantId) : undefined,
             },
-            trackerOwner: facetOwner,
+            trackerOwner: attacker,
             trackerStep: trackerDamage,
           },
         ],
@@ -387,16 +404,14 @@ function buildLegacyAttackProcess(
           {
             allowedActors: ["gm"],
             expectedCommand: "resolve_damage",
-            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
+            identity: downstreamIdentity,
             kind: "damage_review",
             owner: GM_IDENTITY,
             presentationContext: {
               actor: attacker,
-              target: attack
-                ? context.identities.get(attack.defenderParticipantId)
-                : undefined,
+              target: attack ? context.identities.get(attack.defenderParticipantId) : undefined,
             },
-            trackerOwner: facetOwner,
+            trackerOwner: undefined,
             trackerStep: trackerDamage,
           },
         ],
@@ -410,16 +425,14 @@ function buildLegacyAttackProcess(
           {
             allowedActors: ["gm"],
             expectedCommand: "commit_phase_damage",
-            identity: { opponentParticipantId: attack?.defenderParticipantId, phase },
+            identity: downstreamIdentity,
             kind: "damage_review",
             owner: GM_IDENTITY,
             presentationContext: {
               actor: attacker,
-              target: attack
-                ? context.identities.get(attack.defenderParticipantId)
-                : undefined,
+              target: attack ? context.identities.get(attack.defenderParticipantId) : undefined,
             },
-            trackerOwner: facetOwner,
+            trackerOwner: undefined,
             trackerStep: trackerDamage,
           },
         ],
@@ -475,14 +488,29 @@ function buildAdapterAttackProcess(
     .reverse()
     .find((snapshot) => snapshot.participantId === plan.ownerParticipantId);
   const weaponLabel =
-    attackResult?.weaponName ?? attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
+    attackResult?.weaponName ??
+    attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const taskKind = adapterStageTaskKind(stage);
     const owner =
       task?.owner === "gm" ? GM_IDENTITY : task?.owner === "defender" ? defender : attacker;
-    const trackerOwner = stage.trackerFacet === "attack" ? attacker : defender;
+    // Tracker ownership follows the participant who must supply this stage's input.
+    // In particular, hit-location and critical rolls belong to the attacker even
+    // though they are displayed in the damage facet.
+    const trackerOwner = task?.owner === "defender" ? defender : attacker;
     const dependencies: TaskDependency[] = [];
+    const attackResultId = task?.attackResultId;
+    const downstreamIdentity = attackResultId
+      ? {
+          attackResultId,
+          attackerParticipantId: plan.ownerParticipantId,
+          criticalResultId: getCombatRoundCriticalResultId({ attackResultId }),
+          damageReviewId: getCombatRoundDamageReviewId({ attackResultId }),
+          defenderParticipantId: plan.targetParticipantId,
+          hitLocationResultId: getCombatRoundHitLocationResultId({ attackResultId }),
+        }
+      : {};
     for (const prerequisite of plan.prerequisites) {
       if (prerequisite.satisfied) continue;
       dependencies.push({
@@ -519,7 +547,7 @@ function buildAdapterAttackProcess(
                 dependencies,
                 expectedCommand: task.expectedCommand,
                 identity: {
-                  attackResultId: task.attackResultId,
+                  ...downstreamIdentity,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
@@ -541,7 +569,7 @@ function buildAdapterAttackProcess(
                         }
                       : undefined,
                 },
-                trackerOwner,
+                trackerOwner: task.owner === "gm" ? undefined : trackerOwner,
                 trackerStep: trackerStepForPhase(plan.phase, stage.trackerFacet),
               },
             ]

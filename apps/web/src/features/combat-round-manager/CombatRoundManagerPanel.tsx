@@ -99,12 +99,8 @@ import {
   isCombatRoundPhaseInitiativeResolutionOpen,
   hasCombatRoundCombatExperienceRoll,
   getWeaponPreferredDistances,
-  normalizeCombatArmorModifierClass,
   projectCombatHistoryEvent,
   projectCombatProgressionPresentation,
-  recordCombatRoundCriticalRoll,
-  recordCombatRoundDamageResult,
-  recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -131,6 +127,7 @@ import {
   getCombatProgressionPresentationTasks,
   labelCurrentActionAsDeclarationEdit,
   reconcileCombatLogSelection,
+  resolveCombatTaskCommandContext,
   resolveCombatHistoryPanelSnapshot,
   selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
@@ -162,16 +159,18 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  rollCombatCriticalOnServer,
+  rollCombatHitLocationOnServer,
   rollCurrentRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   saveCurrentCombatDamageReviewOnServer,
+  resolveCurrentCombatPhaseDamageOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
   skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
   prepareCombatRoundEndReviewOnServer,
   loadEncounterById,
-  updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import {
@@ -5153,40 +5152,49 @@ export default function CombatRoundManagerPanel({
       inspectorResolutionAttackResult?.defenderParticipantId &&
     inspectorParryBase !== undefined &&
     !inspectorSnapshot;
+  const currentDamageTaskAttackResultId =
+    currentActionPresentation?.taskKind === "damage_review"
+      ? currentActionPresentation.primaryAction.descriptor?.attackResultId
+      : undefined;
+  const liveDamageResolution = currentDamageTaskAttackResultId
+    ? roundState.phaseResolutionResults.find(
+        (resolution) => resolution.attackResultId === currentDamageTaskAttackResultId,
+      )
+    : undefined;
+  const displayedDamageResolution = liveDamageResolution ?? inspectorDisplayPhaseResolutionResult;
   const inspectorDamageSubstate =
     inspectorResolutionStepKind === "damage"
-      ? getCombatRoundDamageSubstate(inspectorDisplayPhaseResolutionResult)
+      ? getCombatRoundDamageSubstate(displayedDamageResolution)
       : undefined;
   const inspectorDamageProposalReady =
     inspectorResolutionStepKind === "damage" &&
-    Boolean(inspectorDisplayPhaseResolutionResult?.damageResult) &&
-    inspectorDisplayPhaseResolutionResult?.damageProposal.status !== "committed";
+    Boolean(displayedDamageResolution?.damageResult) &&
+    displayedDamageResolution?.damageProposal.status !== "committed";
   const inspectorDamageCommitted =
     inspectorResolutionStepKind === "damage" &&
-    inspectorDisplayPhaseResolutionResult?.damageProposal.status === "committed";
-  const inspectorDamageAttackerLabel = inspectorDisplayPhaseResolutionResult
+    displayedDamageResolution?.damageProposal.status === "committed";
+  const inspectorDamageAttackerLabel = displayedDamageResolution
     ? (selectedTimelineRoundState.participants.find(
         (participant) =>
-          participant.participantId === inspectorDisplayPhaseResolutionResult.attackerParticipantId,
+          participant.participantId === displayedDamageResolution.attackerParticipantId,
       )?.label ?? "attacker")
     : undefined;
-  const inspectorDamageDefenderLabel = inspectorDisplayPhaseResolutionResult
+  const inspectorDamageDefenderLabel = displayedDamageResolution
     ? (selectedTimelineRoundState.participants.find(
         (participant) =>
-          participant.participantId === inspectorDisplayPhaseResolutionResult.defenderParticipantId,
+          participant.participantId === displayedDamageResolution.defenderParticipantId,
       )?.label ?? "defender")
     : undefined;
-  const inspectorDamageReviewKey =
-    inspectorDisplayPhaseResolutionResult?.damageResult?.attackResultId;
+  const inspectorDamageReviewKey = displayedDamageResolution?.damageResult?.attackResultId;
   const inspectorDamageReviewDraft =
     inspectorDamageReviewKey && damageReviewDrafts[inspectorDamageReviewKey]
       ? damageReviewDrafts[inspectorDamageReviewKey]
       : buildCombatDamageReviewDraft(
-          inspectorDisplayPhaseResolutionResult?.damageResult,
-          inspectorDisplayPhaseResolutionResult?.criticalRoll,
+          displayedDamageResolution?.damageResult,
+          displayedDamageResolution?.criticalRoll,
         );
   const inspectorDamageCommitReadiness = useMemo(() => {
-    const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
+    const damageResult = displayedDamageResolution?.damageResult;
 
     if (!inspectorDamageProposalReady || !damageResult) {
       return undefined;
@@ -5196,7 +5204,7 @@ export default function CombatRoundManagerPanel({
       const reviewedState = reviewCombatRoundDamageResult({
         attackResultId: damageResult.attackResultId,
         review: buildCombatDamageReviewFromDraft({
-          criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+          criticalRoll: displayedDamageResolution?.criticalRoll,
           damageResult,
           draft: inspectorDamageReviewDraft,
         }),
@@ -5222,7 +5230,7 @@ export default function CombatRoundManagerPanel({
   }, [
     inspectorDamageProposalReady,
     inspectorDamageReviewDraft,
-    inspectorDisplayPhaseResolutionResult,
+    displayedDamageResolution,
     selectedTimelineRoundState,
   ]);
   const inspectorDamageCommitValidationMessage =
@@ -6827,42 +6835,6 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function persistRoundState(nextRoundState: typeof roundState) {
-    const stateToPersist = nextRoundState;
-
-    setRoundState(stateToPersist);
-    setInspectionSelection(
-      resolveCombatRoundInspectionSelection({
-        manualSelection: getCurrentCombatRoundTaskSelection(stateToPersist),
-        state: stateToPersist,
-      }),
-    );
-    setSelectedRoundNumber(stateToPersist.roundNumber);
-    setSaving(true);
-
-    try {
-      const nextEncounter = await updateEncounterOnServer({
-        encounterId: encounter.id,
-        session: {
-          ...encounter,
-          combatRoundState: stateToPersist,
-          currentRound: stateToPersist.roundNumber,
-        },
-      });
-
-      setRoundState(stateToPersist, nextEncounter.updatedAt);
-      onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true, state: stateToPersist });
-      setSaveError(undefined);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to save combat round state.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function clearCurrentStep() {
     setSaving(true);
 
@@ -8084,9 +8056,38 @@ export default function CombatRoundManagerPanel({
   }
 
   async function saveInspectorDamageReview() {
-    const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: currentActionPresentation?.primaryAction.descriptor,
+      expectedCommandTypes: ["commit_phase_damage"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "attackerParticipantId",
+        "criticalResultId",
+        "damageReviewId",
+        "defenderParticipantId",
+        "executionGroupId",
+        "expectedRevision",
+        "hitLocationResultId",
+        "phase",
+        "taskId",
+      ],
+    });
 
-    if (!inspectorDamageReviewKey || !damageResult) {
+    const damageResolution = descriptor
+      ? roundState.phaseResolutionResults.find(
+          (resolution) => resolution.attackResultId === descriptor.attackResultId,
+        )
+      : undefined;
+    const damageResult = damageResolution?.damageResult;
+    const damageReviewKey = damageResult?.attackResultId;
+    const damageReviewDraft = damageReviewKey
+      ? (damageReviewDrafts[damageReviewKey] ??
+        buildCombatDamageReviewDraft(damageResult, damageResolution?.criticalRoll))
+      : undefined;
+
+    if (!damageReviewKey || !damageResult || !damageReviewDraft || !descriptor) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
 
@@ -8095,12 +8096,24 @@ export default function CombatRoundManagerPanel({
     try {
       const { commandEnvelope, encounter: nextEncounter } =
         await saveCurrentCombatDamageReviewOnServer({
+          attackResultId: descriptor.attackResultId!,
+          attackerParticipantId: descriptor.attackerParticipantId!,
+          commandType: "commit_phase_damage",
+          criticalResultId: descriptor.criticalResultId!,
+          damageReviewId: descriptor.damageReviewId!,
+          defenderParticipantId: descriptor.defenderParticipantId!,
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          hitLocationResultId: descriptor.hitLocationResultId!,
+          opportunityId: descriptor.opportunityId,
+          phase: descriptor.phase!,
           review: buildCombatDamageReviewFromDraft({
-            criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+            criticalRoll: damageResolution?.criticalRoll,
             damageResult,
-            draft: inspectorDamageReviewDraft,
+            draft: damageReviewDraft,
           }),
+          taskId: descriptor.taskId,
         });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
@@ -8115,7 +8128,7 @@ export default function CombatRoundManagerPanel({
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setDamageReviewDrafts((current) => {
         const rest = { ...current };
-        delete rest[inspectorDamageReviewKey];
+        delete rest[damageReviewKey];
 
         return rest;
       });
@@ -8125,6 +8138,168 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save damage review.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function invokeGmDownstreamCombatTask(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: [
+        "roll_hit_location",
+        "roll_critical",
+        "resolve_damage",
+        "commit_phase_damage",
+      ],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "attackerParticipantId",
+        "criticalResultId",
+        "damageReviewId",
+        "defenderParticipantId",
+        "executionGroupId",
+        "expectedRevision",
+        "hitLocationResultId",
+        "phase",
+        "taskId",
+      ],
+    });
+    if (!descriptor) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+    const attackerEncounterParticipant = encounter.participants.find((participant) =>
+      getCombatDistanceParticipantAliases(participant).includes(descriptor.attackerParticipantId!),
+    );
+    const attackerScenarioParticipant = attackerEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: attackerEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    if (
+      (descriptor.commandType === "roll_hit_location" ||
+        descriptor.commandType === "roll_critical") &&
+      !attackerScenarioParticipant
+    ) {
+      setSaveError("The attacking participant is no longer available.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (descriptor.commandType === "roll_hit_location") {
+        const nextEncounter = await rollCombatHitLocationOnServer({
+          attackResultId: descriptor.attackResultId!,
+          attackerParticipantId: descriptor.attackerParticipantId!,
+          defenderParticipantId: descriptor.defenderParticipantId!,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          hitLocationResultId: descriptor.hitLocationResultId!,
+          opportunityId: descriptor.opportunityId,
+          phase: descriptor.phase!,
+          scenarioParticipantId: attackerScenarioParticipant!.id,
+          taskId: descriptor.taskId,
+        });
+        acceptCanonicalEncounterState(
+          nextEncounter,
+          initializeCombatRoundState({ encounter: nextEncounter }),
+        );
+        onEncounterUpdated?.(nextEncounter);
+      } else if (descriptor.commandType === "roll_critical") {
+        const nextEncounter = await rollCombatCriticalOnServer({
+          attackResultId: descriptor.attackResultId!,
+          attackerParticipantId: descriptor.attackerParticipantId!,
+          criticalResultId: descriptor.criticalResultId!,
+          defenderParticipantId: descriptor.defenderParticipantId!,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          hitLocationResultId: descriptor.hitLocationResultId!,
+          opportunityId: descriptor.opportunityId,
+          phase: descriptor.phase!,
+          scenarioParticipantId: attackerScenarioParticipant!.id,
+          taskId: descriptor.taskId,
+        });
+        acceptCanonicalEncounterState(
+          nextEncounter,
+          initializeCombatRoundState({ encounter: nextEncounter }),
+        );
+        onEncounterUpdated?.(nextEncounter);
+      } else if (descriptor.commandType === "resolve_damage") {
+        const { commandEnvelope, encounter: nextEncounter } =
+          await resolveCurrentCombatPhaseDamageOnServer({
+            attackResultId: descriptor.attackResultId!,
+            attackerParticipantId: descriptor.attackerParticipantId!,
+            commandType: "resolve_damage",
+            criticalResultId: descriptor.criticalResultId!,
+            damageReviewId: descriptor.damageReviewId!,
+            defenderParticipantId: descriptor.defenderParticipantId!,
+            encounterId: encounter.id,
+            executionGroupId: descriptor.executionGroupId!,
+            expectedRevision: descriptor.expectedRevision,
+            hitLocationResultId: descriptor.hitLocationResultId!,
+            opportunityId: descriptor.opportunityId,
+            phase: descriptor.phase!,
+            taskId: descriptor.taskId,
+          });
+        const next = getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+        acceptCanonicalEncounterState(nextEncounter, next.state);
+        setInspectionSelection(next.inspectionSelection);
+        onEncounterUpdated?.(nextEncounter);
+      } else {
+        const damageResolution = roundState.phaseResolutionResults.find(
+          (resolution) => resolution.attackResultId === descriptor.attackResultId,
+        );
+        const damageResult = damageResolution?.damageResult;
+        const damageReviewDraft = damageResult
+          ? (damageReviewDrafts[damageResult.attackResultId] ??
+            buildCombatDamageReviewDraft(damageResult, damageResolution?.criticalRoll))
+          : undefined;
+        if (!damageResult || !damageReviewDraft) {
+          setSaveError("No damage review is available for this attack.");
+          return;
+        }
+        const { commandEnvelope, encounter: nextEncounter } =
+          await commitCurrentCombatPhaseDamageOnServer({
+            attackResultId: descriptor.attackResultId!,
+            attackerParticipantId: descriptor.attackerParticipantId!,
+            commandType: "commit_phase_damage",
+            criticalResultId: descriptor.criticalResultId!,
+            damageReviewId: descriptor.damageReviewId!,
+            defenderParticipantId: descriptor.defenderParticipantId!,
+            encounterId: encounter.id,
+            executionGroupId: descriptor.executionGroupId!,
+            expectedRevision: descriptor.expectedRevision,
+            hitLocationResultId: descriptor.hitLocationResultId!,
+            opportunityId: descriptor.opportunityId,
+            phase: descriptor.phase!,
+            review: buildCombatDamageReviewFromDraft({
+              criticalRoll: damageResolution?.criticalRoll,
+              damageResult,
+              draft: damageReviewDraft,
+            }),
+            taskId: descriptor.taskId,
+          });
+        const next = getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+        acceptCanonicalEncounterState(nextEncounter, next.state);
+        setInspectionSelection(next.inspectionSelection);
+        onEncounterUpdated?.(nextEncounter);
+      }
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to resolve combat damage.",
       );
     } finally {
       setSaving(false);
@@ -8330,163 +8505,24 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const updatedAt = new Date().toISOString();
       const currentOwnerStatus = getCombatRoundPhaseResolutionStatus({
         participantId: ownerParticipantId,
         phase,
         state: roundState,
       });
-      const damageReviewAttackResult = inspectorResolutionAttackResult;
-      let nextRoundState: typeof roundState;
-
       if (currentOwnerStatus.substep === "damage") {
-        if (!damageReviewAttackResult) {
-          setSaveError("No attack result is available for damage review.");
-          return;
-        }
-
-        const existingDamageResolution = getCombatRoundPhaseResolutionResultForAttack({
-          attackResult: damageReviewAttackResult,
-          state: roundState,
-        });
-        const damageSubstate = getCombatRoundDamageSubstate(existingDamageResolution);
-        const attackerRoundParticipant = roundState.participants.find(
-          (participant) =>
-            participant.participantId === damageReviewAttackResult.attackerParticipantId,
-        );
-        const buildDamageProposalInput = () => {
-          const phaseLabel = formatCombatPhaseLabel(phase);
-          const attackerEncounterParticipant = encounter.participants.find(
-            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
-          );
-          const attackerScenarioParticipant = attackerEncounterParticipant
-            ? findScenarioParticipantForEncounterParticipant({
-                encounterParticipant: attackerEncounterParticipant,
-                scenarioParticipants: effectiveScenarioParticipants,
-              })
-            : undefined;
-          const attackerPhaseSummary = buildScenarioParticipantPhaseSummary({
-            declaration: attackerRoundParticipant?.declaration,
-            phaseKey: phase,
-            scenarioParticipant: attackerScenarioParticipant,
-          });
-          const attackStats = attackerPhaseSummary.attackStats;
-          const defenseStats = inspectorParryDefenderPhaseSummary?.defenseStats;
-
-          if (!attackStats) {
-            setSaveError(`${phaseLabel} attack DMB is not available.`);
-            return undefined;
-          }
-
-          if (!defenseStats) {
-            setSaveError(`${phaseLabel} defender DM is not available.`);
-            return undefined;
-          }
-
-          return {
-            armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage,
-            attackerStrengthGm: attackerPhaseSummary.strengthGm,
-            defenderDm: parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`),
-            dmb: parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`),
-            weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass),
-          };
-        };
-
-        if (damageSubstate === "location_pending") {
-          const damageProposal = buildDamageProposalInput();
-
-          if (!damageProposal) {
-            return;
-          }
-
-          nextRoundState = recordCombatRoundHitLocationRoll({
-            attackResult: damageReviewAttackResult,
-            command: {
-              createdAt: updatedAt,
-            },
-            damageProposal,
-            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
-            state: roundState,
-            submittedBy: "gm",
-            targetLocation:
-              attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
-            updatedAt,
-          });
-        } else if (damageSubstate === "location_rolled") {
-          const damageProposal = buildDamageProposalInput();
-
-          if (!damageProposal) {
-            return;
-          }
-
-          nextRoundState = recordCombatRoundDamageResult({
-            ...damageProposal,
-            attackResult: damageReviewAttackResult,
-            command: {
-              createdAt: updatedAt,
-            },
-            state: roundState,
-            submittedBy: "gm",
-            updatedAt,
-          });
-        } else if (damageSubstate === "critical_pending") {
-          nextRoundState = recordCombatRoundCriticalRoll({
-            attackResult: damageReviewAttackResult,
-            command: {
-              createdAt: updatedAt,
-            },
-            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
-            state: roundState,
-            submittedBy: "gm",
-            updatedAt,
-          });
-        } else if (
-          existingDamageResolution?.damageResult &&
-          existingDamageResolution.damageProposal.status !== "committed"
+        const descriptor = currentActionPresentation?.primaryAction.descriptor;
+        if (
+          descriptor?.commandType !== "roll_hit_location" &&
+          descriptor?.commandType !== "roll_critical" &&
+          descriptor?.commandType !== "resolve_damage" &&
+          descriptor?.commandType !== "commit_phase_damage"
         ) {
-          if (!encounter.scenarioId) {
-            setSaveError("Scenario id is required to commit phase damage.");
-            return;
-          }
-
-          const { commandEnvelope, encounter: nextEncounter } =
-            await commitCurrentCombatPhaseDamageOnServer({
-              encounterId: encounter.id,
-              review: buildCombatDamageReviewFromDraft({
-                criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
-                damageResult: existingDamageResolution.damageResult,
-                draft: inspectorDamageReviewDraft,
-              }),
-            });
-          const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
-            getCombatRoundManagerStateFromCommandEnvelope({
-              commandEnvelope,
-              encounter: nextEncounter,
-            });
-
-          pendingSelectionRef.current = undefined;
-          manualSelectionRef.current = undefined;
-          setInspectionSelection(nextInspectionSelection);
-          setRoundState(nextRoundState, nextEncounter.updatedAt);
-          setSelectedRoundNumber(nextRoundState.roundNumber);
-          if (inspectorDamageReviewKey) {
-            setDamageReviewDrafts((current) => {
-              const rest = { ...current };
-              delete rest[inspectorDamageReviewKey];
-
-              return rest;
-            });
-          }
-          onEncounterUpdated?.(nextEncounter);
-          focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
-          setSaveError(undefined);
-          return;
-        } else {
-          setSaveError("Hit location roll required.");
+          setSaveError("No canonical damage task is available.");
           return;
         }
-
-        await persistRoundState(nextRoundState);
+        await invokeGmDownstreamCombatTask(descriptor);
+        return;
       } else {
         const { commandEnvelope, encounter: nextEncounter } =
           await advanceCurrentCombatPhaseResolutionOnServer({
@@ -9501,15 +9537,14 @@ export default function CombatRoundManagerPanel({
                         sources={inspectorParryDefenderPhaseSummary?.parrySources}
                       />
                     ) : null}
-                    {inspectorDamageProposalReady &&
-                    inspectorDisplayPhaseResolutionResult?.damageResult ? (
+                    {inspectorDamageProposalReady && displayedDamageResolution?.damageResult ? (
                       <CombatDamageReviewPanel
                         attackerLabel={inspectorDamageAttackerLabel}
                         commitReadiness={inspectorDamageReviewCommitReadiness}
                         controlsDisabled={
                           saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
                         }
-                        damageResult={inspectorDisplayPhaseResolutionResult.damageResult}
+                        damageResult={displayedDamageResolution.damageResult}
                         defenderLabel={inspectorDamageDefenderLabel}
                         draft={inspectorDamageReviewDraft}
                         onDraftChange={(draft) => {
@@ -9571,58 +9606,64 @@ export default function CombatRoundManagerPanel({
                             ? advanceInspectorAdjustDistance(descriptor)
                             : descriptor.commandType === "roll_parry"
                               ? rollInspectorParry(descriptor)
-                            : inspectorFeintProposal?.status === "awaiting_rolls"
-                              ? rollInspectorFeint()
-                              : inspectorFeintProposal?.status === "awaiting_review"
-                                ? commitInspectorFeint()
-                                : inspectorDoubleAttackDecisionAvailable
-                                  ? decideInspectorDoubleAttackPhase2()
-                                  : inspectorPhaseAttackChoiceIsBackOut
-                                    ? backOutInspectorPhaseAttack()
-                                    : inspectorSkipActionSelected
-                                      ? skipInspectorCurrentPhaseAction()
-                                      : inspectorCombatExperienceDifficultyCommandPending
-                                        ? saveCombatExperienceDifficultyDraft()
-                                        : inspectorCombatExperienceRequired
-                                          ? rollInspectorCombatExperience()
-                                          : inspectorCanContinuePhaseAttack
-                                            ? continueInspectorPhaseAttack()
-                                            : inspector.step === "round_summary" &&
-                                                inspectorRoundEndDistanceAction?.kind === "roll"
-                                              ? rollRoundEndDistanceControlFromPrimaryAction()
-                                              : inspector.step === "round_summary" &&
-                                                  inspectorRoundEndDistanceAction?.kind === "commit"
-                                                ? commitRoundEndDistanceControl(
-                                                    inspectorRoundEndDistanceAction.proposal.id,
-                                                  )
-                                                : inspector.step === "round_summary"
-                                                  ? advanceInspectorRoundEndReview()
-                                                  : inspectorPhaseInitiativeCommitLabel
-                                                    ? commitCurrentStep()
-                                                    : inspectorCurrentStepIsInitiative
-                                                      ? rollInspectorInitiative()
-                                                      : inspectorCurrentResolutionPhase &&
-                                                            (inspectorActionPhaseHasAttack ===
-                                                              false ||
-                                                              inspectorActionPhaseResolutionStatus?.substep ===
-                                                                "effects")
-                                                          ? completeInspectorPhaseResolution(
-                                                              inspectorCurrentResolutionPhase,
-                                                            )
+                              : descriptor.commandType === "roll_hit_location" ||
+                                  descriptor.commandType === "roll_critical" ||
+                                  descriptor.commandType === "resolve_damage" ||
+                                  descriptor.commandType === "commit_phase_damage"
+                                ? invokeGmDownstreamCombatTask(descriptor)
+                                : inspectorFeintProposal?.status === "awaiting_rolls"
+                                  ? rollInspectorFeint()
+                                  : inspectorFeintProposal?.status === "awaiting_review"
+                                    ? commitInspectorFeint()
+                                    : inspectorDoubleAttackDecisionAvailable
+                                      ? decideInspectorDoubleAttackPhase2()
+                                      : inspectorPhaseAttackChoiceIsBackOut
+                                        ? backOutInspectorPhaseAttack()
+                                        : inspectorSkipActionSelected
+                                          ? skipInspectorCurrentPhaseAction()
+                                          : inspectorCombatExperienceDifficultyCommandPending
+                                            ? saveCombatExperienceDifficultyDraft()
+                                            : inspectorCombatExperienceRequired
+                                              ? rollInspectorCombatExperience()
+                                              : inspectorCanContinuePhaseAttack
+                                                ? continueInspectorPhaseAttack()
+                                                : inspector.step === "round_summary" &&
+                                                    inspectorRoundEndDistanceAction?.kind === "roll"
+                                                  ? rollRoundEndDistanceControlFromPrimaryAction()
+                                                  : inspector.step === "round_summary" &&
+                                                      inspectorRoundEndDistanceAction?.kind ===
+                                                        "commit"
+                                                    ? commitRoundEndDistanceControl(
+                                                        inspectorRoundEndDistanceAction.proposal.id,
+                                                      )
+                                                    : inspector.step === "round_summary"
+                                                      ? advanceInspectorRoundEndReview()
+                                                      : inspectorPhaseInitiativeCommitLabel
+                                                        ? commitCurrentStep()
+                                                        : inspectorCurrentStepIsInitiative
+                                                          ? rollInspectorInitiative()
                                                           : inspectorCurrentResolutionPhase &&
-                                                              (inspectorActionPhaseResolutionStatus?.substep ===
-                                                                "parry" ||
+                                                              (inspectorActionPhaseHasAttack ===
+                                                                false ||
                                                                 inspectorActionPhaseResolutionStatus?.substep ===
-                                                                  "damage")
-                                                            ? advanceInspectorPhaseResolutionSubstep(
+                                                                  "effects")
+                                                            ? completeInspectorPhaseResolution(
                                                                 inspectorCurrentResolutionPhase,
                                                               )
-                                                            : inspectorCanRollPhaseAttack &&
-                                                                inspectorCurrentAttackPhase
-                                                              ? rollInspectorPhaseAttack(
-                                                                  inspectorCurrentAttackPhase,
+                                                            : inspectorCurrentResolutionPhase &&
+                                                                (inspectorActionPhaseResolutionStatus?.substep ===
+                                                                  "parry" ||
+                                                                  inspectorActionPhaseResolutionStatus?.substep ===
+                                                                    "damage")
+                                                              ? advanceInspectorPhaseResolutionSubstep(
+                                                                  inspectorCurrentResolutionPhase,
                                                                 )
-                                                              : saveInspectorDeclaration());
+                                                              : inspectorCanRollPhaseAttack &&
+                                                                  inspectorCurrentAttackPhase
+                                                                ? rollInspectorPhaseAttack(
+                                                                    inspectorCurrentAttackPhase,
+                                                                  )
+                                                                : saveInspectorDeclaration());
                       }}
                       preActionControls={
                         inspectorSelectionIsCurrentProgression

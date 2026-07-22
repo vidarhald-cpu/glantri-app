@@ -20,12 +20,17 @@ export interface CombatPresentationReference {
 
 export interface CurrentActionCommandDescriptor {
   readonly attackResultId?: string;
+  readonly attackerParticipantId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
+  readonly criticalResultId?: string;
+  readonly damageReviewId?: string;
+  readonly defenderParticipantId?: string;
   readonly encounterId: string;
   readonly executionGroupId?: string;
   readonly expectedBoundary: CombatProgressionBoundaryKind;
   readonly expectedRevision: string;
   readonly healthRollId?: string;
+  readonly hitLocationResultId?: string;
   readonly opponentParticipantId?: string;
   readonly opportunityId?: string;
   readonly pairId?: string;
@@ -87,6 +92,34 @@ export interface BuildCurrentActionPresentationInput {
   readonly encounterRevision?: string;
   readonly progression?: CombatProgressionPresentationProjection;
   readonly viewer: CurrentActionViewerContext;
+}
+
+/**
+ * Resolves an immutable task command without consulting inspector, result, or component state.
+ * Task-specific handlers still declare their exact required identity fields at the call site.
+ */
+export function resolveCombatTaskCommandContext(input: {
+  readonly descriptor?: CurrentActionCommandDescriptor;
+  readonly expectedCommandTypes: readonly CombatProgressionExpectedCommand[];
+  readonly presentation?: CurrentActionPresentation | null;
+  readonly requiredFields: readonly (keyof CurrentActionCommandDescriptor)[];
+}): CurrentActionCommandDescriptor | undefined {
+  const descriptor = input.descriptor;
+  const presentation = input.presentation;
+  if (
+    !descriptor ||
+    !presentation ||
+    descriptor.taskId !== presentation.taskId ||
+    descriptor.expectedRevision !== presentation.encounterRevision ||
+    !input.expectedCommandTypes.includes(descriptor.commandType) ||
+    input.requiredFields.some((field) => {
+      const value = descriptor[field];
+      return value === undefined || value === "";
+    })
+  ) {
+    return undefined;
+  }
+  return descriptor;
 }
 
 /**
@@ -328,6 +361,10 @@ function summaryFor(input: {
       return `${actor} is attacking${target ? ` ${target}` : ""}.`;
     case "parry":
       return `${actor} hit ${target ?? "the defender"}.`;
+    case "hit_location":
+    case "critical":
+    case "damage_review":
+      return `${actor} hit ${target ?? "the defender"}.`;
     case "feint_attacker_roll":
     case "feint_defender_roll":
     case "feint_commit":
@@ -450,7 +487,7 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "critical":
       return "Roll critical";
     case "damage_review":
-      return "Commit damage";
+      return task.expectedCommand === "resolve_damage" ? "Resolve damage" : "Commit damage";
     case "feint_attacker_roll":
       return "Roll Feint";
     case "feint_defender_roll":
@@ -514,7 +551,7 @@ function requiredNowFor(
     case "critical":
       return "Roll critical.";
     case "damage_review":
-      return "Commit damage.";
+      return task.expectedCommand === "resolve_damage" ? "Resolve damage." : "Commit damage.";
     case "feint_attacker_roll":
       return "Roll Feint.";
     case "feint_defender_roll":
@@ -619,12 +656,17 @@ export function buildCurrentActionPresentation(
       : phaseLabel(phase, input.progression.boundary.kind);
   const descriptor = Object.freeze({
     attackResultId: task.identity.attackResultId,
+    attackerParticipantId: task.identity.attackerParticipantId,
     commandType: task.expectedCommand,
+    criticalResultId: task.identity.criticalResultId,
+    damageReviewId: task.identity.damageReviewId,
+    defenderParticipantId: task.identity.defenderParticipantId,
     encounterId: input.encounterId,
     executionGroupId: task.executionGroupId,
     expectedBoundary: input.progression.boundary.kind,
     expectedRevision: input.encounterRevision,
     healthRollId: task.identity.healthRollId,
+    hitLocationResultId: task.identity.hitLocationResultId,
     opponentParticipantId: task.identity.opponentParticipantId,
     opportunityId: task.identity.opportunityId,
     pairId: task.identity.pairId,

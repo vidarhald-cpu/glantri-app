@@ -43,7 +43,7 @@ function taskIsVisible(
     // The resolved Adjust Distance commit is intentionally process-owned rather than attached to
     // either participant's tracker row. Both involved participants still need its safe situation
     // and completion state so their Current Action can say that the GM is resolving the contest.
-    if (task.kind !== "adjust_distance_commit") return false;
+    if (task.kind !== "adjust_distance_commit" && task.kind !== "damage_review") return false;
     return [task.presentationContext?.actor, task.presentationContext?.target].some(
       (identity) =>
         identity !== undefined && viewer.controlledParticipantIds.has(identity.participantId),
@@ -100,8 +100,17 @@ function visibleTaskIdentity(
     participantId !== undefined && viewer.visibleParticipantIds.has(participantId);
   return {
     attackResultId: task.identity.attackResultId,
+    attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
+      ? task.identity.attackerParticipantId
+      : undefined,
+    criticalResultId: task.identity.criticalResultId,
+    damageReviewId: task.identity.damageReviewId,
+    defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
+      ? task.identity.defenderParticipantId
+      : undefined,
     executionGroupId: task.identity.executionGroupId,
     healthRollId: task.identity.healthRollId,
+    hitLocationResultId: task.identity.hitLocationResultId,
     opportunityId: task.identity.opportunityId,
     opponentParticipantId: participantVisible(task.identity.opponentParticipantId)
       ? task.identity.opponentParticipantId

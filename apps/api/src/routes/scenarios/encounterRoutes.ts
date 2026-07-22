@@ -65,6 +65,8 @@ import {
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
+  getCombatRoundCriticalResultId,
+  getCombatRoundDamageReviewId,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
   getDistanceEdgeBetweenParticipantAliases,
@@ -73,6 +75,7 @@ import {
   getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundHitLocationResultId,
   getPlayerCombatCurrentRollAction,
   getSingleAttackDeclaredDistanceForPenalty,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -87,6 +90,7 @@ import {
   normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
+  recordCombatRoundDamageResult,
   recordCombatRoundDeclaration,
   respondCombatRoundAdjustDistance,
   reviewCombatRoundAdjustDistanceRollAdjustment,
@@ -952,32 +956,90 @@ function parseCombatParryBody(body: unknown): {
     parryBase: parseInteger(value.parryBase, "parryBase"),
     parrySourceLabel,
     phase: value.phase === undefined ? undefined : combatRoundPhaseSchema.parse(value.phase),
-    taskId:
-      value.taskId === undefined ? undefined : parseNonEmptyString(value.taskId, "taskId"),
+    taskId: value.taskId === undefined ? undefined : parseNonEmptyString(value.taskId, "taskId"),
     usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
     usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
   };
 }
 
-function parseCombatAttackerPrivilegedRollBody(body: unknown): {
+interface ParsedCombatDownstreamTaskIdentity {
   attackResultId: string;
+  attackerParticipantId: string;
+  defenderParticipantId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opportunityId?: string;
+  phase: CombatRoundPhase;
+  taskId: string;
+}
+
+function parseCombatDownstreamTaskIdentity(
+  value: Record<string, unknown>,
+): ParsedCombatDownstreamTaskIdentity {
+  return {
+    attackResultId: parseNonEmptyString(value.attackResultId, "attackResultId"),
+    attackerParticipantId: parseNonEmptyString(
+      value.attackerParticipantId,
+      "attackerParticipantId",
+    ),
+    defenderParticipantId: parseNonEmptyString(
+      value.defenderParticipantId,
+      "defenderParticipantId",
+    ),
+    executionGroupId: parseNonEmptyString(value.executionGroupId, "executionGroupId"),
+    expectedRevision: parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    opportunityId:
+      value.opportunityId === undefined
+        ? undefined
+        : parseNonEmptyString(value.opportunityId, "opportunityId"),
+    phase: combatRoundPhaseSchema.parse(value.phase),
+    taskId: parseNonEmptyString(value.taskId, "taskId"),
+  };
+}
+
+function parseCombatAttackerPrivilegedRollBody(
+  body: unknown,
+): ParsedCombatDownstreamTaskIdentity & {
+  criticalResultId?: string;
+  hitLocationResultId: string;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Combat attacker roll payload");
   const parsed = parseParticipantCommandBody(value, "Combat attacker roll payload");
-  const attackResultId = value.attackResultId;
-
-  if (typeof attackResultId !== "string" || attackResultId.trim().length === 0) {
-    throw new Error("attackResultId is required.");
-  }
 
   return {
     ...parsed,
-    attackResultId,
+    ...parseCombatDownstreamTaskIdentity(value),
+    criticalResultId:
+      value.criticalResultId === undefined
+        ? undefined
+        : parseNonEmptyString(value.criticalResultId, "criticalResultId"),
+    hitLocationResultId: parseNonEmptyString(value.hitLocationResultId, "hitLocationResultId"),
   };
 }
 
-function parseCombatDamageReviewBody(body: unknown): {
+type ParsedCombatDamageTaskBody = ParsedCombatDownstreamTaskIdentity & {
+  commandType: "commit_phase_damage" | "resolve_damage";
+  criticalResultId: string;
+  damageReviewId: string;
+  hitLocationResultId: string;
+};
+
+function parseCombatDamageTaskBody(body: unknown): ParsedCombatDamageTaskBody {
+  const value = parseBodyObject(body, "Combat damage task payload");
+  if (value.commandType !== "resolve_damage" && value.commandType !== "commit_phase_damage") {
+    throw new Error("commandType must identify the current damage review task.");
+  }
+  return {
+    ...parseCombatDownstreamTaskIdentity(value),
+    commandType: value.commandType,
+    criticalResultId: parseNonEmptyString(value.criticalResultId, "criticalResultId"),
+    damageReviewId: parseNonEmptyString(value.damageReviewId, "damageReviewId"),
+    hitLocationResultId: parseNonEmptyString(value.hitLocationResultId, "hitLocationResultId"),
+  };
+}
+
+function parseCombatDamageReviewBody(body: unknown): ParsedCombatDamageTaskBody & {
   review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
 } {
   const value = parseBodyObject(body, "Combat damage review payload");
@@ -987,6 +1049,7 @@ function parseCombatDamageReviewBody(body: unknown): {
   }
 
   return {
+    ...parseCombatDamageTaskBody(value),
     review: value.review as Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">,
   };
 }
@@ -2267,12 +2330,12 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
               roundState.currentStep === "select_actions"
                 ? undefined
                 : participant.declaration
-              ? {
-                  ...participant.declaration,
-                  additionalActionNotes: undefined,
-                  movementIntent: undefined,
-                }
-              : undefined,
+                  ? {
+                      ...participant.declaration,
+                      additionalActionNotes: undefined,
+                      movementIntent: undefined,
+                    }
+                  : undefined,
           },
     ),
     roundEndReview: safeRoundEndReview,
@@ -6404,29 +6467,71 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { review } = parseCombatDamageReviewBody(request.body);
+      const body = parseCombatDamageReviewBody(request.body);
+      if (body.commandType !== "commit_phase_damage") {
+        return reply.code(409).send({ error: "Damage review is not ready to be saved." });
+      }
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
       });
-      const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
-      const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
-        participantId: ownerParticipantId,
-        phase,
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
         state: roundState,
       });
 
       if (!attackResult) {
         throw new Error("No current damage proposal is open.");
       }
-
-      const attackResultId = getCombatRoundAttackResultId({
-        result: attackResult,
-        roundNumber: roundState.roundNumber,
+      if (
+        body.attackerParticipantId !== attackResult.attackerParticipantId ||
+        body.defenderParticipantId !== attackResult.defenderParticipantId ||
+        body.phase !== attackResult.phase ||
+        body.hitLocationResultId !==
+          getCombatRoundHitLocationResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.criticalResultId !==
+          getCombatRoundCriticalResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.damageReviewId !==
+          getCombatRoundDamageReviewId({
+            attackResultId: body.attackResultId,
+          })
+      ) {
+        return reply.code(409).send({ error: "The damage review identity is stale." });
+      }
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        attackResultId: body.attackResultId,
+        attackerParticipantId: body.attackerParticipantId,
+        commandType: "commit_phase_damage",
+        criticalResultId: body.criticalResultId,
+        damageReviewId: body.damageReviewId,
+        defenderParticipantId: body.defenderParticipantId,
+        executionGroupId: body.executionGroupId,
+        hitLocationResultId: body.hitLocationResultId,
+        opportunityId: body.opportunityId,
+        phase: body.phase,
+        projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
       });
+      if (!authorization.ok) {
+        return reply.code(409).send({
+          code: authorization.code,
+          error: "Damage review is not open for this attack.",
+        });
+      }
       const resolution = roundState.phaseResolutionResults.find(
-        (candidate) => candidate.attackResultId === attackResultId,
+        (candidate) => candidate.attackResultId === body.attackResultId,
       );
 
       if (!resolution?.damageResult) {
@@ -6436,7 +6541,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const submittedAt = new Date().toISOString();
       const reviewedState = reviewCombatRoundDamageResult({
         attackResultId: resolution.damageResult.attackResultId,
-        review,
+        review: body.review,
         reviewedAt: submittedAt,
         reviewedByUserId: user.id,
         state: roundState,
@@ -6489,29 +6594,71 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { review } = parseCombatDamageReviewBody(request.body);
+      const body = parseCombatDamageReviewBody(request.body);
+      if (body.commandType !== "commit_phase_damage") {
+        return reply.code(409).send({ error: "Damage review is not ready to be committed." });
+      }
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
       });
-      const { ownerParticipantId, phase } = getCanonicalCurrentPhaseResolutionTarget(roundState);
-      const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
-        participantId: ownerParticipantId,
-        phase,
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
         state: roundState,
       });
 
       if (!attackResult) {
         throw new Error("No current damage proposal is open.");
       }
-
-      const attackResultId = getCombatRoundAttackResultId({
-        result: attackResult,
-        roundNumber: roundState.roundNumber,
+      if (
+        body.attackerParticipantId !== attackResult.attackerParticipantId ||
+        body.defenderParticipantId !== attackResult.defenderParticipantId ||
+        body.phase !== attackResult.phase ||
+        body.hitLocationResultId !==
+          getCombatRoundHitLocationResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.criticalResultId !==
+          getCombatRoundCriticalResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.damageReviewId !==
+          getCombatRoundDamageReviewId({
+            attackResultId: body.attackResultId,
+          })
+      ) {
+        return reply.code(409).send({ error: "The damage review identity is stale." });
+      }
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        attackResultId: body.attackResultId,
+        attackerParticipantId: body.attackerParticipantId,
+        commandType: "commit_phase_damage",
+        criticalResultId: body.criticalResultId,
+        damageReviewId: body.damageReviewId,
+        defenderParticipantId: body.defenderParticipantId,
+        executionGroupId: body.executionGroupId,
+        hitLocationResultId: body.hitLocationResultId,
+        opportunityId: body.opportunityId,
+        phase: body.phase,
+        projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
       });
+      if (!authorization.ok) {
+        return reply.code(409).send({
+          code: authorization.code,
+          error: "Damage review is not open for this attack.",
+        });
+      }
       const resolution = roundState.phaseResolutionResults.find(
-        (candidate) => candidate.attackResultId === attackResultId,
+        (candidate) => candidate.attackResultId === body.attackResultId,
       );
 
       if (!resolution?.damageResult) {
@@ -6540,7 +6687,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const submittedAt = new Date().toISOString();
       const reviewedState = reviewCombatRoundDamageResult({
         attackResultId: resolution.damageResult.attackResultId,
-        review,
+        review: body.review,
         reviewedAt: submittedAt,
         reviewedByUserId: user.id,
         state: roundState,
@@ -7479,6 +7626,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
+
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -7494,9 +7648,47 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (
+        body.attackerParticipantId !== attackResult.attackerParticipantId ||
+        body.defenderParticipantId !== attackResult.defenderParticipantId ||
+        body.phase !== attackResult.phase ||
+        body.hitLocationResultId !==
+          getCombatRoundHitLocationResultId({
+            attackResultId: body.attackResultId,
+          })
+      ) {
+        return reply.code(409).send({
+          code: "stale_opportunity",
+          error: "Hit location is not open for this attack.",
+        });
+      }
+
       if (attackResult.attackerParticipantId !== encounterParticipant.id) {
         return reply.code(403).send({
           error: "Only the attacking participant can roll hit location.",
+        });
+      }
+      const hitLocationAuthorization = authorizeCombatProgressionTask({
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+        attackResultId: body.attackResultId,
+        attackerParticipantId: body.attackerParticipantId,
+        commandType: "roll_hit_location",
+        defenderParticipantId: body.defenderParticipantId,
+        executionGroupId: body.executionGroupId,
+        hitLocationResultId: body.hitLocationResultId,
+        opportunityId: body.opportunityId,
+        participantId: encounterParticipant.id,
+        phase: body.phase,
+        projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
+      });
+      if (!hitLocationAuthorization.ok) {
+        return reply.code(409).send({
+          code: hitLocationAuthorization.code,
+          error: "Hit location is not open for this participant.",
         });
       }
 
@@ -7623,6 +7815,161 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/encounters/:encounterId/combat-round/resolve-phase-damage", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({ error: "Only GM users can resolve phase damage." });
+      }
+      const body = parseCombatDamageTaskBody(request.body);
+      if (body.commandType !== "resolve_damage") {
+        return reply.code(409).send({ error: "Damage is not ready to be resolved." });
+      }
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+      if (!attackResult) {
+        return reply.code(404).send({ error: "Attack result not found." });
+      }
+      if (
+        body.attackerParticipantId !== attackResult.attackerParticipantId ||
+        body.defenderParticipantId !== attackResult.defenderParticipantId ||
+        body.phase !== attackResult.phase ||
+        body.hitLocationResultId !==
+          getCombatRoundHitLocationResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.criticalResultId !==
+          getCombatRoundCriticalResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.damageReviewId !==
+          getCombatRoundDamageReviewId({
+            attackResultId: body.attackResultId,
+          })
+      ) {
+        return reply.code(409).send({ error: "The damage review identity is stale." });
+      }
+      const authorization = authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        attackResultId: body.attackResultId,
+        attackerParticipantId: body.attackerParticipantId,
+        commandType: "resolve_damage",
+        criticalResultId: body.criticalResultId,
+        damageReviewId: body.damageReviewId,
+        defenderParticipantId: body.defenderParticipantId,
+        executionGroupId: body.executionGroupId,
+        hitLocationResultId: body.hitLocationResultId,
+        opportunityId: body.opportunityId,
+        phase: body.phase,
+        projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
+      });
+      if (!authorization.ok) {
+        return reply.code(409).send({
+          code: authorization.code,
+          error: "Damage is not open for this attack.",
+        });
+      }
+
+      const latestAttackerSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === attackResult.attackerParticipantId &&
+            snapshot.phase === attackResult.phase &&
+            snapshot.attackSummary,
+        );
+      const latestDefenderSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === attackResult.defenderParticipantId &&
+            snapshot.phase === attackResult.phase &&
+            snapshot.defenseSummary,
+        );
+      const dmb = parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
+      const defenderDm = parseCombatSummaryInteger(
+        latestDefenderSnapshot?.defenseSummary?.dm,
+        "Defender DM",
+      );
+      if (dmb === undefined || defenderDm === undefined) {
+        return reply.code(409).send({ error: "Canonical damage inputs are not available." });
+      }
+      const defenderEncounterParticipant = encounter.participants.find((participant) =>
+        participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
+      );
+      const defenderScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: defenderEncounterParticipant,
+        scenarioParticipants,
+      });
+      const armorCoverage = buildCombatRoundDamageArmorCoverageFromEquipmentState({
+        characterId: defenderScenarioParticipant?.characterId,
+        equipmentState: defenderScenarioParticipant?.snapshot.equipmentState,
+        fallbackTemplatesById: equipmentTemplatesById,
+      });
+      const submittedAt = new Date().toISOString();
+      const nextRoundState = recordCombatRoundDamageResult({
+        armorCoverage,
+        attackResult,
+        command: { createdAt: submittedAt, createdByUserId: user.id },
+        defenderDm,
+        dmb,
+        state: roundState,
+        submittedBy: "gm",
+        updatedAt: submittedAt,
+        weaponArmorClass: normalizeCombatArmorModifierClass(
+          latestAttackerSnapshot?.attackSummary?.attackMode,
+        ),
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+      return {
+        commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+        encounter: savedEncounter,
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to resolve phase damage.",
+      });
+    }
+  });
+
   app.post("/encounters/:encounterId/combat-round/roll-critical", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -7677,6 +8024,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed. Review the current action before continuing.",
+        });
+      }
+
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -7692,9 +8046,53 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (
+        body.attackerParticipantId !== attackResult.attackerParticipantId ||
+        body.defenderParticipantId !== attackResult.defenderParticipantId ||
+        body.phase !== attackResult.phase ||
+        body.hitLocationResultId !==
+          getCombatRoundHitLocationResultId({
+            attackResultId: body.attackResultId,
+          }) ||
+        body.criticalResultId !==
+          getCombatRoundCriticalResultId({
+            attackResultId: body.attackResultId,
+          })
+      ) {
+        return reply.code(409).send({
+          code: "stale_opportunity",
+          error: "Critical roll is not open for this attack.",
+        });
+      }
+
       if (attackResult.attackerParticipantId !== encounterParticipant.id) {
         return reply.code(403).send({
           error: "Only the attacking participant can roll the critical die.",
+        });
+      }
+
+      const criticalAuthorization = authorizeCombatProgressionTask({
+        actor:
+          access.mode === "gm"
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+        attackResultId: body.attackResultId,
+        attackerParticipantId: body.attackerParticipantId,
+        commandType: "roll_critical",
+        criticalResultId: body.criticalResultId,
+        defenderParticipantId: body.defenderParticipantId,
+        executionGroupId: body.executionGroupId,
+        hitLocationResultId: body.hitLocationResultId,
+        opportunityId: body.opportunityId,
+        participantId: encounterParticipant.id,
+        phase: body.phase,
+        projection: buildCombatProgressionProjection(roundState),
+        taskId: body.taskId,
+      });
+      if (!criticalAuthorization.ok) {
+        return reply.code(409).send({
+          code: criticalAuthorization.code,
+          error: "Critical roll is not open for this participant.",
         });
       }
 

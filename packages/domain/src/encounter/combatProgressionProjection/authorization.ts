@@ -28,10 +28,15 @@ export type CombatProgressionAuthorizationActor =
 export interface AuthorizeCombatProgressionTaskInput {
   readonly actor: CombatProgressionAuthorizationActor;
   readonly attackResultId?: string;
+  readonly attackerParticipantId?: string;
   readonly commandType: CombatRoundCommandType;
+  readonly criticalResultId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
+  readonly damageReviewId?: string;
+  readonly defenderParticipantId?: string;
   readonly executionGroupId?: string;
   readonly healthRollId?: string;
+  readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
@@ -124,6 +129,32 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "parry",
     process: "attack",
     stage: "defense",
+  },
+  roll_hit_location: {
+    boundary: resolutionBoundary,
+    kind: "hit_location",
+    process: "attack",
+    // Adapter-backed attacks expose a dedicated stage. Persisted legacy attack
+    // chains represent all post-defense rolls in their shared damage stage.
+    stage: ["hit_location", "damage"],
+  },
+  roll_critical: {
+    boundary: resolutionBoundary,
+    kind: "critical",
+    process: "attack",
+    stage: ["critical", "damage"],
+  },
+  resolve_damage: {
+    boundary: resolutionBoundary,
+    kind: "damage_review",
+    process: "attack",
+    stage: "damage",
+  },
+  commit_phase_damage: {
+    boundary: resolutionBoundary,
+    kind: "damage_review",
+    process: "attack",
+    stage: "commit",
   },
   prepare_round_end_review: {
     boundary: "round_end",
@@ -344,9 +375,50 @@ export function authorizeCombatProgressionTask(
     return failure("stale_opportunity", "The attack result is stale or not executable.");
   }
 
-  const executionGroupTasks = input.executionGroupId
-    ? attackTasks.filter((task) => task.executionGroupId === input.executionGroupId)
+  const attackerTasks = input.attackerParticipantId
+    ? attackTasks.filter(
+        (task) => task.identity.attackerParticipantId === input.attackerParticipantId,
+      )
     : attackTasks;
+  if (input.attackerParticipantId && attackerTasks.length === 0) {
+    return failure("wrong_participant", "The projected task belongs to another attacker.");
+  }
+
+  const defenderTasks = input.defenderParticipantId
+    ? attackerTasks.filter(
+        (task) => task.identity.defenderParticipantId === input.defenderParticipantId,
+      )
+    : attackerTasks;
+  if (input.defenderParticipantId && defenderTasks.length === 0) {
+    return failure("wrong_participant", "The projected task belongs to another defender.");
+  }
+
+  const hitLocationTasks = input.hitLocationResultId
+    ? defenderTasks.filter(
+        (task) => task.identity.hitLocationResultId === input.hitLocationResultId,
+      )
+    : defenderTasks;
+  if (input.hitLocationResultId && hitLocationTasks.length === 0) {
+    return failure("stale_opportunity", "The hit-location result is stale or not executable.");
+  }
+
+  const criticalTasks = input.criticalResultId
+    ? hitLocationTasks.filter((task) => task.identity.criticalResultId === input.criticalResultId)
+    : hitLocationTasks;
+  if (input.criticalResultId && criticalTasks.length === 0) {
+    return failure("stale_opportunity", "The critical result is stale or not executable.");
+  }
+
+  const damageReviewTasks = input.damageReviewId
+    ? criticalTasks.filter((task) => task.identity.damageReviewId === input.damageReviewId)
+    : criticalTasks;
+  if (input.damageReviewId && damageReviewTasks.length === 0) {
+    return failure("stale_proposal", "The damage review is stale or not executable.");
+  }
+
+  const executionGroupTasks = input.executionGroupId
+    ? damageReviewTasks.filter((task) => task.executionGroupId === input.executionGroupId)
+    : damageReviewTasks;
   if (input.executionGroupId && executionGroupTasks.length === 0) {
     return failure("task_not_found", "No task is executable in this execution group.");
   }

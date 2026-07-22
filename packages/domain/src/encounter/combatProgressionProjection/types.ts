@@ -147,8 +147,13 @@ export interface CombatProgressionTrackerFacet {
 /** Stable facts used to identify projected work without relying on a runtime cursor cell. */
 export interface CombatProgressionTaskIdentity {
   readonly attackResultId?: string;
+  readonly attackerParticipantId?: string;
+  readonly criticalResultId?: string;
+  readonly damageReviewId?: string;
+  readonly defenderParticipantId?: string;
   readonly executionGroupId: string;
   readonly healthRollId?: string;
+  readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;

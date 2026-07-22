@@ -4,7 +4,11 @@ import {
   buildCombatRoundAttackRollResult,
   combatRoundStateSchema,
   recordCombatRoundAttackResult,
+  recordCombatRoundCriticalRoll,
+  recordCombatRoundDamageResult,
   recordCombatRoundGlobalParticipantCommand,
+  recordCombatRoundHitLocationRoll,
+  recordCombatRoundParryResult,
   undoLatestCombatRoundCommand,
   type CombatRoundCursorStep,
   type CombatRoundState,
@@ -1195,7 +1199,7 @@ describe("authorizeCombatProgressionTask", () => {
     ).toMatchObject({ code: "task_not_ready", ok: false });
   });
 
-  it("does not authorize unmigrated commands or mutate the immutable projection", () => {
+  it("keeps migrated downstream commands closed outside resolution without mutating projection", () => {
     const projection = buildCombatProgressionProjection(
       state({ cursorParticipantId: "hero", cursorStep: "DE" }),
     );
@@ -1208,8 +1212,203 @@ describe("authorizeCombatProgressionTask", () => {
         participantId: "hero",
         projection,
       }),
-    ).toMatchObject({ code: "task_not_found", ok: false });
+    ).toMatchObject({ code: "boundary_closed", ok: false });
     expect(JSON.stringify(projection)).toBe(before);
+  });
+
+  it("authorizes hit location and damage review by their complete canonical identities", () => {
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "hero",
+      defenderDb: 0,
+      defenderParticipantId: "guard",
+      ob: 80,
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 20,
+      rolledAt: "2026-07-19T10:00:00.000Z",
+      weaponName: "Sword",
+    });
+    const initial = state({
+      cursorParticipantId: "hero",
+      cursorStep: "A1",
+      currentStep: "phase_1_actions",
+      overrides: {
+        phaseResolutionCursor: { participantId: "hero", phase: "phase1", substep: "attack" },
+      },
+      participantOverrides: [
+        {
+          declaration: {
+            actionId: "attack_parry",
+            attackOpportunities: [
+              {
+                id: "hero-phase1-attack",
+                origin: "declared",
+                phase: "phase1",
+                slot: "attack_1",
+                status: "committed",
+                targetParticipantId: "guard",
+              },
+            ],
+            phaseContexts: { phase1: { targetParticipantId: "guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+        },
+      ],
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: { createdAt: attackResult.rolledAt },
+      participantId: "hero",
+      result: attackResult,
+      state: initial,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: { createdAt: "2026-07-19T10:01:00.000Z" },
+      parryResolution: {
+        combinedParryScore: 0,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 1,
+        rollTotal: 1,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 1,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-07-19T10:01:00.000Z",
+    });
+    const hitProjection = buildCombatProgressionProjection(afterParry);
+    const hitTask = hitProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "hit_location")!;
+    expect(hitTask.trackerFacet.owner).toMatchObject({ participantId: "hero" });
+    const hitInput = {
+      actor: player("hero"),
+      attackResultId: hitTask.identity.attackResultId,
+      attackerParticipantId: "hero",
+      commandType: "roll_hit_location" as const,
+      defenderParticipantId: "guard",
+      executionGroupId: hitTask.executionGroupId,
+      hitLocationResultId: hitTask.identity.hitLocationResultId,
+      opportunityId: hitTask.identity.opportunityId,
+      participantId: "hero",
+      phase: "phase1" as const,
+      projection: hitProjection,
+      taskId: hitTask.id,
+    };
+    expect(authorizeCombatProgressionTask(hitInput)).toMatchObject({ ok: true });
+    expect(
+      authorizeCombatProgressionTask({ ...hitInput, hitLocationResultId: "stale:location" }),
+    ).toMatchObject({ code: "stale_opportunity", ok: false });
+
+    const afterLocation = recordCombatRoundHitLocationRoll({
+      attackResult,
+      command: { createdAt: "2026-07-19T10:02:00.000Z" },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "hero",
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-07-19T10:02:00.000Z",
+    });
+    const damageProjection = buildCombatProgressionProjection(afterLocation);
+    const damageTask = damageProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.expectedCommand === "resolve_damage")!;
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        attackResultId: damageTask.identity.attackResultId,
+        attackerParticipantId: "hero",
+        commandType: "resolve_damage",
+        criticalResultId: damageTask.identity.criticalResultId,
+        damageReviewId: damageTask.identity.damageReviewId,
+        defenderParticipantId: "guard",
+        executionGroupId: damageTask.executionGroupId,
+        hitLocationResultId: damageTask.identity.hitLocationResultId,
+        opportunityId: damageTask.identity.opportunityId,
+        phase: "phase1",
+        projection: damageProjection,
+        taskId: damageTask.id,
+      }),
+    ).toMatchObject({ ok: true, task: { owner: { kind: "gm" } } });
+
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: { createdAt: "2026-07-19T10:03:00.000Z" },
+      defenderDm: 0,
+      dmb: 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-07-19T10:03:00.000Z",
+    });
+    const commitProjection = buildCombatProgressionProjection(afterDamage);
+    const criticalTask = commitProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.expectedCommand === "roll_critical");
+    if (criticalTask) {
+      expect(criticalTask.trackerFacet.owner).toMatchObject({ participantId: "hero" });
+      expect(
+        authorizeCombatProgressionTask({
+          actor: player("hero"),
+          attackResultId: criticalTask.identity.attackResultId,
+          attackerParticipantId: "hero",
+          commandType: "roll_critical",
+          criticalResultId: criticalTask.identity.criticalResultId,
+          defenderParticipantId: "guard",
+          executionGroupId: criticalTask.executionGroupId,
+          hitLocationResultId: criticalTask.identity.hitLocationResultId,
+          opportunityId: criticalTask.identity.opportunityId,
+          participantId: "hero",
+          phase: "phase1",
+          projection: commitProjection,
+          taskId: criticalTask.id,
+        }),
+      ).toMatchObject({ ok: true });
+    }
+    const afterCritical = criticalTask
+      ? recordCombatRoundCriticalRoll({
+          attackResult,
+          command: { createdAt: "2026-07-19T10:04:00.000Z" },
+          criticalDice: [1, 1],
+          rolledByParticipantId: "hero",
+          state: afterDamage,
+          submittedBy: "gm",
+          updatedAt: "2026-07-19T10:04:00.000Z",
+        })
+      : afterDamage;
+    const finalProjection = buildCombatProgressionProjection(afterCritical);
+    const commitTask = finalProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.expectedCommand === "commit_phase_damage")!;
+    expect(commitTask.identity.damageReviewId).toBe(damageTask.identity.damageReviewId);
+    expect(commitTask.trackerFacet.owner).toBeUndefined();
+    const defenderView = projectCombatProgressionPresentation({
+      projection: finalProjection,
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+    const visibleDamageTask = defenderView.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "damage_review");
+    expect(visibleDamageTask).toMatchObject({
+      actorAccess: { combatant: false, gm: true },
+      expectedCommand: "commit_phase_damage",
+      id: commitTask.id,
+      state: "executable",
+    });
+    expect(visibleDamageTask?.identity).toMatchObject({
+      attackResultId: commitTask.identity.attackResultId,
+      damageReviewId: commitTask.identity.damageReviewId,
+    });
   });
 
   it("publishes initiative execution order only after the GM commit boundary closes", () => {

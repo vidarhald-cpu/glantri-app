@@ -9,6 +9,7 @@ import type {
   CombatRoundCombatExperienceResult,
   CombatDistanceEdge,
   CombatRoundInitiativeResult,
+  CombatRoundPhase,
   CombatRoundPhaseContexts,
   CombatRoundStep,
   CombatRoundStepSnapshot,
@@ -610,10 +611,27 @@ export async function completeCurrentCombatPhaseResolutionOnServer(input: {
   return payload;
 }
 
-export async function commitCurrentCombatPhaseDamageOnServer(input: {
-  encounterId: string;
-  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
-}): Promise<{
+export interface CombatDownstreamTaskRequestIdentity {
+  attackResultId: string;
+  attackerParticipantId: string;
+  criticalResultId: string;
+  damageReviewId: string;
+  defenderParticipantId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  hitLocationResultId: string;
+  opportunityId?: string;
+  phase: CombatRoundPhase;
+  taskId: string;
+}
+
+export async function commitCurrentCombatPhaseDamageOnServer(
+  input: CombatDownstreamTaskRequestIdentity & {
+    commandType: "commit_phase_damage";
+    encounterId: string;
+    review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+  },
+): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
 }> {
@@ -621,15 +639,18 @@ export async function commitCurrentCombatPhaseDamageOnServer(input: {
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
   }>(`/encounters/${input.encounterId}/combat-round/commit-phase-damage`, {
-    body: JSON.stringify({ review: input.review }),
+    body: JSON.stringify(input),
     method: "POST",
   });
 }
 
-export async function saveCurrentCombatDamageReviewOnServer(input: {
-  encounterId: string;
-  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
-}): Promise<{
+export async function saveCurrentCombatDamageReviewOnServer(
+  input: CombatDownstreamTaskRequestIdentity & {
+    commandType: "commit_phase_damage";
+    encounterId: string;
+    review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+  },
+): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
 }> {
@@ -637,7 +658,25 @@ export async function saveCurrentCombatDamageReviewOnServer(input: {
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
   }>(`/encounters/${input.encounterId}/combat-round/save-damage-review`, {
-    body: JSON.stringify({ review: input.review }),
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+
+export async function resolveCurrentCombatPhaseDamageOnServer(
+  input: CombatDownstreamTaskRequestIdentity & {
+    commandType: "resolve_damage";
+    encounterId: string;
+  },
+): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/resolve-phase-damage`, {
+    body: JSON.stringify(input),
     method: "POST",
   });
 }
@@ -839,18 +878,16 @@ export async function clearCurrentCombatRoundStepOnServer(input: {
   return payload;
 }
 
-export async function rollCombatHitLocationOnServer(input: {
-  attackResultId: string;
-  encounterId: string;
-  scenarioParticipantId: string;
-}): Promise<EncounterSession> {
+export async function rollCombatHitLocationOnServer(
+  input: Omit<CombatDownstreamTaskRequestIdentity, "criticalResultId" | "damageReviewId"> & {
+    encounterId: string;
+    scenarioParticipantId: string;
+  },
+): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/roll-hit-location`,
     {
-      body: JSON.stringify({
-        attackResultId: input.attackResultId,
-        scenarioParticipantId: input.scenarioParticipantId,
-      }),
+      body: JSON.stringify(input),
       method: "POST",
     },
   );
@@ -858,18 +895,16 @@ export async function rollCombatHitLocationOnServer(input: {
   return payload.encounter;
 }
 
-export async function rollCombatCriticalOnServer(input: {
-  attackResultId: string;
-  encounterId: string;
-  scenarioParticipantId: string;
-}): Promise<EncounterSession> {
+export async function rollCombatCriticalOnServer(
+  input: Omit<CombatDownstreamTaskRequestIdentity, "damageReviewId"> & {
+    encounterId: string;
+    scenarioParticipantId: string;
+  },
+): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/roll-critical`,
     {
-      body: JSON.stringify({
-        attackResultId: input.attackResultId,
-        scenarioParticipantId: input.scenarioParticipantId,
-      }),
+      body: JSON.stringify(input),
       method: "POST",
     },
   );

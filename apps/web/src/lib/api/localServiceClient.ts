@@ -95,6 +95,7 @@ export {
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
   rollCombatParryCommandOnServer,
+  resolveCurrentCombatPhaseDamageOnServer,
   saveCurrentCombatDamageReviewOnServer,
   completeCurrentCombatPhaseResolutionOnServer,
   commitRoundEndDistanceControlOnServer,

@@ -162,7 +162,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).not.toContain("selectedLatestRelevantAttackResult");
     expect(source).not.toContain("selectedCurrentPhaseResolutionResultPanel");
-    expect(source).toContain("selectedAttackerPrivilegedResolution");
+    expect(source).not.toContain("selectedAttackerPrivilegedResolution");
+    expect(source).toContain("resolveCombatTaskCommandContext({");
     expect(source).not.toContain("selectedAttackerPrivilegedAttackResult");
     expect(source).not.toContain("getCombatRoundAttackResultById");
     expect(source).toContain("rollCombatHitLocationOnServer");
@@ -192,8 +193,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("declarationSubmittedAndComplete");
     expect(source).not.toContain("currentAttackAction?.label");
     expect(source).not.toContain("buttonLabel={playerActionButtonLabel}");
-    expect(source).toContain('rollAttackerPrivilegedCombatDie("hitLocation")');
-    expect(source).toContain('rollAttackerPrivilegedCombatDie("critical")');
+    expect(source).toContain('rollAttackerPrivilegedCombatDie("hitLocation", descriptor)');
+    expect(source).toContain('rollAttackerPrivilegedCombatDie("critical", descriptor)');
     expect(source).toContain('case "roll_attack"');
     expect(source).toContain("void rollPhaseAttack(descriptor);");
     expect(source).toContain("getPlayerCombatCurrentRollAction");
@@ -312,7 +313,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("selectedInvolvedDamageResolution");
     expect(source).not.toContain("selectedInvolvedDamageResultPanel");
     expect(source).toContain("events: combatHistory.activeRound.events");
-    expect(source).toContain("viewer: { kind: \"player\" }");
+    expect(source).toContain('viewer: { kind: "player" }');
     expect(source).not.toContain("selectedUninvolvedDamageResultPanel");
   });
 
@@ -327,7 +328,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).not.toContain("selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("currentStepResultPresentation");
-    expect(source).not.toContain("currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel");
+    expect(source).not.toContain(
+      "currentPhaseResolution: selectedCurrentPhaseResolutionResultPanel",
+    );
     expect(source).not.toContain("involvedDamage: selectedInvolvedDamageResultPanel");
     expect(source).not.toContain("latestAttack: selectedLatestRelevantAttackResultPanel");
   });

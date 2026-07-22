@@ -405,6 +405,31 @@ function makeCriticalRollMutationFixture() {
       attackResultId,
       state: afterDamage,
     }),
+    stateAfterLocation: afterLocation,
+  };
+}
+
+function buildDownstreamTaskPayload(
+  state: CombatRoundState,
+  expectedCommand: "commit_phase_damage" | "resolve_damage" | "roll_critical" | "roll_hit_location",
+) {
+  const task = buildCombatProgressionProjection(state)
+    .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+    .find((candidate) => candidate.expectedCommand === expectedCommand);
+  if (!task) throw new Error(`Expected ${expectedCommand} progression task.`);
+  return {
+    attackResultId: task.identity.attackResultId,
+    attackerParticipantId: task.identity.attackerParticipantId,
+    commandType: expectedCommand,
+    criticalResultId: task.identity.criticalResultId,
+    damageReviewId: task.identity.damageReviewId,
+    defenderParticipantId: task.identity.defenderParticipantId,
+    executionGroupId: task.executionGroupId,
+    expectedRevision: "2026-01-01T00:00:00.000Z",
+    hitLocationResultId: task.identity.hitLocationResultId,
+    opportunityId: task.identity.opportunityId,
+    phase: task.identity.phase,
+    taskId: task.id,
   };
 }
 
@@ -2693,9 +2718,7 @@ describe("scenarios route contract", () => {
     );
     const declarationTasks = history.progression.processes
       .flatMap((process: { stages: Array<{ executionGroups: Array<{ tasks: unknown[] }> }> }) =>
-        process.stages.flatMap((stage) =>
-          stage.executionGroups.flatMap((group) => group.tasks),
-        ),
+        process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
       )
       .filter((task: { kind?: string }) => task.kind === "submit_declaration");
     expect(declarationTasks).toEqual([]);
@@ -3828,9 +3851,10 @@ describe("scenarios route contract", () => {
       participants,
       user: mocks.adminUser,
     });
-    const persistEncounter = mocks.encounterService.updateEncounter.getMockImplementation() as (
-      update: { session: EncounterSession },
-    ) => Promise<EncounterSession>;
+    const persistEncounter =
+      mocks.encounterService.updateEncounter.getMockImplementation() as (update: {
+        session: EncounterSession;
+      }) => Promise<EncounterSession>;
     const persistedRevisions = [
       "2026-07-21T10:00:01.000Z",
       "2026-07-21T10:00:02.000Z",
@@ -3943,9 +3967,9 @@ describe("scenarios route contract", () => {
     expect(finalPersistedRevision).toBe(mutationRevision);
     expect(rematerializedState).toEqual(declarationEncounter.combatRoundState);
     expect(Object.hasOwn(rematerializedState, "activeParticipantId")).toBe(true);
-    expect(
-      Object.hasOwn(declarationEncounter.combatRoundState ?? {}, "activeParticipantId"),
-    ).toBe(false);
+    expect(Object.hasOwn(declarationEncounter.combatRoundState ?? {}, "activeParticipantId")).toBe(
+      false,
+    );
     expect(JSON.stringify(rematerializedState)).not.toBe(
       JSON.stringify(declarationEncounter.combatRoundState),
     );
@@ -3981,9 +4005,7 @@ describe("scenarios route contract", () => {
       initiativeBoundaryResponse.statusCode,
       JSON.stringify(initiativeBoundaryResponse.json()),
     ).toBe(200);
-    expect(initiativeBoundaryResponse.json().encounter.updatedAt).toBe(
-      "2026-07-21T10:00:05.000Z",
-    );
+    expect(initiativeBoundaryResponse.json().encounter.updatedAt).toBe("2026-07-21T10:00:05.000Z");
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(5);
   });
 
@@ -11253,6 +11275,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        ...buildDownstreamTaskPayload(stateWithStaleInspection, "commit_phase_damage"),
         review: {
           additionalEffects: [],
           notes: "Reviewed by GM",
@@ -11291,10 +11314,96 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("resolves canonical phase damage without consulting inspector selection", async () => {
+    const fixture = makeCriticalRollMutationFixture();
+    const stateWithCanonicalSnapshots: CombatRoundState = {
+      ...fixture.stateAfterLocation,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+      stepSnapshots: [
+        {
+          attackSummary: {
+            attackMode: "C",
+            dmb: "8",
+            initiative: "3",
+            maxCrits: "FS",
+            ob: "10",
+            weaponName: "Broad sword",
+          },
+          committedAt: "2026-01-01T00:02:00.000Z",
+          id: "snapshot-resolve-damage-attacker",
+          participantId: "encounter-participant-1",
+          participantLabel: "The Gladiator",
+          phase: "phase1",
+          roundNumber: fixture.stateAfterLocation.roundNumber,
+          step: "phase_1_actions",
+        },
+        {
+          committedAt: "2026-01-01T00:02:00.000Z",
+          defenseSummary: {
+            db: "11",
+            dm: "0",
+            parry: "9",
+            sourceName: "Sword / shield",
+          },
+          id: "snapshot-resolve-damage-defender",
+          participantId: "encounter-participant-2",
+          participantLabel: "City guard",
+          phase: "phase1",
+          roundNumber: fixture.stateAfterLocation.roundNumber,
+          step: "phase_1_actions",
+        },
+      ],
+    };
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCanonicalSnapshots,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildDownstreamTaskPayload(stateWithCanonicalSnapshots, "resolve_damage"),
+        commandType: "resolve_damage",
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-phase-damage",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    expect(savedState.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      attackResultId: fixture.attackResultId,
+      defenderDm: 0,
+      dmb: 8,
+    });
+    expect(savedState.commands.at(-1)).toMatchObject({ type: "resolve_damage" });
+  });
+
   it("saves the canonical current damage review without committing effects", async () => {
     const fixture = makeCriticalRollMutationFixture();
+    const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: fixture.state,
+    });
+    if (!attackResult) throw new Error("Expected attack result.");
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:05:45.000Z", createdByUserId: "gm-1" },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "encounter-participant-1",
+      state: fixture.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:45.000Z",
+    });
     const stateWithStaleInspection: CombatRoundState = {
-      ...fixture.state,
+      ...afterCritical,
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "round_summary",
     };
@@ -11311,6 +11420,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        ...buildDownstreamTaskPayload(stateWithStaleInspection, "commit_phase_damage"),
         review: {
           additionalEffects: [],
           notes: "Saved current review",
@@ -11523,11 +11633,24 @@ describe("scenarios route contract", () => {
     });
     mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
     const app = await buildScenarioTestApp();
+    const taskPayload = buildDownstreamTaskPayload(afterParry, "roll_hit_location");
+    const staleResponse = await app.inject({
+      method: "POST",
+      payload: {
+        ...taskPayload,
+        executionGroupId: "stale-execution-group",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-hit-location",
+    });
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json()).toMatchObject({ code: "task_not_found" });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
 
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        ...taskPayload,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-hit-location",
@@ -11535,7 +11658,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
@@ -11723,7 +11846,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        ...buildDownstreamTaskPayload(afterParry, "roll_hit_location"),
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-hit-location",
@@ -11863,11 +11986,23 @@ describe("scenarios route contract", () => {
     });
     mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
     const app = await buildScenarioTestApp();
+    const taskPayload = buildDownstreamTaskPayload(afterDamage, "roll_critical");
+    const staleResponse = await app.inject({
+      method: "POST",
+      payload: {
+        ...taskPayload,
+        criticalResultId: "stale-critical-result",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-critical",
+    });
+    expect(staleResponse.statusCode).toBe(409);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
 
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        ...taskPayload,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-critical",
@@ -12093,7 +12228,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: fixture.attackResultId,
+        ...buildDownstreamTaskPayload(fixture.state, "roll_critical"),
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-critical",
@@ -12124,7 +12259,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
-        attackResultId: fixture.attackResultId,
+        ...buildDownstreamTaskPayload(fixture.state, "roll_critical"),
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-round/roll-critical",

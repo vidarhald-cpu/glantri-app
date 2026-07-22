@@ -66,6 +66,7 @@ import {
   resolveProjectedCombatHistoryPanelSnapshot,
   createDefaultCombatLogSelection,
   reconcileCombatLogSelection,
+  resolveCombatTaskCommandContext,
   selectCombatLogEvent,
   type CombatHistoryInspectionSelection,
   type CombatLogEventSelection,
@@ -2663,14 +2664,33 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollAttackerPrivilegedCombatDie(kind: "critical" | "hitLocation") {
-    if (readOnlyInspection || !selectedParticipant || !encounterId) {
+  async function rollAttackerPrivilegedCombatDie(
+    kind: "critical" | "hitLocation",
+    candidate?: CurrentActionCommandDescriptor,
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: [kind === "hitLocation" ? "roll_hit_location" : "roll_critical"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "attackerParticipantId",
+        "defenderParticipantId",
+        "executionGroupId",
+        "expectedRevision",
+        "hitLocationResultId",
+        "participantId",
+        "phase",
+        "taskId",
+        ...(kind === "critical" ? (["criticalResultId"] as const) : []),
+      ],
+    });
+    if (readOnlyInspection || !selectedParticipant || !encounterId || !descriptor) {
+      setError("Combat state changed. Review the current action before continuing.");
       return;
     }
-
-    const attackResultId = selectedAttackerPrivilegedResolution?.attackResultId;
-
-    if (!attackResultId) {
+    if (selectedRoundParticipant?.participantId !== descriptor.participantId) {
+      setError("This combat task belongs to another participant.");
       return;
     }
 
@@ -2680,14 +2700,31 @@ export default function ScenarioPlayerCombatPageContent({
       const encounter =
         kind === "hitLocation"
           ? await rollCombatHitLocationOnServer({
-              attackResultId,
+              attackResultId: descriptor.attackResultId!,
+              attackerParticipantId: descriptor.attackerParticipantId!,
+              defenderParticipantId: descriptor.defenderParticipantId!,
               encounterId,
+              executionGroupId: descriptor.executionGroupId!,
+              expectedRevision: descriptor.expectedRevision,
+              hitLocationResultId: descriptor.hitLocationResultId!,
+              opportunityId: descriptor.opportunityId,
+              phase: descriptor.phase!,
               scenarioParticipantId: selectedParticipant.id,
+              taskId: descriptor.taskId,
             })
           : await rollCombatCriticalOnServer({
-              attackResultId,
+              attackResultId: descriptor.attackResultId!,
+              attackerParticipantId: descriptor.attackerParticipantId!,
+              criticalResultId: descriptor.criticalResultId!,
+              defenderParticipantId: descriptor.defenderParticipantId!,
               encounterId,
+              executionGroupId: descriptor.executionGroupId!,
+              expectedRevision: descriptor.expectedRevision,
+              hitLocationResultId: descriptor.hitLocationResultId!,
+              opportunityId: descriptor.opportunityId,
+              phase: descriptor.phase!,
               scenarioParticipantId: selectedParticipant.id,
+              taskId: descriptor.taskId,
             });
 
       acceptEncounterSession(encounter);
@@ -3032,13 +3069,6 @@ export default function ScenarioPlayerCombatPageContent({
         phaseCombatLoadoutSummaries[currentResolutionPhase].baseDefenseStats?.parry,
       )
     : undefined;
-  const selectedAttackerPrivilegedResolution =
-    combatRoundState &&
-    (currentRollAction?.kind === "hit_location" || currentRollAction?.kind === "critical")
-      ? combatRoundState.phaseResolutionResults.find(
-          (resolution) => resolution.attackResultId === currentRollAction.attackResultId,
-        )
-      : undefined;
   const selectedDistanceControlCommittedDistance =
     selectedDistanceControlProposal?.proposal.status === "committed"
       ? (selectedDistanceControlProposal.proposal.appliedDistance ??
@@ -3210,10 +3240,10 @@ export default function ScenarioPlayerCombatPageContent({
         void rollCombatExperience(descriptor);
         return;
       case "roll_hit_location":
-        void rollAttackerPrivilegedCombatDie("hitLocation");
+        void rollAttackerPrivilegedCombatDie("hitLocation", descriptor);
         return;
       case "roll_critical":
-        void rollAttackerPrivilegedCombatDie("critical");
+        void rollAttackerPrivilegedCombatDie("critical", descriptor);
         return;
       case "roll_parry":
         void rollCurrentParry(descriptor);
