@@ -81,6 +81,36 @@ describe("themistogenes weapon enrichments", () => {
     ).not.toBe(true);
   });
 
+  it("marks Broad sword's explicit secondary Thrust profile as repeat eligible", () => {
+    const broadSword = enrichedById["weapon-template-broad-sword"];
+
+    expect(broadSword?.sourceMetadata).toMatchObject({
+      row: 7,
+      sheet: "Weapon1",
+      sourceRange: "Weapon1!A7:Q7",
+    });
+    expect(broadSword?.attackModes).toEqual([
+      expect.objectContaining({
+        canonicalMeleeMode: "slash",
+        crit: "FS",
+        dmb: 4,
+        id: "mode-1",
+        label: "Slash",
+        ob: 2,
+      }),
+      expect.objectContaining({
+        allowsRepeatedRoundAttack: true,
+        canonicalMeleeMode: "thrust",
+        crit: "EP",
+        dmb: 3,
+        id: "mode-2",
+        label: "Thrust",
+        ob: 1,
+      }),
+    ]);
+    expect(broadSword?.attackModes?.[0]?.allowsRepeatedRoundAttack).not.toBe(true);
+  });
+
   it("preserves Lance primary Charge attack explicitly while keeping Second crit. on that primary mode", () => {
     const lance = enrichedById["weapon-template-lance"];
 

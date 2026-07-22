@@ -8477,6 +8477,205 @@ describe("scenarios route contract", () => {
   });
 
   it.each([
+    ["GM", mocks.adminUser],
+    ["Player", mocks.playerUser],
+  ] as const)(
+    "accepts Broad sword's canonical Thrust mode for a same-source Double Attack submitted by %s",
+    async (_viewer, user) => {
+      setupCombatDeclarationRoute({
+        participant: makeDoubleAttackWeaponParticipant("weapon-template-broad-sword"),
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const itemId = "item-weapon-template-broad-sword";
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "double_attack",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          phaseAttackSources: {
+            phase1: makeWeaponAttackSourceRef({
+              attackModeId: "mode-2",
+              itemId,
+              opportunitySlot: "attack_1",
+              templateId: "weapon-template-broad-sword",
+            }),
+            phase2: makeWeaponAttackSourceRef({
+              attackModeId: "mode-2",
+              itemId,
+              opportunitySlot: "attack_2",
+              templateId: "weapon-template-broad-sword",
+            }),
+          },
+          phaseContexts: {
+            phase1: {
+              attackModeId: "mode-2",
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "target-1",
+            },
+            phase2: {
+              attackModeId: "mode-2",
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "target-1",
+            },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+      await app.close();
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      const reloadedRoundState = combatRoundStateSchema.parse(
+        mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState,
+      );
+      const declaration = reloadedRoundState.participants[0].declaration;
+      if (!declaration) {
+        throw new Error("Expected the Double Attack declaration to persist.");
+      }
+      expect(declaration.phaseContexts).toMatchObject({
+        phase1: { attackModeId: "mode-2" },
+        phase2: { attackModeId: "mode-2" },
+      });
+      expect(declaration.attackOpportunities).toEqual([
+        expect.objectContaining({ attackModeId: "mode-2", itemId, slot: "attack_1" }),
+        expect.objectContaining({ attackModeId: "mode-2", itemId, slot: "attack_2" }),
+      ]);
+    },
+  );
+
+  it("allows a different first mode when the same weapon's second opportunity uses eligible Thrust", async () => {
+    setupCombatDeclarationRoute({
+      participant: makeDoubleAttackWeaponParticipant("weapon-template-broad-sword"),
+    });
+    const app = await buildScenarioTestApp();
+    const itemId = "item-weapon-template-broad-sword";
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            attackModeId: "mode-1",
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            attackModeId: "mode-2",
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-broad-sword",
+          }),
+        },
+        phaseContexts: {
+          phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .participants[0].declaration.attackOpportunities,
+    ).toEqual([
+      expect.objectContaining({ attackModeId: "mode-1", slot: "attack_1" }),
+      expect.objectContaining({ attackModeId: "mode-2", slot: "attack_2" }),
+    ]);
+  });
+
+  it("identifies an ineligible selected same-weapon mode precisely", async () => {
+    setupCombatDeclarationRoute({
+      participant: makeDoubleAttackWeaponParticipant("weapon-template-broad-sword"),
+    });
+    const app = await buildScenarioTestApp();
+    const itemId = "item-weapon-template-broad-sword";
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            attackModeId: "mode-2",
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            attackModeId: "mode-1",
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-broad-sword",
+          }),
+        },
+        phaseContexts: {
+          phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error:
+        "The selected Phase 2 attack mode for Broad sword is not eligible for same-weapon Double Attack.",
+    });
+  });
+
+  it("rejects a same-source Double Attack weapon with no eligible second profile", async () => {
+    setupCombatDeclarationRoute({
+      participant: makeDoubleAttackWeaponParticipant("weapon-template-mace"),
+    });
+    const app = await buildScenarioTestApp();
+    const itemId = "item-weapon-template-mace";
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId,
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-mace",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: "weapon-template-mace",
+          }),
+        },
+        phaseContexts: {
+          phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+          phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target-1" },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error:
+        "The selected Phase 2 attack mode for Mace is not eligible for same-weapon Double Attack.",
+    });
+  });
+
+  it.each([
     ["distinct committed weapons", "scenario-main-gauche", "secondary"],
     ["the same committed repeated-thrust weapon", "scenario-fencing-sword", "primary"],
   ] as const)(

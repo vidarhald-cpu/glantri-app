@@ -3587,7 +3587,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (phase1Identity === phase2Identity && !phase2Weapon?.repeatEligible) {
           return reply.code(400).send({
             error: phase2Weapon
-              ? `${phase2Weapon.weaponName} has no attack mode eligible for Attack 2. Thrust is required to attack twice with the same weapon.`
+              ? `The selected Phase 2 attack mode for ${phase2Weapon.weaponName} is not eligible for same-weapon Double Attack.`
               : "The same unarmed source cannot be used for both Double Attack opportunities.",
           });
         }

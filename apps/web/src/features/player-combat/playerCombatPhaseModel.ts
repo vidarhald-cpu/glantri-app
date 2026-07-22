@@ -816,14 +816,16 @@ export function buildPlayerCombatLoadoutSummary(input: {
       row: referenceRow,
     }),
     secondCrit: selectedDerivedMode
-      ? String(selectedDerivedMode.secondCrit)
+      ? String(selectedDerivedMode.secondCrit ?? "—")
       : getCombatTableCell({
           columns: combatPanelModel.weaponModeTable.columns,
           label: "Sec",
           row: referenceRow,
         }),
     selectedWeapon: referenceWeaponLabel,
-    sourceAttackModeId: modeResolution.mode?.id ?? rawReferenceRow?.attackMode1Id,
+    sourceAttackModeId:
+      modeResolution.mode?.id ??
+      (requireRepeatedRoundAttack ? undefined : rawReferenceRow?.attackMode1Id),
     sourceItemId: rawReferenceRow?.itemId,
     sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,

@@ -77,10 +77,20 @@ const repeatedThrustMode1Ids = [
   "weapon-template-spear",
 ];
 
+const repeatedThrustMode2Ids = ["weapon-template-broad-sword"];
+
 export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrichment> = {
   ...fromIds(repeatedThrustMode1Ids, {
     attackModes: {
       "mode-1": {
+        allowsRepeatedRoundAttack: true,
+        note: "Manual rules enrichment: this melee thrust mode may be used twice in one round.",
+      },
+    },
+  }),
+  ...fromIds(repeatedThrustMode2Ids, {
+    attackModes: {
+      "mode-2": {
         allowsRepeatedRoundAttack: true,
         note: "Manual rules enrichment: this melee thrust mode may be used twice in one round.",
       },
