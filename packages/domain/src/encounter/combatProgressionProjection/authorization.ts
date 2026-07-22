@@ -1,7 +1,8 @@
-import type { CombatRoundCommandType, CombatRoundPhase } from "../combatRoundManager";
+import type { CombatRoundPhase } from "../combatRoundManager";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
+  CombatProgressionExpectedCommand,
   CombatProgressionProcessKind,
   CombatProgressionProjection,
   CombatProgressionStageKind,
@@ -29,7 +30,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly actor: CombatProgressionAuthorizationActor;
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
-  readonly commandType: CombatRoundCommandType;
+  readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
@@ -65,7 +66,7 @@ interface CommandTaskRule {
   stage: CombatProgressionStageKind | readonly CombatProgressionStageKind[];
 }
 
-const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule>> = {
+const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, CommandTaskRule>> = {
   advance_combat_boundary: {
     kind: "gm_advance_boundary",
     stage: "boundary",
@@ -75,6 +76,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "commit_initiative",
     process: "initiative",
     stage: "commit",
+  },
+  commit_feint_result: {
+    boundary: "phase1_resolution",
+    kind: "feint_commit",
+    process: "feint",
+    stage: "proposal_commit",
   },
   declare_action: {
     boundary: "declaration",
@@ -162,6 +169,24 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "distance",
     stage: "review",
   },
+  review_modifiers_phase1: {
+    boundary: "phase1_modifier_review",
+    kind: "modifier_review",
+    process: "modifier_review",
+    stage: "review",
+  },
+  review_modifiers_phase2: {
+    boundary: "phase2_modifier_review",
+    kind: "modifier_review",
+    process: "modifier_review",
+    stage: "review",
+  },
+  roll_combat_experience: {
+    boundary: "declaration",
+    kind: "combat_experience",
+    process: "combat_experience",
+    stage: "input",
+  },
   roll_round_end_distance_control: {
     boundary: "round_end",
     kind: "distance_roll",
@@ -204,11 +229,17 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "feint",
     stage: ["attacker_roll", "defender_roll"],
   },
-  commit_feint_result: {
-    boundary: "phase1_resolution",
-    kind: "feint_commit",
-    process: "feint",
-    stage: "proposal_commit",
+  set_combat_experience_difficulty: {
+    boundary: "declaration",
+    kind: "combat_experience",
+    process: "combat_experience",
+    stage: "difficulty",
+  },
+  submit_phase_initiative_choice: {
+    boundary: initiativeBoundary,
+    kind: "combat_experience",
+    process: "initiative",
+    stage: "input",
   },
 };
 

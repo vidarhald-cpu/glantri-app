@@ -134,6 +134,8 @@ export async function submitCombatDeclarationOnServer(input: {
   additionalActionNotes?: string;
   combatContext: ScenarioParticipantCombatContext;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   movementId?: string;
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
@@ -141,6 +143,7 @@ export async function submitCombatDeclarationOnServer(input: {
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
+  taskId: string;
   feint?: {
     attackerSkillId?: string;
     method: "movement" | "weapon";
@@ -161,8 +164,11 @@ export async function submitCombatDeclarationOnServer(input: {
         phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,
         feint: input.feint,
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
+        taskId: input.taskId,
       }),
       method: "POST",
     },
@@ -191,9 +197,12 @@ export async function reviewCombatFeintFeasibilityOnServer(input: {
 
 export async function respondCombatAdjustDistanceOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   proposalId: string;
   response: "allow" | "oppose";
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/respond-adjust-distance`,
@@ -204,10 +213,13 @@ export async function respondCombatAdjustDistanceOnServer(input: {
 
 export async function reviewCombatAdjustDistanceOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   notes?: string;
   participantId?: string;
   proposalId: string;
   value: number;
+  taskId: string;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/review-adjust-distance`,
@@ -218,8 +230,11 @@ export async function reviewCombatAdjustDistanceOnServer(input: {
 
 export async function rollCombatAdjustDistanceOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   proposalId: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/roll-adjust-distance`,
@@ -231,9 +246,12 @@ export async function rollCombatAdjustDistanceOnServer(input: {
 export async function commitCombatAdjustDistanceOnServer(input: {
   committedDistance: number;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   notes?: string;
   outcome: "successful" | "unsuccessful" | "allowed";
   proposalId: string;
+  taskId: string;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/commit-adjust-distance`,
@@ -244,13 +262,19 @@ export async function commitCombatAdjustDistanceOnServer(input: {
 
 export async function rollCombatFeintOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   proposalId: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{ encounter: EncounterSession }> {
   return sendJson(`/encounters/${input.encounterId}/combat-round/roll-feint`, {
     body: JSON.stringify({
       proposalId: input.proposalId,
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -258,12 +282,15 @@ export async function rollCombatFeintOnServer(input: {
 
 export async function commitCombatFeintOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   gmAttackerDbParryModifier?: number;
   gmDefenderDbParryModifier?: number;
   gmDefenderObDbModifier?: number;
   gmDefenderSkillObModifier?: number;
   notes?: string;
   proposalId: string;
+  taskId: string;
 }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
   return sendJson(`/encounters/${input.encounterId}/combat-round/commit-feint`, {
     body: JSON.stringify({
@@ -273,6 +300,9 @@ export async function commitCombatFeintOnServer(input: {
       gmDefenderSkillObModifier: input.gmDefenderSkillObModifier,
       notes: input.notes,
       proposalId: input.proposalId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -281,12 +311,20 @@ export async function commitCombatFeintOnServer(input: {
 export async function decideDoubleAttackPhase2OnServer(input: {
   decision: "continue" | "cancel";
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opportunityId?: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
   return sendJson(`/encounters/${input.encounterId}/combat-round/double-attack-phase2-decision`, {
     body: JSON.stringify({
       decision: input.decision,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      opportunityId: input.opportunityId,
       scenarioParticipantId: input.scenarioParticipantId,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -294,7 +332,11 @@ export async function decideDoubleAttackPhase2OnServer(input: {
 
 export async function rollCombatExperienceOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  phase?: "phase1" | "phase2";
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   combatExperience: CombatRoundCombatExperienceResult;
   encounter: EncounterSession;
@@ -307,6 +349,10 @@ export async function rollCombatExperienceOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-combat-experience`, {
     body: JSON.stringify({
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      phase: input.phase,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -317,7 +363,12 @@ export async function rollCombatExperienceOnServer(input: {
 export async function rollRoundEndDistanceControlOnServer(input: {
   distanceProposalId: string;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opponentParticipantId: string;
+  pairId: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   encounter: EncounterSession;
   participant: ScenarioParticipant;
@@ -328,7 +379,12 @@ export async function rollRoundEndDistanceControlOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-distance-control`, {
     body: JSON.stringify({
       distanceProposalId: input.distanceProposalId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      opponentParticipantId: input.opponentParticipantId,
+      pairId: input.pairId,
       scenarioParticipantId: input.scenarioParticipantId,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -338,6 +394,13 @@ export async function rollRoundEndDistanceControlOnServer(input: {
 
 export async function rollCurrentRoundEndDistanceControlOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opponentParticipantId: string;
+  pairId: string;
+  participantId: string;
+  proposalId: string;
+  taskId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
@@ -346,6 +409,7 @@ export async function rollCurrentRoundEndDistanceControlOnServer(input: {
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
   }>(`/encounters/${input.encounterId}/combat-round/roll-current-distance-control`, {
+    body: JSON.stringify(input),
     method: "POST",
   });
 }
@@ -354,6 +418,10 @@ export async function commitRoundEndDistanceControlOnServer(input: {
   distanceOverride?: number;
   distanceProposalId: string;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  pairId: string;
+  taskId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
@@ -365,6 +433,10 @@ export async function commitRoundEndDistanceControlOnServer(input: {
     body: JSON.stringify({
       distanceOverride: input.distanceOverride,
       distanceProposalId: input.distanceProposalId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      pairId: input.pairId,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -372,7 +444,10 @@ export async function commitRoundEndDistanceControlOnServer(input: {
 
 export async function commitRoundEndParticipantReviewOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
@@ -383,7 +458,7 @@ export async function commitRoundEndParticipantReviewOnServer(input: {
     encounter: EncounterSession;
     participant: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/commit-participant-review`, {
-    body: JSON.stringify({ scenarioParticipantId: input.scenarioParticipantId }),
+    body: JSON.stringify(input),
     method: "POST",
   });
 }
@@ -391,8 +466,11 @@ export async function commitRoundEndParticipantReviewOnServer(input: {
 export async function rollRoundEndHealthCheckOnServer(input: {
   difficulty?: number;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   healthRollId: string;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   encounter: EncounterSession;
   participant: ScenarioParticipant;
@@ -405,6 +483,9 @@ export async function rollRoundEndHealthCheckOnServer(input: {
       difficulty: input.difficulty,
       healthRollId: input.healthRollId,
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -414,8 +495,11 @@ export async function rollRoundEndHealthCheckOnServer(input: {
 
 export async function backOutPhaseAttackOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   encounter: EncounterSession;
   participant: ScenarioParticipant;
@@ -427,6 +511,9 @@ export async function backOutPhaseAttackOnServer(input: {
     body: JSON.stringify({
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -436,8 +523,11 @@ export async function backOutPhaseAttackOnServer(input: {
 
 export async function continuePhaseAttackOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{
   encounter: EncounterSession;
   participant: ScenarioParticipant;
@@ -449,6 +539,9 @@ export async function continuePhaseAttackOnServer(input: {
     body: JSON.stringify({
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -458,7 +551,10 @@ export async function continuePhaseAttackOnServer(input: {
 
 export async function commitPhaseInitiativeResolutionOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   phase: "phase1" | "phase2";
+  taskId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
@@ -471,6 +567,9 @@ export async function commitPhaseInitiativeResolutionOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/commit-phase-initiative-resolution`, {
     body: JSON.stringify({
       phase: input.phase,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -481,6 +580,9 @@ export async function commitPhaseInitiativeResolutionOnServer(input: {
 export async function setCombatExperienceDifficultyOnServer(input: {
   difficulty: number;
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  taskId: string;
 }): Promise<{
   difficulty: number;
   encounter: EncounterSession;
@@ -491,6 +593,9 @@ export async function setCombatExperienceDifficultyOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/combat-experience-difficulty`, {
     body: JSON.stringify({
       difficulty: input.difficulty,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -556,10 +661,20 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
 
 export async function prepareCombatRoundEndReviewOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  taskId: string;
 }): Promise<{ encounter: EncounterSession }> {
   return sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/prepare-round-end-review`,
-    { method: "POST" },
+    {
+      body: JSON.stringify({
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
+        taskId: input.taskId,
+      }),
+      method: "POST",
+    },
   );
 }
 
@@ -683,9 +798,12 @@ export async function resolveCurrentCombatPhaseDamageOnServer(
 
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
   initiativeBase?: number;
   initiativeModifierAdjustment?: number;
   scenarioParticipantId: string;
+  taskId: string;
 }): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
   const payload = await sendJson<{
     encounter: EncounterSession;
@@ -695,6 +813,9 @@ export async function rollCombatInitiativeOnServer(input: {
       initiativeBase: input.initiativeBase,
       initiativeModifierAdjustment: input.initiativeModifierAdjustment,
       scenarioParticipantId: input.scenarioParticipantId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
@@ -710,12 +831,15 @@ export async function rollCombatAttackOnServer(input: {
   defenderModifierFingerprint?: string;
   defenderParticipantId: string;
   encounterId: string;
-  expectedRevision?: string;
+  executionGroupId: string;
+  expectedRevision: string;
   modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
+  opportunityId?: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  taskId: string;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
   weaponName?: string;
@@ -740,12 +864,15 @@ export async function rollCombatAttackOnServer(input: {
       defenderDbParryRaw: input.defenderDbParryRaw,
       defenderModifierFingerprint: input.defenderModifierFingerprint,
       defenderParticipantId: input.defenderParticipantId,
+      executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
       modifierValidationTaskId: input.modifierValidationTaskId,
       ob: input.ob,
       obSkillRaw: input.obSkillRaw,
+      opportunityId: input.opportunityId,
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
+      taskId: input.taskId,
       weaponCriticalCode: input.weaponCriticalCode,
       weaponDamageClass: input.weaponDamageClass,
       weaponName: input.weaponName,
@@ -758,20 +885,20 @@ export async function rollCombatAttackOnServer(input: {
 
 export async function rollCombatParryOnServer(input: {
   attackResultId: string;
-  attackerParticipantId?: string;
+  attackerParticipantId: string;
   dbParryRaw: number;
-  defenderParticipantId?: string;
+  defenderParticipantId: string;
   encounterId: string;
-  executionGroupId?: string;
-  expectedRevision?: string;
+  executionGroupId: string;
+  expectedRevision: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
   opportunityId?: string;
   parryBase: number;
   parrySourceLabel?: string;
-  phase?: "phase1" | "phase2";
+  phase: "phase1" | "phase2";
   scenarioParticipantId: string;
-  taskId?: string;
+  taskId: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 }): Promise<EncounterSession> {
@@ -805,20 +932,20 @@ export async function rollCombatParryOnServer(input: {
 
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
-  attackerParticipantId?: string;
+  attackerParticipantId: string;
   dbParryRaw: number;
-  defenderParticipantId?: string;
+  defenderParticipantId: string;
   encounterId: string;
-  executionGroupId?: string;
-  expectedRevision?: string;
+  executionGroupId: string;
+  expectedRevision: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
   opportunityId?: string;
   parryBase: number;
   parrySourceLabel?: string;
-  phase?: "phase1" | "phase2";
+  phase: "phase1" | "phase2";
   scenarioParticipantId: string;
-  taskId?: string;
+  taskId: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 }): Promise<{

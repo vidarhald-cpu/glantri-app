@@ -442,7 +442,47 @@ function parseCombatDeclarationPhaseAttackSources(
   return phase1 || phase2 ? { phase1, phase2 } : undefined;
 }
 
-function parseCombatDeclarationBody(body: unknown): {
+interface ParsedCombatTaskCommandIdentity {
+  executionGroupId: string;
+  expectedRevision: string;
+  taskId: string;
+}
+
+function parseCombatTaskCommandIdentity(
+  value: Record<string, unknown>,
+): ParsedCombatTaskCommandIdentity {
+  return {
+    executionGroupId: parseNonEmptyString(value.executionGroupId, "executionGroupId"),
+    expectedRevision: parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    taskId: parseNonEmptyString(value.taskId, "taskId"),
+  };
+}
+
+function authorizeCombatTaskCommand(input: {
+  authorization: Omit<
+    Parameters<typeof authorizeCombatProgressionTask>[0],
+    "executionGroupId" | "projection" | "taskId"
+  >;
+  encounterRevision: string;
+  identity: ParsedCombatTaskCommandIdentity;
+  roundState: CombatRoundState;
+}) {
+  if (input.identity.expectedRevision !== input.encounterRevision) {
+    return {
+      code: "stale_revision" as const,
+      message: "Combat state changed before this task could be completed.",
+      ok: false as const,
+    };
+  }
+  return authorizeCombatProgressionTask({
+    ...input.authorization,
+    executionGroupId: input.identity.executionGroupId,
+    projection: buildCombatProgressionProjection(input.roundState),
+    taskId: input.identity.taskId,
+  });
+}
+
+function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   adjustDistance?: {
     requestedDistance: ReturnType<typeof combatDistanceSchema.parse>;
     targetParticipantId: string;
@@ -465,6 +505,7 @@ function parseCombatDeclarationBody(body: unknown): {
 } {
   const value = parseBodyObject(body, "Combat declaration payload");
   const scenarioParticipantId = value.scenarioParticipantId;
+  const taskIdentity = parseCombatTaskCommandIdentity(value);
 
   if (typeof scenarioParticipantId !== "string" || scenarioParticipantId.trim().length === 0) {
     throw new Error("scenarioParticipantId is required.");
@@ -486,6 +527,7 @@ function parseCombatDeclarationBody(body: unknown): {
     additionalActionNotes:
       typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
     combatContext: scenarioParticipantCombatContextSchema.parse(value.combatContext ?? {}),
+    ...taskIdentity,
     movementId: parseOptionalDeclarationString(value.movementId),
     movementIntent: normalizeMovementIntent(value.movementIntent),
     phaseContexts:
@@ -606,7 +648,7 @@ function parseParticipantCommandBody(
   return { scenarioParticipantId };
 }
 
-function parseCombatInitiativeBody(body: unknown): {
+function parseCombatInitiativeBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   initiativeBase?: number;
   initiativeModifierAdjustment?: number;
   scenarioParticipantId: string;
@@ -629,13 +671,14 @@ function parseCombatInitiativeBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
     initiativeModifierAdjustment:
       typeof initiativeModifierAdjustment === "number" ? initiativeModifierAdjustment : undefined,
   };
 }
 
-function parseCombatExperienceBody(body: unknown): {
+function parseCombatExperienceBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   difficulty?: number;
   scenarioParticipantId: string;
 } {
@@ -652,12 +695,15 @@ function parseCombatExperienceBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
   };
 }
 
-function parseRoundEndDistanceControlRollBody(body: unknown): {
+function parseRoundEndDistanceControlRollBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   distanceProposalId: string;
+  opponentParticipantId: string;
+  pairId: string;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Round-end distance control roll payload");
@@ -666,11 +712,17 @@ function parseRoundEndDistanceControlRollBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     distanceProposalId,
+    opponentParticipantId: parseNonEmptyString(
+      value.opponentParticipantId,
+      "opponentParticipantId",
+    ),
+    pairId: parseNonEmptyString(value.pairId, "pairId"),
   };
 }
 
-function parseRoundEndHealthCheckRollBody(body: unknown): {
+function parseRoundEndHealthCheckRollBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   difficulty?: number;
   healthRollId: string;
   scenarioParticipantId: string;
@@ -688,14 +740,18 @@ function parseRoundEndHealthCheckRollBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
     healthRollId,
   };
 }
 
-function parseRoundEndDistanceControlCommitBody(body: unknown): {
+function parseRoundEndDistanceControlCommitBody(
+  body: unknown,
+): ParsedCombatTaskCommandIdentity & {
   distanceOverride?: number;
   distanceProposalId: string;
+  pairId: string;
 } {
   const value = parseBodyObject(body, "Round-end distance control commit payload");
   const distanceProposalId = parseNonEmptyString(value.distanceProposalId, "distanceProposalId");
@@ -707,12 +763,14 @@ function parseRoundEndDistanceControlCommitBody(body: unknown): {
     throw new Error("distanceOverride must be a number.");
   }
   return {
+    ...parseCombatTaskCommandIdentity(value),
     distanceOverride: typeof distanceOverride === "number" ? distanceOverride : undefined,
     distanceProposalId,
+    pairId: parseNonEmptyString(value.pairId, "pairId"),
   };
 }
 
-function parseCombatExperienceDifficultyBody(body: unknown): {
+function parseCombatExperienceDifficultyBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   difficulty: number;
 } {
   const value = parseBodyObject(body, "Combat Experience difficulty payload");
@@ -722,7 +780,7 @@ function parseCombatExperienceDifficultyBody(body: unknown): {
     throw new Error("difficulty must be a positive integer.");
   }
 
-  return { difficulty };
+  return { ...parseCombatTaskCommandIdentity(value), difficulty };
 }
 
 function parsePairDistanceBody(body: unknown): {
@@ -783,7 +841,7 @@ function parseCombatRoundAdvanceBody(body: unknown): {
   };
 }
 
-function parsePhaseAttackBackOutBody(body: unknown): {
+function parsePhaseAttackBackOutBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
 } {
@@ -792,6 +850,7 @@ function parsePhaseAttackBackOutBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     phase: combatRoundPhaseSchema.parse(value.phase),
   };
 }
@@ -812,16 +871,16 @@ function parseNonEmptyString(value: unknown, label: string): string {
   return value;
 }
 
-function parseCombatAttackBody(body: unknown): {
+function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   actionId?: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
   defenderModifierFingerprint?: string;
   defenderParticipantId: string;
-  expectedRevision?: string;
   modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
+  opportunityId?: string;
   attackerModifierFingerprint?: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
@@ -852,10 +911,6 @@ function parseCombatAttackBody(body: unknown): {
     typeof value.weaponDamageClass === "string" && value.weaponDamageClass.trim().length > 0
       ? value.weaponDamageClass
       : undefined;
-  const expectedRevision =
-    typeof value.expectedRevision === "string" && value.expectedRevision.trim().length > 0
-      ? value.expectedRevision
-      : undefined;
   const modifierValidationTaskId =
     typeof value.modifierValidationTaskId === "string" &&
     value.modifierValidationTaskId.trim().length > 0
@@ -872,15 +927,19 @@ function parseCombatAttackBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     actionId,
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
     defenderModifierFingerprint,
     defenderParticipantId,
-    expectedRevision,
     modifierValidationTaskId,
     ob: parseInteger(value.ob, "ob"),
     obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
+    opportunityId:
+      value.opportunityId === undefined
+        ? undefined
+        : parseNonEmptyString(value.opportunityId, "opportunityId"),
     attackerModifierFingerprint,
     phase,
     weaponCriticalCode,
@@ -901,21 +960,18 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
   return value;
 }
 
-function parseCombatParryBody(body: unknown): {
+function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   attackResultId: string;
-  attackerParticipantId?: string;
+  attackerParticipantId: string;
   dbParryRaw: number;
-  defenderParticipantId?: string;
-  executionGroupId?: string;
-  expectedRevision?: string;
+  defenderParticipantId: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
   opportunityId?: string;
   parryBase: number;
   parrySourceLabel?: string;
-  phase?: CombatRoundPhase;
+  phase: CombatRoundPhase;
   scenarioParticipantId: string;
-  taskId?: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 } {
@@ -929,24 +985,17 @@ function parseCombatParryBody(body: unknown): {
 
   return {
     ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
     attackResultId,
-    attackerParticipantId:
-      value.attackerParticipantId === undefined
-        ? undefined
-        : parseNonEmptyString(value.attackerParticipantId, "attackerParticipantId"),
+    attackerParticipantId: parseNonEmptyString(
+      value.attackerParticipantId,
+      "attackerParticipantId",
+    ),
     dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
-    defenderParticipantId:
-      value.defenderParticipantId === undefined
-        ? undefined
-        : parseNonEmptyString(value.defenderParticipantId, "defenderParticipantId"),
-    executionGroupId:
-      value.executionGroupId === undefined
-        ? undefined
-        : parseNonEmptyString(value.executionGroupId, "executionGroupId"),
-    expectedRevision:
-      value.expectedRevision === undefined
-        ? undefined
-        : parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    defenderParticipantId: parseNonEmptyString(
+      value.defenderParticipantId,
+      "defenderParticipantId",
+    ),
     mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
     offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
     opportunityId:
@@ -955,8 +1004,7 @@ function parseCombatParryBody(body: unknown): {
         : parseNonEmptyString(value.opportunityId, "opportunityId"),
     parryBase: parseInteger(value.parryBase, "parryBase"),
     parrySourceLabel,
-    phase: value.phase === undefined ? undefined : combatRoundPhaseSchema.parse(value.phase),
-    taskId: value.taskId === undefined ? undefined : parseNonEmptyString(value.taskId, "taskId"),
+    phase: combatRoundPhaseSchema.parse(value.phase),
     usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
     usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
   };
@@ -3195,23 +3243,36 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      // After DE this endpoint also serves the existing GM modifier-review/edit workflow. That
-      // legacy command remains governed by its current guards until modifier review is migrated.
       const progressionProjection = buildCombatProgressionProjection(roundState);
-      if (progressionProjection.boundary.kind === "declaration") {
-        const authorization = authorizeCombatProgressionTask({
+      const commandType =
+        progressionProjection.boundary.kind === "phase1_modifier_review"
+          ? "review_modifiers_phase1"
+          : progressionProjection.boundary.kind === "phase2_modifier_review"
+            ? "review_modifiers_phase2"
+            : "declare_action";
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
           actor: gmAuthorizedOperation
             ? { kind: "gm" }
             : { kind: "combatant", participantId: encounterParticipant.id },
-          commandType: "declare_action",
+          commandType,
           participantId: encounterParticipant.id,
-          projection: progressionProjection,
+          phase:
+            commandType === "review_modifiers_phase1"
+              ? "phase1"
+              : commandType === "review_modifiers_phase2"
+                ? "phase2"
+                : undefined,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
+      });
+      if (!authorization.ok) {
+        return reply.code(409).send({
+          code: authorization.code,
+          error: "Declaration or modifier review is closed for this participant.",
         });
-        if (!authorization.ok) {
-          return reply.code(409).send({
-            error: "Declaration is closed for this round.",
-          });
-        }
       }
 
       const submittedMovementIntent = normalizeCombatDeclarationMovementIntent({
@@ -3675,6 +3736,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       try {
         const encounterId = parseId(request.params, "encounterId", "Encounter id");
         const body = parseBodyObject(request.body, "Double Attack decision payload");
+        const identity = parseCombatTaskCommandIdentity(body);
+        const opportunityId = parseNonEmptyString(body.opportunityId, "opportunityId");
         const scenarioParticipantId = parseOptionalDeclarationString(body.scenarioParticipantId);
         const decision =
           body.decision === "cancel"
@@ -3709,6 +3772,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "decide_double_attack_phase2",
+            opportunityId,
+            participantId: encounterParticipant.id,
+            phase: "phase2",
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const createdAt = new Date().toISOString();
         const nextRoundState = decideCombatRoundDoubleAttackPhase2({
           command: { createdAt, createdByUserId: user.id },
@@ -3755,6 +3836,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       try {
         const encounterId = parseId(request.params, "encounterId", "Encounter id");
         const body = parseBodyObject(request.body, "Adjust Distance response payload");
+        const identity = parseCombatTaskCommandIdentity(body);
         const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
         const scenarioParticipantId = parseNonEmptyString(
           body.scenarioParticipantId,
@@ -3797,19 +3879,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return reply
             .code(409)
             .send({ error: "The defender must choose whether to oppose the maneuver." });
-        const authorization = authorizeCombatProgressionTask({
-          actor:
-            access.mode === "gm"
-              ? { kind: "gm" }
-              : { kind: "combatant", participantId: encounterParticipant.id },
-          commandType: "respond_adjust_distance",
-          opponentParticipantId: proposal.attackerParticipantId,
-          opportunityId: proposal.phase1OpportunityId,
-          pairId: proposal.pairId,
-          participantId: encounterParticipant.id,
-          phase: "phase1",
-          projection: buildCombatProgressionProjection(roundState),
-          proposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "respond_adjust_distance",
+            opponentParticipantId: proposal.attackerParticipantId,
+            opportunityId: proposal.phase1OpportunityId,
+            pairId: proposal.pairId,
+            participantId: encounterParticipant.id,
+            phase: "phase1",
+            proposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!authorization.ok)
           return reply
@@ -3854,6 +3940,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       try {
         const encounterId = parseId(request.params, "encounterId", "Encounter id");
         const body = parseBodyObject(request.body, "Adjust Distance review payload");
+        const identity = parseCombatTaskCommandIdentity(body);
         const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
         const value = body.value === undefined ? 0 : body.value;
         if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
@@ -3879,15 +3966,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const proposal = roundState.adjustDistanceProposals.find(
           (entry) => entry.id === proposalId,
         );
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "review_adjust_distance_roll_adjustment",
-          opponentParticipantId: proposal?.defenderParticipantId,
-          opportunityId: proposal?.phase1OpportunityId,
-          pairId: proposal?.pairId,
-          phase: "phase1",
-          projection: buildCombatProgressionProjection(roundState),
-          proposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "review_adjust_distance_roll_adjustment",
+            opponentParticipantId: proposal?.defenderParticipantId,
+            opportunityId: proposal?.phase1OpportunityId,
+            pairId: proposal?.pairId,
+            phase: "phase1",
+            proposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!authorization.ok)
           return reply.code(409).send({ error: "The GM must confirm the maneuver adjustment." });
@@ -3922,6 +4013,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const body = parseBodyObject(request.body, "Adjust Distance roll payload");
+      const identity = parseCombatTaskCommandIdentity(body);
       const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
       const scenarioParticipantId = parseNonEmptyString(
         body.scenarioParticipantId,
@@ -3975,22 +4067,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (side === "defender" && proposal.defenderRoll)
       )
         return reply.code(409).send({ error: "This participant has already rolled Dodge." });
-      const authorization = authorizeCombatProgressionTask({
-        actor:
-          access.mode === "gm"
-            ? { kind: "gm" }
-            : { kind: "combatant", participantId: encounterParticipant.id },
-        commandType: "roll_adjust_distance",
-        opponentParticipantId:
-          encounterParticipant.id === proposal.attackerParticipantId
-            ? proposal.defenderParticipantId
-            : proposal.attackerParticipantId,
-        opportunityId: proposal.phase1OpportunityId,
-        pairId: proposal.pairId,
-        participantId: encounterParticipant.id,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_adjust_distance",
+          opponentParticipantId:
+            encounterParticipant.id === proposal.attackerParticipantId
+              ? proposal.defenderParticipantId
+              : proposal.attackerParticipantId,
+          opportunityId: proposal.phase1OpportunityId,
+          pairId: proposal.pairId,
+          participantId: encounterParticipant.id,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
       });
       if (!authorization.ok)
         return reply
@@ -4119,6 +4215,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       try {
         const encounterId = parseId(request.params, "encounterId", "Encounter id");
         const body = parseBodyObject(request.body, "Adjust Distance commit payload");
+        const identity = parseCombatTaskCommandIdentity(body);
         const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
         const committedDistance = combatDistanceSchema.parse(body.committedDistance);
         const outcome =
@@ -4148,15 +4245,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const proposal = roundState.adjustDistanceProposals.find(
           (entry) => entry.id === proposalId,
         );
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "commit_adjust_distance",
-          opponentParticipantId: proposal?.defenderParticipantId,
-          opportunityId: proposal?.phase1OpportunityId,
-          pairId: proposal?.pairId,
-          phase: "phase1",
-          projection: buildCombatProgressionProjection(roundState),
-          proposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "commit_adjust_distance",
+            opponentParticipantId: proposal?.defenderParticipantId,
+            opportunityId: proposal?.phase1OpportunityId,
+            pairId: proposal?.pairId,
+            phase: "phase1",
+            proposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!authorization.ok)
           return reply
@@ -4267,6 +4368,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const body = parseBodyObject(request.body, "Feint roll payload");
+      const identity = parseCombatTaskCommandIdentity(body);
       const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
       const scenarioParticipantId = parseNonEmptyString(
         body.scenarioParticipantId,
@@ -4317,21 +4419,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : "The defender must roll resistance.",
         });
       }
-      const authorization = authorizeCombatProgressionTask({
-        actor:
-          access.mode === "gm"
-            ? { kind: "gm" }
-            : { kind: "combatant", participantId: encounterParticipant.id },
-        commandType: "roll_feint",
-        opponentParticipantId: isAttackerRoll
-          ? proposal.defenderParticipantId
-          : proposal.attackerParticipantId,
-        opportunityId: proposal.phase1OpportunityId,
-        pairId: proposal.pairId,
-        participantId: encounterParticipant.id,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_feint",
+          opponentParticipantId: isAttackerRoll
+            ? proposal.defenderParticipantId
+            : proposal.attackerParticipantId,
+          opportunityId: proposal.phase1OpportunityId,
+          pairId: proposal.pairId,
+          participantId: encounterParticipant.id,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
       });
       if (!authorization.ok) {
         return reply.code(409).send({ error: "Feint rolls are not currently available." });
@@ -4455,6 +4561,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const body = parseBodyObject(request.body, "Feint commit payload");
+      const identity = parseCombatTaskCommandIdentity(body);
       const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
       const gmAttackerDbParryModifier =
         body.gmAttackerDbParryModifier === undefined
@@ -4499,15 +4606,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           .code(409)
           .send({ error: "The GM must commit the feint result before Phase 2." });
       }
-      const authorization = authorizeCombatProgressionTask({
-        actor: { kind: "gm" },
-        commandType: "commit_feint_result",
-        opponentParticipantId: existingProposal.defenderParticipantId,
-        opportunityId: existingProposal.phase1OpportunityId,
-        pairId: existingProposal.pairId,
-        phase: "phase1",
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId,
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: { kind: "gm" },
+          commandType: "commit_feint_result",
+          opponentParticipantId: existingProposal.defenderParticipantId,
+          opportunityId: existingProposal.phase1OpportunityId,
+          pairId: existingProposal.pairId,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
       });
       if (!authorization.ok) {
         return reply
@@ -4665,14 +4776,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const initiativeAuthorization = authorizeCombatProgressionTask({
-        actor: gmAuthorizedOperation
-          ? { kind: "gm" }
-          : { kind: "combatant", participantId: encounterParticipant.id },
-        commandType: phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
-        participantId: encounterParticipant.id,
-        phase,
-        projection: buildCombatProgressionProjection(roundState),
+      const initiativeAuthorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: gmAuthorizedOperation
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
+          participantId: encounterParticipant.id,
+          phase,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
       });
       if (!initiativeAuthorization.ok) {
         return reply.code(409).send({
@@ -4829,6 +4944,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           difficulty: body.difficulty,
           state: roundState,
         });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "set_combat_experience_difficulty",
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const submittedAt = new Date().toISOString();
         const savedEncounter = await encounterService.updateEncounter({
           campaignId: access.campaignId,
@@ -5052,6 +5179,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
 
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "roll_combat_experience",
+            participantId: encounterParticipant.id,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
+
         const submittedAt = new Date().toISOString();
         const combatExperienceSkillLookup =
           await getCombatExperienceSkillLookupForScenarioParticipant(scenarioParticipant);
@@ -5193,24 +5336,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const distanceProposal = roundState.roundEndReview?.proposedDistances.find(
-          (proposal) => proposal.id === body.distanceProposalId,
-        );
-        const opponentParticipantId = distanceProposal
-          ? distanceProposal.participantAId === encounterParticipant.id
-            ? distanceProposal.participantBId
-            : distanceProposal.participantAId
-          : undefined;
-        const authorization = authorizeCombatProgressionTask({
-          actor: gmAuthorizedOperation
-            ? { kind: "gm" }
-            : { kind: "combatant", participantId: encounterParticipant.id },
-          commandType: "roll_round_end_distance_control",
-          opponentParticipantId,
-          pairId: distanceProposal?.pairKey,
-          participantId: encounterParticipant.id,
-          projection: buildCombatProgressionProjection(roundState),
-          proposalId: body.distanceProposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "roll_round_end_distance_control",
+            opponentParticipantId: body.opponentParticipantId,
+            pairId: body.pairId,
+            participantId: encounterParticipant.id,
+            proposalId: body.distanceProposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
         });
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -5302,40 +5441,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
 
+        const body = parseBodyObject(request.body, "Current distance-control roll payload");
+        const identity = parseCombatTaskCommandIdentity(body);
+        const participantId = parseNonEmptyString(body.participantId, "participantId");
+        const opponentParticipantId = parseNonEmptyString(
+          body.opponentParticipantId,
+          "opponentParticipantId",
+        );
+        const pairId = parseNonEmptyString(body.pairId, "pairId");
+        const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
         const roundState = initializeMaterializedCombatRoundState({
           encounter,
           scenarioParticipants,
         });
-        const projection = buildCombatProgressionProjection(roundState);
-        const currentTasks = projection.boundary.processes
-          .flatMap((process) => process.stages)
-          .flatMap((stage) => stage.executionGroups)
-          .flatMap((group) => group.tasks)
-          .filter((task) => task.kind === "distance_roll" && task.state === "executable");
-        const cursorTasks = roundState.currentCursor?.participantId
-          ? currentTasks.filter(
-              (task) =>
-                task.owner?.kind === "combatant" &&
-                task.owner.participantId === roundState.currentCursor?.participantId,
-            )
-          : [];
-        const selectedTasks = cursorTasks.length > 0 ? cursorTasks : currentTasks;
-        if (selectedTasks.length !== 1) {
-          throw new Error("No current distance-control roll is open.");
-        }
-        const currentTask = selectedTasks[0]!;
-        if (currentTask.owner?.kind !== "combatant" || !currentTask.identity.proposalId) {
-          throw new Error("The current distance-control task has no participant owner.");
-        }
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "roll_round_end_distance_control",
-          opponentParticipantId: currentTask.identity.opponentParticipantId,
-          pairId: currentTask.identity.pairId,
-          participantId: currentTask.owner.participantId,
-          projection,
-          proposalId: currentTask.identity.proposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "roll_round_end_distance_control",
+            opponentParticipantId,
+            pairId,
+            participantId,
+            proposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -5347,8 +5478,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             createdAt: submittedAt,
             createdByUserId: user.id,
           },
-          distanceProposalId: currentTask.identity.proposalId,
-          participantId: currentTask.owner.participantId,
+          distanceProposalId: proposalId,
+          participantId,
           participantInputs: buildRoundEndDistanceControlInputs({
             encounter,
             roundState,
@@ -5405,15 +5536,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const proposal = roundState.roundEndReview?.proposedDistances.find(
-          (candidate) => candidate.id === body.distanceProposalId,
-        );
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "commit_round_end_distance_control",
-          pairId: proposal?.pairKey,
-          projection: buildCombatProgressionProjection(roundState),
-          proposalId: body.distanceProposalId,
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "commit_round_end_distance_control",
+            pairId: body.pairId,
+            proposalId: body.distanceProposalId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
         });
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -5465,10 +5597,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!access || access.mode !== "gm") {
           return reply.code(403).send({ error: "Only GM users can commit participant review." });
         }
-        const body = parseParticipantCommandBody(
-          parseBodyObject(request.body, "Round-end participant review payload"),
-          "Round-end participant review payload",
-        );
+        const bodyValue = parseBodyObject(request.body, "Round-end participant review payload");
+        const body = {
+          ...parseParticipantCommandBody(bodyValue, "Round-end participant review payload"),
+          ...parseCombatTaskCommandIdentity(bodyValue),
+        };
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
         const participantResolution = resolveCombatParticipantForRequest({
           accessMode: access.mode,
@@ -5486,11 +5619,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "commit_round_end_participant_review",
-          participantId: encounterParticipant.id,
-          projection: buildCombatProgressionProjection(roundState),
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "commit_round_end_participant_review",
+            participantId: encounterParticipant.id,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
         });
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -5609,15 +5746,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
-      const authorization = authorizeCombatProgressionTask({
-        actor: gmAuthorizedOperation
-          ? { kind: "gm" }
-          : { kind: "combatant", participantId: encounterParticipant.id },
-        commandType: "roll_round_end_health_check",
-        healthRollId: body.healthRollId,
-        participantId: encounterParticipant.id,
-        projection: buildCombatProgressionProjection(roundState),
-        proposalId: body.healthRollId,
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: gmAuthorizedOperation
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_round_end_health_check",
+          healthRollId: body.healthRollId,
+          participantId: encounterParticipant.id,
+          proposalId: body.healthRollId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
       });
       if (!authorization.ok) {
         return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -5747,6 +5888,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "submit_phase_initiative_choice",
+            participantId: encounterParticipant.id,
+            phase: body.phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const backedOut = backOutCombatRoundPhaseAttack({
           combatContext: scenarioParticipant.state.combat.combatContext,
           command: {
@@ -5870,6 +6028,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "submit_phase_initiative_choice",
+            participantId: encounterParticipant.id,
+            phase: body.phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
         const continued = continueCombatRoundPhaseAttack({
           command: {
             createdAt: submittedAt,
@@ -5930,18 +6105,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
 
+        const identity = parseCombatTaskCommandIdentity(
+          parseBodyObject(request.body, "Round-end preparation payload"),
+        );
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
         const roundState = initializeMaterializedCombatRoundState({
           encounter,
           scenarioParticipants,
         });
-        if (roundState.roundEndReview?.roundNumber === roundState.roundNumber) {
-          return { encounter };
-        }
-        const authorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "prepare_round_end_review",
-          projection: buildCombatProgressionProjection(roundState),
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "prepare_round_end_review",
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
@@ -6774,6 +6953,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const value = parseBodyObject(request.body, "Phase initiative resolution payload");
+        const identity = parseCombatTaskCommandIdentity(value);
         const phase = combatRoundPhaseSchema.parse(value.phase);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
         const membership = resolveEncounterParticipantMembership({
@@ -6784,11 +6964,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
-        const initiativeCommitAuthorization = authorizeCombatProgressionTask({
-          actor: { kind: "gm" },
-          commandType: "commit_phase_initiative_resolution",
-          phase,
-          projection: buildCombatProgressionProjection(roundState),
+        const initiativeCommitAuthorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "commit_phase_initiative_resolution",
+            phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
         });
         if (!initiativeCommitAuthorization.ok) {
           return reply.code(400).send({
@@ -6994,52 +7178,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
-      const progressionProjection = buildCombatProgressionProjection(roundState);
-      const projectedAttackOpportunity = getCombatRoundPhaseAttackCandidates({
-        phase: body.phase,
-        state: roundState,
-      }).find((candidate) => candidate.participantId === encounterParticipant.id);
-      const projectedAttacker = roundState.participants.find(
-        (participant) => participant.participantId === encounterParticipant.id,
-      );
-      const isMigratedStandardAttack =
-        projectedAttacker?.declaration?.actionId !== "feint_attack" &&
-        projectedAttacker?.declaration?.actionId !== "adjust_range_attack";
-      let projectedAttackTask = getCombatProgressionTasks(progressionProjection).find(
-        (task) =>
-          task.kind === "attack" &&
-          task.state === "executable" &&
-          task.owner?.kind === "combatant" &&
-          task.owner.participantId === encounterParticipant.id &&
-          task.identity.phase === body.phase &&
-          (projectedAttackOpportunity?.id === undefined ||
-            task.identity.opportunityId === projectedAttackOpportunity.id),
-      );
-      if (isMigratedStandardAttack) {
-        const attackAuthorization = authorizeCombatProgressionTask({
+      const attackAuthorization = authorizeCombatTaskCommand({
+        authorization: {
           actor:
             access.mode === "gm"
               ? { kind: "gm" }
               : { kind: "combatant", participantId: encounterParticipant.id },
           commandType: "roll_attack",
-          opportunityId: projectedAttackOpportunity?.id,
+          opportunityId: body.opportunityId,
           participantId: encounterParticipant.id,
           phase: body.phase,
-          projection: progressionProjection,
-        });
-        if (!attackAuthorization.ok) {
-          return reply.code(409).send({
-            error: "Attack is not open for this participant.",
-          });
-        }
-        projectedAttackTask = attackAuthorization.task;
-      }
-      if (body.expectedRevision && body.expectedRevision !== encounter.updatedAt) {
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
+      });
+      if (!attackAuthorization.ok) {
         return reply.code(409).send({
-          code: "stale_revision",
-          error: "Combat modifiers changed. Refresh combat before rolling.",
+          code: attackAuthorization.code,
+          error:
+            attackAuthorization.code === "stale_revision"
+              ? "Combat modifiers changed. Refresh combat before rolling."
+              : "Attack is not open for this participant.",
         });
       }
+      const projectedAttackTask = attackAuthorization.task;
       if (
         body.modifierValidationTaskId &&
         body.modifierValidationTaskId !== projectedAttackTask?.id
@@ -7342,13 +7505,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (body.expectedRevision && body.expectedRevision !== encounter.updatedAt) {
-        return reply.code(409).send({
-          code: "stale_revision",
-          error: "Combat state changed. Review the current action before continuing.",
-        });
-      }
-
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
@@ -7370,22 +7526,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Parry is not open for this attack.",
         });
       }
-      const parryAuthorization = authorizeCombatProgressionTask({
-        actor:
-          access.mode === "gm"
-            ? { kind: "gm" }
-            : { kind: "combatant", participantId: encounterParticipant.id },
-        attackResultId: body.attackResultId,
-        commandType: "roll_parry",
-        executionGroupId: body.executionGroupId,
-        opportunityId: body.opportunityId ?? attackResult?.attackOpportunityId,
-        participantId: encounterParticipant.id,
-        phase: body.phase ?? attackResult?.phase,
-        projection: buildCombatProgressionProjection(roundState),
-        taskId: body.taskId,
+      const parryAuthorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          attackResultId: body.attackResultId,
+          commandType: "roll_parry",
+          opportunityId: body.opportunityId,
+          participantId: encounterParticipant.id,
+          phase: body.phase,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
       });
       if (!parryAuthorization.ok) {
         return reply.code(409).send({
+          code: parryAuthorization.code,
           error: "Parry is not open for this participant.",
         });
       }

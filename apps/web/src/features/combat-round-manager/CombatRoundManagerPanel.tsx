@@ -139,12 +139,10 @@ import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutMo
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   advanceCombatRoundCurrentStepOnServer,
-  advanceCurrentCombatPhaseResolutionOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
   commitCurrentCombatPhaseDamageOnServer,
-  completeCurrentCombatPhaseResolutionOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
   rollCombatFeintOnServer,
@@ -167,7 +165,6 @@ import {
   resolveCurrentCombatPhaseDamageOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
-  skipCombatRoundCurrentActionOnServer,
   submitCombatDeclarationOnServer,
   prepareCombatRoundEndReviewOnServer,
   loadEncounterById,
@@ -4300,8 +4297,15 @@ export default function CombatRoundManagerPanel({
     if (saving || !selectedRoundIsActive || inspectorRoundEndTask?.kind !== "round_end_prepare") {
       return;
     }
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: currentActionPresentation?.primaryAction.descriptor,
+      expectedCommandTypes: ["prepare_round_end_review"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "taskId"],
+    });
+    if (!descriptor) return;
 
-    const attemptKey = `${encounter.id}:${roundState.roundNumber}`;
+    const attemptKey = `${encounter.id}:${descriptor.taskId}:${descriptor.expectedRevision}`;
 
     if (roundEndAutoPrepareAttemptRef.current === attemptKey) {
       return;
@@ -4309,7 +4313,12 @@ export default function CombatRoundManagerPanel({
 
     roundEndAutoPrepareAttemptRef.current = attemptKey;
     setSaving(true);
-    void prepareCombatRoundEndReviewOnServer({ encounterId: encounter.id })
+    void prepareCombatRoundEndReviewOnServer({
+      encounterId: encounter.id,
+      executionGroupId: descriptor.executionGroupId!,
+      expectedRevision: descriptor.expectedRevision,
+      taskId: descriptor.taskId,
+    })
       .then(({ encounter: nextEncounter }) => {
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
@@ -4329,6 +4338,7 @@ export default function CombatRoundManagerPanel({
   }, [
     acceptCanonicalEncounterState,
     encounter.id,
+    currentActionPresentation,
     inspectorRoundEndTask?.kind,
     onEncounterUpdated,
     saving,
@@ -4704,9 +4714,6 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceWindowOpen &&
     !combatExperienceRollRecorded &&
     inspectorCombatExperienceDifficultyDraftChanged;
-  const inspectorCombatExperienceDifficultyCommandPending =
-    inspectorCombatExperienceDifficultyStartPending ||
-    inspectorCombatExperienceDifficultyUpdatePending;
   const inspectorCombatExperienceNoRollAvailable =
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceWindowOpen &&
@@ -5263,21 +5270,6 @@ export default function CombatRoundManagerPanel({
     participantLabelsById: roundParticipantLabelsById,
     proposal: inspectorAdjustDistanceProposal,
   });
-  const inspectorAdjustDistanceExpectedParticipantId = inspectorAdjustDistanceProposal
-    ? projectedAdjustDistanceTask?.owner?.kind === "combatant"
-      ? projectedAdjustDistanceTask.owner.participantId
-      : undefined
-    : undefined;
-  const inspectorAdjustDistanceExpectedEncounterParticipant = encounter.participants.find(
-    (participant) => participant.id === inspectorAdjustDistanceExpectedParticipantId,
-  );
-  const inspectorAdjustDistanceExpectedScenarioParticipant =
-    inspectorAdjustDistanceExpectedEncounterParticipant
-      ? findScenarioParticipantForEncounterParticipant({
-          encounterParticipant: inspectorAdjustDistanceExpectedEncounterParticipant,
-          scenarioParticipants: effectiveScenarioParticipants,
-        })
-      : undefined;
   useEffect(() => {
     if (!inspectorAdjustDistanceProposal) return;
     setInspectorAdjustDistanceCommittedDistance(
@@ -5294,20 +5286,6 @@ export default function CombatRoundManagerPanel({
     );
     setInspectorAdjustDistanceReviewNote(inspectorAdjustDistanceProposal.review?.notes ?? "");
   }, [inspectorAdjustDistanceProposal]);
-  const inspectorFeintExpectedParticipantId = inspectorFeintProposal
-    ? inspectorFeintProposal.attackerRoll
-      ? inspectorFeintProposal.defenderParticipantId
-      : inspectorFeintProposal.attackerParticipantId
-    : undefined;
-  const inspectorFeintExpectedEncounterParticipant = encounter.participants.find(
-    (participant) => participant.id === inspectorFeintExpectedParticipantId,
-  );
-  const inspectorFeintExpectedScenarioParticipant = inspectorFeintExpectedEncounterParticipant
-    ? findScenarioParticipantForEncounterParticipant({
-        encounterParticipant: inspectorFeintExpectedEncounterParticipant,
-        scenarioParticipants: effectiveScenarioParticipants,
-      })
-    : undefined;
   useEffect(() => {
     if (!inspectorFeintProposal?.review) return;
     setInspectorFeintAttackerModifier(
@@ -5354,13 +5332,22 @@ export default function CombatRoundManagerPanel({
     !inspectorCombatExperienceDraftDifficultyValid
       ? "Enter CE difficulty."
       : undefined;
-  const inspectorActionValidationMessage = inspectorCombatExperienceDifficultyCommandPending
-    ? inspectorCombatExperienceDifficultyValidationMessage
-    : (inspectorCombatExperienceDifficultyValidationMessage ??
-      inspectorTargetValidationMessage ??
-      inspectorAttackSourceValidationMessage ??
-      inspectorDamageCommitValidationMessage ??
-      inspectorRoundEndActionValidationMessage);
+  const inspectorCurrentCommandType =
+    currentActionPresentation?.primaryAction.descriptor?.commandType;
+  const inspectorActionValidationMessage =
+    inspectorCurrentCommandType === "set_combat_experience_difficulty"
+      ? inspectorCombatExperienceDifficultyValidationMessage
+      : inspectorCurrentCommandType === "declare_action" ||
+          inspectorCurrentCommandType === "review_modifiers_phase1" ||
+          inspectorCurrentCommandType === "review_modifiers_phase2"
+        ? inspectorTargetValidationMessage
+        : inspectorCurrentCommandType === "roll_attack"
+          ? (inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage)
+          : inspectorCurrentCommandType === "commit_phase_damage"
+            ? inspectorDamageCommitValidationMessage
+            : inspectorCurrentCommandType === "prepare_round_end_review"
+              ? inspectorRoundEndActionValidationMessage
+              : undefined;
   const inspectorCombatExperienceActionLabel = inspectorCombatExperienceDifficultyStartPending
     ? "Start Combat Experience rolls"
     : inspectorCombatExperienceDifficultyUpdatePending ||
@@ -5504,30 +5491,7 @@ export default function CombatRoundManagerPanel({
   const inspectorSkipActionSelected =
     inspectorSkipActionOutcomeSelectorAvailable &&
     inspectorCurrentActionOutcomeSelection === "skip";
-  const inspectorActionButtonDisabled =
-    saving ||
-    (projectedBoundaryTransitionAction
-      ? false
-      : inspectorAdjustDistanceProposal
-        ? (inspectorAdjustDistanceProposal.status === "awaiting_defender_response" ||
-            inspectorAdjustDistanceProposal.status === "awaiting_rolls") &&
-          !inspectorAdjustDistanceExpectedScenarioParticipant
-        : inspectorFeintProposal
-          ? inspectorFeintProposal.status === "awaiting_rolls" &&
-            !inspectorFeintExpectedScenarioParticipant
-          : inspectorDoubleAttackDecisionAvailable
-            ? false
-            : inspectorPhaseAttackChoiceIsBackOut
-              ? Boolean(inspectorSnapshot) || !inspectorCanBackOutPhaseAttack
-              : (inspectorIsInspectionOnly &&
-                  inspector.step !== "select_actions" &&
-                  !inspectorCombatExperienceRequired &&
-                  !inspectorRoundEndDistanceAction) ||
-                inspectorPhaseInitiativeChoiceSubmitted ||
-                Boolean(inspectorActionValidationMessage) ||
-                inspectorSelectedAttackAlreadyRolled ||
-                inspectorDamageCommitted ||
-                Boolean(inspectorSnapshot));
+  const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage);
   const inspectorEffectiveActionButtonDisabled = inspectorSkipActionSelected
     ? saving ||
       Boolean(inspectorSnapshot) ||
@@ -6684,7 +6648,7 @@ export default function CombatRoundManagerPanel({
     });
   }
 
-  async function commitCurrentStep() {
+  async function commitCurrentStep(candidate?: CurrentActionCommandDescriptor) {
     if (isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionAction) {
       return;
     }
@@ -6701,6 +6665,16 @@ export default function CombatRoundManagerPanel({
         visibility: encounter.roleplayState?.visibility,
       })
     ) {
+      const descriptor = resolveCombatTaskCommandContext({
+        descriptor: candidate,
+        expectedCommandTypes: ["commit_phase_initiative_resolution"],
+        presentation: currentActionPresentation,
+        requiredFields: ["executionGroupId", "expectedRevision", "phase", "taskId"],
+      });
+      if (!descriptor || descriptor.phase !== phaseInitiativeResolutionPhase) {
+        setSaveError("Combat state changed. Review the current action before continuing.");
+        return;
+      }
       setSaving(true);
 
       try {
@@ -6710,7 +6684,10 @@ export default function CombatRoundManagerPanel({
           participants,
         } = await commitPhaseInitiativeResolutionOnServer({
           encounterId: encounter.id,
-          phase: phaseInitiativeResolutionPhase,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          phase: descriptor.phase,
+          taskId: descriptor.taskId,
         });
         const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
           getCombatRoundManagerStateFromCommandEnvelope({
@@ -7075,8 +7052,22 @@ export default function CombatRoundManagerPanel({
     return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
   }
 
-  async function saveInspectorDeclaration() {
-    if (!encounter.scenarioId || !selectedScenarioParticipant || !selectedEncounterParticipant) {
+  async function saveInspectorDeclaration(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["declare_action", "review_modifiers_phase1", "review_modifiers_phase2"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+    });
+    if (!descriptor) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+    const taskScenarioParticipant = scenarioParticipantForTask(descriptor);
+    const taskEncounterParticipant = encounter.participants.find((participant) =>
+      getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
+    );
+    if (!encounter.scenarioId || !taskScenarioParticipant || !taskEncounterParticipant) {
       return;
     }
 
@@ -7134,7 +7125,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedParticipantId = taskEncounterParticipant.id;
       const actedStep = roundState.currentStep;
       const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
       const displayedParticipantIds = displayParticipants.map(
@@ -7162,6 +7153,8 @@ export default function CombatRoundManagerPanel({
         additionalActionNotes: inspectorDraft.additionalActionNotes,
         combatContext: inspectorGeneratedCombatContext,
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         feint:
           inspectorDraft.actionId === "feint_attack" && feintTargetResolution?.ok
             ? {
@@ -7201,8 +7194,9 @@ export default function CombatRoundManagerPanel({
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
         },
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        scenarioParticipantId: taskScenarioParticipant.id,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextSelection = shouldUsePersistedCursor
@@ -7248,14 +7242,38 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorFeint() {
-    if (!inspectorFeintProposal || !inspectorFeintExpectedScenarioParticipant) return;
+  function scenarioParticipantForTask(descriptor: CurrentActionCommandDescriptor) {
+    const participantId = descriptor.participantId;
+    if (!participantId) return undefined;
+    const encounterParticipant = encounter.participants.find((participant) =>
+      getCombatDistanceParticipantAliases(participant).includes(participantId),
+    );
+    return encounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+  }
+
+  async function rollInspectorFeint(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_feint"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "proposalId", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant) return;
     setSaving(true);
     try {
       const { encounter: nextEncounter } = await rollCombatFeintOnServer({
         encounterId: encounter.id,
-        proposalId: inspectorFeintProposal.id,
-        scenarioParticipantId: inspectorFeintExpectedScenarioParticipant.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        proposalId: descriptor.proposalId!,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       setRoundState(nextRoundState, nextEncounter.updatedAt);
@@ -7273,6 +7291,7 @@ export default function CombatRoundManagerPanel({
     const proposal = roundState.adjustDistanceProposals.find(
       (candidate) => candidate.id === descriptor.proposalId,
     );
+    const scenarioParticipant = scenarioParticipantForTask(descriptor);
     if (!proposal || saving) return;
     setSaving(true);
     try {
@@ -7281,12 +7300,15 @@ export default function CombatRoundManagerPanel({
         descriptor.commandType === "respond_adjust_distance" &&
         proposal.status === "awaiting_defender_response"
       ) {
-        if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
+        if (!scenarioParticipant) return;
         nextEncounter = await respondCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
           proposalId: proposal.id,
           response: inspectorAdjustDistanceResponse,
-          scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
+          scenarioParticipantId: scenarioParticipant.id,
+          taskId: descriptor.taskId,
         });
       } else if (
         descriptor.commandType === "review_adjust_distance_roll_adjustment" &&
@@ -7300,18 +7322,24 @@ export default function CombatRoundManagerPanel({
         const request = buildAdjustDistanceGmAdjustmentRequest(draft);
         nextEncounter = await reviewCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
           proposalId: proposal.id,
+          taskId: descriptor.taskId,
           ...request,
         });
       } else if (
         descriptor.commandType === "roll_adjust_distance" &&
         proposal.status === "awaiting_rolls"
       ) {
-        if (!inspectorAdjustDistanceExpectedScenarioParticipant) return;
+        if (!scenarioParticipant) return;
         nextEncounter = await rollCombatAdjustDistanceOnServer({
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
           proposalId: proposal.id,
-          scenarioParticipantId: inspectorAdjustDistanceExpectedScenarioParticipant.id,
+          scenarioParticipantId: scenarioParticipant.id,
+          taskId: descriptor.taskId,
         });
       } else if (
         descriptor.commandType === "commit_adjust_distance" &&
@@ -7320,9 +7348,12 @@ export default function CombatRoundManagerPanel({
         nextEncounter = await commitCombatAdjustDistanceOnServer({
           committedDistance: Number.parseInt(inspectorAdjustDistanceCommittedDistance, 10),
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
           notes: inspectorAdjustDistanceReviewNote || undefined,
           outcome: inspectorAdjustDistanceOutcome,
           proposalId: proposal.id,
+          taskId: descriptor.taskId,
         });
       } else {
         setSaveError("Combat state changed. Review the current action before continuing.");
@@ -7344,17 +7375,29 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function commitInspectorFeint() {
-    if (!inspectorFeintProposal?.review) return;
+  async function commitInspectorFeint(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["commit_feint_result"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "proposalId", "taskId"],
+    });
+    const proposal = descriptor
+      ? roundState.feintProposals.find((candidate) => candidate.id === descriptor.proposalId)
+      : undefined;
+    if (!descriptor || !proposal?.review) return;
     setSaving(true);
     try {
       const { encounter: nextEncounter, participants } = await commitCombatFeintOnServer({
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         gmAttackerDbParryModifier: Number.parseInt(inspectorFeintAttackerModifier, 10) || 0,
         gmDefenderDbParryModifier: Number.parseInt(inspectorFeintDefenderDbModifier, 10) || 0,
         gmDefenderSkillObModifier: Number.parseInt(inspectorFeintDefenderObModifier, 10) || 0,
         notes: inspectorFeintNote || undefined,
-        proposalId: inspectorFeintProposal.id,
+        proposalId: descriptor.proposalId!,
+        taskId: descriptor.taskId,
       });
       setScenarioParticipantOverrides((current) => ({
         ...current,
@@ -7373,8 +7416,15 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorCombatExperience() {
-    if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
+  async function rollInspectorCombatExperience(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_combat_experience"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant) {
       return;
     }
 
@@ -7388,7 +7438,11 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter, participant } = await rollCombatExperienceOnServer({
         encounterId: encounter.id,
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        phase: descriptor.phase,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextInspectionSelection = resolveCombatRoundInspectionSelection({
@@ -7416,12 +7470,15 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function backOutInspectorPhaseAttack() {
-    if (
-      !selectedScenarioParticipant ||
-      !selectedEncounterParticipant ||
-      !inspectorPhaseAttackBackOutOpportunity
-    ) {
+  async function backOutInspectorPhaseAttack(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["submit_phase_initiative_choice"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant) {
       return;
     }
 
@@ -7430,8 +7487,11 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter, participant } = await backOutPhaseAttackOnServer({
         encounterId: encounter.id,
-        phase: inspectorPhaseAttackBackOutOpportunity.phase,
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        phase: descriptor.phase!,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextInspectionSelection = resolveCombatRoundInspectionSelection({
@@ -7459,12 +7519,15 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function continueInspectorPhaseAttack() {
-    if (
-      !selectedScenarioParticipant ||
-      !selectedEncounterParticipant ||
-      !inspectorPhaseAttackBackOutOpportunity
-    ) {
+  async function continueInspectorPhaseAttack(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["submit_phase_initiative_choice"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant) {
       return;
     }
 
@@ -7473,8 +7536,11 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter, participant } = await continuePhaseAttackOnServer({
         encounterId: encounter.id,
-        phase: inspectorPhaseAttackBackOutOpportunity.phase,
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        phase: descriptor.phase!,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextInspectionSelection = resolveCombatRoundInspectionSelection({
@@ -7502,14 +7568,25 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function decideInspectorDoubleAttackPhase2() {
-    if (!selectedScenarioParticipant || !selectedEncounterParticipant) return;
+  async function decideInspectorDoubleAttackPhase2(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["decide_double_attack_phase2"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "opportunityId", "participantId", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant) return;
     setSaving(true);
     try {
       const { encounter: nextEncounter, participant } = await decideDoubleAttackPhase2OnServer({
         decision: inspectorDoubleAttackDecision,
         encounterId: encounter.id,
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId!,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       setScenarioParticipantOverrides((current) => ({
@@ -7535,7 +7612,17 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function saveCombatExperienceDifficultyDraft(value = inspectorCombatExperienceDifficulty) {
+  async function saveCombatExperienceDifficultyDraft(
+    candidate: CurrentActionCommandDescriptor,
+    value = inspectorCombatExperienceDifficulty,
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["set_combat_experience_difficulty"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "taskId"],
+    });
+    if (!descriptor) return;
     const difficulty = Number.parseInt(value, 10);
 
     if (!Number.isInteger(difficulty) || difficulty <= 0) {
@@ -7553,6 +7640,9 @@ export default function CombatRoundManagerPanel({
       const { encounter: nextEncounter } = await setCombatExperienceDifficultyOnServer({
         difficulty,
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextInspectionSelection = resolveCombatRoundInspectionSelection({
@@ -7651,15 +7741,27 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorInitiative() {
-    if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
+  async function rollInspectorInitiative(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_initiative_phase1", "roll_initiative_phase2"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const encounterParticipant = descriptor?.participantId
+      ? encounter.participants.find((participant) =>
+          getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
+        )
+      : undefined;
+    if (!descriptor || !scenarioParticipant || !encounterParticipant) {
       return;
     }
 
     setSaving(true);
 
     try {
-      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedParticipantId = encounterParticipant.id;
       const actedStep = roundState.currentStep;
       const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
       const displayedParticipantIds = displayParticipants.map(
@@ -7667,9 +7769,12 @@ export default function CombatRoundManagerPanel({
       );
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         initiativeBase: inspectorInitiativeCalculation.baseInitiative,
         initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment,
-        scenarioParticipantId: selectedScenarioParticipant.id,
+        scenarioParticipantId: scenarioParticipant.id,
+        taskId: descriptor.taskId,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextSelection = shouldUsePersistedCursor
@@ -7709,10 +7814,31 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorPhaseAttack(phase: CombatRoundPhase) {
-    if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
+  async function rollInspectorPhaseAttack(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_attack"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "opponentParticipantId",
+        "opportunityId",
+        "participantId",
+        "phase",
+        "taskId",
+      ],
+    });
+    const selectedScenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const selectedEncounterParticipant = descriptor?.participantId
+      ? encounter.participants.find((participant) =>
+          getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
+        )
+      : undefined;
+    if (!descriptor || !selectedScenarioParticipant || !selectedEncounterParticipant) {
       return;
     }
+    const phase = descriptor.phase!;
 
     const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
       participantId: selectedEncounterParticipant.id,
@@ -7751,7 +7877,7 @@ export default function CombatRoundManagerPanel({
 
     const targetIdentity = resolveCanonicalCombatTargetIdentity({
       encounterParticipants: encounter.participants,
-      targetParticipantId: phaseContext.targetParticipantId,
+      targetParticipantId: descriptor.opponentParticipantId,
     });
     const targetScenarioParticipant = effectiveScenarioParticipants.find(
       (participant) => participant.id === targetIdentity?.scenarioParticipantId,
@@ -7819,13 +7945,17 @@ export default function CombatRoundManagerPanel({
         }),
         defenderParticipantId: targetIdentity.encounterParticipantId,
         encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         ob,
         obSkillRaw: getMergedCombatSkillObModifierTotal({
           combatContext: inspectorGeneratedCombatContext,
           phase,
         }),
+        opportunityId: descriptor.opportunityId!,
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
+        taskId: descriptor.taskId,
         weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,
         weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
         weaponName: phaseModel.attackStats.weaponName,
@@ -7875,6 +8005,7 @@ export default function CombatRoundManagerPanel({
     if (
       descriptor.commandType !== "roll_parry" ||
       !descriptor.attackResultId ||
+      !descriptor.executionGroupId ||
       !attackResult ||
       !phase ||
       !descriptor.participantId ||
@@ -7980,76 +8111,6 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function completeInspectorPhaseResolution(phase: CombatRoundPhase) {
-    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
-
-    if (!ownerParticipantId) {
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const { commandEnvelope, encounter: nextEncounter } =
-        await completeCurrentCombatPhaseResolutionOnServer({
-          encounterId: encounter.id,
-        });
-      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
-        getCombatRoundManagerStateFromCommandEnvelope({
-          commandEnvelope,
-          encounter: nextEncounter,
-        });
-
-      pendingSelectionRef.current = undefined;
-      manualSelectionRef.current = undefined;
-      setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState, nextEncounter.updatedAt);
-      setSelectedRoundNumber(nextRoundState.roundNumber);
-      onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
-      setSaveError(undefined);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to complete ${formatCombatPhaseLabel(phase)} resolution.`,
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function skipInspectorCurrentPhaseAction() {
-    setSaving(true);
-
-    try {
-      const { commandEnvelope, encounter: nextEncounter } =
-        await skipCombatRoundCurrentActionOnServer({
-          encounterId: encounter.id,
-        });
-      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
-        getCombatRoundManagerStateFromCommandEnvelope({
-          commandEnvelope,
-          encounter: nextEncounter,
-        });
-
-      pendingSelectionRef.current = undefined;
-      manualSelectionRef.current = undefined;
-      setInspectionSelection(nextInspectionSelection);
-      setRoundState(nextRoundState, nextEncounter.updatedAt);
-      setSelectedRoundNumber(nextRoundState.roundNumber);
-      onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
-      setSaveError(undefined);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to skip current action.",
-      );
     } finally {
       setSaving(false);
     }
@@ -8306,8 +8367,18 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function advanceInspectorRoundEndReview() {
-    if (!selectedRoundIsActive || inspector.step !== "round_summary") {
+  async function advanceInspectorRoundEndReview(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: [
+        "commit_round_end_participant_review",
+        "roll_round_end_health_check",
+      ],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+    });
+    const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !scenarioParticipant || !selectedRoundIsActive) {
       return;
     }
 
@@ -8319,21 +8390,16 @@ export default function CombatRoundManagerPanel({
         return;
       }
 
-      if (!inspector.participant?.participantId) {
-        setSaveError("Select a participant for SU review.");
-        return;
-      }
-
       const participantReview =
-        roundState.roundEndReview.participantReviews[inspector.participant.participantId];
+        roundState.roundEndReview.participantReviews[descriptor.participantId!];
 
       if (!participantReview) {
         setSaveError("Round-end review is missing for this participant.");
         return;
       }
 
-      if (inspectorRoundEndTask?.kind === "effect_review") {
-        if (!encounter.scenarioId || !selectedScenarioParticipant) {
+      if (descriptor.commandType === "commit_round_end_participant_review") {
+        if (!encounter.scenarioId) {
           setSaveError("Scenario participant state is required to commit SU review.");
           return;
         }
@@ -8341,7 +8407,10 @@ export default function CombatRoundManagerPanel({
         const { encounter: nextEncounter, participant: updatedParticipant } =
           await commitRoundEndParticipantReviewOnServer({
             encounterId: encounter.id,
-            scenarioParticipantId: selectedScenarioParticipant.id,
+            executionGroupId: descriptor.executionGroupId!,
+            expectedRevision: descriptor.expectedRevision,
+            scenarioParticipantId: scenarioParticipant.id,
+            taskId: descriptor.taskId,
           });
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
@@ -8359,8 +8428,8 @@ export default function CombatRoundManagerPanel({
         return;
       }
 
-      if (inspectorRoundEndTask?.kind === "health_review") {
-        if (!encounter.scenarioId || !selectedScenarioParticipant) {
+      if (descriptor.commandType === "roll_round_end_health_check") {
+        if (!encounter.scenarioId || !descriptor.healthRollId) {
           setSaveError("Scenario participant state is required to roll SU health.");
           return;
         }
@@ -8369,7 +8438,7 @@ export default function CombatRoundManagerPanel({
           (proposal) =>
             proposal.accepted &&
             proposal.status === "pending" &&
-            proposal.id === inspectorRoundEndTask.identity.healthRollId,
+            proposal.id === descriptor.healthRollId,
         );
 
         if (!pendingHealthRoll) {
@@ -8387,8 +8456,11 @@ export default function CombatRoundManagerPanel({
           await rollRoundEndHealthCheckOnServer({
             difficulty,
             encounterId: encounter.id,
+            executionGroupId: descriptor.executionGroupId!,
+            expectedRevision: descriptor.expectedRevision,
             healthRollId: pendingHealthRoll.id,
-            scenarioParticipantId: selectedScenarioParticipant.id,
+            scenarioParticipantId: scenarioParticipant.id,
+            taskId: descriptor.taskId,
           });
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
@@ -8412,23 +8484,33 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function commitRoundEndDistanceControl(distanceProposalId: string) {
-    if (!selectedRoundIsActive || inspector.step !== "round_summary") {
+  async function commitRoundEndDistanceControl(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["commit_round_end_distance_control"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "pairId", "proposalId", "taskId"],
+    });
+    if (!descriptor || !selectedRoundIsActive) {
       return;
     }
 
     setSaving(true);
 
     try {
-      const overrideDraft = roundEndDistanceOverrideDrafts[distanceProposalId];
+      const overrideDraft = roundEndDistanceOverrideDrafts[descriptor.proposalId!];
       const { commandEnvelope, encounter: nextEncounter } =
         await commitRoundEndDistanceControlOnServer({
           distanceOverride:
             overrideDraft && overrideDraft.trim().length > 0
               ? parseCombatInteger(overrideDraft, "Distance")
               : undefined,
-          distanceProposalId,
+          distanceProposalId: descriptor.proposalId!,
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          pairId: descriptor.pairId!,
+          taskId: descriptor.taskId,
         });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
@@ -8442,7 +8524,7 @@ export default function CombatRoundManagerPanel({
       setRoundEndDistanceOverrideDrafts((current) => {
         const next = { ...current };
 
-        delete next[distanceProposalId];
+        delete next[descriptor.proposalId!];
 
         return next;
       });
@@ -8456,12 +8538,24 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollRoundEndDistanceControlFromPrimaryAction() {
-    if (
-      !selectedRoundIsActive ||
-      inspector.step !== "round_summary" ||
-      inspectorRoundEndDistanceAction?.kind !== "roll"
-    ) {
+  async function rollRoundEndDistanceControlFromPrimaryAction(
+    candidate: CurrentActionCommandDescriptor,
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_round_end_distance_control"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "opponentParticipantId",
+        "pairId",
+        "participantId",
+        "proposalId",
+        "taskId",
+      ],
+    });
+    if (!descriptor || !selectedRoundIsActive) {
       return;
     }
 
@@ -8471,6 +8565,13 @@ export default function CombatRoundManagerPanel({
       const { commandEnvelope, encounter: nextEncounter } =
         await rollCurrentRoundEndDistanceControlOnServer({
           encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          opponentParticipantId: descriptor.opponentParticipantId!,
+          pairId: descriptor.pairId!,
+          participantId: descriptor.participantId!,
+          proposalId: descriptor.proposalId!,
+          taskId: descriptor.taskId,
         });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
@@ -8495,63 +8596,86 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
-    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
-
-    if (!ownerParticipantId) {
+  function invokeGmCurrentAction(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: candidate ? [candidate.commandType] : [],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "taskId"],
+    });
+    if (!descriptor) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
 
-    setSaving(true);
-
-    try {
-      const currentOwnerStatus = getCombatRoundPhaseResolutionStatus({
-        participantId: ownerParticipantId,
-        phase,
-        state: roundState,
-      });
-      if (currentOwnerStatus.substep === "damage") {
-        const descriptor = currentActionPresentation?.primaryAction.descriptor;
-        if (
-          descriptor?.commandType !== "roll_hit_location" &&
-          descriptor?.commandType !== "roll_critical" &&
-          descriptor?.commandType !== "resolve_damage" &&
-          descriptor?.commandType !== "commit_phase_damage"
-        ) {
-          setSaveError("No canonical damage task is available.");
-          return;
-        }
-        await invokeGmDownstreamCombatTask(descriptor);
+    switch (descriptor.commandType) {
+      case "advance_combat_boundary":
+      case "commit_phase_initiative_resolution":
+      case "complete_round":
+        void commitCurrentStep(descriptor);
         return;
-      } else {
-        const { commandEnvelope, encounter: nextEncounter } =
-          await advanceCurrentCombatPhaseResolutionOnServer({
-            encounterId: encounter.id,
-          });
-        const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
-          getCombatRoundManagerStateFromCommandEnvelope({
-            commandEnvelope,
-            encounter: nextEncounter,
-          });
-
-        pendingSelectionRef.current = undefined;
-        manualSelectionRef.current = undefined;
-        setInspectionSelection(nextInspectionSelection);
-        setRoundState(nextRoundState, nextEncounter.updatedAt);
-        setSelectedRoundNumber(nextRoundState.roundNumber);
-        onEncounterUpdated?.(nextEncounter);
-        focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
-      }
-
-      setSaveError(undefined);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to advance ${formatCombatPhaseLabel(phase)} resolution.`,
-      );
-    } finally {
-      setSaving(false);
+      case "respond_adjust_distance":
+      case "review_adjust_distance_roll_adjustment":
+      case "roll_adjust_distance":
+      case "commit_adjust_distance":
+        void advanceInspectorAdjustDistance(descriptor);
+        return;
+      case "roll_parry":
+        void rollInspectorParry(descriptor);
+        return;
+      case "roll_hit_location":
+      case "roll_critical":
+      case "resolve_damage":
+      case "commit_phase_damage":
+        void invokeGmDownstreamCombatTask(descriptor);
+        return;
+      case "roll_feint":
+        void rollInspectorFeint(descriptor);
+        return;
+      case "commit_feint_result":
+        void commitInspectorFeint(descriptor);
+        return;
+      case "decide_double_attack_phase2":
+        void decideInspectorDoubleAttackPhase2(descriptor);
+        return;
+      case "submit_phase_initiative_choice":
+        void (inspectorPhaseAttackChoiceIsBackOut
+          ? backOutInspectorPhaseAttack(descriptor)
+          : continueInspectorPhaseAttack(descriptor));
+        return;
+      case "set_combat_experience_difficulty":
+        void saveCombatExperienceDifficultyDraft(descriptor);
+        return;
+      case "roll_combat_experience":
+        void rollInspectorCombatExperience(descriptor);
+        return;
+      case "roll_round_end_distance_control":
+        void rollRoundEndDistanceControlFromPrimaryAction(descriptor);
+        return;
+      case "commit_round_end_distance_control":
+        void commitRoundEndDistanceControl(descriptor);
+        return;
+      case "roll_round_end_health_check":
+      case "commit_round_end_participant_review":
+        void advanceInspectorRoundEndReview(descriptor);
+        return;
+      case "roll_initiative_phase1":
+      case "roll_initiative_phase2":
+        void rollInspectorInitiative(descriptor);
+        return;
+      case "roll_attack":
+        void rollInspectorPhaseAttack(descriptor);
+        return;
+      case "declare_action":
+      case "review_modifiers_phase1":
+      case "review_modifiers_phase2":
+        void saveInspectorDeclaration(descriptor);
+        return;
+      case "prepare_round_end_review":
+        // This descriptor is consumed by the single guarded preparation effect.
+        return;
+      default:
+        setSaveError("This combat task does not have a canonical command handler.");
     }
   }
 
@@ -9586,84 +9710,7 @@ export default function CombatRoundManagerPanel({
                     <PlayerCombatActionButtonPanel
                       disabled={inspectorEffectiveActionButtonDisabled}
                       onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
-                        if (
-                          !descriptor ||
-                          descriptor.taskId !== currentActionPresentation?.taskId ||
-                          descriptor.expectedRevision !==
-                            currentActionPresentation.encounterRevision
-                        ) {
-                          setSaveError(
-                            "Combat state changed. Review the current action before continuing.",
-                          );
-                          return;
-                        }
-                        void (projectedBoundaryTransitionAction
-                          ? commitCurrentStep()
-                          : descriptor.commandType === "respond_adjust_distance" ||
-                              descriptor.commandType === "review_adjust_distance_roll_adjustment" ||
-                              descriptor.commandType === "roll_adjust_distance" ||
-                              descriptor.commandType === "commit_adjust_distance"
-                            ? advanceInspectorAdjustDistance(descriptor)
-                            : descriptor.commandType === "roll_parry"
-                              ? rollInspectorParry(descriptor)
-                              : descriptor.commandType === "roll_hit_location" ||
-                                  descriptor.commandType === "roll_critical" ||
-                                  descriptor.commandType === "resolve_damage" ||
-                                  descriptor.commandType === "commit_phase_damage"
-                                ? invokeGmDownstreamCombatTask(descriptor)
-                                : inspectorFeintProposal?.status === "awaiting_rolls"
-                                  ? rollInspectorFeint()
-                                  : inspectorFeintProposal?.status === "awaiting_review"
-                                    ? commitInspectorFeint()
-                                    : inspectorDoubleAttackDecisionAvailable
-                                      ? decideInspectorDoubleAttackPhase2()
-                                      : inspectorPhaseAttackChoiceIsBackOut
-                                        ? backOutInspectorPhaseAttack()
-                                        : inspectorSkipActionSelected
-                                          ? skipInspectorCurrentPhaseAction()
-                                          : inspectorCombatExperienceDifficultyCommandPending
-                                            ? saveCombatExperienceDifficultyDraft()
-                                            : inspectorCombatExperienceRequired
-                                              ? rollInspectorCombatExperience()
-                                              : inspectorCanContinuePhaseAttack
-                                                ? continueInspectorPhaseAttack()
-                                                : inspector.step === "round_summary" &&
-                                                    inspectorRoundEndDistanceAction?.kind === "roll"
-                                                  ? rollRoundEndDistanceControlFromPrimaryAction()
-                                                  : inspector.step === "round_summary" &&
-                                                      inspectorRoundEndDistanceAction?.kind ===
-                                                        "commit"
-                                                    ? commitRoundEndDistanceControl(
-                                                        inspectorRoundEndDistanceAction.proposal.id,
-                                                      )
-                                                    : inspector.step === "round_summary"
-                                                      ? advanceInspectorRoundEndReview()
-                                                      : inspectorPhaseInitiativeCommitLabel
-                                                        ? commitCurrentStep()
-                                                        : inspectorCurrentStepIsInitiative
-                                                          ? rollInspectorInitiative()
-                                                          : inspectorCurrentResolutionPhase &&
-                                                              (inspectorActionPhaseHasAttack ===
-                                                                false ||
-                                                                inspectorActionPhaseResolutionStatus?.substep ===
-                                                                  "effects")
-                                                            ? completeInspectorPhaseResolution(
-                                                                inspectorCurrentResolutionPhase,
-                                                              )
-                                                            : inspectorCurrentResolutionPhase &&
-                                                                (inspectorActionPhaseResolutionStatus?.substep ===
-                                                                  "parry" ||
-                                                                  inspectorActionPhaseResolutionStatus?.substep ===
-                                                                    "damage")
-                                                              ? advanceInspectorPhaseResolutionSubstep(
-                                                                  inspectorCurrentResolutionPhase,
-                                                                )
-                                                              : inspectorCanRollPhaseAttack &&
-                                                                  inspectorCurrentAttackPhase
-                                                                ? rollInspectorPhaseAttack(
-                                                                    inspectorCurrentAttackPhase,
-                                                                  )
-                                                                : saveInspectorDeclaration());
+                        invokeGmCurrentAction(descriptor);
                       }}
                       preActionControls={
                         inspectorSelectionIsCurrentProgression

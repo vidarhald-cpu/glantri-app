@@ -207,6 +207,28 @@ describe("CombatProgressionProjection", () => {
       state: "executable",
       trackerFacet: { owner: { participantId: "guard" }, step: "M2" },
     });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "review_modifiers_phase2",
+        executionGroupId: reviewTask?.executionGroupId,
+        participantId: "guard",
+        phase: "phase2",
+        projection,
+        taskId: reviewTask?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: reviewTask?.id } });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "review_modifiers_phase2",
+        executionGroupId: reviewTask?.executionGroupId,
+        participantId: "hero",
+        phase: "phase2",
+        projection,
+        taskId: reviewTask?.id,
+      }),
+    ).toMatchObject({ code: "wrong_participant", ok: false });
   });
 
   it.each([
@@ -404,6 +426,52 @@ describe("CombatProgressionProjection", () => {
         .filter((task) => task.owner?.kind === "combatant")
         .map((task) => task.presentationContext?.difficulty),
     ).toEqual([26, 26]);
+    const difficultyTask = projection.boundary.processes[0]?.stages[0]?.tasks.find(
+      (task) => task.expectedCommand === "set_combat_experience_difficulty",
+    );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "set_combat_experience_difficulty",
+        executionGroupId: difficultyTask?.executionGroupId,
+        projection,
+        taskId: difficultyTask?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: difficultyTask?.id } });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "set_combat_experience_difficulty",
+        executionGroupId: difficultyTask?.executionGroupId,
+        projection,
+        taskId: "stale:combat-experience",
+      }),
+    ).toMatchObject({ code: "task_not_found", ok: false });
+
+    const openProjection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "DE",
+        overrides: { combatExperienceDifficulty: 26 },
+        roundNumber: 1,
+      }),
+    );
+    const rollTask = openProjection.boundary.processes[0]?.stages[0]?.tasks.find(
+      (task) =>
+        task.expectedCommand === "roll_combat_experience" &&
+        task.owner?.kind === "combatant" &&
+        task.owner.participantId === "hero",
+    );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "roll_combat_experience",
+        executionGroupId: rollTask?.executionGroupId,
+        participantId: "hero",
+        projection: openProjection,
+        taskId: rollTask?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: rollTask?.id } });
   });
 
   it("maps the adapter-derived standard attack stages without advancing state", () => {
@@ -568,6 +636,27 @@ describe("CombatProgressionProjection", () => {
       owner: { kind: "gm" },
       trackerFacet: { owner: { participantId: "hero" }, step: "SU" },
     });
+    const effectTask = effectReview?.stages[0]?.tasks[0];
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "commit_round_end_participant_review",
+        executionGroupId: effectTask?.executionGroupId,
+        participantId: "hero",
+        projection: pending,
+        taskId: effectTask?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: effectTask?.id } });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "commit_round_end_participant_review",
+        executionGroupId: effectTask?.executionGroupId,
+        participantId: "hero",
+        projection: pending,
+        taskId: effectTask?.id,
+      }),
+    ).toMatchObject({ code: "gm_only", ok: false });
 
     const boundary = buildCombatProgressionProjection(
       state({

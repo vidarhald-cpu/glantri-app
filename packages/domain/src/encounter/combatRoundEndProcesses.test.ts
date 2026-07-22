@@ -101,6 +101,18 @@ describe("combat round-end process plans", () => {
     });
     expect(Object.isFrozen(first)).toBe(true);
     expect(JSON.stringify(source)).toBe(before);
+
+    const projection = buildCombatProgressionProjection(source);
+    const task = projection.boundary.processes[0]?.stages[0]?.tasks[0];
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "prepare_round_end_review",
+        executionGroupId: task?.executionGroupId,
+        projection,
+        taskId: task?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: task?.id, kind: "round_end_prepare" } });
   });
 
   it("normalizes stable ordered participant iteration", () => {
@@ -118,9 +130,8 @@ describe("combat round-end process plans", () => {
   });
 
   it("keeps pair rolls parallel and locks participant review behind distance", () => {
-    const plan = buildCombatRoundEndProcessPlan(
-      state(review({ proposedDistances: [pendingDistance()] })),
-    );
+    const source = state(review({ proposedDistances: [pendingDistance()] }));
+    const plan = buildCombatRoundEndProcessPlan(source);
     const distance = plan.processes.find((process) => process.kind === "distance");
     const participants = plan.processes.find((process) => process.kind === "participant_review");
 
@@ -134,6 +145,30 @@ describe("combat round-end process plans", () => {
     });
     expect(participants?.stages.every((stage) => stage.state !== "active")).toBe(true);
     expect(plan.activeParticipantId).toBeUndefined();
+
+    const projection = buildCombatProgressionProjection(source);
+    const heroTask = projection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find(
+        (task) =>
+          task.kind === "distance_roll" &&
+          task.owner?.kind === "combatant" &&
+          task.owner.participantId === "hero",
+      );
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "combatant", participantId: "hero" },
+        commandType: "roll_round_end_distance_control",
+        executionGroupId: heroTask?.executionGroupId,
+        opponentParticipantId: "guard",
+        pairId: "guard::hero",
+        participantId: "hero",
+        projection,
+        proposalId: "distance:hero:guard",
+        taskId: heroTask?.id,
+      }),
+    ).toMatchObject({ ok: true, task: { id: heroTask?.id, kind: "distance_roll" } });
   });
 
   it("composes participant, Health, effect, and explicit transition processes", () => {
@@ -180,16 +215,22 @@ describe("combat round-end process plans", () => {
     const healthProjection = buildCombatProgressionProjection(
       state(review({ heroStatus: "health_roll_pending" })),
     );
+    const healthTask = healthProjection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "health_review");
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "hero" },
         commandType: "roll_round_end_health_check",
+        executionGroupId: healthTask?.executionGroupId,
         healthRollId: "health:hero",
         participantId: "hero",
         projection: healthProjection,
         proposalId: "health:hero",
+        taskId: healthTask?.id,
       }),
-    ).toMatchObject({ ok: true, task: { kind: "health_review" } });
+    ).toMatchObject({ ok: true, task: { id: healthTask?.id, kind: "health_review" } });
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "guard" },
@@ -202,14 +243,20 @@ describe("combat round-end process plans", () => {
     ).toMatchObject({ code: "wrong_participant", ok: false });
 
     const effectProjection = buildCombatProgressionProjection(state(review()));
+    const effectTask = effectProjection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "effect_review");
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },
         commandType: "commit_round_end_participant_review",
+        executionGroupId: effectTask?.executionGroupId,
         participantId: "hero",
         projection: effectProjection,
+        taskId: effectTask?.id,
       }),
-    ).toMatchObject({ ok: true, task: { kind: "effect_review" } });
+    ).toMatchObject({ ok: true, task: { id: effectTask?.id, kind: "effect_review" } });
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "hero" },

@@ -471,6 +471,9 @@ describe("localServiceClient wire contract", () => {
           phase1: "Broad sword",
         },
         scenarioParticipantId: "participant-1",
+        executionGroupId: "group-declaration",
+        expectedRevision: "revision-1",
+        taskId: "task-declaration",
       }),
     ).resolves.toEqual({ encounter, participant });
 
@@ -536,8 +539,11 @@ describe("localServiceClient wire contract", () => {
         phaseWeaponNames: {
           phase1: "Broad sword",
         },
+        executionGroupId: "group-declaration",
+        expectedRevision: "revision-1",
         scenarioParticipantId: "participant-1",
         secondaryActionId: undefined,
+        taskId: "task-declaration",
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-declaration",
@@ -555,9 +561,12 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatInitiativeOnServer({
         encounterId: "encounter-1",
+        executionGroupId: "group-initiative",
+        expectedRevision: "revision-1",
         initiativeBase: 3,
         initiativeModifierAdjustment: -1,
         scenarioParticipantId: "participant-1",
+        taskId: "task-initiative",
       }),
     ).resolves.toEqual({ encounter, initiative: { rolls: [6, 2], total: 8 } });
 
@@ -566,6 +575,9 @@ describe("localServiceClient wire contract", () => {
         initiativeBase: 3,
         initiativeModifierAdjustment: -1,
         scenarioParticipantId: "participant-1",
+        executionGroupId: "group-initiative",
+        expectedRevision: "revision-1",
+        taskId: "task-initiative",
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-initiative",
@@ -804,14 +816,23 @@ describe("localServiceClient wire contract", () => {
     const client = await loadClient();
 
     await expect(
-      client.prepareCombatRoundEndReviewOnServer({ encounterId: "encounter-1" }),
+      client.prepareCombatRoundEndReviewOnServer({
+        encounterId: "encounter-1",
+        executionGroupId: "group-round-end",
+        expectedRevision: "revision-1",
+        taskId: "task-round-end",
+      }),
     ).resolves.toEqual({ encounter });
 
     expectFetchCall(fetchMock, {
+      body: {
+        executionGroupId: "group-round-end",
+        expectedRevision: "revision-1",
+        taskId: "task-round-end",
+      },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/prepare-round-end-review",
     });
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
   });
 
   it("skips the current combat round action through the encounter command endpoint", async () => {
@@ -867,13 +888,19 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatExperienceOnServer({
         encounterId: "encounter-1",
+        executionGroupId: "group-ce",
+        expectedRevision: "revision-1",
         scenarioParticipantId: "participant-1",
+        taskId: "task-ce",
       }),
     ).resolves.toEqual({ combatExperience, encounter, participant });
 
     expectFetchCall(fetchMock, {
       body: {
         scenarioParticipantId: "participant-1",
+        executionGroupId: "group-ce",
+        expectedRevision: "revision-1",
+        taskId: "task-ce",
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/roll-combat-experience",
@@ -894,8 +921,11 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.backOutPhaseAttackOnServer({
         encounterId: "encounter-1",
+        executionGroupId: "group-choice",
+        expectedRevision: "revision-1",
         phase: "phase1",
         scenarioParticipantId: "participant-1",
+        taskId: "task-choice",
       }),
     ).resolves.toEqual({ encounter, participant });
 
@@ -903,6 +933,9 @@ describe("localServiceClient wire contract", () => {
       body: {
         phase: "phase1",
         scenarioParticipantId: "participant-1",
+        executionGroupId: "group-choice",
+        expectedRevision: "revision-1",
+        taskId: "task-choice",
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/back-out-phase-attack",

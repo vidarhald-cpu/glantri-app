@@ -19,12 +19,11 @@ import {
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundArmorCriticalModifierForDamageResult,
-  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
-  getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -2077,7 +2076,17 @@ export default function ScenarioPlayerCombatPageContent({
     setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
   }
 
-  async function saveCombatContext() {
+  async function saveCombatContext(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["declare_action"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+    });
+    if (!descriptor) {
+      setError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
     if (readOnlyInspection) {
       return;
     }
@@ -2162,6 +2171,8 @@ export default function ScenarioPlayerCombatPageContent({
         additionalActionNotes,
         combatContext: projectedCombatContextDraft,
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         feint:
           selectedActionId === "feint_attack" && feintTargetResolution?.ok
             ? {
@@ -2199,8 +2210,9 @@ export default function ScenarioPlayerCombatPageContent({
           phase1: phaseCombatLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName,
         },
-        scenarioParticipantId: selectedParticipant.id,
+        scenarioParticipantId: descriptor.participantId!,
         secondaryActionId: selectedSecondaryActionId || undefined,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2232,8 +2244,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter } = await rollCombatFeintOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         proposalId: descriptor.proposalId,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
       acceptEncounterSession(encounter);
       setError(undefined);
@@ -2249,7 +2264,6 @@ export default function ScenarioPlayerCombatPageContent({
       readOnlyInspection ||
       !selectedParticipant ||
       !encounterId ||
-      !selectedAdjustDistanceProposal ||
       !descriptor.proposalId ||
       !descriptor.participantId
     )
@@ -2257,18 +2271,30 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const encounter =
-        selectedAdjustDistanceProposal.status === "awaiting_defender_response"
+        descriptor.commandType === "respond_adjust_distance"
           ? await respondCombatAdjustDistanceOnServer({
               encounterId,
+              executionGroupId: descriptor.executionGroupId!,
+              expectedRevision: descriptor.expectedRevision,
               proposalId: descriptor.proposalId,
               response: adjustDistanceResponse,
               scenarioParticipantId: descriptor.participantId,
+              taskId: descriptor.taskId,
             })
-          : await rollCombatAdjustDistanceOnServer({
+          : descriptor.commandType === "roll_adjust_distance"
+            ? await rollCombatAdjustDistanceOnServer({
               encounterId,
+              executionGroupId: descriptor.executionGroupId!,
+              expectedRevision: descriptor.expectedRevision,
               proposalId: descriptor.proposalId,
               scenarioParticipantId: descriptor.participantId,
-            });
+              taskId: descriptor.taskId,
+              })
+            : undefined;
+      if (!encounter) {
+        setError("Combat state changed. Review the current action before continuing.");
+        return;
+      }
       acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
@@ -2296,9 +2322,12 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter } = await rollCombatInitiativeOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         initiativeBase: initiativeCalculation.baseInitiative,
         initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       acceptEncounterSession(encounter);
@@ -2326,7 +2355,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollCombatExperienceOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        phase: descriptor.phase,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2360,7 +2393,12 @@ export default function ScenarioPlayerCombatPageContent({
       const { encounter, participant } = await rollRoundEndDistanceControlOnServer({
         distanceProposalId: descriptor.proposalId,
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opponentParticipantId: descriptor.opponentParticipantId!,
+        pairId: descriptor.pairId!,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2393,8 +2431,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await rollRoundEndHealthCheckOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         healthRollId: descriptor.healthRollId,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2427,8 +2468,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await backOutPhaseAttackOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         phase: descriptor.phase,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2459,8 +2503,11 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter, participant } = await continuePhaseAttackOnServer({
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
         phase: descriptor.phase,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
 
       setSelectableParticipants((current) =>
@@ -2483,7 +2530,11 @@ export default function ScenarioPlayerCombatPageContent({
       const { encounter, participant } = await decideDoubleAttackPhase2OnServer({
         decision: doubleAttackPhase2Decision,
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId!,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
       });
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
@@ -2579,12 +2630,15 @@ export default function ScenarioPlayerCombatPageContent({
         defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         encounterId,
+        executionGroupId: descriptor.executionGroupId!,
         expectedRevision: modifierRequest.expectedRevision,
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         ob,
         obSkillRaw: modifierRequest.obSkillRaw,
+        opportunityId: descriptor.opportunityId,
         phase: attackPhase,
         scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
         weaponCriticalCode: phaseAttackStats.weaponCriticalCode,
         weaponDamageClass: phaseAttackStats.weaponDamageClass,
         weaponName: phaseAttackStats.weaponName,
@@ -2608,13 +2662,20 @@ export default function ScenarioPlayerCombatPageContent({
   }
 
   async function rollCurrentParry(descriptor: CurrentActionCommandDescriptor) {
-    const attackResult = selectedCurrentResolutionAttackResult;
+    const attackResult =
+      combatRoundState && descriptor.attackResultId
+        ? getCombatRoundAttackResultById({
+            attackResultId: descriptor.attackResultId,
+            state: combatRoundState,
+          })
+        : undefined;
     if (
       readOnlyInspection ||
       !selectedParticipant ||
       !encounterId ||
       descriptor.commandType !== "roll_parry" ||
       !descriptor.attackResultId ||
+      !descriptor.executionGroupId ||
       !descriptor.participantId ||
       !descriptor.phase ||
       !attackResult ||
@@ -2709,7 +2770,7 @@ export default function ScenarioPlayerCombatPageContent({
               hitLocationResultId: descriptor.hitLocationResultId!,
               opportunityId: descriptor.opportunityId,
               phase: descriptor.phase!,
-              scenarioParticipantId: selectedParticipant.id,
+              scenarioParticipantId: descriptor.participantId!,
               taskId: descriptor.taskId,
             })
           : await rollCombatCriticalOnServer({
@@ -2723,7 +2784,7 @@ export default function ScenarioPlayerCombatPageContent({
               hitLocationResultId: descriptor.hitLocationResultId!,
               opportunityId: descriptor.opportunityId,
               phase: descriptor.phase!,
-              scenarioParticipantId: selectedParticipant.id,
+              scenarioParticipantId: descriptor.participantId!,
               taskId: descriptor.taskId,
             });
 
@@ -3036,24 +3097,6 @@ export default function ScenarioPlayerCombatPageContent({
     : undefined;
   const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
-  const selectedCurrentIncomingResolutionAttackResult =
-    combatRoundState && selectedRoundParticipant && currentResolutionPhase
-      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-          participantId: selectedRoundParticipant.participantId,
-          phase: currentResolutionPhase,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedCurrentOutgoingResolutionAttackResult =
-    combatRoundState && selectedRoundParticipant && currentResolutionPhase
-      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-          participantId: selectedRoundParticipant.participantId,
-          phase: currentResolutionPhase,
-          state: combatRoundState,
-        })
-      : undefined;
-  const selectedCurrentResolutionAttackResult =
-    selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult;
   const currentParryDefenseStats = currentResolutionPhase
     ? buildPlayerCombatDefenseStats({
         mainHandParryItemLabel:
@@ -3204,12 +3247,14 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(declarationTargetValidationMessage || currentAttackSourceValidationMessage) ||
     (currentActionPresentation?.taskKind === "submit_declaration" &&
       (!hasMeaningfulDeclaration || !targetValidation.valid));
-  function invokePlayerCurrentAction(descriptor?: CurrentActionCommandDescriptor) {
-    if (
-      !descriptor ||
-      descriptor.taskId !== currentActionPresentation?.taskId ||
-      descriptor.expectedRevision !== currentActionPresentation.encounterRevision
-    ) {
+  function invokePlayerCurrentAction(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: candidate ? [candidate.commandType] : [],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "taskId"],
+    });
+    if (!descriptor) {
       setError("Combat state changed. Review the current action before continuing.");
       return;
     }
@@ -3256,7 +3301,7 @@ export default function ScenarioPlayerCombatPageContent({
         void rollInitiative(descriptor);
         return;
       case "declare_action":
-        void saveCombatContext();
+        void saveCombatContext(descriptor);
         return;
       default:
         setError("This current action is waiting for the GM.");

@@ -146,8 +146,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("selectedRelevantInitiativeResultPanel");
     expect(source).not.toContain("selectedRelevantInitiativeRankLabel");
     expect(source).not.toContain("latestRolledInitiativePhase");
-    expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
-    expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
+    expect(source).not.toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
+    expect(source).not.toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
     expect(source).not.toContain("buildPlayerCombatDistanceModifierSection");
     expect(source).not.toContain("formatCombatDistanceModifierDetailLine");
     expect(source).not.toContain("distanceModifierDetail");
@@ -165,7 +165,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("selectedAttackerPrivilegedResolution");
     expect(source).toContain("resolveCombatTaskCommandContext({");
     expect(source).not.toContain("selectedAttackerPrivilegedAttackResult");
-    expect(source).not.toContain("getCombatRoundAttackResultById");
+    expect(source).toContain("getCombatRoundAttackResultById");
+    expect(source).not.toContain("const attackResult = selectedCurrentResolutionAttackResult");
     expect(source).toContain("rollCombatHitLocationOnServer");
     expect(source).toContain("rollCombatCriticalOnServer");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
@@ -320,11 +321,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
   it("selects current phase-resolution facts for the selected participant before stale fallbacks", () => {
     const source = readSource();
 
-    expect(source).toContain("selectedCurrentIncomingResolutionAttackResult");
-    expect(source).toContain("selectedCurrentOutgoingResolutionAttackResult");
-    expect(source).toContain(
-      "selectedCurrentIncomingResolutionAttackResult ?? selectedCurrentOutgoingResolutionAttackResult",
-    );
+    expect(source).not.toContain("selectedCurrentIncomingResolutionAttackResult");
+    expect(source).not.toContain("selectedCurrentOutgoingResolutionAttackResult");
+    expect(source).toContain("attackResultId: descriptor.attackResultId");
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).not.toContain("selectedLatestRelevantAttackResultPanel");
     expect(source).toContain("currentStepResultPresentation");
@@ -445,9 +444,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "controlsDisabled || playerDeclarationLocked || selectedCombatExperienceRequired",
     );
     expect(source).not.toContain("const playerActionButtonDisabled =");
-    expect(source).toContain("descriptor.taskId !== currentActionPresentation?.taskId");
+    expect(source).toContain("resolveCombatTaskCommandContext({");
+    expect(source).toContain("presentation: currentActionPresentation");
+    expect(source).toContain('case "roll_combat_experience"');
     expect(source).toContain(
-      "descriptor.expectedRevision !== currentActionPresentation.encounterRevision",
+      'requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"]',
     );
     expect(source).toContain("Combat Experience");
     expect(source).not.toContain("Phase initiative choices");

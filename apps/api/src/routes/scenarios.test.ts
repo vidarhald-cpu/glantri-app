@@ -29,6 +29,7 @@ import {
   recordCombatRoundInitiative,
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
+  resolveEncounterParticipantMembership,
   type CombatRoundState,
   type CombatEffectsState,
   type EncounterSession,
@@ -215,6 +216,124 @@ const adjustRangePhase1DbParryModifier = expect.objectContaining(
 async function buildScenarioTestApp() {
   const app = Fastify({
     logger: false,
+  });
+  app.addHook("preValidation", async (request) => {
+    if (request.method !== "POST" || !request.url.includes("/combat")) return;
+    const body = request.body;
+    const record =
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
+    if (body !== record) {
+      (request as { body: unknown }).body = record;
+    }
+    const commandBySuffix = new Map<string, readonly string[]>([
+      ["/combat-declaration", ["declare_action", "review_modifiers_phase1", "review_modifiers_phase2"]],
+      ["/combat-initiative", ["roll_initiative_phase1", "roll_initiative_phase2"]],
+      ["/combat-round/combat-experience-difficulty", ["set_combat_experience_difficulty"]],
+      ["/combat-round/roll-combat-experience", ["roll_combat_experience"]],
+      ["/combat-round/double-attack-phase2-decision", ["decide_double_attack_phase2"]],
+      ["/combat-round/respond-adjust-distance", ["respond_adjust_distance"]],
+      ["/combat-round/review-adjust-distance", ["review_adjust_distance_roll_adjustment"]],
+      ["/combat-round/roll-adjust-distance", ["roll_adjust_distance"]],
+      ["/combat-round/commit-adjust-distance", ["commit_adjust_distance"]],
+      ["/combat-round/roll-feint", ["roll_feint"]],
+      ["/combat-round/commit-feint", ["commit_feint_result"]],
+      ["/combat-round/roll-distance-control", ["roll_round_end_distance_control"]],
+      ["/combat-round/roll-current-distance-control", ["roll_round_end_distance_control"]],
+      ["/combat-round/commit-distance-control", ["commit_round_end_distance_control"]],
+      ["/combat-round/commit-participant-review", ["commit_round_end_participant_review"]],
+      ["/combat-round/roll-health-check", ["roll_round_end_health_check"]],
+      ["/combat-round/back-out-phase-attack", ["submit_phase_initiative_choice"]],
+      ["/combat-round/continue-phase-attack", ["submit_phase_initiative_choice"]],
+      ["/combat-round/prepare-round-end-review", ["prepare_round_end_review"]],
+      ["/combat-round/commit-phase-initiative-resolution", ["commit_phase_initiative_resolution"]],
+      ["/combat-round/roll-attack", ["roll_attack"]],
+      ["/combat-round/roll-parry", ["roll_parry"]],
+    ]);
+    const entry = [...commandBySuffix].find(([suffix]) => request.url.endsWith(suffix));
+    if (!entry) return;
+
+    const encounterImplementation = mocks.encounterService.getEncounterById.getMockImplementation();
+    const encounter = encounterImplementation
+      ? ((await encounterImplementation(request.url.split("/encounters/")[1]?.split("/")[0])) as
+          | EncounterSession
+          | undefined)
+      : undefined;
+    if (!encounter) return;
+    const participantImplementation = mocks.scenarioService.listScenarioParticipants.getMockImplementation();
+    const scenarioParticipants = participantImplementation
+      ? ((await participantImplementation(encounter.scenarioId)) as Array<Record<string, unknown>>)
+      : [];
+    const membership = resolveEncounterParticipantMembership({
+      encounter,
+      scenarioParticipants: scenarioParticipants as Parameters<
+        typeof resolveEncounterParticipantMembership
+      >[0]["scenarioParticipants"],
+    });
+    const projectedEncounter = { ...encounter, participants: membership.participants };
+    const state = initializeCombatRoundState({ encounter: projectedEncounter });
+    const tasks = buildCombatProgressionProjection(state).boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .filter((task) => entry[1].includes(task.expectedCommand));
+    const requestedParticipantId =
+      typeof record.scenarioParticipantId === "string" ? record.scenarioParticipantId : undefined;
+    const canonicalParticipantId = projectedEncounter.participants.find(
+      (participant) =>
+        participant.id === requestedParticipantId ||
+        participant.scenarioParticipantId === requestedParticipantId ||
+        participant.characterId === requestedParticipantId,
+    )?.id;
+    const selected =
+      tasks.find(
+        (task) =>
+          (!canonicalParticipantId ||
+            (task.owner?.kind === "combatant" &&
+              task.owner.participantId === canonicalParticipantId) ||
+            task.identity.participantId === canonicalParticipantId) &&
+          (typeof record.proposalId !== "string" ||
+            task.identity.proposalId === record.proposalId) &&
+          (typeof record.distanceProposalId !== "string" ||
+            task.identity.proposalId === record.distanceProposalId) &&
+          (typeof record.phase !== "string" || task.identity.phase === record.phase),
+      ) ?? tasks[0];
+    if (!selected) {
+      record.executionGroupId ??= `test:missing:${entry[1][0]}:group`;
+      record.expectedRevision ??= encounter.updatedAt;
+      record.taskId ??= `test:missing:${entry[1][0]}:task`;
+      if (entry[1].includes("roll_attack") || entry[1].includes("decide_double_attack_phase2")) {
+        record.opportunityId ??= "test:missing:opportunity";
+      }
+      if (request.url.endsWith("/combat-round/roll-current-distance-control")) {
+        record.opponentParticipantId ??= "test:missing:opponent";
+        record.pairId ??= "test:missing:pair";
+        record.participantId ??= "test:missing:participant";
+        record.proposalId ??= "test:missing:proposal";
+      }
+      return;
+    }
+
+    record.executionGroupId ??= selected.executionGroupId;
+    record.expectedRevision ??= encounter.updatedAt;
+    record.taskId ??= selected.id;
+    record.opportunityId ??= selected.identity.opportunityId;
+    record.attackResultId ??= selected.identity.attackResultId;
+    record.opponentParticipantId ??= selected.identity.opponentParticipantId;
+    record.pairId ??= selected.identity.pairId;
+    record.participantId ??=
+      selected.owner?.kind === "combatant"
+        ? selected.owner.participantId
+        : selected.identity.participantId;
+    record.attackerParticipantId ??=
+      selected.identity.attackerParticipantId ??
+      (selected.kind === "parry" ? selected.identity.opponentParticipantId : undefined);
+    record.defenderParticipantId ??=
+      selected.identity.defenderParticipantId ??
+      (selected.kind === "parry" ? record.participantId : undefined);
+    record.phase ??= selected.identity.phase;
+    record.proposalId ??= selected.identity.proposalId;
   });
   await app.register(scenariosRoutes);
   return app;
@@ -9457,8 +9576,8 @@ describe("scenarios route contract", () => {
       );
       expect(roundState().currentStep).toBe("review_phase_2_modifiers");
       for (const [scenarioParticipantId, roundParticipantId] of [
-        ["participant-1", "encounter-participant-1"],
         ["participant-2", "encounter-participant-2"],
+        ["participant-1", "encounter-participant-1"],
       ] as const) {
         const declaration = participantState(roundParticipantId)?.declaration;
         const reviewResponse = await app.inject({
@@ -10676,6 +10795,28 @@ describe("scenarios route contract", () => {
             step: "A2",
           },
           currentStep: "phase_2_actions",
+          feintProposals: [
+            {
+              attackerParticipantId: "encounter-participant-1",
+              attackerSkillId: "dodge",
+              attackerSkillLabel: "Dodge",
+              defenderParticipantId: "encounter-participant-2",
+              defenderSkillId: "one-handed-edged",
+              defenderSkillLabel: "1-h edged",
+              feasibility: "possible",
+              id: "feint-proposal-a2",
+              method: "movement",
+              pairId: "encounter-participant-1::encounter-participant-2",
+              phase1OpportunityId: "feint-a1",
+              phase2AttackOpportunityId: "feint-a2",
+              review: {
+                proposedAttackerDbParryModifier: 0,
+                proposedDefenderObDbModifier: 0,
+              },
+              roundNumber: 1,
+              status: "committed",
+            },
+          ],
           participants: [
             {
               attackResults: {},
