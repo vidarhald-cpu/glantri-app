@@ -680,11 +680,13 @@ function parseCombatInitiativeBody(body: unknown): ParsedCombatTaskCommandIdenti
 
 function parseCombatExperienceBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   difficulty?: number;
+  phase?: CombatRoundPhase;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Combat Experience payload");
   const parsed = parseParticipantCommandBody(value, "Combat Experience payload");
   const difficulty = value.difficulty;
+  const phase = value.phase;
 
   if (
     difficulty !== undefined &&
@@ -692,11 +694,15 @@ function parseCombatExperienceBody(body: unknown): ParsedCombatTaskCommandIdenti
   ) {
     throw new Error("difficulty must be a positive integer.");
   }
+  if (phase !== undefined && phase !== "phase1" && phase !== "phase2") {
+    throw new Error("phase must be phase1 or phase2.");
+  }
 
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
+    phase,
   };
 }
 
@@ -5169,6 +5175,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error: "Combat Experience already rolled or is not required for this participant.",
           });
         }
+        const combatExperiencePhase =
+          combatExperienceTrigger === "phase1_attack"
+            ? "phase1"
+            : combatExperienceTrigger === "phase2_attack"
+              ? "phase2"
+              : undefined;
+        if (body.phase !== combatExperiencePhase) {
+          return reply.code(409).send({
+            error: "Combat Experience phase does not match the projected task.",
+          });
+        }
 
         if (
           combatExperienceTrigger === "combat_start" &&
@@ -5184,8 +5201,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             actor: gmAuthorizedOperation
               ? { kind: "gm" }
               : { kind: "combatant", participantId: encounterParticipant.id },
-            commandType: "roll_combat_experience",
+            commandType: combatExperiencePhase
+              ? "submit_phase_initiative_choice"
+              : "roll_combat_experience",
             participantId: encounterParticipant.id,
+            phase: combatExperiencePhase,
           },
           encounterRevision: encounter.updatedAt,
           identity: body,
@@ -8455,7 +8475,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const removedBackOutPhaseAttackCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
-          command.type === "back_out_phase_attack" &&
+          (command.type === "back_out_phase_attack" ||
+            (command.type === "submit_phase_initiative_choice" &&
+              command.facts.choice === "back_out")) &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
       const removedDoubleAttackDecisionCommands = roundState.commands.filter(

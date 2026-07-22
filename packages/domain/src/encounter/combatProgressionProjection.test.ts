@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatRoundAttackRollResult,
+  commitCombatRoundPhaseInitiativeResolution,
   combatRoundStateSchema,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
@@ -9,6 +10,7 @@ import {
   recordCombatRoundGlobalParticipantCommand,
   recordCombatRoundHitLocationRoll,
   recordCombatRoundParryResult,
+  rollCombatRoundCombatExperience,
   undoLatestCombatRoundCommand,
   type CombatRoundCursorStep,
   type CombatRoundState,
@@ -400,6 +402,185 @@ describe("CombatProgressionProjection", () => {
       state: "active",
     });
     expect(taskKinds(committed)).toContain("commit_initiative");
+  });
+
+  it("opens phase Combat Experience only after initiative commit and resolves each gate once", () => {
+    const beforeCommit = state({
+      cursorParticipantId: "guard",
+      cursorStep: "i1",
+      currentStep: "initiative_phase_1",
+      overrides: { combatExperienceDifficulty: 26 },
+      participantOverrides: [
+        {
+          declaration: {
+            actionId: "attack_parry",
+            phaseContexts: { phase1: { targetParticipantId: "scenario-guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+          initiatives: { phase1: 5 },
+        },
+        {
+          declaration: {
+            actionId: "attack_parry",
+            phaseContexts: { phase1: { targetParticipantId: "scenario-hero" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+          initiatives: { phase1: 5 },
+        },
+      ],
+    });
+    expect(taskKinds(buildCombatProgressionProjection(beforeCommit))).toEqual([
+      "commit_initiative",
+    ]);
+
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-07-22T18:00:00.000Z", createdByUserId: "gm" },
+      phase: "phase1",
+      state: beforeCommit,
+    }).state;
+    const committedProjection = buildCombatProgressionProjection(committed);
+    const ceTasks = committedProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .filter((task) => task.kind === "combat_experience");
+    expect(committedProjection.boundary.kind).toBe("phase1_resolution");
+    expect(ceTasks).toHaveLength(2);
+    expect(ceTasks.every((task) => task.expectedCommand === "submit_phase_initiative_choice")).toBe(
+      true,
+    );
+
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-07-22T18:01:00.000Z", createdByUserId: "hero-user" },
+      participantId: "hero",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state: committed,
+    });
+    const remainingTasks = buildCombatProgressionProjection(rolled.state).boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .filter((task) => task.kind === "combat_experience");
+    expect(rolled.command).toMatchObject({ phase: "phase1", type: "roll_combat_experience" });
+    expect(rolled.result.trigger).toBe("phase1_attack");
+    expect(remainingTasks).toHaveLength(1);
+    expect(remainingTasks[0]?.owner).toMatchObject({ participantId: "guard" });
+  });
+
+  it("orders tied Reactive and continued Double Attack CE gates after Phase 2 commit", () => {
+    const guardPhase1Attack = buildCombatRoundAttackRollResult({
+      actionId: "double_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "hero",
+      ob: 10,
+      phase: "phase1",
+      roll: 5,
+      rolledAt: "2026-07-22T18:00:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const beforeCommit = state({
+      cursorParticipantId: "guard",
+      cursorStep: "i2",
+      currentStep: "initiative_phase_2",
+      overrides: { combatExperienceDifficulty: 26 },
+      participantOverrides: [
+        {
+          declaration: {
+            actionId: "parry_attack",
+            attackOpportunities: [
+              {
+                id: "hero-reactive-phase2",
+                origin: "reactive_attack",
+                phase: "phase2",
+                slot: "attack_2",
+                status: "committed",
+                targetParticipantId: "scenario-guard",
+              },
+            ],
+            phaseContexts: { phase2: { targetParticipantId: "scenario-guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+          initiatives: { phase2: 7 },
+        },
+        {
+          attackResults: { phase1: guardPhase1Attack },
+          declaration: {
+            actionId: "double_attack",
+            attackOpportunities: [
+              {
+                id: "guard-double-phase2",
+                origin: "double_attack",
+                phase: "phase2",
+                slot: "attack_2",
+                status: "committed",
+                targetParticipantId: "scenario-hero",
+              },
+            ],
+            phaseContexts: { phase2: { targetParticipantId: "scenario-hero" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+          initiatives: { phase2: 7 },
+        },
+      ],
+    });
+
+    expect(taskKinds(buildCombatProgressionProjection(beforeCommit))).toEqual([
+      "commit_initiative",
+    ]);
+
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-07-22T18:01:00.000Z", createdByUserId: "gm" },
+      phase: "phase2",
+      state: beforeCommit,
+    }).state;
+    const ceTasks = buildCombatProgressionProjection(committed).boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .filter((task) => task.kind === "combat_experience");
+    expect(
+      ceTasks.map((task) =>
+        task.owner?.kind === "combatant" ? task.owner.participantId : undefined,
+      ),
+    ).toEqual(["hero", "guard"]);
+    expect(ceTasks.map((task) => task.identity.opportunityId)).toEqual([
+      "hero-reactive-phase2",
+      "guard-double-phase2",
+    ]);
+
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-07-22T18:02:00.000Z", createdByUserId: "hero-user" },
+      participantId: "hero",
+      rng: () => 0.6,
+      skillTotal: 20,
+      state: committed,
+    });
+    expect(rolled.command).toMatchObject({ phase: "phase2", type: "roll_combat_experience" });
+    expect(rolled.result.trigger).toBe("phase2_attack");
+    expect(
+      buildCombatProgressionProjection(rolled.state).boundary.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .filter((task) => task.kind === "combat_experience")
+        .map((task) =>
+          task.owner?.kind === "combatant" ? task.owner.participantId : undefined,
+        ),
+    ).toEqual(["guard"]);
+  });
+
+  it("starts M2 modifier review from the first unresolved participant, not the A1 cursor", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "guard",
+        cursorStep: "M2",
+        currentStep: "review_phase_2_modifiers",
+      }),
+    );
+    const modifierTasks = projection.boundary.processes
+      .filter((process) => process.kind === "modifier_review")
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks));
+    expect(modifierTasks).toHaveLength(2);
+    expect(modifierTasks[0]).toMatchObject({ owner: { participantId: "hero" }, state: "executable" });
+    expect(modifierTasks[1]).toMatchObject({ owner: { participantId: "guard" }, state: "waiting" });
   });
 
   it("projects Combat Experience as a dependency without changing declaration behavior", () => {

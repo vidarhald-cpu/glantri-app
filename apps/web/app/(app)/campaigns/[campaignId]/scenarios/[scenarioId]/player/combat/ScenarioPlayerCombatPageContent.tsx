@@ -1042,6 +1042,7 @@ export default function ScenarioPlayerCombatPageContent({
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
+  const [combatActionError, setCombatActionError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
@@ -1193,6 +1194,7 @@ export default function ScenarioPlayerCombatPageContent({
           );
         }
         setError(undefined);
+        setCombatActionError(undefined);
       } catch (caughtError) {
         if (cancelled) {
           return;
@@ -2367,8 +2369,9 @@ export default function ScenarioPlayerCombatPageContent({
       );
       acceptEncounterSession(encounter);
       setError(undefined);
+      setCombatActionError(undefined);
     } catch (caughtError) {
-      setError(
+      setCombatActionError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll Combat Experience.",
       );
     } finally {
@@ -3064,7 +3067,11 @@ export default function ScenarioPlayerCombatPageContent({
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
   const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
-  const currentPhaseChoicePhase = currentInitiativePhase;
+  const currentPhaseChoicePhase =
+    currentInitiativePhase ??
+    (currentActionPresentation?.taskKind === "combat_experience"
+      ? currentActionPresentation.phase
+      : undefined);
   const selectedPhaseCombatExperienceRequirement =
     combatRoundState && selectedRoundParticipant && currentPhaseChoicePhase
       ? getCombatRoundPhaseCombatExperienceRequirement({
@@ -3279,7 +3286,9 @@ export default function ScenarioPlayerCombatPageContent({
       case "submit_phase_initiative_choice":
         void (selectedPhaseAttackChoiceIsBackOut
           ? backOutPhaseAttack(descriptor)
-          : continuePhaseAttack(descriptor));
+          : selectedPhaseCombatExperienceRequirement
+            ? rollCombatExperience(descriptor)
+            : continuePhaseAttack(descriptor));
         return;
       case "roll_combat_experience":
         void rollCombatExperience(descriptor);
@@ -3451,6 +3460,8 @@ export default function ScenarioPlayerCombatPageContent({
           </label>
         ) : null}
       </div>
+
+      {combatActionError ? <div style={panelStyle}>{combatActionError}</div> : null}
 
       {playerCombatTrackerModel ? (
         <section style={panelStyle}>

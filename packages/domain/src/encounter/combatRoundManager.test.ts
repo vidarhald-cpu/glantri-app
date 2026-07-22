@@ -106,8 +106,8 @@ import {
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
   removeCombatRoundCombatExperienceEffects,
+  removeCombatRoundCombatExperienceCombatContextModifiers,
   restoreCombatRoundBackOutCombatContextModifiers,
-  restoreCombatRoundPhaseInitiativeResolutionCombatContextModifiers,
   removeCombatRoundEndHealthCheckEffects,
   removeCombatRoundEndParticipantReviewEffects,
   rollCombatRoundCombatExperience,
@@ -918,7 +918,7 @@ function prepareScenarioTargetPhaseCombatExperienceGate(input: {
     submittedBy: "gm",
     visibility,
   });
-  const state = recordCombatRoundInitiative({
+  const inputsRecorded = recordCombatRoundInitiative({
     command: {
       createdAt: "2026-01-01T00:02:30.000Z",
       createdByUserId: "gm-1",
@@ -931,7 +931,33 @@ function prepareScenarioTargetPhaseCombatExperienceGate(input: {
     visibility,
   });
 
+  const state = commitCombatRoundPhaseInitiativeResolution({
+    command: {
+      createdAt: "2026-01-01T00:02:45.000Z",
+      createdByUserId: "gm-1",
+    },
+    phase: input.phase,
+    state: inputsRecorded,
+    visibility,
+  }).state;
+
   return { state, visibility };
+}
+
+function commitPreparedPhaseInitiative(input: {
+  phase: "phase1" | "phase2";
+  state: ReturnType<typeof initializeCombatRoundState>;
+  visibility?: Record<string, Record<string, boolean>>;
+}): ReturnType<typeof initializeCombatRoundState> {
+  return commitCombatRoundPhaseInitiativeResolution({
+    command: {
+      createdAt: "2026-01-01T00:02:45.000Z",
+      createdByUserId: "gm-1",
+    },
+    phase: input.phase,
+    state: input.state,
+    visibility: input.visibility,
+  }).state;
 }
 
 function prepareFailedParryPendingDamage(input: {
@@ -2269,14 +2295,25 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const beforeCommit = state;
 
-    expect(advanced.currentStep).toBe("initiative_phase_1");
-    expect(advanced.currentCursor).toEqual({
-      participantId: "gladiator",
-      roundNumber: 3,
-      step: "i1",
-    });
+    expect(beforeCommit.currentStep).toBe("initiative_phase_1");
+    expect(
+      getCombatRoundPhaseCombatExperienceRequirement({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: beforeCommit,
+        visibility,
+      }),
+    ).toBeUndefined();
+    const advanced = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: beforeCommit,
+      visibility,
+    }).state;
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentCursor?.step).toBe("A1");
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
       getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
@@ -2339,7 +2376,18 @@ describe("combat round manager", () => {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const beforeCommitReport = getCombatRoundPhaseCombatExperienceDetectionReport({
+      phase: "phase1",
+      state,
+      visibility,
+    });
+    expect(beforeCommitReport.every((entry) => entry.required === false)).toBe(true);
+    const advanced = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state,
+      visibility,
+    }).state;
     const report = getCombatRoundPhaseCombatExperienceDetectionReport({
       phase: "phase1",
       state: advanced,
@@ -2388,11 +2436,11 @@ describe("combat round manager", () => {
         targetMatchesParticipant: true,
       }),
     ]);
-    expect(advanced.currentStep).toBe("initiative_phase_1");
+    expect(advanced.currentStep).toBe("phase_1_actions");
     expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 1,
-      step: "i1",
+      step: "A1",
     });
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
@@ -2429,13 +2477,25 @@ describe("combat round manager", () => {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state,
+        visibility,
+      }),
+    ).toBeUndefined();
+    const advanced = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state,
+      visibility,
+    }).state;
 
-    expect(advanced.currentStep).toBe("initiative_phase_1");
+    expect(advanced.currentStep).toBe("phase_1_actions");
     expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 1,
-      step: "i1",
+      step: "A1",
     });
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
@@ -2447,7 +2507,7 @@ describe("combat round manager", () => {
     ).toBe("phase1_attack");
   });
 
-  it("moves the final command-backed i1 roll to the first pending i1 resolution choice", () => {
+  it("keeps the final command-backed i1 roll at initiative until GM commit opens CE", () => {
     const visibility = {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
@@ -2483,7 +2543,7 @@ describe("combat round manager", () => {
     );
     expect(afterScyrianRoll.commands.at(-1)).toMatchObject({
       afterCursor: {
-        participantId: "gladiator",
+        participantId: "scyrian",
         roundNumber: 2,
         step: "i1",
       },
@@ -2496,11 +2556,11 @@ describe("combat round manager", () => {
     });
     expect(afterScyrianRoll.currentStep).toBe("initiative_phase_1");
     expect(afterScyrianRoll.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "scyrian",
       roundNumber: 2,
       step: "i1",
     });
-    expect(afterScyrianRoll.selectedParticipantId).toBe("gladiator");
+    expect(afterScyrianRoll.selectedParticipantId).toBe("scyrian");
     expect(afterScyrianRoll.selectedStep).toBe("initiative_phase_1");
     expect(afterScyrianRoll.phaseResolutionCursor).toBeUndefined();
     expect(
@@ -2509,7 +2569,7 @@ describe("combat round manager", () => {
         state: afterScyrianRoll,
         visibility,
       }),
-    ).toBe("phase1_attack");
+    ).toBeUndefined();
     expect(
       canPlayerRollCombatAttack({
         participantId: "gladiator",
@@ -2517,9 +2577,28 @@ describe("combat round manager", () => {
         state: afterScyrianRoll,
       }),
     ).toBe(false);
+
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: afterScyrianRoll,
+      visibility,
+    }).state;
+    expect(committed.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A1",
+    });
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: committed,
+        visibility,
+      }),
+    ).toBe("phase1_attack");
   });
 
-  it("permits backing out during phase1 initiative resolution without applying it before commit", () => {
+  it("permits backing out after phase1 initiative commit", () => {
     const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
       gladiatorActionId: "double_attack",
       phase: "phase1",
@@ -2563,7 +2642,7 @@ describe("combat round manager", () => {
         trigger: "phase1_attack",
       },
       phase: "phase1",
-      step: "i1",
+      step: "A1",
       type: "submit_phase_initiative_choice",
     });
     expect(
@@ -2576,14 +2655,14 @@ describe("combat round manager", () => {
     expect(
       backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
         ?.stepStatuses.phase_1_actions,
-    ).toBe("pending");
+    ).toBe("skipped");
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "gladiator",
         phase: "phase1",
         state: backedOut.state,
       }).substep,
-    ).toBe("pending");
+    ).toBe("done");
     expect(
       canPlayerRollCombatAttack({
         participantId: "gladiator",
@@ -2594,14 +2673,18 @@ describe("combat round manager", () => {
     expect(backedOut.state.currentCursor).toEqual({
       participantId: "scyrian",
       roundNumber: 2,
-      step: "i1",
+      step: "A1",
     });
-    expect(backedOut.state.phaseResolutionCursor).toBeUndefined();
+    expect(backedOut.state.phaseResolutionCursor).toEqual({
+      participantId: "scyrian",
+      phase: "phase1",
+      substep: "attack",
+    });
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
         (entry) => entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
       )?.value,
-    ).toBe(-4);
+    ).toBe(-2);
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
         (entry) => entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
@@ -2614,7 +2697,7 @@ describe("combat round manager", () => {
     ).toBe(-1);
   });
 
-  it("clears a submitted phase1 back-out choice back to unresolved initiative resolution", () => {
+  it("clears a submitted phase1 back-out choice back to the unresolved A1 gate", () => {
     const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
       gladiatorActionId: "double_attack",
       phase: "phase1",
@@ -2638,7 +2721,7 @@ describe("combat round manager", () => {
     });
     const cleared = clearCombatRoundStep({
       state: backedOut.state,
-      step: "initiative_phase_1",
+      step: "phase_1_actions",
     });
     const restoredContext = restoreCombatRoundBackOutCombatContextModifiers({
       combatContext: backedOut.combatContext,
@@ -2648,9 +2731,9 @@ describe("combat round manager", () => {
     expect(cleared.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 2,
-      step: "i1",
+      step: "A1",
     });
-    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.currentStep).toBe("phase_1_actions");
     expect(cleared.phaseResolutionCursor).toBeUndefined();
     expect(
       getCombatRoundRequiredCombatExperienceTrigger({
@@ -2701,7 +2784,7 @@ describe("combat round manager", () => {
     expect(
       backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
         ?.stepStatuses.phase_1_actions,
-    ).toBe("pending");
+    ).toBe("skipped");
     expect(
       getCombatRoundPhaseInitiativeChoice({
         participantId: "gladiator",
@@ -2711,7 +2794,7 @@ describe("combat round manager", () => {
     ).toBe("back_out");
   });
 
-  it("top advance from completed i1 stays in initiative resolution without extra i1 commands", () => {
+  it("explicit initiative commit opens A1 after completed i1", () => {
     const atInitiative = prepareScenarioTargetPhaseInitiativeStepState({ phase: "phase1" });
     const state = setCombatRoundParticipantInitiative({
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
@@ -2734,20 +2817,14 @@ describe("combat round manager", () => {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
     };
-    const advanced = advanceCombatRoundStep(state, {
-      command: {
-        createdAt: "2026-01-01T00:03:00.000Z",
-        participantId: "scyrian",
-      },
-      visibility,
-    });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
-    expect(advanced.commands).toHaveLength(0);
-    expect(advanced.currentStep).toBe("initiative_phase_1");
+    expect(advanced.commands.at(-1)?.type).toBe("commit_phase_initiative_resolution");
+    expect(advanced.currentStep).toBe("phase_1_actions");
     expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 2,
-      step: "i1",
+      step: "A1",
     });
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
@@ -2893,7 +2970,7 @@ describe("combat round manager", () => {
     const visibility = {
       "scenario-gladiator": { "scenario-scyrian": true },
     };
-    const gate = advanceCombatRoundStep(state, { visibility });
+    const gate = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:03:00.000Z",
@@ -2908,7 +2985,7 @@ describe("combat round manager", () => {
     expect(gate.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
     expect(gate.phaseResolutionCursor).toBeUndefined();
     expect(rolled.result).toMatchObject({
@@ -2916,31 +2993,10 @@ describe("combat round manager", () => {
       trigger: "phase1_attack",
     });
     expect(
-      getCombatRoundPhaseInitiativeChoice({
-        participantId: "gladiator",
-        phase: "phase1",
-        state: rolled.state,
-      })?.choice,
-    ).toBe("roll_ce_result");
-    expect(rolled.state.phaseResolutionCursor).toBeUndefined();
-    expect(
-      canPlayerRollCombatAttack({
-        participantId: "gladiator",
-        phase: "phase1",
-        state: rolled.state,
-      }),
-    ).toBe(false);
-
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-      },
-      phase: "phase1",
-      state: rolled.state,
-      visibility,
-    });
-
-    expect(committed.state.phaseResolutionCursor).toEqual({
+      rolled.state.participants.find((participant) => participant.participantId === "gladiator")
+        ?.combatExperience?.trigger,
+    ).toBe("phase1_attack");
+    expect(rolled.state.phaseResolutionCursor).toEqual({
       participantId: "gladiator",
       phase: "phase1",
       substep: "attack",
@@ -2949,7 +3005,7 @@ describe("combat round manager", () => {
       canPlayerRollCombatAttack({
         participantId: "gladiator",
         phase: "phase1",
-        state: committed.state,
+        state: rolled.state,
       }),
     ).toBe(true);
   });
@@ -2965,12 +3021,12 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
     expect(advanced.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
     expect(
       getCombatRoundPhaseInitiativeChoiceStatuses({
@@ -3057,7 +3113,7 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",
       combatContext: testPhaseContext("guard"),
@@ -3101,18 +3157,22 @@ describe("combat round manager", () => {
     expect(
       backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
         ?.stepStatuses.phase_1_actions,
-    ).toBe("pending");
+    ).toBe("skipped");
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
         (entry) => entry.sourceActionId === "attack_parry" && entry.sourcePhase === "phase1",
       )?.value,
-    ).toBe(-4);
+    ).toBe(-2);
     expect(backedOut.state.currentCursor).toEqual({
       participantId: "guard",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
-    expect(backedOut.state.phaseResolutionCursor).toBeUndefined();
+    expect(backedOut.state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "attack",
+    });
     expect(
       getCombatRoundPhaseCombatExperienceRequirement({
         participantId: "guard",
@@ -3120,14 +3180,14 @@ describe("combat round manager", () => {
         state: backedOut.state,
         visibility,
       }),
-    ).toBeDefined();
+    ).toBeUndefined();
     expect(
       canPlayerRollCombatAttack({
         participantId: "guard",
         phase: "phase1",
         state: backedOut.state,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("allows a higher-initiative threatened attacker to continue normally after required CE clears", () => {
@@ -3141,7 +3201,7 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const guardConfirmed = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:03:00.000Z",
@@ -3167,7 +3227,7 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: guardConfirmed.state,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canBackOutCombatRoundPhaseAttack({
         participantId: "gladiator",
@@ -3187,22 +3247,12 @@ describe("combat round manager", () => {
       state: guardConfirmed.state,
       visibility,
     });
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-        createdByUserId: "gm-1",
-      },
-      phase: "phase1",
-      state: continued.state,
-      visibility,
-    });
-
-    expect(committed.state.currentStep).toBe("phase_1_actions");
+    expect(continued.state.currentStep).toBe("phase_1_actions");
     expect(
       canPlayerRollCombatAttack({
         participantId: "gladiator",
         phase: "phase1",
-        state: committed.state,
+        state: continued.state,
       }),
     ).toBe(true);
   });
@@ -3263,12 +3313,12 @@ describe("combat round manager", () => {
     const visibility = {
       gladiator: { archer: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
     expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
     expect(
       getCombatRoundPhaseCombatExperienceRequirement({
@@ -3344,7 +3394,7 @@ describe("combat round manager", () => {
     const visibility = {
       gladiator: { archer: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
     expect(
       getCombatRoundPhaseCombatExperienceRequirement({
@@ -3377,7 +3427,7 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: advanced,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canBackOutCombatRoundPhaseAttack({
         participantId: "gladiator",
@@ -3551,14 +3601,25 @@ describe("combat round manager", () => {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const beforeCommit = state;
 
-    expect(advanced.currentStep).toBe("initiative_phase_2");
-    expect(advanced.currentCursor).toEqual({
-      participantId: "gladiator",
-      roundNumber: 1,
-      step: "i2",
-    });
+    expect(beforeCommit.currentStep).toBe("initiative_phase_2");
+    expect(
+      isCombatRoundPhaseCombatExperienceRollRequired({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: beforeCommit,
+        visibility,
+      }),
+    ).toBe(false);
+    const advanced = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase2",
+      state: beforeCommit,
+      visibility,
+    }).state;
+    expect(advanced.currentStep).toBe("phase_2_actions");
+    expect(advanced.currentCursor?.step).toBe("A2");
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
       isCombatRoundPhaseCombatExperienceRollRequired({
@@ -3578,7 +3639,7 @@ describe("combat round manager", () => {
     ).toBe(true);
   });
 
-  it("moves the final command-backed i2 roll to the first pending i2 resolution choice", () => {
+  it("keeps the final command-backed i2 roll at initiative until GM commit opens CE", () => {
     const visibility = {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
@@ -3618,7 +3679,7 @@ describe("combat round manager", () => {
     );
     expect(afterScyrianRoll.commands.at(-1)).toMatchObject({
       afterCursor: {
-        participantId: "gladiator",
+        participantId: "scyrian",
         roundNumber: 2,
         step: "i2",
       },
@@ -3631,7 +3692,7 @@ describe("combat round manager", () => {
     });
     expect(afterScyrianRoll.currentStep).toBe("initiative_phase_2");
     expect(afterScyrianRoll.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "scyrian",
       roundNumber: 2,
       step: "i2",
     });
@@ -3640,6 +3701,24 @@ describe("combat round manager", () => {
       getCombatRoundRequiredCombatExperienceTrigger({
         participantId: "gladiator",
         state: afterScyrianRoll,
+        visibility,
+      }),
+    ).toBeUndefined();
+
+    const committed = commitPreparedPhaseInitiative({
+      phase: "phase2",
+      state: afterScyrianRoll,
+      visibility,
+    });
+    expect(committed.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "A2",
+    });
+    expect(
+      getCombatRoundRequiredCombatExperienceTrigger({
+        participantId: "gladiator",
+        state: committed,
         visibility,
       }),
     ).toBe("phase2_attack");
@@ -3676,18 +3755,18 @@ describe("combat round manager", () => {
         trigger: "phase2_attack",
       },
       phase: "phase2",
-      step: "i2",
+      step: "A2",
       type: "submit_phase_initiative_choice",
     });
     expect(
       backedOut.state.participants.find((participant) => participant.participantId === "gladiator")
         ?.stepStatuses.phase_2_actions,
-    ).toBe("pending");
+    ).toBe("skipped");
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
         (entry) => entry.id === PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
       )?.value,
-    ).toBe(-4);
+    ).toBe(-2);
   });
 
   it("does not create phase1 CE from a Parry-Attack declaration without a phase1 attack", () => {
@@ -3702,7 +3781,7 @@ describe("combat round manager", () => {
       "scenario-gladiator": { "scenario-scyrian": true },
       "scenario-scyrian": { "scenario-gladiator": true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
     expect(
       getCombatRoundPhaseCombatExperienceRequirement({
@@ -3797,7 +3876,7 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const gate = advanceCombatRoundStep(state, { visibility });
+    const gate = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const rolledGuard = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:03:00.000Z",
@@ -3827,20 +3906,24 @@ describe("combat round manager", () => {
       beforeCursor: {
         participantId: "gladiator",
         roundNumber: 3,
-        step: "i1",
+        step: "A1",
       },
       phase: "phase1",
-      step: "i1",
-      type: "submit_phase_initiative_choice",
+      step: "A1",
+      type: "roll_combat_experience",
     });
     expect(rolledGuard.state.currentCursor?.participantId).toBe("gladiator");
-    expect(rolledGladiator.state.currentStep).toBe("initiative_phase_1");
+    expect(rolledGladiator.state.currentStep).toBe("phase_1_actions");
     expect(rolledGladiator.state.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
-    expect(rolledGladiator.state.phaseResolutionCursor).toBeUndefined();
+    expect(rolledGladiator.state.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
     expect(
       getCombatRoundRequiredCombatExperienceTrigger({
         participantId: "gladiator",
@@ -3854,41 +3937,18 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: rolledGladiator.state,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(rolledGladiator.state.commands.at(-1)).toMatchObject({
       facts: {
         trigger: "phase1_attack",
       },
       phase: "phase1",
-      step: "i1",
-      type: "submit_phase_initiative_choice",
+      step: "A1",
+      type: "roll_combat_experience",
     });
     expect(getLatestCombatEventSummary(rolledGladiator.state)?.summaryText).toBe(
-      "Round 3, Phase 1: The Gladiator Combat Experience 26 vs 26. Result: Active, no modifier.",
+      "Round 3, A1: The Gladiator Combat Experience 26 vs 26. Result: Attack continues, no roll required. No modifier.",
     );
-
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-      },
-      phase: "phase1",
-      state: rolledGladiator.state,
-      visibility,
-    });
-
-    expect(committed.state.currentStep).toBe("phase_1_actions");
-    expect(committed.state.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
-      phase: "phase1",
-      substep: "attack",
-    });
-    expect(
-      canPlayerRollCombatAttack({
-        participantId: "gladiator",
-        phase: "phase1",
-        state: committed.state,
-      }),
-    ).toBe(true);
   });
 
   it("does not gate phase CE for attacks from explicitly unseen opponents", () => {
@@ -3900,7 +3960,7 @@ describe("combat round manager", () => {
       gladiator: { guard: false },
       guard: { gladiator: false },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
 
     expect(
       getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
@@ -3933,13 +3993,13 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const advanced = advanceCombatRoundStep(state, { visibility });
+    const advanced = commitPreparedPhaseInitiative({ phase: "phase2", state, visibility });
 
-    expect(advanced.currentStep).toBe("initiative_phase_2");
+    expect(advanced.currentStep).toBe("phase_2_actions");
     expect(advanced.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "i2",
+      step: "A2",
     });
     expect(advanced.phaseResolutionCursor).toBeUndefined();
     expect(
@@ -3970,7 +4030,7 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const gate = advanceCombatRoundStep(state, { visibility });
+    const gate = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const rolled = rollCombatRoundCombatExperience({
       command: {
         createdAt: "2026-01-01T00:03:00.000Z",
@@ -3989,16 +4049,17 @@ describe("combat round manager", () => {
       trigger: "phase1_attack",
     });
     expect(rolled.command.facts).toMatchObject({
-      choice: "roll_ce_result",
+      phaseAttackCancelled: true,
+      trigger: "phase1_attack",
     });
-    expect(rolled.state.participants[1]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(rolled.state.participants[1]?.stepStatuses.phase_1_actions).toBe("skipped");
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "guard",
         phase: "phase1",
         state: rolled.state,
       }),
-    ).toMatchObject({ substep: "pending" });
+    ).toMatchObject({ substep: "done" });
     expect(
       getCombatRoundOutgoingAttackResultForParticipantPhase({
         participantId: "guard",
@@ -4007,39 +4068,14 @@ describe("combat round manager", () => {
       }),
     ).toBeUndefined();
 
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-      },
-      phase: "phase1",
-      state: rolled.state,
-      visibility,
-    });
+    expect(rolled.command.facts.phaseAttackCancelled).toBe(true);
 
-    expect(committed.command.facts.appliedChoices).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          choice: "roll_ce_result",
-          participantId: "guard",
-          phaseAttackCancelled: true,
-        }),
-      ]),
-    );
-    expect(committed.state.participants[1]?.stepStatuses.phase_1_actions).toBe("skipped");
-    expect(
-      getCombatRoundPhaseResolutionStatus({
-        participantId: "guard",
-        phase: "phase1",
-        state: committed.state,
-      }),
-    ).toMatchObject({ substep: "done" });
-
-    const cleared = clearCombatRoundStep({ state: committed.state, step: "phase_1_actions" });
+    const cleared = clearCombatRoundStep({ state: rolled.state, step: "phase_1_actions" });
 
     expect(cleared.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
     expect(cleared.participants[1]?.stepStatuses.phase_1_actions).toBe("pending");
     expect(
@@ -4048,7 +4084,7 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: cleared,
       })?.choice,
-    ).toBe("roll_ce_result");
+    ).toBeUndefined();
   });
 
   it("applies phase CE OB modifiers only to the phase attack and clears them with the CE result", () => {
@@ -4062,7 +4098,7 @@ describe("combat round manager", () => {
       gladiator: { guard: true },
       guard: { gladiator: true },
     };
-    const gate = advanceCombatRoundStep(state, { visibility });
+    const gate = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const rolled = rollCombatRoundCombatExperience({
       combatEffects: { effects: [], events: [] },
       command: {
@@ -4076,27 +4112,10 @@ describe("combat round manager", () => {
       state: gate,
       visibility,
     });
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-      },
-      participants: {
-        guard: {
-          combatContext: rolled.combatContext,
-          scenarioParticipantId: "scenario-guard",
-          skillTotal: 10,
-        },
-      },
-      phase: "phase1",
-      state: rolled.state,
-      visibility,
-    });
-    const committedContext = committed.combatContextsByParticipantId.guard ?? rolled.combatContext;
-    const clearedState = clearCombatRoundStep({ state: committed.state, step: "phase_1_actions" });
-    const clearedContext = restoreCombatRoundPhaseInitiativeResolutionCombatContextModifiers({
-      combatContext: committedContext,
-      command: committed.command,
-      participantId: "guard",
+    const clearedState = clearCombatRoundStep({ state: rolled.state, step: "phase_1_actions" });
+    const clearedContext = removeCombatRoundCombatExperienceCombatContextModifiers({
+      combatContext: rolled.combatContext,
+      command: rolled.command,
     });
 
     expect(rolled.result).toMatchObject({
@@ -4106,8 +4125,7 @@ describe("combat round manager", () => {
       trigger: "phase1_attack",
     });
     expect(rolled.combatEffects.effects).toHaveLength(0);
-    expect(rolled.combatContext.modifierBuckets.situationObSkill).toEqual([]);
-    expect(committedContext.modifierBuckets.situationObSkill).toMatchObject([
+    expect(rolled.combatContext.modifierBuckets.situationObSkill).toMatchObject([
       {
         generated: true,
         sourcePhase: "phase1",
@@ -4115,11 +4133,11 @@ describe("combat round manager", () => {
         value: -4,
       },
     ]);
-    expect(clearedState.currentStep).toBe("initiative_phase_1");
+    expect(clearedState.currentStep).toBe("phase_1_actions");
     expect(clearedState.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       roundNumber: 3,
-      step: "i1",
+      step: "A1",
     });
     expect(clearedState.phaseResolutionCursor).toBeUndefined();
     expect(clearedState.participants[1]?.combatExperience).toBeUndefined();
@@ -4129,7 +4147,7 @@ describe("combat round manager", () => {
         phase: "phase1",
         state: clearedState,
       })?.choice,
-    ).toBe("roll_ce_result");
+    ).toBeUndefined();
     expect(clearedContext.modifierBuckets.situationObSkill).toEqual([]);
   });
 
@@ -4151,7 +4169,7 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       visibility,
     });
-    const gate = recordCombatRoundInitiative({
+    const inputsRecorded = recordCombatRoundInitiative({
       command: {
         createdAt: "2026-01-01T00:02:30.000Z",
         createdByUserId: "gm-1",
@@ -4161,6 +4179,11 @@ describe("combat round manager", () => {
       phase: "phase1",
       state: afterGladiatorRoll,
       submittedBy: "gm",
+      visibility,
+    });
+    const gate = commitPreparedPhaseInitiative({
+      phase: "phase1",
+      state: inputsRecorded,
       visibility,
     });
     const rolled = rollCombatRoundCombatExperience({
@@ -4173,16 +4196,16 @@ describe("combat round manager", () => {
       state: gate,
       visibility,
     });
-    const cleared = clearCombatRoundStep({ state: rolled.state, step: "initiative_phase_1" });
+    const cleared = clearCombatRoundStep({ state: rolled.state, step: "phase_1_actions" });
 
-    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.currentStep).toBe("phase_1_actions");
     expect(cleared.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 2,
-      step: "i1",
+      step: "A1",
     });
     expect(cleared.selectedParticipantId).toBe("gladiator");
-    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
     expect(cleared.phaseResolutionCursor).toBeUndefined();
     expect(
       getCombatRoundRequiredCombatExperienceTrigger({
@@ -8687,6 +8710,10 @@ describe("combat round manager", () => {
       decision: "continue",
       participantId: "guard",
       state: phase2Review,
+    });
+    expect(continued.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "M2",
     });
     const reloaded = combatRoundStateSchema.parse(JSON.parse(JSON.stringify(continued)));
     const withPhase2Initiative = setCombatRoundParticipantInitiative({

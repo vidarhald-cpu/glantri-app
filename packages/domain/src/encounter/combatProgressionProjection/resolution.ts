@@ -5,7 +5,9 @@ import {
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundAttackResultId,
   getCombatRoundHitLocationResultId,
+  getCombatRoundCombatExperienceDifficulty,
   getCombatRoundPhaseAttackCandidates,
+  getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseResolutionResultForAttack,
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
@@ -28,6 +30,62 @@ import {
   type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess, CombatProgressionStageKind } from "./types";
+
+function buildPhaseCombatExperienceProcess(
+  context: ProjectionBuildContext,
+  phase: CombatRoundPhase,
+): CombatProgressionProcess | undefined {
+  const candidatesByParticipantId = new Map(
+    getCombatRoundPhaseAttackCandidates({ phase, state: context.state }).map((candidate) => [
+      candidate.participantId,
+      candidate,
+    ]),
+  );
+  const tasks = getCombatRoundPhaseInitiativeChoiceStatuses({ phase, state: context.state })
+    .filter((status) => status.unresolved)
+    .map<TaskSpec>((status) => {
+      const owner = context.identities.get(status.participantId);
+      const candidate = candidatesByParticipantId.get(status.participantId);
+      const incomingAttackerId = status.threats[0]?.attackerParticipantId;
+      return {
+        expectedCommand: "submit_phase_initiative_choice",
+        identity: {
+          opponentParticipantId: incomingAttackerId,
+          opportunityId: candidate?.id,
+          phase,
+        },
+        key: `${status.participantId}:phase-choice`,
+        kind: "combat_experience",
+        owner,
+        presentationContext: {
+          actor: owner,
+          difficulty: status.ceRequired
+            ? getCombatRoundCombatExperienceDifficulty(context.state)
+            : undefined,
+          reason: status.ceRequired ? "attacked_while_attacking" : "phase_attack_choice",
+          responder: owner,
+          target: incomingAttackerId ? context.identities.get(incomingAttackerId) : undefined,
+        },
+        trackerOwner: owner,
+        trackerStep: phase === "phase1" ? "A1" : "A2",
+      };
+    });
+  if (tasks.length === 0) return undefined;
+
+  return buildProcess(
+    context,
+    "combat_experience",
+    [
+      {
+        executionGroups: [{ key: `${phase}:choices`, tasks }],
+        kind: "input",
+        state: "active",
+        strategy: "parallel_all",
+      },
+    ],
+    { key: phase },
+  );
+}
 
 function presentationActionKind(actionId: string | undefined): string | undefined {
   switch (actionId) {
@@ -623,6 +681,9 @@ export function buildResolutionProcesses(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
 ): CombatProgressionProcess[] {
+  const phaseCombatExperienceProcess = buildPhaseCombatExperienceProcess(context, phase);
+  if (phaseCombatExperienceProcess) return [phaseCombatExperienceProcess];
+
   if (isCombatRoundPhaseResolutionComplete({ phase, state: context.state })) {
     const completedProcess = buildProcess(context, "attack", [
       { kind: "attack", state: "complete", strategy: "single_task" },

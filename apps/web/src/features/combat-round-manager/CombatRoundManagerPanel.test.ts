@@ -1208,4 +1208,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("end-review-health-roll-warning");
     expect(source).toContain("end-review-warning");
   });
+
+  it("routes a projected phase Combat Experience task through the CE mutation", () => {
+    const source = readSource();
+    const dispatchStart = source.indexOf('case "submit_phase_initiative_choice"');
+    const dispatchEnd = source.indexOf(
+      'case "set_combat_experience_difficulty"',
+      dispatchStart,
+    );
+    const phaseChoiceDispatch = source.slice(dispatchStart, dispatchEnd);
+
+    expect(source).toContain(
+      'currentActionPresentation?.taskKind === "combat_experience"',
+    );
+    expect(phaseChoiceDispatch).toContain("inspectorPhaseCombatExperienceRequirement");
+    expect(phaseChoiceDispatch).toContain("rollInspectorCombatExperience(descriptor)");
+  });
 });

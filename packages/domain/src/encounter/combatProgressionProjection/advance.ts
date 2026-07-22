@@ -4,6 +4,7 @@ import {
   combatRoundCommandSchema,
   combatRoundStateSchema,
   getCombatRoundCursorStepForStep,
+  getFirstCombatRoundPendingModifierReviewParticipantId,
   getCombatRoundStartNextRoundBlocker,
   upsertCombatRoundStepSnapshots,
   type CombatRoundState,
@@ -82,9 +83,14 @@ function transitionWithoutCommand(input: {
     ? upsertCombatRoundStepSnapshots({ snapshots: input.stepSnapshots, state: input.state })
     : combatRoundStateSchema.parse(input.state);
   const participantId =
-    normalized.currentCursor?.participantId ??
-    normalized.selectedParticipantId ??
-    normalized.participants[0]?.participantId;
+    input.targetBoundary === "phase2_modifier_review"
+      ? (getFirstCombatRoundPendingModifierReviewParticipantId({
+          phase: "phase2",
+          state: normalized,
+        }) ?? normalized.participants[0]?.participantId)
+      : (normalized.currentCursor?.participantId ??
+        normalized.selectedParticipantId ??
+        normalized.participants[0]?.participantId);
 
   return combatRoundStateSchema.parse({
     ...normalized,

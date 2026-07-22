@@ -1770,7 +1770,7 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
     submittedBy: "gm",
     visibility,
   });
-  const roundState = recordCombatRoundInitiative({
+  const initiativeInputsRecorded = recordCombatRoundInitiative({
     command: {
       createdAt: "2026-01-01T00:02:30.000Z",
       createdByUserId: "gm-1",
@@ -1788,6 +1788,15 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
     submittedBy: "gm",
     visibility,
   });
+  const roundState = commitCombatRoundPhaseInitiativeResolution({
+    command: {
+      createdAt: "2026-01-01T00:02:45.000Z",
+      createdByUserId: "gm-1",
+    },
+    phase: "phase1",
+    state: initiativeInputsRecorded,
+    visibility,
+  }).state;
   const participants = [
     makeCombatScenarioParticipant({
       id: "participant-1",
@@ -6296,7 +6305,10 @@ describe("scenarios route contract", () => {
     const updatedParticipantState =
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
     expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationDb).toEqual([
-      doubleAttackPhase1DbParryModifier,
+      expect.objectContaining({
+        id: "generated:double-attack:phase1:db-parry",
+        value: -2,
+      }),
       doubleAttackPhase2DbParryModifier,
     ]);
     expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationObSkill).toEqual([
@@ -6314,7 +6326,7 @@ describe("scenarios route contract", () => {
       }),
       participantId: "encounter-participant-1",
       phase: "phase1",
-      step: "i1",
+      step: "A1",
       type: "submit_phase_initiative_choice",
     });
     expect(
@@ -6323,9 +6335,8 @@ describe("scenarios route contract", () => {
       ),
     ).toBe(false);
     expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
-      "pending",
+      "skipped",
     );
-    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
   });
 
   it("lets a higher-initiative player submit back-out without required CE", async () => {
@@ -6356,7 +6367,10 @@ describe("scenarios route contract", () => {
     const updatedParticipantState =
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
     expect(updatedParticipantState.combat.combatContext.modifierBuckets.situationDb).toEqual([
-      doubleAttackPhase1DbParryModifier,
+      expect.objectContaining({
+        id: "generated:double-attack:phase1:db-parry",
+        value: -2,
+      }),
       doubleAttackPhase2DbParryModifier,
     ]);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
@@ -6376,7 +6390,7 @@ describe("scenarios route contract", () => {
       }),
       participantId: "encounter-participant-1",
       phase: "phase1",
-      step: "i1",
+      step: "A1",
       type: "submit_phase_initiative_choice",
     });
     expect(
@@ -6386,7 +6400,7 @@ describe("scenarios route contract", () => {
     ).toBe(false);
     expect(updatedEncounter.combatRoundState.participants[0]?.combatExperience).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
-      "pending",
+      "skipped",
     );
   });
 
@@ -6442,7 +6456,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
-  it("lets the GM commit submitted phase initiative back-out and softens the phase DB/Parry modifier", async () => {
+  it("applies a submitted phase back-out after initiative has already been committed", () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
     const backedOut = backOutCombatRoundPhaseAttack({
       combatContext: fixture.participants[0]?.state.combat.combatContext,
@@ -6457,74 +6471,24 @@ describe("scenarios route contract", () => {
       visibility: fixture.encounter.roleplayState?.visibility,
     });
 
-    setupCombatDeclarationRoute({
-      combatExperienceResolved: false,
-      encounter: {
-        ...fixture.encounter,
-        combatRoundState: backedOut.state,
-      },
-      participants: [
-        {
-          ...fixture.participants[0],
-          state: {
-            ...fixture.participants[0]?.state,
-            combat: {
-              ...fixture.participants[0]?.state.combat,
-              combatContext: backedOut.combatContext,
-            },
-          },
-        },
-        fixture.participants[1]!,
-      ],
-      user: mocks.adminUser,
-    });
-    const app = await buildScenarioTestApp();
-
-    const response = await app.inject({
-      method: "POST",
-      payload: {
-        phase: "phase1",
-      },
-      url: "/encounters/encounter-1/combat-round/commit-phase-initiative-resolution",
-    });
-
-    await app.close();
-
-    expect(response.statusCode).toBe(200);
-    const gladiatorUpdate = mocks.encounterService.updateScenarioParticipantState.mock.calls.find(
-      ([update]) => update.participantId === "participant-1",
-    )?.[0]?.state;
-    expect(gladiatorUpdate.combat.combatContext.modifierBuckets.situationDb).toEqual([
+    expect(backedOut.combatContext.modifierBuckets.situationDb).toEqual([
       expect.objectContaining({
         id: "generated:double-attack:phase1:db-parry",
         value: -2,
       }),
       doubleAttackPhase2DbParryModifier,
     ]);
-    expect(gladiatorUpdate.combat.combatContext.modifierBuckets.situationObSkill).toEqual([
+    expect(backedOut.combatContext.modifierBuckets.situationObSkill).toEqual([
       doubleAttackPhase1ObSkillModifier,
       doubleAttackPhase2ObSkillModifier,
     ]);
-    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
-      facts: expect.objectContaining({
-        appliedChoices: expect.arrayContaining([
-          expect.objectContaining({
-            choice: "back_out",
-            participantId: "encounter-participant-1",
-          }),
-        ]),
-        source: "phase_initiative_resolution_commit",
-      }),
+    expect(backedOut.command).toMatchObject({
+      facts: expect.objectContaining({ choice: "back_out", skippedAttack: true }),
       phase: "phase1",
-      type: "commit_phase_initiative_resolution",
+      step: "A1",
+      type: "submit_phase_initiative_choice",
     });
-    expect(updatedEncounter.combatRoundState.currentStep).toBe("phase_1_actions");
-    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toMatchObject({
-      phase: "phase1",
-      substep: "attack",
-    });
-    expect(updatedEncounter.combatRoundState.participants[0]?.stepStatuses.phase_1_actions).toBe(
+    expect(backedOut.state.participants[0]?.stepStatuses.phase_1_actions).toBe(
       "skipped",
     );
   });
@@ -7085,24 +7049,25 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-01-01T00:03:00.000Z",
       visibility: fixture.encounter.roleplayState?.visibility,
     });
-    const otherChoice = backOutCombatRoundPhaseAttack({
-      combatContext: fixture.participants[1]?.state.combat.combatContext,
-      command: {
-        createdAt: "2026-01-01T00:03:30.000Z",
-        createdByUserId: "other-player",
-      },
-      participantId: "encounter-participant-2",
-      phase: "phase1",
-      state: ownChoice.state,
-      updatedAt: "2026-01-01T00:03:30.000Z",
-      visibility: fixture.encounter.roleplayState?.visibility,
+    const otherChoiceState = combatRoundStateSchema.parse({
+      ...ownChoice.state,
+      commands: [
+        ...ownChoice.state.commands,
+        {
+          ...ownChoice.command,
+          createdAt: "2026-01-01T00:03:30.000Z",
+          createdByUserId: "other-player",
+          id: `${ownChoice.command.id}:other`,
+          participantId: "encounter-participant-2",
+        },
+      ],
     });
 
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       encounter: {
         ...fixture.encounter,
-        combatRoundState: otherChoice.state,
+        combatRoundState: otherChoiceState,
       },
       participants: fixture.participants,
     });
@@ -7140,24 +7105,25 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-01-01T00:03:00.000Z",
       visibility: fixture.encounter.roleplayState?.visibility,
     });
-    const otherChoice = backOutCombatRoundPhaseAttack({
-      combatContext: fixture.participants[1]?.state.combat.combatContext,
-      command: {
-        createdAt: "2026-01-01T00:03:30.000Z",
-        createdByUserId: "other-player",
-      },
-      participantId: "encounter-participant-2",
-      phase: "phase1",
-      state: ownChoice.state,
-      updatedAt: "2026-01-01T00:03:30.000Z",
-      visibility: fixture.encounter.roleplayState?.visibility,
+    const otherChoiceState = combatRoundStateSchema.parse({
+      ...ownChoice.state,
+      commands: [
+        ...ownChoice.state.commands,
+        {
+          ...ownChoice.command,
+          createdAt: "2026-01-01T00:03:30.000Z",
+          createdByUserId: "other-player",
+          id: `${ownChoice.command.id}:other`,
+          participantId: "encounter-participant-2",
+        },
+      ],
     });
 
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       encounter: {
         ...fixture.encounter,
-        combatRoundState: otherChoice.state,
+        combatRoundState: otherChoiceState,
       },
       participants: fixture.participants,
       user: mocks.adminUser,
@@ -7182,7 +7148,7 @@ describe("scenarios route contract", () => {
     ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
   });
 
-  it("clears a committed phase initiative back-out and restores the generated DB/Parry modifier", async () => {
+  it("clears a phase back-out and restores the generated DB/Parry modifier", async () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
     const backedOut = backOutCombatRoundPhaseAttack({
       combatContext: fixture.participants[0]?.state.combat.combatContext,
@@ -7196,36 +7162,11 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-01-01T00:03:00.000Z",
       visibility: fixture.encounter.roleplayState?.visibility,
     });
-    const committed = commitCombatRoundPhaseInitiativeResolution({
-      command: {
-        createdAt: "2026-01-01T00:04:00.000Z",
-        createdByUserId: "gm-1",
-      },
-      participants: {
-        "encounter-participant-1": {
-          combatContext: backedOut.combatContext,
-          scenarioParticipantId: "participant-1",
-          skillTotal: 26,
-        },
-        "encounter-participant-2": {
-          combatContext: fixture.participants[1]!.state.combat.combatContext,
-          scenarioParticipantId: "participant-2",
-          skillTotal: 26,
-        },
-      },
-      phase: "phase1",
-      rng: () => 0.8,
-      state: backedOut.state,
-      visibility: fixture.encounter.roleplayState?.visibility,
-    });
-    const committedGladiatorContext =
-      committed.combatContextsByParticipantId["encounter-participant-1"] ?? backedOut.combatContext;
-
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       encounter: {
         ...fixture.encounter,
-        combatRoundState: committed.state,
+        combatRoundState: backedOut.state,
       },
       participants: [
         {
@@ -7234,7 +7175,7 @@ describe("scenarios route contract", () => {
             ...fixture.participants[0]?.state,
             combat: {
               ...fixture.participants[0]?.state.combat,
-              combatContext: committedGladiatorContext,
+              combatContext: backedOut.combatContext,
             },
           },
         },
@@ -7263,11 +7204,11 @@ describe("scenarios route contract", () => {
       doubleAttackPhase2DbParryModifier,
     ]);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("phase_1_actions");
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
-      participantId: "encounter-participant-2",
+      participantId: "encounter-participant-1",
       roundNumber: 2,
-      step: "i1",
+      step: "A1",
     });
     expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
   });
@@ -9775,8 +9716,8 @@ describe("scenarios route contract", () => {
       );
       expect(roundState().currentStep).toBe("review_phase_2_modifiers");
       for (const [scenarioParticipantId, roundParticipantId] of [
-        ["participant-2", "encounter-participant-2"],
         ["participant-1", "encounter-participant-1"],
+        ["participant-2", "encounter-participant-2"],
       ] as const) {
         const declaration = participantState(roundParticipantId)?.declaration;
         const reviewResponse = await app.inject({

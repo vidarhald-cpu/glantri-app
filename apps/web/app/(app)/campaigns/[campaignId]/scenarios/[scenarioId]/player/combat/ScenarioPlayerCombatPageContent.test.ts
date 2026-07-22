@@ -454,4 +454,27 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("Phase initiative choices");
     expect(source).not.toContain("Waiting for GM to roll Combat Experience.");
   });
+
+  it("keeps phase Combat Experience errors recoverable and invokes the projected CE task", () => {
+    const source = readSource();
+    const dispatchStart = source.indexOf('case "submit_phase_initiative_choice"');
+    const dispatchEnd = source.indexOf('case "roll_combat_experience"', dispatchStart);
+    const phaseChoiceDispatch = source.slice(dispatchStart, dispatchEnd);
+    const rollStart = source.indexOf(
+      "async function rollCombatExperience(descriptor: CurrentActionCommandDescriptor)",
+    );
+    const rollEnd = source.indexOf("async function", rollStart + 20);
+    const rollHandler = source.slice(rollStart, rollEnd);
+    const catchStart = rollHandler.indexOf("} catch (caughtError) {");
+    const catchHandler = rollHandler.slice(catchStart);
+
+    expect(source).toContain("const [combatActionError, setCombatActionError]");
+    expect(source).toContain(
+      "{combatActionError ? <div style={panelStyle}>{combatActionError}</div> : null}",
+    );
+    expect(phaseChoiceDispatch).toContain("selectedPhaseCombatExperienceRequirement");
+    expect(phaseChoiceDispatch).toContain("rollCombatExperience(descriptor)");
+    expect(rollHandler).toContain("setCombatActionError(");
+    expect(catchHandler).not.toContain("setError(");
+  });
 });

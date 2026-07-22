@@ -2,7 +2,7 @@ import {
   canPlayerRollCombatInitiative,
   canPlayerSubmitCombatDeclaration,
   getCombatRoundCombatExperienceDifficulty,
-  getCombatRoundPhaseInitiativeChoiceStatuses,
+  getFirstCombatRoundPendingModifierReviewParticipantId,
   isCombatRoundPhaseInitiativeComplete,
   isCombatStartExperienceRollRequired,
   type CombatRoundPhase,
@@ -178,12 +178,12 @@ export function buildModifierReviewProcess(
   const pending = context.state.participants.filter(
     (participant) => !isCompleteStatus(participant.stepStatuses[step]),
   );
-  const cursorParticipantId = context.state.currentCursor?.participantId;
-  // A completed review row can remain in the persisted compatibility cursor until the next
-  // command is recorded. Projection must still expose the first unresolved review as executable.
-  const activeId = pending.some((participant) => participant.participantId === cursorParticipantId)
-    ? cursorParticipantId
-    : pending[0]?.participantId;
+  // Each modifier-review boundary owns a fresh ordered participant iteration. A compatibility
+  // cursor left by declaration, action resolution, or a Double Attack decision must not seed it.
+  const activeId = getFirstCombatRoundPendingModifierReviewParticipantId({
+    phase,
+    state: context.state,
+  });
   const tasks = pending.map<TaskSpec>((participant) => {
     const owner = context.identities.get(participant.participantId);
     return {
@@ -345,27 +345,6 @@ export function buildInitiativeProcess(
     ];
   });
   const complete = isCombatRoundPhaseInitiativeComplete({ phase, state: context.state });
-  const choiceTasks = complete
-    ? getCombatRoundPhaseInitiativeChoiceStatuses({ phase, state: context.state })
-        .filter((status) => status.unresolved)
-        .map<TaskSpec>((status) => {
-          const owner = context.identities.get(status.participantId);
-          return {
-            expectedCommand: "submit_phase_initiative_choice",
-            identity: { phase },
-            key: `${status.participantId}:choice`,
-            kind: "combat_experience",
-            owner,
-            presentationContext: {
-              actor: owner,
-              difficulty: getCombatRoundCombatExperienceDifficulty(context.state),
-              responder: owner,
-            },
-            trackerOwner: owner,
-            trackerStep,
-          };
-        })
-    : [];
   const commitTasks: TaskSpec[] = complete
     ? [
         {
@@ -388,10 +367,12 @@ export function buildInitiativeProcess(
       tasks: initiativeTasks,
     },
     {
+      // Phase choices and CE are derived only after the GM commits initiative and the action
+      // boundary opens. The empty compatibility stage keeps initiative process identity stable.
       kind: "input",
-      state: complete && choiceTasks.length > 0 ? "active" : complete ? "complete" : "pending",
+      state: complete ? "complete" : "pending",
       strategy: "parallel_all",
-      tasks: choiceTasks,
+      tasks: [],
     },
     {
       kind: "commit",

@@ -4596,7 +4596,11 @@ export default function CombatRoundManagerPanel({
       (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
-  const inspectorPhaseChoicePhase = inspectorInitiativeResolutionPhase;
+  const inspectorPhaseChoicePhase =
+    inspectorInitiativeResolutionPhase ??
+    (currentActionPresentation?.taskKind === "combat_experience"
+      ? currentActionPresentation.phase
+      : undefined);
   const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseCombatExperienceRequirement =
     inspector.participant?.participantId && inspectorPhaseChoicePhase && selectedRoundIsActive
@@ -7419,7 +7423,7 @@ export default function CombatRoundManagerPanel({
   async function rollInspectorCombatExperience(candidate: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
-      expectedCommandTypes: ["roll_combat_experience"],
+      expectedCommandTypes: ["roll_combat_experience", "submit_phase_initiative_choice"],
       presentation: currentActionPresentation,
       requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
     });
@@ -8641,7 +8645,9 @@ export default function CombatRoundManagerPanel({
       case "submit_phase_initiative_choice":
         void (inspectorPhaseAttackChoiceIsBackOut
           ? backOutInspectorPhaseAttack(descriptor)
-          : continueInspectorPhaseAttack(descriptor));
+          : inspectorPhaseCombatExperienceRequirement
+            ? rollInspectorCombatExperience(descriptor)
+            : continueInspectorPhaseAttack(descriptor));
         return;
       case "set_combat_experience_difficulty":
         void saveCombatExperienceDifficultyDraft(descriptor);

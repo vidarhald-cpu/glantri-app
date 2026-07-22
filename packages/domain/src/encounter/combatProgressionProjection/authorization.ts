@@ -182,7 +182,7 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     stage: "review",
   },
   roll_combat_experience: {
-    boundary: "declaration",
+    boundary: combatExperienceBoundary,
     kind: "combat_experience",
     process: "combat_experience",
     stage: "input",
@@ -236,9 +236,9 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     stage: "difficulty",
   },
   submit_phase_initiative_choice: {
-    boundary: initiativeBoundary,
+    boundary: resolutionBoundary,
     kind: "combat_experience",
-    process: "initiative",
+    process: "combat_experience",
     stage: "input",
   },
 };
@@ -265,6 +265,12 @@ function resolutionBoundary(phase?: CombatRoundPhase): CombatProgressionBoundary
     : phase === "phase2"
       ? "phase2_resolution"
       : undefined;
+}
+
+function combatExperienceBoundary(
+  phase?: CombatRoundPhase,
+): CombatProgressionBoundaryKind | undefined {
+  return phase ? resolutionBoundary(phase) : "declaration";
 }
 
 function failure(

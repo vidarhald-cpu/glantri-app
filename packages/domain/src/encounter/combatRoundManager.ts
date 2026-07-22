@@ -3119,6 +3119,25 @@ export function getCombatExperienceTriggerForPhase(
   return phase === "phase1" ? "phase1_attack" : "phase2_attack";
 }
 
+export function getFirstCombatRoundPendingModifierReviewParticipantId(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): string | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const step = input.phase === "phase1" ? "review_action_modifiers" : "review_phase_2_modifiers";
+  const completedStatuses = new Set<CombatRoundStepStatus>([
+    "complete",
+    "gmEdited",
+    "locked",
+    "skipped",
+    "submitted",
+  ]);
+
+  return normalized.participants.find(
+    (participant) => !completedStatuses.has(participant.stepStatuses[step] ?? "pending"),
+  )?.participantId;
+}
+
 export function getCombatExperiencePhaseForTrigger(
   trigger: CombatExperienceTrigger,
 ): CombatRoundPhase | undefined {
@@ -3383,6 +3402,10 @@ export function getCombatRoundPhaseAttackBackOutOpportunity(input: {
     return undefined;
   }
 
+  if (!isCombatRoundPhaseInitiativeCommitted({ phase: input.phase, state: normalized })) {
+    return undefined;
+  }
+
   if (
     participantHasCombatExperienceForTrigger({
       participant,
@@ -3494,13 +3517,6 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
   visibility?: CombatRoundVisibility;
 }): CombatRoundPhaseCombatExperienceRequirement | undefined {
   const normalized = combatRoundStateSchema.parse(input.state);
-
-  if (
-    normalized.currentStep === getCombatRoundPhaseActionStepForPhase(input.phase) &&
-    normalized.phaseResolutionCursor?.phase === input.phase
-  ) {
-    return undefined;
-  }
 
   if (
     combatRoundPhaseInitiativeChoiceSubmitted({
@@ -3658,10 +3674,11 @@ export function canBackOutCombatRoundPhaseAttack(input: {
   visibility?: CombatRoundVisibility;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(input.phase);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
 
   return Boolean(
-    normalized.currentStep === initiativeStep &&
+    normalized.currentStep === actionStep &&
+    isCombatRoundPhaseInitiativeCommitted({ phase: input.phase, state: normalized }) &&
     getCombatRoundPhaseAttackBackOutOpportunity({
       participantId: input.participantId,
       phase: input.phase,
@@ -4082,12 +4099,14 @@ export function rollCombatRoundCombatExperience(input: {
   }
 
   if (phase) {
-    const requiredStep = getCombatRoundPhaseInitiativeStepForPhase(phase);
+    const requiredStep = getCombatRoundPhaseActionStepForPhase(phase);
 
     if (normalized.currentStep !== requiredStep) {
-      throw new RangeError(
-        "Combat Experience can only be rolled during phase initiative resolution.",
-      );
+      throw new RangeError("Combat Experience can only be rolled after initiative is committed.");
+    }
+
+    if (!isCombatRoundPhaseInitiativeCommitted({ phase, state: normalized })) {
+      throw new RangeError("Phase initiative must be committed before Combat Experience.");
     }
 
     if (!phaseRequirement) {
@@ -4154,109 +4173,8 @@ export function rollCombatRoundCombatExperience(input: {
       createdAt: input.command.createdAt,
       participantId: input.participantId,
       state: normalized,
-      type: phase ? "submit_phase_initiative_choice" : "roll_combat_experience",
+      type: "roll_combat_experience",
     });
-
-  if (phase) {
-    const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(phase);
-    const beforeCursor =
-      normalized.currentCursor?.roundNumber === normalized.roundNumber &&
-      normalized.currentCursor.step === getCombatRoundPhaseInitiativeCursorStepForPhase(phase)
-        ? normalized.currentCursor
-        : getDefaultCombatRoundCursor({
-            participantId: input.participantId,
-            roundNumber: normalized.roundNumber,
-            step: initiativeStep,
-          });
-    const attackStep = getCombatRoundAttackCursorStepForPhase(phase);
-    const commandShell = combatRoundCommandSchema.parse({
-      afterCursor: beforeCursor,
-      beforeCursor,
-      createdAt: input.command.createdAt,
-      createdByUserId: input.command.createdByUserId,
-      facts: {
-        attackActionId: participant.declaration?.actionId,
-        attackStep,
-        ceRequired: true,
-        choice: "roll_ce_result",
-        combatExperience: result,
-        createdCombatEffectEventId: undefined,
-        createdCombatEffectIds: [],
-        createdCombatModifierIds: [],
-        difficulty,
-        difficultyShift,
-        durationRounds: result.durationRounds,
-        effectiveTableTotal,
-        evaluatedResult: evaluation,
-        finalTotal,
-        modifierValue: result.modifierValue,
-        noRollRequired,
-        openEndedD10s: roll?.openEndedD10s ?? [],
-        phase,
-        phaseCombatExperienceReason: phaseRequirement?.reason,
-        phaseCombatExperienceThreats: phaseRequirement?.threats ?? [],
-        resultBand: result.resultBand,
-        resultLabel: result.label,
-        rollD20: roll?.rollD20,
-        rollTotal: roll?.dieResult,
-        scenarioParticipantId: input.scenarioParticipantId ?? input.participantId,
-        skillTotal,
-        skillTotalSource: input.skillTotalSource,
-        skillTotalWarning: input.skillTotalWarning,
-        source: "phase_initiative_resolution",
-        threatened: true,
-        trigger,
-      },
-      id: commandId,
-      participantId: input.participantId,
-      phase,
-      roundNumber: normalized.roundNumber,
-      step: getCombatRoundPhaseInitiativeCursorStepForPhase(phase),
-      type: "submit_phase_initiative_choice",
-    });
-    const stateWithCommandShell = combatRoundStateSchema.parse({
-      ...normalized,
-      combatExperienceDifficulty: difficulty,
-      commands: [
-        ...normalized.commands.filter((existingCommand) => existingCommand.id !== commandId),
-        commandShell,
-      ],
-    });
-    const stateAfterChoice = moveCombatRoundToPhaseInitiativeResolution({
-      phase,
-      state: stateWithCommandShell,
-    });
-    const afterCursor = stateAfterChoice.currentCursor ?? beforeCursor;
-    const command = combatRoundCommandSchema.parse({
-      ...commandShell,
-      afterCursor,
-      facts: {
-        ...commandShell.facts,
-        ...(afterCursor.participantId && afterCursor.participantId !== input.participantId
-          ? {
-              nextChoiceParticipantId: afterCursor.participantId,
-            }
-          : {}),
-      },
-    });
-    const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
-
-    return {
-      combatContext: scenarioParticipantCombatContextSchema.parse(input.combatContext ?? {}),
-      combatEffects: currentCombatEffects,
-      command,
-      result,
-      state: combatRoundStateSchema.parse({
-        ...stateAfterChoice,
-        commands: [
-          ...stateAfterChoice.commands.filter(
-            (existingCommand) => existingCommand.id !== commandId,
-          ),
-          command,
-        ],
-      }),
-    };
-  }
 
   const phaseActionStep = phase ? getCombatRoundPhaseActionStepForPhase(phase) : undefined;
   const previousPhaseActionStepStatus = phaseActionStep
@@ -5982,10 +5900,17 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
   });
 
   if (nextParticipantId) {
-    return moveCombatRoundToPhaseInitiativeResolution({
-      participantId: nextParticipantId,
-      phase,
-      state: withPhaseOutcome,
+    return combatRoundStateSchema.parse({
+      ...withPhaseOutcome,
+      currentCursor: getDefaultCombatRoundCursor({
+        participantId: nextParticipantId,
+        roundNumber: withPhaseOutcome.roundNumber,
+        step: getCombatRoundPhaseActionStepForPhase(phase),
+      }),
+      currentStep: getCombatRoundPhaseActionStepForPhase(phase),
+      phaseResolutionCursor: undefined,
+      selectedParticipantId: nextParticipantId,
+      selectedStep: getCombatRoundPhaseActionStepForPhase(phase),
     });
   }
 
@@ -6522,7 +6447,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
-  const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(input.phase);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
   const trigger = getCombatExperienceTriggerForPhase(input.phase);
   const backOutOpportunity = getCombatRoundPhaseAttackBackOutOpportunity({
     participantId: input.participantId,
@@ -6541,10 +6466,11 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
     throw new RangeError("Phase initiative participant is not in the active round.");
   }
 
-  if (normalized.currentStep !== initiativeStep) {
-    throw new RangeError(
-      "Phase initiative choices can only be submitted during initiative resolution.",
-    );
+  if (
+    normalized.currentStep !== actionStep ||
+    !isCombatRoundPhaseInitiativeCommitted({ phase: input.phase, state: normalized })
+  ) {
+    throw new RangeError("Phase attack choices can only be submitted after initiative commit.");
   }
 
   if (!backOutOpportunity) {
@@ -6578,12 +6504,12 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   const beforeCursor =
     normalized.currentCursor?.roundNumber === normalized.roundNumber &&
     normalized.currentCursor.participantId === input.participantId &&
-    normalized.currentCursor.step === getCombatRoundPhaseInitiativeCursorStepForPhase(input.phase)
+    normalized.currentCursor.step === getCombatRoundAttackCursorStepForPhase(input.phase)
       ? normalized.currentCursor
       : combatRoundCursorSchema.parse({
           participantId: input.participantId,
           roundNumber: normalized.roundNumber,
-          step: getCombatRoundPhaseInitiativeCursorStepForPhase(input.phase),
+          step: getCombatRoundAttackCursorStepForPhase(input.phase),
         });
   const commandType = "submit_phase_initiative_choice" satisfies CombatRoundCommandType;
   const commandId =
@@ -6632,6 +6558,9 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
       choice: input.choice,
       initiativeComparison: backOutOpportunity.threats,
       phase: input.phase,
+      previousPhaseActionStepStatus: participant.stepStatuses[actionStep],
+      previousPhaseResolutionStatus:
+        normalized.phaseResolutionStatuses[input.participantId]?.[input.phase],
       ...(phaseRequirement
         ? {
             phaseCombatExperienceReason: phaseRequirement.reason,
@@ -6667,10 +6596,38 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
       commandShell,
     ],
   });
-  const stateAfterChoice = moveCombatRoundToPhaseInitiativeResolution({
+  const stateWithOutcome =
+    input.choice === "back_out"
+      ? applyCommittedPhaseBackOut({
+          createdAt: input.command.createdAt,
+          participantId: input.participantId,
+          phase: input.phase,
+          state: stateWithCommandShell,
+        })
+      : stateWithCommandShell;
+  const nextParticipantId = getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
     phase: input.phase,
-    state: stateWithCommandShell,
+    state: stateWithOutcome,
+    visibility: input.visibility,
   });
+  const stateAfterChoice = nextParticipantId
+    ? combatRoundStateSchema.parse({
+        ...stateWithOutcome,
+        currentCursor: getDefaultCombatRoundCursor({
+          participantId: nextParticipantId,
+          roundNumber: stateWithOutcome.roundNumber,
+          step: actionStep,
+        }),
+        currentStep: actionStep,
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: nextParticipantId,
+        selectedStep: actionStep,
+      })
+    : initializeCombatRoundPhaseResolutionCursor({
+        phase: input.phase,
+        state: stateWithOutcome,
+        updatedAt: input.command.createdAt,
+      });
   const afterCursor = stateAfterChoice.currentCursor ?? beforeCursor;
   const command = combatRoundCommandSchema.parse({
     ...commandShell,
@@ -6690,7 +6647,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
   return {
-    combatContext: currentCombatContext,
+    combatContext: softenedModifierResult.combatContext,
     command,
     state: combatRoundStateSchema.parse({
       ...stateAfterChoice,
@@ -6771,75 +6728,6 @@ export interface CombatRoundPhaseInitiativeCommitParticipantInput {
   skillTotalWarning?: string;
 }
 
-function buildCommittedPhaseCombatExperienceResult(input: {
-  command: {
-    createdAt: string;
-    createdByUserId?: string;
-  };
-  difficulty: number;
-  participantId: string;
-  phase: CombatRoundPhase;
-  rng: () => number;
-  roundNumber: number;
-  skillTotal?: number;
-  skillTotalSource?: string;
-  skillTotalWarning?: string;
-}): CombatRoundCombatExperienceResult {
-  const skillTotal = Math.trunc(input.skillTotal ?? 0);
-  const noRollRequired = skillTotal >= input.difficulty;
-  const roll = noRollRequired ? undefined : rollOpenEndedD20(input.rng);
-  const finalTotal = noRollRequired ? skillTotal : skillTotal + (roll?.dieResult ?? 0);
-  const evaluation = evaluatePhaseCombatExperienceResult(finalTotal, {
-    difficulty: input.difficulty,
-  });
-
-  return combatRoundCombatExperienceResultSchema.parse({
-    ...evaluation,
-    difficulty: input.difficulty,
-    finalTotal,
-    noRollRequired,
-    openEndedD10s: roll?.openEndedD10s ?? [],
-    rolledAt: input.command.createdAt,
-    rolledByUserId: input.command.createdByUserId,
-    rollD20: roll?.rollD20,
-    rollTotal: roll?.dieResult,
-    roundNumber: input.roundNumber,
-    skillTotal,
-    skillTotalSource: input.skillTotalSource,
-    skillTotalWarning: input.skillTotalWarning,
-    trigger: getCombatExperienceTriggerForPhase(input.phase),
-  });
-}
-
-function applyCommittedPhaseCombatExperienceResult(input: {
-  createdAt: string;
-  participantId: string;
-  phase: CombatRoundPhase;
-  result: CombatRoundCombatExperienceResult;
-  state: CombatRoundState;
-}): CombatRoundState {
-  const withParticipantResult = combatRoundStateSchema.parse({
-    ...input.state,
-    participants: input.state.participants.map((entry) =>
-      entry.participantId === input.participantId
-        ? {
-            ...entry,
-            combatExperience: input.result,
-          }
-        : entry,
-    ),
-  });
-
-  return phaseCombatExperienceCancelsAttack(input.result)
-    ? applyPhaseCombatExperienceAttackCancellation({
-        participantId: input.participantId,
-        phase: input.phase,
-        state: withParticipantResult,
-        updatedAt: input.createdAt,
-      })
-    : withParticipantResult;
-}
-
 function applyCommittedPhaseBackOut(input: {
   createdAt: string;
   participantId: string;
@@ -6893,14 +6781,8 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     throw new RangeError("Phase initiative must be complete before resolution can be committed.");
   }
 
-  const statuses = getCombatRoundPhaseInitiativeChoiceStatuses({
-    phase: input.phase,
-    state: normalized,
-    visibility: input.visibility,
-  });
   const commandParticipantId =
     input.command.participantId ??
-    statuses[0]?.participantId ??
     normalized.currentCursor?.participantId ??
     normalized.selectedParticipantId ??
     normalized.participants[0]?.participantId;
@@ -6926,142 +6808,13 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
           step: initiativeStep,
         });
   const difficulty = getCombatRoundCombatExperienceDifficulty(normalized);
-  const rng = input.rng ?? Math.random;
-  const combatContextsByParticipantId = new Map<string, ScenarioParticipantCombatContext>();
-  let workingState = normalized;
   const appliedChoices: Array<Record<string, unknown>> = [];
   const createdCombatModifierIds: string[] = [];
   const softenedModifiers: unknown[] = [];
 
-  for (const status of statuses) {
-    const participant = workingState.participants.find(
-      (entry) => entry.participantId === status.participantId,
-    );
-
-    if (!participant) {
-      continue;
-    }
-
-    const participantInput = input.participants?.[status.participantId] ?? {};
-    const targetParticipantId = participantInput.scenarioParticipantId ?? status.participantId;
-    const participantCombatContext = scenarioParticipantCombatContextSchema.parse(
-      combatContextsByParticipantId.get(status.participantId) ??
-        participantInput.combatContext ??
-        {},
-    );
-    const choice =
-      status.choice ??
-      (status.ceRequired
-        ? combatRoundPhaseInitiativeChoiceSchema.parse({
-            attackActionId: participant.declaration?.actionId,
-            attackStep: getCombatRoundAttackCursorStepForPhase(input.phase),
-            ceRequired: true,
-            choice: "roll_ce_result",
-            commandId: `${commandId}:${status.participantId}:auto-ce`,
-            defaultedOnCommit: true,
-            phase: input.phase,
-            participantId: status.participantId,
-            roundNumber: normalized.roundNumber,
-            submittedAt: input.command.createdAt,
-            submittedByUserId: input.command.createdByUserId,
-            threatened: true,
-          })
-        : combatRoundPhaseInitiativeChoiceSchema.parse({
-            attackActionId: participant.declaration?.actionId,
-            attackStep: getCombatRoundAttackCursorStepForPhase(input.phase),
-            ceRequired: false,
-            choice: "continue_without_ce",
-            commandId: `${commandId}:${status.participantId}:default-continue`,
-            defaultedOnCommit: true,
-            phase: input.phase,
-            participantId: status.participantId,
-            roundNumber: normalized.roundNumber,
-            submittedAt: input.command.createdAt,
-            submittedByUserId: input.command.createdByUserId,
-            threatened: true,
-          }));
-    let nextCombatContext = participantCombatContext;
-    let combatExperienceResult = choice.combatExperience;
-    let phaseAttackCancelled = false;
-    let modifierSofteningWarning: string | undefined;
-    let currentSoftenedModifiers: unknown[] = [];
-
-    if (choice.choice === "roll_ce_result") {
-      combatExperienceResult =
-        combatExperienceResult ??
-        buildCommittedPhaseCombatExperienceResult({
-          command: input.command,
-          difficulty,
-          participantId: status.participantId,
-          phase: input.phase,
-          rng,
-          roundNumber: normalized.roundNumber,
-          skillTotal: participantInput.skillTotal,
-          skillTotalSource: participantInput.skillTotalSource,
-          skillTotalWarning: participantInput.skillTotalWarning,
-        });
-      const phaseModifier = addCombatRoundPhaseCombatExperienceModifier({
-        combatContext: participantCombatContext,
-        commandId,
-        participant,
-        participantId: targetParticipantId,
-        phase: input.phase,
-        result: combatExperienceResult,
-      });
-
-      nextCombatContext = phaseModifier.combatContext;
-      createdCombatModifierIds.push(...phaseModifier.modifierIds);
-      workingState = applyCommittedPhaseCombatExperienceResult({
-        createdAt: input.command.createdAt,
-        participantId: status.participantId,
-        phase: input.phase,
-        result: combatExperienceResult,
-        state: workingState,
-      });
-      phaseAttackCancelled = phaseCombatExperienceCancelsAttack(combatExperienceResult);
-    } else if (choice.choice === "back_out") {
-      const softenedModifierResult = softenCombatActionGeneratedBackOutModifier({
-        actionId: participant.declaration?.actionId,
-        combatContext: participantCombatContext,
-        phase: input.phase,
-      });
-
-      nextCombatContext = softenedModifierResult.combatContext;
-      modifierSofteningWarning = softenedModifierResult.warning;
-      currentSoftenedModifiers = softenedModifierResult.softenedModifiers;
-      softenedModifiers.push(...currentSoftenedModifiers);
-      workingState = applyCommittedPhaseBackOut({
-        createdAt: input.command.createdAt,
-        participantId: status.participantId,
-        phase: input.phase,
-        state: workingState,
-      });
-    }
-
-    combatContextsByParticipantId.set(status.participantId, nextCombatContext);
-    appliedChoices.push({
-      ceRequired: status.ceRequired,
-      choice: choice.choice,
-      combatExperience: combatExperienceResult,
-      defaultedOnCommit: choice.defaultedOnCommit,
-      modifierSofteningWarning,
-      participantId: status.participantId,
-      phaseAttackCancelled,
-      scenarioParticipantId: targetParticipantId,
-      softenedModifierIds:
-        choice.choice === "back_out"
-          ? currentSoftenedModifiers
-              .filter((change): change is { modifierId: string } =>
-                Boolean(change && typeof change === "object" && "modifierId" in change),
-              )
-              .map((change) => change.modifierId)
-          : [],
-    });
-  }
-
   const stateAfterPhaseOpen = initializeCombatRoundPhaseResolutionCursor({
     phase: input.phase,
-    state: workingState,
+    state: normalized,
     updatedAt: input.command.createdAt,
   });
   const afterCursor = stateAfterPhaseOpen.currentCursor ?? beforeCursor;
@@ -7093,17 +6846,41 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     step: getCombatRoundPhaseInitiativeCursorStepForPhase(input.phase),
     type: "commit_phase_initiative_resolution",
   });
-  const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+  const stateWithCommit = combatRoundStateSchema.parse({
+    ...stateAfterPhaseOpen,
+    commands: [...stateAfterPhaseOpen.commands, command],
+  });
+  const firstCombatExperienceParticipantId =
+    getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+      phase: input.phase,
+      state: stateWithCommit,
+      visibility: input.visibility,
+    });
+  const afterCommitCursor = firstCombatExperienceParticipantId
+    ? getDefaultCombatRoundCursor({
+        participantId: firstCombatExperienceParticipantId,
+        roundNumber: normalized.roundNumber,
+        step: getCombatRoundPhaseActionStepForPhase(input.phase),
+      })
+    : command.afterCursor;
+  const committedCommand = combatRoundCommandSchema.parse({
+    ...command,
+    afterCursor: afterCommitCursor,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(afterCommitCursor.step);
 
   return {
-    combatContextsByParticipantId: Object.fromEntries(combatContextsByParticipantId),
-    command,
+    combatContextsByParticipantId: {},
+    command: committedCommand,
     state: combatRoundStateSchema.parse({
       ...stateAfterPhaseOpen,
-      commands: [...stateAfterPhaseOpen.commands, command],
-      currentCursor: command.afterCursor,
+      commands: [...stateAfterPhaseOpen.commands, committedCommand],
+      currentCursor: afterCommitCursor,
       currentStep: selectedStep,
-      selectedParticipantId: command.afterCursor.participantId ?? commandParticipantId,
+      phaseResolutionCursor: firstCombatExperienceParticipantId
+        ? undefined
+        : stateAfterPhaseOpen.phaseResolutionCursor,
+      selectedParticipantId: afterCommitCursor.participantId ?? commandParticipantId,
       selectedStep,
     }),
   };
@@ -16183,6 +15960,13 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
       roundNumber: normalized.roundNumber,
       step: "review_phase_2_modifiers",
     });
+  const firstModifierReviewParticipantId =
+    getFirstCombatRoundPendingModifierReviewParticipantId({ phase: "phase2", state: normalized });
+  const afterCursor = getDefaultCombatRoundCursor({
+    participantId: firstModifierReviewParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: "review_phase_2_modifiers",
+  });
   const updateContext = (context: ScenarioParticipantCombatContext | undefined) => {
     const normalizedContext = scenarioParticipantCombatContextSchema.parse(context ?? {});
     return input.decision === "cancel"
@@ -16220,7 +16004,7 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
     },
   });
   const command = combatRoundCommandSchema.parse({
-    afterCursor: beforeCursor,
+    afterCursor,
     beforeCursor,
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
@@ -16247,6 +16031,7 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
   return combatRoundStateSchema.parse({
     ...normalized,
     commands: [...normalized.commands, command],
+    currentCursor: afterCursor,
     participants: normalized.participants.map((entry) =>
       entry.participantId === input.participantId
         ? {
@@ -16259,6 +16044,8 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
           }
         : entry,
     ),
+    selectedParticipantId: firstModifierReviewParticipantId,
+    selectedStep: "review_phase_2_modifiers",
   });
 }
 
@@ -17519,6 +17306,13 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
   }
 
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+  const phase = command.phase;
+  const previousPhaseActionStepStatus = combatRoundStepStatusSchema.safeParse(
+    command.facts.previousPhaseActionStepStatus,
+  );
+  const previousPhaseResolutionStatus = combatRoundPhaseResolutionParticipantStatusSchema.safeParse(
+    command.facts.previousPhaseResolutionStatus,
+  );
 
   return combatRoundStateSchema.parse({
     ...normalized,
@@ -17526,6 +17320,29 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
     phaseResolutionCursor: undefined,
+    phaseResolutionStatuses:
+      phase && previousPhaseResolutionStatus.success
+        ? {
+            ...normalized.phaseResolutionStatuses,
+            [command.participantId]: {
+              ...normalized.phaseResolutionStatuses[command.participantId],
+              [phase]: previousPhaseResolutionStatus.data,
+            },
+          }
+        : normalized.phaseResolutionStatuses,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === command.participantId &&
+      phase &&
+      previousPhaseActionStepStatus.success
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              [getCombatRoundPhaseActionStepForPhase(phase)]: previousPhaseActionStepStatus.data,
+            },
+          }
+        : participant,
+    ),
     selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
     selectedStep,
   });
@@ -19269,6 +19086,20 @@ export function isCombatRoundPhaseInitiativeComplete(input: {
       stepStatus === "submitted"
     );
   });
+}
+
+export function isCombatRoundPhaseInitiativeCommitted(input: {
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return normalized.commands.some(
+    (command) =>
+      command.roundNumber === normalized.roundNumber &&
+      command.type === "commit_phase_initiative_resolution" &&
+      command.phase === input.phase,
+  );
 }
 
 export function canPlayerRollCombatAttack(input: {
