@@ -886,6 +886,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
     expect(source).toContain("prepareCombatRoundEndReviewOnServer");
     expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
+    expect(source).toContain("commandType: boundaryTransitionAction.commandType");
+    expect(source).toContain("executionGroupId: boundaryTransitionAction.executionGroupId");
     expect(source).toContain("stepSnapshots,");
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
     expect(source).not.toContain("advanceCombatRoundStep(");

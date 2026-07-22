@@ -11,11 +11,14 @@ import type {
 } from "./types";
 
 export type CombatProgressionAuthorizationFailureCode =
+  | "boundary_mismatch"
   | "boundary_closed"
+  | "execution_group_mismatch"
   | "gm_only"
   | "stale_opportunity"
   | "stale_proposal"
   | "stale_boundary"
+  | "task_mismatch"
   | "task_not_found"
   | "task_not_ready"
   | "wrong_target"
@@ -457,14 +460,17 @@ export function authorizeCombatProgressionTask(
     ? damageReviewTasks.filter((task) => task.executionGroupId === input.executionGroupId)
     : damageReviewTasks;
   if (input.executionGroupId && executionGroupTasks.length === 0) {
-    return failure("task_not_found", "No task is executable in this execution group.");
+    return failure(
+      "execution_group_mismatch",
+      "The projected combat execution group is stale or no longer executable.",
+    );
   }
 
   const matchingTasks = input.taskId
     ? executionGroupTasks.filter((task) => task.id === input.taskId)
     : executionGroupTasks;
   if (input.taskId && matchingTasks.length === 0) {
-    return failure("task_not_found", "The projected combat task is stale or no longer executable.");
+    return failure("task_mismatch", "The projected combat task is stale or no longer executable.");
   }
 
   if (matchingTasks.length !== 1 || hasRelevantDiagnostic(input.projection, matchingTasks)) {

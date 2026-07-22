@@ -38,7 +38,9 @@ describe("combat boundary transition action", () => {
     });
 
     expect(action).toEqual({
+      commandType: "advance_combat_boundary",
       encounterId: "encounter-1",
+      executionGroupId: "group:round-boundary",
       expectedBoundary: "round_boundary",
       expectedRevision: "2026-07-20T12:00:02.000Z",
       targetBoundary: "declaration",
@@ -52,6 +54,13 @@ describe("combat boundary transition action", () => {
       buildCombatBoundaryTransitionAction({
         encounterId: "encounter-1",
         task: transitionTask(),
+      }),
+    ).toBeUndefined();
+    expect(
+      buildCombatBoundaryTransitionAction({
+        encounterId: "encounter-1",
+        encounterRevision: "2026-07-20T12:00:02.000Z",
+        task: transitionTask({ expectedCommand: "roll_attack" }),
       }),
     ).toBeUndefined();
     expect(

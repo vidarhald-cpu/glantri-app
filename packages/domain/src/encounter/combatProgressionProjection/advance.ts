@@ -15,7 +15,7 @@ import {
 import { authorizeCombatProgressionTask } from "./authorization";
 import { buildCombatProgressionProjection } from "./build";
 import type { CombatProgressionAuthorizationFailureCode } from "./authorization";
-import type { CombatProgressionBoundaryKind } from "./types";
+import type { CombatProgressionBoundaryKind, CombatProgressionExpectedCommand } from "./types";
 
 const TARGET_STEP_BY_BOUNDARY: Partial<Record<CombatProgressionBoundaryKind, CombatRoundStep>> = {
   declaration: "select_actions",
@@ -56,7 +56,7 @@ function transitionWithoutCommand(input: {
   const transitionKey = `${input.currentBoundary}:${input.targetBoundary}`;
   if (!DIRECT_TRANSITIONS.has(transitionKey)) {
     throw new CombatProgressionBoundaryAdvanceError(
-      "wrong_target",
+      "boundary_mismatch",
       `Unsupported combat boundary transition ${transitionKey}.`,
     );
   }
@@ -75,7 +75,7 @@ function transitionWithoutCommand(input: {
   const targetStep = TARGET_STEP_BY_BOUNDARY[input.targetBoundary];
   if (!targetStep) {
     throw new CombatProgressionBoundaryAdvanceError(
-      "wrong_target",
+      "boundary_mismatch",
       `Combat boundary ${input.targetBoundary} has no compatible round step.`,
     );
   }
@@ -116,8 +116,13 @@ export function advanceCombatProgressionBoundary(input: {
     createdAt: string;
     createdByUserId?: string;
   };
+  expectedCommandType: Extract<
+    CombatProgressionExpectedCommand,
+    "advance_combat_boundary" | "complete_round"
+  >;
   expectedBoundary: CombatProgressionBoundaryKind;
-  expectedTaskId?: string;
+  expectedExecutionGroupId: string;
+  expectedTaskId: string;
   state: CombatRoundState;
   stepSnapshots?: CombatRoundStepSnapshot[];
   targetBoundary: CombatProgressionBoundaryKind;
@@ -129,11 +134,19 @@ export function advanceCombatProgressionBoundary(input: {
     input.expectedBoundary === "round_boundary"
       ? ("complete_round" as const)
       : ("advance_combat_boundary" as const);
+  if (input.expectedCommandType !== commandType) {
+    throw new CombatProgressionBoundaryAdvanceError(
+      "task_mismatch",
+      "The projected combat boundary command changed before it could be advanced.",
+    );
+  }
   const authorization = authorizeCombatProgressionTask({
     actor: { kind: "gm" },
     commandType,
     currentBoundary: input.expectedBoundary,
+    executionGroupId: input.expectedExecutionGroupId,
     projection,
+    taskId: input.expectedTaskId,
     targetBoundary: input.targetBoundary,
   });
   if (!authorization.ok) {
@@ -141,12 +154,11 @@ export function advanceCombatProgressionBoundary(input: {
       const roundBoundaryBlocker = getCombatRoundStartNextRoundBlocker(normalized);
       if (roundBoundaryBlocker) throw new RangeError(roundBoundaryBlocker);
     }
-    throw new CombatProgressionBoundaryAdvanceError(authorization.code, authorization.message);
-  }
-  if (input.expectedTaskId && authorization.task.id !== input.expectedTaskId) {
     throw new CombatProgressionBoundaryAdvanceError(
-      "task_not_ready",
-      "The projected combat boundary task changed before it could be advanced.",
+      authorization.code === "stale_boundary" || authorization.code === "wrong_target"
+        ? "boundary_mismatch"
+        : authorization.code,
+      authorization.message,
     );
   }
   if (authorization.task.blockerIds.length > 0) {
@@ -174,7 +186,7 @@ export function advanceCombatProgressionBoundary(input: {
   const openedProjection = buildCombatProgressionProjection(transitioned);
   if (openedProjection.boundary.kind !== input.targetBoundary) {
     throw new CombatProgressionBoundaryAdvanceError(
-      "wrong_target",
+      "boundary_mismatch",
       "The combat transition did not open the requested boundary.",
     );
   }

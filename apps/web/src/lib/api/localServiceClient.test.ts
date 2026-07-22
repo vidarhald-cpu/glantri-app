@@ -695,54 +695,6 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
-  it("advances current combat phase resolution through a narrow route", async () => {
-    const encounter = {
-      id: "encounter-1",
-      scenarioId: "scenario-1",
-    };
-    const commandEnvelope = {
-      currentStep: "phase_1_damage",
-      warnings: [],
-    };
-    const fetchMock = stubFetch({ commandEnvelope, encounter });
-    const client = await loadClient();
-
-    await expect(
-      client.advanceCurrentCombatPhaseResolutionOnServer({
-        encounterId: "encounter-1",
-      }),
-    ).resolves.toEqual({ commandEnvelope, encounter });
-
-    expectFetchCall(fetchMock, {
-      method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-phase-resolution",
-    });
-  });
-
-  it("completes current combat phase resolution through a narrow route", async () => {
-    const encounter = {
-      id: "encounter-1",
-      scenarioId: "scenario-1",
-    };
-    const commandEnvelope = {
-      currentStep: "phase_1_actions",
-      warnings: [],
-    };
-    const fetchMock = stubFetch({ commandEnvelope, encounter });
-    const client = await loadClient();
-
-    await expect(
-      client.completeCurrentCombatPhaseResolutionOnServer({
-        encounterId: "encounter-1",
-      }),
-    ).resolves.toEqual({ commandEnvelope, encounter });
-
-    expectFetchCall(fetchMock, {
-      method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/complete-current-phase-resolution",
-    });
-  });
-
   it("clears the current combat round step through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",
@@ -788,7 +740,9 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.advanceCombatRoundCurrentStepOnServer({
+        commandType: "advance_combat_boundary",
         encounterId: "encounter-1",
+        executionGroupId: "group:declaration:advance",
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
@@ -799,6 +753,8 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
+        commandType: "advance_combat_boundary",
+        executionGroupId: "group:declaration:advance",
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
         stepSnapshots,
@@ -832,30 +788,6 @@ describe("localServiceClient wire contract", () => {
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-round/prepare-round-end-review",
-    });
-  });
-
-  it("skips the current combat round action through the encounter command endpoint", async () => {
-    const encounter = {
-      id: "encounter-1",
-      scenarioId: "scenario-1",
-    };
-    const commandEnvelope = {
-      currentStep: "phase_1_actions",
-      warnings: [],
-    };
-    const fetchMock = stubFetch({ commandEnvelope, encounter });
-    const client = await loadClient();
-
-    await expect(
-      client.skipCombatRoundCurrentActionOnServer({
-        encounterId: "encounter-1",
-      }),
-    ).resolves.toEqual({ commandEnvelope, encounter });
-
-    expectFetchCall(fetchMock, {
-      method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/skip-current-action",
     });
   });
 

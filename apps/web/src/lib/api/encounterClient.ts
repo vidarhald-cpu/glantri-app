@@ -158,49 +158,28 @@ export async function submitCombatDeclarationOnServer(input: {
     commandEnvelope?: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
     participant: ScenarioParticipant;
-  }>(
-    `/encounters/${input.encounterId}/combat-declaration`,
-    {
-      body: JSON.stringify({
-        actionId: input.actionId,
-        adjustDistance: input.adjustDistance,
-        additionalActionNotes: input.additionalActionNotes,
-        combatContext: input.combatContext,
-        movementId: input.movementId,
-        movementIntent: input.movementIntent,
-        phaseContexts: input.phaseContexts,
-        phaseAttackSources: input.phaseAttackSources,
-        phaseWeaponNames: input.phaseWeaponNames,
-        feint: input.feint,
-        executionGroupId: input.executionGroupId,
-        expectedRevision: input.expectedRevision,
-        scenarioParticipantId: input.scenarioParticipantId,
-        secondaryActionId: input.secondaryActionId,
-        taskId: input.taskId,
-      }),
-      method: "POST",
-    },
-  );
-
-  return payload;
-}
-
-export async function reviewCombatFeintFeasibilityOnServer(input: {
-  adjustment?: number;
-  encounterId: string;
-  feasibility: "possible" | "possible_with_adjustment" | "impossible";
-  note?: string;
-  proposalId: string;
-}): Promise<{ encounter: EncounterSession }> {
-  return sendJson(`/encounters/${input.encounterId}/combat-round/feint-feasibility`, {
+  }>(`/encounters/${input.encounterId}/combat-declaration`, {
     body: JSON.stringify({
-      adjustment: input.adjustment,
-      feasibility: input.feasibility,
-      note: input.note,
-      proposalId: input.proposalId,
+      actionId: input.actionId,
+      adjustDistance: input.adjustDistance,
+      additionalActionNotes: input.additionalActionNotes,
+      combatContext: input.combatContext,
+      movementId: input.movementId,
+      movementIntent: input.movementIntent,
+      phaseContexts: input.phaseContexts,
+      phaseAttackSources: input.phaseAttackSources,
+      phaseWeaponNames: input.phaseWeaponNames,
+      feint: input.feint,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      scenarioParticipantId: input.scenarioParticipantId,
+      secondaryActionId: input.secondaryActionId,
+      taskId: input.taskId,
     }),
     method: "POST",
   });
+
+  return payload;
 }
 
 export async function respondCombatAdjustDistanceOnServer(input: {
@@ -640,7 +619,9 @@ export async function setPairDistanceOnServer(input: {
 }
 
 export async function advanceCombatRoundCurrentStepOnServer(input: {
+  commandType: "advance_combat_boundary" | "complete_round";
   encounterId: string;
+  executionGroupId: string;
   expectedBoundary: CombatProgressionBoundaryKind;
   expectedRevision: string;
   stepSnapshots?: CombatRoundStepSnapshot[];
@@ -657,6 +638,8 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
     participants: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/advance-current-step`, {
     body: JSON.stringify({
+      commandType: input.commandType,
+      executionGroupId: input.executionGroupId,
       expectedBoundary: input.expectedBoundary,
       expectedRevision: input.expectedRevision,
       stepSnapshots: input.stepSnapshots,
@@ -686,54 +669,6 @@ export async function prepareCombatRoundEndReviewOnServer(input: {
       method: "POST",
     },
   );
-}
-
-export async function skipCombatRoundCurrentActionOnServer(input: {
-  encounterId: string;
-}): Promise<{
-  commandEnvelope: CombatRoundCommandEnvelope;
-  encounter: EncounterSession;
-}> {
-  const payload = await sendJson<{
-    commandEnvelope: CombatRoundCommandEnvelope;
-    encounter: EncounterSession;
-  }>(`/encounters/${input.encounterId}/combat-round/skip-current-action`, {
-    method: "POST",
-  });
-
-  return payload;
-}
-
-export async function advanceCurrentCombatPhaseResolutionOnServer(input: {
-  encounterId: string;
-}): Promise<{
-  commandEnvelope: CombatRoundCommandEnvelope;
-  encounter: EncounterSession;
-}> {
-  const payload = await sendJson<{
-    commandEnvelope: CombatRoundCommandEnvelope;
-    encounter: EncounterSession;
-  }>(`/encounters/${input.encounterId}/combat-round/advance-current-phase-resolution`, {
-    method: "POST",
-  });
-
-  return payload;
-}
-
-export async function completeCurrentCombatPhaseResolutionOnServer(input: {
-  encounterId: string;
-}): Promise<{
-  commandEnvelope: CombatRoundCommandEnvelope;
-  encounter: EncounterSession;
-}> {
-  const payload = await sendJson<{
-    commandEnvelope: CombatRoundCommandEnvelope;
-    encounter: EncounterSession;
-  }>(`/encounters/${input.encounterId}/combat-round/complete-current-phase-resolution`, {
-    method: "POST",
-  });
-
-  return payload;
 }
 
 export interface CombatDownstreamTaskRequestIdentity {

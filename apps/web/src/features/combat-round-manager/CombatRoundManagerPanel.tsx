@@ -6750,7 +6750,9 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participants,
       } = await advanceCombatRoundCurrentStepOnServer({
+        commandType: boundaryTransitionAction.commandType,
         encounterId: boundaryTransitionAction.encounterId,
+        executionGroupId: boundaryTransitionAction.executionGroupId,
         expectedBoundary: boundaryTransitionAction.expectedBoundary,
         expectedRevision: boundaryTransitionAction.expectedRevision,
         stepSnapshots,

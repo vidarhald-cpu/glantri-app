@@ -68,6 +68,32 @@ function taskKinds(projection: ReturnType<typeof buildCombatProgressionProjectio
   );
 }
 
+function boundaryCommandIdentity(
+  state: CombatRoundState,
+  targetBoundary: CombatProgressionBoundaryKind,
+) {
+  const task = buildCombatProgressionProjection(state)
+    .boundary.processes.flatMap((process) => process.stages)
+    .flatMap((stage) => stage.tasks)
+    .find(
+      (candidate) =>
+        candidate.kind === "gm_advance_boundary" &&
+        candidate.transition?.targetBoundary === targetBoundary,
+    );
+  if (!task) throw new Error("Expected an executable boundary task in the test fixture.");
+  if (
+    task.expectedCommand !== "advance_combat_boundary" &&
+    task.expectedCommand !== "complete_round"
+  ) {
+    throw new Error("Expected a boundary command in the test fixture.");
+  }
+  return {
+    expectedCommandType: task.expectedCommand,
+    expectedExecutionGroupId: task.executionGroupId,
+    expectedTaskId: task.id,
+  };
+}
+
 describe("CombatProgressionProjection", () => {
   it("waits after completed declarations and advances to M1 only through the GM task", () => {
     const waiting = state({
@@ -114,17 +140,18 @@ describe("CombatProgressionProjection", () => {
     expect(() =>
       advanceCombatProgressionBoundary({
         command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+        ...boundaryCommandIdentity(waiting, "phase1_modifier_review"),
         expectedBoundary: "declaration",
         expectedTaskId: "stale:boundary-task",
         state: waiting,
         targetBoundary: "phase1_modifier_review",
       }),
-    ).toThrow("projected combat boundary task changed");
+    ).toThrow("projected combat task is stale");
 
     const advanced = advanceCombatProgressionBoundary({
       command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+      ...boundaryCommandIdentity(waiting, "phase1_modifier_review"),
       expectedBoundary: "declaration",
-      expectedTaskId: task?.id,
       state: waiting,
       targetBoundary: "phase1_modifier_review",
     });
@@ -163,6 +190,7 @@ describe("CombatProgressionProjection", () => {
       expect(() =>
         advanceCombatProgressionBoundary({
           command: { createdAt: "2026-07-19T10:00:00.000Z" },
+          ...boundaryCommandIdentity(waiting, targetBoundary),
           expectedBoundary: boundary,
           state: waiting,
           targetBoundary: "round_boundary",
@@ -171,6 +199,7 @@ describe("CombatProgressionProjection", () => {
 
       const advanced = advanceCombatProgressionBoundary({
         command: { createdAt: "2026-07-19T10:00:00.000Z" },
+        ...boundaryCommandIdentity(waiting, targetBoundary),
         expectedBoundary: boundary,
         state: waiting,
         targetBoundary,
@@ -268,6 +297,7 @@ describe("CombatProgressionProjection", () => {
 
       const advanced = advanceCombatProgressionBoundary({
         command: { createdAt: "2026-07-19T10:00:00.000Z", createdByUserId: "gm" },
+        ...boundaryCommandIdentity(waiting, targetBoundary),
         expectedBoundary: boundary,
         state: waiting,
         targetBoundary,
@@ -460,8 +490,8 @@ describe("CombatProgressionProjection", () => {
       skillTotal: 20,
       state: committed,
     });
-    const remainingTasks = buildCombatProgressionProjection(rolled.state).boundary.processes
-      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+    const remainingTasks = buildCombatProgressionProjection(rolled.state)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .filter((task) => task.kind === "combat_experience");
     expect(rolled.command).toMatchObject({
       facts: expect.objectContaining({
@@ -545,8 +575,8 @@ describe("CombatProgressionProjection", () => {
       phase: "phase2",
       state: beforeCommit,
     }).state;
-    const ceTasks = buildCombatProgressionProjection(committed).boundary.processes
-      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+    const ceTasks = buildCombatProgressionProjection(committed)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .filter((task) => task.kind === "combat_experience");
     expect(
       ceTasks.map((task) =>
@@ -576,12 +606,10 @@ describe("CombatProgressionProjection", () => {
     });
     expect(rolled.result.trigger).toBe("phase2_attack");
     expect(
-      buildCombatProgressionProjection(rolled.state).boundary.processes
-        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      buildCombatProgressionProjection(rolled.state)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
         .filter((task) => task.kind === "combat_experience")
-        .map((task) =>
-          task.owner?.kind === "combatant" ? task.owner.participantId : undefined,
-        ),
+        .map((task) => (task.owner?.kind === "combatant" ? task.owner.participantId : undefined)),
     ).toEqual(["guard"]);
   });
 
@@ -597,7 +625,10 @@ describe("CombatProgressionProjection", () => {
       .filter((process) => process.kind === "modifier_review")
       .flatMap((process) => process.stages.flatMap((stage) => stage.tasks));
     expect(modifierTasks).toHaveLength(2);
-    expect(modifierTasks[0]).toMatchObject({ owner: { participantId: "hero" }, state: "executable" });
+    expect(modifierTasks[0]).toMatchObject({
+      owner: { participantId: "hero" },
+      state: "executable",
+    });
     expect(modifierTasks[1]).toMatchObject({ owner: { participantId: "guard" }, state: "waiting" });
   });
 
@@ -645,7 +676,7 @@ describe("CombatProgressionProjection", () => {
         projection,
         taskId: "stale:combat-experience",
       }),
-    ).toMatchObject({ code: "task_not_found", ok: false });
+    ).toMatchObject({ code: "task_mismatch", ok: false });
 
     const openProjection = buildCombatProgressionProjection(
       state({
@@ -1284,7 +1315,7 @@ describe("authorizeCombatProgressionTask", () => {
         projection,
         taskId: "stale-parry-task",
       }),
-    ).toMatchObject({ code: "task_not_found", ok: false });
+    ).toMatchObject({ code: "task_mismatch", ok: false });
   });
 
   it("projects the recorded hit as one live defender task with canonical attack context", () => {
@@ -1854,8 +1885,8 @@ describe("authorizeCombatProgressionTask", () => {
       submittedBy: "player",
       updatedAt: "2026-07-19T11:03:00.000Z",
     });
-    const reviewTask = buildCombatProgressionProjection(afterRoll).boundary.processes
-      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+    const reviewTask = buildCombatProgressionProjection(afterRoll)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .find((task) => task.kind === "damage_review");
     expect(afterRoll.phaseResolutionResults[0]?.damageResult?.damageRoll).toMatchObject({
       diceExpression: "1d7",

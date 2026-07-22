@@ -227,12 +227,27 @@ function advanceBoundary(
   expectedBoundary: Parameters<typeof advanceCombatProgressionBoundary>[0]["expectedBoundary"],
   targetBoundary: Parameters<typeof advanceCombatProgressionBoundary>[0]["targetBoundary"],
 ): ReturnType<typeof initializeCombatRoundState> {
+  const boundaryTask = buildCombatProgressionProjection(state)
+    .boundary.processes.flatMap((process) => process.stages)
+    .flatMap((stage) => stage.tasks)
+    .find(
+      (task) =>
+        task.kind === "gm_advance_boundary" &&
+        task.transition?.currentBoundary === expectedBoundary &&
+        task.transition.targetBoundary === targetBoundary,
+    );
+  if (!boundaryTask) throw new Error("Expected an executable boundary task in the test fixture.");
   return advanceCombatProgressionBoundary({
     command: {
       createdAt: "2026-01-01T00:10:00.000Z",
       createdByUserId: "gm-1",
     },
     expectedBoundary,
+    expectedCommandType: boundaryTask.expectedCommand as
+      | "advance_combat_boundary"
+      | "complete_round",
+    expectedExecutionGroupId: boundaryTask.executionGroupId,
+    expectedTaskId: boundaryTask.id,
     state,
     targetBoundary,
   });
