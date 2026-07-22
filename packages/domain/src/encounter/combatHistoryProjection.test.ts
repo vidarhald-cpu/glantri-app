@@ -134,6 +134,51 @@ describe("combat history projection", () => {
     expect(other).toBeUndefined();
   });
 
+  it("shows an involved phase CE opponent the broad outcome without exact roll facts", () => {
+    const combatExperience = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          modifierValue: 0,
+          phaseAttackCancelled: false,
+          success: true,
+        },
+        publicOutcome: {},
+        rollerPrivate: { difficulty: 26, finalTotal: 27, rollD20: 17, skillTotal: 10 },
+      },
+      ownerParticipantId: "aria",
+      phase: "phase2",
+      rollerParticipantId: "aria",
+      step: "phase_2_actions",
+      targetParticipantId: "borin",
+      type: "combat_experience",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "aria", role: "roller" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    const other = projectCombatHistoryEvent({
+      event: combatExperience,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(other?.facts.involvedOutcome).toEqual({
+      modifierValue: 0,
+      phaseAttackCancelled: false,
+      success: true,
+    });
+    expect(other?.facts.privateCalculation).toBeUndefined();
+  });
+
   it("reconstructs the live Combat Experience presentation event from persisted command facts", () => {
     const command = combatRoundCommandSchema.parse({
       afterCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
@@ -177,11 +222,14 @@ describe("combat history projection", () => {
       expect.objectContaining({
         facts: expect.objectContaining({
           involvedOutcome: expect.objectContaining({
-            difficulty: 26,
-            finalTotal: 27,
             success: true,
           }),
-          privateCalculation: expect.objectContaining({ rollD20: 17, skillTotal: 10 }),
+          privateCalculation: expect.objectContaining({
+            difficulty: 26,
+            finalTotal: 27,
+            rollD20: 17,
+            skillTotal: 10,
+          }),
         }),
         type: "combat_experience",
       }),

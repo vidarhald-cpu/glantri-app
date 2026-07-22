@@ -44,6 +44,7 @@ export interface ProjectedCombatHistoryEvent {
   identities: CombatHistoryParticipantIdentity[];
   missingFacts: string[];
   occurredAt: string | null;
+  opportunityId?: string;
   ownerParticipantId?: string;
   phase?: CombatStepEvent["phase"];
   roundNumber: number;
@@ -384,6 +385,7 @@ export function projectCombatHistoryEvent(input: {
     identities: projectEventIdentities({ event: input.event, labels, viewer: input.viewer }),
     missingFacts: input.event.missingFacts,
     occurredAt: input.event.occurredAt,
+    opportunityId: input.event.opportunityId,
     ownerParticipantId:
       input.event.ownerParticipantId &&
       isVisible({ participantId: input.event.ownerParticipantId, viewer: input.viewer })

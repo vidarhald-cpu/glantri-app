@@ -164,6 +164,7 @@ export const combatStepEventSchema = z.object({
   id: idSchema,
   missingFacts: z.array(z.string().min(1)).default([]),
   occurredAt: z.string().datetime().nullable(),
+  opportunityId: idSchema.optional(),
   ownerParticipantId: idSchema.optional(),
   parryResultId: idSchema.optional(),
   phase: z.enum(["phase1", "phase2"]).optional(),

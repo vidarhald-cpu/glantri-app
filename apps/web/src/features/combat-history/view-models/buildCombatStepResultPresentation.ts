@@ -365,9 +365,24 @@ function supplementalEntries(input: {
   return input.events.flatMap((event): OrderedEntry[] => {
     if (event.type === "combat_experience" && !loggedSourceIds.has(event.id)) {
       const participant = identitySubject(event, "actor") ?? identitySubject(event, "roller");
-      const finalTotal = visibleOutcome(event, "finalTotal");
-      const difficulty = visibleOutcome(event, "difficulty");
+      const maySeeOwnCalculation =
+        input.viewer.kind === "gm" || event.ownerParticipantId === input.participantId;
+      const finalTotal = maySeeOwnCalculation
+        ? event.facts.privateCalculation?.finalTotal
+        : undefined;
+      const difficulty = maySeeOwnCalculation
+        ? event.facts.privateCalculation?.difficulty
+        : undefined;
       const success = visibleOutcome(event, "success");
+      const phaseAttackCancelled = visibleOutcome(event, "phaseAttackCancelled") === true;
+      const modifierValue = visibleOutcome(event, "modifierValue");
+      const phaseConsequence = event.phase
+        ? phaseAttackCancelled
+          ? "the attack is cancelled."
+          : typeof modifierValue === "number" && modifierValue < 0
+            ? `the attack may continue with ${modifierValue} Skill/OB.`
+            : "the attack may continue."
+        : undefined;
       return [
         {
           entry: {
@@ -380,6 +395,7 @@ function supplementalEntries(input: {
             category: "review",
             heading: "Combat Experience",
             id: `current-step:${event.id}`,
+            opportunityId: event.opportunityId,
             outcome:
               typeof finalTotal === "number" && typeof difficulty === "number"
                 ? `Result: ${finalTotal} vs ${difficulty}`
@@ -388,9 +404,13 @@ function supplementalEntries(input: {
             state: "final",
             summary:
               success === true
-                ? "Succeeded."
+                ? phaseConsequence
+                  ? `Succeeded — ${phaseConsequence}`
+                  : "Succeeded."
                 : success === false
-                  ? "Failed."
+                  ? phaseConsequence
+                    ? `Failed — ${phaseConsequence}`
+                    : "Failed."
                   : "Combat Experience roll completed.",
           },
           order: event.sequence,

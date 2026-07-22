@@ -1104,7 +1104,7 @@ function orphanCommandCandidates(input: {
       declare_action: { status: "recorded", step: "select_actions", type: "declaration" },
       roll_combat_experience: {
         status: "recorded",
-        step: "select_actions",
+        step: phase ? phaseStep(phase, "attack") : "select_actions",
         type: "combat_experience",
       },
       resolve_damage: {
@@ -1161,6 +1161,16 @@ function orphanCommandCandidates(input: {
       : stringFact(facts, "rolledByParticipantId");
     const combatExperienceFinalTotal = numberFact(facts, "finalTotal");
     const combatExperienceDifficulty = numberFact(facts, "difficulty");
+    const combatExperienceThreatParticipantIds = combatExperience
+      ? (Array.isArray(facts.phaseCombatExperienceThreats)
+          ? facts.phaseCombatExperienceThreats.flatMap((threat) => {
+              if (typeof threat !== "object" || threat === null) return [];
+              const attackerParticipantId = (threat as Record<string, unknown>)
+                .attackerParticipantId;
+              return typeof attackerParticipantId === "string" ? [attackerParticipantId] : [];
+            })
+          : [])
+      : [];
     const ownerParticipantId =
       mapping.type === "parry" ||
       mapping.type === "hit_location" ||
@@ -1194,8 +1204,8 @@ function orphanCommandCandidates(input: {
           attackerParticipantId,
           completenessMissing: combatExperience
             ? unique([
-                ...(combatExperienceFinalTotal === undefined ? ["facts.involvedOutcome.finalTotal"] : []),
-                ...(combatExperienceDifficulty === undefined ? ["facts.involvedOutcome.difficulty"] : []),
+                ...(combatExperienceFinalTotal === undefined ? ["facts.rollerPrivate.finalTotal"] : []),
+                ...(combatExperienceDifficulty === undefined ? ["facts.rollerPrivate.difficulty"] : []),
               ])
             : [...requiredMissing, "source.structuredResult"],
           damageResultId: stringFact(facts, "damageResultId"),
@@ -1209,11 +1219,11 @@ function orphanCommandCandidates(input: {
             involvedOutcome: {
               appliedDistance: facts.appliedDistance,
               ...(combatExperience
-                ? {
-                    difficulty: combatExperienceDifficulty,
-                    finalTotal: combatExperienceFinalTotal,
+                  ? {
                     resultBand: facts.resultBand,
                     resultLabel: facts.resultLabel,
+                    modifierValue: facts.modifierValue,
+                    phaseAttackCancelled: facts.phaseAttackCancelled,
                   }
                 : {}),
               grazing: booleanFact(facts, "grazing"),
@@ -1241,7 +1251,11 @@ function orphanCommandCandidates(input: {
             },
           },
           healthRollId: stringFact(facts, "healthRollId"),
+          involvedParticipantIds: combatExperience
+            ? [command.participantId, ...combatExperienceThreatParticipantIds]
+            : undefined,
           occurredAt: command.createdAt,
+          opportunityId: stringFact(facts, "opportunityId"),
           ownerParticipantId,
           phase,
           rollerParticipantId,
@@ -1249,7 +1263,8 @@ function orphanCommandCandidates(input: {
           sourceKind: "legacy_command",
           status: mapping.status,
           step: mapping.step,
-          targetParticipantId: defenderParticipantId,
+          targetParticipantId:
+            defenderParticipantId ?? combatExperienceThreatParticipantIds[0],
           type: mapping.type,
         },
         roundNumber: input.roundNumber,

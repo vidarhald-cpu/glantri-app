@@ -636,7 +636,7 @@ describe("player combat phase model", () => {
     });
   });
 
-  it("does not serialize a default mode when same-source Attack 2 has no eligible mode", () => {
+  it("preserves an explicitly selected phase-2 source for authoritative repeat validation", () => {
     const loadoutModel = buildLoadoutModel({
       rows: [["Primary", "Mace", "2", "Strike", "8", "5", "C", "—", "B"]],
       sourceItemId: "scenario-mace",
@@ -669,6 +669,50 @@ describe("player combat phase model", () => {
     });
 
     expect(phase2.selectedAttackModeId).toBeUndefined();
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase2",
+        reference: phase2.reference,
+        unarmedTemplateId: "virtual-weapon-template-kick",
+      }),
+    ).toMatchObject({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_2",
+      scenarioItemId: "scenario-mace",
+      sourceKind: "weapon",
+    });
+  });
+
+  it("does not invent a phase-2 mode when no mode was selected or eligible", () => {
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Mace", "2", "Strike", "8", "5", "C", "—", "B"]],
+        sourceItemId: "scenario-mace",
+        valueLabel: "Mace",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "strike",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Strike",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Mace",
+            itemId: "scenario-mace",
+            modeLabel: "Primary",
+            templateId: "weapon-template-mace",
+          },
+        ],
+      }),
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
     expect(
       buildCombatAttackSourceRef({
         phaseKey: "phase2",

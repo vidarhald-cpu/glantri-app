@@ -681,6 +681,7 @@ function parseCombatInitiativeBody(body: unknown): ParsedCombatTaskCommandIdenti
 
 function parseCombatExperienceBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   difficulty?: number;
+  opportunityId?: string;
   phase?: CombatRoundPhase;
   scenarioParticipantId: string;
 } {
@@ -703,6 +704,7 @@ function parseCombatExperienceBody(body: unknown): ParsedCombatTaskCommandIdenti
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
     difficulty: typeof difficulty === "number" ? difficulty : undefined,
+    opportunityId: parseOptionalDeclarationString(value.opportunityId),
     phase,
   };
 }
@@ -3614,9 +3616,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } else if (body.actionId === "double_attack") {
         const phase1Source = body.phaseAttackSources?.phase1;
         const phase2Source = body.phaseAttackSources?.phase2;
-        if (!phase1Source || !phase2Source) {
+        if (!phase1Source) {
           return reply.code(400).send({
-            error: "Double Attack requires an attack source for both phases.",
+            error: "Double Attack is missing its Phase 1 attack source.",
+          });
+        }
+        if (!phase2Source) {
+          return reply.code(400).send({
+            error: "Double Attack is missing its Phase 2 attack source.",
           });
         }
         if (
@@ -5260,6 +5267,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error: "Combat Experience phase does not match the projected task.",
           });
         }
+        if (combatExperiencePhase && !body.opportunityId) {
+          return reply.code(409).send({
+            error: "Combat Experience attack opportunity does not match the projected task.",
+          });
+        }
 
         if (
           combatExperienceTrigger === "combat_start" &&
@@ -5278,6 +5290,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             commandType: combatExperiencePhase
               ? "submit_phase_initiative_choice"
               : "roll_combat_experience",
+            opportunityId: body.opportunityId,
             participantId: encounterParticipant.id,
             phase: combatExperiencePhase,
           },
@@ -5300,6 +5313,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             createdByUserId: user.id,
           },
           encounterId: encounter.id,
+          opportunityId: body.opportunityId,
           participantId: encounterParticipant.id,
           scenarioId,
           scenarioParticipantId: scenarioParticipant.id,

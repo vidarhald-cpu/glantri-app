@@ -825,6 +825,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     selectedWeapon: referenceWeaponLabel,
     sourceAttackModeId:
       modeResolution.mode?.id ??
+      input.selectedAttackModeId ??
       (requireRepeatedRoundAttack ? undefined : rawReferenceRow?.attackMode1Id),
     sourceItemId: rawReferenceRow?.itemId,
     sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,

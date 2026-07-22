@@ -2360,6 +2360,7 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId,
         phase: descriptor.phase,
         scenarioParticipantId: descriptor.participantId,
         taskId: descriptor.taskId,

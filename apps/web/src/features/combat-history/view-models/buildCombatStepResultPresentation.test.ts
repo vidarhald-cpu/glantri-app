@@ -478,6 +478,128 @@ describe("buildCombatStepResultPresentation", () => {
     expect(JSON.stringify(declaration)).not.toContain("combat log");
   });
 
+  it("shows phase Combat Experience in A2 with its consequence and keeps it out of A1", () => {
+    const combatExperience = historyEvent("combat_experience", 2, {
+      facts: {
+        involvedOutcome: {
+          difficulty: 26,
+          finalTotal: 18,
+          modifierValue: -2,
+          phaseAttackCancelled: false,
+          resultBand: "active_penalty",
+          resultLabel: "Attack continues",
+          success: false,
+        },
+        privateCalculation: {
+          difficulty: 26,
+          finalTotal: 18,
+          rollD20: 8,
+          rollTotal: 8,
+          skillTotal: 10,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      opportunityId: "gladiator-phase2-opportunity",
+      ownerParticipantId: "gladiator",
+      phase: "phase2",
+      step: "phase_2_actions",
+    });
+
+    const phase2 = build({
+      boundary: "phase2_resolution",
+      events: [combatExperience],
+      participantId: "gladiator",
+    });
+    const phase1 = build({
+      boundary: "phase1_resolution",
+      events: [combatExperience],
+      participantId: "gladiator",
+    });
+
+    expect(phase2.entries).toHaveLength(1);
+    expect(phase2.entries[0]).toMatchObject({
+      heading: "Combat Experience",
+      opportunityId: "gladiator-phase2-opportunity",
+      outcome: "Result: 18 vs 26",
+      summary: "Failed — the attack may continue with -2 Skill/OB.",
+    });
+    expect(phase2.entries[0]?.calculations).toHaveLength(1);
+    expect(phase1.entries).toEqual([]);
+  });
+
+  it("shows an involved opponent the phase CE outcome without the roller calculation", () => {
+    const combatExperience = historyEvent("combat_experience", 2, {
+      facts: {
+        involvedOutcome: {
+          difficulty: 26,
+          finalTotal: 27,
+          modifierValue: 0,
+          phaseAttackCancelled: false,
+          success: true,
+        },
+        privateCalculation: {
+          difficulty: 26,
+          finalTotal: 27,
+          rollD20: 17,
+          rollTotal: 17,
+          skillTotal: 10,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      phase: "phase2",
+      step: "phase_2_actions",
+    });
+
+    const opponent = build({
+      boundary: "phase2_resolution",
+      events: [combatExperience],
+      participantId: "scyrian",
+    });
+
+    expect(opponent.entries).toHaveLength(1);
+    expect(opponent.entries[0]).toMatchObject({
+      heading: "Combat Experience",
+      summary: "Succeeded — the attack may continue.",
+    });
+    expect(opponent.entries[0]?.outcome).toBeUndefined();
+    expect(opponent.entries[0]?.calculations).toEqual([]);
+  });
+
   it("presents a graze roll to both participants while keeping its calculation with the roller", () => {
     const graze = historyEvent("damage_proposed", 7, {
       facts: {

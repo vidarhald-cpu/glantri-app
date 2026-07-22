@@ -4045,6 +4045,7 @@ export function rollCombatRoundCombatExperience(input: {
   };
   difficulty?: number;
   encounterId?: string;
+  opportunityId?: string;
   participantId: string;
   rng?: () => number;
   scenarioId?: string;
@@ -4253,6 +4254,7 @@ export function rollCombatRoundCombatExperience(input: {
       finalTotal,
       modifierValue: result.modifierValue,
       noRollRequired,
+      opportunityId: input.opportunityId,
       openEndedD10s: roll?.openEndedD10s ?? [],
       phaseAttackCancelled,
       ...(phaseRequirement
@@ -4281,6 +4283,7 @@ export function rollCombatRoundCombatExperience(input: {
       skillTotalWarning: input.skillTotalWarning,
       scenarioParticipantId: targetParticipantId,
       skillTotal,
+      success: finalTotal >= difficulty,
       trigger,
     },
     id: commandId,

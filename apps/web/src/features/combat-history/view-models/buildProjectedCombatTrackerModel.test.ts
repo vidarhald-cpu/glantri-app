@@ -217,6 +217,35 @@ function parallelAdjustDistanceProgression(
   };
 }
 
+function parallelPhase2CombatExperienceProgression(
+  pending: readonly ("aria" | "borin")[],
+): CombatProgressionPresentationProjection {
+  const projection = parallelAdjustDistanceProgression(pending);
+  return {
+    ...projection,
+    boundary: { ...projection.boundary, kind: "phase2_resolution" },
+    processes: projection.processes.map((process) => ({
+      ...process,
+      kind: "combat_experience",
+      stages: process.stages.map((stage) => ({
+        ...stage,
+        kind: "input",
+        executionGroups: stage.executionGroups.map((group) => ({
+          ...group,
+          activationBoundary: { ...group.activationBoundary, kind: "phase2_resolution" },
+          tasks: group.tasks.map((task) => ({
+            ...task,
+            expectedCommand: "submit_phase_initiative_choice",
+            identity: { ...task.identity, phase: "phase2" },
+            kind: "combat_experience",
+            trackerFacet: { ...task.trackerFacet, step: "A2" },
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
 describe("buildProjectedCombatTrackerModel", () => {
   it("builds the shared tracker model using projected rows and cell events", () => {
     const projection = history([event({ facts: { publicOutcome: { grazing: true } } })]);
@@ -555,6 +584,22 @@ describe("buildProjectedCombatTrackerModel", () => {
     const oneRecorded = buildProjectedCombatTrackerModel({ history: projection });
     expect(oneRecorded.cells["1:aria:phase_1_actions"].marker).toBe("✓");
     expect(oneRecorded.cells["1:borin:phase_1_actions"].marker).toBe("?");
+  });
+
+  it("keeps parallel Phase 2 CE attention on each canonical task owner", () => {
+    const projection = history([]);
+    projection.rows.push({ displayName: "Borin", participantId: "borin" });
+    projection.progression = parallelPhase2CombatExperienceProgression(["aria", "borin"]);
+
+    const bothPending = buildProjectedCombatTrackerModel({ history: projection });
+    expect(bothPending.cells["1:aria:phase_2_actions"]).toMatchObject({ marker: "?" });
+    expect(bothPending.cells["1:borin:phase_2_actions"]).toMatchObject({ marker: "?" });
+    expect(bothPending.cells["1:aria:initiative_phase_2"]?.marker ?? "·").toBe("·");
+
+    projection.progression = parallelPhase2CombatExperienceProgression(["borin"]);
+    const oneResolved = buildProjectedCombatTrackerModel({ history: projection });
+    expect(oneResolved.cells["1:aria:phase_2_actions"]?.marker ?? "·").toBe("·");
+    expect(oneResolved.cells["1:borin:phase_2_actions"].marker).toBe("?");
   });
 
   it.each([

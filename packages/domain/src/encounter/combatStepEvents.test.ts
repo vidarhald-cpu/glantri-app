@@ -478,8 +478,6 @@ describe("deriveLegacyCombatStepEvents", () => {
       completeness: "legacy_derived",
       facts: {
         involvedOutcome: {
-          difficulty: 26,
-          finalTotal: 27,
           resultBand: "active",
           resultLabel: "Active",
           success: true,
@@ -501,6 +499,47 @@ describe("deriveLegacyCombatStepEvents", () => {
         involvedParticipantIds: [ATTACKER_ID],
         outcomeScope: "involved",
         rollerParticipantId: ATTACKER_ID,
+      },
+    });
+  });
+
+  it("places phase Combat Experience in its action facet with opportunity and threat identity", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: {
+            difficulty: 26,
+            finalTotal: 18,
+            modifierValue: -2,
+            opportunityId: "phase2-opportunity",
+            phaseAttackCancelled: false,
+            phaseCombatExperienceThreats: [{ attackerParticipantId: DEFENDER_ID }],
+            resultBand: "active_penalty",
+            resultLabel: "Attack continues",
+            rollD20: 8,
+            rollTotal: 8,
+            skillTotal: 10,
+          },
+          id: "command-phase2-combat-experience",
+          participantId: ATTACKER_ID,
+          phase: "phase2",
+          step: "A1",
+          type: "roll_combat_experience",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      opportunityId: "phase2-opportunity",
+      phase: "phase2",
+      step: "phase_2_actions",
+      targetParticipantId: DEFENDER_ID,
+      visibility: {
+        involvedParticipantIds: [ATTACKER_ID, DEFENDER_ID],
       },
     });
   });

@@ -342,6 +342,7 @@ export async function rollCombatExperienceOnServer(input: {
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  opportunityId?: string;
   phase?: "phase1" | "phase2";
   scenarioParticipantId: string;
   taskId: string;
@@ -359,6 +360,7 @@ export async function rollCombatExperienceOnServer(input: {
       scenarioParticipantId: input.scenarioParticipantId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
+      opportunityId: input.opportunityId,
       phase: input.phase,
       taskId: input.taskId,
     }),

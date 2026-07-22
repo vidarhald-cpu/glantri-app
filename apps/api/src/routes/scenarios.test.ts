@@ -6405,6 +6405,47 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("binds a phase Combat Experience roll to its projected action opportunity", async () => {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+    const task = buildCombatProgressionProjection(fixture.roundState).boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find(
+        (candidate) =>
+          candidate.kind === "combat_experience" &&
+          candidate.owner?.kind === "combatant" &&
+          candidate.owner.participantId === "encounter-participant-1",
+      );
+    expect(task?.identity.opportunityId).toBeTruthy();
+
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        executionGroupId: task?.executionGroupId,
+        opportunityId: task?.identity.opportunityId,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+        taskId: task?.id,
+      },
+      url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({ opportunityId: task?.identity.opportunityId }),
+      phase: "phase1",
+      step: "A1",
+      type: "roll_combat_experience",
+    });
+  });
+
   it("lets a higher-initiative player submit back-out without required CE", async () => {
     const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
       gladiatorInitiative: 9,
@@ -8849,6 +8890,24 @@ describe("scenarios route contract", () => {
     await missingSourceApp.close();
 
     setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant() });
+    const missingPhase2App = await buildScenarioTestApp();
+    const missingPhase2Source = await missingPhase2App.inject({
+      method: "POST",
+      payload: {
+        ...basePayload,
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-dagger",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-dagger",
+          }),
+        },
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await missingPhase2App.close();
+
+    setupCombatDeclarationRoute({ participant: makeDoubleAttackWeaponParticipant() });
     const unreadySourceApp = await buildScenarioTestApp();
     const unreadySource = await unreadySourceApp.inject({
       method: "POST",
@@ -8872,7 +8931,10 @@ describe("scenarios route contract", () => {
     await unreadySourceApp.close();
 
     expect(missingSource.json()).toEqual({
-      error: "Double Attack requires an attack source for both phases.",
+      error: "Double Attack is missing its Phase 1 attack source.",
+    });
+    expect(missingPhase2Source.json()).toEqual({
+      error: "Double Attack is missing its Phase 2 attack source.",
     });
     expect(unreadySource.json()).toEqual({
       error: "The selected Phase 1 weapon is not ready.",

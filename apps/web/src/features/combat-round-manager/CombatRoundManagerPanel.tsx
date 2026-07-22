@@ -7462,6 +7462,7 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId,
         phase: descriptor.phase,
         scenarioParticipantId: scenarioParticipant.id,
         taskId: descriptor.taskId,
@@ -8895,8 +8896,8 @@ export default function CombatRoundManagerPanel({
           roundNumber: timelineRoundState.roundNumber,
           selected:
             timelineRoundState.roundNumber === selectedRoundNumber &&
-            inspectionSelection.participantId === timelineParticipant.participantId &&
-            inspectionSelection.step === step,
+            renderedInspectionSelection.participantId === timelineParticipant.participantId &&
+            renderedInspectionSelection.step === step,
           status: stepStatus,
           step,
           stepOutcome: deriveCombatHistoryStepOutcome(trackerSnapshot),
@@ -8917,7 +8918,7 @@ export default function CombatRoundManagerPanel({
     rows: displayParticipants.map((participant) => ({
       label: participant.label,
       participantId: participant.participantId,
-      selected: inspectionSelection.participantId === participant.participantId,
+      selected: renderedInspectionSelection.participantId === participant.participantId,
     })),
     steps: COMBAT_ROUND_STEPS,
   });

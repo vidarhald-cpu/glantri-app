@@ -452,6 +452,9 @@ describe("CombatProgressionProjection", () => {
 
     const rolled = rollCombatRoundCombatExperience({
       command: { createdAt: "2026-07-22T18:01:00.000Z", createdByUserId: "hero-user" },
+      opportunityId: ceTasks.find(
+        (task) => task.owner?.kind === "combatant" && task.owner.participantId === "hero",
+      )?.identity.opportunityId,
       participantId: "hero",
       rng: () => 0.6,
       skillTotal: 20,
@@ -460,7 +463,14 @@ describe("CombatProgressionProjection", () => {
     const remainingTasks = buildCombatProgressionProjection(rolled.state).boundary.processes
       .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .filter((task) => task.kind === "combat_experience");
-    expect(rolled.command).toMatchObject({ phase: "phase1", type: "roll_combat_experience" });
+    expect(rolled.command).toMatchObject({
+      facts: expect.objectContaining({
+        opportunityId: expect.any(String),
+        success: true,
+      }),
+      phase: "phase1",
+      type: "roll_combat_experience",
+    });
     expect(rolled.result.trigger).toBe("phase1_attack");
     expect(remainingTasks).toHaveLength(1);
     expect(remainingTasks[0]?.owner).toMatchObject({ participantId: "guard" });
@@ -550,12 +560,20 @@ describe("CombatProgressionProjection", () => {
 
     const rolled = rollCombatRoundCombatExperience({
       command: { createdAt: "2026-07-22T18:02:00.000Z", createdByUserId: "hero-user" },
+      opportunityId: "hero-reactive-phase2",
       participantId: "hero",
       rng: () => 0.6,
       skillTotal: 20,
       state: committed,
     });
-    expect(rolled.command).toMatchObject({ phase: "phase2", type: "roll_combat_experience" });
+    expect(rolled.command).toMatchObject({
+      facts: expect.objectContaining({
+        opportunityId: "hero-reactive-phase2",
+        success: true,
+      }),
+      phase: "phase2",
+      type: "roll_combat_experience",
+    });
     expect(rolled.result.trigger).toBe("phase2_attack");
     expect(
       buildCombatProgressionProjection(rolled.state).boundary.processes

@@ -123,6 +123,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatTrackerModel({");
     expect(source).toContain("buildCombatProgressionProjection(roundState)");
     expect(source).toContain("buildCombatProgressionTrackerIndex(combatProgressionPresentation)");
+    expect(source).toContain(
+      "renderedInspectionSelection.participantId === timelineParticipant.participantId",
+    );
+    expect(source).not.toContain(
+      "inspectionSelection.participantId === timelineParticipant.participantId",
+    );
     expect(source.match(/buildCombatProgressionProjection\(roundState\)/g)).toHaveLength(1);
     expect(source).toContain(
       "const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult",
