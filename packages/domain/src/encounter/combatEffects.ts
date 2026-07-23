@@ -79,11 +79,13 @@ export const combatEffectEventSchema = z.object({
 export const combatEffectSchema = z.object({
   checkRequired: z.boolean().optional(),
   checkSkillOrStat: z.string().optional(),
+  combatWide: z.boolean().optional(),
   combatModifierBucket: combatEffectModifierBucketSchema.optional(),
   createdAt: timestampSchema,
   damage: z.number().default(0),
   description: z.string().optional(),
   duration: z.string().optional(),
+  excludedRollPurposes: z.array(z.string().min(1)).optional(),
   effectGroup: combatEffectGroupSchema,
   expiresAtRound: z.number().int().positive().optional(),
   generalDamage: z.number().default(0),

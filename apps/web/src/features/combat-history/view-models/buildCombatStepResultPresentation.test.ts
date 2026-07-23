@@ -655,6 +655,127 @@ describe("buildCombatStepResultPresentation", () => {
     });
   });
 
+  it("presents a resolved Offensive Parry contest with participant-safe calculations", () => {
+    const controllerRoll = historyEvent("offensive_parry_brawling", 10, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          attackResultId: "attack-1",
+          contactEstablished: false,
+          contestId: "contest-1",
+          controllerParticipantId: "gladiator",
+          resolved: false,
+        },
+        privateCalculation: {
+          brawlingSkillXp: 12,
+          finalTotal: 31,
+          parryQualityModifier: 2,
+          rollD20: 17,
+        },
+        publicOutcome: { contactEstablished: false, resolved: false },
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "defender",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "attacker",
+          visibility: "visible",
+        },
+      ],
+      opportunityId: "opportunity-1",
+      ownerParticipantId: "gladiator",
+    });
+    const responderRoll = historyEvent("offensive_parry_brawling", 11, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          attackResultId: "attack-1",
+          contactEstablished: true,
+          contestId: "contest-1",
+          controllerParticipantId: "gladiator",
+          resolved: true,
+          winnerParticipantId: "gladiator",
+        },
+        privateCalculation: {
+          brawlingSkillXp: 9,
+          finalTotal: 22,
+          rollD20: 13,
+        },
+        publicOutcome: {
+          contactEstablished: true,
+          resolved: true,
+          winnerParticipantId: "gladiator",
+        },
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "defender",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "attacker",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      opportunityId: "opportunity-1",
+      ownerParticipantId: "scyrian",
+    });
+
+    const controller = build({
+      events: [controllerRoll, responderRoll],
+      participantId: "gladiator",
+    });
+    const affected = build({
+      events: [controllerRoll, responderRoll],
+      participantId: "scyrian",
+    });
+    const gm = build({
+      events: [controllerRoll, responderRoll],
+      participantId: "gladiator",
+      viewer: "gm",
+    });
+
+    expect(controller.entries).toEqual([
+      expect.objectContaining({
+        calculations: [expect.objectContaining({ visibility: "own" })],
+        heading: "Offensive Parry — Brawling",
+        summary:
+          "You won the Brawling contest. Continued contact was established. Scyrian cavalry guy is Unbalanced (−2%).",
+      }),
+    ]);
+    expect(affected.entries).toEqual([
+      expect.objectContaining({
+        calculations: [expect.objectContaining({ visibility: "own" })],
+        summary:
+          "You lost the Brawling contest. The Gladiator established continued contact. You are Unbalanced (−2%).",
+      }),
+    ]);
+    expect(gm.entries[0]?.calculations).toHaveLength(2);
+    expect(gm.entries[0]?.calculations.every((entry) => entry.visibility === "gm_full")).toBe(true);
+  });
+
   it("does not render declaration content in live results before publication", () => {
     const ownDeclaration = logEvent("log:own-declaration", 1, {
       actor: { displayName: "The Gladiator", participantId: "gladiator" },

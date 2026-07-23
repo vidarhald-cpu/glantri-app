@@ -785,6 +785,11 @@ describe("CombatProgressionProjection", () => {
     ).toEqual([
       { executionStrategy: "single_task", kind: "attack", state: "active" },
       { executionStrategy: "single_task", kind: "defense", state: "pending" },
+      {
+        executionStrategy: "parallel_all",
+        kind: "offensive_parry_contest",
+        state: "pending",
+      },
       { executionStrategy: "single_task", kind: "hit_location", state: "pending" },
       { executionStrategy: "gm_review", kind: "damage", state: "pending" },
       { executionStrategy: "single_task", kind: "critical", state: "pending" },

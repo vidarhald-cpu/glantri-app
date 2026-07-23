@@ -59,6 +59,7 @@ export function classifyCombatTrackerTaskAttention(
     case "feint_defender_roll":
     case "health_review":
     case "hit_location":
+    case "offensive_parry_brawling_roll":
     case "parry":
       return "exceptional";
     default: {
@@ -97,6 +98,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Attack";
     case "parry":
       return "Parry";
+    case "offensive_parry_brawling_roll":
+      return "Offensive Parry";
     case "hit_location":
       return "Hit location";
     case "critical":
@@ -209,6 +212,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} must respond to ${opponent ? `${opponent}’s` : "another combatant’s"} attack.`
           : "Another combatant must respond before combat can continue.";
+        break;
+      case "offensive_parry_brawling_roll":
+        text = owner
+          ? `${owner} must roll Brawling${opponent ? ` against ${opponent}` : ""}.`
+          : "A Brawling roll is required before combat can continue.";
         break;
       case "adjust_distance_response":
         text = owner

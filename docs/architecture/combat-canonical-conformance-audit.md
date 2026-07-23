@@ -47,10 +47,10 @@ The removed P0 paths were not used by the current main panel according to reposi
 their public authenticated mutation surface was still an authority violation rather than harmless
 dead code.
 
-**Conclusion:** the authority and canonical attack-lineage prerequisites are complete. Attacking
-Parry may now be implemented as a new projected opportunity without relying on participant + phase,
-latest-result, inspector, or default-weapon recovery. The unrelated presentation-source risks below
-remain cleanup work but do not block a correctly descriptor-bound Attacking Parry task.
+**Conclusion:** the authority and canonical attack-lineage prerequisites are complete. Offensive
+Parry Slice 1 now uses them for its exact successful-parry trigger and descriptor-bound parallel
+Brawling contest, without participant + phase, latest-result, inspector, or default-weapon recovery.
+The unrelated presentation-source risks below remain cleanup work.
 
 ## 2. Confirmed canonical invariants
 
@@ -520,9 +520,10 @@ boundary commands. Attack-lineage guards now cover deterministic opportunity IDs
 same-phase attacks against one defender, exact source/mode persistence on command/result/event facts,
 strict API identity mismatch rejection, and removal of first/default-weapon fallback.
 
-## 12. Attacking Parry readiness conclusion
+## 12. Offensive Parry status
 
-Attacking Parry may proceed. Both authority and attack-lineage prerequisites are complete.
+The first Offensive Parry slice has proceeded on the completed authority and attack-lineage
+foundation.
 
 Minimum prerequisites:
 
@@ -533,7 +534,10 @@ Minimum prerequisites:
 5. ~~prove with a multi-opportunity test that attack/result lineage does not use participant + phase
    or latest-result lookup;~~ complete for two same-phase attacks and distinct Double Attack slots.
 
-Attacking Parry can be added as another projected process/task without extending the former
-participant/phase ambiguity. Ownerless tracker cleanup and descriptor-keyed GM editing should
-follow soon, but they do not independently block the domain design once exact attack lineage is
-guaranteed.
+`offensive_parry_brawling_roll` is now a fully descriptor-bound participant task in a parallel
+execution group. Its identity retains the declaration, opportunity, attack result, parry result,
+contest, process, stage, task, and group. Continued Contact and Unbalanced are separate canonical
+facts. Phase 2 follow-up attack generation and round-end maintenance/escape remain future slices.
+
+Ownerless tracker cleanup and descriptor-keyed GM editing remain unrelated conformance cleanup; the
+new Brawling path does not depend on either.

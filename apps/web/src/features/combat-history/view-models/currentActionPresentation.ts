@@ -26,6 +26,7 @@ export interface CurrentActionCommandDescriptor {
   readonly attackerParticipantId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
+  readonly contestId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -38,10 +39,13 @@ export interface CurrentActionCommandDescriptor {
   readonly hitLocationResultId?: string;
   readonly opponentParticipantId?: string;
   readonly opportunityId?: string;
+  readonly parryResultId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
+  readonly processId?: string;
   readonly proposalId?: string;
+  readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
   readonly taskId: string;
   readonly weaponInstanceId?: string;
@@ -185,6 +189,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   health_review: "Health Review",
   initiative: "Initiative",
   modifier_review: "Modifier Review",
+  offensive_parry_brawling_roll: "Offensive Parry",
   participant_review: "Participant Review",
   reactive_attack: "Reactive Attack",
   round_end: "Round End",
@@ -214,6 +219,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   health_review: "Health Review",
   hit_location: "Hit Location",
   modifier_review: "Modifier Review",
+  offensive_parry_brawling_roll: "Offensive Parry",
   parry: "Parry",
   participant_review: "Participant Review",
   roll_initiative: "Initiative",
@@ -372,6 +378,11 @@ function summaryFor(input: {
       return `${actor} is attacking${target ? ` ${target}` : ""}.`;
     case "parry":
       return `${actor} hit ${target ?? "the defender"}.`;
+    case "offensive_parry_brawling_roll":
+      return input.task.presentationContext?.responder?.participantId ===
+        input.task.presentationContext?.actor?.participantId
+        ? `Your Offensive Parry succeeded. Contest ${target ?? "the attacker"}'s balance.`
+        : `${actor} maintained contact after the parry.`;
     case "hit_location":
     case "critical":
     case "damage_roll":
@@ -494,6 +505,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Roll attack";
     case "parry":
       return "Roll parry";
+    case "offensive_parry_brawling_roll":
+      return "Roll Brawling";
     case "hit_location":
       return "Roll hit location";
     case "critical":
@@ -560,6 +573,8 @@ function requiredNowFor(
       return "Roll attack.";
     case "parry":
       return "Defend against the attack.";
+    case "offensive_parry_brawling_roll":
+      return "Roll Brawling.";
     case "hit_location":
       return "Roll hit location.";
     case "critical":
@@ -678,6 +693,7 @@ export function buildCurrentActionPresentation(
     attackerParticipantId: task.identity.attackerParticipantId,
     commandType: task.expectedCommand,
     criticalResultId: task.identity.criticalResultId,
+    contestId: task.identity.contestId,
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     declarationId: task.identity.declarationId,
@@ -690,11 +706,14 @@ export function buildCurrentActionPresentation(
     hitLocationResultId: task.identity.hitLocationResultId,
     opponentParticipantId: task.identity.opponentParticipantId,
     opportunityId: task.identity.opportunityId,
+    parryResultId: task.identity.parryResultId,
     pairId: task.identity.pairId,
     participantId:
       task.owner?.kind === "combatant" ? task.owner.participantId : task.identity.participantId,
     phase,
+    processId: task.processId,
     proposalId: task.identity.proposalId,
+    stageId: task.stageId,
     targetBoundary: task.transition?.targetBoundary,
     taskId: task.id,
     weaponInstanceId: task.identity.weaponInstanceId,

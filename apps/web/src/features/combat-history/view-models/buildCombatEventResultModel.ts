@@ -36,6 +36,7 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   hit_location: "Hit location",
   initiative: "Initiative",
   parry: "Parry",
+  offensive_parry_brawling: "Offensive Parry — Brawling",
   participant_su_review: "Participant SU review",
   feint_feasibility: "Feint ruling",
   feint_roll: "Feint roll",
@@ -274,6 +275,34 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           defender && attacker
             ? `${defender} attempted to parry ${attacker}.`
             : `${roller ?? "Defender"} attempted to parry.`,
+      };
+    }
+    case "offensive_parry_brawling": {
+      const resolved = factValue(event, "resolved") === true;
+      const contactEstablished = factValue(event, "contactEstablished") === true;
+      const winnerParticipantId = factValue(event, "winnerParticipantId");
+      const winner =
+        typeof winnerParticipantId === "string"
+          ? event.identities.find(
+              (candidate) => candidate.participantId === winnerParticipantId,
+            )?.displayName
+          : undefined;
+      return {
+        outcomeRows: resolved
+          ? resultRow(
+              event,
+              contactEstablished
+                ? `${winner ?? defender ?? "The defender"} won the Brawling contest.`
+                : winner
+                  ? `${winner} won the Brawling contest.`
+                  : "The Brawling contest was tied.",
+            )
+          : [],
+        summary: resolved
+          ? contactEstablished
+            ? "Continued contact was established and the attacker became Unbalanced."
+            : "Continued contact was not established."
+          : `${roller ?? "Participant"} rolled Brawling.`,
       };
     }
     case "hit_location": {

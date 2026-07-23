@@ -38,6 +38,9 @@ export const REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID =
   "generated:parry-attack:phase2:initiative";
 export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE =
   "parry-attack-phase2-initiative";
+export const OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
+  "generated:offensive-parry:round:flat-db";
+export const OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-flat-db";
 
 export interface CombatActionGeneratedDistanceModifierInput {
   actualDistance: CombatDistance | number;
@@ -194,12 +197,22 @@ export function isReactiveAttackGeneratedInitiativeModifier(
   );
 }
 
+export function isOffensiveParryGeneratedDbModifier(
+  entry: ScenarioCombatModifierEntry,
+): boolean {
+  return (
+    entry.id === OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID ||
+    entry.sourceRule === OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE
+  );
+}
+
 function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     isAttackParryGeneratedDbParryModifier(entry) ||
     isParryAttackGeneratedDbParryModifier(entry) ||
     isDoubleAttackGeneratedDbParryModifier(entry) ||
-    isAdjustRangeAttackGeneratedDbParryModifier(entry)
+    isAdjustRangeAttackGeneratedDbParryModifier(entry) ||
+    isOffensiveParryGeneratedDbModifier(entry)
   );
 }
 
@@ -478,6 +491,24 @@ export function buildParryAttackGeneratedDbParryModifier(): ScenarioCombatModifi
   };
 }
 
+export function buildOffensiveParryGeneratedDbModifier(input?: {
+  roundNumber?: number;
+}): ScenarioCombatModifierEntry {
+  return scenarioCombatModifierEntrySchema.parse({
+    application: "flat_db",
+    durationRounds: 1,
+    expiresAtRound: input?.roundNumber,
+    generated: true,
+    id: OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID,
+    notes: "offensive parry: DB -2 for the declared round",
+    scope: "until",
+    sourceActionId: "offensive_parry",
+    sourceRoundNumber: input?.roundNumber,
+    sourceRule: OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE,
+    value: -2,
+  });
+}
+
 export function buildReactiveAttackPhase2GeneratedInitiativeModifier(input: {
   reason: string;
   value: number;
@@ -684,6 +715,12 @@ export function applyCombatActionGeneratedModifiers(input: {
           ? buildDoubleAttackGeneratedDbParryModifiers()
           : input.actionId === "adjust_range_attack"
             ? buildAdjustRangeAttackGeneratedDbParryModifiers(input.adjustDistance)
+            : input.actionId === "offensive_parry"
+              ? [
+                  buildOffensiveParryGeneratedDbModifier({
+                    roundNumber: input.sourceRoundNumber,
+                  }),
+                ]
             : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];

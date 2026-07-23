@@ -7,6 +7,7 @@ import type {
 } from "@glantri/domain";
 import {
   getMergedCombatDbParryModifierTotal,
+  getMergedCombatDbFlatAdjustmentTotal,
   getMergedCombatInitiativeModifierTotal,
   getMergedCombatSkillObModifierTotal,
 } from "@glantri/domain";
@@ -17,6 +18,7 @@ import {
 } from "@glantri/rules-engine";
 
 export interface EncounterCombatEffectModifierSums {
+  combatWideGeneral: number;
   db: number;
   fatigue: number;
   general: number;
@@ -25,6 +27,7 @@ export interface EncounterCombatEffectModifierSums {
 }
 
 export interface EncounterLiveCombatModifierSummary {
+  dbFlatAdjustment?: number;
   dbRaw: number;
   generalFatigueRaw: number;
   initiativeRaw: number;
@@ -93,6 +96,15 @@ export function sumEncounterCombatEffectModifiers(
         effect.type !== "fatigue",
     )
     .reduce((total, effect) => total + getEffectMagnitude(effect), 0);
+  const combatWideGeneral = activeEffects
+    .filter(
+      (effect) =>
+        contributesToModifier(effect) &&
+        effect.effectGroup === "general" &&
+        effect.type !== "fatigue" &&
+        effect.combatWide === true,
+    )
+    .reduce((total, effect) => total + getEffectMagnitude(effect), 0);
   const obSkill = activeEffects
     .filter((effect) => contributesToModifier(effect) && effect.effectGroup === "obSkill")
     .reduce((total, effect) => total + getEffectMagnitude(effect), 0);
@@ -101,6 +113,7 @@ export function sumEncounterCombatEffectModifiers(
     .reduce((total, effect) => total + getEffectMagnitude(effect), 0);
 
   return {
+    combatWideGeneral,
     db,
     fatigue,
     general,
@@ -140,13 +153,18 @@ export function buildEncounterLiveCombatModifierSummary(input: {
     : undefined;
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw: getMergedCombatDbParryModifierTotal({
+    dbRaw:
+      getMergedCombatDbParryModifierTotal({
+        combatContext: phaseAwareCombatContext,
+      }) + effectSums.combatWideGeneral,
+    dbFlatAdjustment: getMergedCombatDbFlatAdjustmentTotal({
       combatContext: phaseAwareCombatContext,
     }),
     generalFatigueRaw: effectSums.generalFatigue,
-    initiativeRaw: getMergedCombatInitiativeModifierTotal({
-      combatContext: phaseAwareCombatContext,
-    }),
+    initiativeRaw:
+      getMergedCombatInitiativeModifierTotal({
+        combatContext: phaseAwareCombatContext,
+      }) + effectSums.combatWideGeneral,
     modifierNoteLabels: [
       "Gen/Fatigue",
       "Initiative",

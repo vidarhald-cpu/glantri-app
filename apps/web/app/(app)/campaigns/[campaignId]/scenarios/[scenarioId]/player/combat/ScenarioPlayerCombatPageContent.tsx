@@ -146,6 +146,7 @@ import {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollOffensiveParryBrawlingOnServer,
   rollCombatFeintOnServer,
   respondCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
@@ -2741,6 +2742,67 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollCurrentOffensiveParryBrawling(
+    candidate: CurrentActionCommandDescriptor,
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_offensive_parry_brawling"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "contestId",
+        "declarationId",
+        "executionGroupId",
+        "opponentParticipantId",
+        "opportunityId",
+        "parryResultId",
+        "participantId",
+        "phase",
+        "processId",
+        "stageId",
+      ],
+    });
+    if (
+      !descriptor ||
+      !encounterId ||
+      !selectedParticipant ||
+      selectedRoundParticipant?.participantId !== descriptor.participantId
+    ) {
+      setError("The Offensive Parry task is no longer available.");
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const encounter = await rollOffensiveParryBrawlingOnServer({
+        attackResultId: descriptor.attackResultId!,
+        contestId: descriptor.contestId!,
+        declarationId: descriptor.declarationId!,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opponentParticipantId: descriptor.opponentParticipantId!,
+        opportunityId: descriptor.opportunityId!,
+        parryResultId: descriptor.parryResultId!,
+        phase: descriptor.phase!,
+        processId: descriptor.processId!,
+        scenarioParticipantId: selectedParticipant.id,
+        stageId: descriptor.stageId!,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll Offensive Parry Brawling.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollAttackerPrivilegedCombatDie(
     kind: "critical" | "hitLocation",
     candidate?: CurrentActionCommandDescriptor,
@@ -3376,6 +3438,9 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_parry":
         void rollCurrentParry(descriptor);
+        return;
+      case "roll_offensive_parry_brawling":
+        void rollCurrentOffensiveParryBrawling(descriptor);
         return;
       case "roll_attack":
         void rollPhaseAttack(descriptor);

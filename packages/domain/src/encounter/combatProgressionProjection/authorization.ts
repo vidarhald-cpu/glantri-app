@@ -39,6 +39,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly attackerParticipantId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
+  readonly contestId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -47,13 +48,16 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
+  readonly parryResultId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
+  readonly processId?: string;
   readonly projection: CombatProgressionProjection;
   readonly proposalId?: string;
   readonly taskId?: string;
+  readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
   readonly weaponInstanceId?: string;
   readonly weaponSourceId?: string;
@@ -148,6 +152,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     kind: "parry",
     process: "attack",
     stage: "defense",
+  },
+  roll_offensive_parry_brawling: {
+    boundary: resolutionBoundary,
+    kind: "offensive_parry_brawling_roll",
+    process: "attack",
+    stage: "offensive_parry_contest",
   },
   roll_hit_location: {
     boundary: resolutionBoundary,
@@ -415,9 +425,23 @@ export function authorizeCombatProgressionTask(
     return failure("stale_proposal", "The combat proposal is stale or not executable.");
   }
 
-  const healthRollTasks = input.healthRollId
-    ? proposalTasks.filter((task) => task.identity.healthRollId === input.healthRollId)
+  const contestTasks = input.contestId
+    ? proposalTasks.filter((task) => task.identity.contestId === input.contestId)
     : proposalTasks;
+  if (input.contestId && contestTasks.length === 0) {
+    return failure("stale_proposal", "The contested roll is stale or not executable.");
+  }
+
+  const parryResultTasks = input.parryResultId
+    ? contestTasks.filter((task) => task.identity.parryResultId === input.parryResultId)
+    : contestTasks;
+  if (input.parryResultId && parryResultTasks.length === 0) {
+    return failure("stale_opportunity", "The parry result is stale or not executable.");
+  }
+
+  const healthRollTasks = input.healthRollId
+    ? parryResultTasks.filter((task) => task.identity.healthRollId === input.healthRollId)
+    : parryResultTasks;
   if (input.healthRollId && healthRollTasks.length === 0) {
     return failure("stale_proposal", "The Health roll is stale or not executable.");
   }
@@ -496,9 +520,23 @@ export function authorizeCombatProgressionTask(
     );
   }
 
-  const matchingTasks = input.taskId
-    ? executionGroupTasks.filter((task) => task.id === input.taskId)
+  const processTasks = input.processId
+    ? executionGroupTasks.filter((task) => task.processId === input.processId)
     : executionGroupTasks;
+  if (input.processId && processTasks.length === 0) {
+    return failure("identity_mismatch", "The combat process identity does not match the task.");
+  }
+
+  const stageTasks = input.stageId
+    ? processTasks.filter((task) => task.stageId === input.stageId)
+    : processTasks;
+  if (input.stageId && stageTasks.length === 0) {
+    return failure("identity_mismatch", "The combat stage identity does not match the task.");
+  }
+
+  const matchingTasks = input.taskId
+    ? stageTasks.filter((task) => task.id === input.taskId)
+    : stageTasks;
   if (input.taskId && matchingTasks.length === 0) {
     return failure("task_mismatch", "The projected combat task is stale or no longer executable.");
   }

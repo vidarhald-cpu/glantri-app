@@ -259,6 +259,32 @@ describe("live combat modifiers", () => {
     ]);
   });
 
+  it("applies only explicitly combat-wide general effects to initiative and DB/Parry", () => {
+    const summary = buildEncounterLiveCombatModifierSummary({
+      combatEffects: {
+        effects: [
+          effect({
+            combatWide: true,
+            effectGroup: "general",
+            modifierValue: -2,
+            type: "general_modifier",
+          }),
+          effect({
+            effectGroup: "general",
+            modifierValue: -7,
+            type: "general_modifier",
+          }),
+        ],
+        events: [],
+      },
+    });
+
+    expect(summary.generalFatigueRaw).toBe(-9);
+    expect(summary.initiativeRaw).toBe(-2);
+    expect(summary.dbRaw).toBe(-2);
+    expect(summary.obSkillRaw).toBe(0);
+  });
+
   it("sums imported, generated, manual, and legacy Skill/OB rows exactly once by phase", () => {
     const combatContext: ScenarioParticipantCombatContext = {
       modifierBuckets: {

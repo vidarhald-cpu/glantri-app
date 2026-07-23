@@ -4,7 +4,9 @@ import {
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import {
+  combineCombatModifierResolutions,
   createCombatParticipantPairKey,
+  resolveCombatWideGeneralModifiers,
   resolveCombatModifierContributions,
   type CombatModifierResolution,
 } from "./combatModifierContributions";
@@ -137,45 +139,59 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     ownerParticipantId: input.defenderScenarioParticipant.id,
   }).contributions;
   const opportunityId = declaredOpportunity?.id ?? input.opportunityId;
+  const attackerCalculationContext = {
+    actionId: attackerActionId,
+    encounterId: input.encounterId,
+    opponentParticipantId: input.defenderScenarioParticipant.id,
+    opportunityId,
+    ownerParticipantId: input.attackerScenarioParticipant.id,
+    pairKey,
+    phase: input.phase,
+    proposalId: attackerProposalId,
+    rollType: "attack",
+    roundNumber: input.state.roundNumber,
+    step,
+  } as const;
+  const defenderCalculationContext = {
+    actionId: defenderRoundParticipant?.declaration?.actionId,
+    encounterId: input.encounterId,
+    opponentParticipantId: input.attackerScenarioParticipant.id,
+    opportunityId,
+    ownerParticipantId: input.defenderScenarioParticipant.id,
+    pairKey,
+    phase: input.phase,
+    proposalId: defenderFeintProposalId,
+    rollType: "db",
+    roundNumber: input.state.roundNumber,
+    step,
+  } as const;
 
   return {
     attackerActionId,
     attackerCombatContext,
     attackerProposalId,
-    attackerResolution: resolveCombatModifierContributions({
-      bucket: "skill_ob",
-      context: {
-        actionId: attackerActionId,
-        encounterId: input.encounterId,
-        opponentParticipantId: input.defenderScenarioParticipant.id,
-        opportunityId,
-        ownerParticipantId: input.attackerScenarioParticipant.id,
-        pairKey,
-        phase: input.phase,
-        proposalId: attackerProposalId,
-        rollType: "attack",
-        roundNumber: input.state.roundNumber,
-        step,
-      },
-      contributions: attackerContributions,
+    attackerResolution: combineCombatModifierResolutions({
+      additional: resolveCombatWideGeneralModifiers({
+        context: attackerCalculationContext,
+        contributions: attackerContributions,
+      }),
+      primary: resolveCombatModifierContributions({
+        bucket: "skill_ob",
+        context: attackerCalculationContext,
+        contributions: attackerContributions,
+      }),
     }),
     declaredOpportunity,
-    defenderResolution: resolveCombatModifierContributions({
-      bucket: "db_parry",
-      context: {
-        actionId: defenderRoundParticipant?.declaration?.actionId,
-        encounterId: input.encounterId,
-        opponentParticipantId: input.attackerScenarioParticipant.id,
-        opportunityId,
-        ownerParticipantId: input.defenderScenarioParticipant.id,
-        pairKey,
-        phase: input.phase,
-        proposalId: defenderFeintProposalId,
-        rollType: "db",
-        roundNumber: input.state.roundNumber,
-        step,
-      },
-      contributions: defenderContributions,
+    defenderResolution: combineCombatModifierResolutions({
+      additional: resolveCombatWideGeneralModifiers({
+        context: defenderCalculationContext,
+        contributions: defenderContributions,
+      }),
+      primary: resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: defenderCalculationContext,
+        contributions: defenderContributions,
+      }),
     }),
     pairKey,
   };

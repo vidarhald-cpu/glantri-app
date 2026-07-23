@@ -48,6 +48,8 @@ export type CombatModifierContributionBucket =
   | "db_parry";
 
 export interface CombatModifierApplicability {
+  combatWide?: boolean;
+  excludedRollPurposes?: readonly string[];
   participantId?: string;
   opponentParticipantId?: string;
   pairKey?: string;
@@ -125,6 +127,7 @@ export interface CombatCalculationContext {
   proposalId?: string;
 
   rollType?: string;
+  rollPurpose?: string;
   skillId?: string;
   skillGroupId?: string;
 
@@ -292,6 +295,8 @@ export function normalizeScenarioCombatModifierEntry(
       : "active";
   const inferredApplicability = inferApplicability(input.entry);
   const applicability = {
+    combatWide: input.entry.combatWide,
+    excludedRollPurposes: input.entry.excludedRollPurposes,
     ...inferredApplicability,
     ...input.applicability,
   };
@@ -416,6 +421,12 @@ export function doesCombatModifierContributionApply(
   if (!matchesDimension(applicability.opportunityId, context.opportunityId)) return false;
   if (!matchesDimension(applicability.proposalId, context.proposalId)) return false;
   if (!matchesDimension(applicability.rollType, context.rollType)) return false;
+  if (
+    context.rollPurpose &&
+    applicability.excludedRollPurposes?.includes(context.rollPurpose)
+  ) {
+    return false;
+  }
   if (!matchesDimension(applicability.skillId, context.skillId)) return false;
   if (!matchesDimension(applicability.skillGroupId, context.skillGroupId)) return false;
 
@@ -465,6 +476,35 @@ export function resolveCombatModifierContributions(input: {
     bucket: input.bucket,
     rows,
     total: sumCombatModifierContributions(rows),
+  };
+}
+
+/**
+ * Resolves only general modifiers explicitly declared to apply across combat calculation types.
+ * Legacy general/fatigue rows retain their established consumers; a caller cannot accidentally
+ * broaden them merely by asking for a different roll type.
+ */
+export function resolveCombatWideGeneralModifiers(input: {
+  context: CombatCalculationContext;
+  contributions: readonly CombatModifierContribution[];
+}): CombatModifierResolution {
+  return resolveCombatModifierContributions({
+    bucket: "general_fatigue",
+    context: input.context,
+    contributions: input.contributions.filter(
+      (contribution) => contribution.applicability.combatWide === true,
+    ),
+  });
+}
+
+export function combineCombatModifierResolutions(input: {
+  additional: CombatModifierResolution;
+  primary: CombatModifierResolution;
+}): CombatModifierResolution {
+  return {
+    bucket: input.primary.bucket,
+    rows: [...input.primary.rows, ...input.additional.rows],
+    total: input.primary.total + input.additional.total,
   };
 }
 

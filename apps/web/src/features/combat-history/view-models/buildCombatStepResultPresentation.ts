@@ -419,6 +419,69 @@ function supplementalEntries(input: {
       ];
     }
 
+    if (event.type === "offensive_parry_brawling") {
+      if (visibleOutcome(event, "resolved") !== true) return [];
+      const contestId = visibleOutcome(event, "contestId");
+      if (typeof contestId !== "string") return [];
+      const contestEvents = input.events.filter(
+        (candidate) =>
+          candidate.type === "offensive_parry_brawling" &&
+          visibleOutcome(candidate, "contestId") === contestId,
+      );
+      const controller =
+        identitySubject(event, "defender") ?? identitySubject(event, "actor");
+      const affected =
+        identitySubject(event, "attacker") ?? identitySubject(event, "target");
+      const winnerParticipantId = visibleOutcome(event, "winnerParticipantId");
+      const controllerWon =
+        visibleOutcome(event, "contactEstablished") === true &&
+        winnerParticipantId === controller?.id;
+      const participantIsController = controller?.id === input.participantId;
+      const participantIsAffected = affected?.id === input.participantId;
+      const controllerName = controller?.label ?? "The defender";
+      const affectedName = affected?.label ?? "the attacker";
+      const summary = controllerWon
+        ? participantIsController
+          ? `You won the Brawling contest. Continued contact was established. ${affectedName} is Unbalanced (−2%).`
+          : participantIsAffected
+            ? `You lost the Brawling contest. ${controllerName} established continued contact. You are Unbalanced (−2%).`
+            : `${controllerName} established continued contact. ${affectedName} is Unbalanced (−2%).`
+        : participantIsController
+          ? "You did not win the Brawling contest. Continued contact was not established."
+          : participantIsAffected
+            ? "You resisted the attempt. No continued contact was established."
+            : "Continued contact was not established.";
+      return [
+        {
+          entry: {
+            actor: controller,
+            attackResultId:
+              typeof visibleOutcome(event, "attackResultId") === "string"
+                ? (visibleOutcome(event, "attackResultId") as string)
+                : undefined,
+            calculations: calculationsForEvents({
+              events: contestEvents,
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
+            category: "contest",
+            heading: "Offensive Parry — Brawling",
+            id: `current-step:${contestId}:result`,
+            opportunityId: event.opportunityId,
+            outcome: controllerWon
+              ? "Continued contact established · Unbalanced −2%"
+              : "Continued contact not established",
+            sourceEventIds: contestEvents.map((candidate) => candidate.id),
+            state: "final",
+            summary,
+            target: affected,
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
+
     if (event.type === "adjust_distance_result") {
       const id = proposalId(event);
       if (!id || loggedContestProposalIds.has(id)) return [];

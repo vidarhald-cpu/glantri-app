@@ -127,7 +127,10 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 ]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
+  application: z.enum(["percentage", "flat_db"]).optional(),
+  combatWide: z.boolean().optional(),
   durationRounds: z.number().int().positive().optional(),
+  excludedRollPurposes: z.array(z.string().min(1)).optional(),
   expiresAtRound: z.number().int().positive().optional(),
   generated: z.boolean().optional(),
   id: idSchema,

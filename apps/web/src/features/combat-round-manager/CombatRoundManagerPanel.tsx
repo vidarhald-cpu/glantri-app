@@ -58,6 +58,7 @@ import {
   canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
   characterBuildSchema,
+  combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAction,
   combatRoundParticipantHasPhaseAttack,
   deriveCombatHistoryStepOutcome,
@@ -157,6 +158,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  rollOffensiveParryBrawlingOnServer,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
   rollCurrentRoundEndDistanceControlOnServer,
@@ -7874,6 +7876,8 @@ export default function CombatRoundManagerPanel({
         "opportunityId",
         "participantId",
         "phase",
+        "processId",
+        "stageId",
         "taskId",
         "weaponSourceId",
         "weaponSourceSlot",
@@ -8153,6 +8157,65 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rollInspectorOffensiveParryBrawling(
+    candidate: CurrentActionCommandDescriptor,
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_offensive_parry_brawling"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "attackResultId",
+        "contestId",
+        "declarationId",
+        "executionGroupId",
+        "opponentParticipantId",
+        "opportunityId",
+        "parryResultId",
+        "participantId",
+        "phase",
+        "processId",
+        "stageId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !participant) {
+      setSaveError("The Offensive Parry task is no longer available.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const nextEncounter = await rollOffensiveParryBrawlingOnServer({
+        attackResultId: descriptor.attackResultId!,
+        contestId: descriptor.contestId!,
+        declarationId: descriptor.declarationId!,
+        encounterId: descriptor.encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opponentParticipantId: descriptor.opponentParticipantId!,
+        opportunityId: descriptor.opportunityId!,
+        parryResultId: descriptor.parryResultId!,
+        phase: descriptor.phase!,
+        processId: descriptor.processId!,
+        scenarioParticipantId: participant.id,
+        stageId: descriptor.stageId!,
+        taskId: descriptor.taskId,
+      });
+      const nextRoundState = combatRoundStateSchema.parse(nextEncounter.combatRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll Offensive Parry Brawling.",
+      );
     } finally {
       setSaving(false);
     }
@@ -8663,6 +8726,9 @@ export default function CombatRoundManagerPanel({
         return;
       case "roll_parry":
         void rollInspectorParry(descriptor);
+        return;
+      case "roll_offensive_parry_brawling":
+        void rollInspectorOffensiveParryBrawling(descriptor);
         return;
       case "roll_hit_location":
       case "roll_critical":

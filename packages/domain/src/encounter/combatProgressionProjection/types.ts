@@ -34,6 +34,7 @@ export type CombatProgressionProcessKind =
   | "health_review"
   | "initiative"
   | "modifier_review"
+  | "offensive_parry"
   | "participant_review"
   | "round_end";
 
@@ -52,6 +53,7 @@ export type CombatProgressionStageKind =
   | "hit_location"
   | "gm_adjustment"
   | "opposed_rolls"
+  | "offensive_parry_contest"
   | "input"
   | "attacker_roll"
   | "defender_roll"
@@ -96,6 +98,7 @@ export type CombatProgressionTaskKind =
   | "health_review"
   | "hit_location"
   | "modifier_review"
+  | "offensive_parry_brawling_roll"
   | "parry"
   | "participant_review"
   | "round_end_prepare"
@@ -153,6 +156,7 @@ export interface CombatProgressionTaskIdentity {
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
   readonly criticalResultId?: string;
+  readonly contestId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -161,6 +165,7 @@ export interface CombatProgressionTaskIdentity {
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
+  readonly parryResultId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;

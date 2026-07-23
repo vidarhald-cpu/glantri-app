@@ -430,6 +430,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
           ...combatAllocationInputs.situationalModifiers,
           attack: liveObSkillRaw,
           defense: liveDbRaw,
+          defenseFlat: input.liveCombatModifiers.dbFlatAdjustment ?? 0,
           perception: 0,
         },
       }

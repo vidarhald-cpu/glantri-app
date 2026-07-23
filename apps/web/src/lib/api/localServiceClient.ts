@@ -92,6 +92,7 @@ export {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollOffensiveParryBrawlingOnServer,
   rollCombatParryCommandOnServer,
   resolveCurrentCombatPhaseDamageOnServer,
   saveCurrentCombatDamageReviewOnServer,

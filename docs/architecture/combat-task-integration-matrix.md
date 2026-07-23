@@ -25,6 +25,7 @@ authorize a live command.
 | `commit_initiative`                           | Fully descriptor-bound | GM commit requires the projected GM task, execution group, phase, and revision.                                                                                   |
 | `attack`                                      | Fully descriptor-bound | Invocation and persistence require the exact declaration/opportunity/index/source/template/instance/mode plus participant pair, task, group, phase, and revision. |
 | `parry`                                       | Fully descriptor-bound | GM/player handlers and API retain the upstream opportunity and exact attack result through the parry task; no cursor/latest lookup remains.                       |
+| `offensive_parry_brawling_roll`               | Fully descriptor-bound | Two participant-owned tasks share one parallel group after an exact successful-parry trigger. Contest/declaration/opportunity/attack/parry/process/stage identities authorize both player and GM-proxy rolls. |
 | `hit_location`                                | Fully descriptor-bound | Exact attack/result/opportunity/task/group identity authorizes the command; new results carry source-specific downstream damage inputs.                           |
 | `critical`                                    | Fully descriptor-bound | Exact attack/location/critical/task/group identity authorizes the command and retains upstream opportunity/source lineage.                                        |
 | `damage_roll`                                 | Fully descriptor-bound | Graze damage uses the exact attack opportunity/result and its persisted source-specific DMB/armor context.                                                        |
@@ -47,3 +48,6 @@ identity or command eligibility from those forms, the inspector, cursors, or lat
 This matrix now covers both handler authority and canonical attack lineage. Historical records that
 predate opportunity/source/mode persistence may use read-only snapshot compatibility, but that path
 cannot provide a live descriptor or authorize a mutation.
+
+Offensive Parry Slice 1 adds only its post-parry Brawling task. Continued Contact follow-up attacks
+and round-end maintenance/escape remain explicitly deferred and therefore do not yet add task kinds.

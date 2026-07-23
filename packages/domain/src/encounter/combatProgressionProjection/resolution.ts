@@ -569,6 +569,8 @@ function adapterStageTaskKind(stage: CombatActionProcessStage): TaskSpec["kind"]
       return "attack";
     case "defense":
       return "parry";
+    case "offensive_parry_contest":
+      return "offensive_parry_brawling_roll";
     case "hit_location":
       return "hit_location";
     case "damage":
@@ -612,6 +614,58 @@ function buildAdapterAttackProcess(
       })
     : undefined;
   const stages: StageSpec[] = plan.stages.map((stage) => {
+    if (stage.kind === "offensive_parry_contest") {
+      const contest = context.state.offensiveParryContests.find(
+        (entry) =>
+          entry.attackResultId === plan.attackResultId &&
+          entry.opportunityId === plan.opportunity.id &&
+          entry.status === "awaiting_rolls",
+      );
+      const taskSpecs: TaskSpec[] = (stage.tasks ?? []).map((task) => {
+        const owner =
+          task.owner === "offensive_parry_controller"
+            ? context.identities.get(contest?.controllerParticipantId ?? "")
+            : context.identities.get(contest?.affectedParticipantId ?? "");
+        const opponentParticipantId =
+          task.owner === "offensive_parry_controller"
+            ? contest?.affectedParticipantId
+            : contest?.controllerParticipantId;
+        return {
+          expectedCommand: task.expectedCommand,
+          identity: {
+            attackResultId: task.attackResultId,
+            contestId: task.contestId,
+            declarationId: task.declarationId,
+            opponentParticipantId,
+            opportunityId: task.opportunityId,
+            parryResultId: task.parryResultId,
+            phase: task.phase,
+          },
+          key: `${task.contestId}:${owner?.kind === "combatant" ? owner.participantId : "missing"}`,
+          kind: "offensive_parry_brawling_roll",
+          owner,
+          presentationContext: {
+            actionKind: "offensive_parry",
+            actor: context.identities.get(contest?.controllerParticipantId ?? ""),
+            responder: owner?.kind === "combatant" ? owner : undefined,
+            skill: { id: "brawling", label: "Brawling" },
+            target: context.identities.get(contest?.affectedParticipantId ?? ""),
+          },
+          trackerOwner: owner?.kind === "combatant" ? owner : undefined,
+          trackerStep: trackerStepForPhase(plan.phase, "parry"),
+        };
+      });
+      return {
+        executionGroups:
+          taskSpecs.length > 0
+            ? [{ key: contest?.id ?? plan.opportunity.id, tasks: taskSpecs }]
+            : undefined,
+        kind: "offensive_parry_contest",
+        state:
+          stage.state === "ready" ? "active" : stage.state === "pending" ? "pending" : "complete",
+        strategy: "parallel_all",
+      };
+    }
     const task = stage.task;
     const taskKind =
       stage.kind === "damage" && task?.owner === "attacker"

@@ -178,7 +178,9 @@ function buildImportedEntry(input: {
   event?: CombatEffectEvent;
 }): ScenarioCombatModifierEntry {
   return {
+    combatWide: input.effect.combatWide,
     expiresAtRound: input.effect.expiresAtRound,
+    excludedRollPurposes: input.effect.excludedRollPurposes,
     generated: false,
     id: `import:character_effect:${input.effect.id}:${input.effect.combatModifierBucket}`,
     imported: true,
@@ -341,6 +343,10 @@ export function buildLiveCombatModifierContributionProjection(
     const entries = combatContext.modifierBuckets[bucketKey];
 
     for (const entry of entries) {
+      // Flat DB points are composed directly into DB after percentage adjustment. They are not
+      // percentage contributions and must never affect Parry merely because legacy storage
+      // shares the situationDb bucket.
+      if (entry.application === "flat_db") continue;
       if (seenIds.has(entry.id)) continue;
 
       const contribution = normalizeScenarioCombatModifierEntry({
@@ -389,8 +395,13 @@ export function refreshScenarioParticipantPersistentCombatModifiers(input: {
   };
 }
 
-function sum(entries: readonly ScenarioCombatModifierEntry[]): number {
-  return entries.reduce((total, entry) => total + entry.value, 0);
+function sum(
+  entries: readonly ScenarioCombatModifierEntry[],
+  application: ScenarioCombatModifierEntry["application"] = "percentage",
+): number {
+  return entries
+    .filter((entry) => (entry.application ?? "percentage") === application)
+    .reduce((total, entry) => total + entry.value, 0);
 }
 
 export function getMergedCombatModifierTotals(
@@ -464,4 +475,18 @@ export function getMergedCombatDbParryModifierTotal(input: {
       ),
     },
   }).dbParry;
+}
+
+/** Flat DB points are applied after workbook percentage adjustment and never affect Parry. */
+export function getMergedCombatDbFlatAdjustmentTotal(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  phase?: "phase1" | "phase2";
+}): number {
+  const entries = input.combatContext?.modifierBuckets.situationDb ?? [];
+  return sum(
+    entries.filter(
+      (entry) => !input.phase || !entry.sourcePhase || entry.sourcePhase === input.phase,
+    ),
+    "flat_db",
+  );
 }

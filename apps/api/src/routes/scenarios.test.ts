@@ -11801,7 +11801,15 @@ describe("scenarios route contract", () => {
       combat: {
         combatContext: {
           modifierBuckets: {
-            general: [{ id: "general-not-defense", scope: "until", value: 99 }],
+            general: [
+              { id: "general-not-defense", scope: "until", value: 99 },
+              {
+                combatWide: true,
+                id: "unbalanced-combat-wide",
+                scope: "until",
+                value: -2,
+              },
+            ],
             situationDb: [
               {
                 id: "import:character_effect:defense-1:db_parry",
@@ -11878,14 +11886,14 @@ describe("scenarios route contract", () => {
     });
     const staleTaskResponse = await app.inject({
       method: "POST",
-      payload: { ...parryPayload, dbParryRaw: -2, taskId: "stale-parry-task" },
+      payload: { ...parryPayload, dbParryRaw: -4, taskId: "stale-parry-task" },
       url: "/encounters/encounter-1/combat-round/roll-parry",
     });
     const staleRevisionResponse = await app.inject({
       method: "POST",
       payload: {
         ...parryPayload,
-        dbParryRaw: -2,
+        dbParryRaw: -4,
         expectedRevision: "2025-12-31T23:59:59.000Z",
       },
       url: "/encounters/encounter-1/combat-round/roll-parry",
@@ -11895,7 +11903,7 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         ...parryPayload,
-        dbParryRaw: -2,
+        dbParryRaw: -4,
       },
       url: "/encounters/encounter-1/combat-round/roll-parry",
     });
@@ -11933,7 +11941,7 @@ describe("scenarios route contract", () => {
       updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution,
     ).toMatchObject({
       combinedParryScore: 13,
-      modifierBreakdown: [{ label: "DB/Parry", value: -2 }],
+      modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
       parrySourceLabel: "Sword / shield",
       status: "resolved",
     });

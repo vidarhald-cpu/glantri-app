@@ -21,6 +21,7 @@ export * from "./encounter/combatLogProjection";
 export * from "./encounter/combatStepEvents";
 export * from "./encounter/combatDistance";
 export * from "./encounter/combatMovementIntent";
+export * from "./encounter/combatOffensiveParry";
 export * from "./encounter/combatEffects";
 export * from "./encounter/combatFeint";
 export * from "./encounter/combatAdjustDistance";

@@ -44,6 +44,9 @@ import {
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
+  combatEffectEventSchema,
+  combatEffectSchema,
+  combatEffectsStateSchema,
   combatAttackSourceRefSchema,
   combatDistanceSchema,
   combatRoundStepSchema,
@@ -99,6 +102,7 @@ import {
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
   recordCombatRoundParryResult,
+  recordCombatRoundOffensiveParryBrawlingRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
@@ -114,6 +118,7 @@ import {
   normalizeCombatRollAdjustment,
   resolveCombatDodgeModifiers,
   resolveCanonicalCombatAttackModifierFacts,
+  resolveCombatWideGeneralModifiers,
   resolveCombatModifierContributions,
   rollCombatRoundEndDistanceControl,
   rollCombatRoundEndHealthCheck,
@@ -178,6 +183,7 @@ import {
   resolveCombatFeintTable,
   resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
+  resolveParticipantSkillRollProfile,
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -1046,6 +1052,45 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     phase: combatRoundPhaseSchema.parse(value.phase),
     usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
     usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
+  };
+}
+
+function parseOffensiveParryBrawlingBody(
+  body: unknown,
+): ParsedCombatTaskCommandIdentity & {
+  attackResultId: string;
+  contestId: string;
+  declarationId: string;
+  opponentParticipantId: string;
+  opportunityId: string;
+  parryResultId: string;
+  phase: CombatRoundPhase;
+  processId: string;
+  rollPurpose: "offensive_parry_brawling";
+  scenarioParticipantId: string;
+  stageId: string;
+} {
+  const value = parseBodyObject(body, "Offensive Parry Brawling payload");
+  const participant = parseParticipantCommandBody(value, "Offensive Parry Brawling payload");
+  if (value.rollPurpose !== "offensive_parry_brawling") {
+    throw new Error("rollPurpose must be offensive_parry_brawling.");
+  }
+  return {
+    ...participant,
+    ...parseCombatTaskCommandIdentity(value),
+    attackResultId: parseNonEmptyString(value.attackResultId, "attackResultId"),
+    contestId: parseNonEmptyString(value.contestId, "contestId"),
+    declarationId: parseNonEmptyString(value.declarationId, "declarationId"),
+    opponentParticipantId: parseNonEmptyString(
+      value.opponentParticipantId,
+      "opponentParticipantId",
+    ),
+    opportunityId: parseNonEmptyString(value.opportunityId, "opportunityId"),
+    parryResultId: parseNonEmptyString(value.parryResultId, "parryResultId"),
+    phase: combatRoundPhaseSchema.parse(value.phase),
+    processId: parseNonEmptyString(value.processId, "processId"),
+    rollPurpose: "offensive_parry_brawling",
+    stageId: parseNonEmptyString(value.stageId, "stageId"),
   };
 }
 
@@ -2524,6 +2569,32 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           tableResult: committed ? proposal.tableResult : undefined,
         });
       }),
+    offensiveParryContests: roundState.offensiveParryContests
+      .filter((contest) =>
+        isPlayerVisibleCombatRoundResultPair({
+          attackerParticipantId: contest.controllerParticipantId,
+          controlledEncounterParticipantIds,
+          defenderParticipantId: contest.affectedParticipantId,
+          visibleParticipantIds,
+        }),
+      )
+      .map((contest) => ({
+        ...contest,
+        initiatorRoll: controlledEncounterParticipantIds.has(contest.controllerParticipantId)
+          ? contest.initiatorRoll
+          : undefined,
+        responderRoll: controlledEncounterParticipantIds.has(contest.affectedParticipantId)
+          ? contest.responderRoll
+          : undefined,
+      })),
+    continuedContacts: roundState.continuedContacts.filter((contact) =>
+      isPlayerVisibleCombatRoundResultPair({
+        attackerParticipantId: contact.controllerParticipantId,
+        controlledEncounterParticipantIds,
+        defenderParticipantId: contact.affectedParticipantId,
+        visibleParticipantIds,
+      }),
+    ),
     participants: roundState.participants.map((participant) =>
       controlledEncounterParticipantIds.has(participant.participantId)
         ? participant
@@ -2544,6 +2615,11 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     roundEndReview: safeRoundEndReview,
     rounds: [],
     stepSnapshots: [],
+    unbalancedConditions: roundState.unbalancedConditions.filter(
+      (condition) =>
+        controlledEncounterParticipantIds.has(condition.affectedParticipantId) ||
+        visibleParticipantIds.has(condition.affectedParticipantId),
+    ),
   };
 
   return sanitizePlayerSafeCurrentCombatResultsState({
@@ -4663,52 +4739,56 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         skill,
       });
       const adjustment = 0;
-      let canonicalDodgeModifier = 0;
+      const opponentEncounterParticipantId = isAttackerRoll
+        ? proposal.defenderParticipantId
+        : proposal.attackerParticipantId;
+      const opponentEncounterParticipant = membership.participants.find(
+        (participant) => participant.id === opponentEncounterParticipantId,
+      );
+      const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+        ? scenarioParticipants.find(
+            (participant) =>
+              participant.id === opponentEncounterParticipant.scenarioParticipantId,
+          )
+        : undefined;
+      const projection = buildLiveCombatModifierContributionProjection({
+        combatContext: scenarioParticipant.state.combat.combatContext,
+        combatEffects: scenarioParticipant.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: scenarioParticipant.id,
+      });
+      const feintCalculationContext: CombatCalculationContext = {
+        actionId: "feint_attack",
+        encounterId,
+        opportunityId: proposal.phase1OpportunityId,
+        ownerParticipantId: scenarioParticipant.id,
+        ...(opponentScenarioParticipant
+          ? {
+              opponentParticipantId: opponentScenarioParticipant.id,
+              pairKey: createCombatParticipantPairKey(
+                scenarioParticipant.id,
+                opponentScenarioParticipant.id,
+              ),
+            }
+          : {}),
+        phase: "phase1",
+        proposalId: proposal.id,
+        rollType: proposal.method === "movement" ? "feint_dodge" : "feint_weapon",
+        roundNumber: roundState.roundNumber,
+        skillId,
+        step: "phase_1_actions",
+      };
+      let canonicalCombatModifier = resolveCombatWideGeneralModifiers({
+        context: feintCalculationContext,
+        contributions: projection.contributions,
+      }).total;
       if (proposal.method === "movement" && skillId === "dodge") {
-        const opponentEncounterParticipantId = isAttackerRoll
-          ? proposal.defenderParticipantId
-          : proposal.attackerParticipantId;
-        const opponentEncounterParticipant = membership.participants.find(
-          (participant) => participant.id === opponentEncounterParticipantId,
-        );
-        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
-          ? scenarioParticipants.find(
-              (participant) =>
-                participant.id === opponentEncounterParticipant.scenarioParticipantId,
-            )
-          : undefined;
-        const projection = buildLiveCombatModifierContributionProjection({
-          combatContext: scenarioParticipant.state.combat.combatContext,
-          combatEffects: scenarioParticipant.state.combatEffects,
-          currentRound: roundState.roundNumber,
-          encounterId,
-          ownerParticipantId: scenarioParticipant.id,
-        });
         const dodgeResolution = resolveCombatDodgeModifiers({
-          context: {
-            actionId: "feint_attack",
-            encounterId,
-            opportunityId: proposal.phase1OpportunityId,
-            ownerParticipantId: scenarioParticipant.id,
-            ...(opponentScenarioParticipant
-              ? {
-                  opponentParticipantId: opponentScenarioParticipant.id,
-                  pairKey: createCombatParticipantPairKey(
-                    scenarioParticipant.id,
-                    opponentScenarioParticipant.id,
-                  ),
-                }
-              : {}),
-            phase: "phase1",
-            proposalId: proposal.id,
-            rollType: "feint_dodge",
-            roundNumber: roundState.roundNumber,
-            skillId: "dodge",
-            step: "phase_1_actions",
-          },
+          context: feintCalculationContext,
           contributions: projection.contributions,
         });
-        canonicalDodgeModifier = dodgeResolution.total;
+        canonicalCombatModifier = dodgeResolution.total;
       }
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
@@ -4721,7 +4801,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           profile.rollBaseValue +
           profile.unknownSkillPenalty +
           adjustment +
-          canonicalDodgeModifier,
+          canonicalCombatModifier,
         id: `${proposal.id}:roll:${isAttackerRoll ? "attacker" : "defender"}`,
         openEndedD10s: roll.openEndedD10s,
         participantId: encounterParticipant.id,
@@ -5054,7 +5134,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         context: initiativeCalculationContext,
         contributions: initiativeProjection.contributions,
       });
-      const initiativeRawModifier = initiativeResolution.total;
+      const initiativeGeneralResolution = resolveCombatWideGeneralModifiers({
+        context: { ...initiativeCalculationContext, rollType: "initiative" },
+        contributions: initiativeProjection.contributions,
+      });
+      const initiativeRawModifier =
+        initiativeResolution.total + initiativeGeneralResolution.total;
       const initiativeModifierTrace = calculateWorkbookPercentageAdjustmentTrace({
         baseValue: initiativeBase,
         rawModifiers: [{ label: "Initiative", value: initiativeRawModifier }],
@@ -7491,8 +7576,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (participant) => participant.participantId === encounterParticipant.id,
       );
       const attackOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
-        (opportunity) =>
-          opportunity.phase === attackResult.phase && opportunity.status === "committed",
+        (opportunity) => opportunity.id === attackResult.attackOpportunityId,
       );
       const defenderFeintProposal = roundState.feintProposals.find(
         (proposal) =>
@@ -7538,7 +7622,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         contributions: defenderModifierProjection.contributions,
       });
-      const canonicalDbParryRaw = canonicalDbParryResolution.total;
+      const canonicalGeneralParryResolution = resolveCombatWideGeneralModifiers({
+        context: {
+          actionId: defenderRoundParticipant?.declaration?.actionId,
+          encounterId,
+          opportunityId: attackOpportunity?.id,
+          ownerParticipantId: scenarioParticipant.id,
+          opponentParticipantId: attackerScenarioParticipant?.id,
+          phase: attackResult.phase,
+          rollType: "parry",
+          roundNumber: roundState.roundNumber,
+          step: getCombatRoundParryReviewStepForPhase(attackResult.phase),
+        },
+        contributions: defenderModifierProjection.contributions,
+      });
+      const canonicalDbParryRaw =
+        canonicalDbParryResolution.total + canonicalGeneralParryResolution.total;
 
       if (body.dbParryRaw !== canonicalDbParryRaw) {
         return reply.code(409).send({
@@ -7638,6 +7737,305 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
     }
   });
+
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-offensive-parry-brawling",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+
+        const body = parseOffensiveParryBrawlingBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
+          encounter,
+          requestedParticipantId: body.scenarioParticipantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        const roller = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
+        if (!roller || !roller.isActive || !encounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+        if (
+          access.mode !== "gm" &&
+          (roller.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const contest = roundState.offensiveParryContests.find(
+          (entry) => entry.id === body.contestId,
+        );
+        if (!contest) {
+          return reply.code(404).send({ error: "Offensive Parry contest not found." });
+        }
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : { kind: "combatant", participantId: encounterParticipant.id },
+            attackResultId: body.attackResultId,
+            commandType: "roll_offensive_parry_brawling",
+            contestId: body.contestId,
+            declarationId: body.declarationId,
+            opponentParticipantId: body.opponentParticipantId,
+            opportunityId: body.opportunityId,
+            parryResultId: body.parryResultId,
+            participantId: encounterParticipant.id,
+            phase: body.phase,
+            processId: body.processId,
+            stageId: body.stageId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply
+            .code(409)
+            .send({ code: authorization.code, error: authorization.message });
+        }
+
+        const brawlingSkill = defaultCanonicalContent.skills.find(
+          (skill) => skill.id === "brawling",
+        );
+        if (!brawlingSkill) {
+          return reply.code(409).send({ error: "Brawling skill definition is unavailable." });
+        }
+        const profile = resolveParticipantSkillRollProfile({
+          ...getScenarioParticipantFeintSkillInput(roller),
+          skill: brawlingSkill,
+        });
+        const opponentEncounterParticipant = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        }).participants.find(
+          (participant) => participant.id === body.opponentParticipantId,
+        );
+        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        const modifierProjection = buildLiveCombatModifierContributionProjection({
+          combatContext: roller.state.combat.combatContext,
+          combatEffects: roller.state.combatEffects,
+          currentRound: roundState.roundNumber,
+          encounterId,
+          ownerParticipantId: roller.id,
+        });
+        const modifierContext: CombatCalculationContext = {
+          actionId: "offensive_parry",
+          encounterId,
+          opportunityId: contest.opportunityId,
+          ownerParticipantId: roller.id,
+          opponentParticipantId: opponentScenarioParticipant?.id,
+          pairKey: opponentScenarioParticipant
+            ? createCombatParticipantPairKey(roller.id, opponentScenarioParticipant.id)
+            : undefined,
+          phase: contest.phase,
+          rollPurpose: "offensive_parry_brawling",
+          rollType: "brawling",
+          roundNumber: roundState.roundNumber,
+          skillId: "brawling",
+          step: getCombatRoundParryReviewStepForPhase(contest.phase),
+        };
+        const generalResolution = resolveCombatModifierContributions({
+          bucket: "general_fatigue",
+          context: modifierContext,
+          contributions: modifierProjection.contributions,
+        });
+        const skillResolution = resolveCombatModifierContributions({
+          bucket: "skill_ob",
+          context: modifierContext,
+          contributions: modifierProjection.contributions,
+        });
+        const parryQualityModifier =
+          encounterParticipant.id === contest.controllerParticipantId
+            ? contest.parryQualityModifier
+            : 0;
+        const openEndedRoll = rollOpenEndedD20();
+        const createdAt = new Date().toISOString();
+        const roll = {
+          brawlingBaseValue: profile.rollBaseValue + profile.unknownSkillPenalty,
+          brawlingSkillXp: profile.totalXP,
+          characteristicAverage: profile.avgStats,
+          finalTotal:
+            openEndedRoll.dieResult +
+            profile.rollBaseValue +
+            profile.unknownSkillPenalty +
+            generalResolution.total +
+            skillResolution.total +
+            parryQualityModifier,
+          id: `${contest.id}:roll:${encounterParticipant.id}`,
+          generalModifier: generalResolution.total,
+          openEndedD10s: openEndedRoll.openEndedD10s,
+          participantId: encounterParticipant.id,
+          parryQualityModifier,
+          rollD20: openEndedRoll.rollD20,
+          rollPurpose: "offensive_parry_brawling" as const,
+          rollTotal: openEndedRoll.dieResult,
+          rolledAt: createdAt,
+          rolledByUserId: user.id,
+          skillId: "brawling" as const,
+          skillLabel: "Brawling" as const,
+          skillModifier: skillResolution.total,
+        };
+        const previousConditionIds = new Set(
+          roundState.unbalancedConditions.map((condition) => condition.id),
+        );
+        const nextRoundState = recordCombatRoundOffensiveParryBrawlingRoll({
+          attackResultId: body.attackResultId,
+          command: { createdAt, createdByUserId: user.id },
+          contestId: body.contestId,
+          declarationId: body.declarationId,
+          executionGroupId: body.executionGroupId,
+          opportunityId: body.opportunityId,
+          opponentParticipantId: body.opponentParticipantId,
+          parryResultId: body.parryResultId,
+          phase: body.phase,
+          roll,
+          rollerParticipantId: encounterParticipant.id,
+          state: roundState,
+          submittedBy: access.mode === "gm" ? "gm" : "player",
+        });
+
+        const createdCondition = nextRoundState.unbalancedConditions.find(
+          (condition) => !previousConditionIds.has(condition.id) && condition.status === "active",
+        );
+        if (createdCondition) {
+          const affectedEncounterParticipant =
+            resolveEncounterParticipantMembership({
+              encounter,
+              scenarioParticipants,
+            }).participants.find(
+              (participant) => participant.id === createdCondition.affectedParticipantId,
+            );
+          const affectedScenarioParticipant = affectedEncounterParticipant?.scenarioParticipantId
+            ? scenarioParticipants.find(
+                (participant) =>
+                  participant.id === affectedEncounterParticipant.scenarioParticipantId,
+              )
+            : undefined;
+          if (!affectedScenarioParticipant) {
+            throw new RangeError("The Unbalanced participant is not assigned to this encounter.");
+          }
+          const eventId = `${createdCondition.id}:effect-event`;
+          const combatEffects = combatEffectsStateSchema.parse(
+            affectedScenarioParticipant.state.combatEffects,
+          );
+          await encounterService.updateScenarioParticipantState({
+            participantId: affectedScenarioParticipant.id,
+            scenarioId,
+            state: {
+              ...affectedScenarioParticipant.state,
+              combatEffects: combatEffectsStateSchema.parse({
+                effects: [
+                  ...combatEffects.effects.filter((effect) => effect.id !== createdCondition.id),
+                  combatEffectSchema.parse({
+                    combatModifierBucket: "general",
+                    combatWide: true,
+                    createdAt,
+                    damage: 0,
+                    description: "Unbalanced from Offensive Parry continued contact.",
+                    duration: "Until continued contact ends",
+                    effectGroup: "general",
+                    excludedRollPurposes: ["escape_continued_contact"],
+                    generalDamage: 0,
+                    id: createdCondition.id,
+                    modifierValue: -2,
+                    roundNumber: roundState.roundNumber,
+                    sourceEventId: eventId,
+                    status: "active",
+                    targetParticipantId: affectedScenarioParticipant.id,
+                    type: "general_modifier",
+                    updatedAt: createdAt,
+                  }),
+                ],
+                events: [
+                  ...combatEffects.events.filter((event) => event.id !== eventId),
+                  combatEffectEventSchema.parse({
+                    createdAt,
+                    createdByUserId: user.id,
+                    description: "Continued contact left the participant Unbalanced.",
+                    encounterId,
+                    id: eventId,
+                    phase: contest.phase,
+                    roundNumber: roundState.roundNumber,
+                    scenarioId,
+                    sourceActorId: contest.controllerParticipantId,
+                    sourceLabel: "Offensive Parry",
+                    sourceType: "combat_action",
+                    targetParticipantId: affectedScenarioParticipant.id,
+                  }),
+                ],
+              }),
+            },
+          });
+        }
+
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: createdAt,
+          },
+        });
+        return {
+          command: nextRoundState.commands.at(-1),
+          encounter:
+            access.mode === "gm"
+              ? savedEncounter
+              : buildPlayerSafeCombatRollMutationEncounterForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+          roll,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to roll Offensive Parry Brawling.",
+        });
+      }
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-round/roll-hit-location", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -8428,6 +8826,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_round_end_health_check" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedOffensiveParryBrawlingCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "roll_offensive_parry_brawling" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const declarationClearEncounterParticipantIds = new Set<string>();
 
       if (clearsDeclarationStep) {
@@ -8466,7 +8870,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedPhaseInitiativeResolutionCommitCommands.length > 0 ||
         removedCommittedDamageCommands.length > 0 ||
         removedRoundEndParticipantReviewCommands.length > 0 ||
-        removedRoundEndHealthCheckCommands.length > 0
+        removedRoundEndHealthCheckCommands.length > 0 ||
+        removedOffensiveParryBrawlingCommands.length > 0
           ? await Promise.all(
               scenarioParticipants
                 .map((participant) => {
@@ -8634,6 +9039,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                       combatEffects: removeCombatRoundEndHealthCheckEffects({
                         combatEffects: nextState.combatEffects,
                         command,
+                      }),
+                    };
+                  }
+
+                  for (const command of removedOffensiveParryBrawlingCommands) {
+                    const conditionId =
+                      typeof command.facts.createdUnbalancedConditionId === "string"
+                        ? command.facts.createdUnbalancedConditionId
+                        : undefined;
+                    if (!conditionId) continue;
+                    const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
+                    nextState = {
+                      ...nextState,
+                      combatEffects: combatEffectsStateSchema.parse({
+                        effects: effects.effects.filter((effect) => effect.id !== conditionId),
+                        events: effects.events.filter(
+                          (event) => event.id !== `${conditionId}:effect-event`,
+                        ),
                       }),
                     };
                   }

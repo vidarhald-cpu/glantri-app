@@ -885,6 +885,47 @@ export async function rollCombatParryOnServer(input: {
   return payload.encounter;
 }
 
+export async function rollOffensiveParryBrawlingOnServer(input: {
+  attackResultId: string;
+  contestId: string;
+  declarationId: string;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opponentParticipantId: string;
+  opportunityId: string;
+  parryResultId: string;
+  phase: "phase1" | "phase2";
+  processId: string;
+  scenarioParticipantId: string;
+  stageId: string;
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-offensive-parry-brawling`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        contestId: input.contestId,
+        declarationId: input.declarationId,
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
+        opponentParticipantId: input.opponentParticipantId,
+        opportunityId: input.opportunityId,
+        parryResultId: input.parryResultId,
+        phase: input.phase,
+        processId: input.processId,
+        rollPurpose: "offensive_parry_brawling",
+        scenarioParticipantId: input.scenarioParticipantId,
+        stageId: input.stageId,
+        taskId: input.taskId,
+      }),
+      method: "POST",
+    },
+  );
+  return payload.encounter;
+}
+
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;

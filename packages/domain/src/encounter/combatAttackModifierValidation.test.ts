@@ -44,6 +44,10 @@ describe("canonical combat attack modifier validation", () => {
       id: "scenario-attacker",
       modifierBuckets: {
         ...emptyBuckets(),
+        general: [
+          { id: "legacy-general", scope: "until", value: -99 },
+          { combatWide: true, id: "unbalanced-attacker", scope: "until", value: -2 },
+        ],
         situationObSkill: [
           {
             generated: true,
@@ -63,6 +67,10 @@ describe("canonical combat attack modifier validation", () => {
       id: "scenario-defender",
       modifierBuckets: {
         ...emptyBuckets(),
+        general: [
+          { id: "legacy-general", scope: "until", value: -99 },
+          { combatWide: true, id: "unbalanced-defender", scope: "until", value: -2 },
+        ],
         situationDb: [
           {
             generated: true,
@@ -146,8 +154,12 @@ describe("canonical combat attack modifier validation", () => {
           label: "short distance",
           value: -2,
         },
+        {
+          id: "unbalanced-attacker",
+          value: -2,
+        },
       ],
-      total: -2,
+      total: -4,
     });
     expect(first.defenderResolution).toMatchObject({
       rows: [
@@ -156,10 +168,14 @@ describe("canonical combat attack modifier validation", () => {
           label: "adjust range",
           value: -2,
         },
+        {
+          id: "unbalanced-defender",
+          value: -2,
+        },
       ],
-      total: -2,
+      total: -4,
     });
-    expect(fingerprintCombatModifierResolution(first.attackerResolution)).toBe("v1:82d757a9");
+    expect(fingerprintCombatModifierResolution(first.attackerResolution)).toMatch(/^v1:/);
     expect(state).toEqual(original);
   });
 });

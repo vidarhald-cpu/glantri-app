@@ -26,4 +26,23 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("expectedExecutionGroupId: body.executionGroupId");
     expect(source).toContain("expectedTaskId: body.taskId");
   });
+
+  it("binds Offensive Parry Brawling to exact task and parry lineage", () => {
+    expect(source).toContain("combat-round/roll-offensive-parry-brawling");
+    for (const identity of [
+      "attackResultId",
+      "contestId",
+      "declarationId",
+      "executionGroupId",
+      "opportunityId",
+      "parryResultId",
+      "processId",
+      "stageId",
+      "taskId",
+    ]) {
+      expect(source).toContain(`${identity}: body.${identity}`);
+    }
+    expect(source).toContain('commandType: "roll_offensive_parry_brawling"');
+    expect(source).toContain('rollPurpose: "offensive_parry_brawling"');
+  });
 });

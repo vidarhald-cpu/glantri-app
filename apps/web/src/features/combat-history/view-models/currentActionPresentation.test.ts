@@ -237,6 +237,55 @@ describe("CurrentActionPresentation", () => {
     });
   });
 
+  it("binds Offensive Parry Brawling to the exact contest and parry lineage", () => {
+    const base = task({
+      actionKind: "offensive_parry",
+      actor: aria,
+      command: "roll_offensive_parry_brawling",
+      kind: "offensive_parry_brawling_roll",
+      owner: aria,
+      responder: aria,
+      target: borin,
+    });
+    const candidate: CombatProgressionPresentationTask = {
+      ...base,
+      identity: {
+        ...base.identity,
+        attackResultId: "attack-result-1",
+        contestId: "contest-1",
+        declarationId: "declaration-1",
+        opponentParticipantId: "borin",
+        parryResultId: "parry-result-1",
+      },
+    };
+
+    const result = build([candidate]);
+
+    expect(result).toMatchObject({
+      actionName: "Offensive Parry",
+      heading: "Phase 1",
+      primaryAction: {
+        descriptor: {
+          attackResultId: "attack-result-1",
+          commandType: "roll_offensive_parry_brawling",
+          contestId: "contest-1",
+          declarationId: "declaration-1",
+          executionGroupId: "group:offensive_parry_brawling_roll",
+          opponentParticipantId: "borin",
+          opportunityId: "opportunity-1",
+          parryResultId: "parry-result-1",
+          processId: "process:offensive_parry_brawling_roll",
+          stageId: "stage:offensive_parry_brawling_roll",
+          taskId: "task:offensive_parry_brawling_roll",
+        },
+        enabled: true,
+        label: "Roll Brawling",
+      },
+      requiredNow: "Roll Brawling.",
+      summary: "Your Offensive Parry succeeded. Contest Borin's balance.",
+    });
+  });
+
   it("keeps the attacker in the live parry context without exposing a defense command", () => {
     const parryTask = task({
       actor: borin,

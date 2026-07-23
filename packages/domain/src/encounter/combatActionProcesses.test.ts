@@ -117,6 +117,7 @@ describe("combat action process adapters", () => {
     expect(standardAttack?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
       { kind: "attack", state: "ready" },
       { kind: "defense", state: "pending" },
+      { kind: "offensive_parry_contest", state: "pending" },
       { kind: "hit_location", state: "pending" },
       { kind: "damage", state: "pending" },
       { kind: "critical", state: "pending" },

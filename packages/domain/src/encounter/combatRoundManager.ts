@@ -1,4 +1,17 @@
 import { z } from "zod";
+import {
+  buildContinuedContactId,
+  buildOffensiveParryContestId,
+  buildOffensiveParryContestResultId,
+  buildUnbalancedConditionId,
+  continuedContactSchema,
+  offensiveParryBrawlingRollSchema,
+  offensiveParryContestSchema,
+  resolveOffensiveParryContestWinner,
+  resolveOffensiveParryQualityModifier,
+  unbalancedCombatConditionSchema,
+  type OffensiveParryBrawlingRoll,
+} from "./combatOffensiveParry";
 
 import {
   scenarioCombatModifierBucketSchema,
@@ -378,6 +391,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_initiative_phase2",
   "roll_attack",
   "roll_parry",
+  "roll_offensive_parry_brawling",
   "roll_hit_location",
   "roll_critical",
   "decide_double_attack_phase2",
@@ -1899,6 +1913,7 @@ export const combatRoundPhaseResolutionResultSchema = z.object({
 
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
+  id: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
   adjustDistance: combatRoundAdjustDistanceDeclarationSchema.optional(),
   attackOpportunities: z.array(combatRoundAttackOpportunitySchema).optional(),
@@ -2061,6 +2076,7 @@ export const completedCombatRoundSchema = z.object({
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
+  continuedContacts: z.array(continuedContactSchema).default([]),
   completedAt: z.string().datetime().optional(),
   completedByUserId: idSchema.optional(),
   currentCursor: combatRoundCursorSchema.optional(),
@@ -2069,6 +2085,7 @@ export const completedCombatRoundSchema = z.object({
   encounterId: idSchema.optional(),
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
+  offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
   adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -2079,6 +2096,7 @@ export const completedCombatRoundSchema = z.object({
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
+  unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
 });
 
 export type CompletedCombatRound = z.infer<typeof completedCombatRoundSchema>;
@@ -2088,12 +2106,14 @@ export interface CombatRoundState {
   activeParticipantId?: string;
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
+  continuedContacts: z.infer<typeof continuedContactSchema>[];
   currentCursor?: z.infer<typeof combatRoundCursorSchema>;
   currentStep: z.infer<typeof combatRoundStepSchema>;
   distanceState: CombatDistanceState;
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
+  offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
   phaseResolutionCursor?: z.infer<typeof combatRoundPhaseResolutionCursorSchema>;
   phaseResolutionResults: z.infer<typeof combatRoundPhaseResolutionResultSchema>[];
   phaseResolutionStatuses: z.infer<typeof combatRoundPhaseResolutionStatusesSchema>;
@@ -2104,6 +2124,7 @@ export interface CombatRoundState {
   selectedParticipantId?: string;
   selectedStep?: z.infer<typeof combatRoundStepSchema>;
   stepSnapshots: z.infer<typeof combatRoundStepSnapshotSchema>[];
+  unbalancedConditions: z.infer<typeof unbalancedCombatConditionSchema>[];
 }
 
 export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, unknown> = z.object({
@@ -2111,12 +2132,14 @@ export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, u
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
+  continuedContacts: z.array(continuedContactSchema).default([]),
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
   distanceState: combatDistanceStateSchema.default({ edges: {} }),
   encounterId: idSchema.optional(),
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
+  offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
@@ -2127,6 +2150,7 @@ export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, u
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
+  unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
 });
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
@@ -4452,6 +4476,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     isGlobalCombatRoundCommandType(type) ||
     type === "roll_attack" ||
     type === "roll_parry" ||
+    type === "roll_offensive_parry_brawling" ||
     type === "roll_hit_location" ||
     type === "roll_critical" ||
     type === "decide_double_attack_phase2" ||
@@ -7743,6 +7768,23 @@ function getCombatRoundParryCommandAfterCursor(input: {
   state: CombatRoundState;
 }): CombatRoundCursor {
   if (input.parryResolution.success === true) {
+    const attackResultId = getCombatRoundAttackResultId({
+      result: input.attackResult,
+      roundNumber: input.state.roundNumber,
+    });
+    const offensiveParryContest = input.state.offensiveParryContests.find(
+      (contest) =>
+        contest.attackResultId === attackResultId &&
+        contest.opportunityId === input.attackResult.attackOpportunityId &&
+        contest.status === "awaiting_rolls",
+    );
+    if (offensiveParryContest) {
+      return combatRoundCursorSchema.parse({
+        participantId: offensiveParryContest.controllerParticipantId,
+        roundNumber: input.state.roundNumber,
+        step: getCombatRoundParryCursorStepForPhase(input.attackResult.phase),
+      });
+    }
     return getCombatRoundPhaseActionOrCompletionCursor({
       phase: input.attackResult.phase,
       state: input.state,
@@ -7890,25 +7932,60 @@ export function recordCombatRoundParryResult(input: {
     state: input.state,
     updatedAt: input.updatedAt,
   });
-  const nextRoundState =
+  const withOffensiveParryContest =
     input.parryResolution.success === true
+      ? openOffensiveParryContestAfterSuccessfulParry({
+          attackResult: input.attackResult,
+          parryResolution: input.parryResolution,
+          state: withParry,
+        })
+      : withParry;
+  const offensiveParryContest = withOffensiveParryContest.offensiveParryContests.find(
+    (contest) =>
+      contest.opportunityId === input.attackResult.attackOpportunityId &&
+      contest.attackResultId ===
+        getCombatRoundAttackResultId({
+          result: input.attackResult,
+          roundNumber: withOffensiveParryContest.roundNumber,
+        }) &&
+      contest.status === "awaiting_rolls",
+  );
+  const nextRoundState: CombatRoundState =
+    offensiveParryContest
+      ? combatRoundStateSchema.parse({
+          ...withOffensiveParryContest,
+          currentCursor: {
+            participantId: offensiveParryContest.controllerParticipantId,
+            roundNumber: withOffensiveParryContest.roundNumber,
+            step: (phase === "phase1" ? "P1" : "P2") as CombatRoundCursorStep,
+          },
+          currentStep: phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
+          phaseResolutionCursor: {
+            participantId: offensiveParryContest.controllerParticipantId,
+            phase,
+            substep: "parry" as const,
+          },
+          selectedParticipantId: offensiveParryContest.controllerParticipantId,
+          selectedStep: getCombatRoundParryReviewStepForPhase(phase),
+        })
+      : input.parryResolution.success === true
       ? completeCombatRoundPhaseResolutionForParticipant({
           participantId: input.attackResult.attackerParticipantId,
           phase,
-          state: withParry,
+          state: withOffensiveParryContest,
           submittedBy: input.submittedBy,
           updatedAt: input.updatedAt,
         })
       : advanceCombatRoundPhaseResolutionSubstepForParticipant({
           participantId: input.attackResult.attackerParticipantId,
           phase,
-          state: withParry,
+          state: withOffensiveParryContest,
           updatedAt: input.updatedAt,
         });
-  const defenderOwnedNextRoundState =
+  const defenderOwnedNextRoundState: CombatRoundState =
     input.parryResolution.success === true
       ? nextRoundState
-      : {
+      : combatRoundStateSchema.parse({
           ...nextRoundState,
           phaseResolutionCursor: {
             participantId: input.attackResult.defenderParticipantId,
@@ -7917,7 +7994,7 @@ export function recordCombatRoundParryResult(input: {
           },
           selectedParticipantId: input.attackResult.defenderParticipantId,
           selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
-        };
+        });
 
   return input.command
     ? recordCombatRoundParryCommand({
@@ -7927,6 +8004,350 @@ export function recordCombatRoundParryResult(input: {
         state: defenderOwnedNextRoundState,
       })
     : defenderOwnedNextRoundState;
+}
+
+function getOffensiveParryDeclarationId(input: {
+  participantId: string;
+  roundNumber: number;
+}): string {
+  return `round:${input.roundNumber}:participant:${input.participantId}:declaration`;
+}
+
+function openOffensiveParryContestAfterSuccessfulParry(input: {
+  attackResult: CombatRoundAttackRollResult;
+  parryResolution: CombatRoundParryResolution;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  if (
+    input.parryResolution.status !== "resolved" ||
+    input.parryResolution.success !== true ||
+    !input.attackResult.attackOpportunityId
+  ) {
+    return normalized;
+  }
+  const controller = normalized.participants.find(
+    (participant) => participant.participantId === input.attackResult.defenderParticipantId,
+  );
+  const declaration = controller?.declaration;
+  if (declaration?.actionId !== "offensive_parry") return normalized;
+
+  const declaredOpponentId =
+    declaration.phaseContexts?.[input.attackResult.phase]?.targetParticipantId ??
+    declaration.combatContext?.selectedOpponentId;
+  const affected = normalized.participants.find(
+    (participant) => participant.participantId === input.attackResult.attackerParticipantId,
+  );
+  if (
+    declaredOpponentId &&
+    ![
+      affected?.participantId,
+      affected?.scenarioParticipantId,
+      affected?.characterId,
+    ].includes(declaredOpponentId)
+  ) {
+    return normalized;
+  }
+
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+  const parryResultId = `${attackResultId}:parry`;
+  const contestId = buildOffensiveParryContestId({ parryResultId });
+  if (normalized.offensiveParryContests.some((contest) => contest.id === contestId)) {
+    return normalized;
+  }
+  const targetNumber = input.parryResolution.targetNumber;
+  const total = input.parryResolution.total;
+  if (targetNumber === undefined || total === undefined || total < targetNumber) {
+    throw new RangeError("A successful Offensive Parry requires its canonical parry margin.");
+  }
+  const quality = resolveOffensiveParryQualityModifier(total - targetNumber);
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    offensiveParryContests: [
+      ...normalized.offensiveParryContests,
+      offensiveParryContestSchema.parse({
+        affectedParticipantId: input.attackResult.attackerParticipantId,
+        attackResultId,
+        brawlingContestResultId: buildOffensiveParryContestResultId({ contestId }),
+        controllerParticipantId: input.attackResult.defenderParticipantId,
+        declarationId:
+          declaration.id ??
+          getOffensiveParryDeclarationId({
+            participantId: input.attackResult.defenderParticipantId,
+            roundNumber: normalized.roundNumber,
+          }),
+        id: contestId,
+        opportunityId: input.attackResult.attackOpportunityId,
+        parryQualityModifier: quality.modifier,
+        parryQualityTableRow: quality.tableRow,
+        parryResultId,
+        phase: input.attackResult.phase,
+        roundNumber: normalized.roundNumber,
+        status: "awaiting_rolls",
+      }),
+    ],
+  });
+}
+
+export function getOffensiveParryContest(input: {
+  contestId: string;
+  state: CombatRoundState;
+}) {
+  return combatRoundStateSchema
+    .parse(input.state)
+    .offensiveParryContests.find((contest) => contest.id === input.contestId);
+}
+
+export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
+  attackResultId: string;
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  contestId: string;
+  declarationId: string;
+  executionGroupId: string;
+  opportunityId: string;
+  opponentParticipantId: string;
+  parryResultId: string;
+  phase: CombatRoundPhase;
+  roll: OffensiveParryBrawlingRoll;
+  rollerParticipantId: string;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const contest = normalized.offensiveParryContests.find(
+    (entry) => entry.id === input.contestId,
+  );
+  if (!contest || contest.status !== "awaiting_rolls") {
+    throw new RangeError("The Offensive Parry Brawling contest is not awaiting rolls.");
+  }
+  if (
+    contest.attackResultId !== input.attackResultId ||
+    contest.declarationId !== input.declarationId ||
+    contest.opportunityId !== input.opportunityId ||
+    contest.parryResultId !== input.parryResultId ||
+    contest.phase !== input.phase
+  ) {
+    throw new RangeError("The Offensive Parry contest identity does not match the current task.");
+  }
+  const isController = input.rollerParticipantId === contest.controllerParticipantId;
+  const isResponder = input.rollerParticipantId === contest.affectedParticipantId;
+  if (!isController && !isResponder) {
+    throw new RangeError("Only a participant in the Offensive Parry contest may roll.");
+  }
+  const expectedOpponentId = isController
+    ? contest.affectedParticipantId
+    : contest.controllerParticipantId;
+  if (input.opponentParticipantId !== expectedOpponentId) {
+    throw new RangeError("The Offensive Parry opponent identity does not match the current task.");
+  }
+  if ((isController && contest.initiatorRoll) || (isResponder && contest.responderRoll)) {
+    throw new RangeError("This participant has already rolled for the Offensive Parry contest.");
+  }
+  const roll = offensiveParryBrawlingRollSchema.parse(input.roll);
+  if (
+    roll.participantId !== input.rollerParticipantId ||
+    roll.rollPurpose !== "offensive_parry_brawling"
+  ) {
+    throw new RangeError("The Brawling roll does not match the authorized participant or purpose.");
+  }
+  const withRoll = offensiveParryContestSchema.parse({
+    ...contest,
+    initiatorRoll: isController ? roll : contest.initiatorRoll,
+    initiatorRollRecorded: isController || contest.initiatorRollRecorded,
+    responderRoll: isResponder ? roll : contest.responderRoll,
+    responderRollRecorded: isResponder || contest.responderRollRecorded,
+  });
+  const resolved =
+    withRoll.initiatorRoll && withRoll.responderRoll
+      ? offensiveParryContestSchema.parse({
+          ...withRoll,
+          status: "resolved",
+          winnerParticipantId: resolveOffensiveParryContestWinner({
+            controllerParticipantId: withRoll.controllerParticipantId,
+            controllerTotal: withRoll.initiatorRoll.finalTotal,
+            responderParticipantId: withRoll.affectedParticipantId,
+            responderTotal: withRoll.responderRoll.finalTotal,
+          }),
+        })
+      : withRoll;
+  const controllerWon =
+    resolved.status === "resolved" &&
+    resolved.winnerParticipantId === resolved.controllerParticipantId;
+  const continuedContactId = buildContinuedContactId({ contestId: contest.id });
+  const nextContacts = controllerWon
+    ? [
+        ...normalized.continuedContacts.filter((contact) => contact.id !== continuedContactId),
+        continuedContactSchema.parse({
+          affectedParticipantId: contest.affectedParticipantId,
+          brawlingContestResultId: contest.brawlingContestResultId,
+          controllerParticipantId: contest.controllerParticipantId,
+          establishedPhase: contest.phase,
+          establishedRound: contest.roundNumber,
+          id: continuedContactId,
+          sourceActionId: "offensive_parry",
+          sourceAttackResultId: contest.attackResultId,
+          sourceDeclarationId: contest.declarationId,
+          sourceOpportunityId: contest.opportunityId,
+          sourceParryResultId: contest.parryResultId,
+          status: "active",
+        }),
+      ]
+    : normalized.continuedContacts;
+  const unbalancedConditionId = buildUnbalancedConditionId({ continuedContactId });
+  const nextConditions = controllerWon
+    ? [
+        ...normalized.unbalancedConditions.filter(
+          (condition) => condition.id !== unbalancedConditionId,
+        ),
+        unbalancedCombatConditionSchema.parse({
+          affectedParticipantId: contest.affectedParticipantId,
+          establishedRound: contest.roundNumber,
+          id: unbalancedConditionId,
+          modifierValue: -2,
+          sourceActionId: "offensive_parry",
+          sourceContinuedContactId: continuedContactId,
+          status: "active",
+        }),
+      ]
+    : normalized.unbalancedConditions;
+  const beforeCursor = normalized.currentCursor ?? {
+    participantId: input.rollerParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: (input.phase === "phase1" ? "P1" : "P2") as CombatRoundCursorStep,
+  };
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      attackResultId: contest.attackResultId,
+      contestId: contest.id,
+      createdContinuedContactId: controllerWon ? continuedContactId : undefined,
+      createdUnbalancedConditionId: controllerWon ? unbalancedConditionId : undefined,
+      declarationId: contest.declarationId,
+      executionGroupId: input.executionGroupId,
+      opportunityId: contest.opportunityId,
+      opponentParticipantId: input.opponentParticipantId,
+      parryResultId: contest.parryResultId,
+      previousContest: contest,
+      previousCurrentCursor: normalized.currentCursor,
+      previousCurrentStep: normalized.currentStep,
+      previousPhaseResolutionCursor: normalized.phaseResolutionCursor,
+      previousPhaseResolutionStatuses: normalized.phaseResolutionStatuses,
+      previousSelectedParticipantId: normalized.selectedParticipantId,
+      previousSelectedStep: normalized.selectedStep,
+      resolved: resolved.status === "resolved",
+      rollId: roll.id,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.rollerParticipantId,
+        state: normalized,
+        type: "roll_offensive_parry_brawling",
+      }),
+    participantId: input.rollerParticipantId,
+    phase: input.phase,
+    roundNumber: normalized.roundNumber,
+    step: input.phase === "phase1" ? "P1" : "P2",
+    type: "roll_offensive_parry_brawling",
+  });
+  let nextState = combatRoundStateSchema.parse({
+    ...normalized,
+    commands: [...normalized.commands, command],
+    continuedContacts: nextContacts,
+    offensiveParryContests: normalized.offensiveParryContests.map((entry) =>
+      entry.id === resolved.id ? resolved : entry,
+    ),
+    unbalancedConditions: nextConditions,
+  });
+  if (resolved.status === "resolved") {
+    nextState = completeCombatRoundPhaseResolutionForParticipant({
+      participantId: contest.affectedParticipantId,
+      phase: contest.phase,
+      state: nextState,
+      submittedBy: input.submittedBy,
+      updatedAt: input.command.createdAt,
+    });
+  }
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: contest.controllerParticipantId,
+      attackResultId: contest.attackResultId,
+      attackerParticipantId: contest.affectedParticipantId,
+      defenderParticipantId: contest.controllerParticipantId,
+      facts: {
+        gmReview: {
+          affectedTotal: resolved.responderRoll?.finalTotal,
+          brawlingContestResultId: contest.brawlingContestResultId,
+          contactId: controllerWon ? continuedContactId : undefined,
+          controllerTotal: resolved.initiatorRoll?.finalTotal,
+          parryQualityModifier: contest.parryQualityModifier,
+          parryQualityTableRow: contest.parryQualityTableRow,
+          unbalancedConditionId: controllerWon ? unbalancedConditionId : undefined,
+        },
+        involvedOutcome: {
+          affectedParticipantId: contest.affectedParticipantId,
+          attackResultId: contest.attackResultId,
+          brawlingContestResultId: contest.brawlingContestResultId,
+          contactEstablished: controllerWon,
+          contestId: contest.id,
+          controllerParticipantId: contest.controllerParticipantId,
+          resolved: resolved.status === "resolved",
+          winnerParticipantId: resolved.winnerParticipantId,
+        },
+        publicOutcome: {
+          contactEstablished: controllerWon,
+          resolved: resolved.status === "resolved",
+          winnerParticipantId: resolved.winnerParticipantId,
+        },
+        rollerPrivate: {
+          brawlingBaseValue: roll.brawlingBaseValue,
+          brawlingSkillId: roll.skillId,
+          brawlingSkillXp: roll.brawlingSkillXp,
+          characteristicAverage: roll.characteristicAverage,
+          finalTotal: roll.finalTotal,
+          generalModifier: roll.generalModifier,
+          openEndedD10s: roll.openEndedD10s,
+          parryQualityModifier: roll.parryQualityModifier,
+          rollD20: roll.rollD20,
+          rollTotal: roll.rollTotal,
+          skillModifier: roll.skillModifier,
+        },
+      },
+      involvedParticipantIds: [
+        contest.controllerParticipantId,
+        contest.affectedParticipantId,
+      ],
+      opportunityId: contest.opportunityId,
+      ownerParticipantId: input.rollerParticipantId,
+      parryResultId: contest.parryResultId,
+      phase: contest.phase,
+      rollerParticipantId: input.rollerParticipantId,
+      sourceIds: [
+        contest.id,
+        contest.brawlingContestResultId,
+        contest.attackResultId,
+        contest.parryResultId,
+      ],
+      sourceToken: `${contest.id}:${input.rollerParticipantId}`,
+      status: "recorded",
+      step: getCombatStepEventPhaseStep({ kind: "parry", phase: contest.phase }),
+      targetParticipantId: contest.affectedParticipantId,
+      type: "offensive_parry_brawling",
+    },
+    state: nextState,
+  });
 }
 
 export function getCombatRoundDamageResultId(input: { attackResultId: string }): string {
@@ -14276,6 +14697,7 @@ function buildCompletedCombatRound(input: {
     adjustDistanceProposals: normalized.adjustDistanceProposals,
     activeParticipantId: normalized.activeParticipantId,
     commands: normalized.commands,
+    continuedContacts: normalized.continuedContacts,
     completedAt: input.completedAt,
     completedByUserId: input.completedByUserId,
     currentCursor: normalized.currentCursor,
@@ -14284,6 +14706,7 @@ function buildCompletedCombatRound(input: {
     encounterId: normalized.encounterId,
     events: normalized.events,
     feintProposals: normalized.feintProposals,
+    offensiveParryContests: normalized.offensiveParryContests,
     phaseResolutionCursor: normalized.phaseResolutionCursor,
     phaseResolutionResults: normalized.phaseResolutionResults,
     phaseResolutionStatuses: normalized.phaseResolutionStatuses,
@@ -14293,6 +14716,7 @@ function buildCompletedCombatRound(input: {
     selectedParticipantId: normalized.selectedParticipantId,
     selectedStep: normalized.selectedStep,
     stepSnapshots: normalized.stepSnapshots,
+    unbalancedConditions: normalized.unbalancedConditions,
   });
 }
 
@@ -14730,6 +15154,11 @@ export function initializeCombatRoundState(input: {
         participantIds.has(proposal.attackerParticipantId) &&
         participantIds.has(proposal.defenderParticipantId),
     ),
+    continuedContacts: (existing?.continuedContacts ?? []).filter(
+      (contact) =>
+        participantIds.has(contact.controllerParticipantId) &&
+        participantIds.has(contact.affectedParticipantId),
+    ),
     currentStep,
     phaseResolutionCursor: fallbackPhaseResolutionCursor
       ? fallbackPhaseResolutionCursor
@@ -14751,6 +15180,15 @@ export function initializeCombatRoundState(input: {
           ? "select_actions"
           : (existing?.selectedStep ?? currentStep),
     stepSnapshots: stepSnapshotsForState,
+    offensiveParryContests: (existing?.offensiveParryContests ?? []).filter(
+      (contest) =>
+        contest.roundNumber === roundNumber &&
+        participantIds.has(contest.controllerParticipantId) &&
+        participantIds.has(contest.affectedParticipantId),
+    ),
+    unbalancedConditions: (existing?.unbalancedConditions ?? []).filter((condition) =>
+      participantIds.has(condition.affectedParticipantId),
+    ),
   };
 }
 
@@ -15033,6 +15471,7 @@ export function advanceCombatRoundStep(
       activeParticipantId: undefined,
       combatExperienceDifficulty: undefined,
       commands: [],
+      continuedContacts: completedRoundState.continuedContacts,
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
         roundNumber: nextRoundNumber,
@@ -15043,6 +15482,7 @@ export function advanceCombatRoundStep(
       events: [],
       adjustDistanceProposals: [],
       feintProposals: [],
+      offensiveParryContests: [],
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
       phaseResolutionStatuses: {},
@@ -15058,6 +15498,7 @@ export function advanceCombatRoundStep(
       selectedParticipantId: nextParticipantId,
       selectedStep: "select_actions",
       stepSnapshots: [],
+      unbalancedConditions: completedRoundState.unbalancedConditions,
     });
   }
 
@@ -15193,6 +15634,12 @@ export function recordCombatRoundDeclaration(input: {
     synchronizeCombatRoundFeintDeclarationTarget(
       combatRoundDeclarationSchema.parse({
         ...input.declaration,
+        id:
+          input.declaration.id ??
+          getOffensiveParryDeclarationId({
+            participantId: input.participantId,
+            roundNumber: normalizedInput.roundNumber,
+          }),
         submittedBy: input.submittedBy,
       }),
     ),
@@ -18037,10 +18484,17 @@ function undoCombatRoundParryCommandAtIndex(input: {
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
   const parryStep = getCombatRoundParryReviewStepForPhase(phase);
   const damageStep = getCombatRoundDamageReviewStepForPhase(phase);
+  const removedContacts = normalized.continuedContacts.filter(
+    (contact) => contact.sourceAttackResultId === attackResultId,
+  );
+  const removedContactIds = new Set(removedContacts.map((contact) => contact.id));
 
   return {
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    continuedContacts: normalized.continuedContacts.filter(
+      (contact) => contact.sourceAttackResultId !== attackResultId,
+    ),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
     phaseResolutionCursor: {
@@ -18069,6 +18523,9 @@ function undoCombatRoundParryCommandAtIndex(input: {
         },
       },
     },
+    offensiveParryContests: normalized.offensiveParryContests.filter(
+      (contest) => contest.attackResultId !== attackResultId,
+    ),
     participants: normalized.participants.map((participant) =>
       participant.participantId === attackResult.defenderParticipantId
         ? {
@@ -18090,6 +18547,9 @@ function undoCombatRoundParryCommandAtIndex(input: {
       snapshots: normalized.stepSnapshots,
       step: parryStep,
     }),
+    unbalancedConditions: normalized.unbalancedConditions.filter(
+      (condition) => !removedContactIds.has(condition.sourceContinuedContactId),
+    ),
   };
 }
 
@@ -19082,6 +19542,67 @@ function undoCombatRoundAdjustDistanceCommandAtIndex(input: {
   });
 }
 
+function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.type !== "roll_offensive_parry_brawling") return undefined;
+
+  const previousContest = offensiveParryContestSchema.safeParse(command.facts.previousContest);
+  if (!previousContest.success) return undefined;
+  const previousCurrentCursor = combatRoundCursorSchema.safeParse(
+    command.facts.previousCurrentCursor,
+  );
+  const previousPhaseResolutionCursor = combatRoundPhaseResolutionCursorSchema.safeParse(
+    command.facts.previousPhaseResolutionCursor,
+  );
+  const previousPhaseResolutionStatuses = combatRoundPhaseResolutionStatusesSchema.safeParse(
+    command.facts.previousPhaseResolutionStatuses,
+  );
+  const previousCurrentStep = combatRoundStepSchema.safeParse(command.facts.previousCurrentStep);
+  const previousSelectedStep = combatRoundStepSchema.safeParse(command.facts.previousSelectedStep);
+  const createdContinuedContactId =
+    typeof command.facts.createdContinuedContactId === "string"
+      ? command.facts.createdContinuedContactId
+      : undefined;
+  const createdUnbalancedConditionId =
+    typeof command.facts.createdUnbalancedConditionId === "string"
+      ? command.facts.createdUnbalancedConditionId
+      : undefined;
+  const previousSelectedParticipantId =
+    typeof command.facts.previousSelectedParticipantId === "string"
+      ? command.facts.previousSelectedParticipantId
+      : undefined;
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    continuedContacts: normalized.continuedContacts.filter(
+      (contact) => contact.id !== createdContinuedContactId,
+    ),
+    currentCursor: previousCurrentCursor.success ? previousCurrentCursor.data : undefined,
+    currentStep: previousCurrentStep.success
+      ? previousCurrentStep.data
+      : getCombatRoundStepForCursorStep(command.beforeCursor.step),
+    offensiveParryContests: normalized.offensiveParryContests.map((contest) =>
+      contest.id === previousContest.data.id ? previousContest.data : contest,
+    ),
+    phaseResolutionCursor: previousPhaseResolutionCursor.success
+      ? previousPhaseResolutionCursor.data
+      : undefined,
+    phaseResolutionStatuses: previousPhaseResolutionStatuses.success
+      ? previousPhaseResolutionStatuses.data
+      : normalized.phaseResolutionStatuses,
+    selectedParticipantId: previousSelectedParticipantId,
+    selectedStep: previousSelectedStep.success ? previousSelectedStep.data : undefined,
+    unbalancedConditions: normalized.unbalancedConditions.filter(
+      (condition) => condition.id !== createdUnbalancedConditionId,
+    ),
+  });
+}
+
 function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -19130,6 +19651,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_attack") {
     return undoCombatRoundAttackCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "roll_offensive_parry_brawling") {
+    return undoCombatRoundOffensiveParryBrawlingCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

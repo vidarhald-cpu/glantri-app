@@ -26,6 +26,7 @@ export type CombatActionProcessActionKind = (typeof COMBAT_ACTION_PROCESS_ACTION
 export type CombatActionProcessStageKind =
   | "attack"
   | "defense"
+  | "offensive_parry_contest"
   | "hit_location"
   | "damage"
   | "critical"
@@ -106,9 +107,12 @@ export interface CombatManeuverProcessPlan {
 
 export interface CombatActionProcessTaskDescriptor {
   readonly attackResultId?: string;
+  readonly contestId?: string;
+  readonly declarationId?: string;
   readonly expectedCommand: CombatRoundCommandType;
   readonly opportunityId: string;
-  readonly owner: "attacker" | "defender" | "gm";
+  readonly owner: "attacker" | "defender" | "gm" | "offensive_parry_controller" | "offensive_parry_responder";
+  readonly parryResultId?: string;
   readonly phase: CombatRoundPhase;
 }
 
@@ -117,6 +121,7 @@ export interface CombatActionProcessStage {
   readonly kind: CombatActionProcessStageKind;
   readonly state: CombatActionProcessStageState;
   readonly task?: CombatActionProcessTaskDescriptor;
+  readonly tasks?: readonly CombatActionProcessTaskDescriptor[];
   readonly trackerFacet: "attack" | "damage" | "parry";
 }
 
@@ -182,6 +187,7 @@ export interface CombatActionProcessAdapter {
 const STAGE_ORDER: readonly CombatActionProcessStageKind[] = [
   "attack",
   "defense",
+  "offensive_parry_contest",
   "hit_location",
   "damage",
   "critical",
@@ -198,6 +204,7 @@ function deepFreeze<T>(value: T): T {
 function stageTrackerFacet(kind: CombatActionProcessStageKind): "attack" | "damage" | "parry" {
   if (kind === "attack") return "attack";
   if (kind === "defense") return "parry";
+  if (kind === "offensive_parry_contest") return "parry";
   return "damage";
 }
 
@@ -218,6 +225,8 @@ function taskForStage(input: {
       return { ...shared, expectedCommand: "roll_attack", owner: "attacker" };
     case "defense":
       return { ...shared, expectedCommand: "roll_parry", owner: "defender" };
+    case "offensive_parry_contest":
+      return undefined;
     case "hit_location":
       return { ...shared, expectedCommand: "roll_hit_location", owner: "attacker" };
     case "damage":
@@ -284,9 +293,22 @@ function stageStates(input: {
   }
   pending.defense = "complete";
   if (resolution.parryResolution.status === "resolved" && resolution.parryResolution.success) {
-    for (const kind of STAGE_ORDER.slice(2)) pending[kind] = "skipped";
+    const contest = input.state.offensiveParryContests.find(
+      (entry) =>
+        entry.attackResultId === attackResultId &&
+        entry.opportunityId === input.opportunity.id &&
+        entry.status !== "cancelled",
+    );
+    if (contest?.status === "awaiting_rolls") {
+      pending.offensive_parry_contest = "ready";
+      for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
+      return { completion: { complete: false }, states: pending };
+    }
+    pending.offensive_parry_contest = contest ? "complete" : "skipped";
+    for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
     return { completion: { complete: true, reason: "parried" }, states: pending };
   }
+  pending.offensive_parry_contest = "skipped";
 
   const damageSubstate = getCombatRoundDamageSubstate(resolution);
   if (damageSubstate === "location_pending") {
@@ -353,22 +375,66 @@ function buildStandardAttackProcess(input: {
     ownerParticipantId: input.ownerParticipantId,
     phase: input.opportunity.phase,
     prerequisites: input.prerequisites,
-    stages: STAGE_ORDER.map((kind) => ({
-      id: `${processId}:stage:${kind}`,
-      kind,
-      state: states[kind],
-      task:
-        states[kind] === "ready"
-          ? taskForStage({
-              attackResultId,
-              grazing: attack?.grazing === true,
-              kind,
-              opportunityId: input.opportunity.id,
-              phase: input.opportunity.phase,
-            })
-          : undefined,
-      trackerFacet: stageTrackerFacet(kind),
-    })),
+    stages: STAGE_ORDER.map((kind) => {
+      const contest =
+        kind === "offensive_parry_contest"
+          ? input.state.offensiveParryContests.find(
+              (entry) =>
+                entry.attackResultId === attackResultId &&
+                entry.opportunityId === input.opportunity.id &&
+                entry.status === "awaiting_rolls",
+            )
+          : undefined;
+      const contestShared = contest
+        ? {
+            attackResultId,
+            contestId: contest.id,
+            declarationId: contest.declarationId,
+            opportunityId: contest.opportunityId,
+            parryResultId: contest.parryResultId,
+            phase: contest.phase,
+          }
+        : undefined;
+      return {
+        id: `${processId}:stage:${kind}`,
+        kind,
+        state: states[kind],
+        task:
+          states[kind] === "ready" && kind !== "offensive_parry_contest"
+            ? taskForStage({
+                attackResultId,
+                grazing: attack?.grazing === true,
+                kind,
+                opportunityId: input.opportunity.id,
+                phase: input.opportunity.phase,
+              })
+            : undefined,
+        tasks:
+          states[kind] === "ready" && contest && contestShared
+            ? [
+                ...(contest.initiatorRollRecorded
+                  ? []
+                  : [
+                      {
+                        ...contestShared,
+                        expectedCommand: "roll_offensive_parry_brawling" as const,
+                        owner: "offensive_parry_controller" as const,
+                      },
+                    ]),
+                ...(contest.responderRollRecorded
+                  ? []
+                  : [
+                      {
+                        ...contestShared,
+                        expectedCommand: "roll_offensive_parry_brawling" as const,
+                        owner: "offensive_parry_responder" as const,
+                      },
+                    ]),
+              ]
+            : undefined,
+        trackerFacet: stageTrackerFacet(kind),
+      };
+    }),
     targetParticipantId: input.opportunity.targetParticipantId,
   };
 }

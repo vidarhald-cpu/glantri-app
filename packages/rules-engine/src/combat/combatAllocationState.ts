@@ -11,6 +11,7 @@ export interface CombatAllocationState {
   situationalModifiers: {
     attack: number;
     defense: number;
+    defenseFlat?: number;
     movement: number;
     perception: number;
   };
@@ -25,6 +26,7 @@ export const defaultCombatAllocationState: CombatAllocationState = {
   situationalModifiers: {
     attack: 0,
     defense: 0,
+    defenseFlat: 0,
     movement: 0,
     perception: 0
   }
@@ -46,6 +48,7 @@ export function normalizeCombatAllocationState(
     situationalModifiers: {
       attack: allocationState.situationalModifiers.attack,
       defense: allocationState.situationalModifiers.defense,
+      defenseFlat: allocationState.situationalModifiers.defenseFlat ?? 0,
       movement: allocationState.situationalModifiers.movement,
       perception: allocationState.situationalModifiers.perception
     }
