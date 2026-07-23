@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
+  PlayerCombatAttackModeSelector,
   PlayerCombatModifierPanel,
 } from "./PlayerCombatPanels";
 
@@ -29,6 +30,45 @@ describe("PlayerCombatActionSelectorPanel", () => {
 
     expect(screen.getByRole("option", { name: "Choose action" })).toBeInTheDocument();
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
+  });
+});
+
+describe("PlayerCombatAttackModeSelector", () => {
+  it("renders the explicit selected mode used by the editable declaration context", () => {
+    const onChange = vi.fn();
+
+    render(
+      <PlayerCombatAttackModeSelector
+        onChange={onChange}
+        options={[
+          { id: "mode-1", label: "Slash" },
+          { id: "mode-2", label: "Thrust" },
+        ]}
+        selectedAttackModeId="mode-2"
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: "Attack mode" })).toHaveValue("mode-2");
+    fireEvent.change(screen.getByRole("combobox", { name: "Attack mode" }), {
+      target: { value: "mode-1" },
+    });
+    expect(onChange).toHaveBeenCalledWith("mode-1");
+  });
+
+  it("shows why no canonical mode can be selected instead of hiding the field", () => {
+    render(
+      <PlayerCombatAttackModeSelector
+        emptyState="The selected Phase 2 attack mode is not eligible."
+        onChange={vi.fn()}
+        options={[]}
+      />,
+    );
+
+    expect(screen.getByText("Attack mode")).toBeInTheDocument();
+    expect(
+      screen.getByText("The selected Phase 2 attack mode is not eligible."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Attack mode" })).not.toBeInTheDocument();
   });
 });
 

@@ -63,6 +63,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("refreshScenarioParticipantEquipmentOnServer");
     expect(source).toContain("buildCombatDeclarationAttackSelection");
     expect(source).toContain("phaseAttackSources: declarationAttackSelection.phaseAttackSources");
+    expect(source).toContain("renderedDeclarationAttackSelection.phaseContexts[phaseKey]");
+    expect(source).toContain("emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}");
+    expect(source).toContain(
+      "selectedAttackModeId={phaseModel.phaseContext.attackModeId}",
+    );
     expect(source).not.toContain("itemId: phaseCombatLoadoutSummaries");
     expect(source).toContain("visibleAtStep: currentCombatStep");
     expect(source).toContain("buildPlayerCombatDefenseStats");

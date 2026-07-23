@@ -2143,6 +2143,13 @@ export default function ScenarioPlayerCombatPageContent({
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
+    const attackModeUnavailableMessage = Object.values(
+      phaseCombatLoadoutSummaries,
+    ).find((summary) => summary.attackModeUnavailableMessage)?.attackModeUnavailableMessage;
+    if (attackModeUnavailableMessage) {
+      setError(attackModeUnavailableMessage);
+      return;
+    }
     const targetValidation = validateCombatDeclarationTargets({
       actionId: selectedActionId || undefined,
       phaseContexts: requestPhaseContexts,
@@ -3100,6 +3107,23 @@ export default function ScenarioPlayerCombatPageContent({
     selectedParticipant?.state.combatEffects,
     selectedSecondaryActionId,
   ]);
+  const renderedDeclarationAttackSelection = useMemo(
+    () =>
+      buildCombatDeclarationAttackSelection({
+        actionId: selectedActionId || undefined,
+        feintMethod,
+        phaseContexts: normalizedFeintPhaseContexts,
+        phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
+        secondaryActionId: selectedSecondaryActionId || undefined,
+      }),
+    [
+      feintMethod,
+      normalizedFeintPhaseContexts,
+      phaseCombatLoadoutSummaries,
+      selectedActionId,
+      selectedSecondaryActionId,
+    ],
+  );
   const resolvedFeintAttackerSkill =
     feintMethod === "movement"
       ? { id: "dodge", label: "Dodge" }
@@ -3675,7 +3699,9 @@ export default function ScenarioPlayerCombatPageContent({
             {phaseCards.map((phaseCard, index) => {
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
               const phaseCombatContext =
-                normalizedFeintPhaseContexts[phaseKey] ?? phaseCombatContextDrafts[phaseKey];
+                renderedDeclarationAttackSelection.phaseContexts[phaseKey] ??
+                normalizedFeintPhaseContexts[phaseKey] ??
+                phaseCombatContextDrafts[phaseKey];
               const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
               const targetRoundParticipant = phaseCombatContext.targetParticipantId
                 ? combatRoundState?.participants.find(
@@ -3835,6 +3861,7 @@ export default function ScenarioPlayerCombatPageContent({
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                           <PlayerCombatAttackModeSelector
                             controlsDisabled={declarationControlsDisabled}
+                            emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
                             onChange={(attackModeId) => {
                               markCombatDeclarationDraftDirty();
                               setPhaseCombatContextDrafts((current) => ({
@@ -3843,7 +3870,7 @@ export default function ScenarioPlayerCombatPageContent({
                               }));
                             }}
                             options={phaseLoadoutSummary.attackModeOptions}
-                            selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
+                            selectedAttackModeId={phaseModel.phaseContext.attackModeId}
                           />
                         </>
                       ) : null}
@@ -3898,6 +3925,7 @@ export default function ScenarioPlayerCombatPageContent({
                       />
                       <PlayerCombatAttackModeSelector
                         controlsDisabled={declarationControlsDisabled}
+                        emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
                         onChange={(attackModeId) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({
@@ -3909,7 +3937,7 @@ export default function ScenarioPlayerCombatPageContent({
                           }));
                         }}
                         options={phaseLoadoutSummary.attackModeOptions}
-                        selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
+                        selectedAttackModeId={phaseModel.phaseContext.attackModeId}
                       />
                     </>
                   ) : null}

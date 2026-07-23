@@ -4925,12 +4925,30 @@ export default function CombatRoundManagerPanel({
     content,
     inspectorBuild,
     inspectorDraft.actionId,
+    inspectorDraft.phaseContexts,
     inspectorGeneratedCombatContext,
     inspectorDraft.secondaryActionId,
     inspectorEquipmentState,
     inspectorEquipmentCharacterId,
     selectedScenarioParticipant?.state.combatEffects,
   ]);
+  const inspectorRenderedDeclarationAttackSelection = useMemo(
+    () =>
+      buildCombatDeclarationAttackSelection({
+        actionId: inspectorDisplayDraft.actionId || undefined,
+        feintMethod: inspectorDisplayDraft.feintMethod,
+        phaseContexts: inspectorNormalizedFeintPhaseContexts,
+        phaseLoadoutSummaries: inspectorPhaseLoadoutSummaries,
+        secondaryActionId: inspectorDisplayDraft.secondaryActionId || undefined,
+      }),
+    [
+      inspectorDisplayDraft.actionId,
+      inspectorDisplayDraft.feintMethod,
+      inspectorDisplayDraft.secondaryActionId,
+      inspectorNormalizedFeintPhaseContexts,
+      inspectorPhaseLoadoutSummaries,
+    ],
+  );
   const inspectorResolvedFeintSkill =
     inspectorDraft.feintMethod === "movement"
       ? { id: "dodge", label: "Dodge" }
@@ -7142,6 +7160,13 @@ export default function CombatRoundManagerPanel({
       secondaryActionId: inspectorDraft.secondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
+    const attackModeUnavailableMessage = Object.values(
+      inspectorPhaseLoadoutSummaries,
+    ).find((summary) => summary.attackModeUnavailableMessage)?.attackModeUnavailableMessage;
+    if (!isModifierReview && attackModeUnavailableMessage) {
+      setSaveError(attackModeUnavailableMessage);
+      return;
+    }
     const targetValidation = isModifierReview
       ? { valid: true as const }
       : validateCombatDeclarationTargets({
@@ -9192,7 +9217,8 @@ export default function CombatRoundManagerPanel({
                     const phaseCombatContext = inspectorIsHistorical
                       ? (historicalPhasePanel?.phaseContext ??
                         createUnrecordedHistoricalPhaseContext())
-                      : (inspectorNormalizedFeintPhaseContexts[phaseKey] ??
+                      : (inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey] ??
+                        inspectorNormalizedFeintPhaseContexts[phaseKey] ??
                         inspectorDisplayDraft.phaseContexts[phaseKey]);
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
                     const phaseTargetIdentity = !inspectorIsHistorical
@@ -9432,6 +9458,11 @@ export default function CombatRoundManagerPanel({
                                 <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                                 <PlayerCombatAttackModeSelector
                                   controlsDisabled={saving || inspectorIsHistorical}
+                                  emptyState={
+                                    inspectorIsHistorical
+                                      ? undefined
+                                      : phaseLoadoutSummary.attackModeUnavailableMessage
+                                  }
                                   onChange={(attackModeId) =>
                                     updateInspectorDraft({
                                       phaseContexts: {
@@ -9444,7 +9475,7 @@ export default function CombatRoundManagerPanel({
                                     })
                                   }
                                   options={phaseLoadoutSummary.attackModeOptions}
-                                  selectedAttackModeId={phaseLoadoutSummary.selectedAttackModeId}
+                                  selectedAttackModeId={phaseModel.phaseContext.attackModeId}
                                 />
                               </>
                             ) : null}
@@ -9504,6 +9535,11 @@ export default function CombatRoundManagerPanel({
                             />
                             <PlayerCombatAttackModeSelector
                               controlsDisabled={saving || inspectorIsHistorical}
+                              emptyState={
+                                inspectorIsHistorical
+                                  ? undefined
+                                  : phaseLoadoutSummary.attackModeUnavailableMessage
+                              }
                               onChange={(attackModeId) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
@@ -9532,7 +9568,7 @@ export default function CombatRoundManagerPanel({
                               selectedAttackModeId={
                                 inspectorIsHistorical
                                   ? phaseCombatContext.attackModeId
-                                  : phaseLoadoutSummary.selectedAttackModeId
+                                  : phaseModel.phaseContext.attackModeId
                               }
                             />
                           </>

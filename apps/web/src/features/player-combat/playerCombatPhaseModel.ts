@@ -202,6 +202,7 @@ export interface PlayerCombatLoadoutReference {
 }
 
 export interface PlayerCombatLoadoutSummary {
+  attackModeUnavailableMessage?: string;
   attackModeOptions: PlayerCombatAttackModeOption[];
   attackStats: PlayerCombatAttackStatsView | null;
   mainHandParryItemLabel: string;
@@ -635,27 +636,28 @@ export function buildPlayerCombatLoadoutSummary(input: {
       selectedAttackModeUsedFallback: false,
     };
   }
+  const preferredRawReferenceRow = preferredItemIds
+    .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
+    .find((row) => row !== null);
   const referenceRow =
-    preferredItemIds
-      .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
-      .map((rawRow) =>
-        rawRow
-          ? (combatPanelModel.weaponModeTable.rows.find((row) => {
-              const weaponLabel = getCombatTableCell({
-                columns: combatPanelModel.weaponModeTable.columns,
-                label: "Weapon",
-                row,
-              });
-              const modeLabel = getCombatTableCell({
-                columns: combatPanelModel.weaponModeTable.columns,
-                label: "Mode",
-                row,
-              });
-              return weaponLabel === rawRow.currentItemLabel && modeLabel === rawRow.modeLabel;
-            }) ?? null)
-          : null,
-      )
-      .find((row) => row !== null) ??
+    (preferredRawReferenceRow
+      ? (combatPanelModel.weaponModeTable.rows.find((row) => {
+          const weaponLabel = getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "Weapon",
+            row,
+          });
+          const modeLabel = getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "Mode",
+            row,
+          });
+          return (
+            weaponLabel === preferredRawReferenceRow.currentItemLabel &&
+            modeLabel === preferredRawReferenceRow.modeLabel
+          );
+        }) ?? null)
+      : null) ??
     preferredWeaponLabels
       .map(
         (weaponLabel) =>
@@ -742,9 +744,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
     label: "Mode",
     row: referenceRow,
   });
-  const rawReferenceRow = combatPanelModel.weaponRows?.find(
-    (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
-  );
+  const rawReferenceRow =
+    preferredRawReferenceRow ??
+    combatPanelModel.weaponRows?.find(
+      (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+    );
   if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
     return {
       attackStats: null,
@@ -916,6 +920,12 @@ export function buildPlayerCombatLoadoutSummary(input: {
   };
 
   return {
+    attackModeUnavailableMessage:
+      modeResolution.reason === "no_legal_modes"
+        ? requireRepeatedRoundAttack
+          ? `The selected Phase 2 attack mode for ${referenceWeaponLabel} is not eligible for same-weapon Double Attack.`
+          : `${referenceWeaponLabel} has no legal attack mode.`
+        : undefined,
     attackModeOptions: modeResolution.legalModes.map((mode) => ({
       allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
       id: mode.id,

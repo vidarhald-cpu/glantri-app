@@ -65,6 +65,13 @@ const reference: PlayerCombatLoadoutReference = {
 };
 
 function buildLoadoutModel(input: {
+  fields?: Array<{
+    id: "primary" | "secondary";
+    label: string;
+    options: [];
+    value: string;
+    valueLabel: string;
+  }>;
   rows: Array<Array<string | number>>;
   sourceItemId?: string;
   valueLabel?: string;
@@ -104,7 +111,7 @@ function buildLoadoutModel(input: {
       },
     },
     encumbranceSkillsTable: null,
-    fields: [
+    fields: input.fields ?? [
       {
         id: "primary",
         label: "Primary weapon",
@@ -370,6 +377,145 @@ describe("player combat phase model", () => {
       phase1: { attackModeId: "slash" },
       phase2: { attackModeId: "thrust" },
     });
+  });
+
+  it("keeps two same-named weapon instances distinct in the rendered Double Attack phases", () => {
+    const attackModes = [
+      {
+        canonicalMeleeMode: "slash" as const,
+        id: "mode-1",
+        isPrimaryAttack: true,
+        label: "Slash",
+        order: 0,
+      },
+      {
+        canonicalMeleeMode: "thrust" as const,
+        id: "mode-2",
+        isPrimaryAttack: false,
+        label: "Thrust",
+        order: 1,
+      },
+    ];
+    const loadoutModel = buildLoadoutModel({
+      fields: [
+        {
+          id: "primary",
+          label: "Primary weapon",
+          options: [],
+          value: "long-sword-primary",
+          valueLabel: "Long sword",
+        },
+        {
+          id: "secondary",
+          label: "Secondary weapon",
+          options: [],
+          value: "long-sword-secondary",
+          valueLabel: "Long sword",
+        },
+      ],
+      rows: [["Primary", "Long sword", "2", "Slash", "10", "8", "FS", "—", "C"]],
+      weaponRows: [
+        {
+          attackModes,
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Long sword",
+          itemId: "long-sword-primary",
+          modeLabel: "Primary",
+          templateId: "weapon-template-longsword",
+        },
+        {
+          attackModes,
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Long sword",
+          itemId: "long-sword-secondary",
+          modeLabel: "Primary",
+          templateId: "weapon-template-longsword",
+        },
+      ],
+    });
+
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "double_attack",
+      phaseContexts: {
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+      phaseLoadoutSummaries: { phase1, phase2 },
+    });
+
+    expect(phase1.reference).toMatchObject({
+      sourceItemId: "long-sword-primary",
+      sourceSlot: "primary",
+    });
+    expect(phase2.attackModeOptions.map((mode) => mode.id)).toEqual(["mode-1", "mode-2"]);
+    expect(phase2.selectedAttackModeId).toBe("mode-1");
+    expect(phase2.reference).toMatchObject({
+      sourceAttackModeId: "mode-1",
+      sourceItemId: "long-sword-secondary",
+      sourceSlot: "secondary",
+    });
+    expect(selection.phaseContexts.phase2?.attackModeId).toBe("mode-1");
+    expect(selection.phaseAttackSources.phase2).toMatchObject({
+      attackModeId: "mode-1",
+      scenarioItemId: "long-sword-secondary",
+      slot: "secondary",
+    });
+  });
+
+  it("surfaces an explicit unavailable Phase 2 mode for an ineligible same-source weapon", () => {
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Long sword", "2", "Slash", "10", "8", "FS", "—", "C"]],
+        sourceItemId: "long-sword-primary",
+        valueLabel: "Long sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "slash",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Slash",
+                order: 0,
+              },
+              {
+                canonicalMeleeMode: "thrust",
+                id: "mode-2",
+                isPrimaryAttack: false,
+                label: "Thrust",
+                order: 1,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Long sword",
+            itemId: "long-sword-primary",
+            modeLabel: "Primary",
+            templateId: "weapon-template-longsword",
+          },
+        ],
+      }),
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase2.attackModeOptions).toEqual([]);
+    expect(phase2.selectedAttackModeId).toBeUndefined();
+    expect(phase2.attackModeUnavailableMessage).toBe(
+      "The selected Phase 2 attack mode for Long sword is not eligible for same-weapon Double Attack.",
+    );
   });
 
   it("uses the canonical action-phase mapping without affecting Offensive Parry", () => {

@@ -194,6 +194,7 @@ interface PlayerCombatAttackLocationSelectorProps {
 
 interface PlayerCombatAttackModeSelectorProps {
   controlsDisabled?: boolean;
+  emptyState?: string;
   onChange: (attackModeId: string) => void;
   options: readonly { id: string; label: string }[];
   selectedAttackModeId?: string;
@@ -1691,12 +1692,26 @@ export function PlayerCombatAttackLocationSelector({
 
 export function PlayerCombatAttackModeSelector({
   controlsDisabled = false,
+  emptyState,
   onChange,
   options,
   selectedAttackModeId,
 }: PlayerCombatAttackModeSelectorProps) {
   if (options.length === 0) {
-    return null;
+    return emptyState ? (
+      <div
+        role="status"
+        style={{
+          color: "#8a3b1f",
+          display: "grid",
+          fontSize: "0.82rem",
+          gap: "0.2rem",
+        }}
+      >
+        <strong>Attack mode</strong>
+        <span>{emptyState}</span>
+      </div>
+    ) : null;
   }
 
   return (

@@ -663,7 +663,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey]",
     );
-    expect(source).toContain("inspectorNormalizedFeintPhaseContexts[phaseKey]");
+    expect(source).toContain(
+      "inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey]",
+    );
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
