@@ -15,6 +15,7 @@ export type CombatProgressionAuthorizationFailureCode =
   | "boundary_closed"
   | "execution_group_mismatch"
   | "gm_only"
+  | "identity_mismatch"
   | "stale_opportunity"
   | "stale_proposal"
   | "stale_boundary"
@@ -30,6 +31,9 @@ export type CombatProgressionAuthorizationActor =
   | { readonly kind: "combatant"; readonly participantId: string };
 
 export interface AuthorizeCombatProgressionTaskInput {
+  readonly actionId?: string;
+  readonly attackIndex?: number;
+  readonly attackModeId?: string;
   readonly actor: CombatProgressionAuthorizationActor;
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
@@ -37,6 +41,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly criticalResultId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
+  readonly declarationId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId?: string;
   readonly healthRollId?: string;
@@ -50,6 +55,10 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly proposalId?: string;
   readonly taskId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId?: string;
+  readonly weaponSourceSlot?: string;
+  readonly weaponTemplateId?: string;
 }
 
 export type CombatProgressionAuthorizationResult =
@@ -378,9 +387,30 @@ export function authorizeCombatProgressionTask(
     return failure("stale_opportunity", "The combat opportunity is stale or not executable.");
   }
 
+  const lineageChecks: ReadonlyArray<readonly [unknown, keyof CombatProgressionTask["identity"]]> =
+    [
+      [input.actionId, "actionId"],
+      [input.attackIndex, "attackIndex"],
+      [input.attackModeId, "attackModeId"],
+      [input.declarationId, "declarationId"],
+      [input.weaponInstanceId, "weaponInstanceId"],
+      [input.weaponSourceId, "weaponSourceId"],
+      [input.weaponSourceSlot, "weaponSourceSlot"],
+      [input.weaponTemplateId, "weaponTemplateId"],
+    ];
+  const lineageTasks = opportunityTasks.filter((task) =>
+    lineageChecks.every(([value, key]) => value === undefined || task.identity[key] === value),
+  );
+  if (lineageTasks.length === 0 && lineageChecks.some(([value]) => value !== undefined)) {
+    return failure(
+      "identity_mismatch",
+      "The attack source or mode identity does not match the projected task.",
+    );
+  }
+
   const proposalTasks = input.proposalId
-    ? opportunityTasks.filter((task) => task.identity.proposalId === input.proposalId)
-    : opportunityTasks;
+    ? lineageTasks.filter((task) => task.identity.proposalId === input.proposalId)
+    : lineageTasks;
   if (input.proposalId && proposalTasks.length === 0) {
     return failure("stale_proposal", "The combat proposal is stale or not executable.");
   }

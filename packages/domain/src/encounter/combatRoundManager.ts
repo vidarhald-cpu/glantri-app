@@ -845,9 +845,12 @@ export const combatAttackSourceRefSchema = z.discriminatedUnion("sourceKind", [
 export type CombatAttackSourceRef = z.infer<typeof combatAttackSourceRefSchema>;
 
 export const combatRoundAttackOpportunitySchema = z.object({
+  actionId: idSchema.optional(),
+  attackIndex: z.number().int().positive().optional(),
   attackModeId: idSchema.optional(),
   cancelledAt: z.string().datetime().optional(),
   cancelledByUserId: idSchema.optional(),
+  declarationId: idSchema.optional(),
   id: idSchema,
   itemId: idSchema.optional(),
   origin: z.enum([
@@ -862,9 +865,32 @@ export const combatRoundAttackOpportunitySchema = z.object({
   sourceKind: z.enum(["weapon", "unarmed"]).optional(),
   status: z.enum(["committed", "cancelled"]).default("committed"),
   targetParticipantId: idSchema.optional(),
+  weaponInstanceId: idSchema.optional(),
+  weaponSourceId: idSchema.optional(),
+  weaponSourceSlot: combatAttackSourceSlotSchema.optional(),
   weaponTemplateId: idSchema.optional(),
 });
 export type CombatRoundAttackOpportunity = z.infer<typeof combatRoundAttackOpportunitySchema>;
+
+/**
+ * Immutable lineage for a newly committed attack. Optional fields on the persisted schema above
+ * preserve read-only compatibility with older encounter snapshots; live tasks require this full
+ * identity before an attack can be invoked.
+ */
+export interface CanonicalAttackOpportunityIdentity {
+  readonly actionId: string;
+  readonly attackIndex: number;
+  readonly attackModeId: string;
+  readonly attackerParticipantId: string;
+  readonly declarationId: string;
+  readonly defenderParticipantId: string;
+  readonly opportunityId: string;
+  readonly phase: CombatRoundPhase;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId: string;
+  readonly weaponSourceSlot: CombatAttackSourceSlot;
+  readonly weaponTemplateId: string;
+}
 
 export const combatRoundFeintDeclarationSchema = z.object({
   attackerSkillId: idSchema,
@@ -906,10 +932,12 @@ export type CombatRoundPhaseResolutionSubstep = z.infer<
 export const combatRoundAttackRollResultSchema = z
   .object({
     actionId: idSchema,
+    attackIndex: z.number().int().positive().optional(),
     attackModeId: idSchema.optional(),
     attackOpportunityId: idSchema.optional(),
     attackSlot: z.enum(["attack_1", "attack_2"]).optional(),
     attackerParticipantId: idSchema,
+    declarationId: idSchema.optional(),
     defenderParticipantId: idSchema,
     defenderDb: z.number().int(),
     defenderParryModifier: z.number().int().default(0),
@@ -927,9 +955,15 @@ export const combatRoundAttackRollResultSchema = z
     rolledAt: z.string().datetime(),
     rolledByUserId: idSchema.optional(),
     tableResult: z.string().min(1),
+    weaponArmorClass: combatArmorModifierClassSchema.optional(),
     weaponCriticalCode: z.string().min(1).optional(),
     weaponDamageClass: z.string().min(1).optional(),
+    weaponDmb: z.number().int().optional(),
+    weaponInstanceId: idSchema.optional(),
     weaponName: z.string().min(1),
+    weaponSourceId: idSchema.optional(),
+    weaponSourceSlot: combatAttackSourceSlotSchema.optional(),
+    weaponTemplateId: idSchema.optional(),
   })
   .superRefine((result, context) => {
     if (result.rollTotal === undefined && result.roll === undefined) {
@@ -1735,6 +1769,8 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
   state?: CombatRoundState;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
+  weaponArmorClass?: CombatArmorModifierClass;
+  weaponDmb?: number;
 }): CombatRoundDamageReview {
   const existingReview = removeCombatRoundCriticalEffectProposalFromReview(
     input.damageResult.review,
@@ -1882,6 +1918,8 @@ const combatRoundStepStatusesSchema = z.record(combatRoundStepSchema, combatRoun
 
 export const combatRoundParticipantStateSchema = z.object({
   attackResults: combatRoundAttackResultsSchema.default({}),
+  /** Canonical multi-opportunity storage; attackResults remains a phase compatibility view. */
+  attackResultsByOpportunity: z.record(idSchema, combatRoundAttackRollResultSchema).optional(),
   characterId: idSchema.optional(),
   combatExperience: combatRoundCombatExperienceResultSchema.optional(),
   declaration: combatRoundDeclarationSchema.optional(),
@@ -4597,9 +4635,11 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
   const outgoingResults = normalized.participants
     .filter((participant) => participant.participantId === input.participantId)
     .flatMap((participant) =>
-      [participant.attackResults.phase1, participant.attackResults.phase2].filter(
-        (result): result is CombatRoundAttackRollResult => Boolean(result),
-      ),
+      [
+        ...Object.values(participant.attackResultsByOpportunity ?? {}),
+        participant.attackResults.phase1,
+        participant.attackResults.phase2,
+      ].filter((result): result is CombatRoundAttackRollResult => Boolean(result)),
     )
     .filter((result) => !input.phase || result.phase === input.phase);
   const affectedParticipantIds = new Set<string>([input.participantId]);
@@ -4684,6 +4724,13 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
 
         return {
           ...participant,
+          attackResultsByOpportunity: participant.attackResultsByOpportunity
+            ? Object.fromEntries(
+                Object.entries(participant.attackResultsByOpportunity).filter(
+                  ([, result]) => input.phase !== undefined && result.phase !== input.phase,
+                ),
+              )
+            : undefined,
           attackResults: nextAttackResults,
           stepStatuses: {
             ...participant.stepStatuses,
@@ -4720,6 +4767,7 @@ function participantStateFromEncounterParticipant(input: {
 }): CombatRoundParticipantState {
   return {
     attackResults: input.existing?.attackResults ?? {},
+    attackResultsByOpportunity: input.existing?.attackResultsByOpportunity,
     characterId: input.participant.characterId,
     combatExperience: input.existing?.combatExperience,
     declaration: input.existing?.declaration,
@@ -4860,7 +4908,12 @@ function sanitizeCombatRoundDeclarationTargets(input: {
 
 export function buildCombatRoundAttackRollResult(input: {
   actionId: string;
+  attackIndex?: number;
+  attackModeId?: string;
+  attackOpportunityId?: string;
+  attackSlot?: "attack_1" | "attack_2";
   attackerParticipantId: string;
+  declarationId?: string;
   defenderDb: number;
   defenderParticipantId: string;
   ob: number;
@@ -4871,9 +4924,15 @@ export function buildCombatRoundAttackRollResult(input: {
   rollTotal?: number;
   rolledAt: string;
   rolledByUserId?: string;
+  weaponArmorClass?: CombatArmorModifierClass;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
+  weaponDmb?: number;
+  weaponInstanceId?: string;
   weaponName: string;
+  weaponSourceId?: string;
+  weaponSourceSlot?: CombatAttackSourceSlot;
+  weaponTemplateId?: string;
 }): CombatRoundAttackRollResult {
   const rollTotal = input.rollTotal ?? input.roll;
 
@@ -4889,7 +4948,12 @@ export function buildCombatRoundAttackRollResult(input: {
 
   return combatRoundAttackRollResultSchema.parse({
     actionId: input.actionId,
+    attackIndex: input.attackIndex,
+    attackModeId: input.attackModeId,
+    attackOpportunityId: input.attackOpportunityId,
+    attackSlot: input.attackSlot,
     attackerParticipantId: input.attackerParticipantId,
+    declarationId: input.declarationId,
     defenderDb: input.defenderDb,
     defenderParryModifier: toHit.parryModifier,
     defenderParticipantId: input.defenderParticipantId,
@@ -4907,9 +4971,15 @@ export function buildCombatRoundAttackRollResult(input: {
     rolledAt: input.rolledAt,
     rolledByUserId: input.rolledByUserId,
     tableResult: toHit.resultLabel,
+    weaponArmorClass: input.weaponArmorClass,
     weaponCriticalCode: input.weaponCriticalCode,
     weaponDamageClass: input.weaponDamageClass,
+    weaponDmb: input.weaponDmb,
+    weaponInstanceId: input.weaponInstanceId,
     weaponName: input.weaponName,
+    weaponSourceId: input.weaponSourceId,
+    weaponSourceSlot: input.weaponSourceSlot,
+    weaponTemplateId: input.weaponTemplateId,
   });
 }
 
@@ -4922,17 +4992,67 @@ export function getCombatRoundAttackResultsForParticipantPhase(input: {
   outgoing?: CombatRoundAttackRollResult;
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const resultsForParticipant = (participant: CombatRoundParticipantState) => {
+    const canonical = Object.values(participant.attackResultsByOpportunity ?? {}).filter(
+      (result) => result.phase === input.phase,
+    );
+    const legacy = participant.attackResults[input.phase];
+    const results = legacy ? [...canonical, legacy] : canonical;
+    return [
+      ...new Map(
+        results.map((result) => [
+          result.attackOpportunityId ??
+            getCombatRoundAttackResultId({ result, roundNumber: normalized.roundNumber }),
+          result,
+        ]),
+      ).values(),
+    ].sort(
+      (left, right) =>
+        (left.attackIndex ?? Number.MAX_SAFE_INTEGER) -
+          (right.attackIndex ?? Number.MAX_SAFE_INTEGER) ||
+        left.rolledAt.localeCompare(right.rolledAt),
+    );
+  };
   const outgoing = normalized.participants.find(
     (participant) => participant.participantId === input.participantId,
-  )?.attackResults[input.phase];
+  )
+    ? resultsForParticipant(
+        normalized.participants.find(
+          (participant) => participant.participantId === input.participantId,
+        )!,
+      )[0]
+    : undefined;
   const incoming = normalized.participants
-    .map((participant) => participant.attackResults[input.phase])
-    .filter(
-      (result): result is CombatRoundAttackRollResult =>
-        result !== undefined && result.defenderParticipantId === input.participantId,
-    );
+    .flatMap(resultsForParticipant)
+    .filter((result) => result.defenderParticipantId === input.participantId);
 
   return { incoming, outgoing };
+}
+
+/** Canonical persisted attack results, with legacy phase slots included read-only and deduplicated. */
+export function getCombatRoundParticipantAttackResults(input: {
+  participant: CombatRoundParticipantState;
+  roundNumber: number;
+}): CombatRoundAttackRollResult[] {
+  const canonical = Object.values(input.participant.attackResultsByOpportunity ?? {});
+  const legacy = [
+    input.participant.attackResults.phase1,
+    input.participant.attackResults.phase2,
+  ].filter((result): result is CombatRoundAttackRollResult => result !== undefined);
+  return [
+    ...new Map(
+      [...canonical, ...legacy].map((result) => [
+        result.attackOpportunityId ??
+          getCombatRoundAttackResultId({ result, roundNumber: input.roundNumber }),
+        result,
+      ]),
+    ).values(),
+  ].sort(
+    (left, right) =>
+      left.rolledAt.localeCompare(right.rolledAt) ||
+      (left.attackIndex ?? Number.MAX_SAFE_INTEGER) -
+        (right.attackIndex ?? Number.MAX_SAFE_INTEGER),
+  );
 }
 
 export function getCombatRoundOutgoingAttackResultForParticipantPhase(input: {
@@ -5059,6 +5179,85 @@ function buildCombatRoundAttackOpportunityId(input: {
   return `round:${input.roundNumber}:participant:${input.participantId}:${input.phase}:${input.slot}`;
 }
 
+export function buildCombatRoundDeclarationId(input: {
+  participantId: string;
+  roundNumber: number;
+}): string {
+  return `round:${input.roundNumber}:participant:${input.participantId}:declaration`;
+}
+
+export function buildCombatAttackWeaponSourceId(input: {
+  itemId?: string;
+  sourceKind?: "unarmed" | "weapon";
+  weaponTemplateId?: string;
+}): string | undefined {
+  if (input.sourceKind === "weapon" && input.itemId) return `weapon:${input.itemId}`;
+  if (input.sourceKind === "unarmed" && input.weaponTemplateId) {
+    return `unarmed:${input.weaponTemplateId}`;
+  }
+  return undefined;
+}
+
+export function getCanonicalAttackOpportunityIdentity(input: {
+  actionId?: string;
+  attackerParticipantId: string;
+  opportunity: CombatRoundAttackOpportunity;
+  roundNumber: number;
+}): CanonicalAttackOpportunityIdentity | undefined {
+  const actionId = input.opportunity.actionId ?? input.actionId;
+  const attackIndex =
+    input.opportunity.attackIndex ??
+    (input.opportunity.slot === "attack_1"
+      ? 1
+      : input.opportunity.slot === "attack_2"
+        ? 2
+        : undefined);
+  const declarationId =
+    input.opportunity.declarationId ??
+    buildCombatRoundDeclarationId({
+      participantId: input.attackerParticipantId,
+      roundNumber: input.roundNumber,
+    });
+  const weaponInstanceId = input.opportunity.weaponInstanceId ?? input.opportunity.itemId;
+  const weaponSourceId =
+    input.opportunity.weaponSourceId ??
+    buildCombatAttackWeaponSourceId({
+      itemId: weaponInstanceId,
+      sourceKind: input.opportunity.sourceKind,
+      weaponTemplateId: input.opportunity.weaponTemplateId,
+    });
+  const weaponSourceSlot =
+    input.opportunity.weaponSourceSlot ??
+    (input.opportunity.sourceKind === "unarmed" ? "virtual" : undefined);
+
+  if (
+    !actionId ||
+    !attackIndex ||
+    !input.opportunity.attackModeId ||
+    !input.opportunity.targetParticipantId ||
+    !weaponSourceId ||
+    !weaponSourceSlot ||
+    !input.opportunity.weaponTemplateId
+  ) {
+    return undefined;
+  }
+
+  return {
+    actionId,
+    attackIndex,
+    attackModeId: input.opportunity.attackModeId,
+    attackerParticipantId: input.attackerParticipantId,
+    declarationId,
+    defenderParticipantId: input.opportunity.targetParticipantId,
+    opportunityId: input.opportunity.id,
+    phase: input.opportunity.phase,
+    weaponInstanceId,
+    weaponSourceId,
+    weaponSourceSlot,
+    weaponTemplateId: input.opportunity.weaponTemplateId,
+  };
+}
+
 export function buildCombatRoundDeclaredAttackOpportunities(input: {
   actionId?: string;
   participantId: string;
@@ -5070,7 +5269,13 @@ export function buildCombatRoundDeclaredAttackOpportunities(input: {
       CombatRoundPhase,
       Pick<
         CombatRoundAttackOpportunity,
-        "attackModeId" | "itemId" | "sourceKind" | "weaponTemplateId"
+        | "attackModeId"
+        | "itemId"
+        | "sourceKind"
+        | "weaponInstanceId"
+        | "weaponSourceId"
+        | "weaponSourceSlot"
+        | "weaponTemplateId"
       >
     >
   >;
@@ -5081,9 +5286,24 @@ export function buildCombatRoundDeclaredAttackOpportunities(input: {
   }).flatMap((phase) => {
     const targetParticipantId = input.phaseContexts?.[phase]?.targetParticipantId;
     const slot = phase === "phase1" ? "attack_1" : "attack_2";
+    const source = input.sources?.[phase];
+    const weaponInstanceId = source?.weaponInstanceId ?? source?.itemId;
+    const weaponSourceId =
+      source?.weaponSourceId ??
+      buildCombatAttackWeaponSourceId({
+        itemId: weaponInstanceId,
+        sourceKind: source?.sourceKind,
+        weaponTemplateId: source?.weaponTemplateId,
+      });
     return [
       combatRoundAttackOpportunitySchema.parse({
-        ...input.sources?.[phase],
+        ...source,
+        actionId: input.actionId,
+        attackIndex: slot === "attack_1" ? 1 : 2,
+        declarationId: buildCombatRoundDeclarationId({
+          participantId: input.participantId,
+          roundNumber: input.roundNumber,
+        }),
         id: buildCombatRoundAttackOpportunityId({
           participantId: input.participantId,
           phase,
@@ -5099,11 +5319,13 @@ export function buildCombatRoundDeclaredAttackOpportunities(input: {
                 ? "feint_attack"
                 : input.actionId === "adjust_range_attack"
                   ? "adjust_range_attack"
-                : "declared",
+                  : "declared",
         phase,
         slot,
         status: "committed",
         targetParticipantId,
+        weaponInstanceId,
+        weaponSourceId,
       }),
     ];
   });
@@ -6978,10 +7200,14 @@ export function recordCombatRoundNoAttackPhaseReview(input: {
 export function getCombatRoundAttackResultId(input: {
   result: Pick<
     CombatRoundAttackRollResult,
-    "attackerParticipantId" | "defenderParticipantId" | "phase"
+    "attackOpportunityId" | "attackerParticipantId" | "defenderParticipantId" | "phase"
   >;
   roundNumber: number;
 }): string {
+  const opportunityId = input.result.attackOpportunityId;
+  if (opportunityId) {
+    return `${input.roundNumber}:opportunity:${opportunityId}`;
+  }
   return [
     input.roundNumber,
     input.result.phase,
@@ -6997,6 +7223,12 @@ export function getCombatRoundAttackResultById(input: {
   const phases: CombatRoundPhase[] = ["phase1", "phase2"];
 
   for (const participant of input.state.participants) {
+    const canonicalResult = Object.values(participant.attackResultsByOpportunity ?? {}).find(
+      (result) =>
+        getCombatRoundAttackResultId({ result, roundNumber: input.state.roundNumber }) ===
+        input.attackResultId,
+    );
+    if (canonicalResult) return canonicalResult;
     for (const phase of phases) {
       const result = participant.attackResults[phase];
 
@@ -7013,6 +7245,19 @@ export function getCombatRoundAttackResultById(input: {
   }
 
   return undefined;
+}
+
+export function getCombatRoundAttackResultForOpportunity(input: {
+  opportunityId: string;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  return input.state.participants
+    .flatMap((participant) => [
+      ...Object.values(participant.attackResultsByOpportunity ?? {}),
+      participant.attackResults.phase1,
+      participant.attackResults.phase2,
+    ])
+    .find((result) => result?.attackOpportunityId === input.opportunityId);
 }
 
 export interface CombatRoundAttackDistanceModifierDetail {
@@ -7886,10 +8131,7 @@ function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
   return damageMetadata;
 }
 
-export function getCombatRoundGrazeDamageRollContext(input: {
-  defenderDm: number;
-  dmb: number;
-}) {
+export function getCombatRoundGrazeDamageRollContext(input: { defenderDm: number; dmb: number }) {
   const grazingReferenceHitLookupTotal = 12;
   const grazingReferenceDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
     defenderDm: input.defenderDm,
@@ -10815,13 +11057,15 @@ export function wasCombatRoundPairDistanceResolvedDuringRound(input: {
   state: CombatRoundState;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
-  if (normalized.adjustDistanceProposals.some(
-    (proposal) =>
-      proposal.roundNumber === input.roundNumber &&
-      proposal.status === "committed" &&
-      makeDistancePairKey(proposal.attackerParticipantId, proposal.defenderParticipantId) ===
-        input.pairKey,
-  )) {
+  if (
+    normalized.adjustDistanceProposals.some(
+      (proposal) =>
+        proposal.roundNumber === input.roundNumber &&
+        proposal.status === "committed" &&
+        makeDistancePairKey(proposal.attackerParticipantId, proposal.defenderParticipantId) ===
+          input.pairKey,
+    )
+  ) {
     return true;
   }
 
@@ -10922,16 +11166,14 @@ function buildCombatRoundEndDistanceProposals(input: {
     const participantAInput = input.participantInputs?.[entry.participantAId];
     const participantBInput = input.participantInputs?.[entry.participantBId];
     const participantAModifierResolution = resolveRoundEndDistanceDodgeModifier({
-      encounterId:
-        participantAInput?.modifierEncounterId ?? participantBInput?.modifierEncounterId,
+      encounterId: participantAInput?.modifierEncounterId ?? participantBInput?.modifierEncounterId,
       pairKey,
       roundNumber: normalized.roundNumber,
       participantInput: participantAInput,
       opponentInput: participantBInput,
     });
     const participantBModifierResolution = resolveRoundEndDistanceDodgeModifier({
-      encounterId:
-        participantBInput?.modifierEncounterId ?? participantAInput?.modifierEncounterId,
+      encounterId: participantBInput?.modifierEncounterId ?? participantAInput?.modifierEncounterId,
       pairKey,
       roundNumber: normalized.roundNumber,
       participantInput: participantBInput,
@@ -12301,14 +12543,11 @@ export function rollCombatRoundEndDistanceControl(input: {
   }
 
   const opponentParticipantId =
-    sideKey === "participantA"
-      ? distanceProposal.participantBId
-      : distanceProposal.participantAId;
+    sideKey === "participantA" ? distanceProposal.participantBId : distanceProposal.participantAId;
   const participantInput = input.participantInputs?.[input.participantId];
   const opponentInput = input.participantInputs?.[opponentParticipantId];
   const canonicalModifierResolution = resolveRoundEndDistanceDodgeModifier({
-    encounterId:
-      participantInput?.modifierEncounterId ?? opponentInput?.modifierEncounterId,
+    encounterId: participantInput?.modifierEncounterId ?? opponentInput?.modifierEncounterId,
     pairKey: distanceProposal.pairKey,
     roundNumber: normalized.roundNumber,
     participantInput,
@@ -14840,6 +15079,9 @@ export function advanceCombatRoundStep(
     phaseResolutionStatuses: startsNextRound ? {} : withSnapshots.phaseResolutionStatuses,
     participants: withSnapshots.participants.map((participant) => ({
       ...participant,
+      attackResultsByOpportunity: startsNextRound
+        ? undefined
+        : participant.attackResultsByOpportunity,
       attackResults: startsNextRound ? {} : participant.attackResults,
       declaration: startsNextRound ? undefined : participant.declaration,
       initiatives: startsNextRound ? {} : participant.initiatives,
@@ -14948,10 +15190,12 @@ export function recordCombatRoundDeclaration(input: {
 
   const normalized = combatRoundStateSchema.parse(withStatus);
   const declaration = synchronizeCombatRoundAdjustDistanceDeclarationTarget(
-    synchronizeCombatRoundFeintDeclarationTarget(combatRoundDeclarationSchema.parse({
-      ...input.declaration,
-      submittedBy: input.submittedBy,
-    })),
+    synchronizeCombatRoundFeintDeclarationTarget(
+      combatRoundDeclarationSchema.parse({
+        ...input.declaration,
+        submittedBy: input.submittedBy,
+      }),
+    ),
   );
   const withoutPreviousFeint = normalized.feintProposals.filter(
     (proposal) =>
@@ -15120,7 +15364,9 @@ function replaceCombatRoundAdjustDistanceProposal(input: {
   return combatRoundStateSchema.parse({
     ...input.state,
     adjustDistanceProposals: [
-      ...input.state.adjustDistanceProposals.filter((proposal) => proposal.id !== input.proposal.id),
+      ...input.state.adjustDistanceProposals.filter(
+        (proposal) => proposal.id !== input.proposal.id,
+      ),
       input.proposal,
     ],
   });
@@ -15175,17 +15421,20 @@ export function respondCombatRoundAdjustDistance(input: {
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const previousProposal = normalized.adjustDistanceProposals.find((p) => p.id === input.proposalId);
+  const previousProposal = normalized.adjustDistanceProposals.find(
+    (p) => p.id === input.proposalId,
+  );
   if (!previousProposal || previousProposal.status !== "awaiting_defender_response") {
     throw new RangeError("The defender must choose whether to oppose the maneuver.");
   }
-  const standard = input.response === "allow"
-    ? resolveCombatAdjustDistanceStandardProposal({
-        currentDistance: previousProposal.currentDistance,
-        defenderAllowed: true,
-        requestedDistance: previousProposal.requestedDistance,
-      })
-    : undefined;
+  const standard =
+    input.response === "allow"
+      ? resolveCombatAdjustDistanceStandardProposal({
+          currentDistance: previousProposal.currentDistance,
+          defenderAllowed: true,
+          requestedDistance: previousProposal.requestedDistance,
+        })
+      : undefined;
   const proposal = combatAdjustDistanceProposalSchema.parse({
     ...previousProposal,
     defenderResponse: input.response,
@@ -15205,12 +15454,14 @@ export function respondCombatRoundAdjustDistance(input: {
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
     facts: { previousProposal, proposalId: proposal.id, response: input.response },
-    id: input.command.commandId ?? buildCombatRoundCommandId({
-      createdAt: input.command.createdAt,
-      participantId: proposal.defenderParticipantId,
-      state: normalized,
-      type: "respond_adjust_distance",
-    }),
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: proposal.defenderParticipantId,
+        state: normalized,
+        type: "respond_adjust_distance",
+      }),
     participantId: proposal.defenderParticipantId,
     phase: "phase1",
     roundNumber: normalized.roundNumber,
@@ -15250,20 +15501,31 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
   value: number;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const previousProposal = normalized.adjustDistanceProposals.find((p) => p.id === input.proposalId);
+  const previousProposal = normalized.adjustDistanceProposals.find(
+    (p) => p.id === input.proposalId,
+  );
   if (!previousProposal || previousProposal.status !== "awaiting_gm_adjustment") {
     throw new RangeError("The GM must confirm the maneuver adjustment.");
   }
   if (!Number.isFinite(input.value) || !Number.isInteger(input.value)) {
     throw new RangeError("Maneuver adjustment must be an integer.");
   }
-  if (input.participantId && ![previousProposal.attackerParticipantId, previousProposal.defenderParticipantId].includes(input.participantId)) {
+  if (
+    input.participantId &&
+    ![previousProposal.attackerParticipantId, previousProposal.defenderParticipantId].includes(
+      input.participantId,
+    )
+  ) {
     throw new RangeError("The maneuver adjustment must apply to the attacker or defender.");
   }
   const appliedValue = input.participantId ? input.value : 0;
   const proposal = combatAdjustDistanceProposalSchema.parse({
     ...previousProposal,
-    gmRollAdjustment: { notes: input.notes, participantId: input.participantId, value: appliedValue },
+    gmRollAdjustment: {
+      notes: input.notes,
+      participantId: input.participantId,
+      value: appliedValue,
+    },
     status: "awaiting_rolls",
   });
   return recordAdjustDistanceCommand({
@@ -15274,7 +15536,12 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
       proposalId: proposal.id,
       value: appliedValue,
     },
-    facts: { participantId: input.participantId, previousProposal, proposalId: proposal.id, value: appliedValue },
+    facts: {
+      participantId: input.participantId,
+      previousProposal,
+      proposalId: proposal.id,
+      value: appliedValue,
+    },
     participantId: proposal.attackerParticipantId,
     proposal,
     state: normalized,
@@ -15284,7 +15551,11 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
 
 function recordAdjustDistanceCommand(input: {
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
-  draftType: "adjust_distance_adjustment" | "adjust_distance_roll" | "adjust_distance_result" | "adjust_distance_committed";
+  draftType:
+    | "adjust_distance_adjustment"
+    | "adjust_distance_roll"
+    | "adjust_distance_result"
+    | "adjust_distance_committed";
   eventOutcome: Record<string, unknown>;
   facts: Record<string, unknown>;
   participantId: string;
@@ -15292,9 +15563,16 @@ function recordAdjustDistanceCommand(input: {
   resultState?: CombatRoundState;
   rollerPrivate?: Record<string, unknown>;
   state: CombatRoundState;
-  type: "review_adjust_distance_roll_adjustment" | "roll_adjust_distance" | "commit_adjust_distance";
+  type:
+    | "review_adjust_distance_roll_adjustment"
+    | "roll_adjust_distance"
+    | "commit_adjust_distance";
 }): CombatRoundState {
-  const beforeCursor = input.state.currentCursor ?? { participantId: input.participantId, roundNumber: input.state.roundNumber, step: "A1" as const };
+  const beforeCursor = input.state.currentCursor ?? {
+    participantId: input.participantId,
+    roundNumber: input.state.roundNumber,
+    step: "A1" as const,
+  };
   const resultState = input.resultState
     ? combatRoundStateSchema.parse(input.resultState)
     : input.state;
@@ -15303,32 +15581,53 @@ function recordAdjustDistanceCommand(input: {
     participantId: input.participantId,
   };
   const command = combatRoundCommandSchema.parse({
-    afterCursor, beforeCursor, createdAt: input.command.createdAt,
-    createdByUserId: input.command.createdByUserId, facts: input.facts,
-    id: input.command.commandId ?? buildCombatRoundCommandId({ createdAt: input.command.createdAt, participantId: input.participantId, state: input.state, type: input.type }),
-    participantId: input.participantId, phase: "phase1", roundNumber: input.state.roundNumber, step: "A1", type: input.type,
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: input.facts,
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: input.state,
+        type: input.type,
+      }),
+    participantId: input.participantId,
+    phase: "phase1",
+    roundNumber: input.state.roundNumber,
+    step: "A1",
+    type: input.type,
   });
   return appendCombatRoundEventForCommand({
     command,
     draft: {
       actorParticipantId: input.proposal.attackerParticipantId,
       targetParticipantId: input.proposal.defenderParticipantId,
-      rollerParticipantId: input.draftType === "adjust_distance_roll" ? input.participantId : undefined,
+      rollerParticipantId:
+        input.draftType === "adjust_distance_roll" ? input.participantId : undefined,
       facts: {
         involvedOutcome: input.eventOutcome,
         rollerPrivate: input.rollerPrivate,
       },
-      involvedParticipantIds: [input.proposal.attackerParticipantId, input.proposal.defenderParticipantId],
+      involvedParticipantIds: [
+        input.proposal.attackerParticipantId,
+        input.proposal.defenderParticipantId,
+      ],
       ownerParticipantId:
         input.draftType === "adjust_distance_roll"
           ? input.participantId
           : input.proposal.attackerParticipantId,
-      phase: "phase1", status: input.draftType === "adjust_distance_committed" ? "committed" : "recorded",
-      step: "phase_1_actions", type: input.draftType,
+      phase: "phase1",
+      status: input.draftType === "adjust_distance_committed" ? "committed" : "recorded",
+      step: "phase_1_actions",
+      type: input.draftType,
     },
     state: combatRoundStateSchema.parse({
       ...replaceCombatRoundAdjustDistanceProposal({ proposal: input.proposal, state: resultState }),
-      commands: [...input.state.commands, command], currentCursor: afterCursor,
+      commands: [...input.state.commands, command],
+      currentCursor: afterCursor,
       currentStep: getCombatRoundStepForCursorStep(afterCursor.step),
       selectedParticipantId: afterCursor.participantId,
       selectedStep: getCombatRoundStepForCursorStep(afterCursor.step),
@@ -15343,8 +15642,11 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const previousProposal = normalized.adjustDistanceProposals.find((p) => p.id === input.proposalId);
-  if (!previousProposal || previousProposal.status !== "awaiting_rolls") throw new RangeError("Distance-adjustment rolls are not currently available.");
+  const previousProposal = normalized.adjustDistanceProposals.find(
+    (p) => p.id === input.proposalId,
+  );
+  if (!previousProposal || previousProposal.status !== "awaiting_rolls")
+    throw new RangeError("Distance-adjustment rolls are not currently available.");
   const side =
     input.result.participantId === previousProposal.attackerParticipantId
       ? "attacker"
@@ -15357,9 +15659,23 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
   if (side === "defender" && previousProposal.defenderRoll)
     throw new RangeError("The defender has already rolled Dodge.");
   const expectedParticipantId = input.result.participantId;
-  const attackerRoll = side === "attacker" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.attackerRoll;
-  const defenderRoll = side === "defender" ? combatAdjustDistanceRollResultSchema.parse(input.result) : previousProposal.defenderRoll;
-  const standard = attackerRoll && defenderRoll ? resolveCombatAdjustDistanceStandardProposal({ attackerTotal: attackerRoll.finalTotal, currentDistance: previousProposal.currentDistance, defenderTotal: defenderRoll.finalTotal, requestedDistance: previousProposal.requestedDistance }) : undefined;
+  const attackerRoll =
+    side === "attacker"
+      ? combatAdjustDistanceRollResultSchema.parse(input.result)
+      : previousProposal.attackerRoll;
+  const defenderRoll =
+    side === "defender"
+      ? combatAdjustDistanceRollResultSchema.parse(input.result)
+      : previousProposal.defenderRoll;
+  const standard =
+    attackerRoll && defenderRoll
+      ? resolveCombatAdjustDistanceStandardProposal({
+          attackerTotal: attackerRoll.finalTotal,
+          currentDistance: previousProposal.currentDistance,
+          defenderTotal: defenderRoll.finalTotal,
+          requestedDistance: previousProposal.requestedDistance,
+        })
+      : undefined;
   const proposal = combatAdjustDistanceProposalSchema.parse({
     ...previousProposal,
     attackerRoll,
@@ -15437,13 +15753,38 @@ export function commitCombatRoundAdjustDistance(input: {
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const previousProposal = normalized.adjustDistanceProposals.find((p) => p.id === input.proposalId);
-  if (!previousProposal || previousProposal.status !== "awaiting_review") throw new RangeError("The GM must commit the distance proposal before Phase 2.");
+  const previousProposal = normalized.adjustDistanceProposals.find(
+    (p) => p.id === input.proposalId,
+  );
+  if (!previousProposal || previousProposal.status !== "awaiting_review")
+    throw new RangeError("The GM must commit the distance proposal before Phase 2.");
   const committedDistance = combatDistanceSchema.parse(input.committedDistance);
-  const proposal = combatAdjustDistanceProposalSchema.parse({ ...previousProposal, committedAt: input.command.createdAt, committedByUserId: input.command.createdByUserId, review: { acceptedOutcome: input.outcome, committedDistance, notes: input.notes }, status: "committed" });
+  const proposal = combatAdjustDistanceProposalSchema.parse({
+    ...previousProposal,
+    committedAt: input.command.createdAt,
+    committedByUserId: input.command.createdByUserId,
+    review: { acceptedOutcome: input.outcome, committedDistance, notes: input.notes },
+    status: "committed",
+  });
   let nextState = replaceCombatRoundAdjustDistanceProposal({ proposal, state: normalized });
-  nextState = combatRoundStateSchema.parse({ ...nextState, distanceState: setDistanceBetween({ distance: committedDistance, lastChangedPhase: "phase1", lastChangedRound: normalized.roundNumber, notes: input.notes, participantAId: proposal.attackerParticipantId, participantBId: proposal.defenderParticipantId, source: "maneuver", state: normalized.distanceState }) });
-  nextState = moveCombatRoundAdjustDistanceToNextAction({ proposal, state: nextState, updatedAt: input.command.createdAt });
+  nextState = combatRoundStateSchema.parse({
+    ...nextState,
+    distanceState: setDistanceBetween({
+      distance: committedDistance,
+      lastChangedPhase: "phase1",
+      lastChangedRound: normalized.roundNumber,
+      notes: input.notes,
+      participantAId: proposal.attackerParticipantId,
+      participantBId: proposal.defenderParticipantId,
+      source: "maneuver",
+      state: normalized.distanceState,
+    }),
+  });
+  nextState = moveCombatRoundAdjustDistanceToNextAction({
+    proposal,
+    state: nextState,
+    updatedAt: input.command.createdAt,
+  });
   return recordAdjustDistanceCommand({
     command: input.command,
     draftType: "adjust_distance_committed",
@@ -15991,8 +16332,10 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
       roundNumber: normalized.roundNumber,
       step: "review_phase_2_modifiers",
     });
-  const firstModifierReviewParticipantId =
-    getFirstCombatRoundPendingModifierReviewParticipantId({ phase: "phase2", state: normalized });
+  const firstModifierReviewParticipantId = getFirstCombatRoundPendingModifierReviewParticipantId({
+    phase: "phase2",
+    state: normalized,
+  });
   const afterCursor = getDefaultCombatRoundCursor({
     participantId: firstModifierReviewParticipantId,
     roundNumber: normalized.roundNumber,
@@ -16332,6 +16675,8 @@ function recordCombatRoundAttackCommand(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       ...(input.command.facts ?? {}),
+      actionId: input.result.actionId,
+      attackIndex: input.result.attackIndex,
       attackOpportunityId: input.result.attackOpportunityId,
       attackModeId: input.result.attackModeId,
       attackResultId: getCombatRoundAttackResultId({
@@ -16339,10 +16684,17 @@ function recordCombatRoundAttackCommand(input: {
         roundNumber: normalized.roundNumber,
       }),
       attackSlot: input.result.attackSlot,
+      declarationId: input.result.declarationId,
       defenderParticipantId: input.result.defenderParticipantId,
       defenderParryModifier: input.result.defenderParryModifier,
       grazing: input.result.grazing,
       hit: input.result.hit,
+      weaponInstanceId: input.result.weaponInstanceId,
+      weaponArmorClass: input.result.weaponArmorClass,
+      weaponDmb: input.result.weaponDmb,
+      weaponSourceId: input.result.weaponSourceId,
+      weaponSourceSlot: input.result.weaponSourceSlot,
+      weaponTemplateId: input.result.weaponTemplateId,
       ...(afterCursor.participantId
         ? {
             nextStepOpened: {
@@ -16392,13 +16744,19 @@ function recordCombatRoundAttackCommand(input: {
       facts: {
         involvedOutcome: {
           actionId: input.result.actionId,
+          attackIndex: input.result.attackIndex,
           attackModeId: input.result.attackModeId,
           attackOpportunityId: input.result.attackOpportunityId,
           attackSlot: input.result.attackSlot,
+          declarationId: input.result.declarationId,
           grazing: input.result.grazing,
           hit: input.result.hit,
           tableResult: input.result.tableResult,
           weaponName: input.result.weaponName,
+          weaponArmorClass: input.result.weaponArmorClass,
+          weaponDmb: input.result.weaponDmb,
+          weaponSourceId: input.result.weaponSourceId,
+          weaponTemplateId: input.result.weaponTemplateId,
         },
         publicOutcome: { grazing: input.result.grazing, hit: input.result.hit },
         rollerPrivate: {
@@ -16437,28 +16795,53 @@ export function recordCombatRoundAttackResult(input: {
 }): CombatRoundState {
   const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const normalized = combatRoundStateSchema.parse(input.state);
-  const opportunity = getCombatRoundPhaseAttackCandidates({
-    phase: input.result.phase,
-    state: normalized,
-  }).find((candidate) => candidate.participantId === input.participantId);
+  const opportunity = input.result.attackOpportunityId
+    ? getCombatRoundPhaseAttackCandidates({
+        phase: input.result.phase,
+        state: normalized,
+      }).find(
+        (candidate) =>
+          candidate.participantId === input.participantId &&
+          candidate.id === input.result.attackOpportunityId,
+      )
+    : undefined;
+  const opportunityIdentity = opportunity
+    ? getCanonicalAttackOpportunityIdentity({
+        actionId: input.result.actionId,
+        attackerParticipantId: input.participantId,
+        opportunity,
+        roundNumber: normalized.roundNumber,
+      })
+    : undefined;
   const recordedResult = combatRoundAttackRollResultSchema.parse({
     ...input.result,
-    attackModeId: input.result.attackModeId ?? opportunity?.attackModeId,
-    attackOpportunityId:
-      input.result.attackOpportunityId ??
-      (opportunity?.origin === "double_attack" ? opportunity.id : undefined),
-    attackSlot:
-      input.result.attackSlot ??
-      (opportunity?.origin === "double_attack" ? opportunity.slot : undefined),
+    attackIndex: input.result.attackIndex ?? opportunityIdentity?.attackIndex,
+    attackModeId: input.result.attackModeId ?? opportunityIdentity?.attackModeId,
+    attackOpportunityId: input.result.attackOpportunityId ?? opportunityIdentity?.opportunityId,
+    attackSlot: input.result.attackSlot ?? opportunity?.slot,
+    declarationId: input.result.declarationId ?? opportunityIdentity?.declarationId,
+    weaponInstanceId: input.result.weaponInstanceId ?? opportunityIdentity?.weaponInstanceId,
+    weaponSourceId: input.result.weaponSourceId ?? opportunityIdentity?.weaponSourceId,
+    weaponSourceSlot: input.result.weaponSourceSlot ?? opportunityIdentity?.weaponSourceSlot,
+    weaponTemplateId: input.result.weaponTemplateId ?? opportunityIdentity?.weaponTemplateId,
   });
-  const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
-    participantId: input.participantId,
-    phase: input.result.phase,
-    state: normalized,
-  });
+  const existingAttackResult = recordedResult.attackOpportunityId
+    ? getCombatRoundAttackResultForOpportunity({
+        opportunityId: recordedResult.attackOpportunityId,
+        state: normalized,
+      })
+    : getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: input.participantId,
+        phase: input.result.phase,
+        state: normalized,
+      });
 
   if (existingAttackResult) {
-    throw new RangeError("Attack already rolled for this participant and phase.");
+    throw new RangeError(
+      recordedResult.attackOpportunityId
+        ? "Attack already rolled for this opportunity."
+        : "Attack already rolled for this participant and phase.",
+    );
   }
 
   const withResult: CombatRoundState = {
@@ -16467,6 +16850,12 @@ export function recordCombatRoundAttackResult(input: {
       participant.participantId === input.participantId
         ? {
             ...participant,
+            attackResultsByOpportunity: recordedResult.attackOpportunityId
+              ? {
+                  ...(participant.attackResultsByOpportunity ?? {}),
+                  [recordedResult.attackOpportunityId]: recordedResult,
+                }
+              : participant.attackResultsByOpportunity,
             attackResults: {
               ...participant.attackResults,
               [recordedResult.phase]: recordedResult,
@@ -16841,7 +17230,17 @@ function clearCombatRoundStepLegacy(input: {
     phaseResolutionStatuses: nextPhaseResolutionStatuses,
     participants: normalized.participants.map((participant) => {
       const nextAttackResults = { ...participant.attackResults };
+      const nextAttackResultsByOpportunity = {
+        ...(participant.attackResultsByOpportunity ?? {}),
+      };
       const nextInitiatives = { ...participant.initiatives };
+
+      if (
+        participant.participantId === selectedAttackResultForClear?.attackerParticipantId &&
+        selectedAttackResultForClear.attackOpportunityId
+      ) {
+        delete nextAttackResultsByOpportunity[selectedAttackResultForClear.attackOpportunityId];
+      }
 
       if (
         input.step === "phase_1_actions" &&
@@ -16918,6 +17317,9 @@ function clearCombatRoundStepLegacy(input: {
 
       return {
         ...participant,
+        attackResultsByOpportunity: Object.keys(nextAttackResultsByOpportunity).length
+          ? nextAttackResultsByOpportunity
+          : undefined,
         attackResults: nextAttackResults,
         declaration:
           input.step === "select_actions" && participant.participantId === selectedParticipantId
@@ -18702,8 +19104,7 @@ function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
     phaseResolutionCursor: undefined,
-    selectedParticipantId:
-      command.beforeCursor.participantId ?? normalized.selectedParticipantId,
+    selectedParticipantId: command.beforeCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
     stepSnapshots: previousStepSnapshots,
   });

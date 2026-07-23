@@ -61,8 +61,10 @@ import {
   createCombatParticipantPairKey,
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
+  getCombatRoundAttackResultForOpportunity,
   getCombatRoundAttackResultId,
   getCombatRoundCriticalResultId,
+  getCanonicalAttackOpportunityIdentity,
   getCombatRoundDamageReviewId,
   getCombatRoundGrazeDamageRollContext,
   getCombatRoundCombatExperienceDifficulty,
@@ -74,7 +76,6 @@ import {
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundHitLocationResultId,
   getSingleAttackDeclaredDistanceForPenalty,
-  getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackCandidates,
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
@@ -143,6 +144,7 @@ import type {
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
   CombatDistanceWeaponLike,
+  CombatRoundAttackOpportunity,
   CombatRoundAttackResults,
   CombatRoundCommand,
   CombatRoundEndDistanceControlSide,
@@ -910,7 +912,10 @@ function parseNonEmptyString(value: unknown, label: string): string {
 }
 
 function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity & {
-  actionId?: string;
+  actionId: string;
+  attackIndex: number;
+  attackModeId: string;
+  declarationId: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
   defenderModifierFingerprint?: string;
@@ -918,13 +923,14 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
   modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
-  opportunityId?: string;
+  opportunityId: string;
   attackerModifierFingerprint?: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
-  weaponCriticalCode?: string;
-  weaponDamageClass?: string;
-  weaponName?: string;
+  weaponInstanceId?: string;
+  weaponSourceId: string;
+  weaponSourceSlot: CombatAttackSourceRef["slot"];
+  weaponTemplateId: string;
 } {
   const value = parseBodyObject(body, "Combat attack payload");
   const parsed = parseParticipantCommandBody(value, "Combat attack payload");
@@ -933,22 +939,7 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     "defenderParticipantId",
   );
   const phase = combatRoundPhaseSchema.parse(value.phase);
-  const actionId =
-    typeof value.actionId === "string" && value.actionId.trim().length > 0
-      ? value.actionId
-      : undefined;
-  const weaponName =
-    typeof value.weaponName === "string" && value.weaponName.trim().length > 0
-      ? value.weaponName
-      : undefined;
-  const weaponCriticalCode =
-    typeof value.weaponCriticalCode === "string" && value.weaponCriticalCode.trim().length > 0
-      ? value.weaponCriticalCode
-      : undefined;
-  const weaponDamageClass =
-    typeof value.weaponDamageClass === "string" && value.weaponDamageClass.trim().length > 0
-      ? value.weaponDamageClass
-      : undefined;
+  const actionId = parseNonEmptyString(value.actionId, "actionId");
   const modifierValidationTaskId =
     typeof value.modifierValidationTaskId === "string" &&
     value.modifierValidationTaskId.trim().length > 0
@@ -967,6 +958,9 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
     actionId,
+    attackIndex: parseInteger(value.attackIndex, "attackIndex"),
+    attackModeId: parseNonEmptyString(value.attackModeId, "attackModeId"),
+    declarationId: parseNonEmptyString(value.declarationId, "declarationId"),
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
     defenderModifierFingerprint,
@@ -974,15 +968,22 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     modifierValidationTaskId,
     ob: parseInteger(value.ob, "ob"),
     obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
-    opportunityId:
-      value.opportunityId === undefined
-        ? undefined
-        : parseNonEmptyString(value.opportunityId, "opportunityId"),
+    opportunityId: parseNonEmptyString(value.opportunityId, "opportunityId"),
     attackerModifierFingerprint,
     phase,
-    weaponCriticalCode,
-    weaponDamageClass,
-    weaponName,
+    weaponInstanceId:
+      value.weaponInstanceId === undefined
+        ? undefined
+        : parseNonEmptyString(value.weaponInstanceId, "weaponInstanceId"),
+    weaponSourceId: parseNonEmptyString(value.weaponSourceId, "weaponSourceId"),
+    weaponSourceSlot: (() => {
+      const slot = value.weaponSourceSlot;
+      if (!["primary", "secondary", "throwing", "other", "virtual"].includes(String(slot))) {
+        throw new Error("weaponSourceSlot is required.");
+      }
+      return slot as CombatAttackSourceRef["slot"];
+    })(),
+    weaponTemplateId: parseNonEmptyString(value.weaponTemplateId, "weaponTemplateId"),
   };
 }
 
@@ -1195,12 +1196,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeWeaponName(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim().toLowerCase()
-    : undefined;
-}
-
 function getSnapshotEquipmentState(
   participant: ScenarioParticipant,
 ): Record<string, unknown> | undefined {
@@ -1333,6 +1328,10 @@ function resolveDeclaredWeaponSource(input: {
         attackModeId: string;
         itemId: string;
         repeatEligible: boolean;
+        weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
+        weaponCriticalCode?: string;
+        weaponDamageClass?: string;
+        weaponDmb?: number;
         weaponName: string;
         weaponSkill: string;
         weaponTemplateId: string;
@@ -1392,10 +1391,143 @@ function resolveDeclaredWeaponSource(input: {
       attackModeId: mode.id,
       itemId,
       repeatEligible: canRepeatWeaponAttackInRound(mode),
+      weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
+      weaponCriticalCode:
+        mode.crit && mode.secondCrit ? `${mode.crit}${mode.secondCrit}` : (mode.crit ?? undefined),
+      weaponDamageClass: mode.damageClass ?? undefined,
+      weaponDmb: mode.dmb ?? undefined,
       weaponName: template.name,
       weaponSkill: template.weaponSkill,
       weaponTemplateId: template.id,
     },
+  };
+}
+
+function buildDeclaredAttackOpportunitySource(input: {
+  source: CombatAttackSourceRef;
+  weapon?: {
+    attackModeId: string;
+    itemId: string;
+    weaponTemplateId: string;
+  };
+}) {
+  return input.source.sourceKind === "weapon" && input.weapon
+    ? {
+        attackModeId: input.weapon.attackModeId,
+        itemId: input.weapon.itemId,
+        sourceKind: "weapon" as const,
+        weaponInstanceId: input.weapon.itemId,
+        weaponSourceSlot: input.source.slot,
+        weaponTemplateId: input.weapon.weaponTemplateId,
+      }
+    : {
+        attackModeId: input.source.attackModeId,
+        sourceKind: "unarmed" as const,
+        weaponSourceSlot: "virtual" as const,
+        weaponTemplateId: input.source.templateId,
+      };
+}
+
+function buildAttackSourceRefFromDeclaredOpportunity(
+  opportunity: CombatRoundAttackOpportunity | undefined,
+): CombatAttackSourceRef | undefined {
+  if (
+    !opportunity?.attackModeId ||
+    !opportunity.weaponTemplateId ||
+    !opportunity.weaponSourceSlot
+  ) {
+    return undefined;
+  }
+  if (opportunity.sourceKind === "unarmed") {
+    if (opportunity.weaponSourceSlot !== "virtual") return undefined;
+    return {
+      attackModeId: opportunity.attackModeId,
+      opportunitySlot: opportunity.slot,
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: opportunity.weaponTemplateId,
+    };
+  }
+  const itemId = opportunity.weaponInstanceId ?? opportunity.itemId;
+  if (
+    opportunity.sourceKind !== "weapon" ||
+    !itemId ||
+    opportunity.weaponSourceSlot === "virtual"
+  ) {
+    return undefined;
+  }
+  return {
+    attackModeId: opportunity.attackModeId,
+    opportunitySlot: opportunity.slot,
+    scenarioItemId: itemId,
+    slot: opportunity.weaponSourceSlot,
+    sourceKind: "weapon",
+    templateId: opportunity.weaponTemplateId,
+  };
+}
+
+function resolveCanonicalAttackOpportunityWeaponFacts(input: {
+  opportunity: ReturnType<typeof getCombatRoundPhaseAttackCandidates>[number];
+  participant: ScenarioParticipant;
+}):
+  | {
+      attackModeId: string;
+      weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
+      weaponCriticalCode?: string;
+      weaponDamageClass?: string;
+      weaponDmb?: number;
+      weaponName: string;
+    }
+  | undefined {
+  if (
+    !input.opportunity.attackModeId ||
+    !input.opportunity.weaponTemplateId ||
+    !input.opportunity.weaponSourceSlot
+  ) {
+    return undefined;
+  }
+  if (input.opportunity.sourceKind === "weapon") {
+    const itemId = input.opportunity.weaponInstanceId ?? input.opportunity.itemId;
+    if (!itemId || input.opportunity.weaponSourceSlot === "virtual") return undefined;
+    const resolution = resolveDeclaredWeaponSource({
+      participant: input.participant,
+      phaseLabel: input.opportunity.phase === "phase1" ? "Phase 1" : "Phase 2",
+      source: {
+        attackModeId: input.opportunity.attackModeId,
+        opportunitySlot: input.opportunity.slot,
+        scenarioItemId: itemId,
+        slot: input.opportunity.weaponSourceSlot,
+        sourceKind: "weapon",
+        templateId: input.opportunity.weaponTemplateId,
+      },
+    });
+    return resolution.ok
+      ? {
+          attackModeId: resolution.source.attackModeId,
+          weaponArmorClass: resolution.source.weaponArmorClass,
+          weaponCriticalCode: resolution.source.weaponCriticalCode,
+          weaponDamageClass: resolution.source.weaponDamageClass,
+          weaponDmb: resolution.source.weaponDmb,
+          weaponName: resolution.source.weaponName,
+        }
+      : undefined;
+  }
+  if (input.opportunity.sourceKind !== "unarmed") return undefined;
+  const template = [punchTemplate, kickTemplate].find(
+    (candidate) => candidate.id === input.opportunity.weaponTemplateId,
+  );
+  const mode = template?.attackModes?.find(
+    (candidate) => candidate.id === input.opportunity.attackModeId,
+  );
+  if (!template || !mode) return undefined;
+  return {
+    attackModeId: mode.id,
+    weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
+    weaponCriticalCode:
+      mode.crit && mode.secondCrit ? `${mode.crit}${mode.secondCrit}` : (mode.crit ?? undefined),
+    weaponDamageClass: mode.damageClass ?? undefined,
+    weaponDmb: mode.dmb ?? undefined,
+    weaponName: template.name,
   };
 }
 
@@ -1415,47 +1547,6 @@ function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): Wea
   return candidateWeaponItemIds
     .map((itemId) => getEquipmentItemTemplate({ itemId, itemsById, templatesById }))
     .filter((template): template is WeaponTemplate => Boolean(template));
-}
-
-function findAttackWeaponTemplateByName(input: {
-  participant: ScenarioParticipant;
-  weaponName?: string;
-}): WeaponTemplate | undefined {
-  const weaponName = normalizeWeaponName(input.weaponName);
-
-  if (!weaponName) {
-    return undefined;
-  }
-
-  const candidates = [
-    ...getSnapshotActiveWeaponTemplates(input.participant),
-    ...getSnapshotWeaponTemplates(input.participant),
-    ...weaponTemplates,
-  ];
-  const exactMatch = candidates.find(
-    (template) => normalizeWeaponName(template.name) === weaponName,
-  );
-
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  return candidates.find((template) => {
-    const templateName = normalizeWeaponName(template.name);
-
-    return (
-      Boolean(templateName) &&
-      (weaponName.startsWith(`${templateName} `) || weaponName.startsWith(`${templateName}+`))
-    );
-  });
-}
-
-function getDefaultAttackWeaponTemplate(
-  participant: ScenarioParticipant,
-): WeaponTemplate | undefined {
-  return (
-    getSnapshotActiveWeaponTemplates(participant)[0] ?? getSnapshotWeaponTemplates(participant)[0]
-  );
 }
 
 function participantAliasesInclude(input: {
@@ -1702,7 +1793,7 @@ function buildCombatActionDistanceModifierInputs(input: {
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phase: "phase1" | "phase2";
-  phaseWeaponName?: string;
+  phaseAttackSource?: CombatAttackSourceRef;
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
 }): CombatActionGeneratedDistanceModifierInput | undefined {
@@ -1726,11 +1817,19 @@ function buildCombatActionDistanceModifierInputs(input: {
     return undefined;
   }
 
+  const source = input.phaseAttackSource;
+  if (!source) return undefined;
   const weaponTemplate =
-    findAttackWeaponTemplateByName({
-      participant: input.scenarioParticipant,
-      weaponName: input.phaseWeaponName,
-    }) ?? getDefaultAttackWeaponTemplate(input.scenarioParticipant);
+    source.sourceKind === "unarmed"
+      ? [punchTemplate, kickTemplate].find((template) => template.id === source.templateId)
+      : [
+          ...getSnapshotActiveWeaponTemplates(input.scenarioParticipant),
+          ...getSnapshotWeaponTemplates(input.scenarioParticipant),
+          ...weaponTemplates,
+        ].find((template) => template.id === source.templateId);
+  if (!weaponTemplate?.attackModes?.some((mode) => mode.id === source.attackModeId)) {
+    return undefined;
+  }
   const preferredDistances = getWeaponPreferredDistances(weaponTemplate ?? {});
 
   if (preferredDistances.length === 0) {
@@ -1751,7 +1850,7 @@ function buildCombatActionDistanceModifierInputs(input: {
     phase: input.phase,
     preferredDistances,
     sourceActionId: input.actionId,
-    weaponName: weaponTemplate?.name ?? input.phaseWeaponName,
+    weaponName: weaponTemplate.name,
   };
 }
 
@@ -1760,7 +1859,7 @@ function buildCombatActionDistanceModifierInputsForDeclaration(input: {
   encounterParticipant: EncounterSession["participants"][number];
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
-  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
+  phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef | undefined>>;
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
@@ -1776,7 +1875,7 @@ function buildCombatActionDistanceModifierInputsForDeclaration(input: {
         movementIntent: input.movementIntent,
         phase,
         phaseContexts: input.phaseContexts,
-        phaseWeaponName: input.phaseWeaponNames?.[phase],
+        phaseAttackSource: input.phaseAttackSources?.[phase],
         roundState: input.roundState,
         scenarioParticipant: input.scenarioParticipant,
       }),
@@ -1844,7 +1943,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
   encounterParticipant: EncounterSession["participants"][number];
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
-  phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
+  phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef | undefined>>;
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
@@ -1866,7 +1965,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
       encounterParticipant: input.encounterParticipant,
       movementIntent: input.movementIntent,
       phaseContexts: input.phaseContexts,
-      phaseWeaponNames: input.phaseWeaponNames,
+      phaseAttackSources: input.phaseAttackSources,
       roundState: input.roundState,
       scenarioParticipant: input.scenarioParticipant,
       secondaryActionId: input.secondaryActionId,
@@ -1926,6 +2025,14 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
       encounterParticipant,
       movementIntent: declaration.movementIntent,
       phaseContexts: declaration.phaseContexts,
+      phaseAttackSources: {
+        phase1: buildAttackSourceRefFromDeclaredOpportunity(
+          declaration.attackOpportunities?.find((opportunity) => opportunity.phase === "phase1"),
+        ),
+        phase2: buildAttackSourceRefFromDeclaredOpportunity(
+          declaration.attackOpportunities?.find((opportunity) => opportunity.phase === "phase2"),
+        ),
+      },
       roundState: input.roundState,
       scenarioParticipant,
       secondaryActionId: declaration.secondaryActionId,
@@ -2561,6 +2668,18 @@ function sanitizePlayerSafeCurrentCombatResultsState(input: {
     ...input.state,
     participants: input.state.participants.map((participant) => ({
       ...participant,
+      attackResultsByOpportunity: participant.attackResultsByOpportunity
+        ? Object.fromEntries(
+            Object.entries(participant.attackResultsByOpportunity).filter(([, result]) =>
+              isPlayerVisibleCombatRoundResultPair({
+                attackerParticipantId: result.attackerParticipantId,
+                controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+                defenderParticipantId: result.defenderParticipantId,
+                visibleParticipantIds: input.visibleParticipantIds,
+              }),
+            ),
+          )
+        : undefined,
       attackResults: sanitizePlayerSafeCurrentCombatAttackResults({
         attackResults: participant.attackResults,
         controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
@@ -3258,7 +3377,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             encounterParticipant,
             movementIntent: body.movementIntent,
             phaseContexts: submittedPhaseContexts,
-            phaseWeaponNames: body.phaseWeaponNames,
+            phaseAttackSources: body.phaseAttackSources,
             roundState,
             scenarioParticipant,
             secondaryActionId: body.secondaryActionId,
@@ -3482,7 +3601,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           }),
           phase2: scenarioParticipantCombatContextSchema.parse({
             ...submittedPhaseContexts?.phase2,
-            attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
+            attackModeId: phase2WeaponResolution?.source.attackModeId ?? phase2Source.attackModeId,
             targetParticipantId: canonicalTargetParticipantId,
           }),
         };
@@ -3492,13 +3611,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phaseContexts: contexts,
           roundNumber: roundState.roundNumber,
           sources: {
-            phase2: phase2WeaponResolution?.source
-              ? { ...phase2WeaponResolution.source, sourceKind: "weapon" }
-              : {
-                  attackModeId: "mode-1",
-                  sourceKind: "unarmed",
-                  weaponTemplateId: phase2Source.templateId,
-                },
+            phase2: buildDeclaredAttackOpportunitySource({
+              source: phase2Source,
+              weapon: phase2WeaponResolution?.source,
+            }),
           },
         });
         declarationPhaseContexts = contexts;
@@ -3616,20 +3732,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phaseContexts: feintPhaseContexts,
           roundNumber: roundState.roundNumber,
           sources: {
-            phase2: phase2WeaponResolution?.source
-              ? { ...phase2WeaponResolution.source, sourceKind: "weapon" }
-              : {
-                  attackModeId: "mode-1",
-                  sourceKind: "unarmed",
-                  weaponTemplateId: phase2Source.templateId,
-                },
+            phase2: buildDeclaredAttackOpportunitySource({
+              source: phase2Source,
+              weapon: phase2WeaponResolution?.source,
+            }),
           },
         });
         declarationPhaseContexts = {
           ...feintPhaseContexts,
           phase2: {
             ...feintPhaseContexts.phase2,
-            attackModeId: phase2WeaponResolution?.source.attackModeId ?? "mode-1",
+            attackModeId: phase2WeaponResolution?.source.attackModeId ?? phase2Source.attackModeId,
           },
         };
         declarationFeint = {
@@ -3712,36 +3825,78 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phaseContexts: submittedPhaseContexts,
           roundNumber: roundState.roundNumber,
           sources: {
-            phase1: phase1Weapon
-              ? { ...phase1Weapon, sourceKind: "weapon" }
-              : {
-                  attackModeId: "mode-1",
-                  sourceKind: "unarmed",
-                  weaponTemplateId: phase1Source.templateId,
-                },
-            phase2: phase2Weapon
-              ? { ...phase2Weapon, sourceKind: "weapon" }
-              : {
-                  attackModeId: "mode-1",
-                  sourceKind: "unarmed",
-                  weaponTemplateId: phase2Source.templateId,
-                },
+            phase1: buildDeclaredAttackOpportunitySource({
+              source: phase1Source,
+              weapon: phase1Weapon,
+            }),
+            phase2: buildDeclaredAttackOpportunitySource({
+              source: phase2Source,
+              weapon: phase2Weapon,
+            }),
           },
         });
         declarationPhaseContexts = {
           phase1: submittedPhaseContexts?.phase1
             ? {
                 ...submittedPhaseContexts.phase1,
-                attackModeId: phase1Weapon?.attackModeId ?? "mode-1",
+                attackModeId: phase1Weapon?.attackModeId ?? phase1Source.attackModeId,
               }
             : undefined,
           phase2: submittedPhaseContexts?.phase2
             ? {
                 ...submittedPhaseContexts.phase2,
-                attackModeId: phase2Weapon?.attackModeId ?? "mode-1",
+                attackModeId: phase2Weapon?.attackModeId ?? phase2Source.attackModeId,
               }
             : undefined,
         };
+      } else {
+        const attackPhases = getCombatDeclarationAttackPhases({
+          actionId: body.actionId,
+          secondaryActionId: body.secondaryActionId,
+        });
+        if (attackPhases.length > 0) {
+          const sources: Parameters<
+            typeof buildCombatRoundDeclaredAttackOpportunities
+          >[0]["sources"] = {};
+          for (const phase of attackPhases) {
+            const source = body.phaseAttackSources?.[phase];
+            const phaseLabel = phase === "phase1" ? "Phase 1" : "Phase 2";
+            if (!source) {
+              return reply.code(400).send({
+                error: `${phaseLabel} attack source is required.`,
+              });
+            }
+            const weaponResolution =
+              source.sourceKind === "weapon"
+                ? resolveDeclaredWeaponSource({
+                    participant: scenarioParticipant,
+                    phaseLabel,
+                    source,
+                  })
+                : undefined;
+            if (weaponResolution && !weaponResolution.ok) {
+              return reply.code(400).send({ error: weaponResolution.error });
+            }
+            if (
+              source.sourceKind === "unarmed" &&
+              !new Set([punchTemplate.id, kickTemplate.id]).has(source.templateId)
+            ) {
+              return reply.code(400).send({ error: `Select a legal ${phaseLabel} attack source.` });
+            }
+            sources[phase] = buildDeclaredAttackOpportunitySource({
+              source,
+              weapon: weaponResolution?.source,
+            });
+          }
+          attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+            actionId: body.actionId,
+            participantId: encounterParticipant.id,
+            phaseContexts: submittedPhaseContexts,
+            roundNumber: roundState.roundNumber,
+            secondaryActionId: body.secondaryActionId,
+            sources,
+          });
+        }
       }
 
       const targetValidation = validateCombatDeclarationTargets({
@@ -6921,9 +7076,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? { kind: "gm" }
               : { kind: "combatant", participantId: encounterParticipant.id },
           commandType: "roll_attack",
+          attackIndex: body.attackIndex,
+          attackModeId: body.attackModeId,
+          declarationId: body.declarationId,
           opportunityId: body.opportunityId,
           participantId: encounterParticipant.id,
           phase: body.phase,
+          weaponInstanceId: body.weaponInstanceId,
+          weaponSourceId: body.weaponSourceId,
+          weaponSourceSlot: body.weaponSourceSlot,
+          weaponTemplateId: body.weaponTemplateId,
         },
         encounterRevision: encounter.updatedAt,
         identity: body,
@@ -6948,9 +7110,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Combat modifiers changed. Refresh combat before rolling.",
         });
       }
-      const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
-        participantId: encounterParticipant.id,
-        phase: body.phase,
+      const existingAttackResult = getCombatRoundAttackResultForOpportunity({
+        opportunityId: body.opportunityId,
         state: roundState,
       });
 
@@ -6963,9 +7124,35 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerRoundParticipant = roundState.participants.find(
         (participant) => participant.participantId === encounterParticipant.id,
       );
-      const declaredOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
-        (opportunity) => opportunity.phase === body.phase && opportunity.status === "committed",
+      const declaredOpportunity = getCombatRoundPhaseAttackCandidates({
+        phase: body.phase,
+        state: roundState,
+      }).find(
+        (opportunity) =>
+          opportunity.participantId === encounterParticipant.id &&
+          opportunity.id === body.opportunityId &&
+          opportunity.status === "committed",
       );
+      const canonicalOpportunityIdentity = declaredOpportunity
+        ? getCanonicalAttackOpportunityIdentity({
+            actionId: attackerRoundParticipant?.declaration?.actionId,
+            attackerParticipantId: encounterParticipant.id,
+            opportunity: declaredOpportunity,
+            roundNumber: roundState.roundNumber,
+          })
+        : undefined;
+      const canonicalWeaponFacts = declaredOpportunity
+        ? resolveCanonicalAttackOpportunityWeaponFacts({
+            opportunity: declaredOpportunity,
+            participant: scenarioParticipant,
+          })
+        : undefined;
+      if (!declaredOpportunity || !canonicalOpportunityIdentity || !canonicalWeaponFacts) {
+        return reply.code(409).send({
+          code: "identity_mismatch",
+          error: `The ${body.phase === "phase1" ? "Phase 1" : "Phase 2"} attack source or mode is unavailable.`,
+        });
+      }
       const declaredTargetId =
         (attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
         body.phase === "phase2"
@@ -7017,7 +7204,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.defenseSummary,
         );
-      const weaponName = latestAttackerSnapshot?.attackSummary?.weaponName ?? body.weaponName;
+      const weaponName = canonicalWeaponFacts.weaponName;
       const defenderDb =
         parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
         body.defenderDb;
@@ -7029,15 +7216,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
-      const actionId =
-        body.actionId ?? attackerRoundParticipant?.declaration?.actionId ?? `${body.phase}_attack`;
+      const actionId = canonicalOpportunityIdentity.actionId;
       const canonicalModifierFacts = resolveCanonicalCombatAttackModifierFacts({
         attackerCombatantId: encounterParticipant.id,
         attackerScenarioParticipant: scenarioParticipant,
         defenderCombatantId: defenderEncounterParticipant.id,
         defenderScenarioParticipant,
         encounterId,
-        opportunityId: declaredOpportunity?.id,
+        opportunityId: canonicalOpportunityIdentity.opportunityId,
         phase: body.phase,
         state: roundState,
       });
@@ -7086,7 +7272,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
+        attackIndex: canonicalOpportunityIdentity.attackIndex,
+        attackModeId: canonicalOpportunityIdentity.attackModeId,
+        attackOpportunityId: canonicalOpportunityIdentity.opportunityId,
+        attackSlot: declaredOpportunity.slot,
         attackerParticipantId: encounterParticipant.id,
+        declarationId: canonicalOpportunityIdentity.declarationId,
         defenderDb,
         defenderParticipantId: defenderEncounterParticipant.id,
         ob: body.ob,
@@ -7096,9 +7287,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rollTotal: roll.rollTotal,
         rolledAt: submittedAt,
         rolledByUserId: user.id,
-        weaponCriticalCode: body.weaponCriticalCode,
-        weaponDamageClass: body.weaponDamageClass,
+        weaponArmorClass: canonicalWeaponFacts.weaponArmorClass,
+        weaponCriticalCode: canonicalWeaponFacts.weaponCriticalCode,
+        weaponDamageClass: canonicalWeaponFacts.weaponDamageClass,
+        weaponDmb: canonicalWeaponFacts.weaponDmb,
+        weaponInstanceId: canonicalOpportunityIdentity.weaponInstanceId,
         weaponName,
+        weaponSourceId: canonicalOpportunityIdentity.weaponSourceId,
+        weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
+        weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
       });
       const nextRoundState = recordCombatRoundAttackResult({
         command: {
@@ -7598,7 +7795,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === attackResult.phase &&
             snapshot.defenseSummary,
         );
-      const dmb = parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
+      // Snapshot fallback is read compatibility for pre-lineage attacks only. New live results
+      // persist the exact opportunity's weapon inputs and never select by participant + phase.
+      const dmb =
+        attackResult.weaponDmb ??
+        parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
       const defenderDm = parseCombatSummaryInteger(
         latestDefenderSnapshot?.defenseSummary?.dm,
         "Defender DM",
@@ -7615,9 +7816,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         equipmentState: defenderScenarioParticipant?.snapshot.equipmentState,
         fallbackTemplatesById: equipmentTemplatesById,
       });
-      const weaponArmorClass = normalizeCombatArmorModifierClass(
-        latestAttackerSnapshot?.attackSummary?.attackMode,
-      );
+      const weaponArmorClass =
+        attackResult.weaponArmorClass ??
+        normalizeCombatArmorModifierClass(latestAttackerSnapshot?.attackSummary?.attackMode);
       const damageProposal =
         dmb !== undefined && defenderDm !== undefined
           ? {
@@ -7796,7 +7997,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === attackResult.phase &&
             snapshot.defenseSummary,
         );
-      const dmb = parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
+      // Snapshot fallback is historical compatibility for results recorded before canonical
+      // attack-source lineage was persisted.
+      const dmb =
+        attackResult.weaponDmb ??
+        parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
       const defenderDm = parseCombatSummaryInteger(
         latestDefenderSnapshot?.defenseSummary?.dm,
         "Defender DM",
@@ -7837,9 +8042,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",
         updatedAt: submittedAt,
-        weaponArmorClass: normalizeCombatArmorModifierClass(
-          latestAttackerSnapshot?.attackSummary?.attackMode,
-        ),
+        weaponArmorClass:
+          attackResult.weaponArmorClass ??
+          normalizeCombatArmorModifierClass(latestAttackerSnapshot?.attackSummary?.attackMode),
       });
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,

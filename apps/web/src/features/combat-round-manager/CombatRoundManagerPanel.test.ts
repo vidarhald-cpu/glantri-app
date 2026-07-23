@@ -552,8 +552,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("onScenarioParticipantsUpdated?.([participant])");
     expect(source).toContain("defenderParticipantId: targetIdentity.encounterParticipantId");
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
-    expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
-    expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
+    expect(source).toContain("attackModeId: descriptor.attackModeId!");
+    expect(source).toContain("opportunityId: descriptor.opportunityId!");
+    expect(source).toContain("weaponSourceId: descriptor.weaponSourceId!");
+    expect(source).not.toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
+    expect(source).not.toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
     expect(source).toContain("obSkillRaw: getMergedCombatSkillObModifierTotal({");
     expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
     expect(source).not.toContain("completeInspectorPhaseResolution");
@@ -967,10 +970,7 @@ describe("CombatRoundManagerPanel", () => {
     const rollStart = source.indexOf(
       "async function rollRoundEndDistanceControlFromPrimaryAction(",
     );
-    const rollEnd = source.indexOf(
-      "function invokeGmCurrentAction",
-      rollStart,
-    );
+    const rollEnd = source.indexOf("function invokeGmCurrentAction", rollStart);
     const rollHandler = source.slice(rollStart, rollEnd);
 
     expect(rollStart).toBeGreaterThan(-1);
@@ -1128,9 +1128,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty",
     );
-    expect(source).toContain(
-      'inspectorCurrentCommandType === "set_combat_experience_difficulty"',
-    );
+    expect(source).toContain('inspectorCurrentCommandType === "set_combat_experience_difficulty"');
     expect(source).toContain("const inspectorCombatExperienceActionLabel =");
     expect(source).toContain("const combatExperienceDifficultyControlsDisabled =");
     expect(source).toContain("Start Combat Experience rolls");
@@ -1220,15 +1218,10 @@ describe("CombatRoundManagerPanel", () => {
   it("routes a projected phase Combat Experience task through the CE mutation", () => {
     const source = readSource();
     const dispatchStart = source.indexOf('case "submit_phase_initiative_choice"');
-    const dispatchEnd = source.indexOf(
-      'case "set_combat_experience_difficulty"',
-      dispatchStart,
-    );
+    const dispatchEnd = source.indexOf('case "set_combat_experience_difficulty"', dispatchStart);
     const phaseChoiceDispatch = source.slice(dispatchStart, dispatchEnd);
 
-    expect(source).toContain(
-      'currentActionPresentation?.taskKind === "combat_experience"',
-    );
+    expect(source).toContain('currentActionPresentation?.taskKind === "combat_experience"');
     expect(phaseChoiceDispatch).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(phaseChoiceDispatch).toContain("rollInspectorCombatExperience(descriptor)");
   });

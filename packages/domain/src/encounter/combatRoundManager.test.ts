@@ -47,6 +47,9 @@ import {
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
   getCombatRoundAttackResultsForParticipantPhase,
+  getCombatRoundAttackResultForOpportunity,
+  getCombatRoundAttackResultId,
+  getCanonicalAttackOpportunityIdentity,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -409,6 +412,191 @@ describe("canonical Dodge resolution in round-end distance control", () => {
       generalFatigueModifier: -1,
       finalTotal: 20,
     });
+  });
+});
+
+describe("canonical attack opportunity lineage", () => {
+  const emptyContext = {
+    modifierBuckets: {
+      general: [],
+      situationDb: [],
+      situationInitiative: [],
+      situationObSkill: [],
+    },
+  };
+
+  it("creates stable, distinct Double Attack identities with explicit sources and indices", () => {
+    const input = {
+      actionId: "double_attack",
+      participantId: "hero",
+      phaseContexts: {
+        phase1: { ...emptyContext, targetParticipantId: "guard" },
+        phase2: { ...emptyContext, targetParticipantId: "guard" },
+      },
+      roundNumber: 3,
+      sources: {
+        phase1: {
+          attackModeId: "mode-2",
+          itemId: "hero-broad-sword",
+          sourceKind: "weapon" as const,
+          weaponInstanceId: "hero-broad-sword",
+          weaponSourceSlot: "primary" as const,
+          weaponTemplateId: "weapon-template-broad-sword",
+        },
+        phase2: {
+          attackModeId: "mode-2",
+          itemId: "hero-broad-sword",
+          sourceKind: "weapon" as const,
+          weaponInstanceId: "hero-broad-sword",
+          weaponSourceSlot: "primary" as const,
+          weaponTemplateId: "weapon-template-broad-sword",
+        },
+      },
+    };
+
+    const opportunities = buildCombatRoundDeclaredAttackOpportunities(input);
+    const reloaded = buildCombatRoundDeclaredAttackOpportunities(input);
+    const identities = opportunities.map((opportunity) =>
+      getCanonicalAttackOpportunityIdentity({
+        actionId: input.actionId,
+        attackerParticipantId: input.participantId,
+        opportunity,
+        roundNumber: input.roundNumber,
+      }),
+    );
+
+    expect(reloaded).toEqual(opportunities);
+    expect(opportunities.map((opportunity) => opportunity.id)).toEqual([
+      "round:3:participant:hero:phase1:attack_1",
+      "round:3:participant:hero:phase2:attack_2",
+    ]);
+    expect(identities).toMatchObject([
+      {
+        attackIndex: 1,
+        attackModeId: "mode-2",
+        defenderParticipantId: "guard",
+        weaponSourceId: "weapon:hero-broad-sword",
+      },
+      {
+        attackIndex: 2,
+        attackModeId: "mode-2",
+        defenderParticipantId: "guard",
+        weaponSourceId: "weapon:hero-broad-sword",
+      },
+    ]);
+  });
+
+  it("keeps two same-phase attacks against one defender isolated by opportunity", () => {
+    const firstOpportunity = buildCombatRoundDeclaredAttackOpportunities({
+      actionId: "attack_parry",
+      participantId: "hero",
+      phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+      roundNumber: 1,
+      sources: {
+        phase1: {
+          attackModeId: "mode-1",
+          sourceKind: "unarmed",
+          weaponSourceSlot: "virtual",
+          weaponTemplateId: "virtual-weapon-template-punch",
+        },
+      },
+    })[0]!;
+    const secondOpportunity = buildCombatRoundDeclaredAttackOpportunities({
+      actionId: "attack_parry",
+      participantId: "rival",
+      phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+      roundNumber: 1,
+      sources: {
+        phase1: {
+          attackModeId: "mode-1",
+          sourceKind: "unarmed",
+          weaponSourceSlot: "virtual",
+          weaponTemplateId: "virtual-weapon-template-kick",
+        },
+      },
+    })[0]!;
+    const baseState = combatRoundStateSchema.parse({
+      currentStep: "phase_1_actions",
+      participants: [
+        {
+          declaration: {
+            actionId: "attack_parry",
+            attackOpportunities: [firstOpportunity],
+            phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "Hero",
+          participantId: "hero",
+        },
+        {
+          declaration: {
+            actionId: "attack_parry",
+            attackOpportunities: [secondOpportunity],
+            phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "Rival",
+          participantId: "rival",
+        },
+        { label: "Guard", participantId: "guard" },
+      ],
+      roundNumber: 1,
+    });
+    const record = (
+      state: typeof baseState,
+      participantId: "hero" | "rival",
+      opportunity: typeof firstOpportunity,
+      weaponName: string,
+    ) =>
+      recordCombatRoundAttackResult({
+        participantId,
+        result: buildCombatRoundAttackRollResult({
+          actionId: "attack_parry",
+          attackOpportunityId: opportunity.id,
+          attackerParticipantId: participantId,
+          defenderDb: 10,
+          defenderParticipantId: "guard",
+          ob: 10,
+          phase: "phase1",
+          rollD20: 10,
+          rollTotal: 10,
+          rolledAt: `2026-01-01T00:0${participantId === "hero" ? "1" : "2"}:00.000Z`,
+          weaponName,
+        }),
+        state,
+        submittedBy: "player",
+      });
+
+    const afterFirst = record(baseState, "hero", firstOpportunity, "Punch");
+    const afterSecond = record(afterFirst, "rival", secondOpportunity, "Kick");
+    const firstResult = getCombatRoundAttackResultForOpportunity({
+      opportunityId: firstOpportunity.id,
+      state: afterSecond,
+    });
+    const secondResult = getCombatRoundAttackResultForOpportunity({
+      opportunityId: secondOpportunity.id,
+      state: afterSecond,
+    });
+
+    expect(firstResult).toMatchObject({
+      attackOpportunityId: firstOpportunity.id,
+      attackerParticipantId: "hero",
+      defenderParticipantId: "guard",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+    });
+    expect(secondResult).toMatchObject({
+      attackOpportunityId: secondOpportunity.id,
+      attackerParticipantId: "rival",
+      defenderParticipantId: "guard",
+      weaponSourceId: "unarmed:virtual-weapon-template-kick",
+    });
+    expect(
+      firstResult && getCombatRoundAttackResultId({ result: firstResult, roundNumber: 1 }),
+    ).not.toBe(
+      secondResult && getCombatRoundAttackResultId({ result: secondResult, roundNumber: 1 }),
+    );
   });
 });
 

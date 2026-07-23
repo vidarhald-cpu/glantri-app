@@ -2286,12 +2286,12 @@ export default function ScenarioPlayerCombatPageContent({
             })
           : descriptor.commandType === "roll_adjust_distance"
             ? await rollCombatAdjustDistanceOnServer({
-              encounterId,
-              executionGroupId: descriptor.executionGroupId!,
-              expectedRevision: descriptor.expectedRevision,
-              proposalId: descriptor.proposalId,
-              scenarioParticipantId: descriptor.participantId,
-              taskId: descriptor.taskId,
+                encounterId,
+                executionGroupId: descriptor.executionGroupId!,
+                expectedRevision: descriptor.expectedRevision,
+                proposalId: descriptor.proposalId,
+                scenarioParticipantId: descriptor.participantId,
+                taskId: descriptor.taskId,
               })
             : undefined;
       if (!encounter) {
@@ -2567,6 +2567,13 @@ export default function ScenarioPlayerCombatPageContent({
       !descriptor.participantId ||
       !descriptor.opponentParticipantId ||
       !descriptor.opportunityId ||
+      !descriptor.actionId ||
+      !descriptor.attackIndex ||
+      !descriptor.attackModeId ||
+      !descriptor.declarationId ||
+      !descriptor.weaponSourceId ||
+      !descriptor.weaponSourceSlot ||
+      !descriptor.weaponTemplateId ||
       projectedRollTask?.id !== descriptor.taskId ||
       projectedRollTask.identity.opportunityId !== descriptor.opportunityId
     ) {
@@ -2629,11 +2636,14 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
-        actionId: selectedActionId || `${attackPhase}_attack`,
+        actionId: descriptor.actionId,
+        attackIndex: descriptor.attackIndex,
+        attackModeId: descriptor.attackModeId,
         attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
         defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: targetIdentity.encounterParticipantId,
+        declarationId: descriptor.declarationId,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: modifierRequest.expectedRevision,
@@ -2644,9 +2654,10 @@ export default function ScenarioPlayerCombatPageContent({
         phase: attackPhase,
         scenarioParticipantId: descriptor.participantId,
         taskId: descriptor.taskId,
-        weaponCriticalCode: phaseAttackStats.weaponCriticalCode,
-        weaponDamageClass: phaseAttackStats.weaponDamageClass,
-        weaponName: phaseAttackStats.weaponName,
+        weaponInstanceId: descriptor.weaponInstanceId,
+        weaponSourceId: descriptor.weaponSourceId,
+        weaponSourceSlot: descriptor.weaponSourceSlot,
+        weaponTemplateId: descriptor.weaponTemplateId,
       });
 
       if (participant) {
@@ -2861,9 +2872,7 @@ export default function ScenarioPlayerCombatPageContent({
       acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to roll graze damage.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll graze damage.");
     } finally {
       setSavingCombatContext(false);
     }

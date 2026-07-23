@@ -109,7 +109,7 @@ function findAttackWeaponTemplate(input: {
   ];
 
   if (!weaponName) {
-    return candidates[0];
+    return undefined;
   }
 
   return (
@@ -121,8 +121,7 @@ function findAttackWeaponTemplate(input: {
         Boolean(templateName) &&
         (weaponName.startsWith(`${templateName} `) || weaponName.startsWith(`${templateName}+`))
       );
-    }) ??
-    candidates[0]
+    })
   );
 }
 
@@ -161,11 +160,10 @@ function buildDistanceModifierInput(input: {
     return undefined;
   }
 
-  const targetParticipant =
-    findRoundParticipantByAlias({
-      id: targetParticipantId,
-      roundState: input.roundState,
-    }) ?? { participantId: targetParticipantId };
+  const targetParticipant = findRoundParticipantByAlias({
+    id: targetParticipantId,
+    roundState: input.roundState,
+  }) ?? { participantId: targetParticipantId };
   const distanceEdge = getDistanceEdgeBetweenParticipantAliases({
     participantA: input.encounterParticipant,
     participantB: targetParticipant,
@@ -232,10 +230,10 @@ function getCommittedDistanceRowsToPreserve(input: {
 
     return Boolean(
       phase &&
-        input.attackPhases.includes(phase) &&
-        input.phaseContexts?.[phase]?.targetParticipantId &&
-        !input.phaseWeaponNames?.[phase] &&
-        !recomputedDistancePhases.has(phase),
+      input.attackPhases.includes(phase) &&
+      input.phaseContexts?.[phase]?.targetParticipantId &&
+      !input.phaseWeaponNames?.[phase] &&
+      !recomputedDistancePhases.has(phase),
     );
   });
 }
@@ -270,9 +268,7 @@ export function projectCombatActionGeneratedModifiers(input: {
         scenarioParticipant: input.scenarioParticipant,
       }),
     )
-    .filter(
-      (entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined,
-    );
+    .filter((entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined);
   const committedDistanceRowsToPreserve = getCommittedDistanceRowsToPreserve({
     attackPhases,
     combatContext: input.combatContext,

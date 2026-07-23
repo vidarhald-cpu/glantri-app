@@ -19,12 +19,16 @@ export interface CombatPresentationReference {
 }
 
 export interface CurrentActionCommandDescriptor {
+  readonly actionId?: string;
+  readonly attackIndex?: number;
+  readonly attackModeId?: string;
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
+  readonly declarationId?: string;
   readonly defenderParticipantId?: string;
   readonly encounterId: string;
   readonly executionGroupId?: string;
@@ -40,6 +44,10 @@ export interface CurrentActionCommandDescriptor {
   readonly proposalId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
   readonly taskId: string;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId?: string;
+  readonly weaponSourceSlot?: string;
+  readonly weaponTemplateId?: string;
 }
 
 export interface CurrentActionPresentation {
@@ -663,12 +671,16 @@ export function buildCurrentActionPresentation(
       ? BOUNDARY_LABELS[task.transition?.currentBoundary ?? input.progression.boundary.kind]
       : phaseLabel(phase, input.progression.boundary.kind);
   const descriptor = Object.freeze({
+    actionId: task.identity.actionId,
+    attackIndex: task.identity.attackIndex,
+    attackModeId: task.identity.attackModeId,
     attackResultId: task.identity.attackResultId,
     attackerParticipantId: task.identity.attackerParticipantId,
     commandType: task.expectedCommand,
     criticalResultId: task.identity.criticalResultId,
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
+    declarationId: task.identity.declarationId,
     defenderParticipantId: task.identity.defenderParticipantId,
     encounterId: input.encounterId,
     executionGroupId: task.executionGroupId,
@@ -685,6 +697,10 @@ export function buildCurrentActionPresentation(
     proposalId: task.identity.proposalId,
     targetBoundary: task.transition?.targetBoundary,
     taskId: task.id,
+    weaponInstanceId: task.identity.weaponInstanceId,
+    weaponSourceId: task.identity.weaponSourceId,
+    weaponSourceSlot: task.identity.weaponSourceSlot,
+    weaponTemplateId: task.identity.weaponTemplateId,
   } satisfies CurrentActionCommandDescriptor);
   const summary = summaryFor({ action, actor, target, task });
   const requiredNow = requiredNowFor(task, status);

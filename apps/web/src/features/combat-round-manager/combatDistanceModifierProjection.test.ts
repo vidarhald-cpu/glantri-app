@@ -138,6 +138,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
         mode: "set_distance_preferences",
       },
       phaseContexts,
+      phaseWeaponNames: { phase1: "Broad sword" },
       resolvedEquipmentState: buildWeaponEquipmentState() as unknown as EquipmentFeatureState,
       roundState: buildRoundStateWithDistance(2),
     });
@@ -320,8 +321,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
     const browserVisibleTrace = {
       currentRoundNumber: 1,
       declarationExists: true,
-      declarationSituationObSkill:
-        declarationCombatContext.modifierBuckets.situationObSkill,
+      declarationSituationObSkill: declarationCombatContext.modifierBuckets.situationObSkill,
       finalCombatContext: projectedContext,
       finalRenderedModifierRows: modifierRows,
       finalRenderedSkillObSummary: skillObRow?.total,

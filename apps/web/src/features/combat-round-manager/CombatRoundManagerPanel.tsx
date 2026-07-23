@@ -2449,9 +2449,9 @@ function getLongestPreferredDistanceForWeaponName(input: {
     input.participant,
     input.resolvedEquipmentState ?? undefined,
   );
-  const weapon =
-    activeWeapons.find((candidate) => normalizeCombatWeaponName(candidate.name) === weaponName) ??
-    activeWeapons[0];
+  const weapon = activeWeapons.find(
+    (candidate) => normalizeCombatWeaponName(candidate.name) === weaponName,
+  );
   const distances = getWeaponPreferredDistances(weapon);
 
   return distances.at(-1);
@@ -7061,7 +7061,11 @@ export default function CombatRoundManagerPanel({
   async function saveInspectorDeclaration(candidate?: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
-      expectedCommandTypes: ["declare_action", "review_modifiers_phase1", "review_modifiers_phase2"],
+      expectedCommandTypes: [
+        "declare_action",
+        "review_modifiers_phase1",
+        "review_modifiers_phase2",
+      ],
       presentation: currentActionPresentation,
       requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
     });
@@ -7150,8 +7154,11 @@ export default function CombatRoundManagerPanel({
       const displayedParticipantIds = displayParticipants.map(
         (participant) => participant.participantId,
       );
-      const { commandEnvelope, encounter: nextEncounter, participant } =
-        await submitCombatDeclarationOnServer({
+      const {
+        commandEnvelope,
+        encounter: nextEncounter,
+        participant,
+      } = await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
         adjustDistance:
           inspectorDraft.actionId === "adjust_range_attack" &&
@@ -7285,7 +7292,13 @@ export default function CombatRoundManagerPanel({
       descriptor: candidate,
       expectedCommandTypes: ["roll_feint"],
       presentation: currentActionPresentation,
-      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "proposalId", "taskId"],
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "participantId",
+        "proposalId",
+        "taskId",
+      ],
     });
     const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
     if (!descriptor || !scenarioParticipant) return;
@@ -7598,7 +7611,13 @@ export default function CombatRoundManagerPanel({
       descriptor: candidate,
       expectedCommandTypes: ["decide_double_attack_phase2"],
       presentation: currentActionPresentation,
-      requiredFields: ["executionGroupId", "expectedRevision", "opportunityId", "participantId", "taskId"],
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "opportunityId",
+        "participantId",
+        "taskId",
+      ],
     });
     const scenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
     if (!descriptor || !scenarioParticipant) return;
@@ -7845,6 +7864,10 @@ export default function CombatRoundManagerPanel({
       expectedCommandTypes: ["roll_attack"],
       presentation: currentActionPresentation,
       requiredFields: [
+        "actionId",
+        "attackIndex",
+        "attackModeId",
+        "declarationId",
         "executionGroupId",
         "expectedRevision",
         "opponentParticipantId",
@@ -7852,9 +7875,14 @@ export default function CombatRoundManagerPanel({
         "participantId",
         "phase",
         "taskId",
+        "weaponSourceId",
+        "weaponSourceSlot",
+        "weaponTemplateId",
       ],
     });
-    const selectedScenarioParticipant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const selectedScenarioParticipant = descriptor
+      ? scenarioParticipantForTask(descriptor)
+      : undefined;
     const selectedEncounterParticipant = descriptor?.participantId
       ? encounter.participants.find((participant) =>
           getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
@@ -7879,24 +7907,9 @@ export default function CombatRoundManagerPanel({
     }
 
     const phaseLabel = formatCombatPhaseLabel(phase);
-    const phaseContext = inspectorDraft.phaseContexts[phase];
-    const phaseModel = buildPlayerCombatPhasePanelModel({
-      actionId: inspectorDraft.actionId,
-      attackStats: inspectorPhaseLoadoutSummaries[phase].attackStats,
-      defenseStats: null,
-      phaseCard: {
-        description: "",
-        phaseLabel: phase === "phase1" ? "Phase 1" : "Phase 2",
-        stats: [],
-        title: "",
-      },
-      phaseContext,
-      phaseKey: phase,
-      secondaryActionId: inspectorDraft.secondaryActionId,
-    });
-
-    if (!phaseModel.showAttackStats || !phaseModel.attackStats) {
-      setSaveError(`No ${phaseLabel} attack source available.`);
+    const canonicalAttackSummary = inspectorPhaseLoadoutSummaries[phase].attackStats;
+    if (!canonicalAttackSummary) {
+      setSaveError(`${phaseLabel} attack calculation is unavailable.`);
       return;
     }
 
@@ -7910,7 +7923,7 @@ export default function CombatRoundManagerPanel({
     const targetEncounterParticipant = findEncounterParticipantForScenarioParticipant({
       encounterParticipants: encounter.participants,
       scenarioParticipant: targetScenarioParticipant,
-      scenarioParticipantId: phaseContext.targetParticipantId,
+      scenarioParticipantId: descriptor.opponentParticipantId,
     });
     const targetRoundParticipant = roundState.participants.find(
       (participant) => participant.participantId === targetEncounterParticipant?.id,
@@ -7918,7 +7931,7 @@ export default function CombatRoundManagerPanel({
 
     if (!targetIdentity || !targetScenarioParticipant || !targetEncounterParticipant) {
       setSaveError(
-        inspectorDraft.actionId === "feint_attack" && phase === "phase2"
+        descriptor.actionId === "feint_attack" && phase === "phase2"
           ? "The Feint target is no longer in this encounter."
           : `Select a target for ${phaseLabel} attack.`,
       );
@@ -7940,7 +7953,7 @@ export default function CombatRoundManagerPanel({
     let ob: number;
 
     try {
-      ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
+      ob = parseCombatInteger(canonicalAttackSummary.ob, `${phaseLabel} OB`);
       defenderDb = parseCombatInteger(
         targetPhaseSummary.defenseStats.db,
         `Target ${phaseLabel} DB`,
@@ -7962,13 +7975,16 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participant,
       } = await rollCombatAttackOnServer({
-        actionId: inspectorDraft.actionId || `${phase}_attack`,
+        actionId: descriptor.actionId,
+        attackIndex: descriptor.attackIndex!,
+        attackModeId: descriptor.attackModeId!,
         defenderDb,
         defenderDbParryRaw: getMergedCombatDbParryModifierTotal({
           combatContext: targetScenarioParticipant.state.combat.combatContext,
           phase,
         }),
         defenderParticipantId: targetIdentity.encounterParticipantId,
+        declarationId: descriptor.declarationId!,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7981,9 +7997,10 @@ export default function CombatRoundManagerPanel({
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
         taskId: descriptor.taskId,
-        weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,
-        weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
-        weaponName: phaseModel.attackStats.weaponName,
+        weaponInstanceId: descriptor.weaponInstanceId,
+        weaponSourceId: descriptor.weaponSourceId!,
+        weaponSourceSlot: descriptor.weaponSourceSlot!,
+        weaponTemplateId: descriptor.weaponTemplateId!,
       });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
@@ -8397,10 +8414,7 @@ export default function CombatRoundManagerPanel({
   async function advanceInspectorRoundEndReview(candidate: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
-      expectedCommandTypes: [
-        "commit_round_end_participant_review",
-        "roll_round_end_health_check",
-      ],
+      expectedCommandTypes: ["commit_round_end_participant_review", "roll_round_end_health_check"],
       presentation: currentActionPresentation,
       requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
     });

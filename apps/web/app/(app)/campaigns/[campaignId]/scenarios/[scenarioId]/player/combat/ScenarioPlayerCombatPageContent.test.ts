@@ -111,8 +111,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollCombatAttackOnServer");
     expect(source).toContain("const { encounter, participant } = await rollCombatAttackOnServer");
     expect(source).toContain("entry.id === participant.id ? participant : entry");
-    expect(source).toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
-    expect(source).toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
+    expect(source).toContain("attackModeId: descriptor.attackModeId");
+    expect(source).toContain("opportunityId: descriptor.opportunityId");
+    expect(source).toContain("weaponSourceId: descriptor.weaponSourceId");
+    expect(source).not.toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
+    expect(source).not.toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
     expect(source).toContain("buildPlayerCombatAttackModifierRequest");
     expect(source).toContain("defenderDbParryRaw: modifierRequest.defenderDbParryRaw");
     expect(source).toContain("expectedRevision: modifierRequest.expectedRevision");

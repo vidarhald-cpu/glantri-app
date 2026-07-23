@@ -5,6 +5,7 @@ import {
   combatRoundPhaseResolutionResultSchema,
   combatRoundStepSnapshotSchema,
   getCombatRoundAttackResultId,
+  getCombatRoundParticipantAttackResults,
   getCombatRoundDamageResultId,
   getCombatRoundEndDistanceProposalLifecycle,
   type CombatRoundCommand,
@@ -122,7 +123,10 @@ function makeIdentityRefs(input: {
     role: CombatStepEventIdentityRole,
     hiddenIdentityFallback?: CombatStepEventHiddenIdentityFallback,
   ) => {
-    if (participantId && !refs.some((ref) => ref.participantId === participantId && ref.role === role)) {
+    if (
+      participantId &&
+      !refs.some((ref) => ref.participantId === participantId && ref.role === role)
+    ) {
       refs.push({ hiddenIdentityFallback, participantId, role });
     }
   };
@@ -413,9 +417,11 @@ function attackCandidates(input: {
   participantIndex: number;
   roundNumber: number;
 }): LegacyEventCandidate[] {
-  return (["phase1", "phase2"] as const).flatMap((phase, phaseIndex) => {
-    const attack = input.participant.attackResults[phase];
-    if (!attack) return [];
+  return getCombatRoundParticipantAttackResults({
+    participant: input.participant,
+    roundNumber: input.roundNumber,
+  }).map((attack, attackIndex) => {
+    const phase = attack.phase;
     const attackResultId = attackResultIdFor({ ...attack, roundNumber: input.roundNumber });
     const command = commandByResultId({
       commands: input.commands,
@@ -423,56 +429,62 @@ function attackCandidates(input: {
       type: "roll_attack",
     });
 
-    return [
-      buildCandidate({
-        command: command?.value,
-        commandIndex: command?.sourceIndex,
-        encounterId: input.encounterId,
-        event: {
-          actorParticipantId: attack.attackerParticipantId,
-          attackResultId,
-          attackerParticipantId: attack.attackerParticipantId,
-          completenessMissing: unique([
-            ...(attackResultId ? [] : ["attackResultId"]),
-            ...(attack.attackerParticipantId ? [] : ["attackerParticipantId"]),
-            ...(attack.defenderParticipantId ? [] : ["defenderParticipantId"]),
-          ]),
-          defenderParticipantId: attack.defenderParticipantId,
-          facts: {
-            involvedOutcome: {
-              actionId: attack.actionId,
-              grazing: attack.grazing,
-              hit: attack.hit,
-              tableResult: attack.tableResult,
-              weaponName: attack.weaponName,
-            },
-            publicOutcome: { grazing: attack.grazing, hit: attack.hit },
-            rollerPrivate: {
-              defenderDb: attack.defenderDb,
-              lookupTotal: attack.lookupTotal,
-              ob: attack.ob,
-              openEndedD10s: attack.openEndedD10s,
-              rollD20: attack.rollD20,
-              rollTotal: attack.rollTotal,
-            },
+    return buildCandidate({
+      command: command?.value,
+      commandIndex: command?.sourceIndex,
+      encounterId: input.encounterId,
+      event: {
+        actorParticipantId: attack.attackerParticipantId,
+        attackResultId,
+        attackerParticipantId: attack.attackerParticipantId,
+        completenessMissing: unique([
+          ...(attackResultId ? [] : ["attackResultId"]),
+          ...(attack.attackerParticipantId ? [] : ["attackerParticipantId"]),
+          ...(attack.defenderParticipantId ? [] : ["defenderParticipantId"]),
+        ]),
+        defenderParticipantId: attack.defenderParticipantId,
+        facts: {
+          involvedOutcome: {
+            actionId: attack.actionId,
+            attackIndex: attack.attackIndex,
+            attackModeId: attack.attackModeId,
+            attackOpportunityId: attack.attackOpportunityId,
+            grazing: attack.grazing,
+            hit: attack.hit,
+            tableResult: attack.tableResult,
+            weaponName: attack.weaponName,
+            weaponSourceId: attack.weaponSourceId,
+            weaponTemplateId: attack.weaponTemplateId,
           },
-          occurredAt: attack.rolledAt,
-          ownerParticipantId: attack.attackerParticipantId,
-          phase,
-          rollerParticipantId: attack.attackerParticipantId,
-          sourceIds: unique([command?.value.id, attackResultId]),
-          sourceKind: command ? "legacy_command" : "legacy_result",
-          status: "recorded",
-          step: phaseStep(phase, "attack"),
-          targetParticipantId: attack.defenderParticipantId,
-          type: "attack",
+          publicOutcome: { grazing: attack.grazing, hit: attack.hit },
+          rollerPrivate: {
+            defenderDb: attack.defenderDb,
+            lookupTotal: attack.lookupTotal,
+            ob: attack.ob,
+            openEndedD10s: attack.openEndedD10s,
+            rollD20: attack.rollD20,
+            rollTotal: attack.rollTotal,
+          },
         },
-        roundNumber: input.roundNumber,
-        sourceIndex: input.participantIndex * 2 + phaseIndex,
-        sourceRank: 2,
-        sourceToken: command?.value.id ?? attackResultId ?? `${input.participant.participantId}:${phase}`,
-      }),
-    ];
+        occurredAt: attack.rolledAt,
+        ownerParticipantId: attack.attackerParticipantId,
+        phase,
+        rollerParticipantId: attack.attackerParticipantId,
+        sourceIds: unique([command?.value.id, attackResultId]),
+        sourceKind: command ? "legacy_command" : "legacy_result",
+        status: "recorded",
+        step: phaseStep(phase, "attack"),
+        targetParticipantId: attack.defenderParticipantId,
+        type: "attack",
+      },
+      roundNumber: input.roundNumber,
+      sourceIndex: input.participantIndex * 100 + attackIndex,
+      sourceRank: 2,
+      sourceToken:
+        command?.value.id ??
+        attackResultId ??
+        `${input.participant.participantId}:${phase}:${attackIndex}`,
+    });
   });
 }
 
@@ -551,9 +563,7 @@ function resolutionCandidates(input: {
           sourceIds: unique([command?.value.id, resolution.attackResultId, parryResultId]),
           sourceKind: command ? "legacy_command" : "legacy_result",
           status:
-            resolution.parryResolution.status === "not_applicable"
-              ? "not_applicable"
-              : "recorded",
+            resolution.parryResolution.status === "not_applicable" ? "not_applicable" : "recorded",
           step: phaseStep(resolution.phase, "parry"),
           type: "parry",
         },
@@ -583,9 +593,7 @@ function resolutionCandidates(input: {
             ...(resolution.hitLocationRoll.hitLocationRolls.length > 0
               ? []
               : ["facts.rollerPrivate.hitLocationRolls"]),
-            ...(resolution.hitLocationRoll.rolledByParticipantId
-              ? []
-              : ["rollerParticipantId"]),
+            ...(resolution.hitLocationRoll.rolledByParticipantId ? [] : ["rollerParticipantId"]),
           ]),
           facts: {
             involvedOutcome: {
@@ -680,12 +688,8 @@ function resolutionCandidates(input: {
           ...shared,
           completenessMissing: unique([
             ...baseMissing,
-            ...(resolution.criticalRoll.criticalDice
-              ? []
-              : ["facts.rollerPrivate.criticalDice"]),
-            ...(resolution.criticalRoll.rolledByParticipantId
-              ? []
-              : ["rollerParticipantId"]),
+            ...(resolution.criticalRoll.criticalDice ? [] : ["facts.rollerPrivate.criticalDice"]),
+            ...(resolution.criticalRoll.rolledByParticipantId ? [] : ["rollerParticipantId"]),
           ]),
           facts: {
             involvedOutcome: {
@@ -1162,14 +1166,13 @@ function orphanCommandCandidates(input: {
     const combatExperienceFinalTotal = numberFact(facts, "finalTotal");
     const combatExperienceDifficulty = numberFact(facts, "difficulty");
     const combatExperienceThreatParticipantIds = combatExperience
-      ? (Array.isArray(facts.phaseCombatExperienceThreats)
-          ? facts.phaseCombatExperienceThreats.flatMap((threat) => {
-              if (typeof threat !== "object" || threat === null) return [];
-              const attackerParticipantId = (threat as Record<string, unknown>)
-                .attackerParticipantId;
-              return typeof attackerParticipantId === "string" ? [attackerParticipantId] : [];
-            })
-          : [])
+      ? Array.isArray(facts.phaseCombatExperienceThreats)
+        ? facts.phaseCombatExperienceThreats.flatMap((threat) => {
+            if (typeof threat !== "object" || threat === null) return [];
+            const attackerParticipantId = (threat as Record<string, unknown>).attackerParticipantId;
+            return typeof attackerParticipantId === "string" ? [attackerParticipantId] : [];
+          })
+        : []
       : [];
     const ownerParticipantId =
       mapping.type === "parry" ||
@@ -1177,7 +1180,7 @@ function orphanCommandCandidates(input: {
       mapping.type === "critical" ||
       mapping.type === "damage_proposed" ||
       mapping.type === "damage_committed"
-        ? defenderParticipantId ?? command.participantId
+        ? (defenderParticipantId ?? command.participantId)
         : command.participantId;
     const requiredMissing =
       mapping.type === "attack" ||
@@ -1204,8 +1207,12 @@ function orphanCommandCandidates(input: {
           attackerParticipantId,
           completenessMissing: combatExperience
             ? unique([
-                ...(combatExperienceFinalTotal === undefined ? ["facts.rollerPrivate.finalTotal"] : []),
-                ...(combatExperienceDifficulty === undefined ? ["facts.rollerPrivate.difficulty"] : []),
+                ...(combatExperienceFinalTotal === undefined
+                  ? ["facts.rollerPrivate.finalTotal"]
+                  : []),
+                ...(combatExperienceDifficulty === undefined
+                  ? ["facts.rollerPrivate.difficulty"]
+                  : []),
               ])
             : [...requiredMissing, "source.structuredResult"],
           damageResultId: stringFact(facts, "damageResultId"),
@@ -1219,7 +1226,7 @@ function orphanCommandCandidates(input: {
             involvedOutcome: {
               appliedDistance: facts.appliedDistance,
               ...(combatExperience
-                  ? {
+                ? {
                     resultBand: facts.resultBand,
                     resultLabel: facts.resultLabel,
                     modifierValue: facts.modifierValue,
@@ -1263,8 +1270,7 @@ function orphanCommandCandidates(input: {
           sourceKind: "legacy_command",
           status: mapping.status,
           step: mapping.step,
-          targetParticipantId:
-            defenderParticipantId ?? combatExperienceThreatParticipantIds[0],
+          targetParticipantId: defenderParticipantId ?? combatExperienceThreatParticipantIds[0],
           type: mapping.type,
         },
         roundNumber: input.roundNumber,

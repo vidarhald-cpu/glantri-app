@@ -99,6 +99,9 @@ function visibleTaskIdentity(
   const participantVisible = (participantId: string | undefined) =>
     participantId !== undefined && viewer.visibleParticipantIds.has(participantId);
   return {
+    actionId: task.identity.actionId,
+    attackIndex: task.identity.attackIndex,
+    attackModeId: task.identity.attackModeId,
     attackResultId: task.identity.attackResultId,
     attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
       ? task.identity.attackerParticipantId
@@ -106,6 +109,7 @@ function visibleTaskIdentity(
     criticalResultId: task.identity.criticalResultId,
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
+    declarationId: task.identity.declarationId,
     defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
       ? task.identity.defenderParticipantId
       : undefined,
@@ -126,6 +130,10 @@ function visibleTaskIdentity(
       : undefined,
     phase: task.identity.phase,
     proposalId: task.identity.proposalId,
+    weaponInstanceId: task.identity.weaponInstanceId,
+    weaponSourceId: task.identity.weaponSourceId,
+    weaponSourceSlot: task.identity.weaponSourceSlot,
+    weaponTemplateId: task.identity.weaponTemplateId,
   };
 }
 

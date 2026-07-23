@@ -772,10 +772,13 @@ export async function rollCombatInitiativeOnServer(input: {
 
 export async function rollCombatAttackOnServer(input: {
   actionId?: string;
+  attackIndex: number;
+  attackModeId: string;
   attackerModifierFingerprint?: string;
   defenderDb?: number;
   defenderDbParryRaw?: number;
   defenderModifierFingerprint?: string;
+  declarationId: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
@@ -783,13 +786,14 @@ export async function rollCombatAttackOnServer(input: {
   modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
-  opportunityId?: string;
+  opportunityId: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   taskId: string;
-  weaponCriticalCode?: string;
-  weaponDamageClass?: string;
-  weaponName?: string;
+  weaponInstanceId?: string;
+  weaponSourceId: string;
+  weaponSourceSlot: string;
+  weaponTemplateId: string;
 }): Promise<{
   attackResult: CombatRoundAttackRollResult;
   command?: CombatRoundCommand;
@@ -806,10 +810,13 @@ export async function rollCombatAttackOnServer(input: {
   }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
     body: JSON.stringify({
       actionId: input.actionId,
+      attackIndex: input.attackIndex,
+      attackModeId: input.attackModeId,
       attackerModifierFingerprint: input.attackerModifierFingerprint,
       defenderDb: input.defenderDb,
       defenderDbParryRaw: input.defenderDbParryRaw,
       defenderModifierFingerprint: input.defenderModifierFingerprint,
+      declarationId: input.declarationId,
       defenderParticipantId: input.defenderParticipantId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
@@ -820,9 +827,10 @@ export async function rollCombatAttackOnServer(input: {
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
       taskId: input.taskId,
-      weaponCriticalCode: input.weaponCriticalCode,
-      weaponDamageClass: input.weaponDamageClass,
-      weaponName: input.weaponName,
+      weaponInstanceId: input.weaponInstanceId,
+      weaponSourceId: input.weaponSourceId,
+      weaponSourceSlot: input.weaponSourceSlot,
+      weaponTemplateId: input.weaponTemplateId,
     }),
     method: "POST",
   });

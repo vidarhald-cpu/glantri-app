@@ -147,11 +147,15 @@ export interface CombatProgressionTrackerFacet {
 
 /** Stable facts used to identify projected work without relying on a runtime cursor cell. */
 export interface CombatProgressionTaskIdentity {
+  readonly actionId?: string;
+  readonly attackIndex?: number;
+  readonly attackModeId?: string;
   readonly attackResultId?: string;
   readonly attackerParticipantId?: string;
   readonly criticalResultId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
+  readonly declarationId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId: string;
   readonly healthRollId?: string;
@@ -162,6 +166,10 @@ export interface CombatProgressionTaskIdentity {
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly proposalId?: string;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId?: string;
+  readonly weaponSourceSlot?: string;
+  readonly weaponTemplateId?: string;
 }
 
 export interface CombatProgressionPresentationReference {

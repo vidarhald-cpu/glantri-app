@@ -8,6 +8,8 @@ Scope: audit of current combat domain, API, and web integration, with authority-
 
 Authority remediation: 2026-07-23
 
+Attack-lineage remediation: 2026-07-23
+
 ## 1. Executive summary
 
 The canonical architecture is established and is used by most current combat paths:
@@ -30,39 +32,40 @@ the remaining attack-lineage and presentation risks:
    command type, revision, current boundary, and target boundary.
 3. **Fixed:** attack, parry, hit-location, and critical no longer re-check compatibility cursor state
    after exact projected-task authorization.
-4. ordinary attack opportunity identity is dropped when an attack result is recorded, while later
-   stages recover data by participant/phase or “latest snapshot.” This is unsafe groundwork for an
-   additional same-phase action such as Attacking Parry.
+4. **Fixed:** every newly committed attack preserves one deterministic declaration/opportunity,
+   attack index, target, weapon source, weapon template/instance, and attack-mode identity through
+   the task descriptor, request, command, result, downstream process, and presentation event.
 5. GM declaration/modifier-review submission can bind the canonical task identity to form data from
    the currently inspected participant.
 6. ownerless GM tasks sometimes fabricate tracker ownership from `currentCursor`, and Round End UI
    context independently selects an executable SU task instead of following Current Action.
-7. weapon/distance modifier normalization is duplicated in API and web and silently falls back to
-   the first available weapon.
+7. **Fixed for live attacks:** distance modifiers are derived from the explicit declared attack
+   source; the API and web no longer silently select the first/default weapon when the source is
+   absent. Web name matching remains only in the declaration editor preview.
 
 The removed P0 paths were not used by the current main panel according to repository searches, but
 their public authenticated mutation surface was still an authority violation rather than harmless
 dead code.
 
-**Conclusion:** the authority-remediation prerequisite is complete. Slice 2—canonical attack
-opportunity/source identity—may proceed and remains required before Attacking Parry. Otherwise
-Attacking Parry would add another same-phase opportunity to code that still assumes participant +
-phase or “latest result” identifies one attack.
+**Conclusion:** the authority and canonical attack-lineage prerequisites are complete. Attacking
+Parry may now be implemented as a new projected opportunity without relying on participant + phase,
+latest-result, inspector, or default-weapon recovery. The unrelated presentation-source risks below
+remain cleanup work but do not block a correctly descriptor-bound Attacking Parry task.
 
 ## 2. Confirmed canonical invariants
 
-| Invariant                                                        | Result                                   | Evidence                                                                                                                                                                                 |
-| ---------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Live task identity comes only from progression projection     | Partial                                  | Normal mutation routes are canonical; `buildCombatRoundEndProcessPlan` still uses `currentCursor` to prefer a participant.                                                               |
-| 2. Invocation comes only from `CurrentActionCommandDescriptor`   | Partial                                  | All supported normal commands are descriptor-authorized, but GM declaration/review and attack payloads still obtain task-sensitive data from inspector/local phase models.               |
-| 3. API validates exact task and execution group                  | Conformant in supported normal mutations | Boundary commands now use the same strict task/group/command identity contract. The four unprojected legacy mutation routes were removed.                                                |
-| 4. Tracker current ownership comes from required actor and facet | Partial                                  | `buildCombatProgressionTrackerIndex` does this correctly. Several ownerless GM task builders assign `trackerOwner`/`trackerParticipantId` from a cursor or proposal participant.         |
-| 5. Inspector Current task uses the same task                     | Partial                                  | `buildCombatRoundLiveInspectorContext` is canonical. `CombatRoundManagerPanel` falls back to cursor-owner/first task and independently chooses an SU task.                               |
-| 6. Result lifetime uses canonical boundary/opportunity identity  | Partial                                  | live result lifetime is boundary-based, but normal attack opportunity identity is not retained and orphan event mapping falls back to generic phase placement.                           |
-| 7. UI serializes but does not infer canonical identity           | Violated                                 | GM/player attack handlers rebuild source/stats from local loadout and inspector models; distance modifier generation separately resolves by weapon name with a default fallback.         |
-| 8. Player-safe projection preserves safe status                  | Conformant in inspected paths            | `combatProgressionProjection/presentation.ts` preserves IDs, state, blockers, ownership when visible, and explicit waiting-for-GM state while sanitizing subjects and detail identities. |
-| 9. Historical inspection cannot retarget live mutation           | Partial                                  | descriptor task identity cannot be retargeted, but inspector-derived form/loadout state can change the values submitted for the descriptor's participant.                                |
-| 10. Missing identity fails closed                                | Partial                                  | Normal command and boundary authority now fail closed. Attack/damage lineage still uses latest snapshots in places, and distance modifier projection still defaults the weapon.          |
+| Invariant                                                        | Result                                   | Evidence                                                                                                                                                                                  |
+| ---------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Live task identity comes only from progression projection     | Partial                                  | Normal mutation routes are canonical; `buildCombatRoundEndProcessPlan` still uses `currentCursor` to prefer a participant.                                                                |
+| 2. Invocation comes only from `CurrentActionCommandDescriptor`   | Partial                                  | All supported normal commands are descriptor-authorized, but GM declaration/review and attack payloads still obtain task-sensitive data from inspector/local phase models.                |
+| 3. API validates exact task and execution group                  | Conformant in supported normal mutations | Boundary commands now use the same strict task/group/command identity contract. The four unprojected legacy mutation routes were removed.                                                 |
+| 4. Tracker current ownership comes from required actor and facet | Partial                                  | `buildCombatProgressionTrackerIndex` does this correctly. Several ownerless GM task builders assign `trackerOwner`/`trackerParticipantId` from a cursor or proposal participant.          |
+| 5. Inspector Current task uses the same task                     | Partial                                  | `buildCombatRoundLiveInspectorContext` is canonical. `CombatRoundManagerPanel` falls back to cursor-owner/first task and independently chooses an SU task.                                |
+| 6. Result lifetime uses canonical boundary/opportunity identity  | Conformant for new live attack lineage   | live result lifetime remains boundary-based; each new attack event/result carries its exact opportunity and source identity. Legacy incomplete records are read-only compatibility data.  |
+| 7. UI serializes but does not infer canonical identity           | Conformant for live attack invocation    | GM/player attack handlers serialize opportunity/source/mode from the immutable descriptor. Editable declaration previews may still use draft loadout values before commitment.            |
+| 8. Player-safe projection preserves safe status                  | Conformant in inspected paths            | `combatProgressionProjection/presentation.ts` preserves IDs, state, blockers, ownership when visible, and explicit waiting-for-GM state while sanitizing subjects and detail identities.  |
+| 9. Historical inspection cannot retarget live mutation           | Partial                                  | descriptor task identity cannot be retargeted, but inspector-derived form/loadout state can change the values submitted for the descriptor's participant.                                 |
+| 10. Missing identity fails closed                                | Conformant for live attack lineage       | Incomplete live opportunities are non-executable; attack parsing and authorization require exact source/mode/index identity. Historical-only snapshot fallback cannot authorize commands. |
 
 The central domain authorization helper itself is strong. `authorizeCombatProgressionTask` filters
 boundary, process, stage, kind, expected command, task-specific identities, execution group, task,
@@ -114,11 +117,11 @@ The classification used by this audit is:
 | `modifier_review`                               | Confirmed violation    | Task identity is exact, but the shared GM declaration/review handler submits the current inspector draft/loadout for the descriptor participant.                                                                     |
 | `roll_initiative`                               | Fully conformant       | Participant, phase, group, task, revision, actor, and authoritative initiative inputs are checked. Local UI values are calculation input, not task identity.                                                         |
 | `commit_initiative`                             | Minor conformance risk | Current endpoint is descriptor-bound, but the ownerless task fabricates tracker ownership from `currentCursor`.                                                                                                      |
-| `attack`                                        | Confirmed violation    | Cursor-shadow eligibility is fixed. Weapon/stat context is still reconstructed from local UI and latest phase snapshots, and normal opportunity identity is not persisted on the result.                             |
-| `parry`                                         | Minor conformance risk | Task/group/attack identities authorize directly without a compatibility-cursor shadow. Exact upstream attack opportunity/source lineage remains incomplete.                                                          |
-| `damage_roll`                                   | Confirmed violation    | Task and roll expression are exact, but DMB, defender DM, and armor class are recovered from latest phase snapshots rather than an attack-specific canonical source.                                                 |
-| `hit_location`                                  | Confirmed violation    | Cursor-shadow eligibility is fixed. Latest-snapshot damage inputs remain an attack-lineage violation.                                                                                                                |
-| `critical`                                      | Minor conformance risk | Exact critical identities now authorize without a compatibility-cursor shadow; upstream opportunity/source lineage remains incomplete.                                                                               |
+| `attack`                                        | Fully conformant       | The exact opportunity, declaration, attack index, target, weapon source/template/instance, mode, task, group, and revision flow through GM/player invocation and persistence.                                        |
+| `parry`                                         | Fully conformant       | Task/group/attack-result identities authorize directly and retain the exact upstream opportunity lineage.                                                                                                            |
+| `damage_roll`                                   | Fully conformant       | Task and roll expression are exact; new attack results persist the opportunity-specific weapon DMB and armor class used by downstream damage.                                                                        |
+| `hit_location`                                  | Fully conformant       | Exact attack/result/opportunity lineage is retained; new live attacks use persisted source-specific DMB/armor inputs. Legacy snapshot fallback is read-only compatibility.                                           |
+| `critical`                                      | Fully conformant       | Exact critical identities authorize against an attack result that retains its opportunity and source lineage.                                                                                                        |
 | `damage_review`                                 | Fully conformant       | Both resolution and commit validate exact attack/result/review/group/task identities; editable review rows remain intentional GM input.                                                                              |
 | `double_attack_decision`                        | Fully conformant       | Choice is form input; participant, phase, opportunity, group, task, and revision are descriptor-bound.                                                                                                               |
 | `feint_attacker_roll` / `feint_defender_roll`   | Fully conformant       | Current roll routes require exact proposal, participant, group, task, and revision. The obsolete feasibility mutation route was removed.                                                                             |
@@ -187,7 +190,7 @@ Resolution: all four post-authorization cursor checks were removed. The routes u
 task as live eligibility and retain factual validation for exact participant, phase, opportunity,
 attack/result identity, prior result existence, and duplicate mutation protection.
 
-### P1 — attack opportunity/source lineage is dropped and later reconstructed
+### P1 — attack opportunity/source lineage is dropped and later reconstructed — fixed
 
 The attack task and request contain `opportunityId`, but `recordCombatRoundAttackResult` writes
 `attackOpportunityId` only when the candidate origin is `double_attack`. Ordinary Single, Reactive,
@@ -202,23 +205,31 @@ snapshots for weapon, DMB, defender DB/DM, and armor class in attack/hit-locatio
 This is a blocker for Attacking Parry. A new same-phase opportunity cannot safely coexist with code
 that treats participant + phase or latest phase snapshot as unique.
 
-Required action:
+Resolution:
 
-1. persist the opportunity ID for every attack result and canonical combat event;
-2. persist or resolve the exact declared attack source/mode for that opportunity;
-3. have downstream task identities and mutations use that lineage;
-4. remove participant/phase and latest-snapshot recovery where exact identity exists.
+1. `CanonicalAttackOpportunityIdentity` now captures declaration, opportunity, participant pair,
+   phase, action kind/index, weapon source/template/instance, and attack mode;
+2. declaration submission creates and persists the identity once with deterministic IDs;
+3. projected attack tasks and `CurrentActionCommandDescriptor` carry the identity unchanged;
+4. attack parsing/authorization requires the identity and resolves the exact persisted opportunity;
+5. commands, attack results, events, downstream processes, and historical presentation retain the
+   same `opportunityId`/`attackResultId` chain;
+6. new results persist source-specific DMB and armor class, so hit-location/graze damage no longer
+   chooses an attacker snapshot by participant + phase;
+7. old records without lineage remain readable through explicitly historical compatibility paths
+   but cannot create an executable live task.
 
-### P1 — attack invocation reconstructs source and calculations in React
+### P1 — attack invocation reconstructs source and calculations in React — fixed
 
 `CombatRoundManagerPanel.rollInspectorPhaseAttack` authorizes the descriptor, then builds the
 phase model from `inspectorDraft` and `inspectorPhaseLoadoutSummaries`. Player Combat similarly reads
 `phaseCombatLoadoutSummaries`, `selectedActionId`, and a locally resolved target. The descriptor has
 no declaration/action ID, weapon source ID, or attack-mode ID.
 
-The server validates raw modifiers and target, which prevents blind trust in the client, but source
-selection is still duplicated and can disagree before reaching the server. This is a confirmed
-canonical integration violation even where validation fails closed.
+Resolution: both GM and Player handlers require the canonical descriptor fields and serialize them
+directly. React still reads the rendered combat summary for submitted numeric OB/DB calculation
+inputs, which the server validates against canonical modifier facts, but it no longer selects or
+normalizes the live weapon source, mode, target, action, or opportunity.
 
 ### P1 — GM declaration/modifier review can mix canonical identity with inspected values
 
@@ -249,7 +260,7 @@ It can display or edit context for a different task and is therefore a presentat
 Required action: resolve SU context by the current presentation task ID only; support an explicit
 multi-task chooser only when the projection's execution group intentionally exposes parallel tasks.
 
-### P1 — distance modifier source normalization silently defaults a weapon
+### P1 — distance modifier source normalization silently defaults a weapon — fixed for live lineage
 
 API `buildCombatActionDistanceModifierInputs` resolves by a normalized weapon name and falls back to
 `getDefaultAttackWeaponTemplate`. Web `combatDistanceModifierProjection.ts` independently implements
@@ -259,8 +270,10 @@ sets (API also includes content templates and ready items).
 A missing canonical weapon source can therefore become a modifier for an unrelated first weapon,
 and GM/web preview can differ from server persistence. This contradicts fail-closed source handling.
 
-Required action: build distance modifiers from the persisted `CombatAttackSourceRef` and one shared
-domain resolver. No name or first-weapon fallback should run after declaration commitment.
+Resolution: API declaration and recomputation paths build distance inputs from the explicit
+`CombatAttackSourceRef` persisted on the opportunity. Missing sources produce no guessed modifier.
+The web declaration editor may resolve its currently edited named source for preview, but no longer
+falls back to the first candidate. Live execution does not use that preview to identify a weapon.
 
 ### P1 — ownerless GM task facets sometimes fabricate participant ownership
 
@@ -365,15 +378,15 @@ can reach it and it was not one of the audited P0/P1 authority bypasses.
 
 ## 8. Duplicate normalization findings
 
-| Concept                        | Canonical path                                                                                                                                  | Duplicate/risk                                                                                                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Participant membership/aliases | `session.ts`: `resolveEncounterParticipantMembership`, `resolveEncounterParticipantForViewer`, `resolveEncounterParticipantByRollParticipantId` | web `resolveCanonicalCombatTargetIdentity`; API local `find*ByAlias` wrappers; fallback can collapse encounter/scenario IDs.                                    |
-| Pair identity                  | domain `getCombatDistancePairKey` / distance alias helpers                                                                                      | Most current routes use it correctly; local pair option construction still deserves guard coverage but no conflicting formula was found.                        |
-| Weapon source                  | persisted `CombatAttackSourceRef`, API `resolveDeclaredWeaponSource`                                                                            | local phase loadout builders, name-based API lookup, web name-based distance projection, latest attack snapshot.                                                |
-| Attack mode                    | domain `resolvePreferredAttackMode` before commitment; committed source mode afterward                                                          | UI phase model may deliberately select a fallback before commitment; live attacks still rebuild mode/source indirectly rather than carrying committed identity. |
-| Declaration phase source       | `phaseAttackSources` on committed declaration                                                                                                   | descriptor does not carry it; API attack path searches phase opportunity and uses snapshot/body weapon facts.                                                   |
-| Revision comparison            | `combatViewRevision.ts` for Player                                                                                                              | separate `combatRoundViewState.ts` implementation for GM.                                                                                                       |
-| Result/proposal identity       | deterministic result/proposal ID helpers                                                                                                        | ordinary attack opportunity is optional after persistence; legacy orphan event mapper recovers partial identity from command facts.                             |
+| Concept                        | Canonical path                                                                                                                                  | Duplicate/risk                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Participant membership/aliases | `session.ts`: `resolveEncounterParticipantMembership`, `resolveEncounterParticipantForViewer`, `resolveEncounterParticipantByRollParticipantId` | web `resolveCanonicalCombatTargetIdentity`; API local `find*ByAlias` wrappers; fallback can collapse encounter/scenario IDs.                                  |
+| Pair identity                  | domain `getCombatDistancePairKey` / distance alias helpers                                                                                      | Most current routes use it correctly; local pair option construction still deserves guard coverage but no conflicting formula was found.                      |
+| Weapon source                  | persisted `CombatAttackSourceRef` and `CanonicalAttackOpportunityIdentity`, API `resolveDeclaredWeaponSource`                                   | declaration editing may still resolve a displayed name before commitment; live commands, results, downstream work, and modifiers use the committed source ID. |
+| Attack mode                    | domain declaration normalization before commitment; committed opportunity mode afterward                                                        | UI phase models may select a legal editable value before commitment; missing live mode identity now fails closed instead of selecting a default.              |
+| Declaration phase source       | `phaseAttackSources` persisted on the canonical opportunity                                                                                     | no live duplicate remains: descriptor/request/API authorization all require the exact opportunity source and mode.                                            |
+| Revision comparison            | `combatViewRevision.ts` for Player                                                                                                              | separate `combatRoundViewState.ts` implementation for GM.                                                                                                     |
+| Result/proposal identity       | deterministic opportunity-scoped result/proposal ID helpers                                                                                     | only historical records predating lineage may use read-only event/snapshot compatibility; those records cannot authorize live work.                           |
 
 Pre-commit UI fallback is not inherently wrong. The violation begins after a declaration/opportunity is
 committed: live execution must use the committed source, not repeat selection heuristics.
@@ -395,7 +408,8 @@ Risks:
 
 1. orphan command reconstruction defaults missing phase to Phase 1/P1 rather than marking placement
    unresolved;
-2. standard attack events/results do not guarantee top-level opportunity identity;
+2. ~~standard attack events/results do not guarantee top-level opportunity identity;~~ fixed for
+   every newly recorded attack;
 3. some event command records do not retain the authorizing task/group;
 4. Round End distance events have incomplete pair/proposal detail for calculation attachment.
 
@@ -416,7 +430,7 @@ Risk: medium because old bookmarks/tests or undocumented GM tooling may still ca
 
 Non-goal: changing rules represented by current canonical tasks.
 
-### Slice 1 — canonical attack lineage (required before Attacking Parry)
+### Slice 1 — canonical attack lineage — complete
 
 - persist opportunity ID for every attack result/event;
 - bind committed declaration/action/source/mode identity to the attack task/descriptor or resolve it
@@ -459,10 +473,11 @@ Risk: medium presentation/history compatibility.
 
 Non-goal: Round End rules.
 
-### Slice 5 — consolidate normalization and legacy event fallbacks
+### Slice 5 — consolidate remaining normalization and legacy event fallbacks — partially complete
 
-- move committed weapon/source resolution into domain/shared API input;
-- remove first-weapon/name fallbacks from live modifier generation;
+- ~~move committed weapon/source resolution into domain/shared API input;~~ complete for attack
+  lineage;
+- ~~remove first-weapon/name fallbacks from live modifier generation;~~ complete;
 - reuse one participant/revision helper;
 - mark incomplete legacy event placement explicitly instead of silently choosing Phase 1 where safe
   migration data exists.
@@ -501,23 +516,24 @@ Non-goal: equipment or history schema redesign unless exact source identity cann
 Implemented authority guards now cover removed legacy route registration, absence of
 `getPlayerCombatCurrentRollAction` from canonical mutation routes, strict boundary task/group/command
 propagation, wrong/missing group rejection, stale revision rejection, and player rejection for GM
-boundary commands. The attack-lineage guards in items 4–6 remain pending for Slice 1.
+boundary commands. Attack-lineage guards now cover deterministic opportunity IDs/indices, two
+same-phase attacks against one defender, exact source/mode persistence on command/result/event facts,
+strict API identity mismatch rejection, and removal of first/default-weapon fallback.
 
 ## 12. Attacking Parry readiness conclusion
 
-Attacking Parry should **not** proceed immediately, but the authority slice no longer blocks the
-next cleanup step.
+Attacking Parry may proceed. Both authority and attack-lineage prerequisites are complete.
 
 Minimum prerequisites:
 
 1. ~~close or descriptor-bind the P0 legacy mutation routes;~~ complete;
 2. ~~make boundary authorization include execution-group identity;~~ complete;
-3. persist exact opportunity and committed attack source/mode for all attacks;
+3. ~~persist exact opportunity and committed attack source/mode for all attacks;~~ complete;
 4. ~~remove cursor-derived post-authorization checks from downstream attack routes;~~ complete;
-5. prove with a multi-opportunity test that attack, response, result, and damage lineage do not use
-   participant + phase or latest-result lookup.
+5. ~~prove with a multi-opportunity test that attack/result lineage does not use participant + phase
+   or latest-result lookup;~~ complete for two same-phase attacks and distinct Double Attack slots.
 
-Slice 2—canonical attack-opportunity/source identity—may proceed now and should complete items 3 and 5. After those items, Attacking Parry can be added as another projected process/task without
-extending the current ambiguity. Ownerless tracker cleanup and normalization consolidation should
+Attacking Parry can be added as another projected process/task without extending the former
+participant/phase ambiguity. Ownerless tracker cleanup and descriptor-keyed GM editing should
 follow soon, but they do not independently block the domain design once exact attack lineage is
 guaranteed.

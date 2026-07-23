@@ -1,9 +1,11 @@
 import {
   getCombatRoundCriticalResultId,
+  getCanonicalAttackOpportunityIdentity,
   getCombatRoundDamageReviewId,
   getCombatRoundDamageSubstate,
   getCombatRoundGrazeDamageRollContext,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundAttackResultForOpportunity,
   getCombatRoundAttackResultId,
   getCombatRoundHitLocationResultId,
   getCombatRoundCombatExperienceDifficulty,
@@ -585,24 +587,30 @@ function buildAdapterAttackProcess(
   const defender = plan.targetParticipantId
     ? context.identities.get(plan.targetParticipantId)
     : undefined;
-  const attackResult = context.state.participants.find(
-    (participant) => participant.participantId === plan.ownerParticipantId,
-  )?.attackResults[plan.phase];
+  const opportunityIdentity = getCanonicalAttackOpportunityIdentity({
+    actionId: plan.opportunity.actionId,
+    attackerParticipantId: plan.ownerParticipantId,
+    opportunity: plan.opportunity,
+    roundNumber: context.state.roundNumber,
+  });
+  const attackResult = getCombatRoundAttackResultForOpportunity({
+    opportunityId: plan.opportunity.id,
+    state: context.state,
+  });
   const attackSnapshot = [...context.state.stepSnapshots]
     .reverse()
     .find((snapshot) => snapshot.participantId === plan.ownerParticipantId);
   const weaponLabel =
     attackResult?.weaponName ??
     attackSnapshot?.phasePanels?.[plan.phase]?.attackSummary?.weaponName;
-  const damageRollExpression =
-    attackResult?.grazing
-      ? projectedGrazeDamageRollExpression({
-          attackerParticipantId: plan.ownerParticipantId,
-          context,
-          defenderParticipantId: plan.targetParticipantId,
-          phase: plan.phase,
-        })
-      : undefined;
+  const damageRollExpression = attackResult?.grazing
+    ? projectedGrazeDamageRollExpression({
+        attackerParticipantId: plan.ownerParticipantId,
+        context,
+        defenderParticipantId: plan.targetParticipantId,
+        phase: plan.phase,
+      })
+    : undefined;
   const stages: StageSpec[] = plan.stages.map((stage) => {
     const task = stage.task;
     const taskKind =
@@ -627,6 +635,13 @@ function buildAdapterAttackProcess(
           hitLocationResultId: getCombatRoundHitLocationResultId({ attackResultId }),
         }
       : {};
+    if (!opportunityIdentity) {
+      dependencies.push({
+        message: "The active attack is missing its committed weapon source or attack mode.",
+        owner: attacker,
+        type: "invalid_source",
+      });
+    }
     for (const prerequisite of plan.prerequisites) {
       if (prerequisite.satisfied) continue;
       dependencies.push({
@@ -664,12 +679,20 @@ function buildAdapterAttackProcess(
                 expectedCommand: task.expectedCommand,
                 identity: {
                   ...downstreamIdentity,
+                  actionId: opportunityIdentity?.actionId,
+                  attackIndex: opportunityIdentity?.attackIndex,
+                  attackModeId: opportunityIdentity?.attackModeId,
+                  declarationId: opportunityIdentity?.declarationId,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
                   phase: task.phase,
+                  weaponInstanceId: opportunityIdentity?.weaponInstanceId,
+                  weaponSourceId: opportunityIdentity?.weaponSourceId,
+                  weaponSourceSlot: opportunityIdentity?.weaponSourceSlot,
+                  weaponTemplateId: opportunityIdentity?.weaponTemplateId,
                 },
                 key: task.opportunityId,
                 kind: taskKind,
@@ -706,6 +729,14 @@ function findAdapterAttackProcess(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
 ): StandardAttackProcessPlan | undefined {
+  const phasePlans = context.actionProcessPlans
+    .flatMap((plan) => plan.standardAttacks)
+    .filter((attack) => attack.phase === phase);
+  const activePlans = phasePlans.filter((attack) =>
+    attack.stages.some((stage) => stage.state === "ready"),
+  );
+  if (activePlans.length === 1) return activePlans[0];
+
   const phaseCursor = context.state.phaseResolutionCursor;
   const participantId =
     phaseCursor?.phase === phase
@@ -714,29 +745,12 @@ function findAdapterAttackProcess(
   if (!participantId) return undefined;
 
   if (!phaseCursor || phaseCursor.phase !== phase || phaseCursor.substep === "attack") {
-    return context.actionProcessPlans
-      .flatMap((plan) => plan.standardAttacks)
-      .find((attack) => attack.phase === phase && attack.ownerParticipantId === participantId);
+    return activePlans.find((attack) => attack.ownerParticipantId === participantId);
   }
-
-  const incoming = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-    participantId,
-    phase,
-    state: context.state,
-  });
-  const outgoing = context.state.participants.find(
-    (participant) => participant.participantId === participantId,
-  )?.attackResults[phase];
-  const attackResult = incoming ?? outgoing;
-  return context.actionProcessPlans
-    .flatMap((plan) => plan.standardAttacks)
-    .find(
-      (attack) =>
-        attack.phase === phase &&
-        (attackResult?.attackOpportunityId
-          ? attack.opportunity.id === attackResult.attackOpportunityId
-          : attack.ownerParticipantId === attackResult?.attackerParticipantId),
-    );
+  return activePlans.find(
+    (attack) =>
+      attack.ownerParticipantId === participantId || attack.targetParticipantId === participantId,
+  );
 }
 
 export function buildResolutionProcesses(

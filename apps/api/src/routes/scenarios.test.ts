@@ -4,6 +4,7 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
@@ -15,6 +16,8 @@ import {
   commitCombatRoundPhaseInitiativeResolution,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseAttackCandidates,
+  getCanonicalAttackOpportunityIdentity,
   getCombatRoundParticipantPhaseStepStatus,
   initializeCombatRoundState,
   encounterSessionSchema,
@@ -228,6 +231,34 @@ async function buildScenarioTestApp() {
     if (body !== record) {
       (request as { body: unknown }).body = record;
     }
+    // Route tests exercise browser-like requests. Older fixtures predate canonical attack-source
+    // serialization, so supply the same explicit unarmed source a declaration editor would send.
+    // Tests for missing lineage can still pass an explicit empty phaseAttackSources object.
+    if (
+      request.url.endsWith("/combat-declaration") &&
+      record.phaseAttackSources === undefined &&
+      typeof record.actionId === "string"
+    ) {
+      const phaseAttackSources: Record<string, unknown> = {};
+      if (record.actionId === "attack_parry" || record.actionId === "double_attack") {
+        phaseAttackSources.phase1 = makeUnarmedAttackSourceRef({
+          opportunitySlot: "attack_1",
+          templateId: "virtual-weapon-template-punch",
+        });
+      }
+      if (
+        record.actionId === "parry_attack" ||
+        record.actionId === "double_attack" ||
+        record.actionId === "feint_attack" ||
+        record.actionId === "adjust_range_attack"
+      ) {
+        phaseAttackSources.phase2 = makeUnarmedAttackSourceRef({
+          opportunitySlot: "attack_2",
+          templateId: "virtual-weapon-template-kick",
+        });
+      }
+      record.phaseAttackSources = phaseAttackSources;
+    }
     const commandBySuffix = new Map<string, readonly string[]>([
       [
         "/combat-declaration",
@@ -305,6 +336,36 @@ async function buildScenarioTestApp() {
           (typeof record.phase !== "string" || task.identity.phase === record.phase),
       ) ?? tasks[0];
     if (!selected) {
+      if (entry[1].includes("roll_attack") && canonicalParticipantId) {
+        const phase = record.phase === "phase2" ? "phase2" : "phase1";
+        const declaration = state.participants.find(
+          (participant) => participant.participantId === canonicalParticipantId,
+        )?.declaration;
+        const opportunity =
+          declaration?.attackOpportunities?.find((candidate) => candidate.phase === phase) ??
+          getCombatRoundPhaseAttackCandidates({ phase, state }).find(
+            (candidate) => candidate.participantId === canonicalParticipantId,
+          );
+        const identity = opportunity
+          ? getCanonicalAttackOpportunityIdentity({
+              actionId: declaration?.actionId,
+              attackerParticipantId: canonicalParticipantId,
+              opportunity,
+              roundNumber: state.roundNumber,
+            })
+          : undefined;
+        if (identity) {
+          record.actionId ??= identity.actionId;
+          record.attackIndex ??= identity.attackIndex;
+          record.attackModeId ??= identity.attackModeId;
+          record.declarationId ??= identity.declarationId;
+          record.opportunityId ??= identity.opportunityId;
+          record.weaponInstanceId ??= identity.weaponInstanceId;
+          record.weaponSourceId ??= identity.weaponSourceId;
+          record.weaponSourceSlot ??= identity.weaponSourceSlot;
+          record.weaponTemplateId ??= identity.weaponTemplateId;
+        }
+      }
       record.executionGroupId ??= `test:missing:${entry[1][0]}:group`;
       record.expectedRevision ??= encounter.updatedAt;
       record.taskId ??= `test:missing:${entry[1][0]}:task`;
@@ -323,6 +384,10 @@ async function buildScenarioTestApp() {
     record.executionGroupId ??= selected.executionGroupId;
     record.expectedRevision ??= encounter.updatedAt;
     record.taskId ??= selected.id;
+    record.actionId ??= selected.identity.actionId;
+    record.attackIndex ??= selected.identity.attackIndex;
+    record.attackModeId ??= selected.identity.attackModeId;
+    record.declarationId ??= selected.identity.declarationId;
     record.opportunityId ??= selected.identity.opportunityId;
     record.attackResultId ??= selected.identity.attackResultId;
     record.opponentParticipantId ??= selected.identity.opponentParticipantId;
@@ -339,6 +404,10 @@ async function buildScenarioTestApp() {
       (selected.kind === "parry" ? record.participantId : undefined);
     record.phase ??= selected.identity.phase;
     record.proposalId ??= selected.identity.proposalId;
+    record.weaponInstanceId ??= selected.identity.weaponInstanceId;
+    record.weaponSourceId ??= selected.identity.weaponSourceId;
+    record.weaponSourceSlot ??= selected.identity.weaponSourceSlot;
+    record.weaponTemplateId ??= selected.identity.weaponTemplateId;
   });
   await app.register(scenariosRoutes);
   return app;
@@ -821,6 +890,23 @@ function makeOpenPhase1AttackRoundState(
         attackResults: {},
         declaration: {
           actionId: "attack_parry",
+          attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+            actionId: "attack_parry",
+            participantId: "encounter-participant-1",
+            phaseContexts: {
+              phase1: testCombatPhaseContext("encounter-participant-2"),
+            },
+            roundNumber: 1,
+            sources: {
+              phase1: {
+                attackModeId: "mode-1",
+                sourceKind: "unarmed",
+                weaponSourceId: "unarmed:virtual-weapon-template-punch",
+                weaponSourceSlot: "virtual",
+                weaponTemplateId: "virtual-weapon-template-punch",
+              },
+            },
+          }),
           phaseContexts: {
             phase1: {
               targetParticipantId: "participant-2",
@@ -1097,8 +1183,11 @@ function makeWeaponEquipmentState(input: {
   templateId?: string;
 }) {
   const characterId = input.characterId ?? "character-1";
+  const canonicalTemplate = weaponTemplates.find((template) => template.name === input.name);
   const templateId =
-    input.templateId ?? `template-${input.name.toLowerCase().replace(/\s+/g, "-")}`;
+    input.templateId ??
+    canonicalTemplate?.id ??
+    `template-${input.name.toLowerCase().replace(/\s+/g, "-")}`;
   const itemId = `item-${templateId}`;
 
   return {
@@ -1116,7 +1205,7 @@ function makeWeaponEquipmentState(input: {
     locationsById: {},
     templates: {
       templatesById: {
-        [templateId]: {
+        [templateId]: canonicalTemplate ?? {
           category: "weapon",
           id: templateId,
           name: input.name,
@@ -1418,6 +1507,87 @@ function makeCombatEncounterWithResolvedCombatExperience(
   return withResolvedCombatStartExperience(makeCombatEncounter(overrides)) as EncounterSession;
 }
 
+function withCanonicalTestAttackLineage(input: Record<string, unknown>) {
+  const encounter = encounterSessionSchema.parse(input);
+  const round = encounter.combatRoundState;
+  if (!round) return encounter;
+
+  return encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: {
+      ...round,
+      participants: round.participants.map((participant) => {
+        const declaration = participant.declaration;
+        if (!declaration?.actionId) return participant;
+        const generated = buildCombatRoundDeclaredAttackOpportunities({
+          actionId: declaration.actionId,
+          participantId: participant.participantId,
+          phaseContexts: declaration.phaseContexts,
+          roundNumber: round.roundNumber,
+          sources: {
+            phase1: {
+              attackModeId: "mode-1",
+              sourceKind: "unarmed",
+              weaponSourceId: "unarmed:virtual-weapon-template-punch",
+              weaponSourceSlot: "virtual",
+              weaponTemplateId: "virtual-weapon-template-punch",
+            },
+            phase2: {
+              attackModeId: "mode-1",
+              sourceKind: "unarmed",
+              weaponSourceId: "unarmed:virtual-weapon-template-kick",
+              weaponSourceSlot: "virtual",
+              weaponTemplateId: "virtual-weapon-template-kick",
+            },
+          },
+        });
+        const opportunities =
+          declaration.attackOpportunities?.map((opportunity) => {
+            const canonical = generated.find(
+              (candidate) =>
+                candidate.phase === opportunity.phase && candidate.slot === opportunity.slot,
+            );
+            return canonical ? { ...canonical, ...opportunity } : opportunity;
+          }) ?? generated;
+        const attackResults = { ...participant.attackResults };
+        const attackResultsByOpportunity = { ...(participant.attackResultsByOpportunity ?? {}) };
+        for (const phase of ["phase1", "phase2"] as const) {
+          const result = attackResults[phase];
+          const opportunity = opportunities.find((candidate) => candidate.phase === phase);
+          if (!result || !opportunity) continue;
+          const identity = getCanonicalAttackOpportunityIdentity({
+            actionId: declaration.actionId,
+            attackerParticipantId: participant.participantId,
+            opportunity,
+            roundNumber: round.roundNumber,
+          });
+          if (!identity) continue;
+          const canonicalResult = {
+            ...result,
+            attackIndex: identity.attackIndex,
+            attackModeId: identity.attackModeId,
+            attackOpportunityId: identity.opportunityId,
+            attackSlot: opportunity.slot,
+            declarationId: identity.declarationId,
+            weaponInstanceId: identity.weaponInstanceId,
+            weaponSourceId: identity.weaponSourceId,
+            weaponSourceSlot: identity.weaponSourceSlot,
+            weaponTemplateId: identity.weaponTemplateId,
+          };
+          attackResults[phase] = canonicalResult;
+          attackResultsByOpportunity[identity.opportunityId] = canonicalResult;
+        }
+        return {
+          ...participant,
+          attackResults,
+          attackResultsByOpportunity,
+          declaration: { ...declaration, attackOpportunities: opportunities },
+        };
+      }),
+    },
+  });
+}
+
 function setupCombatDeclarationRoute(
   input: {
     combatExperienceDifficulty?: number;
@@ -1429,7 +1599,7 @@ function setupCombatDeclarationRoute(
     user?: typeof mocks.playerUser | typeof mocks.adminUser;
   } = {},
 ) {
-  const baseEncounter = makeCombatEncounter(input.encounter);
+  const baseEncounter = withCanonicalTestAttackLineage(makeCombatEncounter(input.encounter));
   const unresolvedEncounter =
     input.combatExperienceResolved === false && input.combatExperienceWindowOpen
       ? {
@@ -4493,9 +4663,11 @@ describe("scenarios route contract", () => {
         participants: encounterParticipants,
       },
       participants: [
-        {
+        makeCombatScenarioParticipantWithWeapon({
           id: "participant-1",
-        },
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
         {
           controlledByUserId: "other-player",
           id: "participant-2",
@@ -4585,9 +4757,11 @@ describe("scenarios route contract", () => {
         participants: encounterParticipants,
       },
       participants: [
-        {
+        makeCombatScenarioParticipantWithWeapon({
           id: "participant-1",
-        },
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
         {
           controlledByUserId: "other-player",
           id: "participant-2",
@@ -4618,6 +4792,13 @@ describe("scenarios route contract", () => {
             },
             targetParticipantId: "participant-2",
           },
+        },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-broad-sword",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
         },
         phaseWeaponNames: {
           phase1: "Broad sword",
@@ -4675,9 +4856,11 @@ describe("scenarios route contract", () => {
         participants: encounterParticipants,
       },
       participants: [
-        {
+        makeCombatScenarioParticipantWithWeapon({
           id: "participant-1",
-        },
+          weaponName: "Broad sword",
+          weaponRange: "2.0",
+        }),
         {
           controlledByUserId: "other-player",
           id: "participant-2",
@@ -4718,6 +4901,13 @@ describe("scenarios route contract", () => {
             },
             targetParticipantId: "participant-2",
           },
+        },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-broad-sword",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
         },
         phaseWeaponNames: {
           phase1: "Broad sword",
@@ -4830,6 +5020,13 @@ describe("scenarios route contract", () => {
             },
             targetParticipantId: "scenario-gladiator",
           },
+        },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-broad-sword",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
         },
         phaseWeaponNames: {
           phase1: "Broad sword",
@@ -4956,6 +5153,13 @@ describe("scenarios route contract", () => {
             },
             targetParticipantId: "scenario-gladiator",
           },
+        },
+        phaseAttackSources: {
+          phase1: makeWeaponAttackSourceRef({
+            itemId: "item-weapon-template-broad-sword",
+            opportunitySlot: "attack_1",
+            templateId: "weapon-template-broad-sword",
+          }),
         },
         phaseWeaponNames: {
           phase1: "Broad sword",
@@ -5413,7 +5617,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(409);
     expect(response.json()).toMatchObject({
       error: "Combat Experience rolls are not open. Set Combat Experience difficulty first.",
     });
@@ -7450,6 +7654,24 @@ describe("scenarios route contract", () => {
     const roundState = recordCombatRoundDeclaration({
       declaration: {
         actionId: "attack_parry",
+        attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+          actionId: "attack_parry",
+          participantId: "encounter-participant-1",
+          phaseContexts: {
+            phase1: testCombatPhaseContext("participant-2"),
+          },
+          roundNumber: 1,
+          sources: {
+            phase1: {
+              attackModeId: "mode-1",
+              itemId: "item-weapon-template-broad-sword",
+              sourceKind: "weapon",
+              weaponInstanceId: "item-weapon-template-broad-sword",
+              weaponSourceSlot: "primary",
+              weaponTemplateId: "weapon-template-broad-sword",
+            },
+          },
+        }),
         combatContext: {
           modifierBuckets: {
             general: [],
@@ -9752,6 +9974,13 @@ describe("scenarios route contract", () => {
           phaseContexts: {
             phase2: testCombatPhaseContext("participant-2"),
           },
+          phaseAttackSources: {
+            phase2: makeWeaponAttackSourceRef({
+              itemId: "item-weapon-template-longsword",
+              opportunitySlot: "attack_2",
+              templateId: "weapon-template-longsword",
+            }),
+          },
           scenarioParticipantId: "participant-1",
         },
         url: "/encounters/encounter-1/combat-declaration",
@@ -9764,6 +9993,13 @@ describe("scenarios route contract", () => {
           movementId: "hold",
           phaseContexts: {
             phase1: testCombatPhaseContext("participant-1"),
+          },
+          phaseAttackSources: {
+            phase1: makeWeaponAttackSourceRef({
+              itemId: "item-weapon-template-broad-sword",
+              opportunitySlot: "attack_1",
+              templateId: "weapon-template-broad-sword",
+            }),
           },
           scenarioParticipantId: "participant-2",
         },
@@ -10456,11 +10692,19 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        actionId: "attack_parry",
+        attackIndex: 1,
+        attackModeId: "mode-1",
+        declarationId: "round:1:participant:encounter-participant-1:declaration",
         defenderScenarioParticipantId: "participant-2",
         ob: 10,
         obSkillRaw: 0,
+        opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
         phase: "phase1",
         scenarioParticipantId: "participant-1",
+        weaponSourceId: "unarmed:virtual-weapon-template-punch",
+        weaponSourceSlot: "virtual",
+        weaponTemplateId: "virtual-weapon-template-punch",
       },
       url: "/encounters/encounter-1/combat-round/roll-attack",
     });
@@ -10472,17 +10716,29 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
     expect(attackResult).toMatchObject({
+      actionId: "attack_parry",
+      attackIndex: 1,
+      attackModeId: "mode-1",
+      attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
       attackerParticipantId: "encounter-participant-1",
+      declarationId: "round:1:participant:encounter-participant-1:declaration",
       defenderDb: 11,
       defenderParticipantId: "encounter-participant-2",
       ob: 10,
       phase: "phase1",
-      weaponName: "Long sword",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-punch",
+      weaponName: "Punch",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackIndex: 1,
+        attackModeId: "mode-1",
+        attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+        attackResultId: "1:opportunity:round:1:participant:encounter-participant-1:phase1:attack_1",
         obSkillRaw: 0,
+        weaponSourceId: "unarmed:virtual-weapon-template-punch",
       },
       participantId: "encounter-participant-1",
       type: "roll_attack",
@@ -10490,19 +10746,25 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier,
     ).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.involvedOutcome).toMatchObject({
+      attackIndex: 1,
+      attackModeId: "mode-1",
+      attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+    });
     expect(payload.command).toMatchObject({
       facts: expect.objectContaining({
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackResultId: "1:opportunity:round:1:participant:encounter-participant-1:phase1:attack_1",
       }),
       type: "roll_attack",
     });
     expect(payload.commandEnvelope).toMatchObject({
       latestEvent: expect.objectContaining({
-        resultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        resultId: "1:opportunity:round:1:participant:encounter-participant-1:phase1:attack_1",
         shortTitle: "Attack rolled",
       }),
       latestResult: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackResultId: "1:opportunity:round:1:participant:encounter-participant-1:phase1:attack_1",
         attackerParticipantId: "encounter-participant-1",
         defenderParticipantId: "encounter-participant-2",
         kind: "attack",
@@ -10518,10 +10780,52 @@ describe("scenarios route contract", () => {
       }),
     });
     expect(payload.encounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
+      attackIndex: 1,
+      attackModeId: "mode-1",
+      attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
       attackerParticipantId: "encounter-participant-1",
       defenderParticipantId: "encounter-participant-2",
       phase: "phase1",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
     });
+  });
+
+  it.each([
+    ["attack mode", { attackModeId: "wrong-mode" }],
+    ["attack index", { attackIndex: 2 }],
+    ["weapon source", { weaponSourceId: "unarmed:virtual-weapon-template-kick" }],
+  ])("rejects a live attack with a mismatched canonical %s identity", async (_label, mismatch) => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: makeOpenPhase1AttackRoundState(),
+        participants: makeTwoCombatEncounterParticipants(),
+      },
+      participants: [
+        { id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 0,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+        ...mismatch,
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("identity_mismatch");
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("rejects a new live attack that omits the required Skill/OB total", async () => {
@@ -10714,7 +11018,7 @@ describe("scenarios route contract", () => {
     expect(attackResult).toMatchObject({
       ob: 6,
       phase: "phase1",
-      weaponName: "Long sword",
+      weaponName: "Punch",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
@@ -10805,7 +11109,7 @@ describe("scenarios route contract", () => {
     expect(attackResult).toMatchObject({
       ob: 10,
       phase: "phase1",
-      weaponName: "Broad sword",
+      weaponName: "Punch",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject(
       {
@@ -11342,11 +11646,11 @@ describe("scenarios route contract", () => {
       defenderParticipantId: "encounter-participant-2",
       ob: 9,
       phase: "phase2",
-      weaponName: "Long sword",
+      weaponName: "Kick",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
-        attackResultId: "1:phase2:encounter-participant-1:encounter-participant-2",
+        attackResultId: "1:opportunity:feint-a2",
       },
       participantId: "encounter-participant-1",
       type: "roll_attack",
@@ -11425,18 +11729,26 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        actionId: "attack_parry",
+        attackIndex: 1,
+        attackModeId: "mode-1",
+        declarationId: "round:1:participant:encounter-participant-1:declaration",
         defenderScenarioParticipantId: "participant-2",
         ob: 10,
         obSkillRaw: 0,
+        opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
         phase: "phase1",
         scenarioParticipantId: "participant-1",
+        weaponSourceId: "unarmed:virtual-weapon-template-punch",
+        weaponSourceSlot: "virtual",
+        weaponTemplateId: "virtual-weapon-template-punch",
       },
       url: "/encounters/encounter-1/combat-round/roll-attack",
     });
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(409);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
@@ -14012,9 +14324,17 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[1].initiatives.phase1).toMatchObject({
       total: 12,
     });
-    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toEqual(
-      gladiatorMiss,
-    );
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
+      actionId: gladiatorMiss.actionId,
+      attackIndex: 1,
+      attackModeId: "mode-1",
+      attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+      attackerParticipantId: gladiatorMiss.attackerParticipantId,
+      defenderParticipantId: gladiatorMiss.defenderParticipantId,
+      phase: "phase1",
+      rollTotal: gladiatorMiss.rollTotal,
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+    });
     expect(updatedEncounter.combatRoundState.participants[1].attackResults.phase1).toBeUndefined();
   });
 

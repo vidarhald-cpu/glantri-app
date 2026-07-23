@@ -2,6 +2,7 @@ import {
   combatRoundStateSchema,
   buildCombatRoundDeclaredAttackOpportunities,
   getCombatRoundAttackResultId,
+  getCombatRoundAttackResultForOpportunity,
   getCombatRoundDamageSubstate,
   getCombatRoundDoubleAttackPhase2Decision,
   type CombatRoundAttackOpportunity,
@@ -256,9 +257,10 @@ function stageStates(input: {
   }
   if (!input.prerequisitesSatisfied) return { completion: { complete: false }, states: pending };
 
-  const attack = input.state.participants.find(
-    (participant) => participant.participantId === input.ownerParticipantId,
-  )?.attackResults[input.opportunity.phase];
+  const attack = getCombatRoundAttackResultForOpportunity({
+    opportunityId: input.opportunity.id,
+    state: input.state,
+  });
   if (!attack) {
     pending.attack = "ready";
     return { completion: { complete: false }, states: pending };
@@ -321,9 +323,10 @@ function buildStandardAttackProcess(input: {
   prerequisites: readonly CombatActionProcessPrerequisite[];
   state: CombatRoundState;
 }): StandardAttackProcessPlan {
-  const attack = input.state.participants.find(
-    (participant) => participant.participantId === input.ownerParticipantId,
-  )?.attackResults[input.opportunity.phase];
+  const attack = getCombatRoundAttackResultForOpportunity({
+    opportunityId: input.opportunity.id,
+    state: input.state,
+  });
   const attackResultId = attack
     ? getCombatRoundAttackResultId({ result: attack, roundNumber: input.state.roundNumber })
     : undefined;
@@ -853,12 +856,12 @@ function buildAdjustDistanceManeuver(input: {
             ? [
                 !proposal?.attackerRoll
                   ? maneuverTask({
-                expectedCommand: "roll_adjust_distance",
-                kind: "adjust_distance_attacker_roll",
-                opportunityId,
-                ownerParticipantId: input.ownerParticipantId,
-                pairId,
-                proposalId,
+                      expectedCommand: "roll_adjust_distance",
+                      kind: "adjust_distance_attacker_roll",
+                      opportunityId,
+                      ownerParticipantId: input.ownerParticipantId,
+                      pairId,
+                      proposalId,
                     })
                   : undefined,
                 !proposal?.defenderRoll

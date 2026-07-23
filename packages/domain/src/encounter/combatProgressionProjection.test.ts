@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDeclaredAttackOpportunities,
+  getCombatRoundAttackResultId,
   commitCombatRoundPhaseInitiativeResolution,
   combatRoundStateSchema,
   recordCombatRoundAttackResult,
@@ -45,7 +47,54 @@ function state(
 ): CombatRoundState {
   const roundNumber = input.roundNumber ?? 2;
   const participants = [participant("hero", "Hero"), participant("guard", "Guard")].map(
-    (entry, index) => ({ ...entry, ...(input.participantOverrides?.[index] ?? {}) }),
+    (entry, index) => {
+      const merged = { ...entry, ...(input.participantOverrides?.[index] ?? {}) } as Record<
+        string,
+        unknown
+      >;
+      const declaration = merged.declaration as Record<string, unknown> | undefined;
+      if (!declaration || typeof declaration.actionId !== "string") return merged;
+      const phaseContexts = declaration.phaseContexts as
+        | Parameters<typeof buildCombatRoundDeclaredAttackOpportunities>[0]["phaseContexts"]
+        | undefined;
+      const canonical = buildCombatRoundDeclaredAttackOpportunities({
+        actionId: declaration.actionId,
+        participantId: entry.participantId,
+        phaseContexts,
+        roundNumber,
+        sources: {
+          phase1: {
+            attackModeId: "mode-punch",
+            sourceKind: "unarmed",
+            weaponSourceId: "unarmed:virtual-weapon-template-punch",
+            weaponSourceSlot: "virtual",
+            weaponTemplateId: "virtual-weapon-template-punch",
+          },
+          phase2: {
+            attackModeId: "mode-kick",
+            sourceKind: "unarmed",
+            weaponSourceId: "unarmed:virtual-weapon-template-kick",
+            weaponSourceSlot: "virtual",
+            weaponTemplateId: "virtual-weapon-template-kick",
+          },
+        },
+      });
+      const existing = declaration.attackOpportunities as
+        | Array<Record<string, unknown>>
+        | undefined;
+      merged.declaration = {
+        ...declaration,
+        attackOpportunities:
+          existing?.map((opportunity) => {
+            const generated = canonical.find(
+              (candidate) =>
+                candidate.phase === opportunity.phase && candidate.slot === opportunity.slot,
+            );
+            return generated ? { ...generated, ...opportunity } : opportunity;
+          }) ?? canonical,
+      };
+      return merged;
+    },
   );
   return combatRoundStateSchema.parse({
     currentCursor: input.cursorStep
@@ -444,7 +493,7 @@ describe("CombatProgressionProjection", () => {
         {
           declaration: {
             actionId: "attack_parry",
-            phaseContexts: { phase1: { targetParticipantId: "scenario-guard" } },
+            phaseContexts: { phase1: { targetParticipantId: "guard" } },
             roundNumber: 2,
             submittedBy: "player",
           },
@@ -1330,7 +1379,7 @@ describe("authorizeCombatProgressionTask", () => {
         {
           declaration: {
             actionId: "attack_parry",
-            phaseContexts: { phase1: { targetParticipantId: "scenario-guard" } },
+            phaseContexts: { phase1: { targetParticipantId: "guard" } },
             roundNumber: 2,
             submittedBy: "player",
           },
@@ -1339,7 +1388,12 @@ describe("authorizeCombatProgressionTask", () => {
     });
     const hit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackIndex: 1,
+      attackModeId: "mode-punch",
+      attackOpportunityId: "round:2:participant:hero:phase1:attack_1",
+      attackSlot: "attack_1",
       attackerParticipantId: "hero",
+      declarationId: "round:2:participant:hero:declaration",
       defenderDb: 0,
       defenderParticipantId: "guard",
       ob: 80,
@@ -1348,6 +1402,9 @@ describe("authorizeCombatProgressionTask", () => {
       rollTotal: 20,
       rolledAt: "2026-07-19T10:00:00.000Z",
       weaponName: "Long Sword",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-punch",
     });
     const afterHit = recordCombatRoundAttackResult({
       command: { createdAt: hit.rolledAt },
@@ -1367,7 +1424,7 @@ describe("authorizeCombatProgressionTask", () => {
       allowedActors: ["combatant", "gm"],
       expectedCommand: "roll_parry",
       identity: {
-        attackResultId: "2:phase1:hero:guard",
+        attackResultId: getCombatRoundAttackResultId({ result: hit, roundNumber: 2 }),
         opponentParticipantId: "hero",
         phase: "phase1",
       },
@@ -1538,7 +1595,12 @@ describe("authorizeCombatProgressionTask", () => {
   it("authorizes hit location and damage review by their complete canonical identities", () => {
     const attackResult = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackIndex: 1,
+      attackModeId: "mode-punch",
+      attackOpportunityId: "hero-phase1-attack",
+      attackSlot: "attack_1",
       attackerParticipantId: "hero",
+      declarationId: "round:2:participant:hero:declaration",
       defenderDb: 0,
       defenderParticipantId: "guard",
       ob: 80,
@@ -1547,6 +1609,9 @@ describe("authorizeCombatProgressionTask", () => {
       rollTotal: 20,
       rolledAt: "2026-07-19T10:00:00.000Z",
       weaponName: "Sword",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-punch",
     });
     const initial = state({
       cursorParticipantId: "hero",
@@ -1733,7 +1798,12 @@ describe("authorizeCombatProgressionTask", () => {
   it("projects grazing damage as one attacker-owned roll before the ordinary GM review", () => {
     const attackResult = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackIndex: 1,
+      attackModeId: "mode-punch",
+      attackOpportunityId: "hero-graze-phase1",
+      attackSlot: "attack_1",
       attackerParticipantId: "hero",
+      declarationId: "round:2:participant:hero:declaration",
       defenderDb: 0,
       defenderParticipantId: "guard",
       ob: 0,
@@ -1742,6 +1812,9 @@ describe("authorizeCombatProgressionTask", () => {
       rollTotal: 11,
       rolledAt: "2026-07-19T11:00:00.000Z",
       weaponName: "Sword",
+      weaponSourceId: "unarmed:virtual-weapon-template-punch",
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-punch",
     });
     const initial = state({
       cursorParticipantId: "hero",
