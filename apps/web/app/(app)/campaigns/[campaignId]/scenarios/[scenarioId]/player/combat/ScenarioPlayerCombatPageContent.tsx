@@ -100,7 +100,7 @@ import {
 } from "@/features/player-combat/combatParticipantCandidates";
 import {
   applyDefaultPlayerCombatPhaseContext,
-  buildCombatAttackSourceRef,
+  buildCombatDeclarationAttackSelection,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -2135,6 +2135,14 @@ export default function ScenarioPlayerCombatPageContent({
         },
       };
     }
+    const declarationAttackSelection = buildCombatDeclarationAttackSelection({
+      actionId: selectedActionId || undefined,
+      feintMethod,
+      phaseContexts: requestPhaseContexts,
+      phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
+      secondaryActionId: selectedSecondaryActionId || undefined,
+    });
+    requestPhaseContexts = declarationAttackSelection.phaseContexts;
     const targetValidation = validateCombatDeclarationTargets({
       actionId: selectedActionId || undefined,
       phaseContexts: requestPhaseContexts,
@@ -2189,27 +2197,7 @@ export default function ScenarioPlayerCombatPageContent({
         movementId: selectedMovementId || undefined,
         movementIntent: selectedMovementIntent,
         phaseContexts: requestPhaseContexts,
-        phaseAttackSources: {
-          phase1:
-            selectedActionId === "double_attack" ||
-            (selectedActionId === "feint_attack" && feintMethod === "weapon")
-              ? buildCombatAttackSourceRef({
-                  phaseKey: "phase1",
-                  reference: phaseCombatLoadoutSummaries.phase1.reference,
-                  unarmedTemplateId: "virtual-weapon-template-punch",
-                })
-              : undefined,
-          phase2:
-            selectedActionId === "double_attack" ||
-            selectedActionId === "feint_attack" ||
-            selectedActionId === "adjust_range_attack"
-              ? buildCombatAttackSourceRef({
-                  phaseKey: "phase2",
-                  reference: phaseCombatLoadoutSummaries.phase2.reference,
-                  unarmedTemplateId: "virtual-weapon-template-kick",
-                })
-              : undefined,
-        },
+        phaseAttackSources: declarationAttackSelection.phaseAttackSources,
         phaseWeaponNames: {
           phase1: phaseCombatLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName,
@@ -2742,9 +2730,7 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  async function rollCurrentOffensiveParryBrawling(
-    candidate: CurrentActionCommandDescriptor,
-  ) {
+  async function rollCurrentOffensiveParryBrawling(candidate: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
       expectedCommandTypes: ["roll_offensive_parry_brawling"],

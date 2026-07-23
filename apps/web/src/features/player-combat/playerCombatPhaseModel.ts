@@ -218,6 +218,11 @@ export interface PlayerCombatAttackModeOption {
   label: string;
 }
 
+export interface CombatDeclarationAttackSelection {
+  phaseAttackSources: Partial<Record<PlayerCombatPhaseKey, CombatAttackSourceRef>>;
+  phaseContexts: CombatRoundPhaseContexts;
+}
+
 export interface PlayerCombatPhasePanelModel {
   attackStats: PlayerCombatAttackStatsView | null;
   defenseStats: PlayerCombatDefenseStatsView | null;
@@ -472,6 +477,19 @@ export function buildCombatAttackSourceRef(input: {
   unarmedTemplateId: string;
 }): CombatAttackSourceRef | undefined {
   const opportunitySlot = input.phaseKey === "phase1" ? "attack_1" : "attack_2";
+  const isExplicitUnarmedSelection =
+    !input.reference?.sourceItemId &&
+    (input.reference?.selectedWeapon === "Punch" || input.reference?.selectedWeapon === "Kick");
+  if (isExplicitUnarmedSelection) {
+    return {
+      attackModeId: input.reference?.sourceAttackModeId ?? "mode-1",
+      opportunitySlot,
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: input.unarmedTemplateId,
+    };
+  }
+
   if (
     input.reference?.sourceItemId &&
     input.reference.sourceTemplateId &&
@@ -489,6 +507,7 @@ export function buildCombatAttackSourceRef(input: {
   }
 
   if (
+    !input.reference ||
     input.reference?.sourceItemId ||
     input.reference?.sourceTemplateId ||
     input.reference?.sourceAttackModeId
@@ -496,13 +515,54 @@ export function buildCombatAttackSourceRef(input: {
     return undefined;
   }
 
-  return {
-    attackModeId: "mode-1",
-    opportunitySlot,
-    slot: "virtual",
-    sourceKind: "unarmed",
-    templateId: input.unarmedTemplateId,
-  };
+  return undefined;
+}
+
+/**
+ * Converts the explicit declaration-editor selections into canonical source references.
+ * This is the only pre-commit normalization boundary: live combat execution consumes the
+ * persisted opportunity identity and never calls this helper.
+ */
+export function buildCombatDeclarationAttackSelection(input: {
+  actionId?: string;
+  feintMethod?: "movement" | "weapon";
+  phaseContexts: CombatRoundPhaseContexts;
+  phaseLoadoutSummaries: Record<
+    PlayerCombatPhaseKey,
+    Pick<PlayerCombatLoadoutSummary, "reference" | "selectedAttackModeId">
+  >;
+  secondaryActionId?: string;
+}): CombatDeclarationAttackSelection {
+  const attackPhases = new Set<PlayerCombatPhaseKey>(
+    getCombatDeclarationAttackPhases({
+      actionId: input.actionId,
+      secondaryActionId: input.secondaryActionId,
+    }),
+  );
+  if (input.actionId === "feint_attack" && input.feintMethod === "weapon") {
+    attackPhases.add("phase1");
+  }
+
+  const phaseAttackSources: Partial<Record<PlayerCombatPhaseKey, CombatAttackSourceRef>> = {};
+  const phaseContexts: CombatRoundPhaseContexts = { ...input.phaseContexts };
+  for (const phaseKey of attackPhases) {
+    const source = buildCombatAttackSourceRef({
+      phaseKey,
+      reference: input.phaseLoadoutSummaries[phaseKey].reference,
+      unarmedTemplateId:
+        phaseKey === "phase1" ? "virtual-weapon-template-punch" : "virtual-weapon-template-kick",
+    });
+    if (!source) continue;
+
+    phaseAttackSources[phaseKey] = source;
+    phaseContexts[phaseKey] = scenarioParticipantCombatContextSchema.parse({
+      ...phaseContexts[phaseKey],
+      attackModeId:
+        input.phaseLoadoutSummaries[phaseKey].selectedAttackModeId ?? source.attackModeId,
+    });
+  }
+
+  return { phaseAttackSources, phaseContexts };
 }
 
 export function buildPlayerCombatLoadoutSummary(input: {
@@ -609,7 +669,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
           ) ?? null,
       )
       .find((row) => row !== null) ??
-    combatPanelModel.weaponModeTable.rows[0] ??
+    (preferredFieldIds.length === 0 ? combatPanelModel.weaponModeTable.rows[0] : undefined) ??
     null;
   const combinedRow =
     combatPanelModel.weaponModeTable.rows.find(
@@ -622,6 +682,17 @@ export function buildPlayerCombatLoadoutSummary(input: {
     ) ?? null;
 
   if (!referenceRow) {
+    if (input.allowUnarmedFallback === false) {
+      return {
+        attackStats: null,
+        attackModeOptions: [],
+        mainHandParryItemLabel,
+        offHandParryItemLabel,
+        passiveInitiative: 0,
+        reference: null,
+        selectedAttackModeUsedFallback: false,
+      };
+    }
     const reference = {
       am: "—",
       am2: "—",
@@ -686,10 +757,22 @@ export function buildPlayerCombatLoadoutSummary(input: {
     };
   }
   const primaryItemId = loadoutFieldDisplayMap.get("primary")?.value;
-  const selectedSourceItemId = rawReferenceRow?.itemId;
-  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find(
-    (fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value === selectedSourceItemId,
-  );
+  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find((fieldId) => {
+    const field = loadoutFieldDisplayMap.get(fieldId);
+    if (!field?.value) return false;
+    if (field.value === rawReferenceRow?.itemId) return true;
+    const matchingRows = combatPanelModel.weaponRows?.filter(
+      (row) => row.currentItemLabel === field.valueLabel,
+    );
+    return (
+      field.valueLabel === referenceWeaponLabel &&
+      matchingRows?.length === 1 &&
+      matchingRows[0] === rawReferenceRow
+    );
+  });
+  const selectedSourceItemId =
+    (sourceSlot ? loadoutFieldDisplayMap.get(sourceSlot)?.value : undefined) ??
+    rawReferenceRow?.itemId;
   const requireRepeatedRoundAttack = Boolean(
     input.actionId === "double_attack" &&
     input.phaseKey === "phase2" &&
@@ -827,7 +910,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       modeResolution.mode?.id ??
       input.selectedAttackModeId ??
       (requireRepeatedRoundAttack ? undefined : rawReferenceRow?.attackMode1Id),
-    sourceItemId: rawReferenceRow?.itemId,
+    sourceItemId: selectedSourceItemId,
     sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,
   };

@@ -41,7 +41,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Combat Round Manager");
-    expect(source).toContain("buildCombatAttackSourceRef");
+    expect(source).toContain("buildCombatDeclarationAttackSelection");
+    expect(source).toContain("phaseAttackSources: declarationAttackSelection.phaseAttackSources");
     expect(source).toContain("formatScenarioCombatEquipmentDiagnostic");
     expect(source).not.toContain("refreshScenarioParticipantEquipmentOnServer");
     expect(source).not.toContain("Refresh participant equipment");

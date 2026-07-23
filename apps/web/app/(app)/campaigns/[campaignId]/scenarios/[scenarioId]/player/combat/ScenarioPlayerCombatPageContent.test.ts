@@ -61,7 +61,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatScenarioCombatEquipmentDiagnostic");
     expect(source).not.toContain("Refresh participant equipment");
     expect(source).not.toContain("refreshScenarioParticipantEquipmentOnServer");
-    expect(source).toContain("buildCombatAttackSourceRef");
+    expect(source).toContain("buildCombatDeclarationAttackSelection");
+    expect(source).toContain("phaseAttackSources: declarationAttackSelection.phaseAttackSources");
     expect(source).not.toContain("itemId: phaseCombatLoadoutSummaries");
     expect(source).toContain("visibleAtStep: currentCombatStep");
     expect(source).toContain("buildPlayerCombatDefenseStats");

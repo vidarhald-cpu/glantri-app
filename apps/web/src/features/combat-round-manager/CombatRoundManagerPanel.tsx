@@ -219,7 +219,7 @@ import {
 } from "./combatRoundViewState";
 import {
   applyDefaultPlayerCombatPhaseContext,
-  buildCombatAttackSourceRef,
+  buildCombatDeclarationAttackSelection,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -7134,6 +7134,14 @@ export default function CombatRoundManagerPanel({
         },
       };
     }
+    const declarationAttackSelection = buildCombatDeclarationAttackSelection({
+      actionId: inspectorDraft.actionId || undefined,
+      feintMethod: inspectorDraft.feintMethod,
+      phaseContexts: requestPhaseContexts,
+      phaseLoadoutSummaries: inspectorPhaseLoadoutSummaries,
+      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+    });
+    requestPhaseContexts = declarationAttackSelection.phaseContexts;
     const targetValidation = isModifierReview
       ? { valid: true as const }
       : validateCombatDeclarationTargets({
@@ -7198,27 +7206,7 @@ export default function CombatRoundManagerPanel({
         movementId: inspectorDraft.movementId || undefined,
         movementIntent: inspectorDraft.movementIntent,
         phaseContexts: requestPhaseContexts,
-        phaseAttackSources: {
-          phase1:
-            inspectorDraft.actionId === "double_attack" ||
-            (inspectorDraft.actionId === "feint_attack" && inspectorDraft.feintMethod === "weapon")
-              ? buildCombatAttackSourceRef({
-                  phaseKey: "phase1",
-                  reference: inspectorPhaseLoadoutSummaries.phase1.reference,
-                  unarmedTemplateId: "virtual-weapon-template-punch",
-                })
-              : undefined,
-          phase2:
-            inspectorDraft.actionId === "double_attack" ||
-            inspectorDraft.actionId === "feint_attack" ||
-            inspectorDraft.actionId === "adjust_range_attack"
-              ? buildCombatAttackSourceRef({
-                  phaseKey: "phase2",
-                  reference: inspectorPhaseLoadoutSummaries.phase2.reference,
-                  unarmedTemplateId: "virtual-weapon-template-kick",
-                })
-              : undefined,
-        },
+        phaseAttackSources: declarationAttackSelection.phaseAttackSources,
         phaseWeaponNames: {
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
@@ -8162,9 +8150,7 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorOffensiveParryBrawling(
-    candidate: CurrentActionCommandDescriptor,
-  ) {
+  async function rollInspectorOffensiveParryBrawling(candidate: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
       expectedCommandTypes: ["roll_offensive_parry_brawling"],
