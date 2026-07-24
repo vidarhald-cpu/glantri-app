@@ -237,6 +237,55 @@ describe("CurrentActionPresentation", () => {
     });
   });
 
+  it.each(["miss", "hit"] as const)(
+    "presents proactive Offensive Parry after an incoming %s without implying the attack hit",
+    (attackOutcome) => {
+      const base = task({
+        actionKind: "offensive_parry",
+        actor: borin,
+        command: "roll_parry",
+        kind: "parry",
+        owner: aria,
+        responder: aria,
+        target: aria,
+      });
+      const candidate: CombatProgressionPresentationTask = {
+        ...base,
+        identity: {
+          ...base.identity,
+          attackerParticipantId: "borin",
+          declarationId: "declaration-aria",
+          declaredOpponentParticipantId: "borin",
+          defenderParticipantId: "aria",
+          offensiveParryAttemptId: "offensive-parry-attempt-1",
+          parryPurpose: "offensive_parry",
+          parrySourceId: "main-hand",
+        },
+        presentationContext: {
+          ...base.presentationContext,
+          attackOutcome,
+        },
+      };
+
+      const result = build([candidate], "player");
+      expect(result).toMatchObject({
+        actionName: "Offensive Parry",
+        primaryAction: {
+          descriptor: {
+            declarationId: "declaration-aria",
+            declaredOpponentParticipantId: "borin",
+            offensiveParryAttemptId: "offensive-parry-attempt-1",
+            parryPurpose: "offensive_parry",
+            parrySourceId: "main-hand",
+          },
+          label: "Roll Offensive Parry",
+        },
+        requiredNow: "Attempt the parry.",
+        summary: `Borin committed to an attack. The attack ${attackOutcome === "hit" ? "hit" : "missed"}. Aria prepared an Offensive Parry.`,
+      });
+    },
+  );
+
   it("binds Offensive Parry Brawling to the exact contest and parry lineage", () => {
     const base = task({
       actionKind: "offensive_parry",

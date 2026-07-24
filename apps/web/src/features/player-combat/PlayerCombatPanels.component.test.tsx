@@ -31,6 +31,33 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(screen.getByRole("option", { name: "Choose action" })).toBeInTheDocument();
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
   });
+
+  it("renders the canonical Offensive Parry opponent selector used by GM and Player Combat", () => {
+    const onSelectedOpponentChange = vi.fn();
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId="offensive_parry"
+        additionalActionNotes=""
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSelectedOpponentChange={onSelectedOpponentChange}
+        onSecondaryActionChange={vi.fn()}
+        opponentOptions={[
+          { displayName: "Borin", id: "encounter-participant-borin" },
+          { displayName: "Cora", id: "encounter-participant-cora" },
+        ]}
+        secondaryActionId=""
+        selectedOpponentId="encounter-participant-borin"
+      />,
+    );
+
+    const selector = screen.getByRole("combobox", { name: "Opponent to counter" });
+    expect(selector).toHaveValue("encounter-participant-borin");
+    fireEvent.change(selector, { target: { value: "encounter-participant-cora" } });
+    expect(onSelectedOpponentChange).toHaveBeenCalledWith("encounter-participant-cora");
+  });
 });
 
 describe("PlayerCombatAttackModeSelector", () => {

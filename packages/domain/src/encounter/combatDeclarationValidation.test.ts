@@ -103,6 +103,25 @@ describe("combat declaration target validation", () => {
     });
   });
 
+  it("requires an explicit prepared opponent for Offensive Parry", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "offensive_parry",
+        phaseContexts,
+      }),
+    ).toMatchObject({
+      message: "Select an opponent to counter with Offensive Parry.",
+      valid: false,
+    });
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "offensive_parry",
+        phaseContexts,
+        selectedOpponentId: "guard",
+      }),
+    ).toMatchObject({ valid: true });
+  });
+
   it("requires both targets for Double Attack", () => {
     expect(
       validateCombatDeclarationTargets({

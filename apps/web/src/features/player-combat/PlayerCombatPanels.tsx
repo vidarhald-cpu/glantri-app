@@ -158,8 +158,11 @@ interface PlayerCombatActionSelectorPanelProps {
   onAdditionalActionNotesChange: (notes: string) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
   onMovementIntentChange?: (movementIntent: MovementIntent) => void;
+  onSelectedOpponentChange?: (participantId: string) => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
+  opponentOptions?: readonly PlayerEncounterOpponentOption[];
   roundNumber?: number;
+  selectedOpponentId?: string;
   secondaryActionId: PlayerEncounterActionId | "";
   sourceLabel?: string;
 }
@@ -1114,8 +1117,11 @@ export function PlayerCombatActionSelectorPanel({
   onAdditionalActionNotesChange,
   onMovementChange,
   onMovementIntentChange,
+  onSelectedOpponentChange,
   onSecondaryActionChange,
+  opponentOptions = [],
   roundNumber,
+  selectedOpponentId,
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
@@ -1186,6 +1192,25 @@ export function PlayerCombatActionSelectorPanel({
           ))}
         </select>
       </label>
+
+      {actionId === "offensive_parry" ? (
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Opponent to counter</span>
+          <select
+            aria-label="Opponent to counter"
+            disabled={controlsDisabled}
+            onChange={(event) => onSelectedOpponentChange?.(event.target.value)}
+            value={selectedOpponentId ?? ""}
+          >
+            <option value="">Choose opponent</option>
+            {opponentOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>

@@ -2,6 +2,7 @@ import type {
   CombatAttackSourceRef,
   CombatHistoryProjection,
   CombatProgressionBoundaryKind,
+  CombatParryPurpose,
   CombatRoundAttackRollResult,
   CombatRoundCommand,
   CombatRoundCommandEnvelope,
@@ -841,19 +842,27 @@ export async function rollCombatAttackOnServer(input: {
 export async function rollCombatParryOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;
+  commandType: "roll_parry";
   dbParryRaw: number;
+  declarationId?: string;
+  declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
-  opportunityId?: string;
+  offensiveParryAttemptId?: string;
+  opportunityId: string;
   parryBase: number;
+  parryPurpose: CombatParryPurpose;
+  parrySourceId: string;
   parrySourceLabel?: string;
   phase: "phase1" | "phase2";
+  processId: string;
   scenarioParticipantId: string;
   taskId: string;
+  stageId: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 }): Promise<EncounterSession> {
@@ -863,18 +872,26 @@ export async function rollCombatParryOnServer(input: {
       body: JSON.stringify({
         attackResultId: input.attackResultId,
         attackerParticipantId: input.attackerParticipantId,
+        commandType: input.commandType,
         dbParryRaw: input.dbParryRaw,
+        declarationId: input.declarationId,
+        declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
         mainHandParryScore: input.mainHandParryScore,
         offHandParryScore: input.offHandParryScore,
+        offensiveParryAttemptId: input.offensiveParryAttemptId,
         opportunityId: input.opportunityId,
         parryBase: input.parryBase,
+        parryPurpose: input.parryPurpose,
+        parrySourceId: input.parrySourceId,
         parrySourceLabel: input.parrySourceLabel,
         phase: input.phase,
+        processId: input.processId,
         scenarioParticipantId: input.scenarioParticipantId,
         taskId: input.taskId,
+        stageId: input.stageId,
         usedMainHand: input.usedMainHand,
         usedOffHand: input.usedOffHand,
       }),
@@ -889,10 +906,12 @@ export async function rollOffensiveParryBrawlingOnServer(input: {
   attackResultId: string;
   contestId: string;
   declarationId: string;
+  declaredOpponentParticipantId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
   opponentParticipantId: string;
+  offensiveParryAttemptId: string;
   opportunityId: string;
   parryResultId: string;
   phase: "phase1" | "phase2";
@@ -908,9 +927,11 @@ export async function rollOffensiveParryBrawlingOnServer(input: {
         attackResultId: input.attackResultId,
         contestId: input.contestId,
         declarationId: input.declarationId,
+        declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
         opponentParticipantId: input.opponentParticipantId,
+        offensiveParryAttemptId: input.offensiveParryAttemptId,
         opportunityId: input.opportunityId,
         parryResultId: input.parryResultId,
         phase: input.phase,
@@ -929,19 +950,27 @@ export async function rollOffensiveParryBrawlingOnServer(input: {
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;
+  commandType: "roll_parry";
   dbParryRaw: number;
+  declarationId?: string;
+  declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
-  opportunityId?: string;
+  offensiveParryAttemptId?: string;
+  opportunityId: string;
   parryBase: number;
+  parryPurpose: CombatParryPurpose;
+  parrySourceId: string;
   parrySourceLabel?: string;
   phase: "phase1" | "phase2";
+  processId: string;
   scenarioParticipantId: string;
   taskId: string;
+  stageId: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 }): Promise<{
@@ -957,18 +986,26 @@ export async function rollCombatParryCommandOnServer(input: {
     body: JSON.stringify({
       attackResultId: input.attackResultId,
       attackerParticipantId: input.attackerParticipantId,
+      commandType: input.commandType,
       dbParryRaw: input.dbParryRaw,
+      declarationId: input.declarationId,
+      declaredOpponentParticipantId: input.declaredOpponentParticipantId,
       defenderParticipantId: input.defenderParticipantId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
       mainHandParryScore: input.mainHandParryScore,
       offHandParryScore: input.offHandParryScore,
+      offensiveParryAttemptId: input.offensiveParryAttemptId,
       opportunityId: input.opportunityId,
       parryBase: input.parryBase,
+      parryPurpose: input.parryPurpose,
+      parrySourceId: input.parrySourceId,
       parrySourceLabel: input.parrySourceLabel,
       phase: input.phase,
+      processId: input.processId,
       scenarioParticipantId: input.scenarioParticipantId,
       taskId: input.taskId,
+      stageId: input.stageId,
       usedMainHand: input.usedMainHand,
       usedOffHand: input.usedOffHand,
     }),

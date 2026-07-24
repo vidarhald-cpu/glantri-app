@@ -80,6 +80,8 @@ export type CombatLogSummaryFacts =
       readonly defense: "parry";
       readonly kind: "defense_resolved";
       readonly outcome: "failed" | "succeeded";
+      readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
+      readonly sourceAttackOutcome?: "hit" | "missed";
     }
   | {
       readonly amount: number;
@@ -504,6 +506,19 @@ function projectParry(input: {
   );
   if (!actor) return undefined;
   const outcome = success ? "succeeded" : "failed";
+  const parryPurpose = stringFact(
+    input.event.facts.publicOutcome,
+    "parryPurpose",
+  ) as "ordinary_defense" | "offensive_parry" | undefined;
+  const attackHit = booleanFact(input.event.facts.publicOutcome, "attackHit");
+  const offensiveParrySummary =
+    parryPurpose === "offensive_parry"
+      ? success
+        ? attackHit === false
+          ? `${possessive(target?.displayName ?? "The opponent")} attack missed, but ${actor.displayName} successfully intercepted the attack. Roll Brawling to establish continued contact.`
+          : `${actor.displayName} successfully parried ${possessive(target?.displayName ?? "the opponent")} attack. Roll Brawling to establish continued contact.`
+        : `${actor.displayName} failed to establish the parry. No Brawling contest was created.`
+      : undefined;
   return {
     ...baseCandidate({
       actor,
@@ -523,8 +538,14 @@ function projectParry(input: {
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
       sourceSequence: input.event.sequence,
-      summary: `${possessive(actor.displayName)} parry ${outcome}.`,
-      summaryFacts: { defense: "parry", kind: "defense_resolved", outcome },
+      summary: offensiveParrySummary ?? `${possessive(actor.displayName)} parry ${outcome}.`,
+      summaryFacts: {
+        defense: "parry",
+        kind: "defense_resolved",
+        outcome,
+        parryPurpose,
+        sourceAttackOutcome: attackHit === false ? "missed" : attackHit === true ? "hit" : undefined,
+      },
       target,
     }),
     attackResultId: input.event.attackResultId,

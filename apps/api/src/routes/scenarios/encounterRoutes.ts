@@ -1008,15 +1008,23 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   attackResultId: string;
   attackerParticipantId: string;
+  commandType: "roll_parry";
   dbParryRaw: number;
+  declarationId?: string;
+  declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   mainHandParryScore?: number;
   offHandParryScore?: number;
+  offensiveParryAttemptId?: string;
   opportunityId?: string;
   parryBase: number;
+  parryPurpose: "ordinary_defense" | "offensive_parry";
+  parrySourceId: string;
   parrySourceLabel?: string;
   phase: CombatRoundPhase;
+  processId: string;
   scenarioParticipantId: string;
+  stageId: string;
   usedMainHand?: boolean;
   usedOffHand?: boolean;
 } {
@@ -1027,6 +1035,42 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     typeof value.parrySourceLabel === "string" && value.parrySourceLabel.trim().length > 0
       ? value.parrySourceLabel
       : undefined;
+  if (value.commandType !== "roll_parry") {
+    throw new Error("commandType must be roll_parry.");
+  }
+  const parryPurpose =
+    value.parryPurpose === "ordinary_defense" || value.parryPurpose === "offensive_parry"
+      ? value.parryPurpose
+      : undefined;
+  if (!parryPurpose) {
+    throw new Error("parryPurpose is required.");
+  }
+  const declarationId =
+    value.declarationId === undefined
+      ? undefined
+      : parseNonEmptyString(value.declarationId, "declarationId");
+  const declaredOpponentParticipantId =
+    value.declaredOpponentParticipantId === undefined
+      ? undefined
+      : parseNonEmptyString(
+          value.declaredOpponentParticipantId,
+          "declaredOpponentParticipantId",
+        );
+  const offensiveParryAttemptId =
+    value.offensiveParryAttemptId === undefined
+      ? undefined
+      : parseNonEmptyString(value.offensiveParryAttemptId, "offensiveParryAttemptId");
+  if (
+    parryPurpose === "offensive_parry" &&
+    (!declarationId ||
+      !declaredOpponentParticipantId ||
+      !offensiveParryAttemptId ||
+      !value.opportunityId)
+  ) {
+    throw new Error(
+      "Offensive Parry requires declarationId, declaredOpponentParticipantId, offensiveParryAttemptId, and opportunityId.",
+    );
+  }
 
   return {
     ...parsed,
@@ -1036,20 +1080,28 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
       value.attackerParticipantId,
       "attackerParticipantId",
     ),
+    commandType: "roll_parry",
     dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
+    declarationId,
+    declaredOpponentParticipantId,
     defenderParticipantId: parseNonEmptyString(
       value.defenderParticipantId,
       "defenderParticipantId",
     ),
     mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
     offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
+    offensiveParryAttemptId,
     opportunityId:
       value.opportunityId === undefined
         ? undefined
         : parseNonEmptyString(value.opportunityId, "opportunityId"),
     parryBase: parseInteger(value.parryBase, "parryBase"),
+    parryPurpose,
+    parrySourceId: parseNonEmptyString(value.parrySourceId, "parrySourceId"),
     parrySourceLabel,
     phase: combatRoundPhaseSchema.parse(value.phase),
+    processId: parseNonEmptyString(value.processId, "processId"),
+    stageId: parseNonEmptyString(value.stageId, "stageId"),
     usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
     usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
   };
@@ -1061,6 +1113,8 @@ function parseOffensiveParryBrawlingBody(
   attackResultId: string;
   contestId: string;
   declarationId: string;
+  declaredOpponentParticipantId: string;
+  offensiveParryAttemptId: string;
   opponentParticipantId: string;
   opportunityId: string;
   parryResultId: string;
@@ -1081,6 +1135,14 @@ function parseOffensiveParryBrawlingBody(
     attackResultId: parseNonEmptyString(value.attackResultId, "attackResultId"),
     contestId: parseNonEmptyString(value.contestId, "contestId"),
     declarationId: parseNonEmptyString(value.declarationId, "declarationId"),
+    declaredOpponentParticipantId: parseNonEmptyString(
+      value.declaredOpponentParticipantId,
+      "declaredOpponentParticipantId",
+    ),
+    offensiveParryAttemptId: parseNonEmptyString(
+      value.offensiveParryAttemptId,
+      "offensiveParryAttemptId",
+    ),
     opponentParticipantId: parseNonEmptyString(
       value.opponentParticipantId,
       "opponentParticipantId",
@@ -3392,6 +3454,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
+      const selectedOffensiveParryOpponent =
+        body.actionId === "offensive_parry"
+          ? findCombatRoundParticipantByAlias({
+              id: body.combatContext.selectedOpponentId,
+              state: roundState,
+            })
+          : undefined;
+      if (
+        body.actionId === "offensive_parry" &&
+        body.combatContext.selectedOpponentId &&
+        (!selectedOffensiveParryOpponent ||
+          selectedOffensiveParryOpponent.participantId === encounterParticipant.id)
+      ) {
+        return reply.code(400).send({
+          error: "Select an active opponent to counter with Offensive Parry.",
+        });
+      }
+      const canonicalRequestedCombatContext = scenarioParticipantCombatContextSchema.parse({
+        ...body.combatContext,
+        selectedOpponentId:
+          body.actionId === "offensive_parry"
+            ? selectedOffensiveParryOpponent?.participantId
+            : body.combatContext.selectedOpponentId,
+      });
       const submittedPhaseContexts = body.phaseContexts
         ? {
             phase1: body.phaseContexts.phase1
@@ -3413,10 +3499,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           }
         : undefined;
       const baseSubmittedCombatContext = gmAuthorizedOperation
-        ? body.combatContext
+        ? canonicalRequestedCombatContext
         : preservePlayerCombatModifierBuckets({
             existingContext: existingCombatContext,
-            requestedContext: body.combatContext,
+            requestedContext: canonicalRequestedCombatContext,
           });
       const gmModifierReviewOperation =
         gmAuthorizedOperation &&
@@ -3978,6 +4064,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const targetValidation = validateCombatDeclarationTargets({
         actionId: body.actionId,
         phaseContexts: declarationPhaseContexts,
+        selectedOpponentId: submittedCombatContext.selectedOpponentId,
         secondaryActionId: body.secondaryActionId,
       });
 
@@ -7522,11 +7609,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       if (
         attackResult &&
-        ((body.attackerParticipantId &&
-          body.attackerParticipantId !== attackResult.attackerParticipantId) ||
-          (body.defenderParticipantId &&
-            body.defenderParticipantId !== attackResult.defenderParticipantId) ||
-          (body.phase && body.phase !== attackResult.phase))
+        (body.attackerParticipantId !== attackResult.attackerParticipantId ||
+          body.defenderParticipantId !== attackResult.defenderParticipantId ||
+          body.phase !== attackResult.phase ||
+          (body.opportunityId !== undefined &&
+            body.opportunityId !== attackResult.attackOpportunityId))
       ) {
         return reply.code(409).send({
           code: "stale_opportunity",
@@ -7540,10 +7627,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? { kind: "gm" }
               : { kind: "combatant", participantId: encounterParticipant.id },
           attackResultId: body.attackResultId,
+          attackerParticipantId: body.attackerParticipantId,
           commandType: "roll_parry",
+          declarationId: body.declarationId,
+          declaredOpponentParticipantId: body.declaredOpponentParticipantId,
+          defenderParticipantId: body.defenderParticipantId,
+          offensiveParryAttemptId: body.offensiveParryAttemptId,
           opportunityId: body.opportunityId,
+          parryPurpose: body.parryPurpose,
+          parrySourceId: body.parrySourceId,
           participantId: encounterParticipant.id,
           phase: body.phase,
+          processId: body.processId,
+          stageId: body.stageId,
         },
         encounterRevision: encounter.updatedAt,
         identity: body,
@@ -7660,7 +7756,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rollTotal: roll.dieResult,
       });
       const parryResolution = {
+        attackOpportunityId: body.opportunityId,
+        attackResultId: body.attackResultId,
         combinedParryScore: parry.parryBase,
+        declaredOpponentParticipantId: body.declaredOpponentParticipantId,
         mainHandParryScore: body.mainHandParryScore,
         modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
         modifierAdjustment: parry.modifierAdjustment,
@@ -7668,8 +7767,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         notes:
           "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
         offHandParryScore: body.offHandParryScore,
+        offensiveParryAttemptId: body.offensiveParryAttemptId,
+        offensiveParryDeclarationId: body.declarationId,
         openEndedD10s: roll.openEndedD10s,
+        parrySourceId: body.parrySourceId,
         parrySourceLabel: body.parrySourceLabel,
+        purpose: body.parryPurpose,
         rawModifierTotal: parry.rawModifierTotal,
         resultLabel: parry.success ? "Parry successful" : "Parry failed",
         rollD20: roll.rollD20,
@@ -7807,6 +7910,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             commandType: "roll_offensive_parry_brawling",
             contestId: body.contestId,
             declarationId: body.declarationId,
+            declaredOpponentParticipantId: body.declaredOpponentParticipantId,
+            offensiveParryAttemptId: body.offensiveParryAttemptId,
             opponentParticipantId: body.opponentParticipantId,
             opportunityId: body.opportunityId,
             parryResultId: body.parryResultId,
@@ -8886,10 +8991,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   let nextState = participant.state;
 
                   if (declarationClearEncounterParticipantIds.has(encounterParticipant.id)) {
-                    nextState = clearScenarioParticipantCombatDeclaration({
-                      ...participant,
-                      state: nextState,
-                    });
+                    const restoredDeclaration = nextRoundState.participants.find(
+                      (entry) => entry.participantId === encounterParticipant.id,
+                    )?.declaration;
+                    nextState = restoredDeclaration
+                      ? {
+                          ...nextState,
+                          combat: {
+                            ...nextState.combat,
+                            combatContext:
+                              restoredDeclaration.combatContext ?? nextState.combat.combatContext,
+                            lastDeclaredActionId: restoredDeclaration.actionId,
+                            lastDeclaredEncounterId: encounter.id,
+                            lastDeclaredMovementId: restoredDeclaration.movementId,
+                            lastDeclaredRoundNumber: restoredDeclaration.roundNumber,
+                            lastDeclaredSecondaryActionId:
+                              restoredDeclaration.secondaryActionId,
+                            lastDeclarationNotes:
+                              restoredDeclaration.additionalActionNotes,
+                            lastMovementIntent: restoredDeclaration.movementIntent,
+                          },
+                        }
+                      : clearScenarioParticipantCombatDeclaration({
+                          ...participant,
+                          state: nextState,
+                        });
                   }
 
                   for (const command of removedCombatExperienceCommands) {

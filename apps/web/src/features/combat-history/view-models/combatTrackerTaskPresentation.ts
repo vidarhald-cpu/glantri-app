@@ -183,7 +183,10 @@ export function buildCombatTrackerTaskHover(
   const gmActionRequired = task.actorAccess.gm && !task.actorAccess.combatant;
   const requiredActorLabel = gmActionRequired ? "Game Master" : owner;
   const phase = phaseLabel(task);
-  const action = actionLabel(task.kind);
+  const action =
+    task.kind === "parry" && task.identity.parryPurpose === "offensive_parry"
+      ? "Offensive Parry"
+      : actionLabel(task.kind);
   let text: string;
 
   if (gmActionRequired) {
@@ -210,7 +213,9 @@ export function buildCombatTrackerTaskHover(
         break;
       case "parry":
         text = owner
-          ? `${owner} must respond to ${opponent ? `${opponent}’s` : "another combatant’s"} attack.`
+          ? task.identity.parryPurpose === "offensive_parry"
+            ? `${owner} must attempt Offensive Parry against ${opponent ? `${opponent}’s` : "another combatant’s"} attack.`
+            : `${owner} must respond to ${opponent ? `${opponent}’s` : "another combatant’s"} attack.`
           : "Another combatant must respond before combat can continue.";
         break;
       case "offensive_parry_brawling_roll":

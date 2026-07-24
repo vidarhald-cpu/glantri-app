@@ -14989,6 +14989,7 @@ describe("combat round manager", () => {
         combinedParryScore: 9,
         modifierAdjustment: 0,
         openEndedD10s: [],
+        purpose: "ordinary_defense",
         resultLabel: "Parry successful",
         rollD20: 12,
         rollTotal: 12,
@@ -17300,6 +17301,7 @@ describe("combat round manager", () => {
       attackResult,
       parryResolution: {
         openEndedD10s: [],
+        purpose: "ordinary_defense",
         resultLabel: "Parry successful",
         status: "resolved",
         success: true,
@@ -17312,6 +17314,7 @@ describe("combat round manager", () => {
       attackResult,
       parryResolution: {
         openEndedD10s: [],
+        purpose: "ordinary_defense",
         resultLabel: "Parry successful",
         status: "resolved",
         success: true,
@@ -17399,6 +17402,7 @@ describe("combat round manager", () => {
       attackResult,
       parryResolution: {
         openEndedD10s: [],
+        purpose: "ordinary_defense",
         resultLabel: "Parry failed",
         status: "resolved",
         success: false,
@@ -17421,6 +17425,7 @@ describe("combat round manager", () => {
       damageResult,
       parryResolution: {
         openEndedD10s: [],
+        purpose: "ordinary_defense",
         resultLabel: "Parry failed",
         status: "resolved",
         success: false,

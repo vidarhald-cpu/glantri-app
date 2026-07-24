@@ -28,36 +28,54 @@ winner, so Continued Contact is not established.
 
 ## Slice 1 sequence
 
-1. A participant commits an `offensive_parry` declaration.
+1. A participant commits an `offensive_parry` declaration and selects one prepared opponent.
 2. One generated, round-bound `flat_db` modifier applies DB −2. Recommit uses the same deterministic
    row identity and does not stack it.
-3. An exact canonical attack opportunity reaches ordinary parry resolution.
-4. If the Offensive Parry participant successfully parries that attack, one contest is created from
-   the declaration ID, opportunity ID, attack-result ID, and parry-result ID.
-5. A `parallel_all` execution group projects one participant-owned
+3. Any qualifying canonical attack by that selected opponent against the declarer creates one
+   proactive Offensive Parry task. The source attack does not need to hit, exceed DB, or enter an
+   ordinary defensive-parry branch.
+4. The task reuses the ordinary parry resolver, source, modifiers, dice, and success evaluation,
+   but carries `parryPurpose: offensive_parry` and exact declaration/attack lineage.
+5. If the proactive parry succeeds, one contest is created from the declaration ID, selected
+   opponent ID, attempt ID, opportunity ID, attack-result ID, and parry-result ID. A failed attempt
+   creates no contest.
+6. A `parallel_all` execution group projects one participant-owned
    `offensive_parry_brawling_roll` task for each unresolved roller.
-6. Each participant rolls Brawling for their own character; the GM may proxy through the same
+7. Each participant rolls Brawling for their own character; the GM may proxy through the same
    descriptor and endpoint.
-7. After both rolls, the strict comparison resolves automatically.
-8. If the Offensive Parry participant wins, one Continued Contact relationship and one Unbalanced
+8. After both rolls, the strict comparison resolves automatically.
+9. If the Offensive Parry participant wins, one Continued Contact relationship and one Unbalanced
    condition are created. Otherwise neither is created and the attack process closes normally.
 
 The contest belongs to P1 or P2, matching the triggering parry. It is not initiative or damage
-work. Resolving this Slice 1 branch does not create a follow-up attack and does not block the round
-for unimplemented maintenance.
+work. A missed source attack remains composed-process work until this branch resolves, without
+creating damage. For a hit, this task is the attack's one parry roll and retains ordinary successful
+parry behavior; a duplicate defensive parry is not projected. Resolving this Slice 1 branch does
+not create a follow-up attack and does not block the round for unimplemented maintenance.
 
 ## Canonical identities
 
-The Brawling descriptor and request retain:
+The declaration stores the selected encounter-participant ID in
+`combatContext.selectedOpponentId`. Recommit replaces that value; reload and undo use the persisted
+declaration and never infer it from the latest attacker, encounter order, distance, cursor, or
+inspector selection.
+
+The proactive parry descriptor and request retain:
 
 - encounter revision;
 - task, execution-group, process, and stage IDs;
-- contest and declaration IDs;
+- maneuver declaration and selected-opponent IDs;
+- attacker and defender IDs;
 - phase;
-- controller/roller and opponent participant IDs;
 - attack opportunity ID;
 - attack-result ID;
-- parry-result ID;
+- deterministic Offensive Parry attempt ID;
+- parry purpose and parry-source identity.
+
+The Brawling descriptor additionally retains:
+
+- contest and parry-result IDs;
+- controller/roller and opponent participant IDs;
 - roll purpose `offensive_parry_brawling`.
 
 No live layer resolves the trigger from participant plus phase, a cursor, inspector selection, or a
@@ -110,8 +128,11 @@ situational modifiers remain applicable. The escape contest is not implemented i
 
 ## Presentation and privacy
 
-Current Action asks each unresolved participant to roll Brawling. Tracker attention is owned by that
-exact task participant. The current-step result records the broad comparison and visible
+Before the contest, Current Action identifies the committed attacker and asks the declarer to roll
+Offensive Parry whether the source attack hit or missed. Tracker attention is owned by that exact
+P1/P2 parry task. After success, Current Action asks each unresolved participant to roll Brawling.
+The current-step result distinguishes interception of a missed attack from parrying a hit without
+changing trigger eligibility, and records the broad comparison and visible
 Continued Contact/Unbalanced consequence. The GM may inspect both rolls; a player receives their own
 calculation and the broad opponent outcome, not the opponent's private dice/calculation.
 

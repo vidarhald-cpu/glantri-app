@@ -250,6 +250,74 @@ describe("CombatLogProjection", () => {
     expect(JSON.stringify(result)).not.toMatch(/rollD20|modifierTotal|calculation|private/);
   });
 
+  it("describes proactive Offensive Parry results independently of the source hit outcome", () => {
+    const makeParry = (
+      id: string,
+      sequence: number,
+      attackHit: boolean,
+      success: boolean,
+    ) =>
+      event({
+        actorParticipantId: "scyrian",
+        attackResultId: `attack-${id}`,
+        attackerParticipantId: "gladiator",
+        defenderParticipantId: "scyrian",
+        facts: {
+          gmReview: {},
+          involvedOutcome: {
+            attackHit,
+            parryPurpose: "offensive_parry",
+            status: "resolved",
+            success,
+          },
+          publicOutcome: {
+            attackHit,
+            parryPurpose: "offensive_parry",
+            status: "resolved",
+            success,
+          },
+          rollerPrivate: {},
+        },
+        id,
+        parryResultId: `${id}:parry`,
+        sequence,
+        targetParticipantId: "gladiator",
+        type: "parry",
+      });
+    const result = project(
+      state({
+        events: [
+          makeParry("miss-success", 0, false, true),
+          makeParry("hit-success", 1, true, true),
+          makeParry("miss-failure", 2, false, false),
+        ],
+      }),
+    );
+
+    const parryEvents = result.events.filter(
+      (entry) => entry.summaryFacts.kind === "defense_resolved",
+    );
+    expect(parryEvents.map((entry) => entry.summary)).toEqual([
+      "The Gladiator’s attack missed, but Scyrian Cavalry successfully intercepted the attack. Roll Brawling to establish continued contact.",
+      "Scyrian Cavalry successfully parried The Gladiator’s attack. Roll Brawling to establish continued contact.",
+      "Scyrian Cavalry failed to establish the parry. No Brawling contest was created.",
+    ]);
+    expect(parryEvents.map((entry) => entry.summaryFacts)).toEqual([
+      expect.objectContaining({
+        parryPurpose: "offensive_parry",
+        sourceAttackOutcome: "missed",
+      }),
+      expect.objectContaining({
+        parryPurpose: "offensive_parry",
+        sourceAttackOutcome: "hit",
+      }),
+      expect.objectContaining({
+        parryPurpose: "offensive_parry",
+        sourceAttackOutcome: "missed",
+      }),
+    ]);
+  });
+
   it("projects Feint attempt, resistance, and only the committed final result", () => {
     const proposal = {
       attackerParticipantId: "gladiator",

@@ -2149,7 +2149,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(response.json()).toEqual({
       campaigns: [campaign],
     });
@@ -8189,6 +8189,81 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it("rejects Offensive Parry declarations without a prepared opponent", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "offensive_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Select an opponent to counter with Offensive Parry.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes and persists the selected Offensive Parry opponent", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participants: [
+        { id: "participant-1" },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "offensive_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+          selectedOpponentId: "participant-2",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const savedRoundState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState;
+    expect(
+      savedRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.declaration,
+    ).toMatchObject({
+      actionId: "offensive_parry",
+      combatContext: { selectedOpponentId: "encounter-participant-2" },
+    });
+    expect(
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combat
+        .combatContext.selectedOpponentId,
+    ).toBe("encounter-participant-2");
+  });
+
   it("rejects GM Double Attack declarations unless both attack phases have targets", async () => {
     setupCombatDeclarationRoute({ user: mocks.adminUser });
     const app = await buildScenarioTestApp();
@@ -11862,14 +11937,20 @@ describe("scenarios route contract", () => {
     const parryPayload = {
       attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
       attackerParticipantId: "encounter-participant-1",
+      commandType: "roll_parry",
+      declarationId: projectedParryTask?.identity.declarationId,
       defenderParticipantId: "encounter-participant-2",
       executionGroupId: projectedParryTask?.executionGroupId,
       expectedRevision: combatEncounter.updatedAt,
       opportunityId: projectedParryTask?.identity.opportunityId,
       parryBase: 13,
+      parryPurpose: projectedParryTask?.identity.parryPurpose,
+      parrySourceId: projectedParryTask?.identity.parrySourceId,
       parrySourceLabel: "Sword / shield",
       phase: "phase1",
+      processId: projectedParryTask?.processId,
       scenarioParticipantId: "participant-2",
+      stageId: projectedParryTask?.stageId,
       taskId: projectedParryTask?.id,
       usedMainHand: true,
       usedOffHand: true,
@@ -11911,11 +11992,11 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(missingRawResponse.statusCode).toBe(400);
-    expect(staleRawResponse.statusCode).toBe(409);
+    expect(staleRawResponse.statusCode, JSON.stringify(staleRawResponse.json())).toBe(409);
     expect(staleTaskResponse.statusCode).toBe(409);
     expect(staleRevisionResponse.statusCode).toBe(409);
     expect(staleRevisionResponse.json()).toMatchObject({ code: "stale_revision" });
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     const payload = response.json();
     expect(payload.commandEnvelope).toMatchObject({
       latestResult: {
@@ -12907,6 +12988,10 @@ describe("scenarios route contract", () => {
       selectedParticipantId: afterRelevantAttack.selectedParticipantId,
       selectedStep: afterRelevantAttack.selectedStep,
     };
+    const projectedParryTask = buildCombatProgressionProjection(combatRoundState)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "parry");
+    expect(projectedParryTask).toBeDefined();
 
     setupCombatDeclarationRoute({
       encounter: {
@@ -12941,10 +13026,23 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackerParticipantId: "encounter-participant-1",
+        commandType: "roll_parry",
         dbParryRaw: 0,
+        declarationId: projectedParryTask?.identity.declarationId,
+        defenderParticipantId: "encounter-participant-2",
+        executionGroupId: projectedParryTask?.executionGroupId,
+        expectedRevision: combatEncounter.updatedAt,
+        opportunityId: projectedParryTask?.identity.opportunityId,
         parryBase: 13,
+        parryPurpose: projectedParryTask?.identity.parryPurpose,
+        parrySourceId: projectedParryTask?.identity.parrySourceId,
         parrySourceLabel: "Sword / shield",
+        phase: "phase1",
+        processId: projectedParryTask?.processId,
         scenarioParticipantId: "participant-2",
+        stageId: projectedParryTask?.stageId,
+        taskId: projectedParryTask?.id,
         usedMainHand: true,
         usedOffHand: true,
       },
@@ -12953,7 +13051,7 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     const responseRoundState = response.json().encounter.combatRoundState;
     expect(responseRoundState.phaseResolutionResults).toHaveLength(1);
     expect(responseRoundState.phaseResolutionResults[0]).toMatchObject({

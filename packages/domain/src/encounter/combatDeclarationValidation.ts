@@ -87,6 +87,7 @@ function formatMissingTargetMessage(
 export function validateCombatDeclarationTargets(input: {
   actionId?: string;
   phaseContexts?: CombatRoundPhaseContexts;
+  selectedOpponentId?: string;
   secondaryActionId?: string;
 }): CombatDeclarationTargetValidationResult {
   const attackPhases = getCombatDeclarationAttackPhases({
@@ -116,14 +117,23 @@ export function validateCombatDeclarationTargets(input: {
     Boolean(input.phaseContexts?.phase2?.targetParticipantId) &&
     input.phaseContexts?.phase1?.targetParticipantId !==
       input.phaseContexts?.phase2?.targetParticipantId;
+  const offensiveParryOpponentMissing =
+    input.actionId === "offensive_parry" &&
+    (!input.selectedOpponentId || input.selectedOpponentId.trim().length === 0);
 
   return {
     missingPhases,
-    message: doubleAttackTargetsDiffer
+    message: offensiveParryOpponentMissing
+      ? "Select an opponent to counter with Offensive Parry."
+      : doubleAttackTargetsDiffer
       ? "Double Attack must target the same opponent in both phases."
       : feintTargetDiffers
         ? "Feint and attack must target the same opponent."
         : formatMissingTargetMessage(missingPhases),
-    valid: missingPhases.length === 0 && !doubleAttackTargetsDiffer && !feintTargetDiffers,
+    valid:
+      missingPhases.length === 0 &&
+      !doubleAttackTargetsDiffer &&
+      !feintTargetDiffers &&
+      !offensiveParryOpponentMissing,
   };
 }

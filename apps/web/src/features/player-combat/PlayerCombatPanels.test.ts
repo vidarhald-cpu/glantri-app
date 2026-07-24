@@ -719,8 +719,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain('itemLabel={mainHandItemLabel || "Unarmed"}');
     expect(source).not.toContain('itemLabel={offHandItemLabel || "Unarmed"}');
     expect(source).not.toContain("PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS");
-    expect(source).not.toContain("Choose opponent");
-    expect(source).not.toContain("selectedOpponentId");
+    expect(source).toContain('actionId === "offensive_parry"');
+    expect(source).toContain("Opponent to counter");
+    expect(source).toContain("Choose opponent");
+    expect(source).toContain("selectedOpponentId");
+    expect(source).toContain("onSelectedOpponentChange");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("Current action");
     expect(source).not.toContain("Action button");

@@ -1521,6 +1521,7 @@ export default function ScenarioPlayerCombatPageContent({
     ? validateCombatDeclarationTargets({
         actionId: selectedRoundDeclaration.actionId,
         phaseContexts: selectedRoundDeclaration.phaseContexts,
+        selectedOpponentId: selectedRoundDeclaration.combatContext?.selectedOpponentId,
         secondaryActionId: selectedRoundDeclaration.secondaryActionId,
       })
     : declarationRoundNumber &&
@@ -1529,6 +1530,8 @@ export default function ScenarioPlayerCombatPageContent({
         selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber
       ? validateCombatDeclarationTargets({
           actionId: selectedParticipant.state.combat.lastDeclaredActionId,
+          selectedOpponentId:
+            selectedParticipant.state.combat.combatContext?.selectedOpponentId,
           secondaryActionId: selectedParticipant.state.combat.lastDeclaredSecondaryActionId,
         })
       : undefined;
@@ -2153,6 +2156,7 @@ export default function ScenarioPlayerCombatPageContent({
     const targetValidation = validateCombatDeclarationTargets({
       actionId: selectedActionId || undefined,
       phaseContexts: requestPhaseContexts,
+      selectedOpponentId: combatContextDraft.selectedOpponentId,
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
 
@@ -2688,6 +2692,12 @@ export default function ScenarioPlayerCombatPageContent({
       descriptor.commandType !== "roll_parry" ||
       !descriptor.attackResultId ||
       !descriptor.executionGroupId ||
+      !descriptor.processId ||
+      !descriptor.stageId ||
+      !descriptor.parryPurpose ||
+      !descriptor.parrySourceId ||
+      !descriptor.opportunityId ||
+      !descriptor.opponentParticipantId ||
       !descriptor.participantId ||
       !descriptor.phase ||
       !attackResult ||
@@ -2696,6 +2706,15 @@ export default function ScenarioPlayerCombatPageContent({
       attackResult.attackerParticipantId !== descriptor.opponentParticipantId ||
       attackResult.phase !== descriptor.phase
     ) {
+      return;
+    }
+    if (
+      descriptor.parryPurpose === "offensive_parry" &&
+      (!descriptor.declarationId ||
+        !descriptor.declaredOpponentParticipantId ||
+        !descriptor.offensiveParryAttemptId)
+    ) {
+      setError("The Offensive Parry task identity is incomplete.");
       return;
     }
 
@@ -2710,19 +2729,27 @@ export default function ScenarioPlayerCombatPageContent({
       const encounter = await rollCombatParryOnServer({
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
+        commandType: "roll_parry",
         dbParryRaw: getMergedCombatDbParryModifierTotal({
           combatContext: selectedParticipant.state.combat.combatContext,
           phase: descriptor.phase,
         }),
         defenderParticipantId: descriptor.participantId,
+        declarationId: descriptor.declarationId,
+        declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId,
         executionGroupId: descriptor.executionGroupId,
         expectedRevision: descriptor.expectedRevision,
+        offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,
         parryBase: currentParryBase,
+        parryPurpose: descriptor.parryPurpose,
+        parrySourceId: descriptor.parrySourceId,
         parrySourceLabel: currentParryDefenseStats?.sourceName,
         phase: descriptor.phase,
+        processId: descriptor.processId,
         scenarioParticipantId: descriptor.participantId,
+        stageId: descriptor.stageId,
         taskId: descriptor.taskId,
         usedMainHand: true,
         usedOffHand: true,
@@ -2746,9 +2773,11 @@ export default function ScenarioPlayerCombatPageContent({
         "attackResultId",
         "contestId",
         "declarationId",
+        "declaredOpponentParticipantId",
         "executionGroupId",
         "opponentParticipantId",
         "opportunityId",
+        "offensiveParryAttemptId",
         "parryResultId",
         "participantId",
         "phase",
@@ -2771,10 +2800,12 @@ export default function ScenarioPlayerCombatPageContent({
         attackResultId: descriptor.attackResultId!,
         contestId: descriptor.contestId!,
         declarationId: descriptor.declarationId!,
+        declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId!,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
         opponentParticipantId: descriptor.opponentParticipantId!,
+        offensiveParryAttemptId: descriptor.offensiveParryAttemptId!,
         opportunityId: descriptor.opportunityId!,
         parryResultId: descriptor.parryResultId!,
         phase: descriptor.phase!,
@@ -3302,9 +3333,15 @@ export default function ScenarioPlayerCombatPageContent({
       validateCombatDeclarationTargets({
         actionId: selectedActionId || undefined,
         phaseContexts: phaseCombatContextDrafts,
+        selectedOpponentId: combatContextDraft.selectedOpponentId,
         secondaryActionId: selectedSecondaryActionId || undefined,
       }),
-    [phaseCombatContextDrafts, selectedActionId, selectedSecondaryActionId],
+    [
+      combatContextDraft.selectedOpponentId,
+      phaseCombatContextDrafts,
+      selectedActionId,
+      selectedSecondaryActionId,
+    ],
   );
   const declarationIncomplete =
     declarationStepOpen && hasMeaningfulDeclaration && !targetValidation.valid;
@@ -3689,11 +3726,20 @@ export default function ScenarioPlayerCombatPageContent({
                 markCombatDeclarationDraftDirty();
                 setSelectedMovementIntent(movementIntent);
               }}
+              onSelectedOpponentChange={(selectedOpponentId) => {
+                markCombatDeclarationDraftDirty();
+                setCombatContextDraft((current) => ({
+                  ...current,
+                  selectedOpponentId: selectedOpponentId || undefined,
+                }));
+              }}
               onSecondaryActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedSecondaryActionId(actionId);
               }}
+              opponentOptions={targetOptions}
               roundNumber={combatRoundState?.roundNumber}
+              selectedOpponentId={combatContextDraft.selectedOpponentId}
               secondaryActionId={selectedSecondaryActionId}
             />
             {phaseCards.map((phaseCard, index) => {

@@ -12,6 +12,7 @@ import {
   getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseResolutionResultForAttack,
+  getCombatRoundOffensiveParryAttemptIdentity,
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
@@ -391,8 +392,12 @@ function buildLegacyAttackProcess(
                   roundNumber: context.state.roundNumber,
                 })
               : undefined,
+            attackerParticipantId: attack?.attackerParticipantId,
+            defenderParticipantId: attack?.defenderParticipantId,
             opportunityId: attack?.attackOpportunityId,
             opponentParticipantId: attack?.attackerParticipantId,
+            parryPurpose: "ordinary_defense",
+            parrySourceId: "auto",
             phase,
           },
           kind: "parry",
@@ -406,6 +411,7 @@ function buildLegacyAttackProcess(
                 : undefined,
             ),
             actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
+            attackOutcome: attack?.hit === true ? "hit" : "miss",
             responder: owner,
             target: owner,
           },
@@ -599,6 +605,12 @@ function buildAdapterAttackProcess(
     opportunityId: plan.opportunity.id,
     state: context.state,
   });
+  const offensiveParryAttempt = attackResult
+    ? getCombatRoundOffensiveParryAttemptIdentity({
+        attackResult,
+        state: context.state,
+      })
+    : undefined;
   const attackSnapshot = [...context.state.stepSnapshots]
     .reverse()
     .find((snapshot) => snapshot.participantId === plan.ownerParticipantId);
@@ -636,8 +648,11 @@ function buildAdapterAttackProcess(
             attackResultId: task.attackResultId,
             contestId: task.contestId,
             declarationId: task.declarationId,
+            declaredOpponentParticipantId: task.declaredOpponentParticipantId,
+            offensiveParryAttemptId: task.offensiveParryAttemptId,
             opponentParticipantId,
             opportunityId: task.opportunityId,
+            parryPurpose: task.parryPurpose,
             parryResultId: task.parryResultId,
             phase: task.phase,
           },
@@ -736,23 +751,49 @@ function buildAdapterAttackProcess(
                   actionId: opportunityIdentity?.actionId,
                   attackIndex: opportunityIdentity?.attackIndex,
                   attackModeId: opportunityIdentity?.attackModeId,
-                  declarationId: opportunityIdentity?.declarationId,
+                  declarationId:
+                    taskKind === "parry" && offensiveParryAttempt
+                      ? offensiveParryAttempt.declarationId
+                      : opportunityIdentity?.declarationId,
+                  declaredOpponentParticipantId:
+                    taskKind === "parry"
+                      ? offensiveParryAttempt?.declaredOpponentParticipantId
+                      : undefined,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
+                  offensiveParryAttemptId:
+                    taskKind === "parry"
+                      ? offensiveParryAttempt?.offensiveParryAttemptId
+                      : undefined,
+                  parryPurpose:
+                    taskKind === "parry"
+                      ? (offensiveParryAttempt?.parryPurpose ?? "ordinary_defense")
+                      : undefined,
+                  parrySourceId:
+                    taskKind === "parry"
+                      ? (offensiveParryAttempt?.parrySourceId ?? "auto")
+                      : undefined,
                   phase: task.phase,
                   weaponInstanceId: opportunityIdentity?.weaponInstanceId,
                   weaponSourceId: opportunityIdentity?.weaponSourceId,
                   weaponSourceSlot: opportunityIdentity?.weaponSourceSlot,
                   weaponTemplateId: opportunityIdentity?.weaponTemplateId,
                 },
-                key: task.opportunityId,
+                key:
+                  taskKind === "parry" && offensiveParryAttempt
+                    ? offensiveParryAttempt.offensiveParryAttemptId
+                    : task.opportunityId,
                 kind: taskKind,
                 owner,
                 presentationContext: {
-                  actionKind: plan.actionKind,
+                  actionKind:
+                    taskKind === "parry" && offensiveParryAttempt
+                      ? "offensive_parry"
+                      : plan.actionKind,
+                  attackOutcome: attackResult?.hit === true ? "hit" : "miss",
                   actor: attacker,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,

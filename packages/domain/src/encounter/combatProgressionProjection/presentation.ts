@@ -110,6 +110,11 @@ function visibleTaskIdentity(
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     declarationId: task.identity.declarationId,
+    declaredOpponentParticipantId: participantVisible(
+      task.identity.declaredOpponentParticipantId,
+    )
+      ? task.identity.declaredOpponentParticipantId
+      : undefined,
     defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
       ? task.identity.defenderParticipantId
       : undefined,
@@ -117,9 +122,13 @@ function visibleTaskIdentity(
     healthRollId: task.identity.healthRollId,
     hitLocationResultId: task.identity.hitLocationResultId,
     opportunityId: task.identity.opportunityId,
+    offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
     opponentParticipantId: participantVisible(task.identity.opponentParticipantId)
       ? task.identity.opponentParticipantId
       : undefined,
+    parryPurpose: task.identity.parryPurpose,
+    parryResultId: task.identity.parryResultId,
+    parrySourceId: task.identity.parrySourceId,
     pairId:
       participantVisible(task.identity.participantId) &&
       participantVisible(task.identity.opponentParticipantId)

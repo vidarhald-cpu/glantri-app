@@ -30,6 +30,7 @@ export interface CurrentActionCommandDescriptor {
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
+  readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
   readonly encounterId: string;
   readonly executionGroupId?: string;
@@ -39,7 +40,10 @@ export interface CurrentActionCommandDescriptor {
   readonly hitLocationResultId?: string;
   readonly opponentParticipantId?: string;
   readonly opportunityId?: string;
+  readonly offensiveParryAttemptId?: string;
+  readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
   readonly parryResultId?: string;
+  readonly parrySourceId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
@@ -189,6 +193,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   health_review: "Health Review",
   initiative: "Initiative",
   modifier_review: "Modifier Review",
+  offensive_parry: "Offensive Parry",
   offensive_parry_brawling_roll: "Offensive Parry",
   participant_review: "Participant Review",
   reactive_attack: "Reactive Attack",
@@ -377,6 +382,10 @@ function summaryFor(input: {
     case "attack":
       return `${actor} is attacking${target ? ` ${target}` : ""}.`;
     case "parry":
+      if (input.task.identity.parryPurpose === "offensive_parry") {
+        const attackOutcome = input.task.presentationContext?.attackOutcome;
+        return `${actor} committed to an attack.${attackOutcome ? ` The attack ${attackOutcome === "hit" ? "hit" : "missed"}.` : ""} ${target ?? "The defender"} prepared an Offensive Parry.`;
+      }
       return `${actor} hit ${target ?? "the defender"}.`;
     case "offensive_parry_brawling_roll":
       return input.task.presentationContext?.responder?.participantId ===
@@ -504,7 +513,9 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "attack":
       return "Roll attack";
     case "parry":
-      return "Roll parry";
+      return task.identity.parryPurpose === "offensive_parry"
+        ? "Roll Offensive Parry"
+        : "Roll parry";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling";
     case "hit_location":
@@ -572,7 +583,9 @@ function requiredNowFor(
     case "attack":
       return "Roll attack.";
     case "parry":
-      return "Defend against the attack.";
+      return task.identity.parryPurpose === "offensive_parry"
+        ? "Attempt the parry."
+        : "Defend against the attack.";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling.";
     case "hit_location":
@@ -697,6 +710,7 @@ export function buildCurrentActionPresentation(
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     declarationId: task.identity.declarationId,
+    declaredOpponentParticipantId: task.identity.declaredOpponentParticipantId,
     defenderParticipantId: task.identity.defenderParticipantId,
     encounterId: input.encounterId,
     executionGroupId: task.executionGroupId,
@@ -706,7 +720,10 @@ export function buildCurrentActionPresentation(
     hitLocationResultId: task.identity.hitLocationResultId,
     opponentParticipantId: task.identity.opponentParticipantId,
     opportunityId: task.identity.opportunityId,
+    offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
+    parryPurpose: task.identity.parryPurpose,
     parryResultId: task.identity.parryResultId,
+    parrySourceId: task.identity.parrySourceId,
     pairId: task.identity.pairId,
     participantId:
       task.owner?.kind === "combatant" ? task.owner.participantId : task.identity.participantId,

@@ -6,6 +6,7 @@ import type {
   CombatRoundPhase,
   CombatRoundPhaseResolutionCursor,
 } from "../combatRoundManager";
+import type { CombatParryPurpose } from "../combatOffensiveParry";
 
 export const COMBAT_PROGRESSION_BOUNDARIES = [
   "declaration",
@@ -160,12 +161,16 @@ export interface CombatProgressionTaskIdentity {
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
+  readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId: string;
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
+  readonly offensiveParryAttemptId?: string;
+  readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
+  readonly parrySourceId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
@@ -188,6 +193,7 @@ export interface CombatProgressionPresentationReference {
  */
 export interface CombatProgressionTaskPresentationContext {
   readonly actionKind?: string;
+  readonly attackOutcome?: "hit" | "miss";
   readonly actor?: CombatantIdentity;
   readonly distance?: {
     readonly current?: number;

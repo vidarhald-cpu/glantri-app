@@ -539,5 +539,14 @@ execution group. Its identity retains the declaration, opportunity, attack resul
 contest, process, stage, task, and group. Continued Contact and Unbalanced are separate canonical
 facts. Phase 2 follow-up attack generation and round-end maintenance/escape remain future slices.
 
+The Slice 1 trigger is now an active counter-technique rather than an ordinary-parry side effect.
+The declaration persists one selected encounter opponent. Each surviving canonical attack
+opportunity/result from that opponent can project one deterministic `parry` task with purpose
+`offensive_parry`, even when the source attack missed. The composed attack process keeps that child
+work open; it does not reopen a completed phase through cursor state. A hit uses that same task as
+the attack's one ordinary-mechanics parry, so no duplicate defensive roll exists. Successful exact
+attempt lineage opens Brawling; failure does not. Phase 2 follow-up attacks and round-end
+maintenance/escape are still not implemented.
+
 Ownerless tracker cleanup and descriptor-keyed GM editing remain unrelated conformance cleanup; the
 new Brawling path does not depend on either.

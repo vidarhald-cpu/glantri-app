@@ -33,8 +33,10 @@ describe("combat route canonical-conformance guards", () => {
       "attackResultId",
       "contestId",
       "declarationId",
+      "declaredOpponentParticipantId",
       "executionGroupId",
       "opportunityId",
+      "offensiveParryAttemptId",
       "parryResultId",
       "processId",
       "stageId",
@@ -44,5 +46,27 @@ describe("combat route canonical-conformance guards", () => {
     }
     expect(source).toContain('commandType: "roll_offensive_parry_brawling"');
     expect(source).toContain('rollPurpose: "offensive_parry_brawling"');
+  });
+
+  it("authorizes proactive parry from the complete projected descriptor", () => {
+    for (const identity of [
+      "attackResultId",
+      "attackerParticipantId",
+      "declarationId",
+      "declaredOpponentParticipantId",
+      "defenderParticipantId",
+      "executionGroupId",
+      "offensiveParryAttemptId",
+      "opportunityId",
+      "parryPurpose",
+      "parrySourceId",
+      "processId",
+      "stageId",
+      "taskId",
+    ]) {
+      expect(source).toContain(`${identity}: body.${identity}`);
+    }
+    expect(source).toContain('commandType: "roll_parry"');
+    expect(source).toContain("commandType must be roll_parry.");
   });
 });

@@ -4566,9 +4566,15 @@ export default function CombatRoundManagerPanel({
       validateCombatDeclarationTargets({
         actionId: inspectorDraft.actionId || undefined,
         phaseContexts: inspectorDraft.phaseContexts,
+        selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       }),
-    [inspectorDraft.actionId, inspectorDraft.phaseContexts, inspectorDraft.secondaryActionId],
+    [
+      inspectorDraft.actionId,
+      inspectorDraft.combatContext.selectedOpponentId,
+      inspectorDraft.phaseContexts,
+      inspectorDraft.secondaryActionId,
+    ],
   );
   const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
   const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
@@ -7172,6 +7178,7 @@ export default function CombatRoundManagerPanel({
       : validateCombatDeclarationTargets({
           actionId: inspectorDraft.actionId || undefined,
           phaseContexts: requestPhaseContexts,
+          selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
           secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         });
 
@@ -7883,10 +7890,12 @@ export default function CombatRoundManagerPanel({
         "attackIndex",
         "attackModeId",
         "declarationId",
+        "declaredOpponentParticipantId",
         "executionGroupId",
         "expectedRevision",
         "opponentParticipantId",
         "opportunityId",
+        "offensiveParryAttemptId",
         "participantId",
         "phase",
         "processId",
@@ -8065,6 +8074,12 @@ export default function CombatRoundManagerPanel({
       descriptor.commandType !== "roll_parry" ||
       !descriptor.attackResultId ||
       !descriptor.executionGroupId ||
+      !descriptor.processId ||
+      !descriptor.stageId ||
+      !descriptor.parryPurpose ||
+      !descriptor.parrySourceId ||
+      !descriptor.opportunityId ||
+      !descriptor.opponentParticipantId ||
       !attackResult ||
       !phase ||
       !descriptor.participantId ||
@@ -8076,8 +8091,17 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    if (!attackResult.hit) {
+    if (!attackResult.hit && descriptor.parryPurpose !== "offensive_parry") {
       setSaveError("Attack missed; parry is not applicable.");
+      return;
+    }
+    if (
+      descriptor.parryPurpose === "offensive_parry" &&
+      (!descriptor.declarationId ||
+        !descriptor.declaredOpponentParticipantId ||
+        !descriptor.offensiveParryAttemptId)
+    ) {
+      setSaveError("The Offensive Parry task identity is incomplete.");
       return;
     }
 
@@ -8129,18 +8153,24 @@ export default function CombatRoundManagerPanel({
       const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
+        commandType: "roll_parry",
         dbParryRaw: getMergedCombatDbParryModifierTotal({
           combatContext: defenderScenarioParticipant.state.combat.combatContext,
           phase,
         }),
         defenderParticipantId: descriptor.participantId,
+        declarationId: descriptor.declarationId,
+        declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId,
         expectedRevision: descriptor.expectedRevision,
         mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
         offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
+        offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,
         parryBase,
+        parryPurpose: descriptor.parryPurpose,
+        parrySourceId: descriptor.parrySourceId,
         parrySourceLabel: formatSelectedCombatParrySourceName({
           selection: {
             usedMainHand,
@@ -8149,7 +8179,9 @@ export default function CombatRoundManagerPanel({
           sources,
         }),
         phase,
+        processId: descriptor.processId,
         scenarioParticipantId: defenderScenarioParticipant.id,
+        stageId: descriptor.stageId,
         taskId: descriptor.taskId,
         usedMainHand,
         usedOffHand,
@@ -8184,8 +8216,10 @@ export default function CombatRoundManagerPanel({
         "attackResultId",
         "contestId",
         "declarationId",
+        "declaredOpponentParticipantId",
         "executionGroupId",
         "opponentParticipantId",
+        "offensiveParryAttemptId",
         "opportunityId",
         "parryResultId",
         "participantId",
@@ -8205,10 +8239,12 @@ export default function CombatRoundManagerPanel({
         attackResultId: descriptor.attackResultId!,
         contestId: descriptor.contestId!,
         declarationId: descriptor.declarationId!,
+        declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId!,
         encounterId: descriptor.encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
         opponentParticipantId: descriptor.opponentParticipantId!,
+        offensiveParryAttemptId: descriptor.offensiveParryAttemptId!,
         opportunityId: descriptor.opportunityId!,
         parryResultId: descriptor.parryResultId!,
         phase: descriptor.phase!,
@@ -9203,10 +9239,22 @@ export default function CombatRoundManagerPanel({
                       onMovementIntentChange={(movementIntent) =>
                         updateInspectorDraft({ movementIntent })
                       }
+                      onSelectedOpponentChange={(selectedOpponentId) =>
+                        updateInspectorDraft({
+                          combatContext: {
+                            ...inspectorDisplayDraft.combatContext,
+                            selectedOpponentId: selectedOpponentId || undefined,
+                          },
+                        })
+                      }
                       onSecondaryActionChange={(secondaryActionId) =>
                         updateInspectorDraft({ secondaryActionId })
                       }
+                      opponentOptions={inspectorTargetOptions}
                       roundNumber={selectedRoundNumber}
+                      selectedOpponentId={
+                        inspectorDisplayDraft.combatContext.selectedOpponentId
+                      }
                       secondaryActionId={inspectorDisplayDraft.secondaryActionId}
                       sourceLabel={inspectorSourceLabel}
                     />

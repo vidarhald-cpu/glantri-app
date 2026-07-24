@@ -5,6 +5,7 @@ import {
   getCombatRoundAttackResultForOpportunity,
   getCombatRoundDamageSubstate,
   getCombatRoundDoubleAttackPhase2Decision,
+  getCombatRoundOffensiveParryAttemptIdentity,
   type CombatRoundAttackOpportunity,
   type CombatRoundCommandType,
   type CombatRoundPhase,
@@ -109,10 +110,14 @@ export interface CombatActionProcessTaskDescriptor {
   readonly attackResultId?: string;
   readonly contestId?: string;
   readonly declarationId?: string;
+  readonly declaredOpponentParticipantId?: string;
   readonly expectedCommand: CombatRoundCommandType;
   readonly opportunityId: string;
+  readonly offensiveParryAttemptId?: string;
   readonly owner: "attacker" | "defender" | "gm" | "offensive_parry_controller" | "offensive_parry_responder";
+  readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
   readonly parryResultId?: string;
+  readonly parrySourceId?: string;
   readonly phase: CombatRoundPhase;
 }
 
@@ -275,7 +280,11 @@ function stageStates(input: {
     return { completion: { complete: false }, states: pending };
   }
   pending.attack = "complete";
-  if (!attack.hit) {
+  const offensiveParryAttempt = getCombatRoundOffensiveParryAttemptIdentity({
+    attackResult: attack,
+    state: input.state,
+  });
+  if (!attack.hit && !offensiveParryAttempt) {
     for (const kind of STAGE_ORDER.slice(1)) pending[kind] = "skipped";
     return { completion: { complete: true, reason: "miss" }, states: pending };
   }
@@ -309,6 +318,10 @@ function stageStates(input: {
     return { completion: { complete: true, reason: "parried" }, states: pending };
   }
   pending.offensive_parry_contest = "skipped";
+  if (!attack.hit) {
+    for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
+    return { completion: { complete: true, reason: "miss" }, states: pending };
+  }
 
   const damageSubstate = getCombatRoundDamageSubstate(resolution);
   if (damageSubstate === "location_pending") {
@@ -390,7 +403,10 @@ function buildStandardAttackProcess(input: {
             attackResultId,
             contestId: contest.id,
             declarationId: contest.declarationId,
+            declaredOpponentParticipantId: contest.declaredOpponentParticipantId,
+            offensiveParryAttemptId: contest.offensiveParryAttemptId,
             opportunityId: contest.opportunityId,
+            parryPurpose: "offensive_parry" as const,
             parryResultId: contest.parryResultId,
             phase: contest.phase,
           }

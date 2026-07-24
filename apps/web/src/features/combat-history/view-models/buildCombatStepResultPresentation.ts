@@ -183,7 +183,9 @@ function headingForLogEvent(event: CombatLogEventPresentation): string {
     case "attack_resolved":
       return "Attack";
     case "defense_resolved":
-      return "Defense";
+      return event.summaryFacts.parryPurpose === "offensive_parry"
+        ? "Offensive Parry"
+        : "Defense";
     case "damage_committed":
       return "Damage";
     case "condition_applied":

@@ -1,4 +1,5 @@
 import type { CombatRoundPhase } from "../combatRoundManager";
+import type { CombatParryPurpose } from "../combatOffensiveParry";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
@@ -43,12 +44,16 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
+  readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId?: string;
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
   readonly opportunityId?: string;
+  readonly offensiveParryAttemptId?: string;
+  readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
+  readonly parrySourceId?: string;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
@@ -403,6 +408,10 @@ export function authorizeCombatProgressionTask(
       [input.attackIndex, "attackIndex"],
       [input.attackModeId, "attackModeId"],
       [input.declarationId, "declarationId"],
+      [input.declaredOpponentParticipantId, "declaredOpponentParticipantId"],
+      [input.offensiveParryAttemptId, "offensiveParryAttemptId"],
+      [input.parryPurpose, "parryPurpose"],
+      [input.parrySourceId, "parrySourceId"],
       [input.weaponInstanceId, "weaponInstanceId"],
       [input.weaponSourceId, "weaponSourceId"],
       [input.weaponSourceSlot, "weaponSourceSlot"],

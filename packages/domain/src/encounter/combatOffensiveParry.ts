@@ -8,6 +8,12 @@ export const offensiveParryRollPurposeSchema = z.enum([
 ]);
 export type OffensiveParryRollPurpose = z.infer<typeof offensiveParryRollPurposeSchema>;
 
+export const combatParryPurposeSchema = z.enum([
+  "ordinary_defense",
+  "offensive_parry",
+]);
+export type CombatParryPurpose = z.infer<typeof combatParryPurposeSchema>;
+
 export const offensiveParryBrawlingRollSchema = z.object({
   brawlingBaseValue: z.number().int(),
   brawlingSkillXp: z.number().int(),
@@ -37,9 +43,11 @@ export const offensiveParryContestSchema = z.object({
   brawlingContestResultId: idSchema,
   controllerParticipantId: idSchema,
   declarationId: idSchema,
+  declaredOpponentParticipantId: idSchema.optional(),
   id: idSchema,
   initiatorRoll: offensiveParryBrawlingRollSchema.optional(),
   initiatorRollRecorded: z.boolean().default(false),
+  offensiveParryAttemptId: idSchema.optional(),
   opportunityId: idSchema,
   parryQualityModifier: z.number().int(),
   parryQualityTableRow: z.string().min(1),
@@ -84,6 +92,13 @@ export function buildOffensiveParryContestId(input: {
   parryResultId: string;
 }): string {
   return `${input.parryResultId}:offensive-parry:brawling`;
+}
+
+export function buildOffensiveParryAttemptId(input: {
+  attackResultId: string;
+  declarationId: string;
+}): string {
+  return `${input.attackResultId}:offensive-parry:${input.declarationId}:attempt`;
 }
 
 export function buildOffensiveParryContestResultId(input: {
