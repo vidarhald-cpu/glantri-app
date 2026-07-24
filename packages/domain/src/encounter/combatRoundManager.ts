@@ -2055,6 +2055,7 @@ export const combatRoundStepSnapshotSchema = z.object({
   initiativeResult: combatRoundInitiativeResultSchema.optional(),
   modifierSummary: z
     .object({
+      dbFlatAdjustment: z.number().int().optional(),
       dbRaw: z.number().int().default(0),
       generalFatigueRaw: z.number().int().default(0),
       initiativeRaw: z.number().int().default(0),
@@ -6362,18 +6363,21 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
   return {
     ...withStatus,
     phaseResolutionCursor: {
-      participantId: input.attackResult.hit || offensiveParryAttempt
-        ? input.attackResult.defenderParticipantId
-        : input.attackResult.attackerParticipantId,
+      participantId:
+        input.attackResult.hit || offensiveParryAttempt
+          ? input.attackResult.defenderParticipantId
+          : input.attackResult.attackerParticipantId,
       phase: input.attackResult.phase,
       substep: nextSubstep,
     },
-    selectedParticipantId: input.attackResult.hit || offensiveParryAttempt
-      ? input.attackResult.defenderParticipantId
-      : input.attackResult.attackerParticipantId,
-    selectedStep: input.attackResult.hit || offensiveParryAttempt
-      ? getCombatRoundParryReviewStepForPhase(input.attackResult.phase)
-      : getCombatRoundDamageReviewStepForPhase(input.attackResult.phase),
+    selectedParticipantId:
+      input.attackResult.hit || offensiveParryAttempt
+        ? input.attackResult.defenderParticipantId
+        : input.attackResult.attackerParticipantId,
+    selectedStep:
+      input.attackResult.hit || offensiveParryAttempt
+        ? getCombatRoundParryReviewStepForPhase(input.attackResult.phase)
+        : getCombatRoundDamageReviewStepForPhase(input.attackResult.phase),
   };
 }
 
@@ -7498,8 +7502,7 @@ export function buildCombatRoundPhaseResolutionResult(input: {
       ? {
           attackOpportunityId: offensiveParryAttempt?.attackOpportunityId,
           attackResultId: offensiveParryAttempt?.attackResultId,
-          declaredOpponentParticipantId:
-            offensiveParryAttempt?.declaredOpponentParticipantId,
+          declaredOpponentParticipantId: offensiveParryAttempt?.declaredOpponentParticipantId,
           offensiveParryAttemptId: offensiveParryAttempt?.offensiveParryAttemptId,
           offensiveParryDeclarationId: offensiveParryAttempt?.declarationId,
           parrySourceId: offensiveParryAttempt?.parrySourceId,
@@ -8020,8 +8023,7 @@ function recordCombatRoundParryCommand(input: {
               contest.parryResultId === `${attackResultId}:parry` &&
               contest.status !== "cancelled",
           ),
-          declaredOpponentParticipantId:
-            input.parryResolution.declaredOpponentParticipantId,
+          declaredOpponentParticipantId: input.parryResolution.declaredOpponentParticipantId,
           offensiveParryAttemptId: input.parryResolution.offensiveParryAttemptId,
           parryPurpose: input.parryResolution.purpose,
           resultLabel: input.parryResolution.resultLabel,
@@ -8102,25 +8104,24 @@ export function recordCombatRoundParryResult(input: {
         }) &&
       contest.status === "awaiting_rolls",
   );
-  const nextRoundState: CombatRoundState =
-    offensiveParryContest
-      ? combatRoundStateSchema.parse({
-          ...withOffensiveParryContest,
-          currentCursor: {
-            participantId: offensiveParryContest.controllerParticipantId,
-            roundNumber: withOffensiveParryContest.roundNumber,
-            step: (phase === "phase1" ? "P1" : "P2") as CombatRoundCursorStep,
-          },
-          currentStep: phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
-          phaseResolutionCursor: {
-            participantId: offensiveParryContest.controllerParticipantId,
-            phase,
-            substep: "parry" as const,
-          },
-          selectedParticipantId: offensiveParryContest.controllerParticipantId,
-          selectedStep: getCombatRoundParryReviewStepForPhase(phase),
-        })
-      : parryResolution.success === true
+  const nextRoundState: CombatRoundState = offensiveParryContest
+    ? combatRoundStateSchema.parse({
+        ...withOffensiveParryContest,
+        currentCursor: {
+          participantId: offensiveParryContest.controllerParticipantId,
+          roundNumber: withOffensiveParryContest.roundNumber,
+          step: (phase === "phase1" ? "P1" : "P2") as CombatRoundCursorStep,
+        },
+        currentStep: phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
+        phaseResolutionCursor: {
+          participantId: offensiveParryContest.controllerParticipantId,
+          phase,
+          substep: "parry" as const,
+        },
+        selectedParticipantId: offensiveParryContest.controllerParticipantId,
+        selectedStep: getCombatRoundParryReviewStepForPhase(phase),
+      })
+    : parryResolution.success === true
       ? completeCombatRoundPhaseResolutionForParticipant({
           participantId: input.attackResult.attackerParticipantId,
           phase,
@@ -8136,12 +8137,12 @@ export function recordCombatRoundParryResult(input: {
             submittedBy: input.submittedBy,
             updatedAt: input.updatedAt,
           })
-      : advanceCombatRoundPhaseResolutionSubstepForParticipant({
-          participantId: input.attackResult.attackerParticipantId,
-          phase,
-          state: withOffensiveParryContest,
-          updatedAt: input.updatedAt,
-        });
+        : advanceCombatRoundPhaseResolutionSubstepForParticipant({
+            participantId: input.attackResult.attackerParticipantId,
+            phase,
+            state: withOffensiveParryContest,
+            updatedAt: input.updatedAt,
+          });
   const defenderOwnedNextRoundState: CombatRoundState =
     parryResolution.success === true || !input.attackResult.hit
       ? nextRoundState
@@ -8195,8 +8196,7 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
     !attempt ||
     input.parryResolution.attackOpportunityId !== attempt.attackOpportunityId ||
     input.parryResolution.attackResultId !== attempt.attackResultId ||
-    input.parryResolution.declaredOpponentParticipantId !==
-      attempt.declaredOpponentParticipantId ||
+    input.parryResolution.declaredOpponentParticipantId !== attempt.declaredOpponentParticipantId ||
     input.parryResolution.offensiveParryAttemptId !== attempt.offensiveParryAttemptId ||
     input.parryResolution.offensiveParryDeclarationId !== attempt.declarationId ||
     input.parryResolution.parrySourceId !== attempt.parrySourceId
@@ -8228,8 +8228,7 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
         attackResultId,
         brawlingContestResultId: buildOffensiveParryContestResultId({ contestId }),
         controllerParticipantId: input.attackResult.defenderParticipantId,
-        declarationId:
-          attempt.declarationId,
+        declarationId: attempt.declarationId,
         declaredOpponentParticipantId: attempt.declaredOpponentParticipantId,
         id: contestId,
         offensiveParryAttemptId: attempt.offensiveParryAttemptId,
@@ -8245,10 +8244,7 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
   });
 }
 
-export function getOffensiveParryContest(input: {
-  contestId: string;
-  state: CombatRoundState;
-}) {
+export function getOffensiveParryContest(input: { contestId: string; state: CombatRoundState }) {
   return combatRoundStateSchema
     .parse(input.state)
     .offensiveParryContests.find((contest) => contest.id === input.contestId);
@@ -8274,9 +8270,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
   submittedBy: "gm" | "player";
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const contest = normalized.offensiveParryContests.find(
-    (entry) => entry.id === input.contestId,
-  );
+  const contest = normalized.offensiveParryContests.find((entry) => entry.id === input.contestId);
   if (!contest || contest.status !== "awaiting_rolls") {
     throw new RangeError("The Offensive Parry Brawling contest is not awaiting rolls.");
   }
@@ -8478,10 +8472,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
           skillModifier: roll.skillModifier,
         },
       },
-      involvedParticipantIds: [
-        contest.controllerParticipantId,
-        contest.affectedParticipantId,
-      ],
+      involvedParticipantIds: [contest.controllerParticipantId, contest.affectedParticipantId],
       opportunityId: contest.opportunityId,
       ownerParticipantId: input.rollerParticipantId,
       parryResultId: contest.parryResultId,
@@ -17548,8 +17539,7 @@ function resetCombatRoundParryForAttackResult(input: {
   resolution: CombatRoundPhaseResolutionResult;
   updatedAt: string;
 }): CombatRoundPhaseResolutionResult {
-  const offensiveParryPending =
-    input.resolution.parryResolution.purpose === "offensive_parry";
+  const offensiveParryPending = input.resolution.parryResolution.purpose === "offensive_parry";
   return combatRoundPhaseResolutionResultSchema.parse({
     ...input.resolution,
     damageProposal: {
@@ -17571,24 +17561,24 @@ function resetCombatRoundParryForAttackResult(input: {
     hitLocationRoll: {
       status: "pending",
     },
-    parryResolution: input.attackResult.hit || offensiveParryPending
-      ? {
-          attackOpportunityId: input.resolution.parryResolution.attackOpportunityId,
-          attackResultId: input.resolution.parryResolution.attackResultId,
-          declaredOpponentParticipantId:
-            input.resolution.parryResolution.declaredOpponentParticipantId,
-          offensiveParryAttemptId:
-            input.resolution.parryResolution.offensiveParryAttemptId,
-          offensiveParryDeclarationId:
-            input.resolution.parryResolution.offensiveParryDeclarationId,
-          parrySourceId: input.resolution.parryResolution.parrySourceId,
-          purpose: input.resolution.parryResolution.purpose,
-          status: "pending",
-        }
-      : {
-          resultLabel: "Attack missed",
-          status: "not_applicable",
-        },
+    parryResolution:
+      input.attackResult.hit || offensiveParryPending
+        ? {
+            attackOpportunityId: input.resolution.parryResolution.attackOpportunityId,
+            attackResultId: input.resolution.parryResolution.attackResultId,
+            declaredOpponentParticipantId:
+              input.resolution.parryResolution.declaredOpponentParticipantId,
+            offensiveParryAttemptId: input.resolution.parryResolution.offensiveParryAttemptId,
+            offensiveParryDeclarationId:
+              input.resolution.parryResolution.offensiveParryDeclarationId,
+            parrySourceId: input.resolution.parryResolution.parrySourceId,
+            purpose: input.resolution.parryResolution.purpose,
+            status: "pending",
+          }
+        : {
+            resultLabel: "Attack missed",
+            status: "not_applicable",
+          },
     updatedAt: input.updatedAt,
   });
 }
@@ -18154,9 +18144,7 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
       participant.participantId === command.participantId
         ? {
             ...participant,
-            declaration: previousDeclaration.success
-              ? previousDeclaration.data
-              : undefined,
+            declaration: previousDeclaration.success ? previousDeclaration.data : undefined,
             stepStatuses: previousStepStatus.success
               ? {
                   ...participant.stepStatuses,

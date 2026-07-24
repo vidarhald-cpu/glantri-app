@@ -44,24 +44,40 @@ function task(input: {
     expectedCommand: input.command ?? "roll_attack",
     id: input.id ?? `task:${input.kind}`,
     identity: {
-      attackResultId: ["parry", "hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      attackResultId: [
+        "parry",
+        "hit_location",
+        "critical",
+        "damage_roll",
+        "damage_review",
+      ].includes(input.kind)
         ? "attack-result-1"
         : undefined,
-      attackerParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      attackerParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(
+        input.kind,
+      )
         ? "aria"
         : undefined,
-      criticalResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      criticalResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(
+        input.kind,
+      )
         ? "attack-result-1:critical"
         : undefined,
       damageRollExpression: input.kind === "damage_roll" ? "1d7" : undefined,
-      damageReviewId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      damageReviewId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(
+        input.kind,
+      )
         ? "attack-result-1:damage-review"
         : undefined,
-      defenderParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      defenderParticipantId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(
+        input.kind,
+      )
         ? "borin"
         : undefined,
       executionGroupId: `group:${input.id ?? input.kind}`,
-      hitLocationResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(input.kind)
+      hitLocationResultId: ["hit_location", "critical", "damage_roll", "damage_review"].includes(
+        input.kind,
+      )
         ? "attack-result-1:hit-location"
         : undefined,
       opportunityId: "opportunity-1",
@@ -332,6 +348,28 @@ describe("CurrentActionPresentation", () => {
       },
       requiredNow: "Roll Brawling.",
       summary: "Your Offensive Parry succeeded. Contest Borin's balance.",
+    });
+  });
+
+  it("shows a recorded Brawling roll as waiting while the opponent task remains", () => {
+    const base = task({
+      actionKind: "offensive_parry",
+      actor: aria,
+      command: "roll_offensive_parry_brawling",
+      kind: "offensive_parry_brawling_roll",
+      owner: borin,
+      responder: borin,
+      target: borin,
+    });
+    const result = build([base], "player");
+
+    expect(result).toMatchObject({
+      primaryAction: {
+        enabled: false,
+        viewerMayInvoke: false,
+      },
+      requiredNow: "Waiting for Borin.",
+      summary: "Your Brawling roll is recorded. Waiting for Borin.",
     });
   });
 

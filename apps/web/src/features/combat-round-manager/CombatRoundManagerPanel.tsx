@@ -197,6 +197,7 @@ import {
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatOpponentSelector,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelCardStyle,
@@ -6656,6 +6657,7 @@ export default function CombatRoundManagerPanel({
         initiativeRank: initiativeResult ? ranks[roundParticipant.participantId] : undefined,
         initiativeResult,
         modifierSummary: {
+          dbFlatAdjustment: phaseSummary.liveModifiers.dbFlatAdjustment ?? 0,
           dbRaw: phaseSummary.liveModifiers.dbRaw,
           generalFatigueRaw: phaseSummary.liveModifiers.generalFatigueRaw,
           initiativeRaw: phaseSummary.liveModifiers.initiativeRaw,
@@ -7166,9 +7168,9 @@ export default function CombatRoundManagerPanel({
       secondaryActionId: inspectorDraft.secondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
-    const attackModeUnavailableMessage = Object.values(
-      inspectorPhaseLoadoutSummaries,
-    ).find((summary) => summary.attackModeUnavailableMessage)?.attackModeUnavailableMessage;
+    const attackModeUnavailableMessage = Object.values(inspectorPhaseLoadoutSummaries).find(
+      (summary) => summary.attackModeUnavailableMessage,
+    )?.attackModeUnavailableMessage;
     if (!isModifierReview && attackModeUnavailableMessage) {
       setSaveError(attackModeUnavailableMessage);
       return;
@@ -7890,12 +7892,10 @@ export default function CombatRoundManagerPanel({
         "attackIndex",
         "attackModeId",
         "declarationId",
-        "declaredOpponentParticipantId",
         "executionGroupId",
         "expectedRevision",
         "opponentParticipantId",
         "opportunityId",
-        "offensiveParryAttemptId",
         "participantId",
         "phase",
         "processId",
@@ -8254,8 +8254,13 @@ export default function CombatRoundManagerPanel({
         taskId: descriptor.taskId,
       });
       const nextRoundState = combatRoundStateSchema.parse(nextEncounter.combatRoundState);
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
       setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -9239,22 +9244,10 @@ export default function CombatRoundManagerPanel({
                       onMovementIntentChange={(movementIntent) =>
                         updateInspectorDraft({ movementIntent })
                       }
-                      onSelectedOpponentChange={(selectedOpponentId) =>
-                        updateInspectorDraft({
-                          combatContext: {
-                            ...inspectorDisplayDraft.combatContext,
-                            selectedOpponentId: selectedOpponentId || undefined,
-                          },
-                        })
-                      }
                       onSecondaryActionChange={(secondaryActionId) =>
                         updateInspectorDraft({ secondaryActionId })
                       }
-                      opponentOptions={inspectorTargetOptions}
                       roundNumber={selectedRoundNumber}
-                      selectedOpponentId={
-                        inspectorDisplayDraft.combatContext.selectedOpponentId
-                      }
                       secondaryActionId={inspectorDisplayDraft.secondaryActionId}
                       sourceLabel={inspectorSourceLabel}
                     />
@@ -9379,6 +9372,24 @@ export default function CombatRoundManagerPanel({
                           <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                             No information available for this panel.
                           </div>
+                        ) : inspectorDisplayDraft.actionId === "offensive_parry" &&
+                          phaseKey === "phase1" ? (
+                          <PlayerCombatOpponentSelector
+                            controlsDisabled={saving || inspectorIsHistorical}
+                            onSelectedOpponentChange={(selectedOpponentId) =>
+                              updateInspectorDraft({
+                                combatContext: {
+                                  ...inspectorDisplayDraft.combatContext,
+                                  selectedOpponentId: selectedOpponentId || undefined,
+                                },
+                              })
+                            }
+                            opponentOptions={inspectorTargetOptions}
+                            readOnly={inspectorIsHistorical}
+                            selectedOpponentId={
+                              inspectorDisplayDraft.combatContext.selectedOpponentId
+                            }
+                          />
                         ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
                           phaseKey === "phase1" ? (
                           <div style={{ display: "grid", gap: "0.65rem" }}>

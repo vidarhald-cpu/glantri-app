@@ -29,8 +29,13 @@ winner, so Continued Contact is not established.
 ## Slice 1 sequence
 
 1. A participant commits an `offensive_parry` declaration and selects one prepared opponent.
+   The shared GM/Player declaration form places this encounter-participant selector in Phase 1,
+   alongside other Phase 1 opponent-bound maneuvers; it is not part of the general Action panel.
 2. One generated, round-bound `flat_db` modifier applies DB −2. Recommit uses the same deterministic
-   row identity and does not stack it.
+   row identity and does not stack it. The generated row is the single fact shown in declaration
+   preview, presented for GM modifier review, persisted on commit, and composed into effective DB
+   after percentage adjustment. A base combined DB of 15 therefore resolves as DB 13 for attacks
+   in that round. It is not the later Unbalanced percentage modifier.
 3. Any qualifying canonical attack by that selected opponent against the declarer creates one
    proactive Offensive Parry task. The source attack does not need to hit, exceed DB, or enter an
    ordinary defensive-parry branch.
@@ -78,6 +83,11 @@ The Brawling descriptor additionally retains:
 - controller/roller and opponent participant IDs;
 - roll purpose `offensive_parry_brawling`.
 
+Player-safe projection retains the contest ID and each unresolved task. After the first roll, that
+roller's task is complete and their persisted roll remains; the other task keeps the same contest
+and execution-group lineage. The completed roller sees a waiting state, while the other owner or
+the GM proxy may perform the remaining roll. Only the second roll closes and resolves the contest.
+
 No live layer resolves the trigger from participant plus phase, a cursor, inspector selection, or a
 latest attack/parry.
 
@@ -110,14 +120,14 @@ combat-wide without adding Offensive-Parry-specific arithmetic to each formula.
 
 Current modifier-path audit:
 
-| Calculation | Unbalanced path |
-| --- | --- |
-| Initiative | initiative bucket + combat-wide general resolver |
-| Attack/to-hit | Skill/OB bucket + combat-wide general resolver |
-| DB and ordinary parry | DB/Parry bucket + combat-wide general resolver |
-| Dodge and distance contests | existing combined general + skill resolver |
-| Weapon Feint contest | combat-wide general resolver |
-| Offensive Parry Brawling | existing general + skill resolver |
+| Calculation                 | Unbalanced path                                  |
+| --------------------------- | ------------------------------------------------ |
+| Initiative                  | initiative bucket + combat-wide general resolver |
+| Attack/to-hit               | Skill/OB bucket + combat-wide general resolver   |
+| DB and ordinary parry       | DB/Parry bucket + combat-wide general resolver   |
+| Dodge and distance contests | existing combined general + skill resolver       |
+| Weapon Feint contest        | combat-wide general resolver                     |
+| Offensive Parry Brawling    | existing general + skill resolver                |
 
 Disarm is not implemented, but it can consume the same combat-wide resolver later. No unsupported
 currently implemented roll category required an Offensive-Parry-only calculation path.
@@ -132,7 +142,10 @@ Before the contest, Current Action identifies the committed attacker and asks th
 Offensive Parry whether the source attack hit or missed. Tracker attention is owned by that exact
 P1/P2 parry task. After success, Current Action asks each unresolved participant to roll Brawling.
 The current-step result distinguishes interception of a missed attack from parrying a hit without
-changing trigger eligibility, and records the broad comparison and visible
+changing trigger eligibility. Attack and purpose-tagged parry presentation is keyed by canonical
+attack/parry result identity, so a compatibility projection of the same fact is not shown as a
+second Attack or generic Defense entry. Genuinely distinct attack-result identities remain separate.
+The result records the broad comparison and visible
 Continued Contact/Unbalanced consequence. The GM may inspect both rolls; a player receives their own
 calculation and the broad opponent outcome, not the opponent's private dice/calculation.
 

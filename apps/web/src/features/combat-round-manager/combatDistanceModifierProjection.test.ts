@@ -121,6 +121,37 @@ function buildCommittedContext(): ScenarioParticipantCombatContext {
 }
 
 describe("projectCombatActionGeneratedModifiers", () => {
+  it("projects the Offensive Parry round DB drawback into declaration and review rows", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "offensive_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const modifierRows = buildPlayerCombatModifierRows({
+      combatContext: projectedContext,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const dbRow = modifierRows.find((row) => row.bucketKey === "situation_db");
+
+    expect(dbRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          application: "flat_db",
+          expiresAtRound: roundState.roundNumber,
+          id: "generated:offensive-parry:round:flat-db",
+          sourceActionId: "offensive_parry",
+          sourceRoundNumber: roundState.roundNumber,
+          value: -2,
+        }),
+      ],
+      total: -2,
+    });
+  });
+
   it("uses a Single attack declared farther distance for the visible Skill/OB penalty", () => {
     const encounter = buildEncounter();
     const projectedContext = projectCombatActionGeneratedModifiers({

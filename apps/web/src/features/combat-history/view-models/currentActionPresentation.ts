@@ -738,8 +738,18 @@ export function buildCurrentActionPresentation(
     weaponSourceSlot: task.identity.weaponSourceSlot,
     weaponTemplateId: task.identity.weaponTemplateId,
   } satisfies CurrentActionCommandDescriptor);
-  const summary = summaryFor({ action, actor, target, task });
-  const requiredNow = requiredNowFor(task, status);
+  const waitingForParallelBrawlingRoll =
+    task.kind === "offensive_parry_brawling_roll" &&
+    input.viewer.kind === "player" &&
+    !viewerMayInvoke &&
+    actor?.id !== undefined &&
+    (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id);
+  const summary = waitingForParallelBrawlingRoll
+    ? `Your Brawling roll is recorded. Waiting for ${required.label}.`
+    : summaryFor({ action, actor, target, task });
+  const requiredNow = waitingForParallelBrawlingRoll
+    ? `Waiting for ${required.label}.`
+    : requiredNowFor(task, status);
 
   return Object.freeze({
     actionKind: task.presentationContext?.actionKind,

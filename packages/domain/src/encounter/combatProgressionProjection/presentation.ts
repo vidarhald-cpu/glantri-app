@@ -106,13 +106,12 @@ function visibleTaskIdentity(
     attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
       ? task.identity.attackerParticipantId
       : undefined,
+    contestId: task.identity.contestId,
     criticalResultId: task.identity.criticalResultId,
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     declarationId: task.identity.declarationId,
-    declaredOpponentParticipantId: participantVisible(
-      task.identity.declaredOpponentParticipantId,
-    )
+    declaredOpponentParticipantId: participantVisible(task.identity.declaredOpponentParticipantId)
       ? task.identity.declaredOpponentParticipantId
       : undefined,
     defenderParticipantId: participantVisible(task.identity.defenderParticipantId)

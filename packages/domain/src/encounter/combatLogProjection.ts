@@ -138,7 +138,11 @@ function possessiveDisplayName(name: string): string {
   return name.endsWith("s") ? `${name}'` : `${name}’s`;
 }
 
-function replaceSubjectWording(summary: string, subject: CombatLogSubjectPresentation, replacement: string): string {
+function replaceSubjectWording(
+  summary: string,
+  subject: CombatLogSubjectPresentation,
+  replacement: string,
+): string {
   const possessive = possessiveDisplayName(subject.displayName);
   const replacementPossessive = possessiveDisplayName(replacement);
   return summary
@@ -161,9 +165,7 @@ function projectSubjectForViewer(input: {
   const involved = Boolean(
     participantId && input.viewer.controlledParticipantIds.has(participantId),
   );
-  const visible = Boolean(
-    participantId && input.viewer.visibleParticipantIds.has(participantId),
-  );
+  const visible = Boolean(participantId && input.viewer.visibleParticipantIds.has(participantId));
   if (involved) {
     return {
       involved: true,
@@ -203,40 +205,40 @@ export function projectCombatLogForViewer(input: {
           event.roundNumber !== input.unpublishedDeclarationRoundNumber ||
           Boolean(
             event.actor?.participantId &&
-              viewer.controlledParticipantIds.has(event.actor.participantId),
+            viewer.controlledParticipantIds.has(event.actor.participantId),
           ),
       )
       .map((event) => {
-      const actor = projectSubjectForViewer({ subject: event.actor, viewer });
-      const target = projectSubjectForViewer({ subject: event.target, viewer });
-      const summary =
-        actor.replacement && event.actor
-          ? replaceSubjectWording(event.summary, event.actor, actor.replacement)
-          : event.summary;
-      const targetSummary =
-        target.replacement && event.target
-          ? replaceSubjectWording(summary, event.target, target.replacement)
-          : summary;
-      const mayInspect = actor.involved || target.involved;
-      return {
-        ...event,
-        actor: actor.subject,
-        target: target.subject,
-        summary: targetSummary,
-        ...(mayInspect
-          ? {}
-          : {
-              attackResultId: undefined,
-              detailResultId: undefined,
-              opportunityId: undefined,
-              presentationTargetId: undefined,
-              presentationTargetKind: undefined,
-              presentationTargetSourceId: undefined,
-              processId: undefined,
-              proposalId: undefined,
-              taskId: undefined,
-            }),
-      };
+        const actor = projectSubjectForViewer({ subject: event.actor, viewer });
+        const target = projectSubjectForViewer({ subject: event.target, viewer });
+        const summary =
+          actor.replacement && event.actor
+            ? replaceSubjectWording(event.summary, event.actor, actor.replacement)
+            : event.summary;
+        const targetSummary =
+          target.replacement && event.target
+            ? replaceSubjectWording(summary, event.target, target.replacement)
+            : summary;
+        const mayInspect = actor.involved || target.involved;
+        return {
+          ...event,
+          actor: actor.subject,
+          target: target.subject,
+          summary: targetSummary,
+          ...(mayInspect
+            ? {}
+            : {
+                attackResultId: undefined,
+                detailResultId: undefined,
+                opportunityId: undefined,
+                presentationTargetId: undefined,
+                presentationTargetKind: undefined,
+                presentationTargetSourceId: undefined,
+                processId: undefined,
+                proposalId: undefined,
+                taskId: undefined,
+              }),
+        };
       }),
   });
 }
@@ -313,6 +315,12 @@ function targetFromDeclaration(participantId: string, state: CombatRoundState): 
 }
 
 function semanticEventKey(event: CombatStepEvent): string {
+  if (event.type === "attack" && event.attackResultId) {
+    return `attack:${event.attackResultId}`;
+  }
+  if (event.type === "parry" && event.attackResultId) {
+    return `parry:${event.attackResultId}`;
+  }
   return [
     event.type,
     event.ownerParticipantId,
@@ -506,10 +514,10 @@ function projectParry(input: {
   );
   if (!actor) return undefined;
   const outcome = success ? "succeeded" : "failed";
-  const parryPurpose = stringFact(
-    input.event.facts.publicOutcome,
-    "parryPurpose",
-  ) as "ordinary_defense" | "offensive_parry" | undefined;
+  const parryPurpose = stringFact(input.event.facts.publicOutcome, "parryPurpose") as
+    | "ordinary_defense"
+    | "offensive_parry"
+    | undefined;
   const attackHit = booleanFact(input.event.facts.publicOutcome, "attackHit");
   const offensiveParrySummary =
     parryPurpose === "offensive_parry"
@@ -544,7 +552,8 @@ function projectParry(input: {
         kind: "defense_resolved",
         outcome,
         parryPurpose,
-        sourceAttackOutcome: attackHit === false ? "missed" : attackHit === true ? "hit" : undefined,
+        sourceAttackOutcome:
+          attackHit === false ? "missed" : attackHit === true ? "hit" : undefined,
       },
       target,
     }),

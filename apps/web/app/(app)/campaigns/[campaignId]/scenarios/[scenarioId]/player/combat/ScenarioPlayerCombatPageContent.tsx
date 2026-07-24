@@ -88,6 +88,7 @@ import {
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatOpponentSelector,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
@@ -1530,8 +1531,7 @@ export default function ScenarioPlayerCombatPageContent({
         selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber
       ? validateCombatDeclarationTargets({
           actionId: selectedParticipant.state.combat.lastDeclaredActionId,
-          selectedOpponentId:
-            selectedParticipant.state.combat.combatContext?.selectedOpponentId,
+          selectedOpponentId: selectedParticipant.state.combat.combatContext?.selectedOpponentId,
           secondaryActionId: selectedParticipant.state.combat.lastDeclaredSecondaryActionId,
         })
       : undefined;
@@ -2146,9 +2146,9 @@ export default function ScenarioPlayerCombatPageContent({
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
-    const attackModeUnavailableMessage = Object.values(
-      phaseCombatLoadoutSummaries,
-    ).find((summary) => summary.attackModeUnavailableMessage)?.attackModeUnavailableMessage;
+    const attackModeUnavailableMessage = Object.values(phaseCombatLoadoutSummaries).find(
+      (summary) => summary.attackModeUnavailableMessage,
+    )?.attackModeUnavailableMessage;
     if (attackModeUnavailableMessage) {
       setError(attackModeUnavailableMessage);
       return;
@@ -2814,7 +2814,28 @@ export default function ScenarioPlayerCombatPageContent({
         stageId: descriptor.stageId!,
         taskId: descriptor.taskId,
       });
-      acceptEncounterSession(encounter);
+
+      if (acceptEncounterSession(encounter)) {
+        try {
+          const nextHistory = await loadCombatHistory(
+            encounterId,
+            isGameMaster && selectedParticipantId
+              ? { perspectiveParticipantId: selectedParticipantId }
+              : {},
+          );
+          if (
+            nextHistory.sourceUpdatedAt &&
+            isCombatViewRevisionUnchanged({
+              acceptedUpdatedAt: encounter.updatedAt,
+              candidateUpdatedAt: nextHistory.sourceUpdatedAt,
+            })
+          ) {
+            setCombatHistory(nextHistory);
+          }
+        } catch {
+          // The accepted encounter remains authoritative; polling will retry the projection.
+        }
+      }
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -3726,20 +3747,11 @@ export default function ScenarioPlayerCombatPageContent({
                 markCombatDeclarationDraftDirty();
                 setSelectedMovementIntent(movementIntent);
               }}
-              onSelectedOpponentChange={(selectedOpponentId) => {
-                markCombatDeclarationDraftDirty();
-                setCombatContextDraft((current) => ({
-                  ...current,
-                  selectedOpponentId: selectedOpponentId || undefined,
-                }));
-              }}
               onSecondaryActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedSecondaryActionId(actionId);
               }}
-              opponentOptions={targetOptions}
               roundNumber={combatRoundState?.roundNumber}
-              selectedOpponentId={combatContextDraft.selectedOpponentId}
               secondaryActionId={selectedSecondaryActionId}
             />
             {phaseCards.map((phaseCard, index) => {
@@ -3783,7 +3795,20 @@ export default function ScenarioPlayerCombatPageContent({
 
               return (
                 <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
-                  {selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
+                  {selectedActionId === "offensive_parry" && phaseKey === "phase1" ? (
+                    <PlayerCombatOpponentSelector
+                      controlsDisabled={declarationControlsDisabled}
+                      onSelectedOpponentChange={(selectedOpponentId) => {
+                        markCombatDeclarationDraftDirty();
+                        setCombatContextDraft((current) => ({
+                          ...current,
+                          selectedOpponentId: selectedOpponentId || undefined,
+                        }));
+                      }}
+                      opponentOptions={targetOptions}
+                      selectedOpponentId={combatContextDraft.selectedOpponentId}
+                    />
+                  ) : selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
                     <div style={{ display: "grid", gap: "0.65rem" }}>
                       <PlayerCombatAttackTargetSelector
                         combatContext={phaseModel.phaseContext}

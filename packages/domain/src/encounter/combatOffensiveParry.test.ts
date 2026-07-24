@@ -206,9 +206,7 @@ function openContest(sourceAttack = attack): CombatRoundState {
 describe("Offensive Parry rules", () => {
   it("projects the exact proactive parry for a selected opponent's hit or miss only", () => {
     for (const sourceAttack of [attack, missedAttack]) {
-      const projection = buildCombatProgressionProjection(
-        state({ attackResult: sourceAttack }),
-      );
+      const projection = buildCombatProgressionProjection(state({ attackResult: sourceAttack }));
       const tasks = projection.boundary.processes
         .flatMap((process) => process.stages)
         .flatMap((stage) => stage.executionGroups)
@@ -407,8 +405,8 @@ describe("Offensive Parry rules", () => {
       submittedBy: "player",
     });
     expect(
-      buildCombatProgressionProjection(rolled).boundary.processes
-        .flatMap((process) => process.stages)
+      buildCombatProgressionProjection(rolled)
+        .boundary.processes.flatMap((process) => process.stages)
         .flatMap((stage) => stage.executionGroups)
         .flatMap((group) => group.tasks)
         .some((task) => task.identity.offensiveParryAttemptId === offensiveParryAttemptId),
@@ -417,8 +415,8 @@ describe("Offensive Parry rules", () => {
     const undone = undoLatestCombatRoundCommand({ state: rolled });
     expect(
       undone &&
-        buildCombatProgressionProjection(undone).boundary.processes
-          .flatMap((process) => process.stages)
+        buildCombatProgressionProjection(undone)
+          .boundary.processes.flatMap((process) => process.stages)
           .flatMap((stage) => stage.executionGroups)
           .flatMap((group) => group.tasks)
           .some((task) => task.identity.offensiveParryAttemptId === offensiveParryAttemptId),
@@ -478,9 +476,7 @@ describe("Offensive Parry rules", () => {
       combatContext: first,
       sourceRoundNumber: 3,
     });
-    expect(recommitted.modifierBuckets.situationDb).toEqual(
-      first.modifierBuckets.situationDb,
-    );
+    expect(recommitted.modifierBuckets.situationDb).toEqual(first.modifierBuckets.situationDb);
     expect(recommitted.modifierBuckets.situationDb).toHaveLength(1);
   });
 
@@ -530,12 +526,10 @@ describe("Offensive Parry rules", () => {
   it("persists independent rolls and establishes deterministic contact and Unbalanced", () => {
     const opened = openContest();
     const contest = opened.offensiveParryContests[0]!;
-    const openGroup = buildCombatProgressionProjection(opened).boundary.processes
-      .flatMap((process) => process.stages)
+    const openGroup = buildCombatProgressionProjection(opened)
+      .boundary.processes.flatMap((process) => process.stages)
       .flatMap((stage) => stage.executionGroups)
-      .find((group) =>
-        group.tasks.some((task) => task.kind === "offensive_parry_brawling_roll"),
-      );
+      .find((group) => group.tasks.some((task) => task.kind === "offensive_parry_brawling_roll"));
     expect(openGroup).toMatchObject({
       executionStrategy: "parallel_all",
       tasks: [
@@ -557,6 +551,21 @@ describe("Offensive Parry rules", () => {
         }),
       ],
     });
+    const playerSafeBrawlingTasks = projectCombatProgressionPresentation({
+      projection: { ...buildCombatProgressionProjection(opened), diagnostics: [] },
+      viewer: {
+        controlledParticipantIds: new Set(["defender"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["attacker", "defender"]),
+      },
+    }).processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
+    );
+    expect(
+      playerSafeBrawlingTasks
+        .filter((task) => task.kind === "offensive_parry_brawling_roll")
+        .map((task) => task.identity.contestId),
+    ).toEqual([contest.id, contest.id]);
     const controllerTask = openGroup!.tasks.find(
       (task) => task.owner?.kind === "combatant" && task.owner.participantId === "defender",
     )!;
@@ -624,8 +633,8 @@ describe("Offensive Parry rules", () => {
       responderRollRecorded: false,
       status: "awaiting_rolls",
     });
-    const remainingTasks = buildCombatProgressionProjection(afterController).boundary.processes
-      .flatMap((process) => process.stages)
+    const remainingTasks = buildCombatProgressionProjection(afterController)
+      .boundary.processes.flatMap((process) => process.stages)
       .flatMap((stage) => stage.executionGroups)
       .flatMap((group) => group.tasks)
       .filter((task) => task.kind === "offensive_parry_brawling_roll");

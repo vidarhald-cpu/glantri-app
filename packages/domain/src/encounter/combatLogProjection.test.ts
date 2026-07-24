@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatLogProjection,
+  buildCombatRoundAttackRollResult,
   completedCombatRoundSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
   projectCombatLogForViewer,
   projectCombatHistory,
+  getCombatRoundAttackResultId,
+  recordCombatRoundParryResult,
   type CombatRoundState,
   type CombatStepEvent,
 } from "../index";
@@ -251,12 +254,7 @@ describe("CombatLogProjection", () => {
   });
 
   it("describes proactive Offensive Parry results independently of the source hit outcome", () => {
-    const makeParry = (
-      id: string,
-      sequence: number,
-      attackHit: boolean,
-      success: boolean,
-    ) =>
+    const makeParry = (id: string, sequence: number, attackHit: boolean, success: boolean) =>
       event({
         actorParticipantId: "scyrian",
         attackResultId: `attack-${id}`,
@@ -316,6 +314,110 @@ describe("CombatLogProjection", () => {
         sourceAttackOutcome: "missed",
       }),
     ]);
+  });
+
+  it("deduplicates canonical and compatibility attack/parry facts by result lineage", () => {
+    const attack = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "opportunity-1",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "scyrian",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 3,
+      rollTotal: 3,
+      rolledAt: occurredAt(1),
+      weaponName: "Long Sword",
+    });
+    const attackResultId = getCombatRoundAttackResultId({ result: attack, roundNumber: 1 });
+    const baseState = state();
+    const withLegacyParry = recordCombatRoundParryResult({
+      attackResult: attack,
+      parryResolution: {
+        combinedParryScore: 12,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        purpose: "ordinary_defense",
+        rollD20: 11,
+        rollTotal: 11,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 23,
+      },
+      state: combatRoundStateSchema.parse({
+        ...baseState,
+        participants: baseState.participants.map((participant) =>
+          participant.participantId === "gladiator"
+            ? { ...participant, attackResults: { phase1: attack } }
+            : participant,
+        ),
+      }),
+      submittedBy: "player",
+      updatedAt: occurredAt(2),
+    });
+    const canonicalAttack = event({
+      actorParticipantId: "gladiator",
+      attackResultId,
+      attackerParticipantId: "gladiator",
+      defenderParticipantId: "scyrian",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          actionId: "attack_parry",
+          attackOpportunityId: "opportunity-1",
+          hit: false,
+          weaponName: "Long Sword",
+        },
+        publicOutcome: { grazing: false, hit: false },
+        rollerPrivate: {},
+      },
+      id: "canonical-attack",
+      sequence: 0,
+      targetParticipantId: "scyrian",
+      type: "attack",
+    });
+    const canonicalParry = event({
+      actorParticipantId: "scyrian",
+      attackResultId,
+      attackerParticipantId: "gladiator",
+      defenderParticipantId: "scyrian",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          attackHit: false,
+          parryPurpose: "offensive_parry",
+          status: "resolved",
+          success: true,
+        },
+        publicOutcome: {
+          attackHit: false,
+          parryPurpose: "offensive_parry",
+          status: "resolved",
+          success: true,
+        },
+        rollerPrivate: {},
+      },
+      id: "canonical-parry",
+      parryResultId: `${attackResultId}:parry`,
+      sequence: 1,
+      targetParticipantId: "gladiator",
+      type: "parry",
+    });
+    const result = project({
+      ...withLegacyParry,
+      events: [canonicalAttack, canonicalParry],
+    });
+
+    expect(
+      result.events.filter((entry) => entry.summaryFacts.kind === "attack_resolved"),
+    ).toHaveLength(1);
+    const defenses = result.events.filter(
+      (entry) => entry.summaryFacts.kind === "defense_resolved",
+    );
+    expect(defenses).toHaveLength(1);
+    expect(defenses[0]?.summaryFacts).toMatchObject({ parryPurpose: "offensive_parry" });
   });
 
   it("projects Feint attempt, resistance, and only the committed final result", () => {
@@ -712,7 +814,9 @@ describe("CombatLogProjection", () => {
         visibleParticipantIds: new Set(["gladiator", "scyrian"]),
       },
     });
-    expect(player.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state])).toEqual(
+    expect(
+      player.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state]),
+    ).toEqual(
       projection.events.map((entry) => [entry.id, entry.category, entry.sequence, entry.state]),
     );
   });

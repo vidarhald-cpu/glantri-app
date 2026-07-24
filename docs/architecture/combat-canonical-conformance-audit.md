@@ -539,6 +539,12 @@ execution group. Its identity retains the declaration, opportunity, attack resul
 contest, process, stage, task, and group. Continued Contact and Unbalanced are separate canonical
 facts. Phase 2 follow-up attack generation and round-end maintenance/escape remain future slices.
 
+The declaration surface follows the Phase 1 opponent-binding pattern used by Feint and Adjust
+Distance. Its deterministic `flat_db` row remains one canonical fact through preview, GM review,
+participant state, snapshot provenance, and effective defender DB. Attack authorization continues
+to validate the ordinary DB/Parry contribution fingerprint, while attack resolution composes the
+flat row with the exact defender snapshot instead of trusting a stale sheet value or request.
+
 The Slice 1 trigger is now an active counter-technique rather than an ordinary-parry side effect.
 The declaration persists one selected encounter opponent. Each surviving canonical attack
 opportunity/result from that opponent can project one deterministic `parry` task with purpose
@@ -547,6 +553,11 @@ work open; it does not reopen a completed phase through cursor state. A hit uses
 the attack's one ordinary-mechanics parry, so no duplicate defensive roll exists. Successful exact
 attempt lineage opens Brawling; failure does not. Phase 2 follow-up attacks and round-end
 maintenance/escape are still not implemented.
+
+Canonical result identity suppresses compatibility copies of the same attack result or parry
+result without collapsing distinct opportunities. Player-safe task identity retains the Brawling
+contest ID, and a successful mutation immediately reloads the accepted history revision; the first
+parallel roll therefore becomes a waiting state instead of a stale parent-parry action.
 
 Ownerless tracker cleanup and descriptor-keyed GM editing remain unrelated conformance cleanup; the
 new Brawling path does not depend on either.

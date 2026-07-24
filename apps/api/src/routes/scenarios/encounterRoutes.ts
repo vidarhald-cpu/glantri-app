@@ -62,6 +62,7 @@ import {
   getCombatRoundInitiativePhaseForStep,
   buildLiveCombatModifierContributionProjection,
   createCombatParticipantPairKey,
+  getMergedCombatDbFlatAdjustmentTotal,
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultForOpportunity,
@@ -1052,10 +1053,7 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   const declaredOpponentParticipantId =
     value.declaredOpponentParticipantId === undefined
       ? undefined
-      : parseNonEmptyString(
-          value.declaredOpponentParticipantId,
-          "declaredOpponentParticipantId",
-        );
+      : parseNonEmptyString(value.declaredOpponentParticipantId, "declaredOpponentParticipantId");
   const offensiveParryAttemptId =
     value.offensiveParryAttemptId === undefined
       ? undefined
@@ -1107,9 +1105,7 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   };
 }
 
-function parseOffensiveParryBrawlingBody(
-  body: unknown,
-): ParsedCombatTaskCommandIdentity & {
+function parseOffensiveParryBrawlingBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   attackResultId: string;
   contestId: string;
   declarationId: string;
@@ -4834,8 +4830,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       );
       const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
         ? scenarioParticipants.find(
-            (participant) =>
-              participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
           )
         : undefined;
       const projection = buildLiveCombatModifierContributionProjection({
@@ -5225,8 +5220,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         context: { ...initiativeCalculationContext, rollType: "initiative" },
         contributions: initiativeProjection.contributions,
       });
-      const initiativeRawModifier =
-        initiativeResolution.total + initiativeGeneralResolution.total;
+      const initiativeRawModifier = initiativeResolution.total + initiativeGeneralResolution.total;
       const initiativeModifierTrace = calculateWorkbookPercentageAdjustmentTrace({
         baseValue: initiativeBase,
         rawModifiers: [{ label: "Initiative", value: initiativeRawModifier }],
@@ -7376,19 +7370,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.defenseSummary,
         );
-      const weaponName = canonicalWeaponFacts.weaponName;
-      const defenderDb =
-        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
-        body.defenderDb;
-
-      if (!weaponName || defenderDb === undefined) {
-        return reply.code(409).send({
-          error: "Attack or defender combat summary is not available.",
-        });
-      }
-
-      const submittedAt = new Date().toISOString();
-      const actionId = canonicalOpportunityIdentity.actionId;
       const canonicalModifierFacts = resolveCanonicalCombatAttackModifierFacts({
         attackerCombatantId: encounterParticipant.id,
         attackerScenarioParticipant: scenarioParticipant,
@@ -7399,6 +7380,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         phase: body.phase,
         state: roundState,
       });
+      const weaponName = canonicalWeaponFacts.weaponName;
+      const snapshotDefenderDb = parseCombatSummaryInteger(
+        latestDefenderSnapshot?.defenseSummary?.db,
+        "Defender DB",
+      );
+      const defenderFlatDbAdjustment = getMergedCombatDbFlatAdjustmentTotal({
+        combatContext: canonicalModifierFacts.defenderCombatContext,
+        phase: body.phase,
+      });
+      const defenderDb =
+        snapshotDefenderDb !== undefined
+          ? snapshotDefenderDb +
+            defenderFlatDbAdjustment -
+            (latestDefenderSnapshot?.modifierSummary?.dbFlatAdjustment ?? 0)
+          : body.defenderDb;
+
+      if (!weaponName || defenderDb === undefined) {
+        return reply.code(409).send({
+          error: "Attack or defender combat summary is not available.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const actionId = canonicalOpportunityIdentity.actionId;
       const attackerCombatContext = canonicalModifierFacts.attackerCombatContext;
       const canonicalObSkillResolution = canonicalModifierFacts.attackerResolution;
       const canonicalDefenderDbParryResolution = canonicalModifierFacts.defenderResolution;
@@ -7474,6 +7479,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt: submittedAt,
           createdByUserId: user.id,
           facts: {
+            defenderFlatDbAdjustment,
             ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
             obSkillRaw: canonicalObSkillRaw,
           },
@@ -7925,9 +7931,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           roundState,
         });
         if (!authorization.ok) {
-          return reply
-            .code(409)
-            .send({ code: authorization.code, error: authorization.message });
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
 
         const brawlingSkill = defaultCanonicalContent.skills.find(
@@ -7943,12 +7947,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const opponentEncounterParticipant = resolveEncounterParticipantMembership({
           encounter,
           scenarioParticipants,
-        }).participants.find(
-          (participant) => participant.id === body.opponentParticipantId,
-        );
+        }).participants.find((participant) => participant.id === body.opponentParticipantId);
         const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
           ? scenarioParticipants.find(
-              (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+              (participant) =>
+                participant.id === opponentEncounterParticipant.scenarioParticipantId,
             )
           : undefined;
         const modifierProjection = buildLiveCombatModifierContributionProjection({
@@ -8038,13 +8041,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           (condition) => !previousConditionIds.has(condition.id) && condition.status === "active",
         );
         if (createdCondition) {
-          const affectedEncounterParticipant =
-            resolveEncounterParticipantMembership({
-              encounter,
-              scenarioParticipants,
-            }).participants.find(
-              (participant) => participant.id === createdCondition.affectedParticipantId,
-            );
+          const affectedEncounterParticipant = resolveEncounterParticipantMembership({
+            encounter,
+            scenarioParticipants,
+          }).participants.find(
+            (participant) => participant.id === createdCondition.affectedParticipantId,
+          );
           const affectedScenarioParticipant = affectedEncounterParticipant?.scenarioParticipantId
             ? scenarioParticipants.find(
                 (participant) =>
@@ -8134,9 +8136,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error:
-            error instanceof Error
-              ? error.message
-              : "Unable to roll Offensive Parry Brawling.",
+            error instanceof Error ? error.message : "Unable to roll Offensive Parry Brawling.",
         });
       }
     },
@@ -9005,10 +9005,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                             lastDeclaredEncounterId: encounter.id,
                             lastDeclaredMovementId: restoredDeclaration.movementId,
                             lastDeclaredRoundNumber: restoredDeclaration.roundNumber,
-                            lastDeclaredSecondaryActionId:
-                              restoredDeclaration.secondaryActionId,
-                            lastDeclarationNotes:
-                              restoredDeclaration.additionalActionNotes,
+                            lastDeclaredSecondaryActionId: restoredDeclaration.secondaryActionId,
+                            lastDeclarationNotes: restoredDeclaration.additionalActionNotes,
                             lastMovementIntent: restoredDeclaration.movementIntent,
                           },
                         }

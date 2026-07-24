@@ -8247,8 +8247,8 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    const savedRoundState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
-      .combatRoundState;
+    const savedRoundState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
     expect(
       savedRoundState.participants.find(
         (participant: { participantId: string }) =>
@@ -11194,6 +11194,84 @@ describe("scenarios route contract", () => {
       },
     );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("applies the committed Offensive Parry flat DB drawback to a stale defender snapshot", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const defenderState = {
+      ...makeCombatScenarioParticipant({ id: "participant-2" }).state,
+      combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [
+              {
+                application: "flat_db",
+                durationRounds: 1,
+                expiresAtRound: 1,
+                generated: true,
+                id: "generated:offensive-parry:round:flat-db",
+                notes: "offensive parry: DB -2 for the declared round",
+                scope: "until",
+                sourceActionId: "offensive_parry",
+                sourceRoundNumber: 1,
+                sourceRule: "offensive-parry-round-db",
+                value: -2,
+              },
+            ],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+      },
+    };
+    const roundState = makeOpenPhase1AttackRoundState();
+    const defenderSnapshot = roundState.stepSnapshots[1];
+    if (!defenderSnapshot?.defenseSummary) {
+      throw new Error("Expected the defender snapshot fixture.");
+    }
+    defenderSnapshot.defenseSummary.db = "15";
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          state: defenderState,
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 0,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
+      defenderDb: 13,
+      ob: 10,
+    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: { defenderFlatDbAdjustment: -2 },
+      type: "roll_attack",
+    });
   });
 
   it("binds a post-Adjust Distance player attack to current canonical modifier contributions", async () => {

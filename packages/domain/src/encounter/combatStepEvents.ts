@@ -276,6 +276,7 @@ function findCommand(input: {
 }
 
 function attackResultIdFor(input: {
+  attackOpportunityId?: string;
   attackerParticipantId?: string;
   defenderParticipantId?: string;
   phase: CombatRoundPhase;
@@ -284,6 +285,7 @@ function attackResultIdFor(input: {
   return input.attackerParticipantId && input.defenderParticipantId
     ? getCombatRoundAttackResultId({
         result: {
+          attackOpportunityId: input.attackOpportunityId,
           attackerParticipantId: input.attackerParticipantId,
           defenderParticipantId: input.defenderParticipantId,
           phase: input.phase,

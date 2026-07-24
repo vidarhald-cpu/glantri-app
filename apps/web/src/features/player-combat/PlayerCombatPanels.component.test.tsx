@@ -6,6 +6,7 @@ import {
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
   PlayerCombatModifierPanel,
+  PlayerCombatOpponentSelector,
 } from "./PlayerCombatPanels";
 
 afterEach(() => {
@@ -32,8 +33,7 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
   });
 
-  it("renders the canonical Offensive Parry opponent selector used by GM and Player Combat", () => {
-    const onSelectedOpponentChange = vi.fn();
+  it("keeps Offensive Parry opponent selection out of the general action selector", () => {
     render(
       <PlayerCombatActionSelectorPanel
         actionId="offensive_parry"
@@ -42,13 +42,23 @@ describe("PlayerCombatActionSelectorPanel", () => {
         onActionChange={vi.fn()}
         onAdditionalActionNotesChange={vi.fn()}
         onMovementChange={vi.fn()}
-        onSelectedOpponentChange={onSelectedOpponentChange}
         onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Opponent to counter" })).not.toBeInTheDocument();
+  });
+
+  it("renders the shared canonical Offensive Parry opponent selector for the Phase 1 panel", () => {
+    const onSelectedOpponentChange = vi.fn();
+    render(
+      <PlayerCombatOpponentSelector
+        onSelectedOpponentChange={onSelectedOpponentChange}
         opponentOptions={[
           { displayName: "Borin", id: "encounter-participant-borin" },
           { displayName: "Cora", id: "encounter-participant-cora" },
         ]}
-        secondaryActionId=""
         selectedOpponentId="encounter-participant-borin"
       />,
     );

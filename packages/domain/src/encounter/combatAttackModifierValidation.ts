@@ -24,6 +24,7 @@ export interface CanonicalCombatAttackModifierFacts {
   attackerProposalId?: string;
   attackerResolution: CombatModifierResolution;
   declaredOpportunity?: CombatRoundAttackOpportunity;
+  defenderCombatContext: ScenarioParticipantCombatContext;
   defenderResolution: CombatModifierResolution;
   pairKey: string;
 }
@@ -182,6 +183,7 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
       }),
     }),
     declaredOpportunity,
+    defenderCombatContext,
     defenderResolution: combineCombatModifierResolutions({
       additional: resolveCombatWideGeneralModifiers({
         context: defenderCalculationContext,

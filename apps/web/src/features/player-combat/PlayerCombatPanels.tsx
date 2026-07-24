@@ -17,7 +17,9 @@ import {
   getHitLocationFullLabel,
   buildLiveCombatModifierContributionProjection,
   type CombatModifierContributionBucket,
+  isCombatModifierContributionActive,
   isPersistentCombatModifierEntry,
+  normalizeScenarioCombatModifierEntry,
 } from "@glantri/domain";
 
 import {
@@ -158,13 +160,18 @@ interface PlayerCombatActionSelectorPanelProps {
   onAdditionalActionNotesChange: (notes: string) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
   onMovementIntentChange?: (movementIntent: MovementIntent) => void;
-  onSelectedOpponentChange?: (participantId: string) => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
-  opponentOptions?: readonly PlayerEncounterOpponentOption[];
   roundNumber?: number;
-  selectedOpponentId?: string;
   secondaryActionId: PlayerEncounterActionId | "";
   sourceLabel?: string;
+}
+
+interface PlayerCombatOpponentSelectorProps {
+  controlsDisabled?: boolean;
+  onSelectedOpponentChange: (participantId: string) => void;
+  opponentOptions: readonly PlayerEncounterOpponentOption[];
+  readOnly?: boolean;
+  selectedOpponentId?: string;
 }
 
 export interface PlayerCombatDistancePreferenceOption {
@@ -720,13 +727,34 @@ export function buildPlayerCombatModifierRows(input: {
       : input.visibleAtStep
         ? getCombatModifierRowsVisibleAtStep(entries, input.visibleAtStep)
         : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
+  const activeFlatDbEntries = (input.combatContext?.modifierBuckets.situationDb ?? []).filter(
+    (entry) => {
+      if (entry.application !== "flat_db") return false;
+      const contribution = normalizeScenarioCombatModifierEntry({
+        bucket: "situation_db",
+        currentRound: input.currentRound,
+        entry,
+        ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+      });
+      return Boolean(
+        contribution &&
+        isCombatModifierContributionActive(contribution, {
+          ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+          ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+        }),
+      );
+    },
+  );
+  const visibleFlatDbEntries = entriesForDisplay(activeFlatDbEntries);
   const displayModifierBuckets = {
     general: sanitizeCombatModifierEntries(
       entriesForDisplay(entriesForContributions("general_fatigue")),
     ),
-    situationDb: sanitizeCombatModifierEntries(
-      entriesForDisplay(entriesForContributions("db_parry")),
-    ),
+    situationDb: sanitizeCombatModifierEntries([
+      ...entriesForDisplay(entriesForContributions("db_parry")),
+      ...visibleFlatDbEntries,
+    ]),
     situationInitiative: sanitizeCombatModifierEntries(
       entriesForDisplay(entriesForContributions("initiative")),
     ),
@@ -740,9 +768,11 @@ export function buildPlayerCombatModifierRows(input: {
       (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
   );
   const totals = {
-    dbParry: applicableContributions
-      .filter((contribution) => contribution.bucket === "db_parry")
-      .reduce((total, contribution) => total + contribution.value, 0),
+    dbParry:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "db_parry")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      visibleFlatDbEntries.reduce((total, entry) => total + entry.value, 0),
     generalFatigue: applicableContributions
       .filter((contribution) => contribution.bucket === "general_fatigue")
       .reduce((total, contribution) => total + contribution.value, 0),
@@ -1117,11 +1147,8 @@ export function PlayerCombatActionSelectorPanel({
   onAdditionalActionNotesChange,
   onMovementChange,
   onMovementIntentChange,
-  onSelectedOpponentChange,
   onSecondaryActionChange,
-  opponentOptions = [],
   roundNumber,
-  selectedOpponentId,
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
@@ -1192,25 +1219,6 @@ export function PlayerCombatActionSelectorPanel({
           ))}
         </select>
       </label>
-
-      {actionId === "offensive_parry" ? (
-        <label style={compactFieldLabelStyle}>
-          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Opponent to counter</span>
-          <select
-            aria-label="Opponent to counter"
-            disabled={controlsDisabled}
-            onChange={(event) => onSelectedOpponentChange?.(event.target.value)}
-            value={selectedOpponentId ?? ""}
-          >
-            <option value="">Choose opponent</option>
-            {opponentOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
 
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
@@ -1601,6 +1609,53 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function PlayerCombatOpponentSelector({
+  controlsDisabled = false,
+  onSelectedOpponentChange,
+  opponentOptions,
+  readOnly = false,
+  selectedOpponentId,
+}: PlayerCombatOpponentSelectorProps) {
+  const selectedOpponentUnavailable = Boolean(
+    selectedOpponentId && !opponentOptions.some((option) => option.id === selectedOpponentId),
+  );
+  const selectedOpponent = opponentOptions.find((option) => option.id === selectedOpponentId);
+
+  if (readOnly) {
+    return (
+      <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Opponent to counter</span>
+        <span style={compactPhaseTargetSelectStyle}>
+          {selectedOpponent?.displayName ?? "Opponent unavailable"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Opponent to counter</span>
+      <select
+        aria-label="Opponent to counter"
+        disabled={controlsDisabled}
+        onChange={(event) => onSelectedOpponentChange(event.target.value)}
+        style={compactPhaseTargetSelectStyle}
+        value={selectedOpponentId ?? ""}
+      >
+        <option value="">Choose opponent</option>
+        {selectedOpponentUnavailable ? (
+          <option value={selectedOpponentId}>Opponent unavailable</option>
+        ) : null}
+        {opponentOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

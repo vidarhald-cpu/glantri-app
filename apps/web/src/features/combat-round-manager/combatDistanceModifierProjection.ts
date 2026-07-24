@@ -297,6 +297,8 @@ export function projectCombatActionGeneratedModifiers(input: {
             }),
           ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry))
         : [],
+    sourceEncounterId: input.roundState?.encounterId,
+    sourceRoundNumber: input.roundState?.roundNumber,
   });
 
   if (committedDistanceRowsToPreserve.length === 0) {
