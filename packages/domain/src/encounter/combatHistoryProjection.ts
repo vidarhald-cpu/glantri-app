@@ -148,8 +148,12 @@ export interface CombatAttackModifierValidationProjection {
   defenderDbParryRaw: number;
   defenderModifierFingerprint: string;
   defenderParticipantId: string;
+  /** The current initiative group is also the effect cutoff for this attack calculation. */
+  effectCutoffInitiativeGroupId?: string;
   encounterId: string;
   expectedRevision: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   obSkillRaw: number;
   opportunityId?: string;
   pairKey: string;

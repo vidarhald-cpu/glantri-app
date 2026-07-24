@@ -112,7 +112,7 @@ describe("CombatTracker", () => {
     const emptyCell = screen.getByRole("button", {
       name: "Aldren · Round 2 · A1: Not opened.",
     });
-    expect(emptyCell).toBeDisabled();
+    expect((emptyCell as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("·")).toBeTruthy();
     fireEvent.click(emptyCell);
     expect(onInspect).not.toHaveBeenCalled();

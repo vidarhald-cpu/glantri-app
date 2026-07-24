@@ -32,6 +32,17 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("initiativeValue: input.identity.initiativeValue");
   });
 
+  it("binds attack modifier validation to the current initiative-group cutoff", () => {
+    expect(source).toContain(
+      "effectCutoffInitiativeGroupId: task.identity.initiativeGroupId",
+    );
+    expect(source).toContain("initiativeGroupId: task.identity.initiativeGroupId");
+    expect(source).toContain("initiativeValue: task.identity.initiativeValue");
+    expect(source).toContain('code: "modifier_validation_task_mismatch"');
+    expect(source).toContain('code: "attacker_modifier_signature_mismatch"');
+    expect(source).toContain('code: "defender_modifier_signature_mismatch"');
+  });
+
   it("binds Offensive Parry Brawling to exact task and parry lineage", () => {
     expect(source).toContain("combat-round/roll-offensive-parry-brawling");
     for (const identity of [

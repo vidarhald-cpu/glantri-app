@@ -120,7 +120,7 @@ The classification used by this audit is:
 | `modifier_review`                               | Confirmed violation    | Task identity is exact, but the shared GM declaration/review handler submits the current inspector draft/loadout for the descriptor participant.                                                                     |
 | `roll_initiative`                               | Fully conformant       | Participant, phase, group, task, revision, actor, and authoritative initiative inputs are checked. Local UI values are calculation input, not task identity.                                                         |
 | `commit_initiative`                             | Minor conformance risk | Current endpoint is descriptor-bound, but the ownerless task fabricates tracker ownership from `currentCursor`.                                                                                                      |
-| `attack`                                        | Fully conformant       | The exact opportunity, declaration, attack index, target, weapon source/template/instance, mode, task, group, and revision flow through GM/player invocation and persistence.                                        |
+| `attack`                                        | Fully conformant       | The exact opportunity, declaration, attack index, target, weapon source/template/instance, mode, task, execution/initiative group, revision, effect cutoff, and modifier fingerprints flow through GM/player invocation and persistence. |
 | `parry`                                         | Fully conformant       | Task/group/attack-result identities authorize directly and retain the exact upstream opportunity lineage.                                                                                                            |
 | `damage_roll`                                   | Fully conformant       | Task and roll expression are exact; new attack results persist the opportunity-specific weapon DMB and armor class used by downstream damage.                                                                        |
 | `hit_location`                                  | Fully conformant       | Exact attack/result/opportunity lineage is retained; new live attacks use persisted source-specific DMB/armor inputs. Legacy snapshot fallback is read-only compatibility.                                           |
@@ -224,15 +224,29 @@ Resolution:
 
 ### P1 — attack invocation reconstructs source and calculations in React — fixed
 
-`CombatRoundManagerPanel.rollInspectorPhaseAttack` authorizes the descriptor, then builds the
-phase model from `inspectorDraft` and `inspectorPhaseLoadoutSummaries`. Player Combat similarly reads
-`phaseCombatLoadoutSummaries`, `selectedActionId`, and a locally resolved target. The descriptor has
-no declaration/action ID, weapon source ID, or attack-mode ID.
+Previously `CombatRoundManagerPanel.rollInspectorPhaseAttack` authorized the descriptor but rebuilt
+submitted raw OB/DB modifier values from inspector and participant snapshot contexts. That omitted
+initiative-cutoff effect activation and could disagree with the server immediately after a higher
+initiative group completed. Player Combat already consumed the server-projected modifier validation.
 
-Resolution: both GM and Player handlers require the canonical descriptor fields and serialize them
-directly. React still reads the rendered combat summary for submitted numeric OB/DB calculation
-inputs, which the server validates against canonical modifier facts, but it no longer selects or
-normalizes the live weapon source, mode, target, action, or opportunity.
+Resolution: both handlers now serialize the canonical descriptor fields. GM proxy resolves raw
+modifier totals and fingerprints from the exact projected task, current encounter revision, and
+initiative-group cutoff; inspector selection is not an input. Player Combat consumes the matching
+server projection. The API retains strict revision, task/group, opportunity, raw-total, and
+fingerprint comparison with typed mismatch codes.
+
+### P1 — accepted mutation retained a prior task descriptor — fixed
+
+The final Round End participant-review handler discarded its returned command envelope and selected
+a manual `round_summary` inspection tuple. This left the rendered Open declarations action paired
+with pre-review identity until another refresh. Initiative changes exposed the same general risk
+when locally reconstructed attack modifier facts survived a new effect cutoff.
+
+Resolution: accepted GM mutations use the authoritative returned encounter and envelope to replace
+revision, round state, Current Action, and inspection selection. The final SU response selects the
+new boundary task directly. Player Combat invalidates revision-mismatched sanitized history while
+the exact post-mutation projection reloads. Genuine cross-client conflicts still reject, refresh,
+and require an explicit retry.
 
 ### P1 — GM declaration/modifier review can mix canonical identity with inspected values
 

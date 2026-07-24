@@ -11021,6 +11021,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
+      code: "attacker_modifier_signature_mismatch",
       error: "Attack modifiers changed. Refresh combat before rolling.",
     });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
@@ -11373,6 +11374,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
+      code: "defender_modifier_signature_mismatch",
       error: "Defender modifiers changed. Refresh combat before rolling.",
     });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
@@ -11405,6 +11407,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
+      code: "defender_modifier_signature_mismatch",
       error: "Defender modifiers changed. Refresh combat before rolling.",
     });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
@@ -11438,7 +11441,7 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
       code: "stale_revision",
-      error: "Combat modifiers changed. Refresh combat before rolling.",
+      error: "Combat state changed after this attack was displayed. Refresh combat before rolling.",
     });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });

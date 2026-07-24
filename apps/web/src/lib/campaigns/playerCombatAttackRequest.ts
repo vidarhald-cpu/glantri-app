@@ -7,7 +7,10 @@ export interface PlayerCombatAttackModifierRequest {
   attackerModifierFingerprint: string;
   defenderDbParryRaw: number;
   defenderModifierFingerprint: string;
+  effectCutoffInitiativeGroupId?: string;
   expectedRevision: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   modifierValidationTaskId: string;
   obSkillRaw: number;
 }
@@ -36,7 +39,10 @@ export function buildPlayerCombatAttackModifierRequest(input: {
     validation.expectedRevision !== input.encounterRevision ||
     validation.attackerParticipantId !== input.attackerParticipantId ||
     validation.defenderParticipantId !== input.defenderParticipantId ||
-    validation.phase !== input.phase
+    validation.phase !== input.phase ||
+    validation.initiativeGroupId !== task.identity.initiativeGroupId ||
+    validation.initiativeValue !== task.identity.initiativeValue ||
+    validation.effectCutoffInitiativeGroupId !== task.identity.initiativeGroupId
   ) {
     return undefined;
   }
@@ -45,7 +51,10 @@ export function buildPlayerCombatAttackModifierRequest(input: {
     attackerModifierFingerprint: validation.attackerModifierFingerprint,
     defenderDbParryRaw: validation.defenderDbParryRaw,
     defenderModifierFingerprint: validation.defenderModifierFingerprint,
+    effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
     expectedRevision: validation.expectedRevision,
+    initiativeGroupId: validation.initiativeGroupId,
+    initiativeValue: validation.initiativeValue,
     modifierValidationTaskId: validation.taskId,
     obSkillRaw: validation.obSkillRaw,
   };

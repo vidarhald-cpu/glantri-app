@@ -71,7 +71,6 @@ import {
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
   getMergedCombatDbParryModifierTotal,
-  getMergedCombatSkillObModifierTotal,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -173,6 +172,7 @@ import {
   loadEncounterById,
 } from "@/lib/api/encounterClient";
 import { ApiRequestError } from "@/lib/api/apiClient";
+import { loadScenarioParticipants } from "@/lib/api/scenarioClient";
 import {
   loadCharacterEquipmentState,
   loadServerCharacterById,
@@ -219,6 +219,7 @@ import {
   getCombatRoundDescriptorRevision,
   updateCombatRoundViewState,
 } from "./combatRoundViewState";
+import { buildGmCombatAttackModifierRequest } from "./gmCombatAttackRequest";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildCombatDeclarationAttackSelection,
@@ -3674,6 +3675,31 @@ function getCombatRoundManagerStateFromCommandEnvelope(input: {
   };
 }
 
+function getCombatMutationConflictCode(error: unknown): string | undefined {
+  if (
+    !(error instanceof ApiRequestError) ||
+    error.status !== 409 ||
+    !error.payload ||
+    typeof error.payload !== "object" ||
+    !("code" in error.payload) ||
+    typeof error.payload.code !== "string"
+  ) {
+    return undefined;
+  }
+
+  return error.payload.code;
+}
+
+function getCombatMutationRefreshMessage(code: string): string {
+  if (code === "stale_revision") {
+    return "Combat changed in another view. The current action was refreshed; review it before retrying.";
+  }
+  if (code.includes("modifier")) {
+    return "Combat modifiers changed in another view. The current action was refreshed; review it before retrying.";
+  }
+  return "The displayed combat task is no longer current. The current action was refreshed; review it before retrying.";
+}
+
 /**
  * Keep the GM's in-progress adjustment local to this small editor.  The parent
  * combat manager only receives the draft when its primary action is confirmed,
@@ -3940,6 +3966,42 @@ export default function CombatRoundManagerPanel({
   const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
   const boundaryTransitionInFlightRef = useRef(false);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
+
+  async function refreshCanonicalCombatAfterConflict(error: unknown): Promise<boolean> {
+    const code = getCombatMutationConflictCode(error);
+    if (!code) {
+      return false;
+    }
+
+    const [refreshedEncounter, refreshedParticipants] = await Promise.all([
+      loadEncounterById(roundView.encounterId),
+      encounter.scenarioId ? loadScenarioParticipants(encounter.scenarioId) : Promise.resolve([]),
+    ]);
+    const next = getCombatRoundManagerStateFromCommandEnvelope({
+      encounter: refreshedEncounter,
+    });
+    pendingSelectionRef.current = undefined;
+    manualSelectionRef.current = undefined;
+    const accepted = acceptCanonicalEncounterState(refreshedEncounter, next.state);
+
+    if (accepted) {
+      if (refreshedParticipants.length > 0) {
+        setScenarioParticipantOverrides(
+          Object.fromEntries(
+            refreshedParticipants.map((participant) => [participant.id, participant]),
+          ),
+        );
+        onScenarioParticipantsUpdated?.(refreshedParticipants);
+      }
+      setInspectionSelection(next.inspectionSelection);
+      setSelectedRoundNumber(next.state.roundNumber);
+      onEncounterUpdated?.(refreshedEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: next.state });
+    }
+    setSaveError(getCombatMutationRefreshMessage(code));
+    return true;
+  }
+
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
     [encounter.participants],
@@ -6840,25 +6902,9 @@ export default function CombatRoundManagerPanel({
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
-      const stalePayload =
-        caughtError instanceof ApiRequestError &&
-        caughtError.status === 409 &&
-        caughtError.payload &&
-        typeof caughtError.payload === "object" &&
-        "code" in caughtError.payload &&
-        caughtError.payload.code === "stale_revision";
-
-      if (stalePayload) {
+      if (getCombatMutationConflictCode(caughtError)) {
         try {
-          const refreshedEncounter = await loadEncounterById(boundaryTransitionAction.encounterId);
-          const accepted = acceptCanonicalEncounterState(refreshedEncounter);
-
-          if (accepted) {
-            onEncounterUpdated?.(refreshedEncounter);
-          }
-          setSaveError(
-            "Combat state refreshed. Review the current action and retry if it is still available.",
-          );
+          await refreshCanonicalCombatAfterConflict(caughtError);
         } catch (refreshError) {
           setSaveError(
             refreshError instanceof Error
@@ -8005,6 +8051,25 @@ export default function CombatRoundManagerPanel({
       setSaveError(`Target ${phaseLabel} DB is not available.`);
       return;
     }
+    const projectedAttackTask = projectedCurrentTasks.find(
+      (task) => task.id === descriptor.taskId,
+    );
+    const modifierRequest = buildGmCombatAttackModifierRequest({
+      attackerCombatantId: selectedEncounterParticipant.id,
+      attackerScenarioParticipant: selectedScenarioParticipant,
+      defenderCombatantId: targetEncounterParticipant.id,
+      defenderScenarioParticipant: targetScenarioParticipant,
+      descriptor,
+      encounterId: roundView.encounterId,
+      encounterRevision: roundView.encounterRevision,
+      projectedTask: projectedAttackTask,
+      roundState,
+    });
+
+    if (!modifierRequest) {
+      setSaveError("Combat state changed. Review the current action before rolling.");
+      return;
+    }
 
     let defenderDb: number;
     let ob: number;
@@ -8035,21 +8100,20 @@ export default function CombatRoundManagerPanel({
         actionId: descriptor.actionId,
         attackIndex: descriptor.attackIndex!,
         attackModeId: descriptor.attackModeId!,
+        attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         defenderDb,
-        defenderDbParryRaw: getMergedCombatDbParryModifierTotal({
-          combatContext: targetScenarioParticipant.state.combat.combatContext,
-          phase,
-        }),
+        defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
+        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId!,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
-        expectedRevision: descriptor.expectedRevision,
+        expectedRevision: modifierRequest.expectedRevision,
+        initiativeGroupId: modifierRequest.initiativeGroupId,
+        initiativeValue: modifierRequest.initiativeValue,
+        modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         ob,
-        obSkillRaw: getMergedCombatSkillObModifierTotal({
-          combatContext: inspectorGeneratedCombatContext,
-          phase,
-        }),
+        obSkillRaw: modifierRequest.obSkillRaw,
         opportunityId: descriptor.opportunityId!,
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
@@ -8082,6 +8146,18 @@ export default function CombatRoundManagerPanel({
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
+      try {
+        if (await refreshCanonicalCombatAfterConflict(caughtError)) {
+          return;
+        }
+      } catch (refreshError) {
+        setSaveError(
+          refreshError instanceof Error
+            ? refreshError.message
+            : "Unable to refresh the current combat action.",
+        );
+        return;
+      }
       setSaveError(
         caughtError instanceof Error
           ? caughtError.message
@@ -8591,7 +8667,11 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
-        const { encounter: nextEncounter, participant: updatedParticipant } =
+        const {
+          commandEnvelope,
+          encounter: nextEncounter,
+          participant: updatedParticipant,
+        } =
           await commitRoundEndParticipantReviewOnServer({
             encounterId: encounter.id,
             executionGroupId: descriptor.executionGroupId!,
@@ -8599,18 +8679,23 @@ export default function CombatRoundManagerPanel({
             scenarioParticipantId: scenarioParticipant.id,
             taskId: descriptor.taskId,
           });
-        const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+        const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+          getCombatRoundManagerStateFromCommandEnvelope({
+            commandEnvelope,
+            encounter: nextEncounter,
+          });
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
-        setInspectionSelection({
-          participantId: nextRoundState.currentCursor?.participantId,
-          step: "round_summary",
-        });
+        setInspectionSelection(nextInspectionSelection);
+        setSelectedRoundNumber(nextRoundState.roundNumber);
         setScenarioParticipantOverrides((current) => ({
           ...current,
           [updatedParticipant.id]: updatedParticipant,
         }));
         onScenarioParticipantsUpdated?.([updatedParticipant]);
         onEncounterUpdated?.(nextEncounter);
+        focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
         setSaveError(undefined);
         return;
       }

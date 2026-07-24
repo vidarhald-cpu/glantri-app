@@ -13,7 +13,12 @@ const task = {
   executionGroupId: "attack-group",
   expectedCommand: "roll_attack",
   id: "attack-task",
-  identity: { executionGroupId: "attack-group", phase: "phase1" },
+  identity: {
+    executionGroupId: "attack-group",
+    initiativeGroupId: "round:1:phase:phase1:initiative:7",
+    initiativeValue: 7,
+    phase: "phase1",
+  },
   kind: "attack",
   owner: { kind: "combatant", label: "Gladiator", participantId: "encounter-attacker" },
   processId: "attack-process",
@@ -32,8 +37,11 @@ const validation = {
   defenderDbParryRaw: -2,
   defenderModifierFingerprint: "v1:920ced12",
   defenderParticipantId: "encounter-defender",
+  effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
   encounterId: "encounter-1",
   expectedRevision: "2026-07-20T10:00:00.000Z",
+  initiativeGroupId: task.identity.initiativeGroupId,
+  initiativeValue: task.identity.initiativeValue,
   obSkillRaw: -2,
   opportunityId: "attack-opportunity",
   pairKey: "participant-attacker::participant-defender",
@@ -57,7 +65,10 @@ describe("buildPlayerCombatAttackModifierRequest", () => {
       attackerModifierFingerprint: validation.attackerModifierFingerprint,
       defenderDbParryRaw: -2,
       defenderModifierFingerprint: validation.defenderModifierFingerprint,
+      effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
       expectedRevision: validation.expectedRevision,
+      initiativeGroupId: validation.initiativeGroupId,
+      initiativeValue: validation.initiativeValue,
       modifierValidationTaskId: task.id,
       obSkillRaw: -2,
     });
@@ -66,6 +77,15 @@ describe("buildPlayerCombatAttackModifierRequest", () => {
   it.each([
     ["revision", { encounterRevision: "2026-07-20T09:59:59.000Z" }],
     ["task", { task: { ...task, id: "future-attack-task" } }],
+    [
+      "initiative group",
+      {
+        validation: {
+          ...validation,
+          initiativeGroupId: "round:1:phase:phase1:initiative:6",
+        },
+      },
+    ],
     ["opponent", { defenderParticipantId: "another-opponent" }],
     ["phase", { phase: "phase2" as const }],
   ])("fails closed when the %s context changes", (_label, override) => {

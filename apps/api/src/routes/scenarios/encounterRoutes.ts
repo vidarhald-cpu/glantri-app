@@ -1786,8 +1786,11 @@ function buildCurrentAttackModifierValidation(input: {
     defenderDbParryRaw: facts.defenderResolution.total,
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: defenderEncounterParticipant.id,
+    effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
     encounterId: input.encounter.id,
     expectedRevision: input.encounter.updatedAt,
+    initiativeGroupId: task.identity.initiativeGroupId,
+    initiativeValue: task.identity.initiativeValue,
     obSkillRaw: facts.attackerResolution.total,
     opportunityId: facts.declaredOpportunity?.id ?? task.identity.opportunityId,
     pairKey: facts.pairKey,
@@ -7279,8 +7282,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           code: attackAuthorization.code,
           error:
             attackAuthorization.code === "stale_revision"
-              ? "Combat modifiers changed. Refresh combat before rolling."
-              : "Attack is not open for this participant.",
+              ? "Combat state changed after this attack was displayed. Refresh combat before rolling."
+              : attackAuthorization.message,
         });
       }
       const projectedAttackTask = attackAuthorization.task;
@@ -7289,8 +7292,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         body.modifierValidationTaskId !== projectedAttackTask?.id
       ) {
         return reply.code(409).send({
-          code: "stale_opportunity",
-          error: "Combat modifiers changed. Refresh combat before rolling.",
+          code: "modifier_validation_task_mismatch",
+          error:
+            "The attack modifier validation belongs to an older task. Refresh combat before rolling.",
         });
       }
       const existingAttackResult = getCombatRoundAttackResultForOpportunity({
@@ -7437,6 +7441,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             fingerprintCombatModifierResolution(canonicalDefenderDbParryResolution))
       ) {
         return reply.code(409).send({
+          code: "defender_modifier_signature_mismatch",
           error: "Defender modifiers changed. Refresh combat before rolling.",
         });
       }
@@ -7449,6 +7454,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             fingerprintCombatModifierResolution(canonicalObSkillResolution))
       ) {
         return reply.code(409).send({
+          code: "attacker_modifier_signature_mismatch",
           error: "Attack modifiers changed. Refresh combat before rolling.",
         });
       }

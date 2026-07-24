@@ -558,7 +558,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("weaponSourceId: descriptor.weaponSourceId!");
     expect(source).not.toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).not.toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
-    expect(source).toContain("obSkillRaw: getMergedCombatSkillObModifierTotal({");
+    expect(source).toContain("buildGmCombatAttackModifierRequest({");
+    expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
+    expect(source).toContain(
+      "attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint",
+    );
+    expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
+    expect(source).toContain("modifierValidationTaskId: modifierRequest.modifierValidationTaskId");
     expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
     expect(source).not.toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
@@ -929,10 +935,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("boundaryTransitionInFlightRef.current");
     expect(source).toContain("canAcceptCombatRoundViewRevision({");
     expect(source).toContain("acceptedEncounterRevisionRef.current = {");
-    expect(source).toContain('caughtError.payload.code === "stale_revision"');
-    expect(source).toContain("await loadEncounterById(boundaryTransitionAction.encounterId)");
+    expect(source).toContain("getCombatMutationConflictCode(caughtError)");
+    expect(source).toContain("await refreshCanonicalCombatAfterConflict(caughtError)");
+    expect(source).toContain("loadEncounterById(roundView.encounterId)");
     expect(source).toContain(
-      "Combat state refreshed. Review the current action and retry if it is still available.",
+      "The current action was refreshed; review it before retrying.",
     );
   });
 
@@ -1074,12 +1081,32 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("setInspectionSelection(nextInspectionSelection)");
     expect(source).not.toContain("commandEnvelope.commands");
     expect(source).not.toContain("commandEnvelope.state");
-    expect(source.indexOf("await commitPhaseInitiativeResolutionOnServer({")).toBeLessThan(
-      source.indexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
+    const initiativeMutationIndex = source.indexOf(
+      "await commitPhaseInitiativeResolutionOnServer({",
+    );
+    expect(initiativeMutationIndex).toBeLessThan(
+      source.indexOf("getCombatRoundManagerStateFromCommandEnvelope({", initiativeMutationIndex),
     );
     expect(source.indexOf("await rollCombatAttackOnServer({")).toBeLessThan(
       source.lastIndexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
     );
+  });
+
+  it("adopts the final SU command envelope instead of retaining the completed review selection", () => {
+    const source = readSource();
+    const mutationIndex = source.indexOf("await commitRoundEndParticipantReviewOnServer({");
+    const nextHandlerIndex = source.indexOf(
+      "if (descriptor.commandType === \"roll_round_end_health_check\")",
+      mutationIndex,
+    );
+    const handler = source.slice(mutationIndex, nextHandlerIndex);
+
+    expect(handler).toContain("commandEnvelope,");
+    expect(handler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(handler).toContain("pendingSelectionRef.current = undefined");
+    expect(handler).toContain("manualSelectionRef.current = undefined");
+    expect(handler).toContain("setInspectionSelection(nextInspectionSelection)");
+    expect(handler).not.toContain('step: "round_summary"');
   });
 
   it("guards recorded attack results against accidental re-rolls", () => {

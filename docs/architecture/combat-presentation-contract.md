@@ -516,6 +516,10 @@ Rules:
 7. A task change or accepted newer revision invalidates transient local roll-result cards unless they are attached to a canonical event/result.
 8. Reconnect/reload replaces the complete accepted bundle. Polling does not rebuild the projection per row/cell.
 9. Missing task enrichment or severe relevant diagnostics yield a non-actionable conflict/waiting presentation, never a latest-event or cursor fallback.
+10. An accepted mutation response is the immediate source of the next live encounter revision and command envelope. The client replaces the prior revision, clears prior-task inspection state, and renders the envelope-selected task without waiting for polling.
+11. Attack modifier validation belongs to the exact revision, task, execution group, initiative group, opportunity, effect cutoff, and active-modifier fingerprints that produced it. Initiative-group advancement discards the old validation rather than patching it.
+12. A Player-safe history projection is displayed only when its `sourceUpdatedAt` matches the accepted encounter revision. After an accepted Player mutation, the prior history descriptor is hidden until the matching authoritative projection loads.
+13. A genuine `stale_revision`, task/group mismatch, or modifier-signature mismatch refreshes canonical state and asks the user to review the new action. The mutation is not replayed automatically.
 
 ## 11. GM-first view-model and component architecture
 

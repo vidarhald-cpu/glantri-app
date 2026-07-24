@@ -784,6 +784,8 @@ export async function rollCombatAttackOnServer(input: {
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   modifierValidationTaskId?: string;
   ob: number;
   obSkillRaw: number;
@@ -821,6 +823,8 @@ export async function rollCombatAttackOnServer(input: {
       defenderParticipantId: input.defenderParticipantId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
+      initiativeGroupId: input.initiativeGroupId,
+      initiativeValue: input.initiativeValue,
       modifierValidationTaskId: input.modifierValidationTaskId,
       ob: input.ob,
       obSkillRaw: input.obSkillRaw,

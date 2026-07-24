@@ -38,6 +38,13 @@ completion makes its effects pending again; undoing the source consequence remov
 existing source-command cleanup. Declaration and review modifiers active before resolution are not
 pending.
 
+An attack modifier validation is immutable for one revision, task, execution group, initiative
+group, opportunity, and effect cutoff. When a group completes, the next group's descriptor and
+validation are projected from the authoritative post-activation state; clients discard the old
+signature instead of carrying it across the boundary. Accepted GM and Player mutations adopt that
+post-mutation revision immediately, while polling remains the path for changes made by another
+client.
+
 ## Presentation
 
 Tracker live markers come only from current-group tasks. Tied participants may have simultaneous

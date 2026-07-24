@@ -7,9 +7,11 @@ import {
   buildCombatProgressionProjection,
   advanceCombatRoundStep,
   combatRoundStateSchema,
+  commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseInitiativeResolution,
   encounterSessionSchema,
   initializeCombatRoundState,
+  prepareCombatRoundEndReview,
   recordCombatRoundDeclaration,
   rollCombatRoundCombatExperience,
   setCombatRoundCombatExperienceDifficulty,
@@ -19,6 +21,10 @@ import {
 } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
+  advanceCurrentStep: vi.fn(),
+  commitParticipantReview: vi.fn(),
+  loadEncounter: vi.fn(),
+  loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
   submitDeclaration: vi.fn(),
 }));
@@ -27,8 +33,19 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/encounterClient")>();
   return {
     ...actual,
+    advanceCombatRoundCurrentStepOnServer: mocks.advanceCurrentStep,
+    commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
+    loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
     submitCombatDeclarationOnServer: mocks.submitDeclaration,
+  };
+});
+
+vi.mock("@/lib/api/scenarioClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/scenarioClient")>();
+  return {
+    ...actual,
+    loadScenarioParticipants: mocks.loadParticipants,
   };
 });
 
@@ -319,6 +336,54 @@ function buildAttackReadyEncounter(): EncounterSession {
   });
 }
 
+function buildFinalParticipantReviewEncounter(): {
+  beforeFinalReview: EncounterSession;
+  afterFinalReview: EncounterSession;
+} {
+  const encounter = buildEncounter();
+  const base = combatRoundStateSchema.parse(encounter.combatRoundState);
+  const atRoundEnd = combatRoundStateSchema.parse({
+    ...base,
+    currentCursor: {
+      participantId: "encounter-attacker",
+      roundNumber: base.roundNumber,
+      step: "SU",
+    },
+    currentStep: "round_summary",
+    selectedParticipantId: "encounter-attacker",
+    selectedStep: "round_summary",
+  });
+  const prepared = prepareCombatRoundEndReview({
+    command: { createdAt: "2026-07-23T10:03:00.000Z", createdByUserId: "gm-1" },
+    state: atRoundEnd,
+  });
+  const firstCommitted = commitCombatRoundEndParticipantReview({
+    command: { createdAt: "2026-07-23T10:03:10.000Z", createdByUserId: "gm-1" },
+    participantId: "encounter-attacker",
+    scenarioParticipantId: "scenario-attacker",
+    state: prepared,
+  });
+  const finalCommitted = commitCombatRoundEndParticipantReview({
+    command: { createdAt: "2026-07-23T10:03:20.000Z", createdByUserId: "gm-1" },
+    participantId: "encounter-defender",
+    scenarioParticipantId: "scenario-defender",
+    state: firstCommitted.state,
+  });
+
+  return {
+    afterFinalReview: encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: finalCommitted.state,
+      updatedAt: "2026-07-23T10:03:20.000Z",
+    }),
+    beforeFinalReview: encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: firstCommitted.state,
+      updatedAt: "2026-07-23T10:03:10.000Z",
+    }),
+  };
+}
+
 function scenarioParticipant(input: {
   id: string;
   name: string;
@@ -453,6 +518,42 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
       scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
     ];
+    participants[0] = {
+      ...participants[0]!,
+      state: {
+        ...participants[0]!.state,
+        combatEffects: {
+          effects: [
+            {
+              combatModifierBucket: "general",
+              combatWide: true,
+              createdAt: "2026-07-23T10:01:59.000Z",
+              createdInInitiativeGroupId: "round:1:phase:phase1:initiative:7",
+              damage: 0,
+              description: "Higher-initiative injury",
+              effectGroup: "general",
+              effectiveAfterInitiativeGroupId: "round:1:phase:phase1:initiative:7",
+              generalDamage: 0,
+              id: "effect:initiative-7:skill",
+              modifierValue: -2,
+              sourceEventId: "event:initiative-7:injury",
+              status: "pending",
+              targetParticipantId: "scenario-attacker",
+              type: "general_modifier",
+              updatedAt: "2026-07-23T10:01:59.000Z",
+            },
+          ],
+          events: [
+            {
+              createdAt: "2026-07-23T10:01:59.000Z",
+              id: "event:initiative-7:injury",
+              sourceLabel: "Higher-initiative injury",
+              targetParticipantId: "scenario-attacker",
+            },
+          ],
+        },
+      },
+    } as ScenarioParticipant;
     mocks.rollAttack.mockResolvedValue({
       commandEnvelope: buildCombatRoundCommandEnvelope({
         state: attackReadyState,
@@ -481,6 +582,9 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       declarationId: "round:1:participant:encounter-attacker:declaration",
       executionGroupId: projectedAttackTask?.executionGroupId,
       expectedRevision: encounter.updatedAt,
+      initiativeGroupId: projectedAttackTask?.identity.initiativeGroupId,
+      initiativeValue: projectedAttackTask?.identity.initiativeValue,
+      modifierValidationTaskId: projectedAttackTask?.id,
       opportunityId,
       phase: projectedAttackTask?.identity.phase,
       scenarioParticipantId: "scenario-attacker",
@@ -489,7 +593,106 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       weaponSourceSlot: projectedAttackTask?.identity.weaponSourceSlot,
       weaponTemplateId: projectedAttackTask?.identity.weaponTemplateId,
     });
+    expect(request.attackerModifierFingerprint).toMatch(/^v1:/);
+    expect(request.defenderModifierFingerprint).toMatch(/^v1:/);
+    expect(request.obSkillRaw).toBe(-2);
     expect(request).not.toHaveProperty("declaredOpponentParticipantId");
     expect(request).not.toHaveProperty("offensiveParryAttemptId");
+  });
+
+  it("refreshes a genuine cross-client stale revision without replaying the attack", async () => {
+    const encounter = buildAttackReadyEncounter();
+    const refreshedEncounter = encounterSessionSchema.parse({
+      ...encounter,
+      updatedAt: "2026-07-23T10:02:30.000Z",
+    });
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.rollAttack.mockRejectedValue(
+      new (await import("@/lib/api/apiClient")).ApiRequestError(
+        "Combat state changed.",
+        409,
+        { code: "stale_revision" },
+      ),
+    );
+    mocks.loadEncounter.mockResolvedValue(refreshedEncounter);
+    mocks.loadParticipants.mockResolvedValue(participants);
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Roll attack" }));
+
+    await waitFor(() => expect(mocks.loadEncounter).toHaveBeenCalledTimes(1));
+    expect(mocks.loadParticipants).toHaveBeenCalledTimes(1);
+    expect(mocks.rollAttack).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText(
+        "Combat changed in another view. The current action was refreshed; review it before retrying.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("CombatRoundManagerPanel post-mutation task adoption", () => {
+  it("uses the final SU response descriptor to open declarations on the first click", async () => {
+    const { afterFinalReview, beforeFinalReview } = buildFinalParticipantReviewEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const finalBoundaryTask = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse(afterFinalReview.combatRoundState),
+    )
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "gm_advance_boundary" && task.state === "executable");
+    expect(finalBoundaryTask).toBeDefined();
+    mocks.commitParticipantReview.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: combatRoundStateSchema.parse(afterFinalReview.combatRoundState),
+      }),
+      encounter: afterFinalReview,
+      participant: participants[1],
+    });
+    mocks.advanceCurrentStep.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: combatRoundStateSchema.parse(afterFinalReview.combatRoundState),
+      }),
+      encounter: afterFinalReview,
+      participants: [],
+    });
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={beforeFinalReview}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Complete effect review",
+      }),
+    );
+    await waitFor(() => expect(mocks.commitParticipantReview).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open declarations" }));
+    await waitFor(() => expect(mocks.advanceCurrentStep).toHaveBeenCalledTimes(1));
+    expect(mocks.advanceCurrentStep.mock.calls[0]?.[0]).toMatchObject({
+      executionGroupId: finalBoundaryTask?.executionGroupId,
+      expectedRevision: afterFinalReview.updatedAt,
+      taskId: finalBoundaryTask?.id,
+    });
   });
 });

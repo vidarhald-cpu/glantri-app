@@ -1114,6 +1114,9 @@ export default function ScenarioPlayerCombatPageContent({
       return false;
     }
     acceptedEncounterUpdatedAtRef.current = nextEncounter.updatedAt;
+    setCombatHistory((current) =>
+      current?.sourceUpdatedAt === nextEncounter.updatedAt ? current : undefined,
+    );
     setEncounterSession((current) =>
       isCombatViewRevisionUnchanged({
         acceptedUpdatedAt: current?.updatedAt,
@@ -2679,6 +2682,8 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: modifierRequest.expectedRevision,
+        initiativeGroupId: modifierRequest.initiativeGroupId,
+        initiativeValue: modifierRequest.initiativeValue,
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         ob,
         obSkillRaw: modifierRequest.obSkillRaw,
