@@ -5560,10 +5560,16 @@ export function getNextCombatRoundPhaseActionParticipantId(input: {
   state: CombatRoundState;
 }): string | undefined {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const order = getCombatRoundPhaseResolutionOrder({
+  const currentGroup = getCombatRoundCurrentInitiativeExecutionGroup({
     phase: input.phase,
     state: normalized,
   });
+  const order =
+    currentGroup?.participantIds ??
+    getCombatRoundPhaseResolutionOrder({
+      phase: input.phase,
+      state: normalized,
+    });
 
   return order.find((participantId) => {
     const status = getEffectiveCombatRoundPhaseResolutionStatus({
@@ -8473,6 +8479,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
           generalModifier: roll.generalModifier,
           openEndedD10s: roll.openEndedD10s,
           parryQualityModifier: roll.parryQualityModifier,
+          pendingModifiers: roll.pendingModifiers,
           rollD20: roll.rollD20,
           rollTotal: roll.rollTotal,
           skillModifier: roll.skillModifier,
@@ -11007,8 +11014,11 @@ function buildCombatRoundDamageCommitRows(input: {
   criticalRoll?: CombatRoundCriticalRollResult;
   damageResult: CombatRoundDamageResult;
   defenderScenarioParticipantId: string;
+  effectStatus?: "active" | "pending";
   encounterId?: string;
+  initiativeGroup?: CombatRoundInitiativeExecutionGroup;
   scenarioId?: string;
+  sourceOpportunityId?: string;
 }): {
   eventId: string;
   effectIds: string[];
@@ -11095,11 +11105,13 @@ function buildCombatRoundDamageCommitRows(input: {
       ? [
           combatEffectSchema.parse({
             createdAt: input.command.createdAt,
+            createdInInitiativeGroupId: input.initiativeGroup?.id,
             damage: damageLocation ? effectiveDamage.effectiveTotalDamage : 0,
             description: damageLocation?.note
               ? `${physicalDamageDescription} ${damageLocation.note}`
               : physicalDamageDescription,
             effectGroup: "none",
+            effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
             generalDamage: damageLocation ? 0 : effectiveDamage.effectiveTotalDamage,
             id:
               committedDamageEffectIds[0] ??
@@ -11108,9 +11120,13 @@ function buildCombatRoundDamageCommitRows(input: {
                 kind: damageLocation ? `physical-damage-${damageLocation.id}` : "general-damage",
               }),
             location: damageLocation?.id,
+            initiativePhase: input.initiativeGroup?.phase,
+            initiativeValue: input.initiativeGroup?.initiativeValue,
             roundNumber: input.command.roundNumber,
             sourceEventId: eventId,
-            status: "active",
+            sourceAttackResultId: input.damageResult.attackResultId,
+            sourceOpportunityId: input.sourceOpportunityId,
+            status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
             targetParticipantId: input.defenderScenarioParticipantId,
             type: damageLocation ? "physical_damage" : "general_damage",
             updatedAt: input.command.createdAt,
@@ -11123,10 +11139,12 @@ function buildCombatRoundDamageCommitRows(input: {
     return combatEffectSchema.parse({
       combatModifierBucket: rowShape.combatModifierBucket,
       createdAt: input.command.createdAt,
+      createdInInitiativeGroupId: input.initiativeGroup?.id,
       damage: 0,
       description: formatCombatRoundDamageReviewEffectCommittedDescription(effect),
       duration: formatCombatRoundCommittedEffectDuration(effect),
       effectGroup: rowShape.effectGroup,
+      effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
       generalDamage: 0,
       id:
         additionalEffectIds[index] ??
@@ -11135,9 +11153,13 @@ function buildCombatRoundDamageCommitRows(input: {
           kind: `additional-${effect.id}`,
         }),
       modifierValue: rowShape.modifierValue,
+      initiativePhase: input.initiativeGroup?.phase,
+      initiativeValue: input.initiativeGroup?.initiativeValue,
       roundNumber: input.command.roundNumber,
       sourceEventId: eventId,
-      status: "active",
+      sourceAttackResultId: input.damageResult.attackResultId,
+      sourceOpportunityId: input.sourceOpportunityId,
+      status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
       targetParticipantId: input.defenderScenarioParticipantId,
       type: rowShape.type,
       updatedAt: input.command.createdAt,
@@ -11146,9 +11168,11 @@ function buildCombatRoundDamageCommitRows(input: {
   const operationalEffects = operationalEffectConsequences.map((consequence, index) =>
     combatEffectSchema.parse({
       createdAt: input.command.createdAt,
+      createdInInitiativeGroupId: input.initiativeGroup?.id,
       damage: 0,
       description: formatCombatRoundOperationalConsequenceDescription(consequence),
       effectGroup: "special",
+      effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
       generalDamage: 0,
       id:
         operationalEffectIds[index] ??
@@ -11157,8 +11181,12 @@ function buildCombatRoundDamageCommitRows(input: {
           kind: `operational-${consequence.id}`,
         }),
       roundNumber: input.command.roundNumber,
+      initiativePhase: input.initiativeGroup?.phase,
+      initiativeValue: input.initiativeGroup?.initiativeValue,
       sourceEventId: eventId,
-      status: "active",
+      sourceAttackResultId: input.damageResult.attackResultId,
+      sourceOpportunityId: input.sourceOpportunityId,
+      status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
       targetParticipantId: input.defenderScenarioParticipantId,
       type: "special",
       updatedAt: input.command.createdAt,
@@ -13537,6 +13565,10 @@ function buildCombatRoundOperationalCancelledActions(input: {
   state: CombatRoundState;
 }): CombatRoundOperationalCancelledAction[] {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const sourceInitiativeGroup = getCombatRoundCurrentInitiativeExecutionGroup({
+    phase: input.damageResult.phase,
+    state: normalized,
+  });
   const seen = new Set<string>();
   const actions: CombatRoundOperationalCancelledAction[] = [];
 
@@ -13548,6 +13580,15 @@ function buildCombatRoundOperationalCancelledActions(input: {
     const key = `${consequence.participantId}:${consequence.phase}`;
 
     if (seen.has(key)) {
+      continue;
+    }
+
+    // Exact ties are simultaneous. A consequence is authoritative immediately, but it cannot
+    // cancel a sibling opportunity that was already open in the same initiative group.
+    if (
+      consequence.phase === input.damageResult.phase &&
+      sourceInitiativeGroup?.participantIds.includes(consequence.participantId)
+    ) {
       continue;
     }
 
@@ -13665,6 +13706,14 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
   state: CombatRoundState;
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const initiativeGroup = getCombatRoundCurrentInitiativeExecutionGroup({
+    phase: input.damageResult.phase,
+    state: normalized,
+  });
+  const sourceAttackResult = getCombatRoundAttackResultById({
+    attackResultId: input.damageResult.attackResultId,
+    state: normalized,
+  });
   const acceptedOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
@@ -13876,8 +13925,18 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
     defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+    effectStatus:
+      initiativeGroup &&
+      getCombatRoundCurrentInitiativeExecutionGroup({
+        phase: input.damageResult.phase,
+        state: completed,
+      })?.id === initiativeGroup.id
+        ? "pending"
+        : "active",
     encounterId: input.encounterId,
+    initiativeGroup,
     scenarioId: input.scenarioId,
+    sourceOpportunityId: sourceAttackResult?.attackOpportunityId,
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
   const stateWithCommittedProposal = {
@@ -20693,6 +20752,103 @@ export function getCombatRoundInitiativeRanks(input: {
   });
 
   return ranks;
+}
+
+export interface CombatRoundInitiativeExecutionGroup {
+  id: string;
+  initiativeValue: number;
+  opportunityIds: string[];
+  participantIds: string[];
+  phase: CombatRoundPhase;
+  roundNumber: number;
+  status: "complete" | "current" | "waiting";
+}
+
+export function getCombatRoundInitiativeExecutionGroupId(input: {
+  initiativeValue: number;
+  phase: CombatRoundPhase;
+  roundNumber: number;
+}): string {
+  return `round:${input.roundNumber}:phase:${input.phase}:initiative:${input.initiativeValue}`;
+}
+
+/**
+ * Projects the committed initiative order as simultaneous initiative-value groups. Completion
+ * is owned by the participant phase-resolution status, which does not become done until the
+ * source opportunity and all of its canonical child work have closed.
+ */
+export function getCombatRoundInitiativeExecutionGroups(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundInitiativeExecutionGroup[] {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const candidates = getCombatRoundPhaseAttackCandidates({
+    phase: input.phase,
+    state: normalized,
+  });
+  const grouped = new Map<
+    number,
+    { opportunityIds: string[]; participantIds: string[]; complete: boolean }
+  >();
+
+  for (const participant of sortCombatRoundParticipantsByInitiative(input)) {
+    const initiativeValue = getCombatRoundInitiativeTotal(participant.initiatives[input.phase]);
+    if (
+      initiativeValue === undefined ||
+      !combatRoundParticipantHasExecutablePhaseAction({
+        participantId: participant.participantId,
+        phase: input.phase,
+        state: normalized,
+      })
+    ) {
+      continue;
+    }
+    const status = getEffectiveCombatRoundPhaseResolutionStatus({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const existing = grouped.get(initiativeValue) ?? {
+      complete: true,
+      opportunityIds: [],
+      participantIds: [],
+    };
+    existing.participantIds.push(participant.participantId);
+    existing.opportunityIds.push(
+      ...candidates
+        .filter((candidate) => candidate.participantId === participant.participantId)
+        .map((candidate) => candidate.id),
+    );
+    existing.complete &&= status.substep === "done";
+    grouped.set(initiativeValue, existing);
+  }
+
+  const ordered = [...grouped.entries()].sort(([left], [right]) => right - left);
+  const firstIncompleteIndex = ordered.findIndex(([, group]) => !group.complete);
+  return ordered.map(([initiativeValue, group], index) => ({
+    id: getCombatRoundInitiativeExecutionGroupId({
+      initiativeValue,
+      phase: input.phase,
+      roundNumber: normalized.roundNumber,
+    }),
+    initiativeValue,
+    opportunityIds: [...new Set(group.opportunityIds)],
+    participantIds: [...new Set(group.participantIds)],
+    phase: input.phase,
+    roundNumber: normalized.roundNumber,
+    status: group.complete
+      ? "complete"
+      : index === firstIncompleteIndex
+        ? "current"
+        : "waiting",
+  }));
+}
+
+export function getCombatRoundCurrentInitiativeExecutionGroup(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundInitiativeExecutionGroup | undefined {
+  return getCombatRoundInitiativeExecutionGroups(input).find((group) => group.status === "current");
 }
 
 export function buildCombatRoundInspector(input: {

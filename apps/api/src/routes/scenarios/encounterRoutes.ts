@@ -60,6 +60,7 @@ import {
   expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   fingerprintCombatModifierResolution,
   getCombatRoundInitiativePhaseForStep,
+  getCombatRoundCurrentInitiativeExecutionGroup,
   buildLiveCombatModifierContributionProjection,
   createCombatParticipantPairKey,
   getMergedCombatDbFlatAdjustmentTotal,
@@ -447,6 +448,8 @@ function parseCombatDeclarationPhaseAttackSources(
 interface ParsedCombatTaskCommandIdentity {
   executionGroupId: string;
   expectedRevision: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   taskId: string;
 }
 
@@ -466,6 +469,14 @@ function parseCombatTaskCommandIdentity(
   return {
     executionGroupId: parseNonEmptyString(value.executionGroupId, "executionGroupId"),
     expectedRevision: parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    initiativeGroupId:
+      typeof value.initiativeGroupId === "string" && value.initiativeGroupId.trim()
+        ? value.initiativeGroupId
+        : undefined,
+    initiativeValue:
+      typeof value.initiativeValue === "number" && Number.isInteger(value.initiativeValue)
+        ? value.initiativeValue
+        : undefined,
     taskId: parseNonEmptyString(value.taskId, "taskId"),
   };
 }
@@ -489,6 +500,8 @@ function authorizeCombatTaskCommand(input: {
   return authorizeCombatProgressionTask({
     ...input.authorization,
     executionGroupId: input.identity.executionGroupId,
+    initiativeGroupId: input.identity.initiativeGroupId,
+    initiativeValue: input.identity.initiativeValue,
     projection: buildCombatProgressionProjection(input.roundState),
     taskId: input.identity.taskId,
   });
@@ -4836,6 +4849,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const projection = buildLiveCombatModifierContributionProjection({
         combatContext: scenarioParticipant.state.combat.combatContext,
         combatEffects: scenarioParticipant.state.combatEffects,
+        currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
+          phase: "phase1",
+          state: roundState,
+        })?.id,
         currentRound: roundState.roundNumber,
         encounterId,
         ownerParticipantId: scenarioParticipant.id,
@@ -7694,6 +7711,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const defenderModifierProjection = buildLiveCombatModifierContributionProjection({
         combatContext: defenderCombatContext,
         combatEffects: scenarioParticipant.state.combatEffects,
+        currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
+          phase: attackResult.phase,
+          state: roundState,
+        })?.id,
         currentRound: roundState.roundNumber,
         encounterId,
         ownerParticipantId: scenarioParticipant.id,
@@ -7954,9 +7975,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 participant.id === opponentEncounterParticipant.scenarioParticipantId,
             )
           : undefined;
+        const initiativeGroup = getCombatRoundCurrentInitiativeExecutionGroup({
+          phase: contest.phase,
+          state: roundState,
+        });
         const modifierProjection = buildLiveCombatModifierContributionProjection({
           combatContext: roller.state.combat.combatContext,
           combatEffects: roller.state.combatEffects,
+          currentInitiativeGroupId: initiativeGroup?.id,
           currentRound: roundState.roundNumber,
           encounterId,
           ownerParticipantId: roller.id,
@@ -8009,6 +8035,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           openEndedD10s: openEndedRoll.openEndedD10s,
           participantId: encounterParticipant.id,
           parryQualityModifier,
+          pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
+            activationLabel: initiativeGroup
+              ? `Effective after Initiative ${initiativeGroup.initiativeValue} finishes`
+              : "Effective from the next initiative group",
+            label: entry.notes?.trim() || "Combat effect",
+            value: entry.value,
+          })),
           rollD20: openEndedRoll.rollD20,
           rollPurpose: "offensive_parry_brawling" as const,
           rollTotal: openEndedRoll.dieResult,
@@ -8072,17 +8105,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     combatModifierBucket: "general",
                     combatWide: true,
                     createdAt,
+                    createdInInitiativeGroupId: initiativeGroup?.id,
                     damage: 0,
                     description: "Unbalanced from Offensive Parry continued contact.",
                     duration: "Until continued contact ends",
                     effectGroup: "general",
+                    effectiveAfterInitiativeGroupId: initiativeGroup?.id,
                     excludedRollPurposes: ["escape_continued_contact"],
                     generalDamage: 0,
                     id: createdCondition.id,
+                    initiativePhase: initiativeGroup?.phase,
+                    initiativeValue: initiativeGroup?.initiativeValue,
                     modifierValue: -2,
                     roundNumber: roundState.roundNumber,
                     sourceEventId: eventId,
-                    status: "active",
+                    sourceAttackResultId: contest.attackResultId,
+                    sourceOpportunityId: contest.opportunityId,
+                    status:
+                      initiativeGroup &&
+                      getCombatRoundCurrentInitiativeExecutionGroup({
+                        phase: contest.phase,
+                        state: nextRoundState,
+                      })?.id === initiativeGroup.id
+                        ? "pending"
+                        : "active",
                     targetParticipantId: affectedScenarioParticipant.id,
                     type: "general_modifier",
                     updatedAt: createdAt,

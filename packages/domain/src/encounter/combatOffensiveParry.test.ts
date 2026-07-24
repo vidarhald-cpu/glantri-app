@@ -182,6 +182,7 @@ function roll(participantId: string, finalTotal: number) {
     openEndedD10s: [],
     participantId,
     parryQualityModifier: participantId === "defender" ? 1 : 0,
+    pendingModifiers: [],
     rollD20: 12,
     rollPurpose: "offensive_parry_brawling" as const,
     rollTotal: 12,

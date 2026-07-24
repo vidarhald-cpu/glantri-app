@@ -65,6 +65,32 @@ describe("combat calculation presentation", () => {
     ]);
   });
 
+  it("shows pending modifiers without including them in effective-skill arithmetic", () => {
+    const calculation = buildCombatRollCalculationPresentation({
+      calculation: {
+        brawlingBaseValue: 24,
+        finalTotal: 36,
+        generalModifier: 0,
+        parryQualityModifier: 0,
+        pendingModifiers: [
+          {
+            activationLabel: "effective after Initiative 4",
+            label: "Unbalanced",
+            value: -2,
+          },
+        ],
+        rollTotal: 12,
+        skillModifier: 0,
+      },
+      label: "Tied action",
+    });
+
+    expect(calculation).toMatchObject({ effectiveSkill: 24, modifierTotal: 0, total: 36 });
+    expect(formatCombatRollCalculationLines(calculation!)).toContain(
+      "- Unbalanced: -2 — effective after Initiative 4",
+    );
+  });
+
   it("shows a signed contest difference, winner, and participant-safe opponent total", () => {
     const initiatorRoll = buildCombatRollCalculationPresentation({
       calculation: {

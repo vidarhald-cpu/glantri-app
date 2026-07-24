@@ -570,5 +570,22 @@ miss for an exact A1/A2 cell. The round-reset defect was in domain state, not Re
 participant retained `attackResultsByOpportunity`, after which the GM tracker correctly keyed that
 retained value using the active state's new round number. Round start now clears that active map,
 while the completed-round archive keeps it. Empty cells are non-inspectable, and rendered tracker
-cell keys use the full round/participant/facet identity. No initiative-group sequencing or pending
-modifier work is included in this repair.
+cell keys use the full round/participant/facet identity. That tracker repair itself did not include
+initiative sequencing; the subsequent timing slice is recorded below.
+
+## 13. Initiative-group timing status
+
+A1/A2 progression is now group-keyed by round, phase, and committed initiative value rather than
+authorized from the compatibility cursor. Only the highest unresolved value projects; exact ties
+expose all sibling opportunities. Source attack completion is insufficient: defense, maneuver,
+contest, hit-location, critical, damage, GM review, and effect commit all contribute to group
+completion.
+
+Effect timing persists the creating group, activation boundary, affected participant, source
+attack result, and source opportunity where available. Canonical modifier resolution receives the
+current-group cutoff, excluding same-group effects and including them for later groups. Activation
+is idempotent across reload and reversible under undo without a cursor/latest-effect fallback.
+
+Damage operational action cancellation keeps existing consequence semantics for later initiative
+groups. Exact-tie sibling opportunities are excluded because their legality was established at
+group start. No new incapacitation or interruption rule was invented.

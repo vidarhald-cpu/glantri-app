@@ -52,6 +52,7 @@ import {
   COMBAT_ROUND_STEPS,
   buildCombatRoundPhaseResolutionResult,
   buildCombatProgressionProjection,
+  buildLiveCombatModifierContributionProjection,
   buildCombatLogProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInspector,
@@ -4529,15 +4530,24 @@ export default function CombatRoundManagerPanel({
       buildEncounterLiveCombatModifierSummary({
         combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        currentInitiativeGroupId:
+          combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
         phaseKey: inspectorModifierPhase,
       }),
-    [inspectorGeneratedCombatContext, inspectorModifierPhase, selectedScenarioParticipant],
+    [
+      combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
+      inspectorGeneratedCombatContext,
+      inspectorModifierPhase,
+      selectedScenarioParticipant,
+    ],
   );
   const inspectorModifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        currentInitiativeGroupId:
+          combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
         currentRound: selectedRoundNumber,
         encounterId: encounter.id,
         liveModifiers: inspectorLiveModifiers,
@@ -4547,10 +4557,31 @@ export default function CombatRoundManagerPanel({
       }),
     [
       inspectorGeneratedCombatContext,
+      combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
       inspectorLiveModifiers,
       inspectorModifierPhase,
       inspector.step,
       inspectorDraft.actionId,
+      selectedScenarioParticipant?.state.combatEffects,
+    ],
+  );
+  const inspectorPendingModifierEntries = useMemo(
+    () =>
+      buildLiveCombatModifierContributionProjection({
+        combatContext: inspectorGeneratedCombatContext,
+        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        currentInitiativeGroupId:
+          combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
+        currentRound: selectedRoundNumber,
+        encounterId: encounter.id,
+        ownerParticipantId: selectedScenarioParticipant?.id,
+      }).pendingModifierEntries,
+    [
+      combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
+      encounter.id,
+      inspectorGeneratedCombatContext,
+      selectedRoundNumber,
+      selectedScenarioParticipant?.id,
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );
@@ -9715,6 +9746,15 @@ export default function CombatRoundManagerPanel({
                         )
                       }
                       readOnly={inspectorIsHistorical}
+                      pendingActivationLabel={
+                        combatProgressionProjection.executionOrder?.currentInitiativeValue !==
+                        undefined
+                          ? `Effective after Initiative ${combatProgressionProjection.executionOrder.currentInitiativeValue} finishes`
+                          : undefined
+                      }
+                      pendingEntries={
+                        inspectorIsHistorical ? [] : inspectorPendingModifierEntries
+                      }
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
                     />

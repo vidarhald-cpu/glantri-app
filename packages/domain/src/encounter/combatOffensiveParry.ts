@@ -24,6 +24,15 @@ export const offensiveParryBrawlingRollSchema = z.object({
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   participantId: idSchema,
   parryQualityModifier: z.number().int().default(0),
+  pendingModifiers: z
+    .array(
+      z.object({
+        activationLabel: z.string().min(1).optional(),
+        label: z.string().min(1),
+        value: z.number().int(),
+      }),
+    )
+    .default([]),
   rollD20: z.number().int().min(1).max(20),
   rollPurpose: offensiveParryRollPurposeSchema,
   rollTotal: z.number().int(),

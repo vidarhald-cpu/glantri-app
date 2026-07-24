@@ -949,6 +949,73 @@ describe("CurrentActionPresentation", () => {
     });
   });
 
+  it("explains lower-group and completed-tie waiting without an unavailable error", () => {
+    const base = progression();
+    const lowerWaiting = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-initiative",
+      progression: {
+        ...base,
+        executionOrder: {
+          currentInitiativeGroupId: "group-4",
+          currentInitiativeValue: 4,
+          initiativeGroups: [
+            {
+              id: "group-4",
+              initiativeValue: 4,
+              opportunityIds: [],
+              participantIds: ["borin"],
+              status: "current",
+            },
+            {
+              id: "group-3",
+              initiativeValue: 3,
+              opportunityIds: [],
+              participantIds: ["aria"],
+              status: "waiting",
+            },
+          ],
+          participantIds: ["borin", "aria"],
+          phase: "phase1",
+        },
+      },
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+    expect(lowerWaiting).toMatchObject({
+      primaryAction: { enabled: false, label: "Waiting" },
+      requiredNow: "Waiting for Initiative 4 to finish.",
+      summary:
+        "Initiative 4 is still being resolved. Your Initiative 3 action will open after Initiative 4 completes.",
+    });
+
+    const tiedWaiting = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-initiative",
+      progression: {
+        ...base,
+        executionOrder: {
+          currentInitiativeGroupId: "group-4",
+          currentInitiativeValue: 4,
+          initiativeGroups: [
+            {
+              id: "group-4",
+              initiativeValue: 4,
+              opportunityIds: [],
+              participantIds: ["aria", "borin"],
+              status: "current",
+            },
+          ],
+          participantIds: ["aria", "borin"],
+          phase: "phase1",
+        },
+      },
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+    expect(tiedWaiting?.summary).toBe(
+      "Your Initiative 4 action is recorded. Other Initiative 4 actions are still being resolved.",
+    );
+  });
+
   it.each([
     [
       "phase2_resolution",

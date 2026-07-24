@@ -638,3 +638,16 @@ This is the recommended first slice because it is bounded, immediately removes a
 - All calculation views use the shared structure without changing values.
 - Future/unopened work never receives a current marker.
 - No application component infers completion from a hidden raw roll, proposal, or calculation object.
+
+## Initiative-group timing
+
+A1/A2 Current Action and tracker projection expose only the highest unresolved initiative value.
+Exact ties project together and use the same pre-group effective state. Consequences created during
+that group are visible under **Pending modifiers**, with wording such as `Effective after
+Initiative 4 finishes`; they are excluded from arithmetic until the group closes.
+
+Lower-group waiting text names the initiative currently resolving. A tied participant whose own
+work completed sees a recorded/waiting state rather than an unavailable-task error. The concise
+calculation contract may include a `Pending` subsection, but those rows never enter `Modifiers`,
+`Effective skill`, or `Total` for the creating group. See
+`combat-initiative-group-timing.md` for lifecycle and undo/reload rules.

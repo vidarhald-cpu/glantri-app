@@ -38,6 +38,8 @@ export interface CurrentActionCommandDescriptor {
   readonly expectedRevision: string;
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
+  readonly initiativeGroupId?: string;
+  readonly initiativeValue?: number;
   readonly opponentParticipantId?: string;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
@@ -667,6 +669,45 @@ function specialPresentation(
   });
 }
 
+function initiativeWaitingPresentation(
+  input: BuildCurrentActionPresentationInput,
+): CurrentActionPresentation | undefined {
+  if (input.viewer.kind !== "player") return undefined;
+  const order = input.progression?.executionOrder;
+  const currentValue = order?.currentInitiativeValue;
+  if (currentValue === undefined) return undefined;
+  const controlled = input.viewer.controlledParticipantIds ?? new Set<string>();
+  const ownGroup = order?.initiativeGroups?.find((group) =>
+    group.participantIds.some((participantId) => controlled.has(participantId)),
+  );
+  if (!ownGroup || ownGroup.status === "complete") return undefined;
+  const sameGroup = ownGroup.status === "current";
+  const summary = sameGroup
+    ? `Your Initiative ${currentValue} action is recorded. Other Initiative ${currentValue} actions are still being resolved.`
+    : `Initiative ${currentValue} is still being resolved. Your Initiative ${ownGroup.initiativeValue} action will open after Initiative ${currentValue} completes.`;
+  return Object.freeze({
+    actionName: "Initiative",
+    boundary: input.progression?.boundary.kind ?? "declaration",
+    encounterId: input.encounterId,
+    encounterRevision: input.encounterRevision ?? "",
+    heading: "Current action",
+    primaryAction: {
+      enabled: false,
+      gmProxyAvailable: false,
+      label: "Waiting",
+      viewerMayInvoke: false,
+    },
+    reason: "",
+    requiredActor: { hidden: true, label: "another combatant" },
+    requiredNow: sameGroup
+      ? `Waiting for other Initiative ${currentValue} actions.`
+      : `Waiting for Initiative ${currentValue} to finish.`,
+    status: "waiting",
+    summary,
+    taskHeading: "Waiting for initiative",
+  });
+}
+
 /** Builds one display-ready Current Action from the accepted progression revision only. */
 export function buildCurrentActionPresentation(
   input: BuildCurrentActionPresentationInput,
@@ -678,6 +719,16 @@ export function buildCurrentActionPresentation(
   ) {
     return specialPresentation(input);
   }
+  const initiativeWaiting = initiativeWaitingPresentation(input);
+  const controlled = input.viewer.controlledParticipantIds ?? new Set<string>();
+  const hasInvokableControlledTask = taskList(input.progression).some(
+    (task) =>
+      task.state === "executable" &&
+      task.owner?.kind === "combatant" &&
+      controlled.has(task.owner.participantId) &&
+      viewerMayInvokeTask(task, input.viewer),
+  );
+  if (initiativeWaiting && !hasInvokableControlledTask) return initiativeWaiting;
   const task = selectTask(taskList(input.progression), input.viewer);
   if (!task) return null;
 
@@ -718,6 +769,8 @@ export function buildCurrentActionPresentation(
     expectedRevision: input.encounterRevision,
     healthRollId: task.identity.healthRollId,
     hitLocationResultId: task.identity.hitLocationResultId,
+    initiativeGroupId: task.identity.initiativeGroupId,
+    initiativeValue: task.identity.initiativeValue,
     opponentParticipantId: task.identity.opponentParticipantId,
     opportunityId: task.identity.opportunityId,
     offensiveParryAttemptId: task.identity.offensiveParryAttemptId,

@@ -2019,10 +2019,108 @@ describe("authorizeCombatProgressionTask", () => {
     );
 
     expect(commitPending.executionOrder).toBeUndefined();
-    expect(committed.executionOrder).toEqual({
+    expect(committed.executionOrder).toMatchObject({
       participantIds: ["hero", "guard"],
       phase: "phase1",
     });
+  });
+
+  it("projects only the highest unresolved initiative group and keeps exact ties simultaneous", () => {
+    const declaration = (targetParticipantId: string) => ({
+      actionId: "attack_parry",
+      committed: true,
+      phaseContexts: {
+        phase1: { attackModeId: "mode-punch", targetParticipantId },
+      },
+      roundNumber: 2,
+      secondaryActionId: "open",
+      submittedBy: "player",
+    });
+    const tied = state({
+      cursorParticipantId: "hero",
+      cursorStep: "A1",
+      currentStep: "phase_1_actions",
+      participantOverrides: [
+        {
+          declaration: declaration("guard"),
+          initiatives: {
+            phase1: {
+              baseInitiative: 0,
+              modifierAdjustment: 0,
+              rolls: [4],
+              rollTotal: 4,
+              total: 4,
+            },
+          },
+        },
+        {
+          declaration: declaration("hero"),
+          initiatives: {
+            phase1: {
+              baseInitiative: 0,
+              modifierAdjustment: 0,
+              rolls: [4],
+              rollTotal: 4,
+              total: 4,
+            },
+          },
+        },
+      ],
+    });
+    const tiedProjection = buildCombatProgressionProjection(tied);
+    const tiedAttackTasks = tiedProjection.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .filter((task) => task.kind === "attack");
+
+    expect(tiedAttackTasks.map((task) => task.owner?.kind === "combatant" && task.owner.participantId))
+      .toEqual(["hero", "guard"]);
+    expect(new Set(tiedAttackTasks.map((task) => task.identity.initiativeGroupId))).toEqual(
+      new Set(["round:2:phase:phase1:initiative:4"]),
+    );
+    expect(tiedProjection.executionOrder).toMatchObject({
+      currentInitiativeValue: 4,
+      initiativeGroups: [
+        expect.objectContaining({
+          initiativeValue: 4,
+          participantIds: ["hero", "guard"],
+          status: "current",
+        }),
+      ],
+    });
+
+    const sequential = combatRoundStateSchema.parse({
+      ...tied,
+      participants: tied.participants.map((participant, index) => ({
+        ...participant,
+        initiatives: {
+          phase1: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [index === 0 ? 4 : 3],
+            rollTotal: index === 0 ? 4 : 3,
+            total: index === 0 ? 4 : 3,
+          },
+        },
+      })),
+    });
+    const sequentialTasks = buildCombatProgressionProjection(sequential)
+      .boundary.processes.flatMap((process) =>
+        process.stages.flatMap((stage) => stage.tasks),
+      )
+      .filter((task) => task.kind === "attack");
+    expect(sequentialTasks).toHaveLength(1);
+    expect(sequentialTasks[0]?.owner).toMatchObject({ participantId: "hero" });
+    const wrongGroup = authorizeCombatProgressionTask({
+      actor: { kind: "combatant", participantId: "hero" },
+      commandType: "roll_attack",
+      initiativeGroupId: "round:2:phase:phase1:initiative:3",
+      opportunityId: sequentialTasks[0]?.identity.opportunityId,
+      participantId: "hero",
+      phase: "phase1",
+      projection: buildCombatProgressionProjection(sequential),
+      taskId: sequentialTasks[0]?.id,
+    });
+    expect(wrongGroup).toMatchObject({ code: "identity_mismatch", ok: false });
   });
 
   it("builds player-safe task presentation with semantic parity and no private internals", () => {

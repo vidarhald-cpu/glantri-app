@@ -137,6 +137,8 @@ interface PlayerCombatModifierPanelProps {
     >,
   ) => void;
   readOnly?: boolean;
+  pendingActivationLabel?: string;
+  pendingEntries?: readonly ScenarioCombatModifierEntry[];
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
 }
@@ -701,6 +703,7 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
   encounterId?: string;
   includeAllPhases?: boolean;
@@ -712,6 +715,7 @@ export function buildPlayerCombatModifierRows(input: {
   const projection = buildLiveCombatModifierContributionProjection({
     combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
     encounterId: input.encounterId,
     ownerParticipantId: input.ownerParticipantId,
@@ -960,6 +964,8 @@ export function PlayerCombatModifierPanel({
   onAddEntry,
   onRemoveEntry,
   onUpdateEntry,
+  pendingActivationLabel,
+  pendingEntries = [],
   readOnly = false,
   rows,
   sourceLabel,
@@ -1130,6 +1136,20 @@ export function PlayerCombatModifierPanel({
           </div>
         );
       })}
+      {pendingEntries.length > 0 ? (
+        <div style={{ borderTop: "1px solid #d7d1c2", display: "grid", gap: "0.35rem", paddingTop: "0.55rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Pending modifiers</strong>
+          {pendingEntries.map((entry) => (
+            <div key={entry.id} style={{ fontSize: "0.82rem" }}>
+              {(entry.notes?.trim() || "Combat effect")} {entry.value >= 0 ? "+" : ""}
+              {entry.value}
+              <div style={{ color: "#5e5a50" }}>
+                {pendingActivationLabel ?? "Effective from the next initiative group"}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -887,6 +887,33 @@ export function buildResolutionProcesses(
 
     return [completedProcess, transitionProcess];
   }
+  const initiativeParticipantIds = new Set(context.initiativeGroup?.participantIds ?? []);
+  const groupManeuverPlans =
+    phase === "phase1"
+      ? context.actionProcessPlans
+          .filter(
+            (plan) =>
+              initiativeParticipantIds.has(plan.ownerParticipantId) &&
+              plan.maneuver &&
+              !plan.maneuver.completion.complete &&
+              plan.maneuver.stages.some((stage) => stage.state === "ready"),
+          )
+          .map((plan) => plan.maneuver!)
+      : [];
+  const groupAttackPlans = context.actionProcessPlans
+    .flatMap((plan) => plan.standardAttacks)
+    .filter(
+      (attack) =>
+        attack.phase === phase &&
+        initiativeParticipantIds.has(attack.ownerParticipantId) &&
+        attack.stages.some((stage) => stage.state === "ready"),
+    );
+  if (groupManeuverPlans.length > 0 || groupAttackPlans.length > 0) {
+    return [
+      ...groupManeuverPlans.map((plan) => buildAdapterManeuverProcess(context, plan)),
+      ...groupAttackPlans.map((plan) => buildAdapterAttackProcess(context, plan)),
+    ];
+  }
   const participantId =
     context.state.phaseResolutionCursor?.phase === phase
       ? context.state.phaseResolutionCursor.participantId

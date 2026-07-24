@@ -1,5 +1,7 @@
 import {
   combatRoundStateSchema,
+  getCombatRoundCurrentInitiativeExecutionGroup,
+  getCombatRoundInitiativeExecutionGroups,
   getCombatRoundStepForCursorStep,
   sortCombatRoundParticipantsByInitiative,
   type CombatRoundCommandCurrentTask,
@@ -44,7 +46,22 @@ function committedExecutionOrder(
         : undefined;
   if (!phase) return undefined;
 
+  const initiativeGroups = getCombatRoundInitiativeExecutionGroups({ phase, state });
+  const currentGroup = initiativeGroups.find((group) => group.status === "current");
   return {
+    ...(initiativeGroups.length > 0
+      ? {
+          currentInitiativeGroupId: currentGroup?.id,
+          currentInitiativeValue: currentGroup?.initiativeValue,
+          initiativeGroups: initiativeGroups.map((group) => ({
+            id: group.id,
+            initiativeValue: group.initiativeValue,
+            opportunityIds: group.opportunityIds,
+            participantIds: group.participantIds,
+            status: group.status,
+          })),
+        }
+      : {}),
     participantIds: sortCombatRoundParticipantsByInitiative({ phase, state }).map(
       (participant) => participant.participantId,
     ),
@@ -89,6 +106,12 @@ export function buildCombatProgressionProjection(
     boundaryKind,
     diagnostics: [],
     identities,
+    initiativeGroup:
+      boundaryKind === "phase1_resolution"
+        ? getCombatRoundCurrentInitiativeExecutionGroup({ phase: "phase1", state: normalized })
+        : boundaryKind === "phase2_resolution"
+          ? getCombatRoundCurrentInitiativeExecutionGroup({ phase: "phase2", state: normalized })
+          : undefined,
     roundNumber: normalized.roundNumber,
     state: normalized,
   };

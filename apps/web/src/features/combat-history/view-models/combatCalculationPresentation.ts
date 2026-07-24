@@ -11,6 +11,9 @@ export interface CombatRollCalculationPresentation {
   readonly label: string;
   readonly modifierRows: readonly CombatRollModifierPresentation[];
   readonly modifierTotal: number;
+  readonly pendingModifierRows: readonly (CombatRollModifierPresentation & {
+    readonly activationLabel?: string;
+  })[];
   readonly skillValue: number;
   readonly total: number;
 }
@@ -69,6 +72,23 @@ export function buildCombatRollCalculationPresentation(input: {
   const modifierTotal = explicitModifierTotal.every((value) => value !== undefined)
     ? explicitModifierTotal.reduce<number>((sum, value) => sum + value!, 0)
     : total - skillValue - dieResult;
+  const pendingModifierRows = Array.isArray(calculation.pendingModifiers)
+    ? calculation.pendingModifiers.flatMap((row) => {
+        if (!row || typeof row !== "object") return [];
+        const value = finiteNumber((row as Record<string, unknown>).value);
+        const label = (row as Record<string, unknown>).label;
+        const activationLabel = (row as Record<string, unknown>).activationLabel;
+        return value !== undefined && typeof label === "string"
+          ? [
+              {
+                ...(typeof activationLabel === "string" ? { activationLabel } : {}),
+                label,
+                value,
+              },
+            ]
+          : [];
+      })
+    : [];
 
   return {
     dieResult,
@@ -76,6 +96,7 @@ export function buildCombatRollCalculationPresentation(input: {
     label: input.label,
     modifierRows,
     modifierTotal,
+    pendingModifierRows,
     skillValue,
     total,
   };
@@ -107,6 +128,15 @@ function rollLines(
     ...calculation.modifierRows.map(
       (row) => `- ${row.label}: ${formatModifier(row.value)}`,
     ),
+    ...(calculation.pendingModifierRows.length > 0
+      ? [
+          "Pending:",
+          ...calculation.pendingModifierRows.map(
+            (row) =>
+              `- ${row.label}: ${formatModifier(row.value)}${row.activationLabel ? ` — ${row.activationLabel}` : ""}`,
+          ),
+        ]
+      : []),
     `Effective skill: ${calculation.effectiveSkill}`,
     `Die roll: ${calculation.dieResult}`,
     `Total: ${calculation.total}`,

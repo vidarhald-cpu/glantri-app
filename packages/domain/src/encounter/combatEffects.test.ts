@@ -1,8 +1,48 @@
 import { describe, expect, it } from "vitest";
 
-import { combatEffectsStateSchema } from "./combatEffects";
+import { combatEffectsStateSchema, getCombatEffectEffectiveStatus } from "./combatEffects";
 
 describe("combat effect state", () => {
+  it("derives pending initiative effects as active after their group boundary closes", () => {
+    const effect = combatEffectsStateSchema.parse({
+      effects: [
+        {
+          createdAt: "2026-07-24T10:00:00.000Z",
+          createdInInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+          damage: 0,
+          effectGroup: "general",
+          effectiveAfterInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+          generalDamage: 0,
+          id: "effect-pending",
+          sourceEventId: "event-pending",
+          status: "pending",
+          targetParticipantId: "participant-1",
+          type: "general_modifier",
+          updatedAt: "2026-07-24T10:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-07-24T10:00:00.000Z",
+          id: "event-pending",
+          sourceLabel: "Initiative 4 consequence",
+          targetParticipantId: "participant-1",
+        },
+      ],
+    }).effects[0]!;
+
+    expect(
+      getCombatEffectEffectiveStatus(effect, {
+        currentInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatEffectEffectiveStatus(effect, {
+        currentInitiativeGroupId: "round:2:phase:phase1:initiative:3",
+      }),
+    ).toBe("active");
+  });
+
   it("defaults old participant state combat effects to empty collections", () => {
     expect(combatEffectsStateSchema.parse(undefined)).toEqual({
       effects: [],

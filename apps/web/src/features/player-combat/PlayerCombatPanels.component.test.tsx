@@ -110,6 +110,29 @@ describe("PlayerCombatAttackModeSelector", () => {
 });
 
 describe("PlayerCombatModifierPanel", () => {
+  it("separates pending initiative modifiers from active arithmetic", () => {
+    render(
+      <PlayerCombatModifierPanel
+        pendingActivationLabel="Effective after Initiative 4 finishes"
+        pendingEntries={[
+          {
+            id: "pending-unbalanced",
+            imported: true,
+            notes: "Unbalanced",
+            scope: "until",
+            value: -2,
+          },
+        ]}
+        readOnly
+        rows={[]}
+      />,
+    );
+
+    expect(screen.getByText("Pending modifiers")).toBeInTheDocument();
+    expect(screen.getByText("Unbalanced -2")).toBeInTheDocument();
+    expect(screen.getByText("Effective after Initiative 4 finishes")).toBeInTheDocument();
+  });
+
   it("renders player modifier rows with readable source, mod, duration, and details lines", () => {
     render(
       <PlayerCombatModifierPanel

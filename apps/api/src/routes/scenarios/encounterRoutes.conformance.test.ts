@@ -27,6 +27,11 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("expectedTaskId: body.taskId");
   });
 
+  it("forwards initiative-group identity into projected-task authorization", () => {
+    expect(source).toContain("initiativeGroupId: input.identity.initiativeGroupId");
+    expect(source).toContain("initiativeValue: input.identity.initiativeValue");
+  });
+
   it("binds Offensive Parry Brawling to exact task and parry lineage", () => {
     expect(source).toContain("combat-round/roll-offensive-parry-brawling");
     for (const identity of [

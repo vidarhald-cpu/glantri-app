@@ -15,6 +15,7 @@ import {
   type CombatRoundEndHealthRollProposal,
   type CombatRoundStep,
   type CombatDistance,
+  buildLiveCombatModifierContributionProjection,
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
@@ -1954,20 +1955,31 @@ export default function ScenarioPlayerCombatPageContent({
       selectedSecondaryActionId,
     ],
   );
+  const currentInitiativeGroupId =
+    combatHistory?.progression?.executionOrder?.currentInitiativeGroupId;
+  const currentInitiativeValue =
+    combatHistory?.progression?.executionOrder?.currentInitiativeValue;
   const liveCombatModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
         combatContext: sanitizePlayerCombatModifierContext(projectedCombatContextDraft),
         combatEffects: selectedParticipant?.state.combatEffects,
+        currentInitiativeGroupId,
         phaseKey: currentModifierPhase,
       }),
-    [currentModifierPhase, projectedCombatContextDraft, selectedParticipant?.state.combatEffects],
+    [
+      currentInitiativeGroupId,
+      currentModifierPhase,
+      projectedCombatContextDraft,
+      selectedParticipant?.state.combatEffects,
+    ],
   );
   const modifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
         combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
+        currentInitiativeGroupId,
         currentRound: combatRoundState?.roundNumber,
         encounterId: scenarioId,
         liveModifiers: liveCombatModifiers,
@@ -1977,10 +1989,30 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [
       currentCombatStep,
+      currentInitiativeGroupId,
       currentModifierPhase,
       liveCombatModifiers,
       projectedCombatContextDraft,
       selectedActionId,
+      selectedParticipant?.state.combatEffects,
+    ],
+  );
+  const pendingModifierEntries = useMemo(
+    () =>
+      buildLiveCombatModifierContributionProjection({
+        combatContext: projectedCombatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+        currentInitiativeGroupId,
+        currentRound: combatRoundState?.roundNumber,
+        encounterId: scenarioId,
+        ownerParticipantId: selectedParticipant?.id,
+      }).pendingModifierEntries,
+    [
+      combatRoundState?.roundNumber,
+      currentInitiativeGroupId,
+      projectedCombatContextDraft,
+      scenarioId,
+      selectedParticipant?.id,
       selectedParticipant?.state.combatEffects,
     ],
   );
@@ -4044,6 +4076,12 @@ export default function ScenarioPlayerCombatPageContent({
           <div style={playerCombatPanelRowStyle}>
             <PlayerCombatModifierPanel
               controlsDisabled={declarationControlsDisabled}
+              pendingActivationLabel={
+                currentInitiativeValue !== undefined
+                  ? `Effective after Initiative ${currentInitiativeValue} finishes`
+                  : undefined
+              }
+              pendingEntries={pendingModifierEntries}
               readOnly
               rows={modifierRows}
             />

@@ -6,6 +6,7 @@ import type {
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
 import {
+  getCombatEffectEffectiveStatus,
   getMergedCombatDbParryModifierTotal,
   getMergedCombatDbFlatAdjustmentTotal,
   getMergedCombatInitiativeModifierTotal,
@@ -52,10 +53,6 @@ export interface EncounterInitiativeModifierCalculation {
   rawModifierTotal: number;
 }
 
-function isActiveCombatEffect(effect: CombatEffect): boolean {
-  return effect.status === "active";
-}
-
 function getEffectMagnitude(effect: CombatEffect): number {
   if (effect.modifierValue != null) {
     return effect.modifierValue;
@@ -79,8 +76,13 @@ function contributesToModifier(effect: CombatEffect): boolean {
 
 export function sumEncounterCombatEffectModifiers(
   combatEffects?: CombatEffectsState,
+  currentInitiativeGroupId?: string,
 ): EncounterCombatEffectModifierSums {
-  const activeEffects = combatEffects?.effects.filter(isActiveCombatEffect) ?? [];
+  const activeEffects =
+    combatEffects?.effects.filter(
+      (effect) =>
+        getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active",
+    ) ?? [];
   const fatigue = activeEffects
     .filter(
       (effect) =>
@@ -125,9 +127,13 @@ export function sumEncounterCombatEffectModifiers(
 export function buildEncounterLiveCombatModifierSummary(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   phaseKey?: EncounterCombatPhaseKey;
 }): EncounterLiveCombatModifierSummary {
-  const effectSums = sumEncounterCombatEffectModifiers(input.combatEffects);
+  const effectSums = sumEncounterCombatEffectModifiers(
+    input.combatEffects,
+    input.currentInitiativeGroupId,
+  );
   const phaseAwareCombatContext = input.combatContext
     ? {
         ...input.combatContext,

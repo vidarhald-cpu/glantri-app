@@ -1,4 +1,5 @@
 import {
+  type CombatRoundInitiativeExecutionGroup,
   isCombatRoundEndReviewComplete,
   type CombatRoundCursorStep,
   type CombatRoundPhase,
@@ -84,6 +85,7 @@ export interface ProjectionBuildContext {
   boundaryKind: CombatProgressionBoundaryKind;
   diagnostics: CombatProgressionDiagnostic[];
   identities: Map<string, CombatantIdentity>;
+  initiativeGroup?: CombatRoundInitiativeExecutionGroup;
   roundNumber: number;
   state: CombatRoundState;
 }
@@ -225,6 +227,12 @@ function buildTask(
     id,
     identity: {
       executionGroupId,
+      ...(context.initiativeGroup
+        ? {
+            initiativeGroupId: context.initiativeGroup.id,
+            initiativeValue: context.initiativeGroup.initiativeValue,
+          }
+        : {}),
       ...spec.identity,
     },
     kind: spec.kind,

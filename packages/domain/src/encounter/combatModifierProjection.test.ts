@@ -120,6 +120,35 @@ function refresh(input: {
 }
 
 describe("persistent combat modifier projection", () => {
+  it("shows a same-group effect as pending, then includes it automatically after the group", () => {
+    const pendingEffect = effect({
+      createdInInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+      effectiveAfterInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+      status: "pending",
+    });
+    const sameGroup = buildLiveCombatModifierContributionProjection({
+      combatEffects: effects(pendingEffect),
+      currentInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+      currentRound: 2,
+      ownerParticipantId: "participant-1",
+    });
+    expect(sameGroup.contributions).toEqual([]);
+    expect(sameGroup.pendingModifierEntries).toEqual([
+      expect.objectContaining({ sourceEffectId: pendingEffect.id, value: -2 }),
+    ]);
+
+    const laterGroup = buildLiveCombatModifierContributionProjection({
+      combatEffects: effects(pendingEffect),
+      currentInitiativeGroupId: "round:2:phase:phase1:initiative:3",
+      currentRound: 2,
+      ownerParticipantId: "participant-1",
+    });
+    expect(laterGroup.pendingModifierEntries).toEqual([]);
+    expect(laterGroup.contributions).toEqual([
+      expect.objectContaining({ sourceId: pendingEffect.id, value: -2 }),
+    ]);
+  });
+
   it("builds one deterministic live contribution projection without mutating sources", () => {
     const combatContext: ScenarioParticipantCombatContext = {
       modifierBuckets: {

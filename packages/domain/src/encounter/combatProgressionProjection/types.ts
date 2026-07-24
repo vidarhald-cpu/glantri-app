@@ -166,6 +166,8 @@ export interface CombatProgressionTaskIdentity {
   readonly executionGroupId: string;
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
+  readonly initiativeGroupId?: string;
+  readonly initiativeValue?: number;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
   readonly parryPurpose?: CombatParryPurpose;
@@ -322,6 +324,15 @@ export interface CombatProgressionProjection {
 }
 
 export interface CombatProgressionExecutionOrder {
+  readonly currentInitiativeGroupId?: string;
+  readonly currentInitiativeValue?: number;
+  readonly initiativeGroups?: readonly {
+    readonly id: string;
+    readonly initiativeValue: number;
+    readonly opportunityIds: readonly string[];
+    readonly participantIds: readonly string[];
+    readonly status: "complete" | "current" | "waiting";
+  }[];
   readonly participantIds: readonly string[];
   readonly phase: CombatRoundPhase;
 }

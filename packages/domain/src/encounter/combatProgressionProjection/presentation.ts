@@ -247,6 +247,15 @@ export function projectCombatProgressionPresentation(input: {
   const executionOrder = input.projection.executionOrder
     ? {
         ...input.projection.executionOrder,
+        initiativeGroups: input.projection.executionOrder.initiativeGroups?.map((group) => ({
+          ...group,
+          opportunityIds: input.viewer.kind === "gm" ? group.opportunityIds : [],
+          participantIds: !visibleParticipantIds
+            ? group.participantIds
+            : group.participantIds.filter((participantId) =>
+                visibleParticipantIds.has(participantId),
+              ),
+        })),
         participantIds: !visibleParticipantIds
           ? input.projection.executionOrder.participantIds
           : input.projection.executionOrder.participantIds.filter((participantId) =>

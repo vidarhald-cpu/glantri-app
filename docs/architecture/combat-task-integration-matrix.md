@@ -70,3 +70,13 @@ an obsolete proxy button. The final contest owns one concise, viewer-sanitized c
 Attack and purpose-tagged parry retain only their exact calculations. Continued Contact follow-up
 attacks and round-end maintenance/escape remain explicitly deferred and therefore do not yet add
 task kinds.
+
+Initiative-group execution (2026-07-24): A1/A2 now selects the highest unresolved committed
+initiative value and projects all exact-tie opportunities at that value. Resolution descriptors
+carry the stable round/phase/initiative group identity and value with existing task, execution
+group, opportunity, and result lineage. Child work keeps the initiative group open, so lower values
+cannot authorize until damage/effect commit closes it.
+
+Damage and Offensive Parry consequences created in a tie persist their source group and activation
+boundary. They remain visible but non-effective within that group and become effective
+automatically for the next group. No activation endpoint or GM review task was added.

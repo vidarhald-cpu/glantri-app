@@ -49,6 +49,8 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly executionGroupId?: string;
   readonly healthRollId?: string;
   readonly hitLocationResultId?: string;
+  readonly initiativeGroupId?: string;
+  readonly initiativeValue?: number;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
   readonly parryPurpose?: CombatParryPurpose;
@@ -408,6 +410,8 @@ export function authorizeCombatProgressionTask(
       [input.attackIndex, "attackIndex"],
       [input.attackModeId, "attackModeId"],
       [input.declarationId, "declarationId"],
+      [input.initiativeGroupId, "initiativeGroupId"],
+      [input.initiativeValue, "initiativeValue"],
       [input.declaredOpponentParticipantId, "declaredOpponentParticipantId"],
       [input.offensiveParryAttemptId, "offensiveParryAttemptId"],
       [input.parryPurpose, "parryPurpose"],

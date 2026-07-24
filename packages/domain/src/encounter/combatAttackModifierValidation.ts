@@ -12,6 +12,7 @@ import {
 } from "./combatModifierContributions";
 import { buildLiveCombatModifierContributionProjection } from "./combatModifierProjection";
 import {
+  getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundPhaseActionStepForPhase,
   type CombatRoundAttackOpportunity,
   type CombatRoundPhase,
@@ -125,9 +126,14 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
   const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
     input.defenderScenarioParticipant.state.combat.combatContext ?? {},
   );
+  const currentInitiativeGroupId = getCombatRoundCurrentInitiativeExecutionGroup({
+    phase: input.phase,
+    state: input.state,
+  })?.id;
   const attackerContributions = buildLiveCombatModifierContributionProjection({
     combatContext: attackerCombatContext,
     combatEffects: input.attackerScenarioParticipant.state.combatEffects,
+    currentInitiativeGroupId,
     currentRound: input.state.roundNumber,
     encounterId: input.encounterId,
     ownerParticipantId: input.attackerScenarioParticipant.id,
@@ -135,6 +141,7 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
   const defenderContributions = buildLiveCombatModifierContributionProjection({
     combatContext: defenderCombatContext,
     combatEffects: input.defenderScenarioParticipant.state.combatEffects,
+    currentInitiativeGroupId,
     currentRound: input.state.roundNumber,
     encounterId: input.encounterId,
     ownerParticipantId: input.defenderScenarioParticipant.id,

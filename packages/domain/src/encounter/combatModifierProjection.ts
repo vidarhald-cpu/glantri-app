@@ -4,7 +4,12 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantState,
 } from "../campaign/scenario";
-import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "./combatEffects";
+import {
+  getCombatEffectEffectiveStatus,
+  type CombatEffect,
+  type CombatEffectEvent,
+  type CombatEffectsState,
+} from "./combatEffects";
 import {
   isCombatModifierContributionActive,
   normalizeScenarioCombatModifierEntry,
@@ -15,12 +20,14 @@ export const PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE = "character_effect" as cons
 
 export interface ProjectPersistentCombatEffectModifiersInput {
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
 }
 
 export interface PersistentCombatEffectModifierProjection {
   importedEffectIds: string[];
   modifierBuckets: ScenarioParticipantCombatContext["modifierBuckets"];
+  pendingModifierEntries: ScenarioCombatModifierEntry[];
   specialEffectIds: string[];
   specialEffectCount: number;
 }
@@ -35,6 +42,7 @@ export interface MergedCombatModifierTotals {
 export interface LiveCombatModifierContributionProjectionInput {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
   encounterId?: string;
   ownerParticipantId?: string;
@@ -49,6 +57,7 @@ export interface LiveCombatModifierContributionProjectionInput {
  */
 export interface LiveCombatModifierContributionProjection {
   contributions: CombatModifierContribution[];
+  pendingModifierEntries: ScenarioCombatModifierEntry[];
   sourceEntries: ReadonlyMap<string, ScenarioCombatModifierEntry>;
   specialEffectIds: string[];
   specialEffectCount: number;
@@ -115,9 +124,13 @@ export function normalizeCombatModifierRowsForEncounter(
   };
 }
 
-function isEffectActiveForRound(effect: CombatEffect, currentRound?: number): boolean {
+function isEffectActiveForRound(
+  effect: CombatEffect,
+  currentRound?: number,
+  currentInitiativeGroupId?: string,
+): boolean {
   return (
-    effect.status === "active" &&
+    getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active" &&
     (currentRound === undefined ||
       effect.expiresAtRound === undefined ||
       effect.expiresAtRound >= currentRound)
@@ -203,6 +216,7 @@ export function projectPersistentCombatEffectModifiers(
 ): PersistentCombatEffectModifierProjection {
   const modifierBuckets = emptyModifierBuckets();
   const importedEffectIds: string[] = [];
+  const pendingModifierEntries: ScenarioCombatModifierEntry[] = [];
   const specialEffectIds: string[] = [];
   const eventsById = new Map(
     (input.combatEffects?.events ?? []).map((event) => [event.id, event] as const),
@@ -212,7 +226,23 @@ export function projectPersistentCombatEffectModifiers(
   );
 
   for (const effect of effects) {
-    if (!isEffectActiveForRound(effect, input.currentRound)) {
+    if (
+      getCombatEffectEffectiveStatus(effect, {
+        currentInitiativeGroupId: input.currentInitiativeGroupId,
+      }) === "pending"
+    ) {
+      if (
+        getScenarioBucket(effect) &&
+        effect.modifierValue !== undefined &&
+        Number.isFinite(effect.modifierValue)
+      ) {
+        pendingModifierEntries.push(
+          buildImportedEntry({ effect, event: eventsById.get(effect.sourceEventId) }),
+        );
+      }
+      continue;
+    }
+    if (!isEffectActiveForRound(effect, input.currentRound, input.currentInitiativeGroupId)) {
       continue;
     }
 
@@ -244,6 +274,7 @@ export function projectPersistentCombatEffectModifiers(
   return {
     importedEffectIds,
     modifierBuckets,
+    pendingModifierEntries,
     specialEffectCount: specialEffectIds.length,
     specialEffectIds,
   };
@@ -264,6 +295,7 @@ function replaceImportedEntries(
 export function mergePersistentCombatEffectModifiers(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
 }): ScenarioParticipantCombatContext {
   const current = input.combatContext ?? { modifierBuckets: emptyModifierBuckets() };
@@ -322,10 +354,12 @@ export function buildLiveCombatModifierContributionProjection(
   const combatContext = mergePersistentCombatEffectModifiers({
     combatContext: input.combatContext,
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
   });
   const persistentProjection = projectPersistentCombatEffectModifiers({
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
   });
   const resolutionContext = {
@@ -367,6 +401,7 @@ export function buildLiveCombatModifierContributionProjection(
 
   return {
     contributions,
+    pendingModifierEntries: persistentProjection.pendingModifierEntries,
     sourceEntries,
     specialEffectCount: persistentProjection.specialEffectCount,
     specialEffectIds: persistentProjection.specialEffectIds,
