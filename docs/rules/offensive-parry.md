@@ -48,7 +48,9 @@ winner, so Continued Contact is not established.
    `offensive_parry_brawling_roll` task for each unresolved roller.
 7. Each participant rolls Brawling for their own character; the GM may proxy through the same
    descriptor and endpoint.
-8. After both rolls, the strict comparison resolves automatically.
+8. After both rolls, the strict comparison resolves automatically. The final roll completes the
+   parallel group, removes both Brawling tasks and their tracker attention, and advances Current
+   Action from the authoritative post-mutation projection.
 9. If the Offensive Parry participant wins, one Continued Contact relationship and one Unbalanced
    condition are created. Otherwise neither is created and the attack process closes normally.
 
@@ -87,6 +89,10 @@ Player-safe projection retains the contest ID and each unresolved task. After th
 roller's task is complete and their persisted roll remains; the other task keeps the same contest
 and execution-group lineage. The completed roller sees a waiting state, while the other owner or
 the GM proxy may perform the remaining roll. Only the second roll closes and resolves the contest.
+After that roll, no Brawling task remains for either player or the GM. GM Combat refreshes the
+active encounter revision while open; reload reconstructs the same completed projection. Undoing
+the final roll restores exactly the other participant's unresolved task and removes only the result
+and effects created by that final command.
 
 No live layer resolves the trigger from participant plus phase, a cursor, inspector selection, or a
 latest attack/parry.
@@ -148,6 +154,15 @@ second Attack or generic Defense entry. Genuinely distinct attack-result identit
 The result records the broad comparison and visible
 Continued Contact/Unbalanced consequence. The GM may inspect both rolls; a player receives their own
 calculation and the broad opponent outcome, not the opponent's private dice/calculation.
+
+The final result uses one concise **Offensive Parry — Brawling** calculation. Each visible full roll
+shows Skill, the arithmetic Modifiers total (with non-zero source rows), Effective skill, Die roll,
+and Total. The signed contest difference is always controller total minus affected-participant
+total. The GM sees both full rolls; each involved player sees their own full roll, the opponent
+total, the signed difference, and the broad result. Skill IDs, XP fields, characteristic
+decomposition, task/process identities, and duplicate roll/final-total labels remain audit facts
+and are not normal calculation UI. This Brawling calculation attaches only to the final contest
+result; the incoming Attack and proactive parry retain their own calculations.
 
 The mechanics-only Brawling roll is not projected as new Combat Log narration.
 

@@ -160,6 +160,41 @@ describe("buildCombatEventResultModel", () => {
     ]);
   });
 
+  it("uses the concise skill calculation for Offensive Parry Brawling", () => {
+    const model = buildCombatEventResultModel([
+      event("offensive_parry_brawling", 1, {
+        facts: {
+          involvedOutcome: { resolved: false },
+          privateCalculation: {
+            brawlingBaseValue: 15,
+            brawlingSkillId: "brawling",
+            brawlingSkillXp: 928,
+            characteristicAverage: 12,
+            finalTotal: 27,
+            generalModifier: 0,
+            parryQualityModifier: 1,
+            rollD20: 11,
+            rollTotal: 11,
+            skillModifier: 0,
+          },
+          publicOutcome: { resolved: false },
+        },
+      }),
+    ]);
+
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
+      "Brawling",
+      "Skill: 15",
+      "Modifiers: +1",
+      "- Parry quality: +1",
+      "Effective skill: 16",
+      "Die roll: 11",
+      "Total: 27",
+    ]);
+    expect(JSON.stringify(model)).not.toContain("Brawling Skill Xp");
+    expect(JSON.stringify(model)).not.toContain("Characteristic Average");
+  });
+
   it("shows the final combined modifier and the maneuver adjustment separately", () => {
     const model = buildCombatEventResultModel([
       event("adjust_distance_roll", 1, {

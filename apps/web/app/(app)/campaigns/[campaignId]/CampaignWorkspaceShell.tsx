@@ -47,6 +47,8 @@ interface CampaignWorkspaceShellProps {
   campaignId: string;
 }
 
+const GM_COMBAT_REFRESH_INTERVAL_MS = 5_000;
+
 const panelStyle = {
   border: "1px solid #d9ddd8",
   borderRadius: 12,
@@ -243,6 +245,40 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const activeEncounter = activeScenarioEncounters.find(
     (encounter) => encounter.id === workspaceState.activeEncounterId,
   );
+  const activeEncounterId = activeEncounter?.id;
+  useEffect(() => {
+    if (
+      sessionLoading ||
+      !canAccessGmEncounter ||
+      workspaceState.activeTab !== "combat" ||
+      !activeEncounterId
+    ) {
+      return;
+    }
+
+    let refreshInFlight = false;
+    async function refreshActiveCombat() {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        await refreshWorkspaceContextWithErrorHandling();
+      } finally {
+        refreshInFlight = false;
+      }
+    }
+
+    const intervalId = window.setInterval(
+      () => void refreshActiveCombat(),
+      GM_COMBAT_REFRESH_INTERVAL_MS,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [
+    activeEncounterId,
+    canAccessGmEncounter,
+    refreshWorkspaceContextWithErrorHandling,
+    sessionLoading,
+    workspaceState.activeTab,
+  ]);
   const gmInspectableCandidates = useMemo(
     () =>
       buildGmCharacterWorkspaceCandidates({

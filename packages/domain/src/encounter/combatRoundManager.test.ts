@@ -14227,6 +14227,87 @@ describe("combat round manager", () => {
     expect(timelineRounds[1]?.participants[0]?.declaration).toBeUndefined();
   });
 
+  it("keeps opportunity-keyed attack results in their completed round only", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "single_attack",
+      attackOpportunityId: "round-3-gladiator-phase1-attack-1",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 13,
+      rollTotal: 13,
+      rolledAt: "2026-01-01T00:08:00.000Z",
+      weaponName: "Long sword",
+    });
+    const withCanonicalAttack = combatRoundStateSchema.parse({
+      ...roundSummaryState,
+      participants: roundSummaryState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              attackResultsByOpportunity: {
+                [attackResult.attackOpportunityId!]: attackResult,
+              },
+            }
+          : participant,
+      ),
+    });
+    const nextRoundState = advanceCombatRoundStep(
+      completeCleanRoundEndReview(withCanonicalAttack),
+      {
+        command: {
+          createdAt: "2026-01-01T00:10:00.000Z",
+          createdByUserId: "gm-1",
+        },
+      },
+    );
+    const [completedRound, activeRound] = getCombatRoundTimelineRoundStates(nextRoundState);
+
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: completedRound!,
+      }),
+    ).toEqual(attackResult);
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: activeRound!,
+      }),
+    ).toBeUndefined();
+    expect(activeRound?.participants[0]?.attackResultsByOpportunity).toBeUndefined();
+    expect(activeRound?.participants[0]?.attackResults).toEqual({});
+    expect(activeRound?.participants[0]?.initiatives).toEqual({});
+    expect(
+      activeRound?.participants.every(
+        (participant) =>
+          participant.attackResultsByOpportunity === undefined &&
+          Object.keys(participant.attackResults).length === 0 &&
+          Object.keys(participant.initiatives).length === 0,
+      ),
+    ).toBe(true);
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: "guard",
+        phase: "phase1",
+        state: activeRound!,
+      }),
+    ).toBeUndefined();
+    expect(activeRound?.currentStep).toBe("select_actions");
+    expect(activeRound?.currentCursor).toMatchObject({
+      roundNumber: roundSummaryState.roundNumber + 1,
+      step: "DE",
+    });
+  });
+
   it("summarizes the latest archived round-start event", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),

@@ -7,6 +7,11 @@ import type {
 
 import type { CombatPresentationSubject } from "./currentActionPresentation";
 import { buildCombatEventResultModel } from "./buildCombatEventResultModel";
+import {
+  buildCombatContestCalculationPresentation,
+  buildCombatRollCalculationPresentation,
+  formatCombatContestCalculationLines,
+} from "./combatCalculationPresentation";
 
 export type CombatStepResultEntryCategory =
   | "declaration"
@@ -207,10 +212,26 @@ function calculationEventsForLogEvent(input: {
     if (input.event.proposalId && proposalId(event) === input.event.proposalId) {
       return input.event.category === "contest" && event.type.endsWith("_roll");
     }
-    return Boolean(
-      input.event.attackResultId && event.id !== input.event.id &&
-        (event.facts.involvedOutcome?.attackResultId === input.event.attackResultId),
-    );
+    if (
+      !input.event.attackResultId ||
+      event.id === input.event.id ||
+      event.facts.involvedOutcome?.attackResultId !== input.event.attackResultId
+    ) {
+      return false;
+    }
+    // Compatibility attachment is type-scoped to the exact canonical result kind. Sharing an
+    // attackResultId does not make the child parry or Brawling calculation part of the Attack.
+    if (input.event.category === "attack") return event.type === "attack";
+    if (input.event.category === "defense") return event.type === "parry";
+    if (input.event.category === "damage") {
+      return (
+        event.type === "damage_proposed" ||
+        event.type === "damage_committed" ||
+        event.type === "critical" ||
+        event.type === "hit_location"
+      );
+    }
+    return false;
   });
 }
 
@@ -442,6 +463,8 @@ function supplementalEntries(input: {
       const participantIsAffected = affected?.id === input.participantId;
       const controllerName = controller?.label ?? "The defender";
       const affectedName = affected?.label ?? "the attacker";
+      const controllerTotal = visibleOutcome(event, "controllerTotal");
+      const affectedTotal = visibleOutcome(event, "affectedTotal");
       const summary = controllerWon
         ? participantIsController
           ? `You won the Brawling contest. Continued contact was established. ${affectedName} is Unbalanced (−2%).`
@@ -453,6 +476,42 @@ function supplementalEntries(input: {
           : participantIsAffected
             ? "You resisted the attempt. No continued contact was established."
             : "Continued contact was not established.";
+      const consequence = controllerWon
+        ? `Continued contact established; ${affectedName} is Unbalanced (−2%).`
+        : "No continued contact established.";
+      const contestCalculation =
+        controller?.id &&
+        affected?.id &&
+        typeof controllerTotal === "number" &&
+        typeof affectedTotal === "number"
+          ? buildCombatContestCalculationPresentation({
+              consequence,
+              initiator: {
+                label: controllerName,
+                participantId: controller.id,
+                roll: buildCombatRollCalculationPresentation({
+                  calculation: contestEvents.find(
+                    (candidate) => candidate.ownerParticipantId === controller.id,
+                  )?.facts.privateCalculation,
+                  label: controllerName,
+                }),
+                total: controllerTotal,
+              },
+              responder: {
+                label: affectedName,
+                participantId: affected.id,
+                roll: buildCombatRollCalculationPresentation({
+                  calculation: contestEvents.find(
+                    (candidate) => candidate.ownerParticipantId === affected.id,
+                  )?.facts.privateCalculation,
+                  label: affectedName,
+                }),
+                total: affectedTotal,
+              },
+              winnerParticipantId:
+                typeof winnerParticipantId === "string" ? winnerParticipantId : undefined,
+            })
+          : undefined;
       return [
         {
           entry: {
@@ -461,11 +520,21 @@ function supplementalEntries(input: {
               typeof visibleOutcome(event, "attackResultId") === "string"
                 ? (visibleOutcome(event, "attackResultId") as string)
                 : undefined,
-            calculations: calculationsForEvents({
-              events: contestEvents,
-              participantId: input.participantId,
-              viewer: input.viewer,
-            }),
+            calculations: contestCalculation
+              ? [
+                  {
+                    collapsedByDefault: true,
+                    id: `${contestId}:calculation`,
+                    lines: formatCombatContestCalculationLines({
+                      presentation: contestCalculation,
+                      viewerParticipantId:
+                        input.viewer.kind === "player" ? input.participantId : undefined,
+                    }),
+                    title: "Offensive Parry — Brawling",
+                    visibility: input.viewer.kind === "gm" ? "gm_full" : "own",
+                  },
+                ]
+              : [],
             category: "contest",
             heading: "Offensive Parry — Brawling",
             id: `current-step:${contestId}:result`,

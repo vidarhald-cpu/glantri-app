@@ -145,7 +145,7 @@ export function CombatTracker(input: {
                         className={
                           roundIndex > 0 && stepIndex === 0 ? "round-boundary-start" : undefined
                         }
-                        key={`${round.roundNumber}-${step}`}
+                        key={cell.cellKey}
                         style={{
                           ...stepCellStyle,
                           background: cell.selected

@@ -8954,6 +8954,16 @@ export default function CombatRoundManagerPanel({
                       proposal.defenderRollRecorded)),
               )
             : false;
+        const trackerProgression =
+          timelineRoundState.roundNumber === roundState.roundNumber
+            ? combatProgressionTrackerIndex.byCellKey[
+                buildCombatTrackerCellKey({
+                  participantId: timelineParticipant.participantId,
+                  roundNumber: timelineRoundState.roundNumber,
+                  step,
+                })
+              ]
+            : undefined;
         trackerCellFacts.push({
           adjustDistance: trackerAdjustDistanceProposal
             ? {
@@ -9002,7 +9012,17 @@ export default function CombatRoundManagerPanel({
                       : "pending",
               }
             : undefined,
-          inspectable: true,
+          inspectable: Boolean(
+            trackerProgression ||
+            trackerSnapshot ||
+            trackerAttackResult ||
+            trackerPhaseResolutionResult ||
+            trackerFeintProposal ||
+            trackerAdjustDistanceProposal ||
+            trackerAdjustDistanceRollRecorded ||
+            initiative ||
+            stepStatus !== "pending",
+          ),
           initiativeCommitted:
             step === "initiative_phase_1" || step === "initiative_phase_2"
               ? timelineRoundState.commands.some(
@@ -9017,16 +9037,7 @@ export default function CombatRoundManagerPanel({
           participantId: timelineParticipant.participantId,
           participantLabel: timelineParticipant.label,
           phaseResolutionResult: trackerPhaseResolutionResult,
-          progression:
-            timelineRoundState.roundNumber === roundState.roundNumber
-              ? combatProgressionTrackerIndex.byCellKey[
-                  buildCombatTrackerCellKey({
-                    participantId: timelineParticipant.participantId,
-                    roundNumber: timelineRoundState.roundNumber,
-                    step,
-                  })
-                ]
-              : undefined,
+          progression: trackerProgression,
           roundNumber: timelineRoundState.roundNumber,
           selected:
             timelineRoundState.roundNumber === selectedRoundNumber &&

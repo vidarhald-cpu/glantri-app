@@ -1,4 +1,8 @@
-import type { CombatProgressionTaskKind, CombatRoundAttackRollResult } from "@glantri/domain";
+import {
+  COMBAT_ROUND_STEPS,
+  type CombatProgressionTaskKind,
+  type CombatRoundAttackRollResult,
+} from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import type { CombatTrackerCellFacts } from "../types";
@@ -185,6 +189,73 @@ describe("buildCombatTrackerModel", () => {
     expect(result.cells["1:participant-a:phase_1_actions"].hoverText).toContain(
       "Aldren attacked Bera with Long sword: miss; Miss.",
     );
+  });
+
+  it("isolates completed attack and initiative facts from a new declaration round", () => {
+    const attackResult = {
+      grazing: false,
+      hit: false,
+      tableResult: "Miss",
+      weaponName: "Long sword",
+    } as CombatRoundAttackRollResult;
+    const result = buildCombatTrackerModel({
+      cellFacts: [
+        facts({
+          attackAttackerLabel: "Aldren",
+          attackDefenderLabel: "Bera",
+          attackResult,
+          roundNumber: 2,
+          status: "complete",
+          step: "phase_1_actions",
+        }),
+        facts({
+          initiativeCommitted: true,
+          initiativeRollRecorded: true,
+          initiativeTotal: 7,
+          roundNumber: 2,
+          status: "complete",
+          step: "initiative_phase_1",
+        }),
+        ...COMBAT_ROUND_STEPS.map((step) =>
+          facts({
+            inspectable: step === "select_actions",
+            progression: step === "select_actions" ? live("submit_declaration") : undefined,
+            roundNumber: 3,
+            step,
+          }),
+        ),
+      ],
+      rounds: [{ roundNumber: 2 }, { currentStep: "select_actions", roundNumber: 3 }],
+      rows: [{ label: "Aldren", participantId: "participant-a", selected: true }],
+      steps: ["select_actions", "initiative_phase_1", "phase_1_actions"],
+    });
+
+    expect(result.cells["2:participant-a:phase_1_actions"]).toMatchObject({
+      inspectable: true,
+      marker: "M",
+    });
+    expect(result.cells["2:participant-a:initiative_phase_1"]).toMatchObject({
+      marker: "7",
+    });
+    expect(result.cells["3:participant-a:select_actions"]).toMatchObject({
+      current: true,
+      marker: "·",
+    });
+    expect(result.currentTaskCellKey).toBe("3:participant-a:select_actions");
+    expect(result.cells["3:participant-a:initiative_phase_1"]).toMatchObject({
+      inspectable: false,
+      marker: "·",
+    });
+    expect(result.cells["3:participant-a:phase_1_actions"]).toMatchObject({
+      inspectable: false,
+      marker: "·",
+    });
+    for (const step of COMBAT_ROUND_STEPS.filter((step) => step !== "select_actions")) {
+      expect(result.cells[`3:participant-a:${step}`]).toMatchObject({
+        inspectable: false,
+        marker: "·",
+      });
+    }
   });
 
   it("marks a committed Feint action complete instead of treating it as a skipped attack", () => {

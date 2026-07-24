@@ -660,17 +660,22 @@ describe("buildCombatStepResultPresentation", () => {
       facts: {
         involvedOutcome: {
           affectedParticipantId: "scyrian",
+          affectedTotal: undefined,
           attackResultId: "attack-1",
           contactEstablished: false,
           contestId: "contest-1",
           controllerParticipantId: "gladiator",
+          controllerTotal: 31,
           resolved: false,
         },
         privateCalculation: {
-          brawlingSkillXp: 12,
+          brawlingBaseValue: 12,
           finalTotal: 31,
+          generalModifier: 0,
           parryQualityModifier: 2,
           rollD20: 17,
+          rollTotal: 17,
+          skillModifier: 0,
         },
         publicOutcome: { contactEstablished: false, resolved: false },
       },
@@ -701,17 +706,24 @@ describe("buildCombatStepResultPresentation", () => {
       facts: {
         involvedOutcome: {
           affectedParticipantId: "scyrian",
+          affectedTotal: 22,
           attackResultId: "attack-1",
           contactEstablished: true,
           contestId: "contest-1",
           controllerParticipantId: "gladiator",
+          controllerTotal: 31,
+          difference: 9,
           resolved: true,
           winnerParticipantId: "gladiator",
         },
         privateCalculation: {
-          brawlingSkillXp: 9,
+          brawlingBaseValue: 9,
           finalTotal: 22,
+          generalModifier: 0,
+          parryQualityModifier: 0,
           rollD20: 13,
+          rollTotal: 13,
+          skillModifier: 0,
         },
         publicOutcome: {
           contactEstablished: true,
@@ -772,8 +784,149 @@ describe("buildCombatStepResultPresentation", () => {
           "You lost the Brawling contest. The Gladiator established continued contact. You are Unbalanced (−2%).",
       }),
     ]);
-    expect(gm.entries[0]?.calculations).toHaveLength(2);
-    expect(gm.entries[0]?.calculations.every((entry) => entry.visibility === "gm_full")).toBe(true);
+    expect(controller.entries[0]?.calculations[0]?.lines).toEqual(
+      expect.arrayContaining([
+        "Your roll",
+        "Skill: 12",
+        "Opponent total: 22",
+        "Difference: +9 in your favor",
+        "Result: You win",
+      ]),
+    );
+    expect(controller.entries[0]?.calculations[0]?.lines).not.toContain("Die roll: 13");
+    expect(gm.entries[0]?.calculations).toHaveLength(1);
+    expect(gm.entries[0]?.calculations[0]).toMatchObject({ visibility: "gm_full" });
+    expect(gm.entries[0]?.calculations[0]?.lines).toEqual(
+      expect.arrayContaining([
+        "The Gladiator",
+        "Skill: 12",
+        "Scyrian cavalry guy",
+        "Skill: 9",
+        "Difference: +9 in favor of The Gladiator",
+        "Result: The Gladiator wins",
+      ]),
+    );
+  });
+
+  it("attaches attack, parry, and final Brawling calculations only to their canonical results", () => {
+    const attack = historyEvent("attack", 1, {
+      facts: {
+        involvedOutcome: { attackResultId: "attack-1", hit: false },
+        privateCalculation: { defenderDb: 13, lookupTotal: 8, ob: 10, rollTotal: 11 },
+        publicOutcome: { hit: false },
+      },
+      id: "history:attack-1",
+    });
+    const parry = historyEvent("parry", 2, {
+      facts: {
+        involvedOutcome: { attackResultId: "attack-1", success: true },
+        privateCalculation: { combinedParryScore: 12, rollTotal: 11, total: 23 },
+        publicOutcome: { success: true },
+      },
+      id: "history:parry-1",
+      ownerParticipantId: "gladiator",
+    });
+    const controllerRoll = historyEvent("offensive_parry_brawling", 3, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          attackResultId: "attack-1",
+          contestId: "contest-1",
+          controllerParticipantId: "gladiator",
+          controllerTotal: 31,
+          resolved: false,
+        },
+        privateCalculation: {
+          brawlingBaseValue: 12,
+          finalTotal: 31,
+          generalModifier: 0,
+          parryQualityModifier: 2,
+          rollTotal: 17,
+          skillModifier: 0,
+        },
+        publicOutcome: { resolved: false },
+      },
+      id: "history:brawling:gladiator",
+      ownerParticipantId: "gladiator",
+    });
+    const responderRoll = historyEvent("offensive_parry_brawling", 4, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          affectedTotal: 22,
+          attackResultId: "attack-1",
+          contactEstablished: true,
+          contestId: "contest-1",
+          controllerParticipantId: "gladiator",
+          controllerTotal: 31,
+          resolved: true,
+          winnerParticipantId: "gladiator",
+        },
+        privateCalculation: {
+          brawlingBaseValue: 9,
+          finalTotal: 22,
+          generalModifier: 0,
+          parryQualityModifier: 0,
+          rollTotal: 13,
+          skillModifier: 0,
+        },
+        publicOutcome: {
+          contactEstablished: true,
+          resolved: true,
+          winnerParticipantId: "gladiator",
+        },
+      },
+      id: "history:brawling:scyrian",
+      ownerParticipantId: "scyrian",
+    });
+    const result = build({
+      events: [attack, parry, controllerRoll, responderRoll],
+      logEvents: [
+        logEvent("log:attack", 1, {
+          attackResultId: "attack-1",
+          category: "attack",
+          sourceEventIds: [attack.id],
+          summary: "Scyrian cavalry guy attacked The Gladiator. The attack missed.",
+          summaryFacts: { kind: "attack_resolved", outcome: "missed" },
+        }),
+        logEvent("log:parry", 2, {
+          attackResultId: "attack-1",
+          category: "defense",
+          sourceEventIds: [parry.id],
+          summary:
+            "The attack missed, but The Gladiator successfully intercepted the attack. Roll Brawling to establish continued contact.",
+          summaryFacts: {
+            defense: "parry",
+            kind: "defense_resolved",
+            outcome: "succeeded",
+            parryPurpose: "offensive_parry",
+          },
+        }),
+      ],
+      participantId: "gladiator",
+      viewer: "gm",
+    });
+
+    expect(result.entries.map((entry) => entry.heading)).toEqual([
+      "Attack",
+      "Offensive Parry",
+      "Offensive Parry — Brawling",
+    ]);
+    expect(result.entries[0]?.calculations).toEqual([
+      expect.objectContaining({ title: "Attack" }),
+    ]);
+    expect(result.entries[1]?.calculations).toEqual([
+      expect.objectContaining({ title: "Parry" }),
+    ]);
+    expect(result.entries[2]?.calculations).toEqual([
+      expect.objectContaining({ title: "Offensive Parry — Brawling" }),
+    ]);
+    expect(
+      result.entries
+        .slice(0, 2)
+        .flatMap((entry) => entry.calculations)
+        .flatMap((calculation) => calculation.lines),
+    ).not.toContain("Skill: 12");
   });
 
   it("does not render declaration content in live results before publication", () => {

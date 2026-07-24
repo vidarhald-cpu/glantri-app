@@ -42,6 +42,9 @@ the remaining attack-lineage and presentation risks:
 7. **Fixed for live attacks:** distance modifiers are derived from the explicit declared attack
    source; the API and web no longer silently select the first/default weapon when the source is
    absent. Web name matching remains only in the declaration editor preview.
+8. **Fixed:** round-start reset now removes canonical opportunity-keyed attack results from the
+   active participant state while preserving them in the completed-round archive. Tracker marker
+   input can no longer associate a prior-round miss with the new round's A1 facet.
 
 The removed P0 paths were not used by the current main panel according to repository searches, but
 their public authenticated mutation surface was still an authority violation rather than harmless
@@ -54,18 +57,18 @@ The unrelated presentation-source risks below remain cleanup work.
 
 ## 2. Confirmed canonical invariants
 
-| Invariant                                                        | Result                                   | Evidence                                                                                                                                                                                  |
-| ---------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Live task identity comes only from progression projection     | Partial                                  | Normal mutation routes are canonical; `buildCombatRoundEndProcessPlan` still uses `currentCursor` to prefer a participant.                                                                |
-| 2. Invocation comes only from `CurrentActionCommandDescriptor`   | Partial                                  | All supported normal commands are descriptor-authorized, but GM declaration/review and attack payloads still obtain task-sensitive data from inspector/local phase models.                |
-| 3. API validates exact task and execution group                  | Conformant in supported normal mutations | Boundary commands now use the same strict task/group/command identity contract. The four unprojected legacy mutation routes were removed.                                                 |
-| 4. Tracker current ownership comes from required actor and facet | Partial                                  | `buildCombatProgressionTrackerIndex` does this correctly. Several ownerless GM task builders assign `trackerOwner`/`trackerParticipantId` from a cursor or proposal participant.          |
-| 5. Inspector Current task uses the same task                     | Partial                                  | `buildCombatRoundLiveInspectorContext` is canonical. `CombatRoundManagerPanel` falls back to cursor-owner/first task and independently chooses an SU task.                                |
-| 6. Result lifetime uses canonical boundary/opportunity identity  | Conformant for new live attack lineage   | live result lifetime remains boundary-based; each new attack event/result carries its exact opportunity and source identity. Legacy incomplete records are read-only compatibility data.  |
-| 7. UI serializes but does not infer canonical identity           | Conformant for live attack invocation    | GM/player attack handlers serialize opportunity/source/mode from the immutable descriptor. Editable declaration previews may still use draft loadout values before commitment.            |
-| 8. Player-safe projection preserves safe status                  | Conformant in inspected paths            | `combatProgressionProjection/presentation.ts` preserves IDs, state, blockers, ownership when visible, and explicit waiting-for-GM state while sanitizing subjects and detail identities.  |
-| 9. Historical inspection cannot retarget live mutation           | Partial                                  | descriptor task identity cannot be retargeted, but inspector-derived form/loadout state can change the values submitted for the descriptor's participant.                                 |
-| 10. Missing identity fails closed                                | Conformant for live attack lineage       | Incomplete live opportunities are non-executable; attack parsing and authorization require exact source/mode/index identity. Historical-only snapshot fallback cannot authorize commands. |
+| Invariant                                                        | Result                                   | Evidence                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Live task identity comes only from progression projection     | Partial                                  | Normal mutation routes are canonical; `buildCombatRoundEndProcessPlan` still uses `currentCursor` to prefer a participant.                                                                                                                                                                         |
+| 2. Invocation comes only from `CurrentActionCommandDescriptor`   | Partial                                  | All supported normal commands are descriptor-authorized, but GM declaration/review and attack payloads still obtain task-sensitive data from inspector/local phase models.                                                                                                                         |
+| 3. API validates exact task and execution group                  | Conformant in supported normal mutations | Boundary commands now use the same strict task/group/command identity contract. The four unprojected legacy mutation routes were removed.                                                                                                                                                          |
+| 4. Tracker current ownership comes from required actor and facet | Partial                                  | `buildCombatProgressionTrackerIndex` does this correctly. Several ownerless GM task builders assign `trackerOwner`/`trackerParticipantId` from a cursor or proposal participant.                                                                                                                   |
+| 5. Inspector Current task uses the same task                     | Partial                                  | `buildCombatRoundLiveInspectorContext` is canonical. `CombatRoundManagerPanel` falls back to cursor-owner/first task and independently chooses an SU task.                                                                                                                                         |
+| 6. Result lifetime uses canonical boundary/opportunity identity  | Conformant for new live attack lineage   | Live result lifetime remains boundary-based; each new attack event/result carries its exact opportunity and source identity. Round transition archives those results and clears both active legacy and opportunity-keyed attack slots. Legacy incomplete records are read-only compatibility data. |
+| 7. UI serializes but does not infer canonical identity           | Conformant for live attack invocation    | GM/player attack handlers serialize opportunity/source/mode from the immutable descriptor. Editable declaration previews may still use draft loadout values before commitment.                                                                                                                     |
+| 8. Player-safe projection preserves safe status                  | Conformant in inspected paths            | `combatProgressionProjection/presentation.ts` preserves IDs, state, blockers, ownership when visible, and explicit waiting-for-GM state while sanitizing subjects and detail identities.                                                                                                           |
+| 9. Historical inspection cannot retarget live mutation           | Partial                                  | descriptor task identity cannot be retargeted, but inspector-derived form/loadout state can change the values submitted for the descriptor's participant.                                                                                                                                          |
+| 10. Missing identity fails closed                                | Conformant for live attack lineage       | Incomplete live opportunities are non-executable; attack parsing and authorization require exact source/mode/index identity. Historical-only snapshot fallback cannot authorize commands.                                                                                                          |
 
 The central domain authorization helper itself is strong. `authorizeCombatProgressionTask` filters
 boundary, process, stage, kind, expected command, task-specific identities, execution group, task,
@@ -561,3 +564,11 @@ parallel roll therefore becomes a waiting state instead of a stale parent-parry 
 
 Ownerless tracker cleanup and descriptor-keyed GM editing remain unrelated conformance cleanup; the
 new Brawling path does not depend on either.
+
+Tracker round isolation is enforced before marker classification. `M` remains a canonical recorded
+miss for an exact A1/A2 cell. The round-reset defect was in domain state, not React: the active
+participant retained `attackResultsByOpportunity`, after which the GM tracker correctly keyed that
+retained value using the active state's new round number. Round start now clears that active map,
+while the completed-round archive keeps it. Empty cells are non-inspectable, and rendered tracker
+cell keys use the full round/participant/facet identity. No initiative-group sequencing or pending
+modifier work is included in this repair.

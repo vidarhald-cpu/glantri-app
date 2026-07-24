@@ -85,6 +85,9 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("scenarioParticipants={scenarioParticipants}");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).not.toContain('workspaceTab="combat"');
+    expect(source).toContain("GM_COMBAT_REFRESH_INTERVAL_MS");
+    expect(source).toContain('workspaceState.activeTab !== "combat"');
+    expect(source).toContain("await refreshWorkspaceContextWithErrorHandling()");
     expect(source).toContain("Combat Round Manager is a GM tool.");
     expect(source).toContain("Open Player combat");
     expect(source).toContain("No encounter is currently available for combat tools.");

@@ -14,6 +14,7 @@ export * from "./view-models/buildProjectedCombatTrackerModel";
 export * from "./view-models/combatViewRevision";
 export * from "./view-models/combatLogSelection";
 export * from "./view-models/combatTrackerTaskPresentation";
+export * from "./view-models/combatCalculationPresentation";
 export * from "./view-models/currentActionPresentation";
 export * from "./view-models/resolveCombatHistoryPanelSnapshot";
 export * from "./view-models/formatCombatModifier";

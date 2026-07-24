@@ -73,4 +73,48 @@ describe("CombatTracker", () => {
     fireEvent.keyDown(screen.getByLabelText("Combat round timeline grid"), { key: "ArrowRight" });
     expect(onKeyDown).toHaveBeenCalledOnce();
   });
+
+  it("renders a new-round empty cell as disabled after a prior-round attack marker", () => {
+    const onInspect = vi.fn();
+    const { rerender } = render(<CombatTracker model={model} onInspect={onInspect} />);
+    const nextRoundModel: CombatTrackerModel = {
+      ...model,
+      cells: {
+        "2:participant-a:phase_1_actions": {
+          ...model.cells["1:participant-a:select_actions"]!,
+          cellKey: "2:participant-a:phase_1_actions",
+          completed: false,
+          current: false,
+          executable: false,
+          executionGroupIds: [],
+          hoverText: "Aldren · Round 2 · A1: Not opened.",
+          inspectable: false,
+          marker: "·",
+          markerKind: "not_reached",
+          processIds: [],
+          roundNumber: 2,
+          selected: false,
+          stageIds: [],
+          status: "unopened",
+          step: "phase_1_actions",
+          taskIds: [],
+          taskKinds: [],
+        },
+      },
+      currentTaskCellKey: undefined,
+      rounds: [{ currentStep: "select_actions", roundNumber: 2 }],
+      selectedCellKey: undefined,
+      steps: ["phase_1_actions"],
+    };
+
+    rerender(<CombatTracker model={nextRoundModel} onInspect={onInspect} />);
+
+    const emptyCell = screen.getByRole("button", {
+      name: "Aldren · Round 2 · A1: Not opened.",
+    });
+    expect(emptyCell).toBeDisabled();
+    expect(screen.getByText("·")).toBeTruthy();
+    fireEvent.click(emptyCell);
+    expect(onInspect).not.toHaveBeenCalled();
+  });
 });

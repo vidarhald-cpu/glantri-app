@@ -8445,11 +8445,17 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
         },
         involvedOutcome: {
           affectedParticipantId: contest.affectedParticipantId,
+          affectedTotal: resolved.responderRoll?.finalTotal,
           attackResultId: contest.attackResultId,
           brawlingContestResultId: contest.brawlingContestResultId,
           contactEstablished: controllerWon,
           contestId: contest.id,
           controllerParticipantId: contest.controllerParticipantId,
+          controllerTotal: resolved.initiatorRoll?.finalTotal,
+          difference:
+            resolved.initiatorRoll && resolved.responderRoll
+              ? resolved.initiatorRoll.finalTotal - resolved.responderRoll.finalTotal
+              : undefined,
           resolved: resolved.status === "resolved",
           winnerParticipantId: resolved.winnerParticipantId,
         },
@@ -14659,6 +14665,7 @@ function resetCombatRoundParticipantToRoundStart(
   return {
     ...participant,
     attackResults: {},
+    attackResultsByOpportunity: undefined,
     combatExperience: undefined,
     declaration: undefined,
     initiatives: {},

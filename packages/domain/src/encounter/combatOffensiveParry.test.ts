@@ -683,6 +683,54 @@ describe("Offensive Parry rules", () => {
         modifierValue: -2,
       }),
     ]);
+    const resolvedBrawlingTasks = buildCombatProgressionProjection(resolved)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .filter((task) => task.kind === "offensive_parry_brawling_roll");
+    expect(resolvedBrawlingTasks).toEqual([]);
+    const reloaded = combatRoundStateSchema.parse(JSON.parse(JSON.stringify(resolved)));
+    expect(
+      buildCombatProgressionProjection(reloaded)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .filter((task) => task.kind === "offensive_parry_brawling_roll"),
+    ).toEqual([]);
+    expect(
+      resolved.events.filter(
+        (event) =>
+          event.type === "offensive_parry_brawling" &&
+          event.facts.involvedOutcome.resolved === true,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        facts: expect.objectContaining({
+          involvedOutcome: expect.objectContaining({
+            affectedTotal: 20,
+            controllerTotal: 30,
+            difference: 10,
+          }),
+        }),
+      }),
+    ]);
+    expect(() =>
+      recordCombatRoundOffensiveParryBrawlingRoll({
+        attackResultId: contest.attackResultId,
+        command: { commandId: "duplicate-roll-command", createdAt: at },
+        contestId: contest.id,
+        declarationId: contest.declarationId,
+        executionGroupId: "group",
+        opportunityId: contest.opportunityId,
+        opponentParticipantId: "defender",
+        parryResultId: contest.parryResultId,
+        phase: contest.phase,
+        roll: roll("attacker", 20),
+        rollerParticipantId: "attacker",
+        state: resolved,
+        submittedBy: "gm",
+      }),
+    ).toThrow("contest is not awaiting rolls");
     const undone = undoLatestCombatRoundCommand({ state: resolved });
     expect(undone).toBeDefined();
     expect(undone?.continuedContacts).toEqual([]);
@@ -692,6 +740,17 @@ describe("Offensive Parry rules", () => {
       responderRollRecorded: false,
       status: "awaiting_rolls",
     });
+    expect(
+      buildCombatProgressionProjection(undone!)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .filter((task) => task.kind === "offensive_parry_brawling_roll"),
+    ).toEqual([
+      expect.objectContaining({
+        owner: expect.objectContaining({ participantId: "attacker" }),
+      }),
+    ]);
   });
 
   it("excludes only the affected participant's future escape-purpose roll", () => {

@@ -45,6 +45,13 @@ There are no remaining task-integration gaps. Editable rule inputs (declarations
 sources, and GM review values) remain local form state by design, but no handler derives combat
 identity or command eligibility from those forms, the inspector, cursors, or latest-result chains.
 
+Tracker round isolation (2026-07-24): the completed round retains its declaration, initiative,
+attack, defense, damage, and round-end facts, while the new active participant state clears both
+legacy phase attack slots and canonical opportunity-keyed attack results. Tracker cells are keyed
+by round, participant, and facet; an unopened cell is not inspectable. `M` remains the explicit
+recorded-miss outcome and is never carried forward as a pending marker. This presentation repair
+does not change task sequencing or initiative-group behavior.
+
 This matrix now covers both handler authority and canonical attack lineage. Historical records that
 predate opportunity/source/mode persistence may use read-only snapshot compatibility, but that path
 cannot provide a live descriptor or authorize a mutation.
@@ -55,5 +62,11 @@ creates the task regardless of hit outcome. The shared declaration UI binds that
 Phase 1 panel. One round-scoped `flat_db` fact supplies preview, modifier review, persisted
 calculation context, and authoritative effective DB. Player-safe projection preserves the Brawling
 contest identity across the two stable `parallel_all` child tasks; completion of one child leaves
-the other executable. Continued Contact follow-up attacks and round-end maintenance/escape remain
-explicitly deferred and therefore do not yet add task kinds.
+the other executable. The second roll completes the group, leaves no Brawling task projected,
+clears its tracker attention, and advances Current Action from the accepted post-mutation
+projection; undo restores exactly one unresolved child. GM Combat refreshes the active encounter
+revision while open so a final player-owned roll replaces a stale GM descriptor instead of leaving
+an obsolete proxy button. The final contest owns one concise, viewer-sanitized calculation;
+Attack and purpose-tagged parry retain only their exact calculations. Continued Contact follow-up
+attacks and round-end maintenance/escape remain explicitly deferred and therefore do not yet add
+task kinds.

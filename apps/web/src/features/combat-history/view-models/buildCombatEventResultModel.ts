@@ -1,6 +1,10 @@
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 import { formatSignedCombatModifier } from "./formatCombatModifier";
+import {
+  buildCombatRollCalculationPresentation,
+  formatCombatRollCalculationLines,
+} from "./combatCalculationPresentation";
 
 export interface CombatEventResultItemModel {
   calculationRows: CombatEventResultFactRow[];
@@ -200,6 +204,21 @@ function dodgeCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventRe
     eventId: event.id,
     outcome: standardOutcome,
   });
+}
+
+function offensiveParryBrawlingCalculationRows(
+  event: ProjectedCombatHistoryEvent,
+): CombatEventResultFactRow[] {
+  const calculation = buildCombatRollCalculationPresentation({
+    calculation: event.facts.privateCalculation,
+    label: identity(event, "roller") ?? "Brawling",
+  });
+  return calculation
+    ? formatCombatRollCalculationLines(calculation).map((text, index) => ({
+        key: `${event.id}:calculation:brawling:${index}`,
+        text,
+      }))
+    : [];
 }
 
 function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
@@ -540,6 +559,8 @@ export function buildCombatEventResultModel(
             ? attackCalculationRows(event)
             : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
               ? dodgeCalculationRows(event)
+              : event.type === "offensive_parry_brawling"
+                ? offensiveParryBrawlingCalculationRows(event)
               : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
           completenessLabel:
             event.completeness === "complete"

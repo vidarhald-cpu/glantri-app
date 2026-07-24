@@ -134,6 +134,69 @@ describe("combat history projection", () => {
     expect(other).toBeUndefined();
   });
 
+  it("keeps Offensive Parry contest totals involved-safe while hiding the opponent roll", () => {
+    const brawling = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          affectedParticipantId: "borin",
+          affectedTotal: 24,
+          contestId: "contest-1",
+          controllerParticipantId: "aria",
+          controllerTotal: 27,
+          difference: 3,
+          resolved: true,
+          winnerParticipantId: "aria",
+        },
+        publicOutcome: { resolved: true, winnerParticipantId: "aria" },
+        rollerPrivate: {
+          brawlingBaseValue: 15,
+          finalTotal: 27,
+          generalModifier: 0,
+          parryQualityModifier: 1,
+          rollTotal: 11,
+          skillModifier: 0,
+        },
+      },
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      type: "offensive_parry_brawling",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "defender" },
+          { participantId: "aria", role: "roller" },
+          { participantId: "borin", role: "attacker" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    const controller = projectCombatHistoryEvent({
+      event: brawling,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const affected = projectCombatHistoryEvent({
+      event: brawling,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(controller?.facts.privateCalculation).toMatchObject({
+      brawlingBaseValue: 15,
+      finalTotal: 27,
+    });
+    expect(affected?.facts.involvedOutcome).toMatchObject({
+      affectedTotal: 24,
+      controllerTotal: 27,
+      difference: 3,
+    });
+    expect(affected?.facts.privateCalculation).toBeUndefined();
+  });
+
   it("shows an involved phase CE opponent the broad outcome without exact roll facts", () => {
     const combatExperience = event({
       actorParticipantId: "aria",

@@ -39,31 +39,31 @@ The audited implementation has several strong canonical foundations:
 
 Presentation is nevertheless split across these independent paths:
 
-| Concern | Current path |
-|---|---|
-| Canonical live work | domain `CombatProgressionProjection` and its presentation projection |
-| Player-safe live facts | API encounter sanitization plus player-safe combat-history projection |
-| GM tracker | `buildCombatTrackerModel` plus raw statuses, proposals, results, events, and snapshots |
-| Shared/projected tracker | `buildCombatProgressionTrackerModel` and `buildProjectedCombatTrackerModel` |
-| GM Current Action | a large conditional tree in `CombatRoundManagerPanel` combining projected tasks, cursors, proposals, results, and inspector selection |
-| Player Current Action | a separate conditional tree in `ScenarioPlayerCombatPageContent` combining projected tasks with sanitized raw combat state |
-| GM Action Result | selected-cell canonical events followed by several legacy result fallbacks |
-| Player Action Result | fixed-priority selection across health, distance, maneuvers, attacks, initiative, Combat Experience, and local roll state |
-| Latest GM information | a single command-history summary, separate from canonical combat events |
-| Historical inspection | event/snapshot selection and historical panel models |
+| Concern                  | Current path                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Canonical live work      | domain `CombatProgressionProjection` and its presentation projection                                                                  |
+| Player-safe live facts   | API encounter sanitization plus player-safe combat-history projection                                                                 |
+| GM tracker               | `buildCombatTrackerModel` plus raw statuses, proposals, results, events, and snapshots                                                |
+| Shared/projected tracker | `buildCombatProgressionTrackerModel` and `buildProjectedCombatTrackerModel`                                                           |
+| GM Current Action        | a large conditional tree in `CombatRoundManagerPanel` combining projected tasks, cursors, proposals, results, and inspector selection |
+| Player Current Action    | a separate conditional tree in `ScenarioPlayerCombatPageContent` combining projected tasks with sanitized raw combat state            |
+| GM Action Result         | selected-cell canonical events followed by several legacy result fallbacks                                                            |
+| Player Action Result     | fixed-priority selection across health, distance, maneuvers, attacks, initiative, Combat Experience, and local roll state             |
+| Latest GM information    | a single command-history summary, separate from canonical combat events                                                               |
+| Historical inspection    | event/snapshot selection and historical panel models                                                                                  |
 
 The target architecture should retain the canonical foundations and remove the presentation-level reinterpretations incrementally.
 
 ## 3. Panel responsibility matrix
 
-| Panel | Owns | Must not own |
-|---|---|---|
-| Tracker | Compact progression state and recorded outcome by participant/facet; task-derived hover context | Commands, detailed calculations, event selection, or local-current-task inference |
-| Current Action | The one canonical current task (or explicit waiting/conflict state), its context, and its primary action | Historical selection, latest-event fallback, or arbitrary result selection |
-| Progressive Combat Recap | Chronological, viewer-safe major combat facts | Every internal command, validation, proposal edit, or calculation contribution |
-| Detailed Action Result | Details for an explicitly selected recap event/result, or the result explicitly attached to the current process | Selecting an unrelated latest result because the current task has no result yet |
-| Combat Modifiers | Contributions applicable to the selected/current calculation context at the same revision | Progression scheduling or outcome inference |
-| Historical Inspector | Immutable event/snapshot replay for a selected round, participant, or cell | Live commands, live task replacement, or reconstruction using current rules |
+| Panel                    | Owns                                                                                                            | Must not own                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Tracker                  | Compact progression state and recorded outcome by participant/facet; task-derived hover context                 | Commands, detailed calculations, event selection, or local-current-task inference |
+| Current Action           | The one canonical current task (or explicit waiting/conflict state), its context, and its primary action        | Historical selection, latest-event fallback, or arbitrary result selection        |
+| Progressive Combat Recap | Chronological, viewer-safe major combat facts                                                                   | Every internal command, validation, proposal edit, or calculation contribution    |
+| Detailed Action Result   | Details for an explicitly selected recap event/result, or the result explicitly attached to the current process | Selecting an unrelated latest result because the current task has no result yet   |
+| Combat Modifiers         | Contributions applicable to the selected/current calculation context at the same revision                       | Progression scheduling or outcome inference                                       |
+| Historical Inspector     | Immutable event/snapshot replay for a selected round, participant, or cell                                      | Live commands, live task replacement, or reconstruction using current rules       |
 
 The Current Action remains visible and unchanged while the user inspects history. The inspector may have its own heading and detailed result, but it never becomes the live action source.
 
@@ -71,14 +71,14 @@ The Current Action remains visible and unchanged while the user inspects history
 
 ### 4.1 Marker semantics
 
-| Marker | Canonical meaning |
-|---|---|
-| `·` | No recorded outcome. This includes unopened work and **ordinary open/pending work**, including a normal declaration. Hover distinguishes unopened from open/pending. |
-| `?` | Exceptional, currently executable or actively waiting nested/prerequisite work associated with this participant and facet. Hover names the actual required task and required actor. A future planned task never produces `?`. |
-| `✓` | Successfully completed/submitted/reviewed work when no more specific numeric or H/M outcome applies. |
-| `–` | A final unsuccessful, skipped, cancelled, locked-out, or not-applicable outcome. It must be supported by a recorded final fact; it is not a generic unopened marker. |
-| `H` | A recorded attack hit for that attack facet. |
-| `M` | A recorded attack miss for that attack facet. |
+| Marker | Canonical meaning                                                                                                                                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `·`    | No recorded outcome. This includes unopened work and **ordinary open/pending work**, including a normal declaration. Hover distinguishes unopened from open/pending.                                                          |
+| `?`    | Exceptional, currently executable or actively waiting nested/prerequisite work associated with this participant and facet. Hover names the actual required task and required actor. A future planned task never produces `?`. |
+| `✓`    | Successfully completed/submitted/reviewed work when no more specific numeric or H/M outcome applies.                                                                                                                          |
+| `–`    | A final unsuccessful, skipped, cancelled, locked-out, or not-applicable outcome. It must be supported by a recorded final fact; it is not a generic unopened marker.                                                          |
+| `H`    | A recorded attack hit for that attack facet.                                                                                                                                                                                  |
+| `M`    | A recorded attack miss for that attack facet.                                                                                                                                                                                 |
 
 Committed initiative values remain numeric markers. They are not replaced by these symbols.
 
@@ -106,15 +106,15 @@ interface CombatTrackerFacetPresentation {
 
 ### 4.2 Facet semantics
 
-| Facet | Open ordinary pending (`·`) | Exceptional pending (`?`) | Completed | Final negative / not applicable | Historical outcome |
-|---|---|---|---|---|---|
-| DE | Declaration input | Combat Experience difficulty/roll or another explicit declaration prerequisite | Declaration accepted (`✓`) | Explicitly unavailable/cancelled (`–`) | Recorded declaration/CE event |
-| M1/M2 | GM modifier review | A phase choice or nested prerequisite requiring participant attention | Review committed (`✓`) | Explicit no-review/not-applicable (`–`) | Snapshot/event |
-| i1/i2 | Initiative roll window or GM initiative commit | Exceptional phase choice, Combat Experience gate, or repair task | Committed numeric initiative | Explicitly excluded/not participating (`–`) | Committed numeric value/event |
-| A1/A2 | Standard attack or ordinary action awaiting its actor | Feint/Adjust Distance roll or response, Double Attack decision, or other nested action prerequisite | Successful maneuver/non-attack action (`✓`) | Failed maneuver, skipped/cancelled/no attack (`–`) | Attack `H`/`M`, maneuver `✓`/`–`, snapshot/event |
-| P1/P2 | No defense task yet | Required defender/parry response | Defense resolved (`✓`) | Defense not required, declined, failed, or made impossible (`–`) when recorded | Defense event/snapshot |
-| D1/D2 | No damage task yet | Hit location, critical, damage/effects review, or other required post-hit work | Required post-hit chain committed (`✓`) | No post-hit work after miss/parry, or explicit non-applicability (`–`) | Critical/damage event/snapshot |
-| SU | Ordinary participant/effect review or GM Start Next Round readiness | Distance contest input/commit, Health check, Combat Experience, or another nested round-end prerequisite | Required round-end work complete (`✓`) | Recorded not-applicable/skipped review (`–`) | Round-end event/snapshot |
+| Facet | Open ordinary pending (`·`)                                         | Exceptional pending (`?`)                                                                                | Completed                                   | Final negative / not applicable                                                | Historical outcome                               |
+| ----- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| DE    | Declaration input                                                   | Combat Experience difficulty/roll or another explicit declaration prerequisite                           | Declaration accepted (`✓`)                  | Explicitly unavailable/cancelled (`–`)                                         | Recorded declaration/CE event                    |
+| M1/M2 | GM modifier review                                                  | A phase choice or nested prerequisite requiring participant attention                                    | Review committed (`✓`)                      | Explicit no-review/not-applicable (`–`)                                        | Snapshot/event                                   |
+| i1/i2 | Initiative roll window or GM initiative commit                      | Exceptional phase choice, Combat Experience gate, or repair task                                         | Committed numeric initiative                | Explicitly excluded/not participating (`–`)                                    | Committed numeric value/event                    |
+| A1/A2 | Standard attack or ordinary action awaiting its actor               | Feint/Adjust Distance roll or response, Double Attack decision, or other nested action prerequisite      | Successful maneuver/non-attack action (`✓`) | Failed maneuver, skipped/cancelled/no attack (`–`)                             | Attack `H`/`M`, maneuver `✓`/`–`, snapshot/event |
+| P1/P2 | No defense task yet                                                 | Required defender/parry response                                                                         | Defense resolved (`✓`)                      | Defense not required, declined, failed, or made impossible (`–`) when recorded | Defense event/snapshot                           |
+| D1/D2 | No damage task yet                                                  | Hit location, critical, damage/effects review, or other required post-hit work                           | Required post-hit chain committed (`✓`)     | No post-hit work after miss/parry, or explicit non-applicability (`–`)         | Critical/damage event/snapshot                   |
+| SU    | Ordinary participant/effect review or GM Start Next Round readiness | Distance contest input/commit, Health check, Combat Experience, or another nested round-end prerequisite | Required round-end work complete (`✓`)      | Recorded not-applicable/skipped review (`–`)                                   | Round-end event/snapshot                         |
 
 The table defines presentation attention, not domain execution strategy. A product decision can move a task between ordinary and exceptional without changing combat progression.
 
@@ -136,6 +136,25 @@ Hover text has one canonical source:
 4. unopened: a facet-specific `Not opened` message.
 
 Generic text such as `current task` is not sufficient. Event-derived hover text must not override a live task unless the event is the result explicitly attached to that task/process.
+
+### 4.5 Round isolation
+
+Every tracker fact is keyed by round number, participant ID, and facet before marker
+classification. A task may populate only the round declared by its progression projection. A
+result, event, snapshot, initiative, or step status may populate only the round that persisted that
+fact. In particular, `M` continues to mean a recorded attack miss; it is never a pending-action or
+compatibility marker.
+
+Starting a new round archives the completed participant state and clears all active-round
+declarations, initiatives, legacy phase attack slots, and opportunity-keyed attack results. The
+active Declaration round therefore contains no M1/i1/A1/P1/D1/M2/i2/A2/P2/D2/SU outcome until a
+canonical fact for that round exists. Tracker construction must not apply the active round number
+to a previous round's “latest” fact.
+
+An unopened cell without a task or recorded result is not inspectable. Historical cells remain
+inspectable under their recorded round, while selecting them never changes Current Action. Tracker
+cell identity and rendered React keys include round, participant, and facet so a newly opened round
+cannot reuse the previous round's rendered cell state.
 
 ## 5. Current Action contract
 
@@ -194,30 +213,30 @@ The descriptor is constructed with the rendered task. The click handler does not
 
 ### 5.2 Task context requirements
 
-| Task kind(s) | Required context | Required actor and proxy | Expected next work |
-|---|---|---|---|
-| `submit_declaration` | Declarer, declaration boundary, declaration state | Participant; GM proxy/edit only where authorized | Remaining declarations or GM boundary transition |
-| `combat_experience` | Participant, CE action/difficulty, whether a roll is required | Participant; GM proxy where authorized | Declaration/initiative/round-end process resumes |
-| `modifier_review` | Phase, reviewed participant, modifier scope | GM only | Next review or initiative boundary transition |
-| `roll_initiative` | Participant, phase, initiative calculation label | Participant; GM proxy where authorized | Remaining rolls/choices, then GM commit |
-| `commit_initiative` | Phase, pending choices/roll state, intended phase-resolution opening | GM only | Committed execution order and phase resolution |
-| `double_attack_decision` | Actor, target if visible, first attack outcome, Continue/Cancel choice | Declaring participant; GM proxy where authorized | Second standard attack or process completion |
-| `attack` | Attacker, target, phase, opportunity, weapon/mode | Attacker; GM proxy where authorized | Defense, post-hit work, or process completion |
-| `parry` | Attack, attacker, defender, weapon/shield context | Defender; GM proxy where authorized | Hit location/post-hit work or process completion |
-| `hit_location` | Attacker, target, attack result, location input reason | Current authorized actor/GM per existing rule | Critical or damage review |
-| `critical` | Attacker, target, hit/location, critical type | Current authorized actor/GM per existing rule | Damage review |
-| `damage_review` | Attack, target, critical/damage proposal, effects | GM only where currently required | Process completion |
-| `feint_attacker_roll`, `feint_defender_roll` | Feint method, actor, target, selected skill, required roller | Named roller; GM proxy where authorized | Other roll or proposal commit |
-| `feint_commit` | Actor, target, proposal result and broad outcome | GM only | Maneuver completion; later Phase 2 attack remains boundary-locked |
-| `adjust_distance_response` | Actor, defender, current/requested distance | Defender; GM proxy where authorized | Allow resolution or opposed adjustment/rolls |
-| `adjust_distance_adjustment` | Pair, current/requested distance, opposed state | GM only | Opposed Dodge rolls |
-| `adjust_distance_attacker_roll`, `adjust_distance_defender_roll` | Pair, current/requested distance, Dodge skill, required roller | Named roller; GM proxy where authorized | Other roll or proposal commit |
-| `adjust_distance_commit` | Pair, proposal broad outcome, old/requested distance | GM only | Distance change/final outcome; later Phase 2 attack remains boundary-locked |
-| `distance_roll` | Pair, current/requested distance, required roller | Named participant; GM proxy where authorized | Other roll or distance commit |
-| `distance_commit` | Pair, contest broad outcome, old/new distance | GM only | Next pair/round-end child process |
-| `health_review` | Participant, health reason, stat/skill and required roll | Participant; GM proxy where authorized | Participant/effect review continues |
-| `participant_review`, `effect_review`, `round_end_prepare` | Participant or effect being reviewed, round-end reason | GM or participant according to existing command | Next ordered round-end process |
-| `gm_advance_boundary` | Current boundary, target boundary, completed prerequisites | GM only; never participant proxy | Target boundary/process |
+| Task kind(s)                                                     | Required context                                                       | Required actor and proxy                         | Expected next work                                                          |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `submit_declaration`                                             | Declarer, declaration boundary, declaration state                      | Participant; GM proxy/edit only where authorized | Remaining declarations or GM boundary transition                            |
+| `combat_experience`                                              | Participant, CE action/difficulty, whether a roll is required          | Participant; GM proxy where authorized           | Declaration/initiative/round-end process resumes                            |
+| `modifier_review`                                                | Phase, reviewed participant, modifier scope                            | GM only                                          | Next review or initiative boundary transition                               |
+| `roll_initiative`                                                | Participant, phase, initiative calculation label                       | Participant; GM proxy where authorized           | Remaining rolls/choices, then GM commit                                     |
+| `commit_initiative`                                              | Phase, pending choices/roll state, intended phase-resolution opening   | GM only                                          | Committed execution order and phase resolution                              |
+| `double_attack_decision`                                         | Actor, target if visible, first attack outcome, Continue/Cancel choice | Declaring participant; GM proxy where authorized | Second standard attack or process completion                                |
+| `attack`                                                         | Attacker, target, phase, opportunity, weapon/mode                      | Attacker; GM proxy where authorized              | Defense, post-hit work, or process completion                               |
+| `parry`                                                          | Attack, attacker, defender, weapon/shield context                      | Defender; GM proxy where authorized              | Hit location/post-hit work or process completion                            |
+| `hit_location`                                                   | Attacker, target, attack result, location input reason                 | Current authorized actor/GM per existing rule    | Critical or damage review                                                   |
+| `critical`                                                       | Attacker, target, hit/location, critical type                          | Current authorized actor/GM per existing rule    | Damage review                                                               |
+| `damage_review`                                                  | Attack, target, critical/damage proposal, effects                      | GM only where currently required                 | Process completion                                                          |
+| `feint_attacker_roll`, `feint_defender_roll`                     | Feint method, actor, target, selected skill, required roller           | Named roller; GM proxy where authorized          | Other roll or proposal commit                                               |
+| `feint_commit`                                                   | Actor, target, proposal result and broad outcome                       | GM only                                          | Maneuver completion; later Phase 2 attack remains boundary-locked           |
+| `adjust_distance_response`                                       | Actor, defender, current/requested distance                            | Defender; GM proxy where authorized              | Allow resolution or opposed adjustment/rolls                                |
+| `adjust_distance_adjustment`                                     | Pair, current/requested distance, opposed state                        | GM only                                          | Opposed Dodge rolls                                                         |
+| `adjust_distance_attacker_roll`, `adjust_distance_defender_roll` | Pair, current/requested distance, Dodge skill, required roller         | Named roller; GM proxy where authorized          | Other roll or proposal commit                                               |
+| `adjust_distance_commit`                                         | Pair, proposal broad outcome, old/requested distance                   | GM only                                          | Distance change/final outcome; later Phase 2 attack remains boundary-locked |
+| `distance_roll`                                                  | Pair, current/requested distance, required roller                      | Named participant; GM proxy where authorized     | Other roll or distance commit                                               |
+| `distance_commit`                                                | Pair, contest broad outcome, old/new distance                          | GM only                                          | Next pair/round-end child process                                           |
+| `health_review`                                                  | Participant, health reason, stat/skill and required roll               | Participant; GM proxy where authorized           | Participant/effect review continues                                         |
+| `participant_review`, `effect_review`, `round_end_prepare`       | Participant or effect being reviewed, round-end reason                 | GM or participant according to existing command  | Next ordered round-end process                                              |
+| `gm_advance_boundary`                                            | Current boundary, target boundary, completed prerequisites             | GM only; never participant proxy                 | Target boundary/process                                                     |
 
 `participant_review` exists in the task vocabulary but is not consistently emitted by the current composed round-end plan. The implementation should either emit it where it has distinct user work or remove it from presentation mappings after confirming it is unused; UI code must not invent it.
 
@@ -375,21 +394,47 @@ Outcome      <plain-language outcome>
 
 An optional collapsed `Contribution details` section lists canonical contribution ID, label, value, scope, and applicability context for fields the viewer may see. It is never used to recompute the total.
 
-| Calculation | Standard mapping | Intentional difference |
-|---|---|---|
-| Initiative | Initiative base; modifiers; die; total; committed rank/order | Rank exists only after commit |
-| Attack | Skill/OB base; attacker modifiers and opposing DB/Parry as labeled terms; die; lookup/result; H/M | Has an opposing defense term and table lookup |
-| Parry | Parry base; modifiers; die; total; success/failure | Defender-owned calculation |
-| Dodge | Dodge skill; modifiers; die; total; waiting/win/loss | Opposed contests can show two sanitized calculation blocks |
-| Feint | Selected attack/defense skill; modifiers; die; total; contest outcome | Attacker and defender may use different skills/stats |
-| Adjust Distance | Dodge; roll-local adjustment/modifiers; die; total; contest/distance outcome | Allow path has `Die roll: Not required` |
-| Distance control | Dodge; modifiers; die; total; contest/distance outcome | Pair process, sometimes suppressed by in-round contest |
-| Health | Health/Constitution base; modifiers; die; result; health outcome | Difficulty/reason is outcome context |
-| Combat Experience | Skill/base; modifiers/difficulty; die or `Not required`; result; CE outcome | Some paths require no roll |
-| Critical | Critical base/type; modifiers; dice; table result; critical outcome | Uses its canonical critical dice/table |
-| Damage/effects | Damage base; modifiers/mitigation; relevant dice or `Not required`; committed amount/effects; outcome | May be a multi-step table/effect calculation |
+| Calculation       | Standard mapping                                                                                      | Intentional difference                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Initiative        | Initiative base; modifiers; die; total; committed rank/order                                          | Rank exists only after commit                              |
+| Attack            | Skill/OB base; attacker modifiers and opposing DB/Parry as labeled terms; die; lookup/result; H/M     | Has an opposing defense term and table lookup              |
+| Parry             | Parry base; modifiers; die; total; success/failure                                                    | Defender-owned calculation                                 |
+| Dodge             | Dodge skill; modifiers; die; total; waiting/win/loss                                                  | Opposed contests can show two sanitized calculation blocks |
+| Feint             | Selected attack/defense skill; modifiers; die; total; contest outcome                                 | Attacker and defender may use different skills/stats       |
+| Adjust Distance   | Dodge; roll-local adjustment/modifiers; die; total; contest/distance outcome                          | Allow path has `Die roll: Not required`                    |
+| Distance control  | Dodge; modifiers; die; total; contest/distance outcome                                                | Pair process, sometimes suppressed by in-round contest     |
+| Health            | Health/Constitution base; modifiers; die; result; health outcome                                      | Difficulty/reason is outcome context                       |
+| Combat Experience | Skill/base; modifiers/difficulty; die or `Not required`; result; CE outcome                           | Some paths require no roll                                 |
+| Critical          | Critical base/type; modifiers; dice; table result; critical outcome                                   | Uses its canonical critical dice/table                     |
+| Damage/effects    | Damage base; modifiers/mitigation; relevant dice or `Not required`; committed amount/effects; outcome | May be a multi-step table/effect calculation               |
 
 Current intentional rule differences should remain. Current accidental presentation inconsistencies should not: attack uses an inline formula while Dodge uses five labeled rows, GM and Player have duplicate formatter branches, and generic events sometimes render humanized raw object keys. Standardization changes formatting only, never formulas.
+
+### 8.1 Implemented Offensive Parry Brawling subset
+
+Offensive Parry Brawling now uses the reusable combat roll/contest presentation model without
+claiming that every combat calculation has migrated. One roll displays:
+
+```text
+Skill: <base value used by the roll>
+Modifiers: <signed applied total>
+- <non-zero modifier source>: <signed value>
+Effective skill: <skill + modifiers>
+Die roll: <canonical open-ended roll total>
+Total: <persisted final total>
+```
+
+The final contest displays both sides to the GM, followed by the signed difference and winner. The
+difference convention is controller total minus affected-participant total; zero is a tie under the
+existing strictly-higher rule. An involved player receives their own full concise roll, the
+opponent's total, the difference, and the broad result. The opponent's die and modifier breakdown
+remain private.
+
+Calculation attachment is identity- and result-kind-specific: Attack receives the attack
+calculation, purpose-tagged Offensive Parry receives the parry calculation, and the final
+`Offensive Parry — Brawling` result receives one contested calculation keyed by contest result
+identity. Sharing an `attackResultId` is lineage, not permission to copy every child calculation
+onto every parent result.
 
 ## 9. Visibility and sanitization
 
@@ -406,22 +451,22 @@ Visibility is field-level. An event can be visible while its die, exact contribu
 
 ### 9.2 Matrix
 
-| Field/fact | GM | Actor/roller | Involved target/opponent | Aware third party | Hidden viewer |
-|---|---|---|---|---|---|
-| Task/event ID and completion status | Full | Safe stable ID/status | Safe stable ID/status when involved | Broad status if perceptible | Omit |
-| Action kind, phase, broad reason | Full | Full | Full when involved | Broad visible action | Omit |
-| Actor/target identity | Full | Visible identities or fallback | Visible identities or fallback | Only identities already visible | Fallback or omit |
-| Required responder | Full | Visible or safe fallback | Visible or safe fallback | Only if perceptible | Omit |
-| Broad success/failure, hit/miss, distance change | Full | Full | Full | If perceptible | Omit |
-| Own die and calculation | Full | Full | Not unless they rolled it | No | No |
-| Other participant's exact die/private calculation | Full | No, except an explicitly public rule | No | No | No |
-| Roll-recorded/completion boolean | Full | Yes | Yes when needed for involved status | Broad status if perceptible | No |
-| Proposal status and public outcome | Full | Safe involved fields | Safe involved fields | Broad final outcome only | No |
-| Proposal arithmetic/private adjustments | Full | Only own/explicitly shared facts | Only own/explicitly shared facts | No | No |
-| Weapon/skill | Full | Own and visibly used facts | If perceptible | If perceptible | Generic action wording |
-| Current/requested distance | Full | When involved | When involved | If perceptible | No |
-| Damage/effects | Full | Own/visible detail | Affected visible detail | Broad perceptible outcome | No |
-| GM notes, blockers, diagnostics | Full | Sanitized waiting reason only | Sanitized waiting reason only | No | No |
+| Field/fact                                        | GM   | Actor/roller                         | Involved target/opponent            | Aware third party               | Hidden viewer          |
+| ------------------------------------------------- | ---- | ------------------------------------ | ----------------------------------- | ------------------------------- | ---------------------- |
+| Task/event ID and completion status               | Full | Safe stable ID/status                | Safe stable ID/status when involved | Broad status if perceptible     | Omit                   |
+| Action kind, phase, broad reason                  | Full | Full                                 | Full when involved                  | Broad visible action            | Omit                   |
+| Actor/target identity                             | Full | Visible identities or fallback       | Visible identities or fallback      | Only identities already visible | Fallback or omit       |
+| Required responder                                | Full | Visible or safe fallback             | Visible or safe fallback            | Only if perceptible             | Omit                   |
+| Broad success/failure, hit/miss, distance change  | Full | Full                                 | Full                                | If perceptible                  | Omit                   |
+| Own die and calculation                           | Full | Full                                 | Not unless they rolled it           | No                              | No                     |
+| Other participant's exact die/private calculation | Full | No, except an explicitly public rule | No                                  | No                              | No                     |
+| Roll-recorded/completion boolean                  | Full | Yes                                  | Yes when needed for involved status | Broad status if perceptible     | No                     |
+| Proposal status and public outcome                | Full | Safe involved fields                 | Safe involved fields                | Broad final outcome only        | No                     |
+| Proposal arithmetic/private adjustments           | Full | Only own/explicitly shared facts     | Only own/explicitly shared facts    | No                              | No                     |
+| Weapon/skill                                      | Full | Own and visibly used facts           | If perceptible                      | If perceptible                  | Generic action wording |
+| Current/requested distance                        | Full | When involved                        | When involved                       | If perceptible                  | No                     |
+| Damage/effects                                    | Full | Own/visible detail                   | Affected visible detail             | Broad perceptible outcome       | No                     |
+| GM notes, blockers, diagnostics                   | Full | Sanitized waiting reason only        | Sanitized waiting reason only       | No                              | No                     |
 
 Players may see declarations, attempts, and broad outcomes for combatants/events they are aware of. Involved players must clearly see what is being done to them. Concealment still wins over identity disclosure.
 
