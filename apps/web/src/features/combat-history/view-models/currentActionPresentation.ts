@@ -186,6 +186,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   adjust_distance_attack: "Adjust Distance-Attack",
   attack: "Attack",
   combat_experience: "Combat Experience",
+  continued_contact_distance_control: "Continued Contact",
   declaration: "Declaration",
   distance: "Distance Control",
   double_attack: "Double Attack",
@@ -420,6 +421,9 @@ function summaryFor(input: {
       return `${actor} needs a Combat Experience roll.`;
     case "distance_roll":
     case "distance_commit":
+      if (input.task.presentationContext?.actionKind === "continued_contact_distance_control") {
+        return `${actor} is choosing engagement distance${target ? ` with ${target}` : ""} because Continued Contact is active.`;
+      }
       return `${actor} is resolving distance control${target ? ` with ${target}` : ""}.`;
     case "double_attack_decision":
       return `${actor} has completed the first attack.`;
@@ -547,7 +551,9 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "distance_roll":
       return "Roll distance control";
     case "distance_commit":
-      return "Apply distance control";
+      return task.presentationContext?.actionKind === "continued_contact_distance_control"
+        ? "Choose engagement distance"
+        : "Apply distance control";
     case "health_review":
       return "Roll Health";
     case "effect_review":
@@ -616,7 +622,9 @@ function requiredNowFor(
     case "distance_roll":
       return "Roll distance control.";
     case "distance_commit":
-      return "Apply the distance result.";
+      return task.presentationContext?.actionKind === "continued_contact_distance_control"
+        ? "Choose engagement distance."
+        : "Apply the distance result.";
     case "health_review":
       return "Roll Health.";
     case "effect_review":
@@ -825,7 +833,10 @@ export function buildCurrentActionPresentation(
       viewerMayInvoke,
     },
     processId: task.processId,
-    reason: "",
+    reason:
+      task.presentationContext?.actionKind === "continued_contact_distance_control"
+        ? (task.presentationContext.reason ?? "")
+        : "",
     requiredActor: required,
     requiredNow,
     skill: task.presentationContext?.skill?.label

@@ -132,6 +132,7 @@ import {
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   backOutPhaseAttackOnServer,
+  chooseRoundEndContinuedContactDistanceOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
   loadCombatHistory,
@@ -1071,6 +1072,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [adjustDistanceResponse, setAdjustDistanceResponse] = useState<"allow" | "oppose">(
     "oppose",
   );
+  const [continuedContactDistanceChoice, setContinuedContactDistanceChoice] = useState("");
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
@@ -1604,7 +1606,9 @@ export default function ScenarioPlayerCombatPageContent({
     (task) => task.kind === "submit_declaration",
   );
   const selectedDistanceControlProgressionTask = selectedProgressionTasks.find(
-    (task) => task.kind === "distance_roll" && task.state === "executable",
+    (task) =>
+      (task.kind === "distance_roll" || task.kind === "distance_commit") &&
+      task.state === "executable",
   );
   const selectedHealthProgressionTask = selectedProgressionTasks.find(
     (task) => task.kind === "health_review" && task.state === "executable",
@@ -1782,15 +1786,28 @@ export default function ScenarioPlayerCombatPageContent({
       return undefined;
     }
 
-    const proposal = proposals.find(
-      (candidate) =>
-        candidate.accepted &&
+    const proposal = proposals.find((candidate) => {
+      if (
+        !candidate.accepted ||
+        candidate.id !== selectedDistanceControlProgressionTask.identity.proposalId
+      ) {
+        return false;
+      }
+      if (selectedDistanceControlProgressionTask.kind === "distance_commit") {
+        return (
+          candidate.controlMode === "continued_contact" &&
+          candidate.controllerParticipantId === participantId &&
+          candidate.status === "review_ready"
+        );
+      }
+      return (
         candidate.requiresContest &&
         ((candidate.participantAId === participantId &&
           candidate.participantA.status === "pending") ||
           (candidate.participantBId === participantId &&
-            candidate.participantB.status === "pending")),
-    );
+            candidate.participantB.status === "pending"))
+      );
+    });
 
     if (!proposal) {
       return undefined;
@@ -1960,8 +1977,7 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const currentInitiativeGroupId =
     combatHistory?.progression?.executionOrder?.currentInitiativeGroupId;
-  const currentInitiativeValue =
-    combatHistory?.progression?.executionOrder?.currentInitiativeValue;
+  const currentInitiativeValue = combatHistory?.progression?.executionOrder?.currentInitiativeValue;
   const liveCombatModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
@@ -2449,6 +2465,47 @@ export default function ScenarioPlayerCombatPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll distance control.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function chooseContinuedContactDistance(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.proposalId ||
+      !descriptor.participantId ||
+      continuedContactDistanceChoice.trim().length === 0
+    ) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+    try {
+      const { encounter, participant } = await chooseRoundEndContinuedContactDistanceOnServer({
+        chosenDistance: Number.parseInt(continuedContactDistanceChoice, 10),
+        distanceProposalId: descriptor.proposalId,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        pairId: descriptor.pairId!,
+        scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
+      });
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      acceptEncounterSession(encounter);
+      setContinuedContactDistanceChoice("");
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to choose engagement distance.",
       );
     } finally {
       setSavingCombatContext(false);
@@ -3357,6 +3414,8 @@ export default function ScenarioPlayerCombatPageContent({
       ? (selectedDistanceControlProposal.proposal.appliedDistance ??
         selectedDistanceControlProposal.proposal.proposedDistance)
       : undefined;
+  const selectedContinuedContactDistanceChoice =
+    selectedDistanceControlProposal?.proposal.controlMode === "continued_contact";
   const selectedDistanceControlProgressText = selectedDistanceControlProposal
     ? formatDistanceControlProgressLine({
         opponentStatus: selectedDistanceControlProposal.opponentSide.status,
@@ -3491,6 +3550,9 @@ export default function ScenarioPlayerCombatPageContent({
     savingCombatContext ||
     !displayedParticipant ||
     Boolean(declarationTargetValidationMessage || currentAttackSourceValidationMessage) ||
+    (currentActionPresentation?.taskKind === "distance_commit" &&
+      currentActionPresentation.actionKind === "continued_contact_distance_control" &&
+      continuedContactDistanceChoice.trim().length === 0) ||
     (currentActionPresentation?.taskKind === "submit_declaration" &&
       (!hasMeaningfulDeclaration || !targetValidation.valid));
   function invokePlayerCurrentAction(candidate?: CurrentActionCommandDescriptor) {
@@ -3518,6 +3580,9 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_round_end_distance_control":
         void rollDistanceControl(descriptor);
+        return;
+      case "commit_round_end_distance_control":
+        void chooseContinuedContactDistance(descriptor);
         return;
       case "decide_double_attack_phase2":
         void decideDoubleAttackPhase2(descriptor);
@@ -4225,31 +4290,53 @@ export default function ScenarioPlayerCombatPageContent({
               ) : null}
               {selectedDistanceControlProposal ? (
                 <section style={panelStyle}>
-                  <strong>Distance control</strong>
+                  <strong>
+                    {selectedContinuedContactDistanceChoice
+                      ? "Continued Contact — engagement distance"
+                      : "Distance control"}
+                  </strong>
                   <div style={{ color: "#4f5f57", display: "grid", gap: "0.25rem" }}>
                     <div>
                       {selectedDistanceControlProposal.ownLabel} ↔{" "}
                       {selectedDistanceControlProposal.opponentLabel}
                     </div>
-                    <div>
-                      Current {selectedDistanceControlProposal.proposal.currentDistance} · your
-                      preference:{" "}
-                      {selectedDistanceControlProposal.ownSide.desiredDistance ?? "no preference"}
-                    </div>
-                    <div>
-                      Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} · Gen/Fatigue{" "}
-                      {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
-                    </div>
-                    <div>
-                      {formatDistanceControlOpponentStatus({
-                        opponentLabel: selectedDistanceControlProposal.opponentLabel,
-                        opponentStatus: selectedDistanceControlProposal.opponentSide.status,
-                        proposalStatus: selectedDistanceControlProposal.proposal.status,
-                      })}
-                    </div>
-                    {selectedDistanceControlProgressText ? (
-                      <div>{selectedDistanceControlProgressText}</div>
-                    ) : null}
+                    {selectedContinuedContactDistanceChoice ? (
+                      <>
+                        <div>
+                          Continued Contact is active. You control this pair&apos;s engagement
+                          distance for the next round.
+                        </div>
+                        <div>
+                          Current distance:{" "}
+                          {selectedDistanceControlProposal.proposal.currentDistance}
+                        </div>
+                        <div>No opposing distance roll is required.</div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          Current {selectedDistanceControlProposal.proposal.currentDistance} · your
+                          preference:{" "}
+                          {selectedDistanceControlProposal.ownSide.desiredDistance ??
+                            "no preference"}
+                        </div>
+                        <div>
+                          Dodge {selectedDistanceControlProposal.ownSide.dodgeSkillTotal} ·
+                          Gen/Fatigue{" "}
+                          {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
+                        </div>
+                        <div>
+                          {formatDistanceControlOpponentStatus({
+                            opponentLabel: selectedDistanceControlProposal.opponentLabel,
+                            opponentStatus: selectedDistanceControlProposal.opponentSide.status,
+                            proposalStatus: selectedDistanceControlProposal.proposal.status,
+                          })}
+                        </div>
+                        {selectedDistanceControlProgressText ? (
+                          <div>{selectedDistanceControlProgressText}</div>
+                        ) : null}
+                      </>
+                    )}
                     {selectedDistanceControlCommittedDistance !== undefined ? (
                       <div style={{ color: "#3f5f46" }}>
                         Distance control committed: distance{" "}
@@ -4263,7 +4350,23 @@ export default function ScenarioPlayerCombatPageContent({
                 disabled={currentActionDomainValidationDisabled}
                 onDeclareAction={invokePlayerCurrentAction}
                 preActionControls={
-                  selectedAdjustDistanceProposal?.status === "awaiting_defender_response" ? (
+                  selectedContinuedContactDistanceChoice ? (
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      <strong>Engagement distance</strong>
+                      <select
+                        disabled={savingCombatContext}
+                        onChange={(event) => setContinuedContactDistanceChoice(event.target.value)}
+                        value={continuedContactDistanceChoice}
+                      >
+                        <option value="">Choose distance</option>
+                        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                          <option key={distance} value={distance}>
+                            Distance {distance}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : selectedAdjustDistanceProposal?.status === "awaiting_defender_response" ? (
                     <label style={{ display: "grid", gap: "0.25rem" }}>
                       <strong>Defender response</strong>
                       <select

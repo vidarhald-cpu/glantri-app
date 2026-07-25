@@ -1016,6 +1016,54 @@ describe("CurrentActionPresentation", () => {
     );
   });
 
+  it("presents Continued Contact distance ownership to the controller and waiting opponent", () => {
+    const distanceTask = task({
+      actionKind: "continued_contact_distance_control",
+      actor: aria,
+      command: "commit_round_end_distance_control",
+      currentDistance: 4,
+      kind: "distance_commit",
+      owner: aria,
+      reason: "Continued Contact is active.",
+      target: borin,
+    });
+    const projected = progression({ boundary: "round_end", tasks: [distanceTask] });
+    const controller = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-distance",
+      progression: projected,
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+    const opponent = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-distance",
+      progression: projected,
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+
+    expect(controller).toMatchObject({
+      actionName: "Continued Contact",
+      primaryAction: {
+        enabled: true,
+        label: "Choose engagement distance",
+        viewerMayInvoke: true,
+      },
+      reason: "Continued Contact is active.",
+      requiredNow: "Choose engagement distance.",
+      summary:
+        "Aria is choosing engagement distance with Borin because Continued Contact is active.",
+    });
+    expect(opponent).toMatchObject({
+      primaryAction: {
+        enabled: false,
+        label: "Waiting for another combatant",
+        viewerMayInvoke: false,
+      },
+      summary:
+        "Aria is choosing engagement distance with Borin because Continued Contact is active.",
+    });
+  });
+
   it.each([
     [
       "phase2_resolution",

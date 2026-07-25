@@ -132,6 +132,44 @@ describe("buildCombatEventResultModel", () => {
     ]);
   });
 
+  it("presents a Continued Contact controller choice with its prior and chosen distance", () => {
+    const model = buildCombatEventResultModel([
+      event("distance_control_applied", 1, {
+        facts: {
+          involvedOutcome: {
+            appliedDistance: 2,
+            previousDistance: 4,
+            reason: "continued_contact",
+          },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "Scyrian cavalry guy",
+            participantId: "controller",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "affected",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+      }),
+    ]);
+
+    expect(model.items[0]).toMatchObject({
+      outcomeRows: [
+        { text: "Applied distance: 2" },
+        { text: "Previous distance: 4" },
+        { text: "Reason: Continued Contact" },
+      ],
+      summary: "Scyrian cavalry guy chose the next-round engagement distance.",
+    });
+  });
+
   it("uses the concise Dodge calculation structure for an in-round distance roll", () => {
     const model = buildCombatEventResultModel([
       event("adjust_distance_roll", 1, {

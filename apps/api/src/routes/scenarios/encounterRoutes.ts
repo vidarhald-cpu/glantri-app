@@ -780,13 +780,22 @@ function parseRoundEndHealthCheckRollBody(body: unknown): ParsedCombatTaskComman
 }
 
 function parseRoundEndDistanceControlCommitBody(body: unknown): ParsedCombatTaskCommandIdentity & {
+  chosenDistance?: number;
   distanceOverride?: number;
   distanceProposalId: string;
   pairId: string;
+  scenarioParticipantId?: string;
 } {
   const value = parseBodyObject(body, "Round-end distance control commit payload");
   const distanceProposalId = parseNonEmptyString(value.distanceProposalId, "distanceProposalId");
+  const chosenDistance = value.chosenDistance;
   const distanceOverride = value.distanceOverride;
+  if (
+    chosenDistance !== undefined &&
+    (typeof chosenDistance !== "number" || !Number.isFinite(chosenDistance))
+  ) {
+    throw new Error("chosenDistance must be a number.");
+  }
   if (
     distanceOverride !== undefined &&
     (typeof distanceOverride !== "number" || !Number.isFinite(distanceOverride))
@@ -795,9 +804,14 @@ function parseRoundEndDistanceControlCommitBody(body: unknown): ParsedCombatTask
   }
   return {
     ...parseCombatTaskCommandIdentity(value),
+    chosenDistance: typeof chosenDistance === "number" ? chosenDistance : undefined,
     distanceOverride: typeof distanceOverride === "number" ? distanceOverride : undefined,
     distanceProposalId,
     pairId: parseNonEmptyString(value.pairId, "pairId"),
+    scenarioParticipantId:
+      value.scenarioParticipantId === undefined
+        ? undefined
+        : parseNonEmptyString(value.scenarioParticipantId, "scenarioParticipantId"),
   };
 }
 
@@ -5945,20 +5959,51 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           { campaignService, scenarioService },
           { scenarioId, userId: user.id, userRoles: user.roles },
         );
-        if (!access || access.mode !== "gm") {
-          return reply.code(403).send({ error: "Only GM users can commit distance control." });
+        if (!access) {
+          return reply.code(404).send({ error: "Encounter not found." });
         }
         const body = parseRoundEndDistanceControlCommitBody(request.body);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = body.scenarioParticipantId
+          ? resolveCombatParticipantForRequest({
+              accessMode: access.mode,
+              encounter,
+              requestedParticipantId: body.scenarioParticipantId,
+              scenarioParticipants,
+              userId: user.id,
+            })
+          : undefined;
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
+        const gmAuthorizedOperation = access.mode === "gm";
+        if (!gmAuthorizedOperation && (!scenarioParticipant || !encounterParticipant)) {
+          return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        }
+        if (
+          !gmAuthorizedOperation &&
+          (scenarioParticipant?.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
         const roundState = initializeMaterializedCombatRoundState({
           encounter,
           scenarioParticipants,
         });
         const authorization = authorizeCombatTaskCommand({
           authorization: {
-            actor: { kind: "gm" },
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant!.id },
             commandType: "commit_round_end_distance_control",
             pairId: body.pairId,
+            participantId: encounterParticipant?.id,
             proposalId: body.distanceProposalId,
           },
           encounterRevision: encounter.updatedAt,
@@ -5970,9 +6015,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
         const submittedAt = new Date().toISOString();
         const committed = commitCombatRoundEndDistanceControl({
+          chosenDistance: body.chosenDistance,
           command: { createdAt: submittedAt, createdByUserId: user.id },
           distanceOverride: body.distanceOverride,
           distanceProposalId: body.distanceProposalId,
+          participantId: encounterParticipant?.id,
           state: roundState,
         });
         const savedEncounter = await encounterService.updateEncounter({
@@ -5986,9 +6033,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           },
         });
+        if (gmAuthorizedOperation) {
+          return {
+            commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
+            encounter: savedEncounter,
+          };
+        }
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
-          encounter: savedEncounter,
+          command: buildPlayerSafeCombatRoundCommandForUser({
+            command: committed.command,
+            ...buildPlayerSafeCombatScopeForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
+          encounter: buildPlayerSafeEncounterForUser({
+            encounter: savedEncounter,
+            scenarioParticipants,
+            userId: user.id,
+          }),
+          participant: scenarioParticipant,
         };
       } catch (error) {
         return reply.code(400).send({

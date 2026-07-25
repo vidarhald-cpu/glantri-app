@@ -3,8 +3,9 @@
 ## Status and scope
 
 This document defines the canonical vocabulary and ownership rules for persistent combat state and
-temporary tactical control. It is an architecture contract for current and future combat mechanics;
-it does not add commands, tasks, permissions, persistence tables, or gameplay behavior.
+temporary tactical control. It is an architecture contract for current and future combat mechanics.
+The initial concrete consumer is Continued Contact ownership of the existing Round End distance
+commit; no parallel controller subsystem or persistence table is introduced.
 
 The current concrete models remain authoritative:
 
@@ -149,9 +150,20 @@ When an active state explicitly grants Distance Control, its controller owns the
 choice allowed by that rule. This does not imply authority over unrelated participant pairs,
 distance increases or decreases outside the rule, or general round-end distance handling.
 
-Continued Contact is the initial grant of Distance Control. Its Phase 2 and round-end distance
-behavior remains deferred; this contract does not add a distance command or change current distance
-resolution.
+Continued Contact is the initial grant of Distance Control. At Round End, one active relationship
+suppresses the ordinary opposed Dodge distance contest for that exact participant pair. The
+controller receives the existing canonical `distance_commit` task, chooses distance 0–8, and the
+choice is committed to the ordinary distance matrix for the next round. The proposal persists:
+
+- controller and affected participant IDs;
+- source Continued Contact ID;
+- previous and chosen distance;
+- reason `continued_contact`;
+- next-round applicability.
+
+The affected participant receives no competing roll or choice. The GM may proxy the controller
+through the exact projected task. Reload derives the same task, and command undo restores the prior
+edge and unresolved controller choice. Unrelated pairs retain ordinary distance resolution.
 
 ### Escape contests
 
@@ -250,13 +262,14 @@ derived opportunity through exact lineage. No consumer may substitute a newer st
 participant pair, or the first compatible source.
 
 Offensive Parry follow-up attacks, Continued Contact maintenance, and escape are examples of future
-state-qualified opportunities. They remain unimplemented in this slice.
+state-qualified opportunities. The implemented Round End distance choice is not a combat
+opportunity: it reuses the existing distance proposal and commit process.
 
 ## Current model mapping
 
 | Current fact | Canonical interpretation | Current effect |
 | ------------ | ------------------------ | -------------- |
-| `ContinuedContact` | Relationship-bearing Combat State with controller, affected participant, and exact Offensive Parry lineage | Records the relationship; future Distance Control consumers are deferred. |
+| `ContinuedContact` | Relationship-bearing Combat State with controller, affected participant, and exact Offensive Parry lineage | Supplies the controller for the exact pair's Round End engagement-distance choice. |
 | `UnbalancedCombatCondition` | Participant Combat State sourced by Continued Contact | Identifies the affected participant and canonical −2% consequence. |
 | Linked Unbalanced `CombatEffect` | Modifier-bearing effect derived from Unbalanced | Supplies shared combat arithmetic and initiative timing. |
 | Bleed/Fatigue `CombatEffect` | Participant Combat State represented directly as an effect | Supplies its existing damage, modifier, duration, and review behavior. |
@@ -271,8 +284,10 @@ than adding maneuver-specific ownership rules.
 ### Offensive Parry
 
 Continued Contact establishes the initial controller relationship and Distance Control capability;
-Unbalanced remains a separate affected-participant state. Phase 2 follow-up opportunities and
-round-end maintenance/escape must consume exact state lineage when implemented.
+Unbalanced remains a separate affected-participant state. The relationship survives the round
+transition, while each participant makes an ordinary next-round declaration using the chosen
+distance. Phase 2 follow-up opportunities and round-end maintenance/escape remain separate deferred
+work and must consume exact state lineage when implemented.
 
 ### Disarm
 

@@ -1,6 +1,6 @@
 # Offensive Parry process
 
-Implementation status: Slice 1 only.
+Implementation status: Slice 1 plus the controller-owned Continued Contact distance lifecycle.
 
 The repository action identifier is `offensive_parry`; its user-facing label is **Offensive
 Parry**. It is a declaration-time maneuver, not a display-text inference.
@@ -142,6 +142,23 @@ The applicability contract carries excluded roll purposes. For the affected part
 `escape_continued_contact` excludes the Unbalanced row itself. Other valid general, skill, or
 situational modifiers remain applicable. The escape contest is not implemented in Slice 1.
 
+### Next-round engagement distance
+
+Active Continued Contact survives the round transition. At Round End it replaces the ordinary
+opposed distance contest for only the controller/affected-participant pair:
+
+1. the controller receives **Choose engagement distance**;
+2. the affected participant receives no opposing roll or competing choice;
+3. the selected distance is committed through the ordinary canonical distance matrix with the
+   prior distance, controller, affected participant, source contact, and reason retained;
+4. reload and history preserve the choice, while undo restores the prior distance and unresolved
+   choice;
+5. the next round opens normal declarations for both participants at that chosen distance.
+
+This lifecycle does not create an Offensive Parry attack, shorten distance from weapon data, or
+change declaration legality. The controller owns only this relationship-scoped distance choice.
+Unrelated participant pairs continue to use ordinary Round End distance resolution.
+
 ## Presentation and privacy
 
 Before the contest, Current Action identifies the committed attacker and asks the declarer to roll
@@ -179,7 +196,6 @@ Slice 3:
 
 - round-end Brawling maintenance/escape contest;
 - the unpenalized escape roll using `escape_continued_contact`;
-- continuation across later rounds;
 - ending Continued Contact and removing Unbalanced;
 - forward movement and forced-retreat consequences.
 

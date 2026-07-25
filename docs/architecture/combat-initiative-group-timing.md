@@ -60,5 +60,6 @@ lineage. The shared modifier projection applies the cutoff to General/Fatigue, S
 initiative, Dodge, Brawling, and maneuver consumers on the canonical contribution pipeline.
 Existing operational action cancellation applies to lower groups; tied siblings are protected.
 
-Offensive Parry Phase 2, Continued Contact maintenance/escape, controller-owned distance changes,
-and future maneuvers remain deferred.
+Continued Contact's controller-owned Round End distance choice occurs after A1/A2 initiative-group
+resolution and uses the active relationship; it does not create initiative work. Offensive Parry
+Phase 2, Continued Contact maintenance/escape, and future maneuvers remain deferred.

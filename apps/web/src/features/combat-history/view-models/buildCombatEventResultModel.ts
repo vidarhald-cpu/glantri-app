@@ -401,6 +401,7 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     case "distance_control_applied": {
       const applied = factLabel(factValue(event, "appliedDistance"));
       const previous = factLabel(factValue(event, "previousDistance"));
+      const continuedContact = factValue(event, "reason") === "continued_contact";
       return {
         outcomeRows: [
           ...(applied
@@ -409,8 +410,13 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           ...(previous
             ? [{ key: `${event.id}:outcome:previous`, text: `Previous distance: ${previous}` }]
             : []),
+          ...(continuedContact
+            ? [{ key: `${event.id}:outcome:reason`, text: "Reason: Continued Contact" }]
+            : []),
         ],
-        summary: "The next-round distance was applied.",
+        summary: continuedContact
+          ? `${attacker ?? "The controller"} chose the next-round engagement distance.`
+          : "The next-round distance was applied.",
       };
     }
     case "health_check": {

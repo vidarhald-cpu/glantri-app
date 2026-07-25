@@ -97,6 +97,7 @@ export {
   resolveCurrentCombatPhaseDamageOnServer,
   saveCurrentCombatDamageReviewOnServer,
   commitRoundEndDistanceControlOnServer,
+  chooseRoundEndContinuedContactDistanceOnServer,
   commitRoundEndParticipantReviewOnServer,
   rollRoundEndDistanceControlOnServer,
   rollCurrentRoundEndDistanceControlOnServer,

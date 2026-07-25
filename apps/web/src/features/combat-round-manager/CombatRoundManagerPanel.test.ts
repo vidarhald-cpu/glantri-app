@@ -752,6 +752,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Distance roll");
     expect(source).toContain("Distance pair");
     expect(source).toContain("GM override");
+    expect(source).toContain('"Engagement distance"');
+    expect(source).toContain('"Choose engagement distance."');
+    expect(source).toContain("chosenDistance: controlledByContinuedContact");
+    expect(source).toContain("scenarioParticipantId: controlledByContinuedContact");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain("stepSnapshots,");

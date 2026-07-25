@@ -229,7 +229,8 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
         tasks: distanceRollTasks,
       }),
       stage({
-        executionStrategy: "gm_review",
+        executionStrategy:
+          distanceCommit?.controlMode === "continued_contact" ? "single_task" : "gm_review",
         kind: "proposal_commit",
         processId: distanceProcessId,
         state: distanceRollTasks.length > 0 ? "pending" : distanceCommit ? "active" : "complete",
@@ -237,14 +238,27 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
           distanceRollTasks.length === 0 && distanceCommit
             ? [
                 {
-                  allowedActors: ["gm"],
+                  allowedActors:
+                    distanceCommit.controlMode === "continued_contact"
+                      ? (["combatant", "gm"] as const)
+                      : (["gm"] as const),
                   expectedCommand: "commit_round_end_distance_control",
                   key: distanceCommit.id,
                   kind: "distance_commit",
-                  ownerRole: "gm",
+                  opponentParticipantId:
+                    distanceCommit.controlMode === "continued_contact"
+                      ? distanceCommit.affectedParticipantId
+                      : undefined,
+                  ownerParticipantId:
+                    distanceCommit.controlMode === "continued_contact"
+                      ? distanceCommit.controllerParticipantId
+                      : undefined,
+                  ownerRole:
+                    distanceCommit.controlMode === "continued_contact" ? "participant" : "gm",
                   pairId: distanceCommit.pairKey,
                   proposalId: distanceCommit.id,
-                  trackerParticipantId: distanceCommit.participantAId,
+                  trackerParticipantId:
+                    distanceCommit.controllerParticipantId ?? distanceCommit.participantAId,
                 },
               ]
             : [],

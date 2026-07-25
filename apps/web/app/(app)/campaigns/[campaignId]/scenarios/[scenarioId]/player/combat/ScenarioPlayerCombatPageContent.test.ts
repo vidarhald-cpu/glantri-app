@@ -433,7 +433,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Roll your Health check for round-end bleed review.");
     expect(source).toContain("formatRoundEndHealthCheckResultLine");
     expect(source).toContain('case "roll_round_end_distance_control"');
+    expect(source).toContain('case "commit_round_end_distance_control"');
     expect(source).toContain("rollRoundEndDistanceControlOnServer");
+    expect(source).toContain("chooseRoundEndContinuedContactDistanceOnServer");
+    expect(source).toContain("Continued Contact — engagement distance");
+    expect(source).toContain("No opposing distance roll is required.");
+    expect(source).toContain("setContinuedContactDistanceChoice");
     expect(source).toContain("Roll your Dodge for distance control.");
     expect(source).toContain("formatDistanceControlOpponentStatus");
     expect(source).toContain("selectedDistanceControlCommittedDistance");

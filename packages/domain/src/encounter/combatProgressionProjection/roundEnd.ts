@@ -58,7 +58,10 @@ export function buildRoundEndProcesses(
             kind: task.kind,
             owner: task.ownerRole === "gm" ? GM_IDENTITY : participantOwner,
             presentationContext: {
-              actionKind: process.kind,
+              actionKind:
+                distanceProposal?.controlMode === "continued_contact"
+                  ? "continued_contact_distance_control"
+                  : process.kind,
               actor:
                 task.ownerRole === "gm" && task.trackerParticipantId
                   ? context.identities.get(task.trackerParticipantId)
@@ -66,10 +69,13 @@ export function buildRoundEndProcesses(
               distance: distanceProposal
                 ? {
                     current: distanceProposal.currentDistance,
-                    requested: distanceProposal.proposedDistance,
+                    requested: distanceProposal.chosenDistance ?? distanceProposal.proposedDistance,
                   }
                 : undefined,
-              reason: healthProposal?.label,
+              reason:
+                distanceProposal?.controlMode === "continued_contact"
+                  ? "Continued Contact is active."
+                  : healthProposal?.label,
               responder: task.ownerRole === "participant" ? participantOwner : undefined,
               skill: task.kind === "health_review" ? { label: "Health" } : undefined,
               target: task.opponentParticipantId

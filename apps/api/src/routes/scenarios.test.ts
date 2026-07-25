@@ -1818,6 +1818,74 @@ function makeDistanceControlReviewFixture(): {
   };
 }
 
+function makeContinuedContactDistanceChoiceFixture(): {
+  encounter: EncounterSession;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  proposalId: string;
+} {
+  const encounterParticipants = makeTwoCombatEncounterParticipants();
+  const baseEncounter = makeCombatEncounter({
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const resolvedEncounter = withResolvedCombatStartExperience(baseEncounter) as EncounterSession;
+  const baseState =
+    resolvedEncounter.combatRoundState ?? initializeCombatRoundState({ encounter: baseEncounter });
+  const reviewed = prepareCombatRoundEndReview({
+    state: {
+      ...baseState,
+      continuedContacts: [
+        {
+          affectedParticipantId: "encounter-participant-2",
+          brawlingContestResultId: "contest-result-1",
+          controllerParticipantId: "encounter-participant-1",
+          establishedPhase: "phase1",
+          establishedRound: baseState.roundNumber,
+          id: "continued-contact-1",
+          sourceActionId: "offensive_parry",
+          sourceAttackResultId: "attack-result-1",
+          sourceDeclarationId: "declaration-1",
+          sourceOpportunityId: "opportunity-1",
+          sourceParryResultId: "parry-result-1",
+          status: "active",
+        },
+      ],
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: baseState.roundNumber,
+        step: "SU",
+      },
+      currentStep: "round_summary",
+      distanceState: setDistanceBetween({
+        distance: 4,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+        state: baseState.distanceState,
+      }),
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary",
+    },
+  });
+  const proposalId = reviewed.roundEndReview?.proposedDistances[0]?.id;
+  if (!proposalId) throw new Error("Continued Contact fixture did not create a proposal.");
+  return {
+    encounter: {
+      ...resolvedEncounter,
+      combatRoundState: reviewed,
+      currentRound: reviewed.roundNumber,
+    },
+    participants: [
+      makeCombatScenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: { displayName: "Scyrian cavalry guy" },
+      }),
+    ],
+    proposalId,
+  };
+}
+
 function rollDistanceControlFixtureBothSides(input: {
   encounter: EncounterSession;
   proposalId: string;
@@ -5851,6 +5919,76 @@ describe("scenarios route contract", () => {
       mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
         .roundEndReview.proposedDistances[0],
     ).toMatchObject({ status: "committed" });
+  });
+
+  it("lets the Continued Contact controller choose engagement distance without an opposing roll", async () => {
+    const fixture = makeContinuedContactDistanceChoiceFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        chosenDistance: 2,
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-distance-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      participant: { id: "participant-1" },
+    });
+    expect(response.json()).not.toHaveProperty("commandEnvelope");
+    const updatedState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+    expect(updatedState.roundEndReview.proposedDistances[0]).toMatchObject({
+      appliedDistance: 2,
+      chosenDistance: 2,
+      controlMode: "continued_contact",
+      controllerParticipantId: "encounter-participant-1",
+      reason: "continued_contact",
+      status: "committed",
+    });
+    expect(updatedState.roundEndReview.proposedDistances[0].participantA.result).toBeUndefined();
+    expect(updatedState.roundEndReview.proposedDistances[0].participantB.result).toBeUndefined();
+    expect(
+      getDistanceBetween(
+        updatedState.distanceState,
+        "encounter-participant-1",
+        "encounter-participant-2",
+      ),
+    ).toBe(2);
+  });
+
+  it("rejects a Continued Contact engagement-distance choice from the affected opponent", async () => {
+    const fixture = makeContinuedContactDistanceChoiceFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        chosenDistance: 2,
+        distanceProposalId: fixture.proposalId,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-distance-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
   it("returns the incremented revision and Start next round task after the final SU review", async () => {

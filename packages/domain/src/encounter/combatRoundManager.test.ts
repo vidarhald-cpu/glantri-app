@@ -13205,6 +13205,245 @@ describe("combat round manager", () => {
     ]);
   });
 
+  it("gives an active Continued Contact controller the next-round engagement-distance choice", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 4,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      state: combatRoundStateSchema.parse({
+        ...baseState,
+        continuedContacts: [
+          {
+            affectedParticipantId: "guard",
+            brawlingContestResultId: "contest-result-1",
+            controllerParticipantId: "gladiator",
+            establishedPhase: "phase1",
+            establishedRound: 3,
+            id: "continued-contact-1",
+            sourceActionId: "offensive_parry",
+            sourceAttackResultId: "attack-result-1",
+            sourceDeclarationId: "declaration-1",
+            sourceOpportunityId: "opportunity-1",
+            sourceParryResultId: "parry-result-1",
+            status: "active",
+          },
+        ],
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        distanceState,
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      }),
+    });
+    const proposal = reviewed.roundEndReview?.proposedDistances[0];
+
+    expect(reviewed.roundEndReview?.proposedDistances).toHaveLength(1);
+    expect(proposal).toMatchObject({
+      affectedParticipantId: "guard",
+      appliesFromRound: 4,
+      continuedContactId: "continued-contact-1",
+      controllerParticipantId: "gladiator",
+      controlMode: "continued_contact",
+      currentDistance: 4,
+      outcome: "controller_choice",
+      proposedDistance: undefined,
+      reason: "continued_contact",
+      requiresContest: false,
+      status: "review_ready",
+    });
+    expect(proposal?.participantA.status).toBe("not_required");
+    expect(proposal?.participantB.status).toBe("not_required");
+    expect(
+      getCombatRoundEndDistanceControlPendingRollCount({
+        participantId: "gladiator",
+        state: reviewed,
+      }),
+    ).toBe(0);
+    expect(getNextCombatRoundEndTask({ state: reviewed })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_commit",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
+
+    const progressionTask = buildCombatProgressionProjection(reviewed)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.kind === "distance_commit");
+    expect(progressionTask).toMatchObject({
+      allowedActors: ["combatant", "gm"],
+      identity: {
+        opponentParticipantId: "guard",
+        participantId: "gladiator",
+        proposalId: proposal?.id,
+      },
+      owner: { kind: "combatant", participantId: "gladiator" },
+      presentationContext: {
+        actionKind: "continued_contact_distance_control",
+        reason: "Continued Contact is active.",
+      },
+      state: "executable",
+      trackerFacet: { owner: { participantId: "gladiator" }, step: "SU" },
+    });
+    expect(() =>
+      commitCombatRoundEndDistanceControl({
+        chosenDistance: 2,
+        command: { createdAt: "2026-01-01T00:11:00.000Z" },
+        distanceProposalId: proposal?.id ?? "missing",
+        participantId: "guard",
+        state: reviewed,
+      }),
+    ).toThrow("Only the Continued Contact controller may choose engagement distance.");
+
+    const committed = commitCombatRoundEndDistanceControl({
+      chosenDistance: 2,
+      command: { createdAt: "2026-01-01T00:11:00.000Z", createdByUserId: "player-1" },
+      distanceProposalId: proposal?.id ?? "missing",
+      participantId: "gladiator",
+      state: reviewed,
+    }).state;
+
+    expect(getDistanceBetween(committed.distanceState, "gladiator", "guard")).toBe(2);
+    expect(committed.roundEndReview?.proposedDistances[0]).toMatchObject({
+      appliedDistance: 2,
+      chosenDistance: 2,
+      continuedContactId: "continued-contact-1",
+      controllerParticipantId: "gladiator",
+      reason: "continued_contact",
+      status: "committed",
+    });
+    expect(committed.events.map((event) => event.type)).toEqual(["distance_control_applied"]);
+    expect(committed.events[0]).toMatchObject({
+      actorParticipantId: "gladiator",
+      facts: {
+        involvedOutcome: {
+          appliedDistance: 2,
+          chosenDistance: 2,
+          previousDistance: 4,
+          reason: "continued_contact",
+        },
+      },
+      targetParticipantId: "guard",
+    });
+    expect(committed.events[0]?.source.sourceIds).toEqual(
+      expect.arrayContaining([proposal?.id, proposal?.pairKey, "continued-contact-1"]),
+    );
+
+    const undone = clearCombatRoundStep({ state: committed, step: "round_summary" });
+    expect(getDistanceBetween(undone.distanceState, "gladiator", "guard")).toBe(4);
+    expect(undone.roundEndReview?.proposedDistances[0]).toMatchObject({
+      status: "review_ready",
+    });
+    expect(undone.roundEndReview?.proposedDistances[0]?.chosenDistance).toBeUndefined();
+    expect(getNextCombatRoundEndTask({ state: undone })).toEqual({
+      distanceProposalId: proposal?.id,
+      kind: "distance_commit",
+      pairKey: proposal?.pairKey,
+      participantId: "gladiator",
+    });
+
+    const reloaded = initializeCombatRoundState({
+      encounter: encounter({ combatRoundState: committed, currentRound: 3 }),
+    });
+    expect(reloaded.roundEndReview?.proposedDistances[0]?.chosenDistance).toBe(2);
+    expect(getDistanceBetween(reloaded.distanceState, "gladiator", "guard")).toBe(2);
+
+    const gladiatorComplete = commitCombatRoundEndParticipantReview({
+      combatEffects: combatEffectsWith([]),
+      command: { createdAt: "2026-01-01T00:12:00.000Z" },
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reloaded,
+    }).state;
+    const roundComplete = commitCombatRoundEndParticipantReview({
+      combatEffects: combatEffectsWith([]),
+      command: { createdAt: "2026-01-01T00:13:00.000Z" },
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: gladiatorComplete,
+    }).state;
+    const nextRound = advanceCombatRoundStep(roundComplete, {
+      command: { createdAt: "2026-01-01T00:14:00.000Z" },
+    });
+
+    expect(nextRound.roundNumber).toBe(4);
+    expect(getDistanceBetween(nextRound.distanceState, "gladiator", "guard")).toBe(2);
+    expect(nextRound.continuedContacts).toMatchObject([
+      { controllerParticipantId: "gladiator", status: "active" },
+    ]);
+    expect(nextRound.participants.every((participant) => !participant.declaration)).toBe(true);
+  });
+
+  it("changes only the Continued Contact pair when other participant pairs exist", () => {
+    const baseState = initializeCombatRoundState({
+      encounter: encounter({
+        participants: [
+          participant({ id: "gladiator", label: "The Gladiator" }),
+          participant({ id: "guard", label: "City guard" }),
+          participant({ id: "scout", label: "Scout" }),
+        ],
+      }),
+    });
+    const withContactDistance = setDistanceBetween({
+      distance: 4,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const distanceState = setDistanceBetween({
+      distance: 6,
+      participantAId: "guard",
+      participantBId: "scout",
+      source: "gm_set",
+      state: withContactDistance,
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: combatRoundStateSchema.parse({
+        ...baseState,
+        continuedContacts: [
+          {
+            affectedParticipantId: "guard",
+            brawlingContestResultId: "contest-result-1",
+            controllerParticipantId: "gladiator",
+            establishedPhase: "phase1",
+            establishedRound: 3,
+            id: "continued-contact-1",
+            sourceActionId: "offensive_parry",
+            sourceAttackResultId: "attack-result-1",
+            sourceDeclarationId: "declaration-1",
+            sourceOpportunityId: "opportunity-1",
+            sourceParryResultId: "parry-result-1",
+            status: "active",
+          },
+        ],
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        distanceState,
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      }),
+    });
+    const proposal = reviewed.roundEndReview?.proposedDistances[0];
+    const committed = commitCombatRoundEndDistanceControl({
+      chosenDistance: 1,
+      command: { createdAt: "2026-01-01T00:11:00.000Z" },
+      distanceProposalId: proposal?.id ?? "missing",
+      participantId: "gladiator",
+      state: reviewed,
+    }).state;
+
+    expect(reviewed.roundEndReview?.proposedDistances).toHaveLength(1);
+    expect(getDistanceBetween(committed.distanceState, "gladiator", "guard")).toBe(1);
+    expect(getDistanceBetween(committed.distanceState, "guard", "scout")).toBe(6);
+  });
+
   it("builds SU duration proposals for active round-based effects", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),

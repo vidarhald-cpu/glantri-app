@@ -579,8 +579,13 @@ export type CombatRoundEndDistanceControlSide = z.infer<
 
 export const combatRoundEndDistanceProposalSchema = z.object({
   accepted: z.boolean().default(true),
+  affectedParticipantId: idSchema.optional(),
   appliedDistance: combatDistanceSchema.optional(),
   appliesFromRound: z.number().int().positive(),
+  chosenDistance: combatDistanceSchema.optional(),
+  continuedContactId: idSchema.optional(),
+  controllerParticipantId: idSchema.optional(),
+  controlMode: z.enum(["ordinary", "continued_contact"]).default("ordinary"),
   currentDistance: combatDistanceSchema,
   gmOverrideDistance: combatDistanceSchema.optional(),
   id: idSchema,
@@ -593,6 +598,7 @@ export const combatRoundEndDistanceProposalSchema = z.object({
       "participant_b_wins",
       "tie",
       "gm_override",
+      "controller_choice",
     ])
     .default("contest_pending"),
   pairKey: idSchema,
@@ -602,6 +608,9 @@ export const combatRoundEndDistanceProposalSchema = z.object({
   participantBId: idSchema,
   proposedDistance: combatDistanceSchema.optional(),
   requiresContest: z.boolean().default(false),
+  reason: z
+    .enum(["ordinary_distance_control", "continued_contact"])
+    .default("ordinary_distance_control"),
   status: z
     .enum(["pending", "pending_rolls", "rolled", "review_ready", "committed"])
     .default("pending"),
@@ -11346,7 +11355,8 @@ export function getNextCombatRoundEndTask(input: {
       distanceProposalId: commitReadyProposal.id,
       kind: "distance_commit",
       pairKey: commitReadyProposal.pairKey,
-      participantId: commitReadyProposal.participantAId,
+      participantId:
+        commitReadyProposal.controllerParticipantId ?? commitReadyProposal.participantAId,
     };
   }
 
@@ -11557,6 +11567,7 @@ export interface CombatRoundEndDistanceControlParticipantInput {
 }
 
 type CombatRoundEndDistancePreferenceAccumulator = {
+  continuedContact?: CombatRoundState["continuedContacts"][number];
   participantAId: string;
   participantBId: string;
   preferenceA?: DistancePreferenceIntent;
@@ -11692,6 +11703,51 @@ function buildCombatRoundEndDistanceProposals(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const preferencesByPair = new Map<string, CombatRoundEndDistancePreferenceAccumulator>();
 
+  for (const contact of normalized.continuedContacts) {
+    if (contact.status !== "active") {
+      continue;
+    }
+    const controller = findCombatRoundParticipantByAlias({
+      id: contact.controllerParticipantId,
+      state: normalized,
+    });
+    const affected = findCombatRoundParticipantByAlias({
+      id: contact.affectedParticipantId,
+      state: normalized,
+    });
+    if (!controller || !affected || controller.participantId === affected.participantId) {
+      continue;
+    }
+    const pairKey = makeDistancePairKey(controller.participantId, affected.participantId);
+    const [participantAId, participantBId] = pairKey.split("::");
+    if (!participantAId || !participantBId) {
+      continue;
+    }
+    const existing = preferencesByPair.get(pairKey);
+    const existingController = existing?.continuedContact
+      ? findCombatRoundParticipantByAlias({
+          id: existing.continuedContact.controllerParticipantId,
+          state: normalized,
+        })
+      : undefined;
+    if (
+      existing?.continuedContact &&
+      existingController?.participantId !== controller.participantId
+    ) {
+      throw new RangeError(
+        "Continued Contact has conflicting distance controllers for the same participant pair.",
+      );
+    }
+    if (!existing?.continuedContact || contact.id < existing.continuedContact.id) {
+      preferencesByPair.set(pairKey, {
+        ...existing,
+        continuedContact: contact,
+        participantAId,
+        participantBId,
+      });
+    }
+  }
+
   for (const participant of normalized.participants) {
     const movementIntent = participant.declaration?.movementIntent;
 
@@ -11720,7 +11776,9 @@ function buildCombatRoundEndDistanceProposals(input: {
         continue;
       }
 
+      const existing = preferencesByPair.get(pairKey);
       if (
+        !existing?.continuedContact &&
         wasCombatRoundPairDistanceResolvedDuringRound({
           pairKey,
           roundNumber: normalized.roundNumber,
@@ -11730,14 +11788,14 @@ function buildCombatRoundEndDistanceProposals(input: {
         continue;
       }
 
-      const existing = preferencesByPair.get(pairKey) ?? {
+      const accumulator = existing ?? {
         participantAId,
         participantBId,
       };
       const next =
         participant.participantId === participantAId
-          ? { ...existing, preferenceA: preference }
-          : { ...existing, preferenceB: preference };
+          ? { ...accumulator, preferenceA: preference }
+          : { ...accumulator, preferenceB: preference };
 
       preferencesByPair.set(pairKey, next);
     }
@@ -11755,14 +11813,33 @@ function buildCombatRoundEndDistanceProposals(input: {
     const currentDistance = currentEdge?.distance ?? combatDistanceSchema.parse(2);
     const desiredDistanceA = entry.preferenceA?.desiredDistance;
     const desiredDistanceB = entry.preferenceB?.desiredDistance;
+    const controller = entry.continuedContact
+      ? findCombatRoundParticipantByAlias({
+          id: entry.continuedContact.controllerParticipantId,
+          state: normalized,
+        })
+      : undefined;
+    const affected = entry.continuedContact
+      ? findCombatRoundParticipantByAlias({
+          id: entry.continuedContact.affectedParticipantId,
+          state: normalized,
+        })
+      : undefined;
+    const controlledByContinuedContact = Boolean(entry.continuedContact && controller && affected);
     const samePreference =
       desiredDistanceA !== undefined &&
       desiredDistanceB !== undefined &&
       desiredDistanceA === desiredDistanceB;
-    const requiresContest = !samePreference;
-    const proposedDistance = samePreference ? desiredDistanceA : undefined;
-    const status = samePreference ? "review_ready" : "pending_rolls";
-    const outcome = samePreference ? "uncontested" : "contest_pending";
+    const requiresContest = controlledByContinuedContact ? false : !samePreference;
+    const proposedDistance =
+      controlledByContinuedContact || !samePreference ? undefined : desiredDistanceA;
+    const status =
+      controlledByContinuedContact || samePreference ? "review_ready" : "pending_rolls";
+    const outcome = controlledByContinuedContact
+      ? "controller_choice"
+      : samePreference
+        ? "uncontested"
+        : "contest_pending";
     const participantAInput = input.participantInputs?.[entry.participantAId];
     const participantBInput = input.participantInputs?.[entry.participantBId];
     const participantAModifierResolution = resolveRoundEndDistanceDodgeModifier({
@@ -11781,7 +11858,11 @@ function buildCombatRoundEndDistanceProposals(input: {
     });
 
     return combatRoundEndDistanceProposalSchema.parse({
+      affectedParticipantId: affected?.participantId,
       appliesFromRound: normalized.roundNumber + 1,
+      continuedContactId: entry.continuedContact?.id,
+      controllerParticipantId: controller?.participantId,
+      controlMode: controlledByContinuedContact ? "continued_contact" : "ordinary",
       currentDistance,
       id: buildCombatRoundEndDistanceProposalId({
         pairKey,
@@ -11810,6 +11891,7 @@ function buildCombatRoundEndDistanceProposals(input: {
       }),
       participantBId: entry.participantBId,
       proposedDistance,
+      reason: controlledByContinuedContact ? "continued_contact" : "ordinary_distance_control",
       requiresContest,
       status,
       warnings,
@@ -12244,7 +12326,11 @@ export function prepareCombatRoundEndReview(input: {
 
   if (command) {
     for (const proposal of roundEndReview.proposedDistances) {
-      if (proposal.requiresContest || proposal.status !== "review_ready") {
+      if (
+        proposal.controlMode === "continued_contact" ||
+        proposal.requiresContest ||
+        proposal.status !== "review_ready"
+      ) {
         continue;
       }
 
@@ -13319,6 +13405,7 @@ export function rollCombatRoundEndDistanceControl(input: {
 }
 
 export function commitCombatRoundEndDistanceControl(input: {
+  chosenDistance?: CombatDistance | number | string;
   command: {
     commandId?: string;
     createdAt: string;
@@ -13355,8 +13442,31 @@ export function commitCombatRoundEndDistanceControl(input: {
     throw new RangeError("Round-end distance control proposal is already committed.");
   }
 
-  const appliedDistance =
-    input.distanceOverride !== undefined
+  const controlledByContinuedContact = distanceProposal.controlMode === "continued_contact";
+  if (controlledByContinuedContact) {
+    if (
+      !distanceProposal.controllerParticipantId ||
+      !distanceProposal.affectedParticipantId ||
+      !distanceProposal.continuedContactId
+    ) {
+      throw new RangeError("Continued Contact distance control is missing canonical ownership.");
+    }
+    if (input.participantId !== distanceProposal.controllerParticipantId) {
+      throw new RangeError("Only the Continued Contact controller may choose engagement distance.");
+    }
+    if (input.distanceOverride !== undefined) {
+      throw new RangeError("Continued Contact distance control does not use a GM override.");
+    }
+    if (input.chosenDistance === undefined) {
+      throw new RangeError("Choose an engagement distance for Continued Contact.");
+    }
+  } else if (input.chosenDistance !== undefined) {
+    throw new RangeError("Ordinary distance control does not accept a controller choice.");
+  }
+
+  const appliedDistance = controlledByContinuedContact
+    ? combatDistanceSchema.parse(input.chosenDistance)
+    : input.distanceOverride !== undefined
       ? combatDistanceSchema.parse(input.distanceOverride)
       : distanceProposal.proposedDistance;
 
@@ -13373,7 +13483,9 @@ export function commitCombatRoundEndDistanceControl(input: {
     distance: appliedDistance,
     lastChangedPhase: "round_end",
     lastChangedRound: normalized.roundNumber,
-    notes: `Round ${normalized.roundNumber} distance control; applies from round ${distanceProposal.appliesFromRound}.`,
+    notes: controlledByContinuedContact
+      ? `Continued Contact engagement distance chosen in round ${normalized.roundNumber}; applies from round ${distanceProposal.appliesFromRound}.`
+      : `Round ${normalized.roundNumber} distance control; applies from round ${distanceProposal.appliesFromRound}.`,
     participantAId: distanceProposal.participantAId,
     participantBId: distanceProposal.participantBId,
     source: "round_end_review",
@@ -13392,9 +13504,16 @@ export function commitCombatRoundEndDistanceControl(input: {
   const nextProposal = combatRoundEndDistanceProposalSchema.parse({
     ...distanceProposal,
     appliedDistance,
+    chosenDistance: controlledByContinuedContact
+      ? appliedDistance
+      : distanceProposal.chosenDistance,
     gmOverrideDistance:
       input.distanceOverride !== undefined ? appliedDistance : distanceProposal.gmOverrideDistance,
-    outcome: input.distanceOverride !== undefined ? "gm_override" : distanceProposal.outcome,
+    outcome: controlledByContinuedContact
+      ? "controller_choice"
+      : input.distanceOverride !== undefined
+        ? "gm_override"
+        : distanceProposal.outcome,
     status: "committed",
   });
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
@@ -13404,6 +13523,7 @@ export function commitCombatRoundEndDistanceControl(input: {
     ),
   });
   const commandParticipantId =
+    distanceProposal.controllerParticipantId ??
     input.participantId ??
     normalized.currentCursor?.participantId ??
     distanceProposal.participantAId;
@@ -13427,6 +13547,10 @@ export function commitCombatRoundEndDistanceControl(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       appliedDistance,
+      affectedParticipantId: distanceProposal.affectedParticipantId,
+      chosenDistance: nextProposal.chosenDistance,
+      continuedContactId: distanceProposal.continuedContactId,
+      controllerParticipantId: distanceProposal.controllerParticipantId,
       distanceProposalId: distanceProposal.id,
       nextEdge,
       nextProposal,
@@ -13435,6 +13559,7 @@ export function commitCombatRoundEndDistanceControl(input: {
       participantBId: distanceProposal.participantBId,
       previousEdge,
       previousProposal: distanceProposal,
+      reason: distanceProposal.reason,
     },
     id:
       input.command.commandId ??
@@ -13471,17 +13596,27 @@ export function commitCombatRoundEndDistanceControl(input: {
         },
         involvedOutcome: {
           appliedDistance,
+          affectedParticipantId: distanceProposal.affectedParticipantId,
+          chosenDistance: nextProposal.chosenDistance,
+          continuedContactId: distanceProposal.continuedContactId,
+          controllerParticipantId: distanceProposal.controllerParticipantId,
           previousDistance: previousEdge?.distance ?? distanceProposal.currentDistance,
+          reason: distanceProposal.reason,
           status: nextProposal.status,
         },
       },
       involvedParticipantIds: [distanceProposal.participantAId, distanceProposal.participantBId],
       outcomeScope: "involved",
       ownerParticipantId: commandParticipantId,
-      sourceIds: [distanceProposal.id, distanceProposal.pairKey],
+      sourceIds: [
+        distanceProposal.id,
+        distanceProposal.pairKey,
+        ...(distanceProposal.continuedContactId ? [distanceProposal.continuedContactId] : []),
+      ],
       sourceToken: distanceProposal.id,
       status: "committed",
       step: "round_summary",
+      targetParticipantId: distanceProposal.affectedParticipantId,
       type: "distance_control_applied",
     },
     state: stateWithEvents,

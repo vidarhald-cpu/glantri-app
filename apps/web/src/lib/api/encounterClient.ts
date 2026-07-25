@@ -405,12 +405,14 @@ export async function rollCurrentRoundEndDistanceControlOnServer(input: {
 }
 
 export async function commitRoundEndDistanceControlOnServer(input: {
+  chosenDistance?: number;
   distanceOverride?: number;
   distanceProposalId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
   pairId: string;
+  scenarioParticipantId?: string;
   taskId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
@@ -421,13 +423,39 @@ export async function commitRoundEndDistanceControlOnServer(input: {
     encounter: EncounterSession;
   }>(`/encounters/${input.encounterId}/combat-round/commit-distance-control`, {
     body: JSON.stringify({
+      chosenDistance: input.chosenDistance,
       distanceOverride: input.distanceOverride,
       distanceProposalId: input.distanceProposalId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
       pairId: input.pairId,
+      scenarioParticipantId: input.scenarioParticipantId,
       taskId: input.taskId,
     }),
+    method: "POST",
+  });
+}
+
+export async function chooseRoundEndContinuedContactDistanceOnServer(input: {
+  chosenDistance: number;
+  distanceProposalId: string;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  pairId: string;
+  scenarioParticipantId: string;
+  taskId: string;
+}): Promise<{
+  command: CombatRoundCommand;
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+}> {
+  return sendJson<{
+    command: CombatRoundCommand;
+    encounter: EncounterSession;
+    participant: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/commit-distance-control`, {
+    body: JSON.stringify(input),
     method: "POST",
   });
 }

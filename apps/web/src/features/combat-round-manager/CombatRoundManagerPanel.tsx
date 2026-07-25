@@ -5467,11 +5467,15 @@ export default function CombatRoundManagerPanel({
         ? inspectorTargetValidationMessage
         : inspectorCurrentCommandType === "roll_attack"
           ? (inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage)
-          : inspectorCurrentCommandType === "commit_phase_damage"
-            ? inspectorDamageCommitValidationMessage
-            : inspectorCurrentCommandType === "prepare_round_end_review"
-              ? inspectorRoundEndActionValidationMessage
-              : undefined;
+          : inspectorCurrentCommandType === "commit_round_end_distance_control" &&
+              inspectorRoundEndDistanceCommitProposal?.controlMode === "continued_contact" &&
+              !roundEndDistanceOverrideDrafts[inspectorRoundEndDistanceCommitProposal.id]?.trim()
+            ? "Choose engagement distance."
+            : inspectorCurrentCommandType === "commit_phase_damage"
+              ? inspectorDamageCommitValidationMessage
+              : inspectorCurrentCommandType === "prepare_round_end_review"
+                ? inspectorRoundEndActionValidationMessage
+                : undefined;
   const inspectorCombatExperienceActionLabel = inspectorCombatExperienceDifficultyStartPending
     ? "Start Combat Experience rolls"
     : inspectorCombatExperienceDifficultyUpdatePending ||
@@ -5743,7 +5747,11 @@ export default function CombatRoundManagerPanel({
           </div>
         )}
         <label style={compactFieldLabelStyle}>
-          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>GM override</span>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
+            {inspectorRoundEndDistanceAction.proposal.controlMode === "continued_contact"
+              ? "Engagement distance"
+              : "GM override"}
+          </span>
           <select
             disabled={saving || Boolean(inspectorSnapshot)}
             onChange={(event) =>
@@ -5756,7 +5764,11 @@ export default function CombatRoundManagerPanel({
               roundEndDistanceOverrideDrafts[inspectorRoundEndDistanceAction.proposal.id] ?? ""
             }
           >
-            <option value="">Use proposal</option>
+            <option value="">
+              {inspectorRoundEndDistanceAction.proposal.controlMode === "continued_contact"
+                ? "Choose distance"
+                : "Use proposal"}
+            </option>
             {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
               <option key={distance} value={distance}>
                 Distance {distance}
@@ -8771,17 +8783,24 @@ export default function CombatRoundManagerPanel({
 
     try {
       const overrideDraft = roundEndDistanceOverrideDrafts[descriptor.proposalId!];
+      const proposal = inspectorRoundEndDistanceCommitProposal;
+      const controlledByContinuedContact = proposal?.controlMode === "continued_contact";
+      const selectedDistance =
+        overrideDraft && overrideDraft.trim().length > 0
+          ? parseCombatInteger(overrideDraft, "Distance")
+          : undefined;
       const { commandEnvelope, encounter: nextEncounter } =
         await commitRoundEndDistanceControlOnServer({
-          distanceOverride:
-            overrideDraft && overrideDraft.trim().length > 0
-              ? parseCombatInteger(overrideDraft, "Distance")
-              : undefined,
+          chosenDistance: controlledByContinuedContact ? selectedDistance : undefined,
+          distanceOverride: controlledByContinuedContact ? undefined : selectedDistance,
           distanceProposalId: descriptor.proposalId!,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
           pairId: descriptor.pairId!,
+          scenarioParticipantId: controlledByContinuedContact
+            ? descriptor.participantId
+            : undefined,
           taskId: descriptor.taskId,
         });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
