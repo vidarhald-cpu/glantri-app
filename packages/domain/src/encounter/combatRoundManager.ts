@@ -7873,6 +7873,9 @@ export function recordCombatRoundParryResolution(input: {
       state: normalized,
       updatedAt: input.updatedAt,
     });
+  if (existing.parryResolution.status === "resolved") {
+    throw new RangeError("The parry for this attack has already been resolved.");
+  }
   const nextResult = combatRoundPhaseResolutionResultSchema.parse({
     ...existing,
     criticalRoll: {
@@ -8233,6 +8236,16 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
     roundNumber: normalized.roundNumber,
   });
   const parryResultId = `${attackResultId}:parry`;
+  if (
+    normalized.continuedContacts.some(
+      (contact) =>
+        contact.sourceAttackResultId === attackResultId &&
+        contact.sourceOpportunityId === input.attackResult.attackOpportunityId &&
+        contact.sourceParryResultId === parryResultId,
+    )
+  ) {
+    return normalized;
+  }
   const contestId = buildOffensiveParryContestId({ parryResultId });
   if (normalized.offensiveParryContests.some((contest) => contest.id === contestId)) {
     return normalized;
@@ -8493,10 +8506,13 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
           brawlingSkillId: roll.skillId,
           brawlingSkillXp: roll.brawlingSkillXp,
           characteristicAverage: roll.characteristicAverage,
+          effectiveSkillValue: roll.effectiveSkillValue,
           finalTotal: roll.finalTotal,
           generalModifier: roll.generalModifier,
           openEndedD10s: roll.openEndedD10s,
           parryQualityModifier: roll.parryQualityModifier,
+          percentageAdjustment: roll.percentageAdjustment,
+          percentageModifierTotal: roll.percentageModifierTotal,
           pendingModifiers: roll.pendingModifiers,
           rollD20: roll.rollD20,
           rollTotal: roll.rollTotal,
@@ -12747,10 +12763,13 @@ export function recordContinuedContactMaintenanceRoll(input: {
           brawlingSkillId: roll.skillId,
           brawlingSkillXp: roll.brawlingSkillXp,
           characteristicAverage: roll.characteristicAverage,
+          effectiveSkillValue: roll.effectiveSkillValue,
           finalTotal: roll.finalTotal,
           generalModifier: roll.generalModifier,
           openEndedD10s: roll.openEndedD10s,
           parryQualityModifier: 0,
+          percentageAdjustment: roll.percentageAdjustment,
+          percentageModifierTotal: roll.percentageModifierTotal,
           pendingModifiers: roll.pendingModifiers,
           rollD20: roll.rollD20,
           rollTotal: roll.rollTotal,

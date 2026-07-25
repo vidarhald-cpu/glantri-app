@@ -413,16 +413,22 @@ Current intentional rule differences should remain. Current accidental presentat
 ### 8.1 Implemented Offensive Parry Brawling subset
 
 Offensive Parry Brawling now uses the reusable combat roll/contest presentation model without
-claiming that every combat calculation has migrated. One roll displays:
+claiming that every combat calculation has migrated. Brawling modifier contributions are workbook
+percentage inputs, not flat skill points. One roll displays:
 
 ```text
 Skill: <base value used by the roll>
-Modifiers: <signed applied total>
-- <non-zero modifier source>: <signed value>
-Effective skill: <skill + modifiers>
+Percentage modifiers: <signed raw percentage total>%
+- <non-zero modifier source>: <signed raw value>%
+Effective skill: <persisted workbook-adjusted skill>
 Die roll: <canonical open-ended roll total>
 Total: <persisted final total>
 ```
+
+For example, base Brawling 15 with Offensive Parry parry quality `+2%` uses the shared workbook
+percentage table and resolves to effective skill 18. The UI presents the persisted raw percentage,
+table adjustment, and effective value; it does not independently add two skill points or recompute
+the table.
 
 The final contest displays both sides to the GM, followed by the signed difference and winner. The
 difference convention is controller total minus affected-participant total; zero is a tie under the
@@ -435,6 +441,18 @@ calculation, purpose-tagged Offensive Parry receives the parry calculation, and 
 `Offensive Parry — Brawling` result receives one contested calculation keyed by contest result
 identity. Sharing an `attackResultId` is lineage, not permission to copy every child calculation
 onto every parent result.
+
+Action buttons consume validation facts projected for the exact viewer-owned task. In a parallel or
+tied group, task selection applies viewer ownership before selecting the first executable task; a
+different participant's earlier task cannot suppress the viewer's validation tuple. GM proxy and
+participant execution then use the same factual attack/parry tuple, differing only in authority.
+Accepted encounter revisions replace the rendered descriptor. A rejected action remains a
+recoverable action-panel error while the newly projected combat state remains renderable.
+
+GM Player Combat accepts mutation responses whose authoritative encounter changed but whose route
+does not return a participant snapshot. It updates participant caches only when a participant is
+present and always reprojects from the returned encounter; an omitted optional participant may
+never be dereferenced by presentation code.
 
 ## 9. Visibility and sanitization
 

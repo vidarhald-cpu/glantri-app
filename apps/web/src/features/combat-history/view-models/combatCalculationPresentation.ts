@@ -11,11 +11,15 @@ export interface CombatRollCalculationPresentation {
   readonly label: string;
   readonly modifierRows: readonly CombatRollModifierPresentation[];
   readonly modifierTotal: number;
+  readonly percentageAdjustment: number;
+  readonly percentageModifierRows: readonly CombatRollModifierPresentation[];
+  readonly percentageModifierTotal: number;
   readonly pendingModifierRows: readonly (CombatRollModifierPresentation & {
     readonly activationLabel?: string;
   })[];
   readonly skillValue: number;
   readonly total: number;
+  readonly usesPercentageModifiers: boolean;
 }
 
 export interface CombatContestSidePresentation {
@@ -70,9 +74,23 @@ export function buildCombatRollCalculationPresentation(input: {
     finiteNumber(calculation.generalModifier),
     finiteNumber(calculation.skillModifier),
   ];
-  const modifierTotal = explicitModifierTotal.every((value) => value !== undefined)
-    ? explicitModifierTotal.reduce<number>((sum, value) => sum + value!, 0)
-    : total - skillValue - dieResult;
+  const hasPercentageTrace =
+    finiteNumber(calculation.percentageModifierTotal) !== undefined &&
+    finiteNumber(calculation.percentageAdjustment) !== undefined &&
+    finiteNumber(calculation.effectiveSkillValue) !== undefined;
+  const percentageModifierRows = hasPercentageTrace ? modifierRows : [];
+  const percentageModifierTotal = hasPercentageTrace
+    ? (finiteNumber(calculation.percentageModifierTotal) ?? 0)
+    : 0;
+  const percentageAdjustment = hasPercentageTrace
+    ? (finiteNumber(calculation.percentageAdjustment) ?? 0)
+    : 0;
+  const flatModifierRows = hasPercentageTrace ? [] : modifierRows;
+  const modifierTotal = hasPercentageTrace
+    ? 0
+    : explicitModifierTotal.every((value) => value !== undefined)
+      ? explicitModifierTotal.reduce<number>((sum, value) => sum + value!, 0)
+      : total - skillValue - dieResult;
   const pendingModifierRows = Array.isArray(calculation.pendingModifiers)
     ? calculation.pendingModifiers.flatMap((row) => {
         if (!row || typeof row !== "object") return [];
@@ -93,13 +111,18 @@ export function buildCombatRollCalculationPresentation(input: {
 
   return {
     dieResult,
-    effectiveSkill: skillValue + modifierTotal,
+    effectiveSkill:
+      finiteNumber(calculation.effectiveSkillValue) ?? skillValue + modifierTotal,
     label: input.label,
-    modifierRows,
+    modifierRows: flatModifierRows,
     modifierTotal,
+    percentageAdjustment,
+    percentageModifierRows,
+    percentageModifierTotal,
     pendingModifierRows,
     skillValue,
     total,
+    usesPercentageModifiers: hasPercentageTrace,
   };
 }
 
@@ -127,8 +150,24 @@ function rollLines(
   return [
     heading,
     `Skill: ${calculation.skillValue}`,
-    `Modifiers: ${formatModifier(calculation.modifierTotal)}`,
-    ...calculation.modifierRows.map((row) => `- ${row.label}: ${formatModifier(row.value)}`),
+    ...(!calculation.usesPercentageModifiers ||
+    calculation.modifierRows.length > 0 ||
+    calculation.modifierTotal !== 0
+      ? [
+          `Modifiers: ${formatModifier(calculation.modifierTotal)}`,
+          ...calculation.modifierRows.map(
+            (row) => `- ${row.label}: ${formatModifier(row.value)}`,
+          ),
+        ]
+      : []),
+    ...(calculation.usesPercentageModifiers
+      ? [
+          `Percentage modifiers: ${formatModifier(calculation.percentageModifierTotal)}%`,
+          ...calculation.percentageModifierRows.map(
+            (row) => `- ${row.label}: ${formatModifier(row.value)}%`,
+          ),
+        ]
+      : []),
     ...(calculation.pendingModifierRows.length > 0
       ? [
           "Pending:",

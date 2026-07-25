@@ -99,5 +99,22 @@ describe("combat route canonical-conformance guards", () => {
     }
     expect(source).toContain('commandType: "roll_parry"');
     expect(source).toContain("commandType must be roll_parry.");
+    expect(source).toContain("resolveCanonicalCombatParryModifierFacts({");
+    expect(source).toContain('code: "parry_modifier_signature_mismatch"');
+    expect(source).toContain(
+      "body.defenderModifierFingerprint !== canonicalDefenderModifierFingerprint",
+    );
+    expect(source).toContain(
+      "body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId",
+    );
+  });
+
+  it("uses workbook percentage composition for Offensive Parry and maintenance Brawling", () => {
+    expect(source.match(/calculateWorkbookPercentageAdjustmentTrace\(\{/g)?.length).toBeGreaterThan(
+      2,
+    );
+    expect(source).toContain("effectiveSkillValue: modifierTrace.finalValue");
+    expect(source).toContain("percentageModifierTotal: modifierTrace.rawModifierTotal");
+    expect(source).toContain("finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue");
   });
 });

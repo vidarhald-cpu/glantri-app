@@ -251,6 +251,10 @@ The invariants are:
 - expired effects do not contribute;
 - relationship existence alone never adds a numeric modifier;
 - consumers do not reimplement a state's modifier in a maneuver-specific formula.
+- attack and parry descriptors carry the canonical effect cutoff and contribution fingerprint;
+  GM proxy and participant execution consume the same resolved modifier facts;
+- percentage-bearing skill contributions remain raw workbook percentage inputs until the shared
+  workbook adjustment table produces the persisted effective skill.
 
 The current Offensive Parry mapping follows this split:
 
@@ -258,6 +262,12 @@ The current Offensive Parry mapping follows this split:
 - Unbalanced is the affected-participant condition;
 - its linked combat-wide `general` effect contributes the canonical −2% modifier;
 - `escape_continued_contact` excludes that Unbalanced contribution under the existing rule.
+
+Because Unbalanced is combat-wide General state, it participates in ordinary attack and parry
+validation through the shared contribution resolver. It must not be omitted merely because a
+presentation context separately lists DB/Parry rows. Offensive Parry parry-quality Brawling
+contributions likewise remain percentages: a raw `+2%` is table-adjusted with the base skill rather
+than added as two points.
 
 When maintenance ends Continued Contact, the relationship and `UnbalancedCombatCondition` become
 terminal in the same domain mutation and the linked Unbalanced `CombatEffect` becomes expired in

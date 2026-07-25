@@ -554,7 +554,7 @@ Minimum prerequisites:
 `offensive_parry_brawling_roll` is now a fully descriptor-bound participant task in a parallel
 execution group. Its identity retains the declaration, opportunity, attack result, parry result,
 contest, process, stage, task, and group. Continued Contact and Unbalanced are separate canonical
-facts. Phase 2 follow-up attack generation and round-end maintenance/escape remain future slices.
+facts.
 
 The declaration surface follows the Phase 1 opponent-binding pattern used by Feint and Adjust
 Distance. Its deterministic `flat_db` row remains one canonical fact through preview, GM review,
@@ -568,8 +568,29 @@ opportunity/result from that opponent can project one deterministic `parry` task
 `offensive_parry`, even when the source attack missed. The composed attack process keeps that child
 work open; it does not reopen a completed phase through cursor state. A hit uses that same task as
 the attack's one ordinary-mechanics parry, so no duplicate defensive roll exists. Successful exact
-attempt lineage opens Brawling; failure does not. Phase 2 follow-up attacks and round-end
-maintenance/escape are still not implemented.
+attempt lineage opens Brawling; failure does not. The lifecycle repairs below do not change
+Continued Contact establishment, distance ownership, or maintenance/escape rules.
+
+Attack validation projection now selects the first executable task after applying the viewer's
+participant ownership constraint. Previously, a different participant's earlier tied task could be
+selected and then rejected, leaving the owning player without a validation tuple while unrestricted
+GM proxy continued to work. Attack descriptors bind revision, task, execution group, initiative
+group, opportunity, effect cutoff, source/mode, raw modifier totals, and fingerprints.
+
+Parry validation now uses the same canonical contribution resolver in projection, GM proxy,
+participant request construction, and API authorization. The tuple includes exact task/group,
+initiative group and cutoff, opportunity/result, purpose, source, process/stage,
+attack-result modifier, combined DB/Parry plus combat-wide General modifier, and fingerprint.
+Inspector-local totals cannot omit an active condition such as Unbalanced.
+
+Offensive Parry Brawling parry-quality rows are raw workbook percentage inputs. The accepted route
+persists the shared workbook trace, percentage adjustment, effective skill, and final total. For
+base 15 and raw `+2%`, the canonical table produces effective skill 18; the raw value is not added
+as two flat skill points.
+
+The domain rejects a parry resolution when the exact attack result already has one. Once Brawling
+or the exact source Continued Contact exists, that source cannot recreate its parent parry task,
+result, or contest even if a stale client submits the old descriptor.
 
 Canonical result identity suppresses compatibility copies of the same attack result or parry
 result without collapsing distinct opportunities. Player-safe task identity retains the Brawling

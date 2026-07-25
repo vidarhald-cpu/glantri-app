@@ -8,13 +8,16 @@ import {
   createCombatParticipantPairKey,
   resolveCombatWideGeneralModifiers,
   resolveCombatModifierContributions,
+  type CombatModifierContribution,
   type CombatModifierResolution,
 } from "./combatModifierContributions";
 import { buildLiveCombatModifierContributionProjection } from "./combatModifierProjection";
 import {
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundPhaseActionStepForPhase,
+  getCombatRoundParryReviewStepForPhase,
   type CombatRoundAttackOpportunity,
+  type CombatRoundAttackRollResult,
   type CombatRoundPhase,
   type CombatRoundState,
 } from "./combatRoundManager";
@@ -28,6 +31,14 @@ export interface CanonicalCombatAttackModifierFacts {
   defenderCombatContext: ScenarioParticipantCombatContext;
   defenderResolution: CombatModifierResolution;
   pairKey: string;
+}
+
+export interface CanonicalCombatParryModifierFacts {
+  attackOpportunity?: CombatRoundAttackOpportunity;
+  attackResultModifier: number;
+  defenderCombatContext: ScenarioParticipantCombatContext;
+  defenderResolution: CombatModifierResolution;
+  pairKey?: string;
 }
 
 function findRoundParticipant(input: {
@@ -47,7 +58,13 @@ function findRoundParticipant(input: {
   );
 }
 
-export function fingerprintCombatModifierResolution(resolution: CombatModifierResolution): string {
+export function fingerprintCombatModifierResolution<
+  TRow extends Pick<CombatModifierContribution, "id" | "value">,
+>(resolution: {
+  bucket?: CombatModifierResolution["bucket"];
+  rows: readonly TRow[];
+  total?: number;
+}): string {
   const serialized = JSON.stringify(
     resolution.rows
       .map((row) => ({ id: row.id, value: row.value }))
@@ -200,6 +217,93 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
         bucket: "db_parry",
         context: defenderCalculationContext,
         contributions: defenderContributions,
+      }),
+    }),
+    pairKey,
+  };
+}
+
+/** Resolves one parry from the exact live effect and opportunity context used by the API. */
+export function resolveCanonicalCombatParryModifierFacts(input: {
+  attackerScenarioParticipant?: ScenarioParticipant;
+  attackResult: CombatRoundAttackRollResult;
+  defenderCombatantId: string;
+  defenderScenarioParticipant: ScenarioParticipant;
+  encounterId: string;
+  state: CombatRoundState;
+}): CanonicalCombatParryModifierFacts {
+  const defenderRoundParticipant = findRoundParticipant({
+    combatantId: input.defenderCombatantId,
+    scenarioParticipant: input.defenderScenarioParticipant,
+    state: input.state,
+  });
+  const attackerRoundParticipant = input.attackerScenarioParticipant
+    ? findRoundParticipant({
+        combatantId: input.attackResult.attackerParticipantId,
+        scenarioParticipant: input.attackerScenarioParticipant,
+        state: input.state,
+      })
+    : input.state.participants.find(
+        (participant) =>
+          participant.participantId === input.attackResult.attackerParticipantId,
+      );
+  const attackOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
+    (opportunity) => opportunity.id === input.attackResult.attackOpportunityId,
+  );
+  const defenderFeintProposal = input.state.feintProposals.find(
+    (proposal) =>
+      proposal.roundNumber === input.state.roundNumber &&
+      proposal.status === "committed" &&
+      proposal.attackerParticipantId === input.attackResult.attackerParticipantId &&
+      proposal.defenderParticipantId === input.defenderCombatantId,
+  );
+  const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
+    input.defenderScenarioParticipant.state.combat.combatContext ?? {},
+  );
+  const contributions = buildLiveCombatModifierContributionProjection({
+    combatContext: defenderCombatContext,
+    combatEffects: input.defenderScenarioParticipant.state.combatEffects,
+    currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
+      phase: input.attackResult.phase,
+      state: input.state,
+    })?.id,
+    currentRound: input.state.roundNumber,
+    encounterId: input.encounterId,
+    ownerParticipantId: input.defenderScenarioParticipant.id,
+  }).contributions;
+  const pairKey = input.attackerScenarioParticipant
+    ? createCombatParticipantPairKey(
+        input.defenderScenarioParticipant.id,
+        input.attackerScenarioParticipant.id,
+      )
+    : undefined;
+  const calculationContext = {
+    actionId: defenderRoundParticipant?.declaration?.actionId,
+    encounterId: input.encounterId,
+    opponentParticipantId: input.attackerScenarioParticipant?.id,
+    opportunityId: attackOpportunity?.id,
+    ownerParticipantId: input.defenderScenarioParticipant.id,
+    pairKey,
+    phase: input.attackResult.phase,
+    proposalId: defenderFeintProposal?.id,
+    rollType: "parry",
+    roundNumber: input.state.roundNumber,
+    step: getCombatRoundParryReviewStepForPhase(input.attackResult.phase),
+  } as const;
+
+  return {
+    attackOpportunity,
+    attackResultModifier: input.attackResult.defenderParryModifier,
+    defenderCombatContext,
+    defenderResolution: combineCombatModifierResolutions({
+      additional: resolveCombatWideGeneralModifiers({
+        context: calculationContext,
+        contributions,
+      }),
+      primary: resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: calculationContext,
+        contributions,
       }),
     }),
     pairKey,

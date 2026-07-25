@@ -594,14 +594,17 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.rollCombatParryOnServer({
+        attackResultModifier: -3,
         attackResultId: "1:phase1:attacker:defender",
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         dbParryRaw: -4,
+        defenderModifierFingerprint: "v1:defender",
         defenderParticipantId: "defender",
         encounterId: "encounter-1",
         executionGroupId: "parry-group",
         expectedRevision: "2026-07-22T10:00:00.000Z",
+        modifierValidationTaskId: "parry-task",
         opportunityId: "attack-opportunity",
         parryBase: 13,
         parryPurpose: "ordinary_defense",
@@ -619,14 +622,17 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
+        attackResultModifier: -3,
         attackResultId: "1:phase1:attacker:defender",
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         dbParryRaw: -4,
+        defenderModifierFingerprint: "v1:defender",
         defenderParticipantId: "defender",
         executionGroupId: "parry-group",
         expectedRevision: "2026-07-22T10:00:00.000Z",
         mainHandParryScore: undefined,
+        modifierValidationTaskId: "parry-task",
         offHandParryScore: undefined,
         opportunityId: "attack-opportunity",
         parryBase: 13,
@@ -664,14 +670,17 @@ describe("localServiceClient wire contract", () => {
 
     await expect(
       client.rollCombatParryCommandOnServer({
+        attackResultModifier: -3,
         attackResultId: "1:phase1:attacker:defender",
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         dbParryRaw: -4,
+        defenderModifierFingerprint: "v1:defender",
         defenderParticipantId: "defender",
         encounterId: "encounter-1",
         executionGroupId: "parry-group",
         expectedRevision: "2026-07-22T10:00:00.000Z",
+        modifierValidationTaskId: "parry-task",
         opportunityId: "attack-opportunity",
         parryBase: 13,
         parryPurpose: "ordinary_defense",
@@ -688,14 +697,17 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
+        attackResultModifier: -3,
         attackResultId: "1:phase1:attacker:defender",
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         dbParryRaw: -4,
+        defenderModifierFingerprint: "v1:defender",
         defenderParticipantId: "defender",
         executionGroupId: "parry-group",
         expectedRevision: "2026-07-22T10:00:00.000Z",
         mainHandParryScore: undefined,
+        modifierValidationTaskId: "parry-task",
         offHandParryScore: undefined,
         opportunityId: "attack-opportunity",
         parryBase: 13,

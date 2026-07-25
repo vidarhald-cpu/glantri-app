@@ -338,6 +338,23 @@ describe("Offensive Parry rules", () => {
       opened.phaseResolutionResults.find((result) => result.attackResultId === attackResultId)
         ?.damageRoll.status,
     ).toBe("not_required");
+    expect(
+      buildCombatProgressionProjection(opened)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .filter((task) => task.kind === "parry"),
+    ).toEqual([]);
+    expect(() =>
+      recordCombatRoundParryResult({
+        attackResult: missedAttack,
+        command: { commandId: "duplicate-parry-command", createdAt: at },
+        parryResolution: successfulParry,
+        state: opened,
+        submittedBy: "gm",
+        updatedAt: at,
+      }),
+    ).toThrow("already been resolved");
   });
 
   it("recommit replaces the prepared opponent and undo restores the prior declaration", () => {

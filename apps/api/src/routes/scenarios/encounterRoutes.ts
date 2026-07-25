@@ -121,6 +121,7 @@ import {
   normalizeCombatRollAdjustment,
   resolveCombatDodgeModifiers,
   resolveCanonicalCombatAttackModifierFacts,
+  resolveCanonicalCombatParryModifierFacts,
   resolveCombatWideGeneralModifiers,
   resolveCombatModifierContributions,
   rollCombatRoundEndDistanceControl,
@@ -149,6 +150,7 @@ import {
 } from "@glantri/domain";
 import type {
   CombatAttackModifierValidationProjection,
+  CombatParryModifierValidationProjection,
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
   CombatDistanceWeaponLike,
@@ -193,6 +195,7 @@ import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAut
 import { combatRoundStatesDiffer } from "./combatRoundPersistence";
 import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
+import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
 
 const campaignService = new CampaignService();
 const characterService = new CharacterService();
@@ -985,6 +988,7 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
   defenderDb?: number;
   defenderDbParryRaw?: number;
   defenderModifierFingerprint?: string;
+  effectCutoffInitiativeGroupId?: string;
   defenderParticipantId: string;
   modifierValidationTaskId?: string;
   ob: number;
@@ -1030,6 +1034,13 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
     defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
     defenderModifierFingerprint,
+    effectCutoffInitiativeGroupId:
+      value.effectCutoffInitiativeGroupId === undefined
+        ? undefined
+        : parseNonEmptyString(
+            value.effectCutoffInitiativeGroupId,
+            "effectCutoffInitiativeGroupId",
+          ),
     defenderParticipantId,
     modifierValidationTaskId,
     ob: parseInteger(value.ob, "ob"),
@@ -1066,14 +1077,18 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
 }
 
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
+  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
   dbParryRaw: number;
+  defenderModifierFingerprint: string;
+  effectCutoffInitiativeGroupId?: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   mainHandParryScore?: number;
+  modifierValidationTaskId: string;
   offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId?: string;
@@ -1132,6 +1147,7 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
+    attackResultModifier: parseInteger(value.attackResultModifier, "attackResultModifier"),
     attackResultId,
     attackerParticipantId: parseNonEmptyString(
       value.attackerParticipantId,
@@ -1139,6 +1155,17 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     ),
     commandType: "roll_parry",
     dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
+    defenderModifierFingerprint: parseNonEmptyString(
+      value.defenderModifierFingerprint,
+      "defenderModifierFingerprint",
+    ),
+    effectCutoffInitiativeGroupId:
+      value.effectCutoffInitiativeGroupId === undefined
+        ? undefined
+        : parseNonEmptyString(
+            value.effectCutoffInitiativeGroupId,
+            "effectCutoffInitiativeGroupId",
+          ),
     declarationId,
     declaredOpponentParticipantId,
     defenderParticipantId: parseNonEmptyString(
@@ -1146,6 +1173,10 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
       "defenderParticipantId",
     ),
     mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
+    modifierValidationTaskId: parseNonEmptyString(
+      value.modifierValidationTaskId,
+      "modifierValidationTaskId",
+    ),
     offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
     offensiveParryAttemptId,
     opportunityId:
@@ -1763,12 +1794,6 @@ function findScenarioParticipantForEncounterParticipant(input: {
   );
 }
 
-function getCombatProgressionTasks(projection: CombatProgressionProjection) {
-  return projection.boundary.processes.flatMap((process) =>
-    process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
-  );
-}
-
 function buildCurrentAttackModifierValidation(input: {
   allowedAttackerParticipantIds?: ReadonlySet<string>;
   encounter: EncounterSession;
@@ -1776,20 +1801,13 @@ function buildCurrentAttackModifierValidation(input: {
   roundState: CombatRoundState;
   scenarioParticipants: ScenarioParticipant[];
 }): CombatAttackModifierValidationProjection | undefined {
-  const task = getCombatProgressionTasks(input.projection).find(
-    (candidate) =>
-      candidate.kind === "attack" &&
-      candidate.state === "executable" &&
-      candidate.owner?.kind === "combatant",
-  );
+  const task = selectCurrentCombatModifierValidationTask({
+    allowedParticipantIds: input.allowedAttackerParticipantIds,
+    kind: "attack",
+    projection: input.projection,
+  });
   if (!task || task.owner?.kind !== "combatant" || !task.identity.phase) return undefined;
   const attackerParticipantId = task.owner.participantId;
-  if (
-    input.allowedAttackerParticipantIds &&
-    !input.allowedAttackerParticipantIds.has(attackerParticipantId)
-  ) {
-    return undefined;
-  }
   const attackerEncounterParticipant = input.encounter.participants.find((participant) =>
     participantAliasesInclude({ id: attackerParticipantId, participant }),
   );
@@ -1842,6 +1860,92 @@ function buildCurrentAttackModifierValidation(input: {
     pairKey: facts.pairKey,
     phase: task.identity.phase,
     proposalId: facts.attackerProposalId,
+    taskId: task.id,
+  };
+}
+
+function buildCurrentParryModifierValidation(input: {
+  allowedDefenderParticipantIds?: ReadonlySet<string>;
+  encounter: EncounterSession;
+  projection: CombatProgressionProjection;
+  roundState: CombatRoundState;
+  scenarioParticipants: ScenarioParticipant[];
+}): CombatParryModifierValidationProjection | undefined {
+  const task = selectCurrentCombatModifierValidationTask({
+    allowedParticipantIds: input.allowedDefenderParticipantIds,
+    kind: "parry",
+    projection: input.projection,
+  });
+  if (
+    !task ||
+    task.owner?.kind !== "combatant" ||
+    !task.identity.attackResultId ||
+    !task.identity.attackerParticipantId ||
+    !task.identity.defenderParticipantId ||
+    !task.identity.opportunityId ||
+    !task.identity.parryPurpose ||
+    !task.identity.parrySourceId
+  ) {
+    return undefined;
+  }
+  const attackResult = getCombatRoundAttackResultById({
+    attackResultId: task.identity.attackResultId,
+    state: input.roundState,
+  });
+  const defenderEncounterParticipant = input.encounter.participants.find((participant) =>
+    participantAliasesInclude({
+      id: task.identity.defenderParticipantId,
+      participant,
+    }),
+  );
+  const attackerEncounterParticipant = input.encounter.participants.find((participant) =>
+    participantAliasesInclude({
+      id: task.identity.attackerParticipantId,
+      participant,
+    }),
+  );
+  const defenderScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+    encounterParticipant: defenderEncounterParticipant,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  const attackerScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+    encounterParticipant: attackerEncounterParticipant,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  if (
+    !attackResult ||
+    !defenderEncounterParticipant ||
+    !attackerEncounterParticipant ||
+    !defenderScenarioParticipant
+  ) {
+    return undefined;
+  }
+  const facts = resolveCanonicalCombatParryModifierFacts({
+    attackerScenarioParticipant,
+    attackResult,
+    defenderCombatantId: defenderEncounterParticipant.id,
+    defenderScenarioParticipant,
+    encounterId: input.encounter.id,
+    state: input.roundState,
+  });
+
+  return {
+    attackResultId: task.identity.attackResultId,
+    attackResultModifier: facts.attackResultModifier,
+    attackerParticipantId: attackerEncounterParticipant.id,
+    dbParryRaw: facts.defenderResolution.total,
+    defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
+    defenderParticipantId: defenderEncounterParticipant.id,
+    effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
+    encounterId: input.encounter.id,
+    expectedRevision: input.encounter.updatedAt,
+    initiativeGroupId: task.identity.initiativeGroupId,
+    initiativeValue: task.identity.initiativeValue,
+    opportunityId: task.identity.opportunityId,
+    parryPurpose: task.identity.parryPurpose,
+    parrySourceId: task.identity.parrySourceId,
+    processId: task.processId,
+    stageId: task.stageId,
     taskId: task.id,
   };
 }
@@ -3266,10 +3370,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState: state,
         scenarioParticipants,
       });
+      const currentParryModifierValidation = buildCurrentParryModifierValidation({
+        allowedDefenderParticipantIds:
+          viewer.kind === "player" ? viewer.controlledParticipantIds : undefined,
+        encounter,
+        projection: progressionProjection,
+        roundState: state,
+        scenarioParticipants,
+      });
 
       return {
         history: projectCombatHistory({
           currentAttackModifierValidation,
+          currentParryModifierValidation,
           participants,
           progressionProjection,
           sourceUpdatedAt: encounter.updatedAt,
@@ -5917,23 +6030,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           context: modifierContext,
           contributions: modifierProjection.contributions,
         });
+        const brawlingBaseValue = profile.rollBaseValue + profile.unknownSkillPenalty;
+        const modifierTrace = calculateWorkbookPercentageAdjustmentTrace({
+          baseValue: brawlingBaseValue,
+          rawModifiers: [
+            { label: "General", value: generalResolution.total },
+            { label: "Skill", value: skillResolution.total },
+          ],
+        });
+        if (!modifierTrace) {
+          throw new RangeError("Brawling modifiers are outside the canonical workbook table.");
+        }
         const openEndedRoll = rollOpenEndedD20();
         const createdAt = new Date().toISOString();
         const roll = {
-          brawlingBaseValue: profile.rollBaseValue + profile.unknownSkillPenalty,
+          brawlingBaseValue,
           brawlingSkillXp: profile.totalXP,
           characteristicAverage: profile.avgStats,
-          finalTotal:
-            openEndedRoll.dieResult +
-            profile.rollBaseValue +
-            profile.unknownSkillPenalty +
-            generalResolution.total +
-            skillResolution.total,
+          effectiveSkillValue: modifierTrace.finalValue,
+          finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue,
           generalModifier: generalResolution.total,
           id: `${contest.id}:roll:${encounterParticipant.id}`,
           openEndedD10s: openEndedRoll.openEndedD10s,
           participantId: encounterParticipant.id,
           parryQualityModifier: 0,
+          percentageAdjustment: modifierTrace.percentageAdjustment,
+          percentageModifierTotal: modifierTrace.rawModifierTotal,
           pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
             activationLabel: "Effective from later combat work",
             label: entry.notes?.trim() || "Combat effect",
@@ -7736,6 +7858,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             "The attack modifier validation belongs to an older task. Refresh combat before rolling.",
         });
       }
+      if (
+        body.effectCutoffInitiativeGroupId !== undefined &&
+        body.effectCutoffInitiativeGroupId !== projectedAttackTask?.identity.initiativeGroupId
+      ) {
+        return reply.code(409).send({
+          code: "effect_cutoff_mismatch",
+          error:
+            "The attack effect cutoff belongs to an older initiative group. Refresh combat before rolling.",
+        });
+      }
       const existingAttackResult = getCombatRoundAttackResultForOpportunity({
         opportunityId: body.opportunityId,
         state: roundState,
@@ -8133,90 +8265,40 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             (participant) => participant.id === attackerEncounterParticipant.scenarioParticipantId,
           )
         : undefined;
-      const attackerRoundParticipant = roundState.participants.find(
-        (participant) => participant.participantId === attackResult.attackerParticipantId,
-      );
-      const defenderRoundParticipant = roundState.participants.find(
-        (participant) => participant.participantId === encounterParticipant.id,
-      );
-      const attackOpportunity = attackerRoundParticipant?.declaration?.attackOpportunities?.find(
-        (opportunity) => opportunity.id === attackResult.attackOpportunityId,
-      );
-      const defenderFeintProposal = roundState.feintProposals.find(
-        (proposal) =>
-          proposal.roundNumber === roundState.roundNumber &&
-          proposal.status === "committed" &&
-          proposal.attackerParticipantId === attackResult.attackerParticipantId &&
-          proposal.defenderParticipantId === encounterParticipant.id,
-      );
-
-      const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
-        scenarioParticipant.state.combat.combatContext ?? {},
-      );
-      const defenderModifierProjection = buildLiveCombatModifierContributionProjection({
-        combatContext: defenderCombatContext,
-        combatEffects: scenarioParticipant.state.combatEffects,
-        currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
-          phase: attackResult.phase,
-          state: roundState,
-        })?.id,
-        currentRound: roundState.roundNumber,
+      const canonicalModifierFacts = resolveCanonicalCombatParryModifierFacts({
+        attackerScenarioParticipant,
+        attackResult,
+        defenderCombatantId: encounterParticipant.id,
+        defenderScenarioParticipant: scenarioParticipant,
         encounterId,
-        ownerParticipantId: scenarioParticipant.id,
+        state: roundState,
       });
-      const canonicalDbParryResolution = resolveCombatModifierContributions({
-        bucket: "db_parry",
-        context: {
-          actionId: defenderRoundParticipant?.declaration?.actionId,
-          encounterId,
-          ...(attackerScenarioParticipant
-            ? { opponentParticipantId: attackerScenarioParticipant.id }
-            : {}),
-          ...(attackOpportunity?.id ? { opportunityId: attackOpportunity.id } : {}),
-          ownerParticipantId: scenarioParticipant.id,
-          ...(attackerScenarioParticipant
-            ? {
-                pairKey: createCombatParticipantPairKey(
-                  scenarioParticipant.id,
-                  attackerScenarioParticipant.id,
-                ),
-              }
-            : {}),
-          phase: attackResult.phase,
-          proposalId: defenderFeintProposal?.id,
-          roundNumber: roundState.roundNumber,
-          rollType: "parry",
-          step: getCombatRoundParryReviewStepForPhase(attackResult.phase),
-        },
-        contributions: defenderModifierProjection.contributions,
-      });
-      const canonicalGeneralParryResolution = resolveCombatWideGeneralModifiers({
-        context: {
-          actionId: defenderRoundParticipant?.declaration?.actionId,
-          encounterId,
-          opportunityId: attackOpportunity?.id,
-          ownerParticipantId: scenarioParticipant.id,
-          opponentParticipantId: attackerScenarioParticipant?.id,
-          phase: attackResult.phase,
-          rollType: "parry",
-          roundNumber: roundState.roundNumber,
-          step: getCombatRoundParryReviewStepForPhase(attackResult.phase),
-        },
-        contributions: defenderModifierProjection.contributions,
-      });
-      const canonicalDbParryRaw =
-        canonicalDbParryResolution.total + canonicalGeneralParryResolution.total;
-
-      if (body.dbParryRaw !== canonicalDbParryRaw) {
+      const currentInitiativeGroupId = getCombatRoundCurrentInitiativeExecutionGroup({
+        phase: attackResult.phase,
+        state: roundState,
+      })?.id;
+      const canonicalDefenderModifierFingerprint = fingerprintCombatModifierResolution(
+        canonicalModifierFacts.defenderResolution,
+      );
+      if (
+        body.modifierValidationTaskId !== body.taskId ||
+        body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId ||
+        body.dbParryRaw !== canonicalModifierFacts.defenderResolution.total ||
+        body.defenderModifierFingerprint !== canonicalDefenderModifierFingerprint ||
+        body.attackResultModifier !== canonicalModifierFacts.attackResultModifier
+      ) {
         return reply.code(409).send({
+          code: "parry_modifier_signature_mismatch",
           error: "Parry modifiers changed. Refresh combat before rolling.",
         });
       }
 
       const rawModifiers = [
-        ...(canonicalDbParryRaw !== 0 ? [{ label: "DB/Parry", value: canonicalDbParryRaw }] : []),
-        ...(attackResult.defenderParryModifier !== 0
-          ? [{ label: "Attack result", value: attackResult.defenderParryModifier }]
+        ...(canonicalModifierFacts.defenderResolution.total !== 0
+          ? [{ label: "DB/Parry", value: canonicalModifierFacts.defenderResolution.total }]
+          : []),
+        ...(canonicalModifierFacts.attackResultModifier !== 0
+          ? [{ label: "Attack result", value: canonicalModifierFacts.attackResultModifier }]
           : []),
       ];
 
@@ -8462,24 +8544,33 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounterParticipant.id === contest.controllerParticipantId
             ? contest.parryQualityModifier
             : 0;
+        const brawlingBaseValue = profile.rollBaseValue + profile.unknownSkillPenalty;
+        const modifierTrace = calculateWorkbookPercentageAdjustmentTrace({
+          baseValue: brawlingBaseValue,
+          rawModifiers: [
+            { label: "Parry quality", value: parryQualityModifier },
+            { label: "General", value: generalResolution.total },
+            { label: "Skill", value: skillResolution.total },
+          ],
+        });
+        if (!modifierTrace) {
+          throw new RangeError("Brawling modifiers are outside the canonical workbook table.");
+        }
         const openEndedRoll = rollOpenEndedD20();
         const createdAt = new Date().toISOString();
         const roll = {
-          brawlingBaseValue: profile.rollBaseValue + profile.unknownSkillPenalty,
+          brawlingBaseValue,
           brawlingSkillXp: profile.totalXP,
           characteristicAverage: profile.avgStats,
-          finalTotal:
-            openEndedRoll.dieResult +
-            profile.rollBaseValue +
-            profile.unknownSkillPenalty +
-            generalResolution.total +
-            skillResolution.total +
-            parryQualityModifier,
+          effectiveSkillValue: modifierTrace.finalValue,
+          finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue,
           id: `${contest.id}:roll:${encounterParticipant.id}`,
           generalModifier: generalResolution.total,
           openEndedD10s: openEndedRoll.openEndedD10s,
           participantId: encounterParticipant.id,
           parryQualityModifier,
+          percentageAdjustment: modifierTrace.percentageAdjustment,
+          percentageModifierTotal: modifierTrace.rawModifierTotal,
           pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
             activationLabel: initiativeGroup
               ? `Effective after Initiative ${initiativeGroup.initiativeValue} finishes`

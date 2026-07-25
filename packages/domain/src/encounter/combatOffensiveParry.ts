@@ -15,12 +15,15 @@ export const offensiveParryBrawlingRollSchema = z.object({
   brawlingBaseValue: z.number().int(),
   brawlingSkillXp: z.number().int(),
   characteristicAverage: z.number().int(),
+  effectiveSkillValue: z.number().int().optional(),
   finalTotal: z.number().int(),
   generalModifier: z.number().int(),
   id: idSchema,
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   participantId: idSchema,
   parryQualityModifier: z.number().int().default(0),
+  percentageAdjustment: z.number().int().nonnegative().optional(),
+  percentageModifierTotal: z.number().int().optional(),
   pendingModifiers: z
     .array(
       z.object({

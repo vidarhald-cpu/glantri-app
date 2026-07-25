@@ -8,37 +8,41 @@ import {
 } from "./combatCalculationPresentation";
 
 describe("combat calculation presentation", () => {
-  it("shows skill, applied modifiers, effective skill, die, and total without internals", () => {
+  it("shows canonical percentage modifiers and their persisted effective skill", () => {
     const calculation = buildCombatRollCalculationPresentation({
       calculation: {
         brawlingBaseValue: 15,
         brawlingSkillXp: 928,
         characteristicAverage: 12,
-        finalTotal: 27,
+        effectiveSkillValue: 18,
+        finalTotal: 29,
         generalModifier: 0,
+        percentageAdjustment: 3,
+        percentageModifierTotal: 2,
         parryQualityModifier: 2,
         rollD20: 9,
         rollTotal: 11,
-        skillModifier: -1,
+        skillModifier: 0,
       },
       label: "Scyrian cavalry guy",
     });
 
     expect(calculation).toMatchObject({
-      effectiveSkill: 16,
-      modifierTotal: 1,
+      effectiveSkill: 18,
+      modifierTotal: 0,
+      percentageAdjustment: 3,
+      percentageModifierTotal: 2,
       skillValue: 15,
-      total: 27,
+      total: 29,
     });
     expect(formatCombatRollCalculationLines(calculation!)).toEqual([
       "Scyrian cavalry guy",
       "Skill: 15",
-      "Modifiers: +1",
-      "- Parry quality: +2",
-      "- Skill: -1",
-      "Effective skill: 16",
+      "Percentage modifiers: +2%",
+      "- Parry quality: +2%",
+      "Effective skill: 18",
       "Die roll: 11",
-      "Total: 27",
+      "Total: 29",
     ]);
   });
 

@@ -45,6 +45,12 @@ signature instead of carrying it across the boundary. Accepted GM and Player mut
 post-mutation revision immediately, while polling remains the path for changes made by another
 client.
 
+Validation task selection is viewer-aware inside tied groups. A player receives the tuple for their
+own executable task even when another tied participant sorts first; GM proxy sees the same
+canonical facts for the selected task. Parry validation follows the same cutoff and contribution
+fingerprint rules, including active combat-wide General effects. Pending same-group effects remain
+excluded by the cutoff and become part of later-group fingerprints only after activation.
+
 ## Presentation
 
 Tracker live markers come only from current-group tasks. Tied participants may have simultaneous

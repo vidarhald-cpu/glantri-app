@@ -134,6 +134,8 @@ export interface CombatHistoryProjection {
   combatLog?: CombatLogProjection;
   /** Player-safe canonical modifier totals bound to the currently executable attack task. */
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
+  /** Player-safe canonical modifier totals bound to the currently executable parry task. */
+  currentParryModifierValidation?: CombatParryModifierValidationProjection;
   /** Sanitized canonical live progression for the same encounter revision. */
   progression?: CombatProgressionPresentationProjection;
   rows: ProjectedCombatHistoryRow[];
@@ -159,6 +161,27 @@ export interface CombatAttackModifierValidationProjection {
   pairKey: string;
   phase: "phase1" | "phase2";
   proposalId?: string;
+  taskId: string;
+}
+
+export interface CombatParryModifierValidationProjection {
+  attackResultId: string;
+  attackResultModifier: number;
+  attackerParticipantId: string;
+  dbParryRaw: number;
+  defenderModifierFingerprint: string;
+  defenderParticipantId: string;
+  /** The current initiative group is also the effect cutoff for this parry calculation. */
+  effectCutoffInitiativeGroupId?: string;
+  encounterId: string;
+  expectedRevision: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
+  opportunityId: string;
+  parryPurpose: "ordinary_defense" | "offensive_parry";
+  parrySourceId: string;
+  processId: string;
+  stageId: string;
   taskId: string;
 }
 
@@ -599,6 +622,7 @@ function eventsWithDerivedCombatExperience(input: {
 
 export function projectCombatHistory(input: {
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
+  currentParryModifierValidation?: CombatParryModifierValidationProjection;
   participants: readonly CombatHistoryParticipantInput[];
   progressionProjection?: CombatProgressionProjection;
   sourceUpdatedAt?: string;
@@ -669,6 +693,7 @@ export function projectCombatHistory(input: {
         }
       : {}),
     currentAttackModifierValidation: input.currentAttackModifierValidation,
+    currentParryModifierValidation: input.currentParryModifierValidation,
     progression,
     rows: visibleParticipants.map((participant) => ({
       displayName: participant.displayName,

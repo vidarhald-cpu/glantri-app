@@ -131,7 +131,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "current?.sourceUpdatedAt === nextEncounter.updatedAt ? current : undefined",
     );
     expect(source).toContain("rollCombatParryOnServer");
-    expect(source).toContain("dbParryRaw: getMergedCombatDbParryModifierTotal({");
+    expect(source).toContain("buildCombatParryModifierRequest({");
+    expect(source).toContain("dbParryRaw: modifierRequest.dbParryRaw");
+    expect(source).toContain("if (participant) {");
+    expect(source).toContain("chooseRoundEndContinuedContactDistanceOnServer({");
     expect(source).toContain("baseDefenseStats: buildPlayerCombatDefenseStats({");
     expect(source).toContain(".baseDefenseStats?.parry");
     expect(source).not.toContain("modifierBreakdown: currentParryModifierBreakdown");

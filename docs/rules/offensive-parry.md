@@ -205,13 +205,21 @@ Continued Contact/Unbalanced consequence. The GM may inspect both rolls; a playe
 calculation and the broad opponent outcome, not the opponent's private dice/calculation.
 
 The final result uses one concise **Offensive Parry — Brawling** calculation. Each visible full roll
-shows Skill, the arithmetic Modifiers total (with non-zero source rows), Effective skill, Die roll,
-and Total. The signed contest difference is always controller total minus affected-participant
-total. The GM sees both full rolls; each involved player sees their own full roll, the opponent
-total, the signed difference, and the broad result. Skill IDs, XP fields, characteristic
-decomposition, task/process identities, and duplicate roll/final-total labels remain audit facts
-and are not normal calculation UI. This Brawling calculation attaches only to the final contest
-result; the incoming Attack and proactive parry retain their own calculations.
+shows Skill, raw Percentage modifiers (with non-zero source rows), the persisted workbook-adjusted
+Effective skill, Die roll, and Total. Parry quality values `+0%`, `+1%`, `+2%`, and `+4%` are not
+flat skill points. The shared workbook table applies them with all other eligible percentage
+contributions; base Brawling 15 with `+2%` resolves to effective skill 18. The signed contest
+difference is always controller total minus affected-participant total. The GM sees both full
+rolls; each involved player sees their own full roll, the opponent total, the signed difference,
+and the broad result. Skill IDs, XP fields, characteristic decomposition, task/process identities,
+and duplicate roll/final-total labels remain audit facts and are not normal calculation UI. This
+Brawling calculation attaches only to the final contest result; the incoming Attack and proactive
+parry retain their own calculations.
+
+For one declaration and source attack result, the proactive attempt and parry result are
+single-instance canonical facts. Successful resolution removes the parent parry task before
+Brawling is projected. Reload, polling, or a stale descriptor cannot create another parry result or
+restore **Roll Offensive Parry** after the contest or Continued Contact exists.
 
 The mechanics-only Brawling roll is not projected as new Combat Log narration.
 

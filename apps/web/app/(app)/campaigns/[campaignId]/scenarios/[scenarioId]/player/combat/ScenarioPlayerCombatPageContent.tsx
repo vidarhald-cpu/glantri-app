@@ -30,7 +30,6 @@ import {
   getCombatRoundRequiredCombatExperienceTrigger,
   getDistanceEdgeBetweenParticipantAliases,
   getCombatDistanceParticipantAliases,
-  getMergedCombatDbParryModifierTotal,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
@@ -170,6 +169,7 @@ import {
   buildEncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
+import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 
 interface ScenarioPlayerCombatPageContentProps {
@@ -2495,9 +2495,11 @@ export default function ScenarioPlayerCombatPageContent({
         scenarioParticipantId: descriptor.participantId,
         taskId: descriptor.taskId,
       });
-      setSelectableParticipants((current) =>
-        current.map((entry) => (entry.id === participant.id ? participant : entry)),
-      );
+      if (participant) {
+        setSelectableParticipants((current) =>
+          current.map((entry) => (entry.id === participant.id ? participant : entry)),
+        );
+      }
       acceptEncounterSession(encounter);
       setContinuedContactDistanceChoice("");
       setError(undefined);
@@ -2704,7 +2706,7 @@ export default function ScenarioPlayerCombatPageContent({
     });
 
     if (!modifierRequest) {
-      setError("Combat modifiers changed. Refresh combat before rolling.");
+      setCombatActionError("Attack state changed. Review the current action before rolling.");
       return;
     }
 
@@ -2734,6 +2736,7 @@ export default function ScenarioPlayerCombatPageContent({
         attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
         defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
+        effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId,
         encounterId,
@@ -2761,9 +2764,9 @@ export default function ScenarioPlayerCombatPageContent({
       }
 
       acceptEncounterSession(encounter);
-      setError(undefined);
+      setCombatActionError(undefined);
     } catch (caughtError) {
-      setError(
+      setCombatActionError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.",
       );
     } finally {
@@ -2813,7 +2816,25 @@ export default function ScenarioPlayerCombatPageContent({
     }
 
     if (currentParryBase === undefined) {
-      setError("No parry source is available.");
+      setCombatActionError("No parry source is available.");
+      return;
+    }
+    const modifierRequest = buildCombatParryModifierRequest({
+      attackResultId: descriptor.attackResultId,
+      attackerParticipantId: descriptor.opponentParticipantId,
+      defenderParticipantId: descriptor.participantId,
+      encounterId,
+      encounterRevision: descriptor.expectedRevision,
+      opportunityId: descriptor.opportunityId,
+      parryPurpose: descriptor.parryPurpose,
+      parrySourceId: descriptor.parrySourceId,
+      processId: descriptor.processId,
+      stageId: descriptor.stageId,
+      task: projectedRollTask,
+      validation: combatHistory?.currentParryModifierValidation,
+    });
+    if (!modifierRequest) {
+      setCombatActionError("Parry state changed. Review the current action before rolling.");
       return;
     }
 
@@ -2821,19 +2842,22 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const encounter = await rollCombatParryOnServer({
+        attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
         commandType: "roll_parry",
-        dbParryRaw: getMergedCombatDbParryModifierTotal({
-          combatContext: selectedParticipant.state.combat.combatContext,
-          phase: descriptor.phase,
-        }),
+        dbParryRaw: modifierRequest.dbParryRaw,
+        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: descriptor.participantId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId,
         executionGroupId: descriptor.executionGroupId,
         expectedRevision: descriptor.expectedRevision,
+        effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
+        initiativeGroupId: modifierRequest.initiativeGroupId,
+        initiativeValue: modifierRequest.initiativeValue,
+        modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,
         parryBase: currentParryBase,
@@ -2850,9 +2874,11 @@ export default function ScenarioPlayerCombatPageContent({
       });
 
       acceptEncounterSession(encounter);
-      setError(undefined);
+      setCombatActionError(undefined);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll combat parry.");
+      setCombatActionError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll combat parry.",
+      );
     } finally {
       setSavingCombatContext(false);
     }
@@ -2885,7 +2911,7 @@ export default function ScenarioPlayerCombatPageContent({
       !selectedParticipant ||
       selectedRoundParticipant?.participantId !== descriptor.participantId
     ) {
-      setError("The Offensive Parry task is no longer available.");
+      setCombatActionError("The Offensive Parry task is no longer available.");
       return;
     }
     setSavingCombatContext(true);
@@ -2930,9 +2956,9 @@ export default function ScenarioPlayerCombatPageContent({
           // The accepted encounter remains authoritative; polling will retry the projection.
         }
       }
-      setError(undefined);
+      setCombatActionError(undefined);
     } catch (caughtError) {
-      setError(
+      setCombatActionError(
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to roll Offensive Parry Brawling.",

@@ -70,7 +70,6 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
   getCombatRoundInitiativePhaseForStep,
-  getMergedCombatDbParryModifierTotal,
   getCombatRoundPhaseInitiativeChoice,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
@@ -137,6 +136,7 @@ import {
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
+import { buildGmCombatParryModifierRequest } from "./gmCombatParryRequest";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   advanceCombatRoundCurrentStepOnServer,
@@ -8115,6 +8115,7 @@ export default function CombatRoundManagerPanel({
         defenderDb,
         defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
         defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
+        effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId!,
         encounterId: encounter.id,
@@ -8235,6 +8236,18 @@ export default function CombatRoundManagerPanel({
           scenarioParticipants: effectiveScenarioParticipants,
         })
       : undefined;
+    const attackerEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === attackResult.attackerParticipantId,
+    );
+    const attackerScenarioParticipant = attackerEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: attackerEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    const projectedParryTask = projectedCurrentTasks.find(
+      (task) => task.id === descriptor.taskId,
+    );
 
     if (!defenderScenarioParticipant || !defenderRoundParticipant) {
       setSaveError("Defender scenario participant is required to roll parry.");
@@ -8261,6 +8274,21 @@ export default function CombatRoundManagerPanel({
       setSaveError("Select at least one available parry source.");
       return;
     }
+    const modifierRequest = buildGmCombatParryModifierRequest({
+      attackerScenarioParticipant,
+      attackResult,
+      defenderCombatantId: descriptor.participantId,
+      defenderScenarioParticipant,
+      descriptor,
+      encounterId: encounter.id,
+      encounterRevision: currentActionPresentation?.encounterRevision,
+      projectedTask: projectedParryTask,
+      roundState,
+    });
+    if (!modifierRequest) {
+      setSaveError("Parry state changed. Review the current action before rolling.");
+      return;
+    }
 
     const usedMainHand = selection.usedMainHand && Boolean(sources?.mainHand);
     const usedOffHand = selection.usedOffHand && Boolean(sources?.offHand);
@@ -8269,20 +8297,23 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
+        attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
         commandType: "roll_parry",
-        dbParryRaw: getMergedCombatDbParryModifierTotal({
-          combatContext: defenderScenarioParticipant.state.combat.combatContext,
-          phase,
-        }),
+        dbParryRaw: modifierRequest.dbParryRaw,
+        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: descriptor.participantId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId,
         expectedRevision: descriptor.expectedRevision,
+        effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
+        initiativeGroupId: modifierRequest.initiativeGroupId,
+        initiativeValue: modifierRequest.initiativeValue,
         mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
+        modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
         offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,

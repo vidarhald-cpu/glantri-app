@@ -12,6 +12,7 @@ export interface GmCombatAttackModifierRequest {
   attackerModifierFingerprint: string;
   defenderDbParryRaw: number;
   defenderModifierFingerprint: string;
+  effectCutoffInitiativeGroupId?: string;
   expectedRevision: string;
   initiativeGroupId?: string;
   initiativeValue?: number;
@@ -77,6 +78,7 @@ export function buildGmCombatAttackModifierRequest(input: {
     attackerModifierFingerprint: fingerprintCombatModifierResolution(facts.attackerResolution),
     defenderDbParryRaw: facts.defenderResolution.total,
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
+    effectCutoffInitiativeGroupId: descriptor.initiativeGroupId,
     expectedRevision: descriptor.expectedRevision,
     initiativeGroupId: descriptor.initiativeGroupId,
     initiativeValue: descriptor.initiativeValue,

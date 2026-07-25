@@ -446,14 +446,16 @@ export async function chooseRoundEndContinuedContactDistanceOnServer(input: {
   scenarioParticipantId: string;
   taskId: string;
 }): Promise<{
-  command: CombatRoundCommand;
+  command?: CombatRoundCommand;
+  commandEnvelope?: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
-  participant: ScenarioParticipant;
+  participant?: ScenarioParticipant;
 }> {
   return sendJson<{
-    command: CombatRoundCommand;
+    command?: CombatRoundCommand;
+    commandEnvelope?: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
-    participant: ScenarioParticipant;
+    participant?: ScenarioParticipant;
   }>(`/encounters/${input.encounterId}/combat-round/commit-distance-control`, {
     body: JSON.stringify(input),
     method: "POST",
@@ -807,6 +809,7 @@ export async function rollCombatAttackOnServer(input: {
   defenderDb?: number;
   defenderDbParryRaw?: number;
   defenderModifierFingerprint?: string;
+  effectCutoffInitiativeGroupId?: string;
   declarationId: string;
   defenderParticipantId: string;
   encounterId: string;
@@ -847,6 +850,7 @@ export async function rollCombatAttackOnServer(input: {
       defenderDb: input.defenderDb,
       defenderDbParryRaw: input.defenderDbParryRaw,
       defenderModifierFingerprint: input.defenderModifierFingerprint,
+      effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
       declarationId: input.declarationId,
       defenderParticipantId: input.defenderParticipantId,
       executionGroupId: input.executionGroupId,
@@ -872,17 +876,23 @@ export async function rollCombatAttackOnServer(input: {
 }
 
 export async function rollCombatParryOnServer(input: {
+  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
   dbParryRaw: number;
+  defenderModifierFingerprint: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  effectCutoffInitiativeGroupId?: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   mainHandParryScore?: number;
+  modifierValidationTaskId: string;
   offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId: string;
@@ -902,16 +912,22 @@ export async function rollCombatParryOnServer(input: {
     `/encounters/${input.encounterId}/combat-round/roll-parry`,
     {
       body: JSON.stringify({
+        attackResultModifier: input.attackResultModifier,
         attackResultId: input.attackResultId,
         attackerParticipantId: input.attackerParticipantId,
         commandType: input.commandType,
         dbParryRaw: input.dbParryRaw,
+        defenderModifierFingerprint: input.defenderModifierFingerprint,
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
+        effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
+        initiativeGroupId: input.initiativeGroupId,
+        initiativeValue: input.initiativeValue,
         mainHandParryScore: input.mainHandParryScore,
+        modifierValidationTaskId: input.modifierValidationTaskId,
         offHandParryScore: input.offHandParryScore,
         offensiveParryAttemptId: input.offensiveParryAttemptId,
         opportunityId: input.opportunityId,
@@ -1018,17 +1034,23 @@ export async function rollContinuedContactMaintenanceOnServer(input: {
 }
 
 export async function rollCombatParryCommandOnServer(input: {
+  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
   dbParryRaw: number;
+  defenderModifierFingerprint: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  effectCutoffInitiativeGroupId?: string;
+  initiativeGroupId?: string;
+  initiativeValue?: number;
   mainHandParryScore?: number;
+  modifierValidationTaskId: string;
   offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId: string;
@@ -1054,16 +1076,22 @@ export async function rollCombatParryCommandOnServer(input: {
     encounter: EncounterSession;
   }>(`/encounters/${input.encounterId}/combat-round/roll-parry`, {
     body: JSON.stringify({
+      attackResultModifier: input.attackResultModifier,
       attackResultId: input.attackResultId,
       attackerParticipantId: input.attackerParticipantId,
       commandType: input.commandType,
       dbParryRaw: input.dbParryRaw,
+      defenderModifierFingerprint: input.defenderModifierFingerprint,
       declarationId: input.declarationId,
       declaredOpponentParticipantId: input.declaredOpponentParticipantId,
       defenderParticipantId: input.defenderParticipantId,
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
+      effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
+      initiativeGroupId: input.initiativeGroupId,
+      initiativeValue: input.initiativeValue,
       mainHandParryScore: input.mainHandParryScore,
+      modifierValidationTaskId: input.modifierValidationTaskId,
       offHandParryScore: input.offHandParryScore,
       offensiveParryAttemptId: input.offensiveParryAttemptId,
       opportunityId: input.opportunityId,

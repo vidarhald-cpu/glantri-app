@@ -15,6 +15,7 @@ import {
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
   ensureCombatRoundPhaseResolutionResultsForPhase,
+  fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackCandidates,
   getCanonicalAttackOpportunityIdentity,
@@ -12418,13 +12419,28 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
 
     const parryPayload = {
+      attackResultModifier: attackHit.defenderParryModifier,
       attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
       attackerParticipantId: "encounter-participant-1",
       commandType: "roll_parry",
+      defenderModifierFingerprint: fingerprintCombatModifierResolution({
+        rows: [
+          { id: "generated-defense", label: "generated-defense", value: -1 },
+          {
+            id: "import:character_effect:defense-1:db_parry",
+            label: "imported-defense",
+            value: -2,
+          },
+          { id: "manual-defense", label: "manual-defense", value: 1 },
+          { id: "unbalanced-combat-wide", label: "unbalanced", value: -2 },
+        ],
+        total: -4,
+      }),
       declarationId: projectedParryTask?.identity.declarationId,
       defenderParticipantId: "encounter-participant-2",
       executionGroupId: projectedParryTask?.executionGroupId,
       expectedRevision: combatEncounter.updatedAt,
+      modifierValidationTaskId: projectedParryTask?.id,
       opportunityId: projectedParryTask?.identity.opportunityId,
       parryBase: 13,
       parryPurpose: projectedParryTask?.identity.parryPurpose,
@@ -13508,14 +13524,20 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        attackResultModifier: relevantAttack.defenderParryModifier,
         attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
         attackerParticipantId: "encounter-participant-1",
         commandType: "roll_parry",
         dbParryRaw: 0,
+        defenderModifierFingerprint: fingerprintCombatModifierResolution({
+          rows: [],
+          total: 0,
+        }),
         declarationId: projectedParryTask?.identity.declarationId,
         defenderParticipantId: "encounter-participant-2",
         executionGroupId: projectedParryTask?.executionGroupId,
         expectedRevision: combatEncounter.updatedAt,
+        modifierValidationTaskId: projectedParryTask?.id,
         opportunityId: projectedParryTask?.identity.opportunityId,
         parryBase: 13,
         parryPurpose: projectedParryTask?.identity.parryPurpose,

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   combatRoundStateSchema,
+  buildCombatRoundAttackRollResult,
   fingerprintCombatModifierResolution,
   resolveCanonicalCombatAttackModifierFacts,
+  resolveCanonicalCombatParryModifierFacts,
   scenarioParticipantSchema,
   type ScenarioParticipantCombatContext,
 } from "../index";
@@ -176,6 +178,41 @@ describe("canonical combat attack modifier validation", () => {
       total: -4,
     });
     expect(fingerprintCombatModifierResolution(first.attackerResolution)).toMatch(/^v1:/);
+    const parryFacts = resolveCanonicalCombatParryModifierFacts({
+      attackerScenarioParticipant: attacker,
+      attackResult: {
+        ...buildCombatRoundAttackRollResult({
+          actionId: "attack_parry",
+          attackerParticipantId: "encounter-attacker",
+          defenderDb: 15,
+          defenderParticipantId: "encounter-defender",
+          ob: 10,
+          phase: "phase1",
+          rollD20: 13,
+          rollTotal: 13,
+          rolledAt: "2026-01-01T00:00:00.000Z",
+          weaponName: "Sword",
+        }),
+        attackOpportunityId: "current-opportunity",
+      },
+      defenderCombatantId: "encounter-defender",
+      defenderScenarioParticipant: defender,
+      encounterId: "encounter-1",
+      state,
+    });
+    expect(parryFacts.defenderResolution).toMatchObject({
+      rows: [
+        {
+          id: "generated:adjust-range-attack:phase1:db-parry",
+          value: -2,
+        },
+        {
+          id: "unbalanced-defender",
+          value: -2,
+        },
+      ],
+      total: -4,
+    });
     expect(state).toEqual(original);
   });
 });
