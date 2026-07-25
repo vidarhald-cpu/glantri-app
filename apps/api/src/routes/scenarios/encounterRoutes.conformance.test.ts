@@ -33,9 +33,7 @@ describe("combat route canonical-conformance guards", () => {
   });
 
   it("binds attack modifier validation to the current initiative-group cutoff", () => {
-    expect(source).toContain(
-      "effectCutoffInitiativeGroupId: task.identity.initiativeGroupId",
-    );
+    expect(source).toContain("effectCutoffInitiativeGroupId: task.identity.initiativeGroupId");
     expect(source).toContain("initiativeGroupId: task.identity.initiativeGroupId");
     expect(source).toContain("initiativeValue: task.identity.initiativeValue");
     expect(source).toContain('code: "modifier_validation_task_mismatch"');
@@ -62,6 +60,23 @@ describe("combat route canonical-conformance guards", () => {
     }
     expect(source).toContain('commandType: "roll_offensive_parry_brawling"');
     expect(source).toContain('rollPurpose: "offensive_parry_brawling"');
+  });
+
+  it("binds Continued Contact maintenance to the exact task, contest, contact, and roll purpose", () => {
+    expect(source).toContain("combat-round/roll-continued-contact-maintenance");
+    for (const identity of [
+      "contestId",
+      "continuedContactId",
+      "executionGroupId",
+      "opponentParticipantId",
+      "processId",
+      "stageId",
+      "taskId",
+    ]) {
+      expect(source).toContain(`${identity}: body.${identity}`);
+    }
+    expect(source).toContain('commandType: "roll_continued_contact_maintenance"');
+    expect(source).toContain('rollPurpose: "escape_continued_contact"');
   });
 
   it("authorizes proactive parry from the complete projected descriptor", () => {

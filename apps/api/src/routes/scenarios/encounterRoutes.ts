@@ -105,6 +105,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
+  recordContinuedContactMaintenanceRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCombatExperienceCombatContextModifiers,
@@ -752,6 +753,37 @@ function parseRoundEndDistanceControlRollBody(body: unknown): ParsedCombatTaskCo
       "opponentParticipantId",
     ),
     pairId: parseNonEmptyString(value.pairId, "pairId"),
+  };
+}
+
+function parseContinuedContactMaintenanceRollBody(
+  body: unknown,
+): ParsedCombatTaskCommandIdentity & {
+  contestId: string;
+  continuedContactId: string;
+  opponentParticipantId: string;
+  processId: string;
+  rollPurpose: "escape_continued_contact";
+  scenarioParticipantId: string;
+  stageId: string;
+} {
+  const value = parseBodyObject(body, "Continued Contact maintenance roll payload");
+  const parsed = parseParticipantCommandBody(value, "Continued Contact maintenance roll payload");
+  if (value.rollPurpose !== "escape_continued_contact") {
+    throw new Error("rollPurpose must be escape_continued_contact.");
+  }
+  return {
+    ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
+    contestId: parseNonEmptyString(value.contestId, "contestId"),
+    continuedContactId: parseNonEmptyString(value.continuedContactId, "continuedContactId"),
+    opponentParticipantId: parseNonEmptyString(
+      value.opponentParticipantId,
+      "opponentParticipantId",
+    ),
+    processId: parseNonEmptyString(value.processId, "processId"),
+    rollPurpose: "escape_continued_contact",
+    stageId: parseNonEmptyString(value.stageId, "stageId"),
   };
 }
 
@@ -2539,6 +2571,45 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     return sanitizePlayerSafeDistanceControlCommandFacts(input);
   }
 
+  if (input.command.type === "roll_continued_contact_maintenance") {
+    const contactId =
+      typeof input.command.facts.continuedContactId === "string"
+        ? input.command.facts.continuedContactId
+        : undefined;
+    const contact = contactId ? input.command.facts.previousContinuedContact : undefined;
+    const parsedContact =
+      contact && typeof contact === "object"
+        ? (contact as {
+            affectedParticipantId?: unknown;
+            controllerParticipantId?: unknown;
+          })
+        : undefined;
+    const involved = [
+      parsedContact?.affectedParticipantId,
+      parsedContact?.controllerParticipantId,
+    ].some(
+      (participantId) =>
+        typeof participantId === "string" &&
+        (input.controlledEncounterParticipantIds.has(participantId) ||
+          input.visibleParticipantIds.has(participantId)),
+    );
+    if (!involved) return undefined;
+    return {
+      ...input.command,
+      facts: {
+        contactMaintained: input.command.facts.contactMaintained,
+        contestId: input.command.facts.contestId,
+        continuedContactId: input.command.facts.continuedContactId,
+        opponentParticipantId: input.command.facts.opponentParticipantId,
+        resolved: input.command.facts.resolved,
+        resultId: input.command.facts.resultId,
+        rollId: input.command.facts.rollId,
+        rollPurpose: input.command.facts.rollPurpose,
+        unbalancedConditionId: input.command.facts.unbalancedConditionId,
+      },
+    };
+  }
+
   return input.command;
 }
 
@@ -2572,6 +2643,25 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
   const safeRoundEndReview = roundState.roundEndReview
     ? {
         ...roundState.roundEndReview,
+        continuedContactMaintenanceContests:
+          roundState.roundEndReview.continuedContactMaintenanceContests
+            .filter((contest) =>
+              isPlayerVisibleCombatRoundResultPair({
+                attackerParticipantId: contest.controllerParticipantId,
+                controlledEncounterParticipantIds,
+                defenderParticipantId: contest.affectedParticipantId,
+                visibleParticipantIds,
+              }),
+            )
+            .map((contest) => ({
+              ...contest,
+              affectedRoll: controlledEncounterParticipantIds.has(contest.affectedParticipantId)
+                ? contest.affectedRoll
+                : undefined,
+              controllerRoll: controlledEncounterParticipantIds.has(contest.controllerParticipantId)
+                ? contest.controllerRoll
+                : undefined,
+            })),
         proposedDistances: roundState.roundEndReview.proposedDistances
           .map((proposal) =>
             buildPlayerSafeDistanceControlProposalForUser({
@@ -5686,6 +5776,290 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error: error instanceof Error ? error.message : "Unable to roll Combat Experience.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-continued-contact-maintenance",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+
+        const body = parseContinuedContactMaintenanceRollBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
+          encounter,
+          requestedParticipantId: body.scenarioParticipantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        const roller = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
+        if (!roller || !roller.isActive || !encounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+        const gmAuthorizedOperation = access.mode === "gm";
+        if (
+          !gmAuthorizedOperation &&
+          (roller.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const contest = roundState.roundEndReview?.continuedContactMaintenanceContests.find(
+          (entry) => entry.id === body.contestId,
+        );
+        if (!contest || contest.continuedContactId !== body.continuedContactId) {
+          return reply.code(404).send({ error: "Continued Contact maintenance not found." });
+        }
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+            commandType: "roll_continued_contact_maintenance",
+            contestId: body.contestId,
+            continuedContactId: body.continuedContactId,
+            opponentParticipantId: body.opponentParticipantId,
+            participantId: encounterParticipant.id,
+            processId: body.processId,
+            rollPurpose: body.rollPurpose,
+            stageId: body.stageId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
+
+        const brawlingSkill = defaultCanonicalContent.skills.find(
+          (skill) => skill.id === "brawling",
+        );
+        if (!brawlingSkill) {
+          return reply.code(409).send({ error: "Brawling skill definition is unavailable." });
+        }
+        const profile = resolveParticipantSkillRollProfile({
+          ...getScenarioParticipantFeintSkillInput(roller),
+          skill: brawlingSkill,
+        });
+        const opponentEncounterParticipant = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        }).participants.find((participant) => participant.id === body.opponentParticipantId);
+        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) =>
+                participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        const modifierProjection = buildLiveCombatModifierContributionProjection({
+          combatContext: roller.state.combat.combatContext,
+          combatEffects: roller.state.combatEffects,
+          currentRound: roundState.roundNumber,
+          encounterId,
+          ownerParticipantId: roller.id,
+        });
+        const modifierContext: CombatCalculationContext = {
+          actionId: "offensive_parry",
+          encounterId,
+          ownerParticipantId: roller.id,
+          opponentParticipantId: opponentScenarioParticipant?.id,
+          pairKey: opponentScenarioParticipant
+            ? createCombatParticipantPairKey(roller.id, opponentScenarioParticipant.id)
+            : undefined,
+          rollPurpose:
+            encounterParticipant.id === contest.affectedParticipantId
+              ? "escape_continued_contact"
+              : undefined,
+          rollType: "brawling",
+          roundNumber: roundState.roundNumber,
+          skillId: "brawling",
+          step: "round_summary",
+        };
+        const generalResolution = resolveCombatModifierContributions({
+          bucket: "general_fatigue",
+          context: modifierContext,
+          contributions: modifierProjection.contributions,
+        });
+        const skillResolution = resolveCombatModifierContributions({
+          bucket: "skill_ob",
+          context: modifierContext,
+          contributions: modifierProjection.contributions,
+        });
+        const openEndedRoll = rollOpenEndedD20();
+        const createdAt = new Date().toISOString();
+        const roll = {
+          brawlingBaseValue: profile.rollBaseValue + profile.unknownSkillPenalty,
+          brawlingSkillXp: profile.totalXP,
+          characteristicAverage: profile.avgStats,
+          finalTotal:
+            openEndedRoll.dieResult +
+            profile.rollBaseValue +
+            profile.unknownSkillPenalty +
+            generalResolution.total +
+            skillResolution.total,
+          generalModifier: generalResolution.total,
+          id: `${contest.id}:roll:${encounterParticipant.id}`,
+          openEndedD10s: openEndedRoll.openEndedD10s,
+          participantId: encounterParticipant.id,
+          parryQualityModifier: 0,
+          pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
+            activationLabel: "Effective from later combat work",
+            label: entry.notes?.trim() || "Combat effect",
+            value: entry.value,
+          })),
+          rollD20: openEndedRoll.rollD20,
+          rollPurpose: "escape_continued_contact" as const,
+          rollTotal: openEndedRoll.dieResult,
+          rolledAt: createdAt,
+          rolledByUserId: user.id,
+          skillId: "brawling" as const,
+          skillLabel: "Brawling" as const,
+          skillModifier: skillResolution.total,
+        };
+        const rolled = recordContinuedContactMaintenanceRoll({
+          command: { createdAt, createdByUserId: user.id },
+          contestId: body.contestId,
+          executionGroupId: body.executionGroupId,
+          opponentParticipantId: body.opponentParticipantId,
+          participantId: encounterParticipant.id,
+          participantInputs: buildRoundEndDistanceControlInputs({
+            encounter,
+            roundState,
+            scenarioParticipants,
+          }),
+          roll,
+          state: roundState,
+        });
+
+        const endedCondition = roundState.unbalancedConditions.find((condition) => {
+          const next = rolled.state.unbalancedConditions.find((entry) => entry.id === condition.id);
+          return condition.status === "active" && next?.status === "ended";
+        });
+        let responseScenarioParticipants = scenarioParticipants;
+        let updatedParticipant: ScenarioParticipant | undefined;
+        if (endedCondition) {
+          const affectedEncounterParticipant = resolveEncounterParticipantMembership({
+            encounter,
+            scenarioParticipants,
+          }).participants.find(
+            (participant) => participant.id === endedCondition.affectedParticipantId,
+          );
+          const affected = affectedEncounterParticipant?.scenarioParticipantId
+            ? scenarioParticipants.find(
+                (participant) =>
+                  participant.id === affectedEncounterParticipant.scenarioParticipantId,
+              )
+            : undefined;
+          if (!affected) {
+            throw new RangeError("The Unbalanced participant is not assigned to this encounter.");
+          }
+          const effects = combatEffectsStateSchema.parse(affected.state.combatEffects);
+          if (
+            !effects.effects.some(
+              (effect) =>
+                effect.id === endedCondition.id &&
+                (effect.status === "active" || effect.status === "pending"),
+            )
+          ) {
+            throw new RangeError(
+              "The active Continued Contact relationship has no matching Unbalanced effect.",
+            );
+          }
+          updatedParticipant = await encounterService.updateScenarioParticipantState({
+            participantId: affected.id,
+            scenarioId,
+            state: {
+              ...affected.state,
+              combatEffects: combatEffectsStateSchema.parse({
+                ...effects,
+                effects: effects.effects.map((effect) =>
+                  effect.id === endedCondition.id
+                    ? combatEffectSchema.parse({
+                        ...effect,
+                        status: "expired",
+                        updatedAt: createdAt,
+                      })
+                    : effect,
+                ),
+              }),
+            },
+          });
+          responseScenarioParticipants = scenarioParticipants.map((participant) =>
+            participant.id === updatedParticipant!.id ? updatedParticipant! : participant,
+          );
+        }
+
+        const savedEncounter = await encounterService.updateEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: createdAt,
+          },
+        });
+        return {
+          command: gmAuthorizedOperation
+            ? rolled.command
+            : buildPlayerSafeCombatRoundCommandForUser({
+                command: rolled.command,
+                ...buildPlayerSafeCombatScopeForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants: responseScenarioParticipants,
+                  userId: user.id,
+                }),
+              }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: rolled.state }),
+          encounter: gmAuthorizedOperation
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants: responseScenarioParticipants,
+                userId: user.id,
+              }),
+          participant: updatedParticipant,
+          roll,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to roll Continued Contact maintenance.",
         });
       }
     },
@@ -9054,6 +9428,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_offensive_parry_brawling" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedContinuedContactMaintenanceCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "roll_continued_contact_maintenance" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const declarationClearEncounterParticipantIds = new Set<string>();
 
       if (clearsDeclarationStep) {
@@ -9093,7 +9473,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedCommittedDamageCommands.length > 0 ||
         removedRoundEndParticipantReviewCommands.length > 0 ||
         removedRoundEndHealthCheckCommands.length > 0 ||
-        removedOffensiveParryBrawlingCommands.length > 0
+        removedOffensiveParryBrawlingCommands.length > 0 ||
+        removedContinuedContactMaintenanceCommands.length > 0
           ? await Promise.all(
               scenarioParticipants
                 .map((participant) => {
@@ -9297,6 +9678,37 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                         effects: effects.effects.filter((effect) => effect.id !== conditionId),
                         events: effects.events.filter(
                           (event) => event.id !== `${conditionId}:effect-event`,
+                        ),
+                      }),
+                    };
+                  }
+
+                  for (const command of removedContinuedContactMaintenanceCommands) {
+                    if (
+                      command.facts.resolved !== true ||
+                      command.facts.contactMaintained !== false
+                    ) {
+                      continue;
+                    }
+                    const conditionId =
+                      typeof command.facts.unbalancedConditionId === "string"
+                        ? command.facts.unbalancedConditionId
+                        : undefined;
+                    if (!conditionId) continue;
+                    const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
+                    if (!effects.effects.some((effect) => effect.id === conditionId)) continue;
+                    nextState = {
+                      ...nextState,
+                      combatEffects: combatEffectsStateSchema.parse({
+                        ...effects,
+                        effects: effects.effects.map((effect) =>
+                          effect.id === conditionId
+                            ? combatEffectSchema.parse({
+                                ...effect,
+                                status: "active",
+                                updatedAt: submittedAt,
+                              })
+                            : effect,
                         ),
                       }),
                     };

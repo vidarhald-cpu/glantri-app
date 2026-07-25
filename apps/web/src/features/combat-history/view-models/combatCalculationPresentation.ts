@@ -30,6 +30,7 @@ export interface CombatContestCalculationPresentation {
   readonly difference: number;
   readonly initiator: CombatContestSidePresentation;
   readonly responder: CombatContestSidePresentation;
+  readonly tieResultLabel?: string;
   readonly winnerParticipantId?: string;
 }
 
@@ -106,6 +107,7 @@ export function buildCombatContestCalculationPresentation(input: {
   readonly consequence?: string;
   readonly initiator: CombatContestSidePresentation;
   readonly responder: CombatContestSidePresentation;
+  readonly tieResultLabel?: string;
   readonly winnerParticipantId?: string;
 }): CombatContestCalculationPresentation {
   return {
@@ -113,6 +115,7 @@ export function buildCombatContestCalculationPresentation(input: {
     difference: input.initiator.total - input.responder.total,
     initiator: input.initiator,
     responder: input.responder,
+    tieResultLabel: input.tieResultLabel,
     winnerParticipantId: input.winnerParticipantId,
   };
 }
@@ -125,9 +128,7 @@ function rollLines(
     heading,
     `Skill: ${calculation.skillValue}`,
     `Modifiers: ${formatModifier(calculation.modifierTotal)}`,
-    ...calculation.modifierRows.map(
-      (row) => `- ${row.label}: ${formatModifier(row.value)}`,
-    ),
+    ...calculation.modifierRows.map((row) => `- ${row.label}: ${formatModifier(row.value)}`),
     ...(calculation.pendingModifierRows.length > 0
       ? [
           "Pending:",
@@ -149,8 +150,7 @@ function differenceLine(
 ): string {
   const signed = formatSignedCombatModifier(presentation.difference);
   if (presentation.difference === 0) return "Difference: 0";
-  const favored =
-    presentation.difference > 0 ? presentation.initiator : presentation.responder;
+  const favored = presentation.difference > 0 ? presentation.initiator : presentation.responder;
   return viewerParticipantId === favored.participantId
     ? `Difference: ${signed} in your favor`
     : `Difference: ${signed} in favor of ${favored.label}`;
@@ -161,7 +161,7 @@ function resultLine(
   viewerParticipantId?: string,
 ): string {
   if (!presentation.winnerParticipantId) {
-    return "Result: Tie — no continued contact established";
+    return `Result: ${presentation.tieResultLabel ?? "Tie — no continued contact established"}`;
   }
   if (viewerParticipantId) {
     return presentation.winnerParticipantId === viewerParticipantId

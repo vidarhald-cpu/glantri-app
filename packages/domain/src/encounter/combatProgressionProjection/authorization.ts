@@ -1,5 +1,5 @@
 import type { CombatRoundPhase } from "../combatRoundManager";
-import type { CombatParryPurpose } from "../combatOffensiveParry";
+import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
@@ -41,6 +41,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
   readonly contestId?: string;
+  readonly continuedContactId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -56,6 +57,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
+  readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
@@ -165,6 +167,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     kind: "offensive_parry_brawling_roll",
     process: "attack",
     stage: "offensive_parry_contest",
+  },
+  roll_continued_contact_maintenance: {
+    boundary: "round_end",
+    kind: "continued_contact_maintenance_roll",
+    process: "continued_contact_maintenance",
+    stage: "contest",
   },
   roll_hit_location: {
     boundary: resolutionBoundary,
@@ -410,12 +418,14 @@ export function authorizeCombatProgressionTask(
       [input.attackIndex, "attackIndex"],
       [input.attackModeId, "attackModeId"],
       [input.declarationId, "declarationId"],
+      [input.continuedContactId, "continuedContactId"],
       [input.initiativeGroupId, "initiativeGroupId"],
       [input.initiativeValue, "initiativeValue"],
       [input.declaredOpponentParticipantId, "declaredOpponentParticipantId"],
       [input.offensiveParryAttemptId, "offensiveParryAttemptId"],
       [input.parryPurpose, "parryPurpose"],
       [input.parrySourceId, "parrySourceId"],
+      [input.rollPurpose, "rollPurpose"],
       [input.weaponInstanceId, "weaponInstanceId"],
       [input.weaponSourceId, "weaponSourceId"],
       [input.weaponSourceSlot, "weaponSourceSlot"],

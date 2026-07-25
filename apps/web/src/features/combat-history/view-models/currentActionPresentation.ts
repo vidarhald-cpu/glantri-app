@@ -5,6 +5,7 @@ import type {
   CombatProgressionPresentationTask,
   CombatProgressionTaskKind,
   CombatRoundPhase,
+  OffensiveParryRollPurpose,
 } from "@glantri/domain";
 
 export interface CombatPresentationSubject {
@@ -27,6 +28,7 @@ export interface CurrentActionCommandDescriptor {
   readonly commandType: CombatProgressionExpectedCommand;
   readonly criticalResultId?: string;
   readonly contestId?: string;
+  readonly continuedContactId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -51,6 +53,7 @@ export interface CurrentActionCommandDescriptor {
   readonly phase?: CombatRoundPhase;
   readonly processId?: string;
   readonly proposalId?: string;
+  readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
   readonly taskId: string;
@@ -187,6 +190,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   attack: "Attack",
   combat_experience: "Combat Experience",
   continued_contact_distance_control: "Continued Contact",
+  continued_contact_maintenance_controller: "Continued Contact",
+  continued_contact_maintenance_escape: "Continued Contact",
   declaration: "Declaration",
   distance: "Distance Control",
   double_attack: "Double Attack",
@@ -212,6 +217,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   adjust_distance_response: "Adjust Distance",
   attack: "Attack",
   combat_experience: "Combat Experience",
+  continued_contact_maintenance_roll: "Continued Contact",
   commit_initiative: "Initiative",
   critical: "Critical",
   damage_roll: "Graze Damage",
@@ -395,6 +401,11 @@ function summaryFor(input: {
         input.task.presentationContext?.actor?.participantId
         ? `Your Offensive Parry succeeded. Contest ${target ?? "the attacker"}'s balance.`
         : `${actor} maintained contact after the parry.`;
+    case "continued_contact_maintenance_roll":
+      return input.task.presentationContext?.actionKind ===
+        "continued_contact_maintenance_controller"
+        ? `Maintain Continued Contact with ${target ?? "the opponent"}.`
+        : `Attempt to escape ${actor}'s Continued Contact.`;
     case "hit_location":
     case "critical":
     case "damage_roll":
@@ -524,6 +535,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
         : "Roll parry";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling";
+    case "continued_contact_maintenance_roll":
+      return "Roll Brawling";
     case "hit_location":
       return "Roll hit location";
     case "critical":
@@ -596,6 +609,10 @@ function requiredNowFor(
         : "Defend against the attack.";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling.";
+    case "continued_contact_maintenance_roll":
+      return task.presentationContext?.actionKind === "continued_contact_maintenance_controller"
+        ? "Maintain Continued Contact. Roll Brawling."
+        : "Attempt to escape Continued Contact. Roll Brawling.";
     case "hit_location":
       return "Roll hit location.";
     case "critical":
@@ -766,6 +783,7 @@ export function buildCurrentActionPresentation(
     commandType: task.expectedCommand,
     criticalResultId: task.identity.criticalResultId,
     contestId: task.identity.contestId,
+    continuedContactId: task.identity.continuedContactId,
     damageRollExpression: task.identity.damageRollExpression,
     damageReviewId: task.identity.damageReviewId,
     declarationId: task.identity.declarationId,
@@ -791,6 +809,7 @@ export function buildCurrentActionPresentation(
     phase,
     processId: task.processId,
     proposalId: task.identity.proposalId,
+    rollPurpose: task.identity.rollPurpose,
     stageId: task.stageId,
     targetBoundary: task.transition?.targetBoundary,
     taskId: task.id,
@@ -800,11 +819,18 @@ export function buildCurrentActionPresentation(
     weaponTemplateId: task.identity.weaponTemplateId,
   } satisfies CurrentActionCommandDescriptor);
   const waitingForParallelBrawlingRoll =
-    task.kind === "offensive_parry_brawling_roll" &&
+    (task.kind === "offensive_parry_brawling_roll" ||
+      task.kind === "continued_contact_maintenance_roll") &&
     input.viewer.kind === "player" &&
     !viewerMayInvoke &&
-    actor?.id !== undefined &&
-    (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id);
+    (task.kind === "continued_contact_maintenance_roll"
+      ? task.presentationContext?.opponentRollRecorded === true &&
+        task.identity.opponentParticipantId !== undefined &&
+        (input.viewer.controlledParticipantIds ?? new Set()).has(
+          task.identity.opponentParticipantId,
+        )
+      : actor?.id !== undefined &&
+        (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id));
   const summary = waitingForParallelBrawlingRoll
     ? `Your Brawling roll is recorded. Waiting for ${required.label}.`
     : summaryFor({ action, actor, target, task });
@@ -833,10 +859,9 @@ export function buildCurrentActionPresentation(
       viewerMayInvoke,
     },
     processId: task.processId,
-    reason:
-      task.presentationContext?.actionKind === "continued_contact_distance_control"
-        ? (task.presentationContext.reason ?? "")
-        : "",
+    reason: task.presentationContext?.actionKind?.startsWith("continued_contact_")
+      ? (task.presentationContext.reason ?? "")
+      : "",
     requiredActor: required,
     requiredNow,
     skill: task.presentationContext?.skill?.label

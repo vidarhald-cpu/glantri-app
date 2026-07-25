@@ -1,6 +1,7 @@
 # Offensive Parry process
 
-Implementation status: Slice 1 plus the controller-owned Continued Contact distance lifecycle.
+Implementation status: Slice 1 plus the controller-owned Continued Contact distance and
+maintenance/escape lifecycle.
 
 The repository action identifier is `offensive_parry`; its user-facing label is **Offensive
 Parry**. It is a declaration-time maneuver, not a display-text inference.
@@ -140,7 +141,7 @@ currently implemented roll category required an Offensive-Parry-only calculation
 
 The applicability contract carries excluded roll purposes. For the affected participant,
 `escape_continued_contact` excludes the Unbalanced row itself. Other valid general, skill, or
-situational modifiers remain applicable. The escape contest is not implemented in Slice 1.
+situational modifiers remain applicable.
 
 ### Next-round engagement distance
 
@@ -158,6 +159,37 @@ opposed distance contest for only the controller/affected-participant pair:
 This lifecycle does not create an Offensive Parry attack, shorten distance from weapon data, or
 change declaration legality. The controller owns only this relationship-scoped distance choice.
 Unrelated participant pairs continue to use ordinary Round End distance resolution.
+
+### Maintenance and escape
+
+The establishment round does not contain a maintenance contest. Continued Contact first supplies
+the controller-owned distance choice, the next round opens normal declarations, and both
+participants fight that complete round through its ordinary combat work. Only when that later round
+reaches Round End does maintenance precede the next distance decision:
+
+1. one deterministic maintenance contest is created for each active Continued Contact relationship
+   whose establishment round is earlier than the current round;
+2. one controller-owned and one affected-participant-owned
+   `continued_contact_maintenance_roll` task are projected together in an `SU` `parallel_all`
+   execution group;
+3. both use ordinary effective Brawling and `rollPurpose: escape_continued_contact`;
+4. the affected participant's Unbalanced −2% row is excluded from that roll purpose only, while
+   every other applicable modifier remains;
+5. a strictly higher controller total maintains Continued Contact and Unbalanced;
+6. a higher affected-participant total or an equal total breaks Continued Contact and removes
+   Unbalanced.
+
+Maintenance is a Round End child process. It does not run during initiative resolution,
+declaration, or the distance choice, and unresolved maintenance gates all distance work for the
+relationship. Each participant owns their own roll, the GM may proxy either exact task, and the
+first roll completes only that participant's child task.
+
+When contact is maintained, the same controller receives the canonical engagement-distance choice
+before the next round's declarations. When contact is broken, the ordinary opposed distance
+process returns for that pair. Ending contact marks both the relationship and condition terminal
+and expires the linked Unbalanced combat effect in the same accepted route mutation. Reload
+reconstructs the same result; undoing the final roll restores the prior active states and exactly
+one unresolved maintenance task.
 
 ## Presentation and privacy
 
@@ -183,6 +215,12 @@ result; the incoming Attack and proactive parry retain their own calculations.
 
 The mechanics-only Brawling roll is not projected as new Combat Log narration.
 
+The final maintenance result uses one concise **Continued Contact — Maintenance** contested
+calculation. A controller win states that contact was maintained, Unbalanced remains, and the
+controller chooses the next engagement distance. An affected-participant win or tie states that
+contact was broken, Unbalanced was removed, and ordinary distance control resumes. It does not
+repeat the Brawling calculation that originally established Continued Contact.
+
 ## Deferred work
 
 Slice 2:
@@ -192,11 +230,11 @@ Slice 2:
 - automatic distance shortening where required;
 - exact source/mode selection for the follow-up attack.
 
-Slice 3:
+Still deferred:
 
-- round-end Brawling maintenance/escape contest;
-- the unpenalized escape roll using `escape_continued_contact`;
-- ending Continued Contact and removing Unbalanced;
-- forward movement and forced-retreat consequences.
+- any conditional Phase 2 follow-up attack, second-weapon rule, or automatic attack-distance
+  shortening;
+- forward movement and forced-retreat consequences;
+- Disarm, Throws, Locks, and Observe Opponent.
 
 This document does not claim that the complete maneuver is implemented.

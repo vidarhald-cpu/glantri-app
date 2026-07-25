@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  buildContinuedContactMaintenanceContestId,
+  buildContinuedContactMaintenanceContestResultId,
   buildOffensiveParryAttemptId,
   buildContinuedContactId,
   buildOffensiveParryContestId,
@@ -7,11 +9,13 @@ import {
   buildUnbalancedConditionId,
   combatParryPurposeSchema,
   continuedContactSchema,
+  continuedContactMaintenanceContestSchema,
   offensiveParryBrawlingRollSchema,
   offensiveParryContestSchema,
   resolveOffensiveParryContestWinner,
   resolveOffensiveParryQualityModifier,
   unbalancedCombatConditionSchema,
+  type ContinuedContactMaintenanceContest,
   type OffensiveParryBrawlingRoll,
 } from "./combatOffensiveParry";
 
@@ -394,6 +398,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_attack",
   "roll_parry",
   "roll_offensive_parry_brawling",
+  "roll_continued_contact_maintenance",
   "roll_hit_location",
   "roll_critical",
   "decide_double_attack_phase2",
@@ -675,6 +680,9 @@ export const combatRoundEndParticipantReviewSchema = z.object({
 export type RoundEndParticipantReview = z.infer<typeof combatRoundEndParticipantReviewSchema>;
 
 export const combatRoundEndReviewSchema = z.object({
+  continuedContactMaintenanceContests: z
+    .array(continuedContactMaintenanceContestSchema)
+    .default([]),
   participantReviews: z.record(idSchema, combatRoundEndParticipantReviewSchema).default({}),
   preparedAt: z.string().datetime().optional(),
   preparedByUserId: idSchema.optional(),
@@ -4498,6 +4506,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "roll_attack" ||
     type === "roll_parry" ||
     type === "roll_offensive_parry_brawling" ||
+    type === "roll_continued_contact_maintenance" ||
     type === "roll_hit_location" ||
     type === "roll_critical" ||
     type === "decide_double_attack_phase2" ||
@@ -11257,6 +11266,13 @@ function getCombatRoundEndReviewCursor(input: {
 
 export type CombatRoundEndTask =
   | {
+      continuedContactId: string;
+      contestId: string;
+      kind: "continued_contact_maintenance_roll";
+      opponentParticipantId: string;
+      participantId: string;
+    }
+  | {
       distanceProposalId: string;
       kind: "distance_roll";
       pairKey: string;
@@ -11320,6 +11336,28 @@ export function getNextCombatRoundEndTask(input: {
 
   if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
     return undefined;
+  }
+
+  for (const contest of roundEndReview.continuedContactMaintenanceContests) {
+    if (contest.status !== "awaiting_rolls") continue;
+    if (!contest.controllerRollRecorded) {
+      return {
+        continuedContactId: contest.continuedContactId,
+        contestId: contest.id,
+        kind: "continued_contact_maintenance_roll",
+        opponentParticipantId: contest.affectedParticipantId,
+        participantId: contest.controllerParticipantId,
+      };
+    }
+    if (!contest.affectedRollRecorded) {
+      return {
+        continuedContactId: contest.continuedContactId,
+        contestId: contest.id,
+        kind: "continued_contact_maintenance_roll",
+        opponentParticipantId: contest.controllerParticipantId,
+        participantId: contest.affectedParticipantId,
+      };
+    }
   }
 
   for (const proposal of roundEndReview.proposedDistances) {
@@ -11655,6 +11693,60 @@ function buildCombatRoundEndDistanceProposalId(input: {
   roundNumber: number;
 }): string {
   return `round-end:${input.roundNumber}:distance:${input.pairKey}`;
+}
+
+function buildContinuedContactMaintenanceContests(
+  state: CombatRoundState,
+): ContinuedContactMaintenanceContest[] {
+  const normalized = combatRoundStateSchema.parse(state);
+  for (const condition of normalized.unbalancedConditions) {
+    if (
+      condition.status === "active" &&
+      !normalized.continuedContacts.some(
+        (contact) =>
+          contact.id === condition.sourceContinuedContactId &&
+          contact.affectedParticipantId === condition.affectedParticipantId &&
+          contact.status === "active",
+      )
+    ) {
+      throw new RangeError(
+        "Active Unbalanced requires its matching active Continued Contact relationship.",
+      );
+    }
+  }
+
+  return normalized.continuedContacts.flatMap((contact) => {
+    if (contact.status !== "active" || contact.establishedRound >= normalized.roundNumber) {
+      return [];
+    }
+    const condition = normalized.unbalancedConditions.find(
+      (entry) =>
+        entry.sourceContinuedContactId === contact.id &&
+        entry.affectedParticipantId === contact.affectedParticipantId &&
+        entry.status === "active",
+    );
+    if (!condition) {
+      throw new RangeError(
+        "Active Continued Contact requires its matching active Unbalanced condition.",
+      );
+    }
+    const contestId = buildContinuedContactMaintenanceContestId({
+      continuedContactId: contact.id,
+      roundNumber: normalized.roundNumber,
+    });
+    return [
+      continuedContactMaintenanceContestSchema.parse({
+        affectedParticipantId: contact.affectedParticipantId,
+        continuedContactId: contact.id,
+        controllerParticipantId: contact.controllerParticipantId,
+        id: contestId,
+        resultId: buildContinuedContactMaintenanceContestResultId({ contestId }),
+        roundNumber: normalized.roundNumber,
+        status: "awaiting_rolls",
+        unbalancedConditionId: condition.id,
+      }),
+    ];
+  });
 }
 
 /**
@@ -12095,6 +12187,9 @@ export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean
   }
 
   if (
+    review.continuedContactMaintenanceContests.some(
+      (contest) => contest.status === "awaiting_rolls",
+    ) ||
     review.proposedDistances.some(
       (proposal) =>
         proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) !== "applied",
@@ -12167,6 +12262,14 @@ export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): st
 
   if (!review || review.roundNumber !== normalized.roundNumber) {
     return "Round-end review incomplete.";
+  }
+
+  if (
+    review.continuedContactMaintenanceContests.some(
+      (contest) => contest.status === "awaiting_rolls",
+    )
+  ) {
+    return "Continued Contact maintenance must be resolved before starting the next round.";
   }
 
   const pendingDistanceProposal = review.proposedDistances.find(
@@ -12247,10 +12350,14 @@ export function prepareCombatRoundEndReview(input: {
       participantInput.distanceControl ?? {},
     ]),
   );
-  const distanceProposals = buildCombatRoundEndDistanceProposals({
-    participantInputs: distanceControlInputs,
-    state: normalized,
-  });
+  const continuedContactMaintenanceContests = buildContinuedContactMaintenanceContests(normalized);
+  const distanceProposals =
+    continuedContactMaintenanceContests.length > 0
+      ? []
+      : buildCombatRoundEndDistanceProposals({
+          participantInputs: distanceControlInputs,
+          state: normalized,
+        });
   const participantReviews = Object.fromEntries(
     normalized.participants.map((participant) => {
       const participantInput = input.participantInputs?.[participant.participantId];
@@ -12268,6 +12375,7 @@ export function prepareCombatRoundEndReview(input: {
   );
   const preparedAt = input.command?.createdAt ?? new Date().toISOString();
   const roundEndReview = combatRoundEndReviewSchema.parse({
+    continuedContactMaintenanceContests,
     participantReviews,
     preparedAt,
     preparedByUserId: input.command?.createdByUserId,
@@ -12394,6 +12502,280 @@ export function ensureCombatRoundEndReviewPrepared(input: {
     participantInputs: input.participantInputs,
     state: normalized,
   });
+}
+
+export function recordContinuedContactMaintenanceRoll(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  contestId: string;
+  executionGroupId: string;
+  opponentParticipantId: string;
+  participantId: string;
+  participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
+  roll: OffensiveParryBrawlingRoll;
+  state: CombatRoundState;
+}): {
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const review = normalized.roundEndReview;
+  if (!review || review.roundNumber !== normalized.roundNumber) {
+    throw new RangeError("Round-end review has not been prepared.");
+  }
+  const contest = review.continuedContactMaintenanceContests.find(
+    (entry) => entry.id === input.contestId,
+  );
+  if (!contest || contest.status !== "awaiting_rolls") {
+    throw new RangeError("Continued Contact maintenance is not awaiting rolls.");
+  }
+  const isController = input.participantId === contest.controllerParticipantId;
+  const isAffected = input.participantId === contest.affectedParticipantId;
+  if (!isController && !isAffected) {
+    throw new RangeError("Only a participant in Continued Contact may roll maintenance.");
+  }
+  const expectedOpponentId = isController
+    ? contest.affectedParticipantId
+    : contest.controllerParticipantId;
+  if (input.opponentParticipantId !== expectedOpponentId) {
+    throw new RangeError("The Continued Contact opponent does not match the current task.");
+  }
+  if (
+    (isController && contest.controllerRollRecorded) ||
+    (isAffected && contest.affectedRollRecorded)
+  ) {
+    throw new RangeError("This participant has already rolled Continued Contact maintenance.");
+  }
+  const contact = normalized.continuedContacts.find(
+    (entry) => entry.id === contest.continuedContactId && entry.status === "active",
+  );
+  const condition = normalized.unbalancedConditions.find(
+    (entry) => entry.id === contest.unbalancedConditionId && entry.status === "active",
+  );
+  if (
+    !contact ||
+    !condition ||
+    contact.controllerParticipantId !== contest.controllerParticipantId ||
+    contact.affectedParticipantId !== contest.affectedParticipantId ||
+    condition.sourceContinuedContactId !== contact.id
+  ) {
+    throw new RangeError("Continued Contact and Unbalanced are no longer active together.");
+  }
+  const roll = offensiveParryBrawlingRollSchema.parse(input.roll);
+  if (
+    roll.participantId !== input.participantId ||
+    roll.rollPurpose !== "escape_continued_contact"
+  ) {
+    throw new RangeError("The Brawling roll does not match the participant or escape purpose.");
+  }
+  const withRoll = continuedContactMaintenanceContestSchema.parse({
+    ...contest,
+    affectedRoll: isAffected ? roll : contest.affectedRoll,
+    affectedRollRecorded: isAffected || contest.affectedRollRecorded,
+    controllerRoll: isController ? roll : contest.controllerRoll,
+    controllerRollRecorded: isController || contest.controllerRollRecorded,
+  });
+  const winnerParticipantId =
+    withRoll.controllerRoll && withRoll.affectedRoll
+      ? resolveOffensiveParryContestWinner({
+          controllerParticipantId: withRoll.controllerParticipantId,
+          controllerTotal: withRoll.controllerRoll.finalTotal,
+          responderParticipantId: withRoll.affectedParticipantId,
+          responderTotal: withRoll.affectedRoll.finalTotal,
+        })
+      : undefined;
+  const resolved =
+    withRoll.controllerRoll && withRoll.affectedRoll
+      ? continuedContactMaintenanceContestSchema.parse({
+          ...withRoll,
+          outcome:
+            winnerParticipantId === withRoll.controllerParticipantId
+              ? "maintained"
+              : winnerParticipantId === withRoll.affectedParticipantId
+                ? "escaped"
+                : "tie",
+          status: "resolved",
+          winnerParticipantId,
+        })
+      : withRoll;
+  const maintained =
+    resolved.status === "resolved" &&
+    resolved.winnerParticipantId === resolved.controllerParticipantId;
+  const nextContacts =
+    resolved.status !== "resolved"
+      ? normalized.continuedContacts
+      : normalized.continuedContacts.map((entry) =>
+          entry.id !== contact.id
+            ? entry
+            : continuedContactSchema.parse(
+                maintained
+                  ? {
+                      ...entry,
+                      lastMaintainedByContestResultId: resolved.resultId,
+                      lastMaintainedRound: normalized.roundNumber,
+                    }
+                  : {
+                      ...entry,
+                      endedByMaintenanceContestResultId: resolved.resultId,
+                      endedRound: normalized.roundNumber,
+                      status: "ended",
+                    },
+              ),
+        );
+  const nextConditions =
+    resolved.status !== "resolved" || maintained
+      ? normalized.unbalancedConditions
+      : normalized.unbalancedConditions.map((entry) =>
+          entry.id !== condition.id
+            ? entry
+            : unbalancedCombatConditionSchema.parse({
+                ...entry,
+                endedByMaintenanceContestResultId: resolved.resultId,
+                endedRound: normalized.roundNumber,
+                status: "ended",
+              }),
+        );
+  const nextContests = review.continuedContactMaintenanceContests.map((entry) =>
+    entry.id === resolved.id ? resolved : entry,
+  );
+  let nextState = combatRoundStateSchema.parse({
+    ...normalized,
+    continuedContacts: nextContacts,
+    roundEndReview: {
+      ...review,
+      continuedContactMaintenanceContests: nextContests,
+    },
+    unbalancedConditions: nextConditions,
+  });
+  if (nextContests.every((entry) => entry.status !== "awaiting_rolls")) {
+    nextState = combatRoundStateSchema.parse({
+      ...nextState,
+      roundEndReview: {
+        ...nextState.roundEndReview!,
+        proposedDistances: buildCombatRoundEndDistanceProposals({
+          participantInputs: input.participantInputs,
+          state: nextState,
+        }),
+      },
+    });
+  }
+  const nextTask = getNextCombatRoundEndTask({ state: nextState });
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: input.participantId,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndTaskCursor({ state: nextState, task: nextTask });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      contestId: contest.id,
+      contactMaintained: resolved.status === "resolved" ? maintained : undefined,
+      continuedContactId: contest.continuedContactId,
+      executionGroupId: input.executionGroupId,
+      opponentParticipantId: input.opponentParticipantId,
+      previousContest: contest,
+      previousContinuedContact: contact,
+      previousDistanceProposals: review.proposedDistances,
+      previousUnbalancedCondition: condition,
+      resolved: resolved.status === "resolved",
+      resultId: contest.resultId,
+      rollId: roll.id,
+      rollPurpose: "escape_continued_contact",
+      unbalancedConditionId: contest.unbalancedConditionId,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: normalized,
+        type: "roll_continued_contact_maintenance",
+      }),
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: "SU",
+    type: "roll_continued_contact_maintenance",
+  });
+  nextState = combatRoundStateSchema.parse({
+    ...nextState,
+    commands: [...nextState.commands, command],
+    currentCursor: afterCursor,
+    currentStep: "round_summary",
+    selectedParticipantId: afterCursor.participantId,
+    selectedStep: "round_summary",
+  });
+  nextState = appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: contest.controllerParticipantId,
+      facts: {
+        gmReview: {
+          affectedTotal: resolved.affectedRoll?.finalTotal,
+          controllerTotal: resolved.controllerRoll?.finalTotal,
+          outcome: resolved.outcome,
+        },
+        involvedOutcome: {
+          affectedParticipantId: contest.affectedParticipantId,
+          affectedTotal: resolved.affectedRoll?.finalTotal,
+          contactMaintained: maintained,
+          contestId: contest.id,
+          controllerParticipantId: contest.controllerParticipantId,
+          controllerTotal: resolved.controllerRoll?.finalTotal,
+          difference:
+            resolved.controllerRoll && resolved.affectedRoll
+              ? resolved.controllerRoll.finalTotal - resolved.affectedRoll.finalTotal
+              : undefined,
+          outcome: resolved.outcome,
+          resolved: resolved.status === "resolved",
+          resultId: resolved.resultId,
+          winnerParticipantId: resolved.winnerParticipantId,
+        },
+        publicOutcome: {
+          contactMaintained: maintained,
+          outcome: resolved.outcome,
+          resolved: resolved.status === "resolved",
+          winnerParticipantId: resolved.winnerParticipantId,
+        },
+        rollerPrivate: {
+          brawlingBaseValue: roll.brawlingBaseValue,
+          brawlingSkillId: roll.skillId,
+          brawlingSkillXp: roll.brawlingSkillXp,
+          characteristicAverage: roll.characteristicAverage,
+          finalTotal: roll.finalTotal,
+          generalModifier: roll.generalModifier,
+          openEndedD10s: roll.openEndedD10s,
+          parryQualityModifier: 0,
+          pendingModifiers: roll.pendingModifiers,
+          rollD20: roll.rollD20,
+          rollTotal: roll.rollTotal,
+          skillModifier: roll.skillModifier,
+        },
+      },
+      involvedParticipantIds: [contest.controllerParticipantId, contest.affectedParticipantId],
+      outcomeScope: "involved",
+      ownerParticipantId: input.participantId,
+      rollerParticipantId: input.participantId,
+      sourceIds: [
+        contest.id,
+        contest.resultId,
+        contest.continuedContactId,
+        contest.unbalancedConditionId,
+      ],
+      sourceToken: `${contest.id}:${input.participantId}`,
+      status: "recorded",
+      step: "round_summary",
+      targetParticipantId: contest.affectedParticipantId,
+      type: "continued_contact_maintenance",
+    },
+    state: nextState,
+  });
+  return { command, state: nextState };
 }
 
 type CombatRoundEndUpdatedEffectFact = {
@@ -20004,6 +20386,58 @@ function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
   });
 }
 
+function undoContinuedContactMaintenanceCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.type !== "roll_continued_contact_maintenance") return undefined;
+  const previousContest = continuedContactMaintenanceContestSchema.safeParse(
+    command.facts.previousContest,
+  );
+  const previousContact = continuedContactSchema.safeParse(command.facts.previousContinuedContact);
+  const previousCondition = unbalancedCombatConditionSchema.safeParse(
+    command.facts.previousUnbalancedCondition,
+  );
+  const previousDistanceProposals = Array.isArray(command.facts.previousDistanceProposals)
+    ? command.facts.previousDistanceProposals.flatMap((proposal) => {
+        const parsed = combatRoundEndDistanceProposalSchema.safeParse(proposal);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : undefined;
+  const review = normalized.roundEndReview;
+  if (
+    !previousContest.success ||
+    !previousContact.success ||
+    !previousCondition.success ||
+    !review
+  ) {
+    return undefined;
+  }
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    continuedContacts: normalized.continuedContacts.map((contact) =>
+      contact.id === previousContact.data.id ? previousContact.data : contact,
+    ),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    roundEndReview: {
+      ...review,
+      continuedContactMaintenanceContests: review.continuedContactMaintenanceContests.map(
+        (contest) => (contest.id === previousContest.data.id ? previousContest.data : contest),
+      ),
+      proposedDistances: previousDistanceProposals ?? review.proposedDistances,
+    },
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+    unbalancedConditions: normalized.unbalancedConditions.map((condition) =>
+      condition.id === previousCondition.data.id ? previousCondition.data : condition,
+    ),
+  });
+}
+
 function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -20059,6 +20493,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_offensive_parry_brawling") {
     return undoCombatRoundOffensiveParryBrawlingCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "roll_continued_contact_maintenance") {
+    return undoContinuedContactMaintenanceCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
@@ -20971,11 +21412,7 @@ export function getCombatRoundInitiativeExecutionGroups(input: {
     participantIds: [...new Set(group.participantIds)],
     phase: input.phase,
     roundNumber: normalized.roundNumber,
-    status: group.complete
-      ? "complete"
-      : index === firstIncompleteIndex
-        ? "current"
-        : "waiting",
+    status: group.complete ? "complete" : index === firstIncompleteIndex ? "current" : "waiting",
   }));
 }
 

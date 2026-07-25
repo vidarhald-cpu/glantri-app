@@ -6,6 +6,7 @@ import {
 } from "./combatRoundManager";
 
 export type CombatRoundEndProcessKind =
+  | "continued_contact_maintenance"
   | "distance"
   | "effect_review"
   | "health_review"
@@ -14,6 +15,7 @@ export type CombatRoundEndProcessKind =
 
 export type CombatRoundEndProcessStageKind =
   | "boundary"
+  | "contest"
   | "effect"
   | "health"
   | "participant"
@@ -22,6 +24,7 @@ export type CombatRoundEndProcessStageKind =
   | "roll";
 
 export type CombatRoundEndProcessTaskKind =
+  | "continued_contact_maintenance_roll"
   | "distance_commit"
   | "distance_roll"
   | "effect_review"
@@ -33,6 +36,8 @@ export interface CombatRoundEndProcessTaskPlan {
   readonly allowedActors?: readonly ("combatant" | "gm")[];
   readonly expectedCommand: CombatRoundCommandType;
   readonly healthRollId?: string;
+  readonly continuedContactId?: string;
+  readonly contestId?: string;
   readonly key: string;
   readonly kind: CombatRoundEndProcessTaskKind;
   readonly opponentParticipantId?: string;
@@ -45,6 +50,7 @@ export interface CombatRoundEndProcessTaskPlan {
 
 export interface CombatRoundEndProcessStagePlan {
   readonly executionStrategy: "gm_review" | "ordered_all" | "parallel_all" | "single_task";
+  readonly groupTasksTogether?: boolean;
   readonly id: string;
   readonly key?: string;
   readonly kind: CombatRoundEndProcessStageKind;
@@ -111,6 +117,7 @@ function processId(roundNumber: number, kind: CombatRoundEndProcessKind, key?: s
 
 function stage(input: {
   executionStrategy: CombatRoundEndProcessStagePlan["executionStrategy"];
+  groupTasksTogether?: boolean;
   key?: string;
   kind: CombatRoundEndProcessStageKind;
   processId: string;
@@ -119,6 +126,7 @@ function stage(input: {
 }): CombatRoundEndProcessStagePlan {
   return {
     executionStrategy: input.executionStrategy,
+    groupTasksTogether: input.groupTasksTogether,
     id: `${input.processId}:stage:${input.kind}${input.key ? `:${input.key}` : ""}`,
     key: input.key,
     kind: input.kind,
@@ -170,53 +178,118 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
     });
   }
 
-  const distanceRollTasks: CombatRoundEndProcessTaskPlan[] = validReview.proposedDistances.flatMap(
-    (proposal) => {
-      if (
-        !proposal.accepted ||
-        getCombatRoundEndDistanceProposalLifecycle(proposal) !== "pending_rolls"
-      ) {
-        return [];
-      }
-      return [
-        ...(proposal.participantA.status === "pending"
-          ? [
-              {
-                expectedCommand: "roll_round_end_distance_control" as const,
-                key: `${proposal.id}:${proposal.participantAId}`,
-                kind: "distance_roll" as const,
-                opponentParticipantId: proposal.participantBId,
-                ownerParticipantId: proposal.participantAId,
-                ownerRole: "participant" as const,
-                pairId: proposal.pairKey,
-                proposalId: proposal.id,
-                trackerParticipantId: proposal.participantAId,
-              },
-            ]
-          : []),
-        ...(proposal.participantB.status === "pending"
-          ? [
-              {
-                expectedCommand: "roll_round_end_distance_control" as const,
-                key: `${proposal.id}:${proposal.participantBId}`,
-                kind: "distance_roll" as const,
-                opponentParticipantId: proposal.participantAId,
-                ownerParticipantId: proposal.participantBId,
-                ownerRole: "participant" as const,
-                pairId: proposal.pairKey,
-                proposalId: proposal.id,
-                trackerParticipantId: proposal.participantBId,
-              },
-            ]
-          : []),
-      ];
-    },
+  const maintenanceProcesses: CombatRoundEndChildProcessPlan[] =
+    validReview.continuedContactMaintenanceContests.map((contest) => {
+      const maintenanceProcessId = processId(
+        roundNumber,
+        "continued_contact_maintenance",
+        contest.id,
+      );
+      const tasks: CombatRoundEndProcessTaskPlan[] =
+        contest.status !== "awaiting_rolls"
+          ? []
+          : [
+              ...(contest.controllerRollRecorded
+                ? []
+                : [
+                    {
+                      continuedContactId: contest.continuedContactId,
+                      contestId: contest.id,
+                      expectedCommand: "roll_continued_contact_maintenance" as const,
+                      key: `${contest.id}:${contest.controllerParticipantId}`,
+                      kind: "continued_contact_maintenance_roll" as const,
+                      opponentParticipantId: contest.affectedParticipantId,
+                      ownerParticipantId: contest.controllerParticipantId,
+                      ownerRole: "participant" as const,
+                      trackerParticipantId: contest.controllerParticipantId,
+                    },
+                  ]),
+              ...(contest.affectedRollRecorded
+                ? []
+                : [
+                    {
+                      continuedContactId: contest.continuedContactId,
+                      contestId: contest.id,
+                      expectedCommand: "roll_continued_contact_maintenance" as const,
+                      key: `${contest.id}:${contest.affectedParticipantId}`,
+                      kind: "continued_contact_maintenance_roll" as const,
+                      opponentParticipantId: contest.controllerParticipantId,
+                      ownerParticipantId: contest.affectedParticipantId,
+                      ownerRole: "participant" as const,
+                      trackerParticipantId: contest.affectedParticipantId,
+                    },
+                  ]),
+            ];
+      return {
+        id: maintenanceProcessId,
+        key: contest.id,
+        kind: "continued_contact_maintenance",
+        stages: [
+          stage({
+            executionStrategy: "parallel_all",
+            groupTasksTogether: true,
+            kind: "contest",
+            processId: maintenanceProcessId,
+            state: tasks.length > 0 ? "active" : "complete",
+            tasks,
+          }),
+        ],
+      };
+    });
+  const maintenancePending = maintenanceProcesses.some((process) =>
+    process.stages.some((maintenanceStage) => maintenanceStage.state !== "complete"),
   );
-  const distanceCommit = validReview.proposedDistances.find(
-    (proposal) =>
-      proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved",
-  );
-  const distancePending = distanceRollTasks.length > 0 || distanceCommit !== undefined;
+
+  const distanceRollTasks: CombatRoundEndProcessTaskPlan[] = maintenancePending
+    ? []
+    : validReview.proposedDistances.flatMap((proposal) => {
+        if (
+          !proposal.accepted ||
+          getCombatRoundEndDistanceProposalLifecycle(proposal) !== "pending_rolls"
+        ) {
+          return [];
+        }
+        return [
+          ...(proposal.participantA.status === "pending"
+            ? [
+                {
+                  expectedCommand: "roll_round_end_distance_control" as const,
+                  key: `${proposal.id}:${proposal.participantAId}`,
+                  kind: "distance_roll" as const,
+                  opponentParticipantId: proposal.participantBId,
+                  ownerParticipantId: proposal.participantAId,
+                  ownerRole: "participant" as const,
+                  pairId: proposal.pairKey,
+                  proposalId: proposal.id,
+                  trackerParticipantId: proposal.participantAId,
+                },
+              ]
+            : []),
+          ...(proposal.participantB.status === "pending"
+            ? [
+                {
+                  expectedCommand: "roll_round_end_distance_control" as const,
+                  key: `${proposal.id}:${proposal.participantBId}`,
+                  kind: "distance_roll" as const,
+                  opponentParticipantId: proposal.participantAId,
+                  ownerParticipantId: proposal.participantBId,
+                  ownerRole: "participant" as const,
+                  pairId: proposal.pairKey,
+                  proposalId: proposal.id,
+                  trackerParticipantId: proposal.participantBId,
+                },
+              ]
+            : []),
+        ];
+      });
+  const distanceCommit = maintenancePending
+    ? undefined
+    : validReview.proposedDistances.find(
+        (proposal) =>
+          proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved",
+      );
+  const distancePending =
+    maintenancePending || distanceRollTasks.length > 0 || distanceCommit !== undefined;
   const distanceProcess: CombatRoundEndChildProcessPlan = {
     id: distanceProcessId,
     kind: "distance",
@@ -225,7 +298,11 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
         executionStrategy: "parallel_all",
         kind: "roll",
         processId: distanceProcessId,
-        state: distanceRollTasks.length > 0 ? "active" : "complete",
+        state: maintenancePending
+          ? "pending"
+          : distanceRollTasks.length > 0
+            ? "active"
+            : "complete",
         tasks: distanceRollTasks,
       }),
       stage({
@@ -233,7 +310,12 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
           distanceCommit?.controlMode === "continued_contact" ? "single_task" : "gm_review",
         kind: "proposal_commit",
         processId: distanceProcessId,
-        state: distanceRollTasks.length > 0 ? "pending" : distanceCommit ? "active" : "complete",
+        state:
+          maintenancePending || distanceRollTasks.length > 0
+            ? "pending"
+            : distanceCommit
+              ? "active"
+              : "complete",
         tasks:
           distanceRollTasks.length === 0 && distanceCommit
             ? [
@@ -302,7 +384,11 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
     ),
   };
 
-  const processes: CombatRoundEndChildProcessPlan[] = [distanceProcess, participantProcess];
+  const processes: CombatRoundEndChildProcessPlan[] = [
+    ...maintenanceProcesses,
+    distanceProcess,
+    participantProcess,
+  ];
   if (activeParticipantId) {
     const participantReview = validReview.participantReviews[activeParticipantId];
     const healthProcessId = processId(roundNumber, "health_review", activeParticipantId);

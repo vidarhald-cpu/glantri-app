@@ -276,6 +276,7 @@ async function buildScenarioTestApp() {
       ["/combat-round/commit-feint", ["commit_feint_result"]],
       ["/combat-round/roll-distance-control", ["roll_round_end_distance_control"]],
       ["/combat-round/roll-current-distance-control", ["roll_round_end_distance_control"]],
+      ["/combat-round/roll-continued-contact-maintenance", ["roll_continued_contact_maintenance"]],
       ["/combat-round/commit-distance-control", ["commit_round_end_distance_control"]],
       ["/combat-round/commit-participant-review", ["commit_round_end_participant_review"]],
       ["/combat-round/roll-health-check", ["roll_round_end_health_check"]],
@@ -390,6 +391,8 @@ async function buildScenarioTestApp() {
     record.declarationId ??= selected.identity.declarationId;
     record.opportunityId ??= selected.identity.opportunityId;
     record.attackResultId ??= selected.identity.attackResultId;
+    record.contestId ??= selected.identity.contestId;
+    record.continuedContactId ??= selected.identity.continuedContactId;
     record.opponentParticipantId ??= selected.identity.opponentParticipantId;
     record.pairId ??= selected.identity.pairId;
     record.participantId ??=
@@ -404,6 +407,9 @@ async function buildScenarioTestApp() {
       (selected.kind === "parry" ? record.participantId : undefined);
     record.phase ??= selected.identity.phase;
     record.proposalId ??= selected.identity.proposalId;
+    record.processId ??= selected.processId;
+    record.rollPurpose ??= selected.identity.rollPurpose;
+    record.stageId ??= selected.stageId;
     record.weaponInstanceId ??= selected.identity.weaponInstanceId;
     record.weaponSourceId ??= selected.identity.weaponSourceId;
     record.weaponSourceSlot ??= selected.identity.weaponSourceSlot;
@@ -1883,6 +1889,162 @@ function makeContinuedContactDistanceChoiceFixture(): {
       }),
     ],
     proposalId,
+  };
+}
+
+function makeContinuedContactMaintenanceFixture(): {
+  conditionId: string;
+  contactId: string;
+  contestId: string;
+  encounter: EncounterSession;
+  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+} {
+  const encounterParticipants = makeTwoCombatEncounterParticipants();
+  const baseEncounter = makeCombatEncounter({
+    currentRound: 3,
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+  const contactId = "continued-contact-maintenance-1";
+  const conditionId = "continued-contact-maintenance-1:unbalanced";
+  const withDeclarations = {
+    ...baseState,
+    continuedContacts: [
+      {
+        affectedParticipantId: "encounter-participant-2",
+        brawlingContestResultId: "opening-contest-result-1",
+        controllerParticipantId: "encounter-participant-1",
+        establishedPhase: "phase1" as const,
+        establishedRound: 2,
+        id: contactId,
+        sourceActionId: "offensive_parry",
+        sourceAttackResultId: "attack-result-1",
+        sourceDeclarationId: "declaration-1",
+        sourceOpportunityId: "opportunity-1",
+        sourceParryResultId: "parry-result-1",
+        status: "active" as const,
+      },
+    ],
+    currentCursor: {
+      participantId: "encounter-participant-1",
+      roundNumber: 3,
+      step: "SU" as const,
+    },
+    currentStep: "round_summary" as const,
+    participants: baseState.participants.map((participant, index) => ({
+      ...participant,
+      declaration: {
+        actionId: "attack_parry" as const,
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: index === 0 ? 1 : 3,
+              source: "player_declared" as const,
+              targetParticipantId:
+                index === 0 ? "encounter-participant-2" : "encounter-participant-1",
+            },
+          ],
+          mode: "set_distance_preferences" as const,
+        },
+        roundNumber: 3,
+        submittedBy: "player" as const,
+      },
+    })),
+    unbalancedConditions: [
+      {
+        affectedParticipantId: "encounter-participant-2",
+        establishedRound: 2,
+        id: conditionId,
+        modifierValue: -2,
+        sourceActionId: "offensive_parry",
+        sourceContinuedContactId: contactId,
+        status: "active" as const,
+      },
+    ],
+  };
+  const reviewed = prepareCombatRoundEndReview({
+    state: combatRoundStateSchema.parse(withDeclarations),
+  });
+  const contest = reviewed.roundEndReview?.continuedContactMaintenanceContests[0];
+  if (!contest) throw new Error("Continued Contact fixture did not create maintenance.");
+
+  const unbalancedEffect = {
+    combatModifierBucket: "general" as const,
+    combatWide: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    damage: 0,
+    description: "Unbalanced from Offensive Parry continued contact.",
+    duration: "Until continued contact ends",
+    effectGroup: "general" as const,
+    excludedRollPurposes: ["escape_continued_contact"],
+    generalDamage: 0,
+    id: conditionId,
+    modifierValue: -2,
+    roundNumber: 2,
+    sourceEventId: `${conditionId}:effect-event`,
+    status: "active" as const,
+    targetParticipantId: "participant-2",
+    type: "general_modifier" as const,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const participant = (input: {
+    controlledByUserId: string;
+    displayName: string;
+    id: string;
+    skill: number;
+    state?: Record<string, unknown>;
+  }) =>
+    makeCombatScenarioParticipant({
+      controlledByUserId: input.controlledByUserId,
+      id: input.id,
+      snapshot: {
+        displayName: input.displayName,
+        sheetSummary: {
+          draftView: {
+            skills: [
+              {
+                effectiveSkillNumber: input.skill,
+                name: "Brawling",
+                skillId: "brawling",
+                totalSkill: input.skill,
+              },
+            ],
+          },
+        },
+      },
+      ...(input.state ? { state: input.state } : {}),
+    });
+  const baseAffectedState = makeCombatScenarioParticipant().state;
+  return {
+    conditionId,
+    contactId,
+    contestId: contest.id,
+    encounter: {
+      ...baseEncounter,
+      combatRoundState: reviewed,
+      currentRound: reviewed.roundNumber,
+    },
+    participants: [
+      participant({
+        controlledByUserId: "player-1",
+        displayName: "The Gladiator",
+        id: "participant-1",
+        skill: 18,
+      }),
+      participant({
+        controlledByUserId: "other-player",
+        displayName: "Scyrian cavalry guy",
+        id: "participant-2",
+        skill: 100,
+        state: {
+          ...baseAffectedState,
+          combatEffects: {
+            effects: [unbalancedEffect],
+            events: [],
+          },
+        },
+      }),
+    ],
   };
 }
 
@@ -5989,6 +6151,108 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(403);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("lets the GM proxy both Continued Contact maintenance rolls and expires Unbalanced on escape", async () => {
+    const fixture = makeContinuedContactMaintenanceFixture();
+    const mutable = setupMutableCombatRouteState({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+
+    const controllerResponse = await app.inject({
+      method: "POST",
+      payload: {
+        contestId: fixture.contestId,
+        opponentParticipantId: "encounter-participant-2",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+    });
+    const affectedResponse = await app.inject({
+      method: "POST",
+      payload: {
+        contestId: fixture.contestId,
+        opponentParticipantId: "encounter-participant-1",
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(controllerResponse.statusCode, JSON.stringify(controllerResponse.json())).toBe(200);
+    expect(affectedResponse.statusCode, JSON.stringify(affectedResponse.json())).toBe(200);
+    const contest =
+      mutable.encounter.combatRoundState?.roundEndReview?.continuedContactMaintenanceContests[0];
+    expect(contest).toMatchObject({
+      controllerRoll: expect.objectContaining({
+        rollPurpose: "escape_continued_contact",
+        rolledByUserId: "gm-1",
+      }),
+      affectedRoll: expect.objectContaining({
+        generalModifier: 0,
+        rollPurpose: "escape_continued_contact",
+        rolledByUserId: "gm-1",
+      }),
+      outcome: "escaped",
+      status: "resolved",
+    });
+    expect(mutable.encounter.combatRoundState?.continuedContacts[0]?.status).toBe("ended");
+    expect(mutable.encounter.combatRoundState?.unbalancedConditions[0]?.status).toBe("ended");
+    const affectedState = mutable.participants[1]?.state as unknown as {
+      combatEffects: CombatEffectsState;
+    };
+    expect(
+      affectedState.combatEffects.effects.find((effect) => effect.id === fixture.conditionId),
+    ).toMatchObject({ status: "expired" });
+    expect(mutable.encounter.combatRoundState?.roundEndReview?.proposedDistances[0]).toMatchObject({
+      controlMode: "ordinary",
+      requiresContest: true,
+    });
+  });
+
+  it("returns a player-safe partial Continued Contact maintenance contest after the owner's roll", async () => {
+    const fixture = makeContinuedContactMaintenanceFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        contestId: fixture.contestId,
+        opponentParticipantId: "encounter-participant-2",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const responseContest =
+      response.json().encounter.combatRoundState.roundEndReview
+        .continuedContactMaintenanceContests[0];
+    expect(responseContest).toMatchObject({
+      controllerRoll: expect.objectContaining({
+        participantId: "encounter-participant-1",
+        rollPurpose: "escape_continued_contact",
+      }),
+      controllerRollRecorded: true,
+      affectedRollRecorded: false,
+      status: "awaiting_rolls",
+    });
+    expect(responseContest.affectedRoll).toBeUndefined();
   });
 
   it("returns the incremented revision and Start next round task after the final SU review", async () => {

@@ -979,6 +979,44 @@ export async function rollOffensiveParryBrawlingOnServer(input: {
   return payload.encounter;
 }
 
+export async function rollContinuedContactMaintenanceOnServer(input: {
+  contestId: string;
+  continuedContactId: string;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  opponentParticipantId: string;
+  processId: string;
+  scenarioParticipantId: string;
+  stageId: string;
+  taskId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participant?: ScenarioParticipant;
+}> {
+  return sendJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+    participant?: ScenarioParticipant;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-continued-contact-maintenance`, {
+    body: JSON.stringify({
+      commandType: "roll_continued_contact_maintenance",
+      contestId: input.contestId,
+      continuedContactId: input.continuedContactId,
+      executionGroupId: input.executionGroupId,
+      expectedRevision: input.expectedRevision,
+      opponentParticipantId: input.opponentParticipantId,
+      processId: input.processId,
+      rollPurpose: "escape_continued_contact",
+      scenarioParticipantId: input.scenarioParticipantId,
+      stageId: input.stageId,
+      taskId: input.taskId,
+    }),
+    method: "POST",
+  });
+}
+
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;

@@ -170,6 +170,47 @@ describe("buildCombatEventResultModel", () => {
     });
   });
 
+  it("presents the final Continued Contact maintenance outcome without repeating its opening contest", () => {
+    const model = buildCombatEventResultModel([
+      event("continued_contact_maintenance", 1, {
+        facts: {
+          involvedOutcome: {
+            contactMaintained: false,
+            outcome: "escaped",
+            resolved: true,
+          },
+          publicOutcome: {
+            contactMaintained: false,
+            outcome: "escaped",
+            resolved: true,
+          },
+        },
+        identities: [
+          {
+            displayName: "Scyrian cavalry guy",
+            participantId: "controller",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "affected",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+        step: "round_summary",
+      }),
+    ]);
+
+    expect(model.items).toHaveLength(1);
+    expect(model.items[0]).toMatchObject({
+      outcomeRows: [{ text: "Continued Contact broken." }],
+      summary: "Unbalanced was removed. Ordinary distance control resumes.",
+      title: "Continued Contact — Maintenance",
+    });
+  });
+
   it("uses the concise Dodge calculation structure for an in-round distance roll", () => {
     const model = buildCombatEventResultModel([
       event("adjust_distance_roll", 1, {

@@ -5,7 +5,8 @@
 This document defines the canonical vocabulary and ownership rules for persistent combat state and
 temporary tactical control. It is an architecture contract for current and future combat mechanics.
 The initial concrete consumer is Continued Contact ownership of the existing Round End distance
-commit; no parallel controller subsystem or persistence table is introduced.
+commit and its later Round End maintenance/escape contest; no parallel controller subsystem or
+persistence table is introduced.
 
 The current concrete models remain authoritative:
 
@@ -76,9 +77,9 @@ Conceptually, a relationship identifies:
 
 The initial controller capability is:
 
-| Source state       | Controller capability | Meaning |
-| ------------------ | --------------------- | ------- |
-| Continued Contact  | Distance Control      | The controller chooses engagement distance only where the Continued Contact rule explicitly permits that choice. |
+| Source state      | Controller capability | Meaning                                                                                                          |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Continued Contact | Distance Control      | The controller chooses engagement distance only where the Continued Contact rule explicitly permits that choice. |
 
 Controller status does **not** grant general ownership of the affected participant. In particular,
 it does not grant permission to:
@@ -100,11 +101,11 @@ Combat-state effectiveness follows
 
 The canonical effective lifecycle is:
 
-| Status    | Meaning |
-| --------- | ------- |
+| Status    | Meaning                                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `pending` | The state is committed, authoritative, and visible, but its creating simultaneous initiative group is still open. Its modifiers, restrictions, capabilities, and opportunity qualifications do not affect sibling work in that same group. |
-| `active`  | The activation boundary has passed. The state may contribute its rule-defined modifiers, restrictions, capabilities, and opportunity qualifications. |
-| `expired` | The state remains available for history and provenance but no longer contributes authority or mechanics. |
+| `active`  | The activation boundary has passed. The state may contribute its rule-defined modifiers, restrictions, capabilities, and opportunity qualifications.                                                                                       |
+| `expired` | The state remains available for history and provenance but no longer contributes authority or mechanics.                                                                                                                                   |
 
 Pending does not mean provisional. Undo removes a pending state only when its source consequence is
 undone. Otherwise, the state becomes active automatically when its initiative-group boundary
@@ -131,16 +132,16 @@ the state and any state-derived facts through the existing source-lineage cleanu
 Combat uses several independent ownership axes. They must not be collapsed into a single
 “controller” or “current participant” field.
 
-| Axis | Canonical meaning |
-| ---- | ----------------- |
-| State subject | The participant whose condition, capability, or restriction the state describes. |
-| Relationship controller | The participant granted one named tactical capability over the affected participant. |
-| Affected participant | The other participant in a directional relationship. |
-| Opportunity actor | The participant who may receive a later canonical opportunity. |
-| Task required actor | The participant who must perform the currently projected task. |
-| Decision authority | The participant allowed to make one specific rule choice. |
-| Viewer | A user allowed to see a safe projection of the state, relationship, or task. |
-| GM proxy | GM authority to execute a projected participant-owned task without changing its owner. |
+| Axis                    | Canonical meaning                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| State subject           | The participant whose condition, capability, or restriction the state describes.       |
+| Relationship controller | The participant granted one named tactical capability over the affected participant.   |
+| Affected participant    | The other participant in a directional relationship.                                   |
+| Opportunity actor       | The participant who may receive a later canonical opportunity.                         |
+| Task required actor     | The participant who must perform the currently projected task.                         |
+| Decision authority      | The participant allowed to make one specific rule choice.                              |
+| Viewer                  | A user allowed to see a safe projection of the state, relationship, or task.           |
+| GM proxy                | GM authority to execute a projected participant-owned task without changing its owner. |
 
 The following authority rules apply:
 
@@ -167,12 +168,22 @@ edge and unresolved controller choice. Unrelated pairs retain ordinary distance 
 
 ### Escape contests
 
-The affected participant owns the choice to attempt an escape when the rule makes an escape
-available. Each participant owns their own required contest roll, and GM proxy follows the normal
-task authorization rules. The controller relationship does not let the controller suppress a legal
-escape or roll for the affected participant.
+After Continued Contact has survived into a later round and that complete round reaches Round End,
+maintenance is mandatory for that relationship. The controller owns one ordinary Brawling roll and
+the affected participant owns one ordinary Brawling escape roll. The two
+`continued_contact_maintenance_roll` tasks share one `parallel_all` execution group, and GM proxy
+follows the same descriptor authorization as participant execution.
 
-Continued Contact maintenance and escape tasks are not implemented by this document.
+The affected participant's roll carries `rollPurpose: escape_continued_contact`. The shared
+modifier resolver excludes only the Continued Contact–sourced Unbalanced row for that purpose;
+other active general, skill, and situational modifiers remain authoritative. The condition is not
+temporarily removed.
+
+A strictly higher controller total maintains the relationship and its Unbalanced condition. A
+higher affected-participant total or a tie ends both. The terminal contest result retains the
+contact, condition, round, participants, both roll identities, and signed comparison. Undoing the
+final roll reopens exactly one participant-owned task and restores the prior relationship,
+condition, effect, and distance state.
 
 ### Declarations
 
@@ -200,6 +211,11 @@ Current Action therefore answers “who acts now?” from the task's required ac
 A participant whose state may matter later receives an ordinary waiting presentation until
 canonical work is projected. Historical inspection of a state never retargets Current Action.
 
+For Continued Contact maintenance, the projected Current Action says **Maintain Continued
+Contact** to the controller and **Attempt to escape Continued Contact** to the affected participant.
+After either participant rolls, that participant sees a normal waiting state until the parallel
+contest completes. No completed maintenance task remains actionable.
+
 ## Relationship to the tracker
 
 The tracker represents canonical tasks and recorded results, not passive relationships.
@@ -211,6 +227,10 @@ The tracker represents canonical tasks and recorded results, not passive relatio
 - Required-actor ownership comes from the projected task; it is not automatically assigned to the
   controller.
 - Expired states remain historical facts but do not create live attention.
+
+Continued Contact maintenance is projected in the source round's `SU` facet. Both unresolved
+rollers may be marked while the contest is open; completing one roll clears only that participant's
+attention. Distance work remains gated until the contest resolves.
 
 This preserves round isolation and the existing tracker marker contract. Future controller-driven
 work must use the same task projection and cannot introduce a relationship-derived marker fallback.
@@ -239,6 +259,11 @@ The current Offensive Parry mapping follows this split:
 - its linked combat-wide `general` effect contributes the canonical −2% modifier;
 - `escape_continued_contact` excludes that Unbalanced contribution under the existing rule.
 
+When maintenance ends Continued Contact, the relationship and `UnbalancedCombatCondition` become
+terminal in the same domain mutation and the linked Unbalanced `CombatEffect` becomes expired in
+the participant state. A maintained relationship leaves all three facts active. This synchronization
+prevents a live Unbalanced modifier without its source Continued Contact relationship.
+
 Bleeding and Fatigue are already represented by participant combat effects. They are Combat States
 under this vocabulary but do not require separate controller records.
 
@@ -261,20 +286,23 @@ undo, cancellation, equipment invalidation, or source-result removal must remove
 derived opportunity through exact lineage. No consumer may substitute a newer state, another
 participant pair, or the first compatible source.
 
-Offensive Parry follow-up attacks, Continued Contact maintenance, and escape are examples of future
-state-qualified opportunities. The implemented Round End distance choice is not a combat
-opportunity: it reuses the existing distance proposal and commit process.
+Continued Contact maintenance is an implemented state-qualified Round End child process. Its
+deterministic contest ID binds the source contact and maintenance round; its two tasks bind exact
+contest/contact, participant/opponent, process, stage, execution-group, purpose, and revision
+identity. The Round End distance choice remains a separate use of the existing distance proposal
+and commit process.
 
 ## Current model mapping
 
-| Current fact | Canonical interpretation | Current effect |
-| ------------ | ------------------------ | -------------- |
-| `ContinuedContact` | Relationship-bearing Combat State with controller, affected participant, and exact Offensive Parry lineage | Supplies the controller for the exact pair's Round End engagement-distance choice. |
-| `UnbalancedCombatCondition` | Participant Combat State sourced by Continued Contact | Identifies the affected participant and canonical −2% consequence. |
-| Linked Unbalanced `CombatEffect` | Modifier-bearing effect derived from Unbalanced | Supplies shared combat arithmetic and initiative timing. |
-| Bleed/Fatigue `CombatEffect` | Participant Combat State represented directly as an effect | Supplies its existing damage, modifier, duration, and review behavior. |
-| `CombatProgressionTask` | Executable work, not state ownership | Supplies required actor, tracker facet, descriptor, and authorization identity. |
-| Committed declaration | Participant-owned intent, not a controller relationship | Supplies declared action facts and opportunity prerequisites. |
+| Current fact                         | Canonical interpretation                                                                                   | Current effect                                                                               |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ContinuedContact`                   | Relationship-bearing Combat State with controller, affected participant, and exact Offensive Parry lineage | Supplies the controller for the exact pair's Round End engagement-distance choice.           |
+| `UnbalancedCombatCondition`          | Participant Combat State sourced by Continued Contact                                                      | Identifies the affected participant and canonical −2% consequence.                           |
+| Linked Unbalanced `CombatEffect`     | Modifier-bearing effect derived from Unbalanced                                                            | Supplies shared combat arithmetic and initiative timing.                                     |
+| `ContinuedContactMaintenanceContest` | Round End state-qualified contest                                                                          | Supplies two participant-owned Brawling tasks and either maintains or ends the relationship. |
+| Bleed/Fatigue `CombatEffect`         | Participant Combat State represented directly as an effect                                                 | Supplies its existing damage, modifier, duration, and review behavior.                       |
+| `CombatProgressionTask`              | Executable work, not state ownership                                                                       | Supplies required actor, tracker facet, descriptor, and authorization identity.              |
+| Committed declaration                | Participant-owned intent, not a controller relationship                                                    | Supplies declared action facts and opportunity prerequisites.                                |
 
 ## Future consumers
 
@@ -286,8 +314,10 @@ than adding maneuver-specific ownership rules.
 Continued Contact establishes the initial controller relationship and Distance Control capability;
 Unbalanced remains a separate affected-participant state. The relationship survives the round
 transition, while each participant makes an ordinary next-round declaration using the chosen
-distance. Phase 2 follow-up opportunities and round-end maintenance/escape remain separate deferred
-work and must consume exact state lineage when implemented.
+distance. After that complete round, its Round End maintenance contest either preserves the
+relationship and returns controller-owned distance selection or ends both Continued Contact and
+Unbalanced and restores ordinary opposed distance control. No special attack opportunity is
+created.
 
 ### Disarm
 
@@ -336,4 +366,5 @@ For each future consumer:
 7. preserve player-safe visibility without changing ownership;
 8. add persistence fields only when the first concrete consumer requires them.
 
-This slice intentionally makes no gameplay, API, tracker, modifier-timing, or persistence changes.
+This model remains incremental: new controller capabilities and state-qualified mechanics must add
+only the fields and behavior required by a verified rule.

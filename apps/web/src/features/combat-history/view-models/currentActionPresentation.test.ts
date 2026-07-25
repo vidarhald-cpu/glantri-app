@@ -1064,6 +1064,117 @@ describe("CurrentActionPresentation", () => {
     });
   });
 
+  it("presents participant-owned Continued Contact maintenance and escape rolls", () => {
+    const controllerTask = {
+      ...task({
+        actionKind: "continued_contact_maintenance_controller",
+        actor: aria,
+        command: "roll_continued_contact_maintenance",
+        kind: "continued_contact_maintenance_roll",
+        owner: aria,
+        reason: "Continued Contact is active.",
+        responder: aria,
+        target: borin,
+      }),
+      identity: {
+        contestId: "maintenance-1",
+        continuedContactId: "contact-1",
+        executionGroupId: "group:continued-contact",
+        opponentParticipantId: "borin",
+        participantId: "aria",
+        rollPurpose: "escape_continued_contact" as const,
+      },
+      trackerFacet: { owner: aria, step: "SU" as const },
+    };
+    const projected = progression({ boundary: "round_end", tasks: [controllerTask] });
+    const controller = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-maintenance",
+      progression: projected,
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+    const defender = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-maintenance",
+      progression: projected,
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+
+    expect(controller).toMatchObject({
+      actionName: "Continued Contact",
+      primaryAction: {
+        descriptor: {
+          contestId: "maintenance-1",
+          continuedContactId: "contact-1",
+          rollPurpose: "escape_continued_contact",
+        },
+        enabled: true,
+        label: "Roll Brawling",
+      },
+      requiredNow: "Maintain Continued Contact. Roll Brawling.",
+      summary: "Maintain Continued Contact with Borin.",
+      trackerFacet: "SU",
+    });
+    expect(defender).toMatchObject({
+      primaryAction: { enabled: false },
+      status: "waiting",
+    });
+
+    const affectedTask = {
+      ...controllerTask,
+      id: "task:maintenance:borin",
+      identity: {
+        ...controllerTask.identity,
+        opponentParticipantId: "aria",
+        participantId: "borin",
+      },
+      owner: borin,
+      presentationContext: {
+        ...controllerTask.presentationContext,
+        actionKind: "continued_contact_maintenance_escape",
+        responder: borin,
+      },
+      trackerFacet: { owner: borin, step: "SU" as const },
+    };
+    const affectedAction = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-maintenance",
+      progression: progression({ boundary: "round_end", tasks: [affectedTask] }),
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+    expect(affectedAction).toMatchObject({
+      primaryAction: { enabled: true, label: "Roll Brawling" },
+      requiredNow: "Attempt to escape Continued Contact. Roll Brawling.",
+      summary: "Attempt to escape Aria's Continued Contact.",
+    });
+
+    const afterDefenderRolled = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-maintenance-2",
+      progression: progression({
+        boundary: "round_end",
+        tasks: [
+          {
+            ...controllerTask,
+            presentationContext: {
+              ...controllerTask.presentationContext,
+              opponentRollRecorded: true,
+            },
+          },
+        ],
+      }),
+      viewer: { controlledParticipantIds: new Set(["borin"]), kind: "player" },
+    });
+    expect(afterDefenderRolled).toMatchObject({
+      primaryAction: {
+        enabled: false,
+        label: "Waiting for another combatant",
+      },
+      requiredNow: "Waiting for Aria.",
+      summary: "Your Brawling roll is recorded. Waiting for Aria.",
+    });
+  });
+
   it.each([
     [
       "phase2_resolution",

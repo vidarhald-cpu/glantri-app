@@ -22,14 +22,21 @@ export function buildRoundEndProcesses(
     buildProcess(
       context,
       process.kind,
-      process.stages.map((stage) => ({
-        key: stage.key,
-        kind: stage.kind,
-        state: stage.state,
-        strategy: stage.executionStrategy,
-        tasks: stage.tasks.map((task) => {
+      process.stages.map((stage) => {
+        const tasks = stage.tasks.map((task) => {
           const participantOwner = task.ownerParticipantId
             ? context.identities.get(task.ownerParticipantId)
+            : undefined;
+          const maintenanceContest = task.contestId
+            ? context.state.roundEndReview?.continuedContactMaintenanceContests.find(
+                (contest) => contest.id === task.contestId,
+              )
+            : undefined;
+          const maintenanceController = maintenanceContest
+            ? context.identities.get(maintenanceContest.controllerParticipantId)
+            : undefined;
+          const maintenanceAffected = maintenanceContest
+            ? context.identities.get(maintenanceContest.affectedParticipantId)
             : undefined;
           const distanceProposal = task.proposalId
             ? context.state.roundEndReview?.proposedDistances.find(
@@ -48,24 +55,35 @@ export function buildRoundEndProcesses(
             allowedActors: task.allowedActors,
             expectedCommand: task.expectedCommand,
             identity: {
+              contestId: task.contestId,
+              continuedContactId: task.continuedContactId,
               healthRollId: task.healthRollId,
               opponentParticipantId: task.opponentParticipantId,
               pairId: task.pairId,
               participantId: task.ownerParticipantId,
               proposalId: task.proposalId,
+              rollPurpose:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? ("escape_continued_contact" as const)
+                  : undefined,
             },
             key: task.key,
             kind: task.kind,
             owner: task.ownerRole === "gm" ? GM_IDENTITY : participantOwner,
             presentationContext: {
               actionKind:
-                distanceProposal?.controlMode === "continued_contact"
-                  ? "continued_contact_distance_control"
-                  : process.kind,
+                task.kind === "continued_contact_maintenance_roll"
+                  ? task.ownerParticipantId === maintenanceContest?.controllerParticipantId
+                    ? "continued_contact_maintenance_controller"
+                    : "continued_contact_maintenance_escape"
+                  : distanceProposal?.controlMode === "continued_contact"
+                    ? "continued_contact_distance_control"
+                    : process.kind,
               actor:
-                task.ownerRole === "gm" && task.trackerParticipantId
+                maintenanceController ??
+                (task.ownerRole === "gm" && task.trackerParticipantId
                   ? context.identities.get(task.trackerParticipantId)
-                  : participantOwner,
+                  : participantOwner),
               distance: distanceProposal
                 ? {
                     current: distanceProposal.currentDistance,
@@ -73,14 +91,29 @@ export function buildRoundEndProcesses(
                   }
                 : undefined,
               reason:
-                distanceProposal?.controlMode === "continued_contact"
+                task.kind === "continued_contact_maintenance_roll"
                   ? "Continued Contact is active."
-                  : healthProposal?.label,
+                  : distanceProposal?.controlMode === "continued_contact"
+                    ? "Continued Contact is active."
+                    : healthProposal?.label,
+              opponentRollRecorded:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? task.ownerParticipantId === maintenanceContest?.controllerParticipantId
+                    ? maintenanceContest?.affectedRollRecorded
+                    : maintenanceContest?.controllerRollRecorded
+                  : undefined,
               responder: task.ownerRole === "participant" ? participantOwner : undefined,
-              skill: task.kind === "health_review" ? { label: "Health" } : undefined,
-              target: task.opponentParticipantId
-                ? context.identities.get(task.opponentParticipantId)
-                : undefined,
+              skill:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? { id: "brawling", label: "Brawling" }
+                  : task.kind === "health_review"
+                    ? { label: "Health" }
+                    : undefined,
+              target:
+                maintenanceAffected ??
+                (task.opponentParticipantId
+                  ? context.identities.get(task.opponentParticipantId)
+                  : undefined),
             },
             trackerOwner: task.trackerParticipantId
               ? context.identities.get(task.trackerParticipantId)
@@ -95,8 +128,25 @@ export function buildRoundEndProcesses(
                   }
                 : undefined,
           };
-        }),
-      })),
+        });
+        return {
+          key: stage.key,
+          kind: stage.kind,
+          state: stage.state,
+          strategy: stage.executionStrategy,
+          ...(stage.groupTasksTogether && tasks.length > 0
+            ? {
+                executionGroups: [
+                  {
+                    key: process.key ?? process.id,
+                    strategy: stage.executionStrategy,
+                    tasks,
+                  },
+                ],
+              }
+            : { tasks }),
+        };
+      }),
       { key: process.key, planId: process.id },
     ),
   );

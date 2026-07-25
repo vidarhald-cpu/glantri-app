@@ -8,10 +8,7 @@ export const offensiveParryRollPurposeSchema = z.enum([
 ]);
 export type OffensiveParryRollPurpose = z.infer<typeof offensiveParryRollPurposeSchema>;
 
-export const combatParryPurposeSchema = z.enum([
-  "ordinary_defense",
-  "offensive_parry",
-]);
+export const combatParryPurposeSchema = z.enum(["ordinary_defense", "offensive_parry"]);
 export type CombatParryPurpose = z.infer<typeof combatParryPurposeSchema>;
 
 export const offensiveParryBrawlingRollSchema = z.object({
@@ -42,9 +39,7 @@ export const offensiveParryBrawlingRollSchema = z.object({
   skillLabel: z.literal("Brawling"),
   skillModifier: z.number().int(),
 });
-export type OffensiveParryBrawlingRoll = z.infer<
-  typeof offensiveParryBrawlingRollSchema
->;
+export type OffensiveParryBrawlingRoll = z.infer<typeof offensiveParryBrawlingRollSchema>;
 
 export const offensiveParryContestSchema = z.object({
   affectedParticipantId: idSchema,
@@ -74,9 +69,13 @@ export const continuedContactSchema = z.object({
   affectedParticipantId: idSchema,
   brawlingContestResultId: idSchema,
   controllerParticipantId: idSchema,
+  endedByMaintenanceContestResultId: idSchema.optional(),
+  endedRound: z.number().int().positive().optional(),
   establishedPhase: z.enum(["phase1", "phase2"]),
   establishedRound: z.number().int().positive(),
   id: idSchema,
+  lastMaintainedByContestResultId: idSchema.optional(),
+  lastMaintainedRound: z.number().int().positive().optional(),
   sourceActionId: z.literal("offensive_parry"),
   sourceAttackResultId: idSchema,
   sourceDeclarationId: idSchema,
@@ -88,6 +87,8 @@ export type ContinuedContact = z.infer<typeof continuedContactSchema>;
 
 export const unbalancedCombatConditionSchema = z.object({
   affectedParticipantId: idSchema,
+  endedByMaintenanceContestResultId: idSchema.optional(),
+  endedRound: z.number().int().positive().optional(),
   establishedRound: z.number().int().positive(),
   id: idSchema,
   modifierValue: z.literal(-2),
@@ -97,9 +98,27 @@ export const unbalancedCombatConditionSchema = z.object({
 });
 export type UnbalancedCombatCondition = z.infer<typeof unbalancedCombatConditionSchema>;
 
-export function buildOffensiveParryContestId(input: {
-  parryResultId: string;
-}): string {
+export const continuedContactMaintenanceContestSchema = z.object({
+  affectedParticipantId: idSchema,
+  affectedRoll: offensiveParryBrawlingRollSchema.optional(),
+  affectedRollRecorded: z.boolean().default(false),
+  continuedContactId: idSchema,
+  controllerParticipantId: idSchema,
+  controllerRoll: offensiveParryBrawlingRollSchema.optional(),
+  controllerRollRecorded: z.boolean().default(false),
+  id: idSchema,
+  outcome: z.enum(["maintained", "escaped", "tie"]).optional(),
+  resultId: idSchema,
+  roundNumber: z.number().int().positive(),
+  status: z.enum(["awaiting_rolls", "resolved", "cancelled"]).default("awaiting_rolls"),
+  unbalancedConditionId: idSchema,
+  winnerParticipantId: idSchema.optional(),
+});
+export type ContinuedContactMaintenanceContest = z.infer<
+  typeof continuedContactMaintenanceContestSchema
+>;
+
+export function buildOffensiveParryContestId(input: { parryResultId: string }): string {
   return `${input.parryResultId}:offensive-parry:brawling`;
 }
 
@@ -110,9 +129,7 @@ export function buildOffensiveParryAttemptId(input: {
   return `${input.attackResultId}:offensive-parry:${input.declarationId}:attempt`;
 }
 
-export function buildOffensiveParryContestResultId(input: {
-  contestId: string;
-}): string {
+export function buildOffensiveParryContestResultId(input: { contestId: string }): string {
   return `${input.contestId}:result`;
 }
 
@@ -120,10 +137,21 @@ export function buildContinuedContactId(input: { contestId: string }): string {
   return `${input.contestId}:continued-contact`;
 }
 
-export function buildUnbalancedConditionId(input: {
-  continuedContactId: string;
-}): string {
+export function buildUnbalancedConditionId(input: { continuedContactId: string }): string {
   return `${input.continuedContactId}:unbalanced`;
+}
+
+export function buildContinuedContactMaintenanceContestId(input: {
+  continuedContactId: string;
+  roundNumber: number;
+}): string {
+  return `round-end:${input.roundNumber}:continued-contact:${input.continuedContactId}:maintenance`;
+}
+
+export function buildContinuedContactMaintenanceContestResultId(input: {
+  contestId: string;
+}): string {
+  return `${input.contestId}:result`;
 }
 
 /**

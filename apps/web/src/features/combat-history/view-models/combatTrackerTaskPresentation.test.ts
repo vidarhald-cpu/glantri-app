@@ -25,6 +25,7 @@ const EXCEPTIONAL_TASK_KINDS = [
   "adjust_distance_defender_roll",
   "adjust_distance_response",
   "combat_experience",
+  "continued_contact_maintenance_roll",
   "critical",
   "damage_roll",
   "damage_review",
@@ -36,6 +37,7 @@ const EXCEPTIONAL_TASK_KINDS = [
   "feint_defender_roll",
   "health_review",
   "hit_location",
+  "offensive_parry_brawling_roll",
   "parry",
 ] satisfies CombatProgressionTaskKind[];
 
@@ -118,6 +120,36 @@ describe("combat tracker task presentation", () => {
     expect(buildCombatTrackerTaskHover(task("combat_experience"))).toMatchObject({
       actionLabel: "Combat Experience",
       text: "Combat Experience roll required for The Gladiator.",
+    });
+  });
+
+  it("marks Continued Contact maintenance as SU Brawling work for the exact owner", () => {
+    expect(
+      buildCombatTrackerTaskHover(
+        task("continued_contact_maintenance_roll", {
+          expectedCommand: "roll_continued_contact_maintenance",
+          identity: {
+            contestId: "maintenance-1",
+            continuedContactId: "contact-1",
+            executionGroupId: "group-1",
+            opponentParticipantId: "scyrian",
+            rollPurpose: "escape_continued_contact",
+          },
+          opponent: {
+            kind: "combatant",
+            label: "Scyrian cavalry guy",
+            participantId: "scyrian",
+          },
+          trackerFacet: {
+            owner: { kind: "combatant", label: "The Gladiator", participantId: "gladiator" },
+            step: "SU",
+          },
+        }),
+      ),
+    ).toMatchObject({
+      actionLabel: "Continued Contact",
+      requiredActorLabel: "The Gladiator",
+      text: "The Gladiator must roll Brawling against Scyrian cavalry guy for Continued Contact.",
     });
   });
 

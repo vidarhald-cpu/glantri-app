@@ -48,6 +48,7 @@ export function classifyCombatTrackerTaskAttention(
     case "adjust_distance_defender_roll":
     case "adjust_distance_response":
     case "combat_experience":
+    case "continued_contact_maintenance_roll":
     case "critical":
     case "damage_roll":
     case "damage_review":
@@ -100,6 +101,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Parry";
     case "offensive_parry_brawling_roll":
       return "Offensive Parry";
+    case "continued_contact_maintenance_roll":
+      return "Continued Contact";
     case "hit_location":
       return "Hit location";
     case "critical":
@@ -222,6 +225,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} must roll Brawling${opponent ? ` against ${opponent}` : ""}.`
           : "A Brawling roll is required before combat can continue.";
+        break;
+      case "continued_contact_maintenance_roll":
+        text = owner
+          ? `${owner} must roll Brawling${opponent ? ` against ${opponent}` : ""} for Continued Contact.`
+          : "A Continued Contact Brawling roll is required.";
         break;
       case "adjust_distance_response":
         text = owner

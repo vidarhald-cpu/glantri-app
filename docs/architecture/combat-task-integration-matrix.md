@@ -23,9 +23,10 @@ authorize a live command.
 | `modifier_review`                             | Fully descriptor-bound | M1/M2 review uses the projected participant task, phase, group, and revision.                                                                                                                                                                                                                                                                                    |
 | `roll_initiative`                             | Fully descriptor-bound | GM proxy and player rolls use descriptor participant/phase identity; submitted calculation inputs remain server-validated.                                                                                                                                                                                                                                       |
 | `commit_initiative`                           | Fully descriptor-bound | GM commit requires the projected GM task, execution group, phase, and revision.                                                                                                                                                                                                                                                                                  |
-| `attack`                                      | Fully descriptor-bound | Invocation and persistence require the exact declaration/opportunity/index/source/template/instance/mode plus participant pair, task, execution group, initiative group, phase, revision, effect cutoff, and canonical modifier fingerprints. GM proxy derives numeric modifier facts from that exact projected task rather than inspector state.                 |
+| `attack`                                      | Fully descriptor-bound | Invocation and persistence require the exact declaration/opportunity/index/source/template/instance/mode plus participant pair, task, execution group, initiative group, phase, revision, effect cutoff, and canonical modifier fingerprints. GM proxy derives numeric modifier facts from that exact projected task rather than inspector state.                |
 | `parry`                                       | Fully descriptor-bound | GM/player handlers and API retain the upstream opportunity and exact attack result through the parry task. Offensive Parry reuses this task with explicit purpose, maneuver declaration, selected opponent, deterministic attempt, parry source, and process/stage identity; it is projected for a selected opponent's hit or miss without cursor/latest lookup. |
 | `offensive_parry_brawling_roll`               | Fully descriptor-bound | Two participant-owned tasks share one parallel group after an exact successful-parry trigger. Contest/declaration/opportunity/attack/parry/process/stage identities authorize both player and GM-proxy rolls.                                                                                                                                                    |
+| `continued_contact_maintenance_roll`          | Fully descriptor-bound | Two participant-owned Round End Brawling tasks share one parallel group. Exact contest, Continued Contact, participant/opponent, roll-purpose, process, stage, task, execution-group, and revision identities authorize player and GM-proxy rolls.                                                                                                               |
 | `hit_location`                                | Fully descriptor-bound | Exact attack/result/opportunity/task/group identity authorizes the command; new results carry source-specific downstream damage inputs.                                                                                                                                                                                                                          |
 | `critical`                                    | Fully descriptor-bound | Exact attack/location/critical/task/group identity authorizes the command and retains upstream opportunity/source lineage.                                                                                                                                                                                                                                       |
 | `damage_roll`                                 | Fully descriptor-bound | Graze damage uses the exact attack opportunity/result and its persisted source-specific DMB/armor context.                                                                                                                                                                                                                                                       |
@@ -68,8 +69,17 @@ projection; undo restores exactly one unresolved child. GM Combat refreshes the 
 revision while open so a final player-owned roll replaces a stale GM descriptor instead of leaving
 an obsolete proxy button. The final contest owns one concise, viewer-sanitized calculation;
 Attack and purpose-tagged parry retain only their exact calculations. Continued Contact follow-up
-attacks and round-end maintenance/escape remain explicitly deferred and therefore do not yet add
-task kinds.
+attacks remain explicitly deferred and therefore add no attack task kind.
+
+Continued Contact maintenance/escape (2026-07-25): after the establishment round's
+controller-owned distance choice and one complete ordinary round, active relationships project one
+Round End `parallel_all` maintenance contest before distance work. The first roll leaves the other
+task stable and executable. The final roll either maintains the relationship and returns
+controller-owned distance selection, or atomically ends Continued Contact and Unbalanced and
+restores ordinary opposed distance control; ties use the escape outcome. The affected participant's
+descriptor carries `rollPurpose: escape_continued_contact`, so only the linked Unbalanced
+contribution is excluded while other modifiers remain. Undo of the final roll restores exactly one
+unresolved task and the pre-result state.
 
 Initiative-group execution (2026-07-24): A1/A2 now selects the highest unresolved committed
 initiative value and projects all exact-tie opportunities at that value. Resolution descriptors

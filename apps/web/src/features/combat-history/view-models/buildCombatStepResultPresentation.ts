@@ -25,12 +25,7 @@ export type CombatStepResultEntryCategory =
   | "condition"
   | "review";
 
-export type CombatCalculationVisibility =
-  | "gm_full"
-  | "own"
-  | "shared"
-  | "observed"
-  | "hidden";
+export type CombatCalculationVisibility = "gm_full" | "own" | "shared" | "observed" | "hidden";
 
 export interface CombatCalculationPresentation {
   readonly collapsedByDefault: true;
@@ -188,9 +183,7 @@ function headingForLogEvent(event: CombatLogEventPresentation): string {
     case "attack_resolved":
       return "Attack";
     case "defense_resolved":
-      return event.summaryFacts.parryPurpose === "offensive_parry"
-        ? "Offensive Parry"
-        : "Defense";
+      return event.summaryFacts.parryPurpose === "offensive_parry" ? "Offensive Parry" : "Defense";
     case "damage_committed":
       return "Damage";
     case "condition_applied":
@@ -372,16 +365,12 @@ function supplementalEntries(input: {
   const loggedSourceIds = new Set(input.logEvents.flatMap((event) => event.sourceEventIds));
   const loggedContestProposalIds = new Set(
     input.logEvents.flatMap((event) =>
-      event.summaryFacts.kind === "contest_resolved" && event.proposalId
-        ? [event.proposalId]
-        : [],
+      event.summaryFacts.kind === "contest_resolved" && event.proposalId ? [event.proposalId] : [],
     ),
   );
   const loggedDistanceProposalIds = new Set(
     input.logEvents.flatMap((event) =>
-      event.summaryFacts.kind === "distance_changed" && event.proposalId
-        ? [event.proposalId]
-        : [],
+      event.summaryFacts.kind === "distance_changed" && event.proposalId ? [event.proposalId] : [],
     ),
   );
 
@@ -451,10 +440,8 @@ function supplementalEntries(input: {
           candidate.type === "offensive_parry_brawling" &&
           visibleOutcome(candidate, "contestId") === contestId,
       );
-      const controller =
-        identitySubject(event, "defender") ?? identitySubject(event, "actor");
-      const affected =
-        identitySubject(event, "attacker") ?? identitySubject(event, "target");
+      const controller = identitySubject(event, "defender") ?? identitySubject(event, "actor");
+      const affected = identitySubject(event, "attacker") ?? identitySubject(event, "target");
       const winnerParticipantId = visibleOutcome(event, "winnerParticipantId");
       const controllerWon =
         visibleOutcome(event, "contactEstablished") === true &&
@@ -553,6 +540,112 @@ function supplementalEntries(input: {
       ];
     }
 
+    if (event.type === "continued_contact_maintenance") {
+      if (visibleOutcome(event, "resolved") !== true) return [];
+      const contestId = visibleOutcome(event, "contestId");
+      if (typeof contestId !== "string") return [];
+      const contestEvents = input.events.filter(
+        (candidate) =>
+          candidate.type === "continued_contact_maintenance" &&
+          visibleOutcome(candidate, "contestId") === contestId,
+      );
+      const controller = identitySubject(event, "actor");
+      const affected = identitySubject(event, "target");
+      const winnerParticipantId = visibleOutcome(event, "winnerParticipantId");
+      const maintained = visibleOutcome(event, "contactMaintained") === true;
+      const outcome = visibleOutcome(event, "outcome");
+      const controllerName = controller?.label ?? "The controller";
+      const affectedName = affected?.label ?? "the defender";
+      const controllerTotal = visibleOutcome(event, "controllerTotal");
+      const affectedTotal = visibleOutcome(event, "affectedTotal");
+      const consequence = maintained
+        ? `${affectedName} remains Unbalanced; ${controllerName} chooses engagement distance for the next round.`
+        : `Continued Contact ended; Unbalanced was removed and ordinary distance control resumes.`;
+      const contestCalculation =
+        controller?.id &&
+        affected?.id &&
+        typeof controllerTotal === "number" &&
+        typeof affectedTotal === "number"
+          ? buildCombatContestCalculationPresentation({
+              consequence,
+              initiator: {
+                label: controllerName,
+                participantId: controller.id,
+                roll: buildCombatRollCalculationPresentation({
+                  calculation: contestEvents.find(
+                    (candidate) => candidate.ownerParticipantId === controller.id,
+                  )?.facts.privateCalculation,
+                  label: controllerName,
+                }),
+                total: controllerTotal,
+              },
+              responder: {
+                label: affectedName,
+                participantId: affected.id,
+                roll: buildCombatRollCalculationPresentation({
+                  calculation: contestEvents.find(
+                    (candidate) => candidate.ownerParticipantId === affected.id,
+                  )?.facts.privateCalculation,
+                  label: affectedName,
+                }),
+                total: affectedTotal,
+              },
+              tieResultLabel: "Tie — Continued Contact broken",
+              winnerParticipantId:
+                typeof winnerParticipantId === "string" ? winnerParticipantId : undefined,
+            })
+          : undefined;
+      const participantIsController = controller?.id === input.participantId;
+      const participantIsAffected = affected?.id === input.participantId;
+      const summary = maintained
+        ? participantIsController
+          ? `Continued Contact maintained. ${affectedName} remains Unbalanced. You choose engagement distance for the next round.`
+          : participantIsAffected
+            ? `Continued Contact maintained. You remain Unbalanced. ${controllerName} chooses engagement distance for the next round.`
+            : `Continued Contact maintained. ${affectedName} remains Unbalanced.`
+        : participantIsAffected
+          ? "You escaped Continued Contact. Unbalanced was removed. Ordinary distance control resumes."
+          : participantIsController
+            ? "Continued Contact was broken. Unbalanced was removed. Ordinary distance control resumes."
+            : "Continued Contact was broken. Unbalanced was removed. Ordinary distance control resumes.";
+      return [
+        {
+          entry: {
+            actor: controller,
+            calculations: contestCalculation
+              ? [
+                  {
+                    collapsedByDefault: true,
+                    id: `${contestId}:calculation`,
+                    lines: formatCombatContestCalculationLines({
+                      presentation: contestCalculation,
+                      viewerParticipantId:
+                        input.viewer.kind === "player" ? input.participantId : undefined,
+                    }),
+                    title: "Continued Contact — Maintenance",
+                    visibility: input.viewer.kind === "gm" ? "gm_full" : "own",
+                  },
+                ]
+              : [],
+            category: "contest",
+            heading: "Continued Contact — Maintenance",
+            id: `current-step:${contestId}:result`,
+            outcome: maintained
+              ? "Continued Contact maintained · Unbalanced remains"
+              : outcome === "tie"
+                ? "Tie · Continued Contact broken"
+                : "Continued Contact broken · Unbalanced removed",
+            sourceEventIds: contestEvents.map((candidate) => candidate.id),
+            state: "final",
+            summary,
+            target: affected,
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
+
     if (event.type === "adjust_distance_result") {
       const id = proposalId(event);
       if (!id || loggedContestProposalIds.has(id)) return [];
@@ -562,8 +655,7 @@ function supplementalEntries(input: {
       const actorLabel = actor?.label ?? identityLabel(event, "attacker") ?? "The initiator";
       const won = outcome === "successful" || outcome === "allowed";
       const rollEvents = input.events.filter(
-        (candidate) =>
-          candidate.type === "adjust_distance_roll" && proposalId(candidate) === id,
+        (candidate) => candidate.type === "adjust_distance_roll" && proposalId(candidate) === id,
       );
       return [
         {
@@ -678,7 +770,10 @@ function supplementalEntries(input: {
       ];
     }
 
-    if ((event.type === "hit_location" || event.type === "critical") && !loggedSourceIds.has(event.id)) {
+    if (
+      (event.type === "hit_location" || event.type === "critical") &&
+      !loggedSourceIds.has(event.id)
+    ) {
       const model = buildCombatEventResultModel([event]).items[0];
       if (!model) return [];
       return [
@@ -697,7 +792,9 @@ function supplementalEntries(input: {
             category: "critical",
             heading: model.title,
             id: `current-step:${event.id}`,
-            outcome: model.outcomeRows.map((row) => row.text.replace(/^Result: /, "")).join(" · ") || undefined,
+            outcome:
+              model.outcomeRows.map((row) => row.text.replace(/^Result: /, "")).join(" · ") ||
+              undefined,
             sourceEventIds: [event.id],
             state: "final",
             summary: model.summary,

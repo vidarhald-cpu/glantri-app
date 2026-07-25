@@ -275,12 +275,17 @@ describe("buildCombatStepResultPresentation", () => {
     });
 
     // The viewer projection enforces ownership even if a caller supplies an unsanitized event.
-    const sanitizedPlayer = build({ events: [attackerRoll, defenderRoll, committed], logEvents: [contest] });
+    const sanitizedPlayer = build({
+      events: [attackerRoll, defenderRoll, committed],
+      logEvents: [contest],
+    });
     expect(gm.entries[0]?.calculations).toHaveLength(2);
     expect(player.entries[0]?.calculations).toHaveLength(1);
     expect(sanitizedPlayer.entries[0]?.calculations).toHaveLength(1);
     expect(sanitizedPlayer.entries[0]?.calculations[0]?.visibility).toBe("own");
-    expect(gm.entries[0]?.calculations.every((calculation) => calculation.visibility === "gm_full")).toBe(true);
+    expect(
+      gm.entries[0]?.calculations.every((calculation) => calculation.visibility === "gm_full"),
+    ).toBe(true);
   });
 
   it("fails closed instead of mixing contradictory revisions", () => {
@@ -366,7 +371,12 @@ describe("buildCombatStepResultPresentation", () => {
     });
 
     const result = build({
-      events: [attackEvent, historyEvent("parry", 6), critical, historyEvent("damage_committed", 8)],
+      events: [
+        attackEvent,
+        historyEvent("parry", 6),
+        critical,
+        historyEvent("damage_committed", 8),
+      ],
       logEvents: [attack, defense, damage, condition],
     });
 
@@ -808,6 +818,115 @@ describe("buildCombatStepResultPresentation", () => {
     );
   });
 
+  it("presents one concise Continued Contact maintenance result and treats a tie as escape", () => {
+    const identities = [
+      {
+        displayName: "The Gladiator",
+        participantId: "gladiator",
+        role: "actor" as const,
+        visibility: "visible" as const,
+      },
+      {
+        displayName: "Scyrian cavalry guy",
+        participantId: "scyrian",
+        role: "target" as const,
+        visibility: "visible" as const,
+      },
+    ];
+    const controllerRoll = historyEvent("continued_contact_maintenance", 20, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          contestId: "maintenance-1",
+          controllerParticipantId: "gladiator",
+          controllerTotal: 24,
+          resolved: false,
+        },
+        privateCalculation: {
+          brawlingBaseValue: 14,
+          finalTotal: 24,
+          generalModifier: 0,
+          rollD20: 10,
+          rollTotal: 10,
+          skillModifier: 0,
+        },
+        publicOutcome: { resolved: false },
+      },
+      identities: [
+        ...identities,
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+    const defenderRoll = historyEvent("continued_contact_maintenance", 21, {
+      facts: {
+        involvedOutcome: {
+          affectedParticipantId: "scyrian",
+          affectedTotal: 24,
+          contactMaintained: false,
+          contestId: "maintenance-1",
+          controllerParticipantId: "gladiator",
+          controllerTotal: 24,
+          difference: 0,
+          outcome: "tie",
+          resolved: true,
+        },
+        privateCalculation: {
+          brawlingBaseValue: 12,
+          finalTotal: 24,
+          generalModifier: 2,
+          rollD20: 10,
+          rollTotal: 10,
+          skillModifier: 0,
+        },
+        publicOutcome: {
+          contactMaintained: false,
+          outcome: "tie",
+          resolved: true,
+        },
+      },
+      identities: [
+        ...identities,
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "scyrian",
+      step: "round_summary",
+    });
+    const gm = build({
+      boundary: "round_end",
+      events: [controllerRoll, defenderRoll],
+      participantId: "gladiator",
+      viewer: "gm",
+    });
+
+    expect(gm.entries).toHaveLength(1);
+    expect(gm.entries[0]).toMatchObject({
+      heading: "Continued Contact — Maintenance",
+      outcome: "Tie · Continued Contact broken",
+      summary:
+        "Continued Contact was broken. Unbalanced was removed. Ordinary distance control resumes.",
+    });
+    expect(gm.entries[0]?.calculations).toHaveLength(1);
+    expect(gm.entries[0]?.calculations[0]?.lines).toEqual(
+      expect.arrayContaining([
+        "Difference: 0",
+        "Result: Tie — Continued Contact broken",
+        "Consequence: Continued Contact ended; Unbalanced was removed and ordinary distance control resumes.",
+      ]),
+    );
+  });
+
   it("attaches attack, parry, and final Brawling calculations only to their canonical results", () => {
     const attack = historyEvent("attack", 1, {
       facts: {
@@ -912,12 +1031,8 @@ describe("buildCombatStepResultPresentation", () => {
       "Offensive Parry",
       "Offensive Parry — Brawling",
     ]);
-    expect(result.entries[0]?.calculations).toEqual([
-      expect.objectContaining({ title: "Attack" }),
-    ]);
-    expect(result.entries[1]?.calculations).toEqual([
-      expect.objectContaining({ title: "Parry" }),
-    ]);
+    expect(result.entries[0]?.calculations).toEqual([expect.objectContaining({ title: "Attack" })]);
+    expect(result.entries[1]?.calculations).toEqual([expect.objectContaining({ title: "Parry" })]);
     expect(result.entries[2]?.calculations).toEqual([
       expect.objectContaining({ title: "Offensive Parry — Brawling" }),
     ]);
@@ -942,9 +1057,7 @@ describe("buildCombatStepResultPresentation", () => {
       },
     });
 
-    expect(
-      build({ boundary: "declaration", logEvents: [ownDeclaration] }).entries,
-    ).toEqual([]);
+    expect(build({ boundary: "declaration", logEvents: [ownDeclaration] }).entries).toEqual([]);
   });
 
   it("preserves safe hidden-identity wording without exposing a participant id", () => {

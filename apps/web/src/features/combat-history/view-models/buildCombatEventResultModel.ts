@@ -29,6 +29,7 @@ export interface CombatEventResultModel {
 const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   attack: "Attack",
   combat_experience: "Combat Experience",
+  continued_contact_maintenance: "Continued Contact — Maintenance",
   critical: "Critical",
   damage_committed: "Damage committed",
   damage_proposed: "Damage proposed",
@@ -168,17 +169,20 @@ export function buildConciseDodgeCalculationRows(input: {
   ) {
     return calculationFactRows(input.eventId, calculation, new Map());
   }
-  const general = typeof calculation.generalFatigueModifier === "number" ? calculation.generalFatigueModifier : 0;
-  const adjustment = typeof calculation.situationalAdjustment === "number" ? calculation.situationalAdjustment : 0;
+  const general =
+    typeof calculation.generalFatigueModifier === "number" ? calculation.generalFatigueModifier : 0;
+  const adjustment =
+    typeof calculation.situationalAdjustment === "number" ? calculation.situationalAdjustment : 0;
   const modifier = general + adjustment;
   const openEnded = Array.isArray(calculation.openEndedD10s) ? calculation.openEndedD10s : [];
-  const dieText = openEnded.length
-    ? `${die} (${openEnded.join(" + ")})`
-    : String(die);
+  const dieText = openEnded.length ? `${die} (${openEnded.join(" + ")})` : String(die);
   const standardOutcome = input.outcome;
   const rows: CombatEventResultFactRow[] = [
     { key: `${input.eventId}:calculation:skill`, text: `Skill: Dodge ${skill}` },
-    { key: `${input.eventId}:calculation:modifier`, text: `Modifier: ${formatSignedCombatModifier(modifier)}` },
+    {
+      key: `${input.eventId}:calculation:modifier`,
+      text: `Modifier: ${formatSignedCombatModifier(modifier)}`,
+    },
     { key: `${input.eventId}:calculation:die`, text: `Die roll: ${dieText}` },
     { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
     {
@@ -302,9 +306,8 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const winnerParticipantId = factValue(event, "winnerParticipantId");
       const winner =
         typeof winnerParticipantId === "string"
-          ? event.identities.find(
-              (candidate) => candidate.participantId === winnerParticipantId,
-            )?.displayName
+          ? event.identities.find((candidate) => candidate.participantId === winnerParticipantId)
+              ?.displayName
           : undefined;
       return {
         outcomeRows: resolved
@@ -321,6 +324,28 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           ? contactEstablished
             ? "Continued contact was established and the attacker became Unbalanced."
             : "Continued contact was not established."
+          : `${roller ?? "Participant"} rolled Brawling.`,
+      };
+    }
+    case "continued_contact_maintenance": {
+      const resolved = factValue(event, "resolved") === true;
+      const maintained = factValue(event, "contactMaintained") === true;
+      const outcome = factValue(event, "outcome");
+      return {
+        outcomeRows: resolved
+          ? resultRow(
+              event,
+              maintained
+                ? "Continued Contact maintained."
+                : outcome === "tie"
+                  ? "Tie — Continued Contact broken."
+                  : "Continued Contact broken.",
+            )
+          : [],
+        summary: resolved
+          ? maintained
+            ? "The defender remains Unbalanced. The controller chooses engagement distance for the next round."
+            : "Unbalanced was removed. Ordinary distance control resumes."
           : `${roller ?? "Participant"} rolled Brawling.`,
       };
     }
@@ -525,23 +550,52 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "adjust_distance_response": {
       const response = factValue(event, "response");
-      return { outcomeRows: resultRow(event, response === "allow" ? `${defender ?? "Defender"} allowed the distance adjustment.` : `${defender ?? "Defender"} opposed the distance adjustment.`), summary: "The defender responded to the maneuver." };
+      return {
+        outcomeRows: resultRow(
+          event,
+          response === "allow"
+            ? `${defender ?? "Defender"} allowed the distance adjustment.`
+            : `${defender ?? "Defender"} opposed the distance adjustment.`,
+        ),
+        summary: "The defender responded to the maneuver.",
+      };
     }
     case "adjust_distance_adjustment":
       return { outcomeRows: [], summary: "The GM confirmed the maneuver adjustment." };
     case "adjust_distance_roll": {
       const side = factLabel(factValue(event, "side"));
-      const outcome = side?.toLowerCase() === "defender" ? "to resist the distance adjustment" : "to adjust distance";
-      return { outcomeRows: [], summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge ${outcome}.` };
+      const outcome =
+        side?.toLowerCase() === "defender"
+          ? "to resist the distance adjustment"
+          : "to adjust distance";
+      return {
+        outcomeRows: [],
+        summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge ${outcome}.`,
+      };
     }
     case "adjust_distance_result": {
       const proposed = factValue(event, "standardProposedDistance");
-      return { outcomeRows: typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [], summary: "The maneuver proposal was resolved." };
+      return {
+        outcomeRows:
+          typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [],
+        summary: "The maneuver proposal was resolved.",
+      };
     }
     case "adjust_distance_committed": {
       const previous = factValue(event, "previousDistance");
       const committed = factValue(event, "committedDistance");
-      return { outcomeRows: typeof committed === "number" ? resultRow(event, previous === committed ? `Distance remained ${committed}.` : `Distance changed from ${previous} to ${committed}.`) : [], summary: "The GM committed the distance adjustment." };
+      return {
+        outcomeRows:
+          typeof committed === "number"
+            ? resultRow(
+                event,
+                previous === committed
+                  ? `Distance remained ${committed}.`
+                  : `Distance changed from ${previous} to ${committed}.`,
+              )
+            : [],
+        summary: "The GM committed the distance adjustment.",
+      };
     }
   }
 }
@@ -567,7 +621,7 @@ export function buildCombatEventResultModel(
               ? dodgeCalculationRows(event)
               : event.type === "offensive_parry_brawling"
                 ? offensiveParryBrawlingCalculationRows(event)
-              : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
+                : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
           completenessLabel:
             event.completeness === "complete"
               ? undefined

@@ -715,6 +715,48 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("rolls Continued Contact maintenance with the exact contest and task lineage", async () => {
+    const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
+    const commandEnvelope = { currentStep: "round_summary", warnings: [] };
+    const fetchMock = stubFetch({ commandEnvelope, encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.rollContinuedContactMaintenanceOnServer({
+        contestId: "maintenance-contest-1",
+        continuedContactId: "continued-contact-1",
+        encounterId: "encounter-1",
+        executionGroupId: "maintenance-group-1",
+        expectedRevision: "revision-1",
+        opponentParticipantId: "encounter-participant-2",
+        processId: "maintenance-process-1",
+        scenarioParticipantId: "participant-1",
+        stageId: "maintenance-stage-1",
+        taskId: "maintenance-task-1",
+      }),
+    ).resolves.toEqual({ commandEnvelope, encounter });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        commandType: "roll_continued_contact_maintenance",
+        contestId: "maintenance-contest-1",
+        continuedContactId: "continued-contact-1",
+        executionGroupId: "maintenance-group-1",
+        expectedRevision: "revision-1",
+        opponentParticipantId: "encounter-participant-2",
+        processId: "maintenance-process-1",
+        rollPurpose: "escape_continued_contact",
+        scenarioParticipantId: "participant-1",
+        stageId: "maintenance-stage-1",
+        taskId: "maintenance-task-1",
+      },
+      method: "POST",
+      url:
+        "https://api.example.test/encounters/encounter-1/combat-round/" +
+        "roll-continued-contact-maintenance",
+    });
+  });
+
   it("clears the current combat round step through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",

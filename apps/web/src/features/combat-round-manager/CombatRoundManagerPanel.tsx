@@ -158,6 +158,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
@@ -8063,9 +8064,7 @@ export default function CombatRoundManagerPanel({
       setSaveError(`Target ${phaseLabel} DB is not available.`);
       return;
     }
-    const projectedAttackTask = projectedCurrentTasks.find(
-      (task) => task.id === descriptor.taskId,
-    );
+    const projectedAttackTask = projectedCurrentTasks.find((task) => task.id === descriptor.taskId);
     const modifierRequest = buildGmCombatAttackModifierRequest({
       attackerCombatantId: selectedEncounterParticipant.id,
       attackerScenarioParticipant: selectedScenarioParticipant,
@@ -8392,6 +8391,78 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function rollContinuedContactMaintenance(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_continued_contact_maintenance"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "contestId",
+        "continuedContactId",
+        "executionGroupId",
+        "expectedRevision",
+        "opponentParticipantId",
+        "participantId",
+        "processId",
+        "rollPurpose",
+        "stageId",
+        "taskId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !participant) {
+      setSaveError("The Continued Contact maintenance task is no longer available.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const {
+        commandEnvelope,
+        encounter: nextEncounter,
+        participant: updatedParticipant,
+      } = await rollContinuedContactMaintenanceOnServer({
+        contestId: descriptor.contestId!,
+        continuedContactId: descriptor.continuedContactId!,
+        encounterId: descriptor.encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        opponentParticipantId: descriptor.opponentParticipantId!,
+        processId: descriptor.processId!,
+        scenarioParticipantId: participant.id,
+        stageId: descriptor.stageId!,
+        taskId: descriptor.taskId,
+      });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      if (updatedParticipant) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          [updatedParticipant.id]: updatedParticipant,
+        }));
+        onScenarioParticipantsUpdated?.([updatedParticipant]);
+      }
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll Continued Contact maintenance.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveInspectorDamageReview() {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: currentActionPresentation?.primaryAction.descriptor,
@@ -8683,14 +8754,13 @@ export default function CombatRoundManagerPanel({
           commandEnvelope,
           encounter: nextEncounter,
           participant: updatedParticipant,
-        } =
-          await commitRoundEndParticipantReviewOnServer({
-            encounterId: encounter.id,
-            executionGroupId: descriptor.executionGroupId!,
-            expectedRevision: descriptor.expectedRevision,
-            scenarioParticipantId: scenarioParticipant.id,
-            taskId: descriptor.taskId,
-          });
+        } = await commitRoundEndParticipantReviewOnServer({
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          scenarioParticipantId: scenarioParticipant.id,
+          taskId: descriptor.taskId,
+        });
         const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
           getCombatRoundManagerStateFromCommandEnvelope({
             commandEnvelope,
@@ -8916,6 +8986,9 @@ export default function CombatRoundManagerPanel({
         return;
       case "roll_offensive_parry_brawling":
         void rollInspectorOffensiveParryBrawling(descriptor);
+        return;
+      case "roll_continued_contact_maintenance":
+        void rollContinuedContactMaintenance(descriptor);
         return;
       case "roll_hit_location":
       case "roll_critical":
@@ -9856,9 +9929,7 @@ export default function CombatRoundManagerPanel({
                           ? `Effective after Initiative ${combatProgressionProjection.executionOrder.currentInitiativeValue} finishes`
                           : undefined
                       }
-                      pendingEntries={
-                        inspectorIsHistorical ? [] : inspectorPendingModifierEntries
-                      }
+                      pendingEntries={inspectorIsHistorical ? [] : inspectorPendingModifierEntries}
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
                     />

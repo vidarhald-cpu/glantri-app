@@ -6,7 +6,7 @@ import type {
   CombatRoundPhase,
   CombatRoundPhaseResolutionCursor,
 } from "../combatRoundManager";
-import type { CombatParryPurpose } from "../combatOffensiveParry";
+import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
 
 export const COMBAT_PROGRESSION_BOUNDARIES = [
   "declaration",
@@ -27,6 +27,7 @@ export type CombatProgressionProcessKind =
   | "attack_decision"
   | "attack"
   | "combat_experience"
+  | "continued_contact_maintenance"
   | "boundary_transition"
   | "declaration"
   | "distance"
@@ -43,6 +44,7 @@ export type CombatProgressionStageKind =
   | "attack"
   | "boundary"
   | "commit"
+  | "contest"
   | "critical"
   | "damage"
   | "defense"
@@ -85,6 +87,7 @@ export type CombatProgressionTaskKind =
   | "adjust_distance_response"
   | "attack"
   | "combat_experience"
+  | "continued_contact_maintenance_roll"
   | "critical"
   | "damage_roll"
   | "damage_review"
@@ -158,6 +161,7 @@ export interface CombatProgressionTaskIdentity {
   readonly attackerParticipantId?: string;
   readonly criticalResultId?: string;
   readonly contestId?: string;
+  readonly continuedContactId?: string;
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
@@ -173,6 +177,7 @@ export interface CombatProgressionTaskIdentity {
   readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
+  readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
@@ -205,6 +210,7 @@ export interface CombatProgressionTaskPresentationContext {
   readonly difficulty?: number;
   readonly damageRollExpression?: string;
   readonly reason?: string;
+  readonly opponentRollRecorded?: boolean;
   readonly responder?: CombatantIdentity;
   readonly skill?: CombatProgressionPresentationReference;
   readonly target?: CombatantIdentity;
