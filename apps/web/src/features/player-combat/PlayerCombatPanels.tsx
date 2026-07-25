@@ -1014,6 +1014,10 @@ export function PlayerCombatModifierPanel({
       <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
       {rows.map((row) => {
         const draftEntry = draftEntries[row.bucketKey];
+        const displayEntries = [...row.entries, ...(row.characterStateEntries ?? [])];
+        const totalIsPercentage =
+          displayEntries.length > 0 &&
+          displayEntries.every((entry) => entry.application === "percentage");
         const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
         const situationalEntries = row.entries.filter(
           (entry) => !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
@@ -1048,6 +1052,7 @@ export function PlayerCombatModifierPanel({
                 <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                   {getDisplayTotal(row) >= 0 ? "+" : ""}
                   {getDisplayTotal(row)}
+                  {totalIsPercentage ? "%" : ""}
                 </span>
               </div>
               {editable && !row.locked ? (
@@ -1268,12 +1273,6 @@ export function PlayerCombatActionSelectorPanel({
           ))}
         </select>
       </label>
-      {actionId === "parry" ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-          Focus on defense for this round. Parry assumes sufficient room to maneuver.
-        </div>
-      ) : null}
-
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
         <select

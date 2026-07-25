@@ -7,6 +7,7 @@ import {
   getSingleAttackDeclaredDistanceForPenalty,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
+  isParryGeneratedPercentageModifier,
   type CombatActionGeneratedDistanceModifierInput,
   type CombatRoundPhaseContexts,
   type CombatRoundState,
@@ -240,6 +241,25 @@ function getCommittedDistanceRowsToPreserve(input: {
   });
 }
 
+function getCommittedParryRowsToPreserve(input: {
+  actionId?: string;
+  combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
+  roundState?: CombatRoundState;
+}): ScenarioCombatModifierEntry[] {
+  if (input.actionId !== "parry" || input.dodgeSkillValue !== undefined) {
+    return [];
+  }
+
+  return input.combatContext.modifierBuckets.situationDb.filter(
+    (entry) =>
+      isParryGeneratedPercentageModifier(entry) &&
+      (input.roundState === undefined ||
+        entry.sourceRoundNumber === undefined ||
+        entry.sourceRoundNumber === input.roundState.roundNumber),
+  );
+}
+
 export function projectCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
@@ -279,6 +299,7 @@ export function projectCombatActionGeneratedModifiers(input: {
     phaseContexts: input.phaseContexts,
     phaseWeaponNames: input.phaseWeaponNames,
   });
+  const committedParryRowsToPreserve = getCommittedParryRowsToPreserve(input);
   const roundParticipantId =
     input.roundState && input.encounterParticipant
       ? (findRoundParticipantByAlias({
@@ -308,7 +329,7 @@ export function projectCombatActionGeneratedModifiers(input: {
     sourceRoundNumber: input.roundState?.roundNumber,
   });
 
-  if (committedDistanceRowsToPreserve.length === 0) {
+  if (committedDistanceRowsToPreserve.length === 0 && committedParryRowsToPreserve.length === 0) {
     return projectedContext;
   }
 
@@ -317,11 +338,20 @@ export function projectCombatActionGeneratedModifiers(input: {
       .filter(isDistanceGeneratedObSkillModifier)
       .map((entry) => entry.id),
   );
+  const projectedParryRowIds = new Set(
+    projectedContext.modifierBuckets.situationDb
+      .filter(isParryGeneratedPercentageModifier)
+      .map((entry) => entry.id),
+  );
 
   return {
     ...projectedContext,
     modifierBuckets: {
       ...projectedContext.modifierBuckets,
+      situationDb: [
+        ...projectedContext.modifierBuckets.situationDb,
+        ...committedParryRowsToPreserve.filter((entry) => !projectedParryRowIds.has(entry.id)),
+      ],
       situationObSkill: [
         ...projectedContext.modifierBuckets.situationObSkill,
         ...committedDistanceRowsToPreserve.filter(

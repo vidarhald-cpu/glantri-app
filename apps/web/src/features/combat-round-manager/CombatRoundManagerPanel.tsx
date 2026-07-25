@@ -6551,6 +6551,7 @@ export default function CombatRoundManagerPanel({
       const recordedModifierRows = buildRecordedCombatModifierRows({
         combatContext: draft.combatContext,
         combatEffects: scenarioParticipant?.state.combatEffects,
+        currentRound: stateForSnapshots.roundNumber,
         step,
       });
       const modifierRows = recordedModifierRows.map((row) => ({

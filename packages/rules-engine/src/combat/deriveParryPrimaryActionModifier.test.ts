@@ -4,6 +4,7 @@ import { deriveParryPrimaryActionModifier } from "./deriveParryPrimaryActionModi
 
 describe("deriveParryPrimaryActionModifier", () => {
   it.each([
+    [7, 1],
     [17, 3],
     [15, 3],
     [14, 2],

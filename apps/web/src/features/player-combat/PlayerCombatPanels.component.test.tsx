@@ -51,6 +51,7 @@ describe("PlayerCombatActionSelectorPanel", () => {
     const secondary = screen.getByRole("combobox", {
       name: "Secondary action",
     }) as HTMLSelectElement;
+    const movement = screen.getByRole("combobox", { name: "Movement" }) as HTMLSelectElement;
     expect(Array.from(primary.options).some((option) => option.text === "Parry")).toBe(true);
     expect(Array.from(primary.options).some((option) => option.text === "Observe Opponent")).toBe(
       false,
@@ -61,7 +62,11 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(Array.from(secondary.options).some((option) => option.text === "Offensive Parry")).toBe(
       false,
     );
-    expect(screen.getByText("Focus on defense for this round.", { exact: false })).toBeTruthy();
+    expect(movement.value).toBe("hold_position");
+    expect(screen.queryByText("Focus on defense for this round.", { exact: false })).toBeNull();
+    expect(
+      screen.queryByText("Parry assumes sufficient room to maneuver.", { exact: false }),
+    ).toBeNull();
   });
 
   it("keeps Offensive Parry opponent selection out of the general action selector", () => {
@@ -211,6 +216,40 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText("P1")).toBeInTheDocument();
     expect(screen.getByText("long distance")).toBeInTheDocument();
     expect(screen.queryByText(/Broad sword preferred 2/)).not.toBeInTheDocument();
+  });
+
+  it("renders the round-scoped Parry percentage row during modifier review", () => {
+    render(
+      <PlayerCombatModifierPanel
+        readOnly
+        rows={[
+          {
+            bucketKey: "situation_db",
+            entries: [
+              {
+                application: "percentage",
+                durationRounds: 1,
+                expiresAtRound: 4,
+                generated: true,
+                id: "generated:parry:round:db-parry-percentage",
+                notes: "Parry: Dodge 7; one fifth, rounded down; Parry +1%",
+                scope: "until",
+                sourceActionId: "parry",
+                sourceRoundNumber: 4,
+                sourceRule: "parry-dodge-one-fifth",
+                value: 1,
+              },
+            ],
+            label: "DB/Parry",
+            total: 1,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("+1%")).toHaveLength(2);
+    expect(screen.getByText("Parry")).toBeInTheDocument();
+    expect(screen.getByText(/Dodge 7/)).toBeInTheDocument();
   });
 
   it("keeps editable modifier details on a full-width row", () => {

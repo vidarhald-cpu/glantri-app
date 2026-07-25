@@ -14,11 +14,13 @@ import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCom
 export function buildRecordedCombatModifierRows(input: {
   combatContext: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentRound: number;
   step: CombatRoundStep;
 }) {
   return buildPlayerCombatModifierRows({
     combatContext: input.combatContext,
     combatEffects: input.combatEffects,
+    currentRound: input.currentRound,
     liveModifiers: buildEncounterLiveCombatModifierSummary(input),
     phaseKey:
       input.step === "review_phase_2_modifiers" ||

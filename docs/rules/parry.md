@@ -46,8 +46,9 @@ or progression task.
 
 Existing movement declaration behavior is unchanged. The source assumes sufficient room for
 defensive maneuvering, but terrain validation, forced backward movement, and the blocked-retreat
-penalty are not implemented. The UI may state the maneuvering-room assumption without enforcing a
-movement choice.
+penalty are not implemented. The maneuvering-room assumption remains rules documentation rather
+than explanatory prose beneath the declaration dropdowns; Current Action and precise validation
+messages remain the places for actionable guidance.
 
 ## Explicitly deferred source rules
 

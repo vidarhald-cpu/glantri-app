@@ -152,6 +152,69 @@ describe("projectCombatActionGeneratedModifiers", () => {
     });
   });
 
+  it("preserves the committed Parry row at M1 while Dodge hydration is unavailable", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const committedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 7,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const m1Context = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: committedContext,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const phase1Rows = buildPlayerCombatModifierRows({
+      combatContext: m1Context,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const phase2Rows = buildPlayerCombatModifierRows({
+      combatContext: m1Context,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase2",
+    });
+
+    expect(m1Context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        application: "percentage",
+        id: "generated:parry:round:db-parry-percentage",
+        sourceRoundNumber: roundState.roundNumber,
+        value: 1,
+      }),
+    ]);
+    expect(phase1Rows.find((row) => row.bucketKey === "situation_db")).toMatchObject({
+      entries: [expect.objectContaining({ value: 1 })],
+      total: 1,
+    });
+    expect(phase2Rows.find((row) => row.bucketKey === "situation_db")).toMatchObject({
+      entries: [expect.objectContaining({ value: 1 })],
+      total: 1,
+    });
+  });
+
+  it("does not preserve the committed Parry row after the action changes", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const committedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 7,
+      roundState,
+    });
+    const changedContext = projectCombatActionGeneratedModifiers({
+      actionId: "full_defense",
+      combatContext: committedContext,
+      roundState,
+    });
+
+    expect(changedContext.modifierBuckets.situationDb).toEqual([]);
+  });
+
   it("projects the Offensive Parry round DB drawback into declaration and review rows", () => {
     const roundState = buildRoundStateWithDistance(3);
     const projectedContext = projectCombatActionGeneratedModifiers({
