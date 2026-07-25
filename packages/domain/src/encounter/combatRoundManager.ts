@@ -23,6 +23,7 @@ import {
   scenarioCombatModifierBucketSchema,
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
+  scenarioParticipantSecondaryActionContextSchema,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
@@ -1950,6 +1951,7 @@ export const combatRoundDeclarationSchema = z.object({
   movementIntent: movementIntentSchema.optional(),
   phaseContexts: combatRoundPhaseContextsSchema.optional(),
   roundNumber: z.number().int().positive(),
+  secondaryActionContext: scenarioParticipantSecondaryActionContextSchema.optional(),
   secondaryActionId: idSchema.optional(),
   submittedAt: z.string().datetime().optional(),
   submittedBy: z.enum(["gm", "player"]),
@@ -2041,6 +2043,7 @@ export const combatRoundStepSnapshotSchema = z.object({
       movementId: idSchema.optional(),
       movementLabel: z.string().min(1).optional(),
       movementIntent: movementIntentSchema.optional(),
+      secondaryActionContext: scenarioParticipantSecondaryActionContextSchema.optional(),
       secondaryActionId: idSchema.optional(),
       secondaryActionLabel: z.string().min(1).optional(),
       movementPreferenceTargets: z
@@ -3952,8 +3955,11 @@ function isCombatRoundDeclarationComplete(participant: CombatRoundParticipantSta
   const declarationStatus = participant.stepStatuses.select_actions ?? "pending";
   const declarationTargetValidation = participant.declaration
     ? validateCombatDeclarationTargets({
+        actingParticipantId: participant.participantId,
         actionId: participant.declaration.actionId,
+        movementKind: participant.declaration.movementIntent?.mode,
         phaseContexts: participant.declaration.phaseContexts,
+        secondaryActionContext: participant.declaration.secondaryActionContext,
         selectedOpponentId: participant.declaration.combatContext?.selectedOpponentId,
         secondaryActionId: participant.declaration.secondaryActionId,
       })
@@ -4923,11 +4929,18 @@ function sanitizeCombatRoundDeclarationTargets(input: {
         ),
       })
     : undefined;
+  const secondaryActionContext =
+    declaration.secondaryActionContext?.action === "observe_opponent" &&
+    input.validTargetIds.has(declaration.secondaryActionContext.targetParticipantId)
+      ? declaration.secondaryActionContext
+      : undefined;
   const repaired =
     declaration.phaseContexts?.phase1?.targetParticipantId !== phase1?.targetParticipantId ||
     declaration.phaseContexts?.phase2?.targetParticipantId !== phase2?.targetParticipantId ||
     declaration.combatContext?.targetParticipantId !== combatContext?.targetParticipantId ||
     declaration.combatContext?.selectedOpponentId !== combatContext?.selectedOpponentId ||
+    declaration.secondaryActionContext?.targetParticipantId !==
+      secondaryActionContext?.targetParticipantId ||
     (declaration.movementIntent?.distancePreferences.length ?? 0) !==
       (movementIntent?.distancePreferences.length ?? 0);
 
@@ -4947,6 +4960,7 @@ function sanitizeCombatRoundDeclarationTargets(input: {
         ...declaration,
         combatContext,
         movementIntent,
+        secondaryActionContext,
         phaseContexts: {
           phase1,
           phase2,
@@ -20843,8 +20857,11 @@ export function canPlayerSubmitCombatDeclaration(input: {
   const declarationStatus = participant?.stepStatuses.select_actions ?? "pending";
   const existingDeclarationIsIncomplete = participant?.declaration
     ? !validateCombatDeclarationTargets({
+        actingParticipantId: participant.participantId,
         actionId: participant.declaration.actionId,
+        movementKind: participant.declaration.movementIntent?.mode,
         phaseContexts: participant.declaration.phaseContexts,
+        secondaryActionContext: participant.declaration.secondaryActionContext,
         selectedOpponentId: participant.declaration.combatContext?.selectedOpponentId,
         secondaryActionId: participant.declaration.secondaryActionId,
       }).valid

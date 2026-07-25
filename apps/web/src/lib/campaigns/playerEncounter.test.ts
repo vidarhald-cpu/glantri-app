@@ -3,6 +3,8 @@ import type { ScenarioParticipant } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import {
+  PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
   buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
@@ -64,6 +66,20 @@ function createScenarioParticipant(
 }
 
 describe("playerEncounter", () => {
+  it("separates primary Parry from secondary Observe Opponent options", () => {
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS).toContainEqual({
+      label: "Parry",
+      value: "parry",
+    });
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => option.value)).not.toContain(
+      "observe_opponent",
+    );
+    expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS).toContainEqual({
+      label: "Observe Opponent",
+      value: "observe_opponent",
+    });
+  });
+
   it("maps primary and secondary actions into round phases", () => {
     expect(
       buildPlayerEncounterPhaseSummary({

@@ -392,6 +392,7 @@ function declarationCandidate(input: {
           movementId: declaration.movementId,
           movementIntent: declaration.movementIntent,
           phaseContexts: declaration.phaseContexts,
+          secondaryActionContext: declaration.secondaryActionContext,
           secondaryActionId: declaration.secondaryActionId,
         },
       },

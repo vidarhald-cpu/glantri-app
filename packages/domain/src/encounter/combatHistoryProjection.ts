@@ -79,6 +79,7 @@ export interface ProjectedCombatHistorySnapshot {
       movementPreferenceTargets?: Array<{ displayName: string; participantId: string }>;
       secondaryActionId?: string;
       secondaryActionLabel?: string;
+      secondaryActionTargetParticipantId?: string;
     };
     modifiers: NonNullable<CombatRoundStepSnapshot["modifierSummary"]> | Record<string, never>;
     phase1: ProjectedCombatHistoryPhasePanel;
@@ -548,6 +549,15 @@ function projectSnapshot(input: {
             ),
             secondaryActionId: input.snapshot.declarationSummary?.secondaryActionId,
             secondaryActionLabel: input.snapshot.declarationSummary?.secondaryActionLabel,
+            secondaryActionTargetParticipantId:
+              input.snapshot.declarationSummary?.secondaryActionContext?.targetParticipantId &&
+              isVisible({
+                participantId:
+                  input.snapshot.declarationSummary.secondaryActionContext.targetParticipantId,
+                viewer: input.viewer,
+              })
+                ? input.snapshot.declarationSummary.secondaryActionContext.targetParticipantId
+                : undefined,
           }
         : {},
       modifiers: ownsSnapshot ? (input.snapshot.modifierSummary ?? {}) : {},

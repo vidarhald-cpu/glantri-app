@@ -21,6 +21,7 @@ import type {
   MovementIntent,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
+  ScenarioParticipantSecondaryActionContext,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -143,6 +144,7 @@ export async function submitCombatDeclarationOnServer(input: {
   phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
+  secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   secondaryActionId?: string;
   taskId: string;
   feint?: {
@@ -174,6 +176,7 @@ export async function submitCombatDeclarationOnServer(input: {
       executionGroupId: input.executionGroupId,
       expectedRevision: input.expectedRevision,
       scenarioParticipantId: input.scenarioParticipantId,
+      secondaryActionContext: input.secondaryActionContext,
       secondaryActionId: input.secondaryActionId,
       taskId: input.taskId,
     }),

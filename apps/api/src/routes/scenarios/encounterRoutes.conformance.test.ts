@@ -27,6 +27,14 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("expectedTaskId: body.taskId");
   });
 
+  it("canonicalizes targeted secondary declarations and derives Parry from stable Dodge identity", () => {
+    expect(source).toContain("scenarioParticipantSecondaryActionContextSchema.parse");
+    expect(source).toContain('skill.skillId === "dodge"');
+    expect(source).toContain("deriveParryPrimaryActionModifier(dodgeSkillValue)");
+    expect(source).toContain("secondaryActionContext: canonicalSecondaryActionContext");
+    expect(source).toContain("Parry requires the participant's canonical Dodge skill.");
+  });
+
   it("forwards initiative-group identity into projected-task authorization", () => {
     expect(source).toContain("initiativeGroupId: input.identity.initiativeGroupId");
     expect(source).toContain("initiativeValue: input.identity.initiativeValue");

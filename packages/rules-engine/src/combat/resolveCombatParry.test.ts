@@ -46,4 +46,18 @@ describe("resolveCombatParry", () => {
       total: 21,
     });
   });
+
+  it("consumes Parry's Dodge-derived value as a raw percentage modifier", () => {
+    expect(
+      resolveCombatParry({
+        parryBase: 15,
+        rawModifiers: [{ label: "Parry", value: 3 }],
+        rollTotal: 1,
+      }),
+    ).toMatchObject({
+      modifierAdjustment: 5,
+      rawModifierTotal: 3,
+      total: 21,
+    });
+  });
 });

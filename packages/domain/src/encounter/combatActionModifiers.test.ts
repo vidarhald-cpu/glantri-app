@@ -9,6 +9,7 @@ import {
   DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
   PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+  PARRY_ROUND_PERCENTAGE_MODIFIER_ID,
   REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
   applyCombatActionGeneratedModifiers,
   cancelDoubleAttackPhase2GeneratedModifiers,
@@ -21,10 +22,65 @@ import {
   isDoubleAttackGeneratedDbParryModifier,
   isDoubleAttackGeneratedObSkillModifier,
   isParryAttackGeneratedDbParryModifier,
+  isParryGeneratedPercentageModifier,
   isReactiveAttackGeneratedInitiativeModifier,
 } from "./combatActionModifiers";
 
 describe("combat action generated modifiers", () => {
+  it("creates one round-scoped Parry percentage modifier with Dodge provenance", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      parryModifier: { dodgeSkillValue: 17, percentageModifier: 3 },
+      sourceRoundNumber: 4,
+    });
+
+    expect(context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        application: "percentage",
+        expiresAtRound: 4,
+        id: PARRY_ROUND_PERCENTAGE_MODIFIER_ID,
+        notes: "Parry: Dodge 17; one fifth, rounded down; Parry +3%",
+        sourceActionId: "parry",
+        value: 3,
+      }),
+    ]);
+  });
+
+  it("recommits Parry without duplicating its generated percentage row", () => {
+    const first = applyCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      parryModifier: { dodgeSkillValue: 15, percentageModifier: 3 },
+    });
+    const recommitted = applyCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: first,
+      parryModifier: { dodgeSkillValue: 15, percentageModifier: 3 },
+    });
+
+    expect(
+      recommitted.modifierBuckets.situationDb.filter(isParryGeneratedPercentageModifier),
+    ).toHaveLength(1);
+  });
+
+  it("removes the Parry row when the declaration changes or is undone", () => {
+    const declared = applyCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      parryModifier: { dodgeSkillValue: 14, percentageModifier: 2 },
+      sourceRoundNumber: 4,
+    });
+    const cleared = applyCombatActionGeneratedModifiers({
+      combatContext: declared,
+      sourceRoundNumber: 4,
+    });
+
+    expect(cleared.modifierBuckets.situationDb).not.toContainEqual(
+      expect.objectContaining({ id: PARRY_ROUND_PERCENTAGE_MODIFIER_ID }),
+    );
+  });
+
   it("creates one phase 1 DB/Parry modifier for Single attack", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",

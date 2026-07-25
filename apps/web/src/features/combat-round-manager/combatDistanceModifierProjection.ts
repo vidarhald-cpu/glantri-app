@@ -17,6 +17,7 @@ import {
   type ScenarioParticipantCombatContext,
   type WeaponTemplate,
 } from "@glantri/domain";
+import { deriveParryPrimaryActionModifier } from "@glantri/rules-engine";
 
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 
@@ -213,6 +214,7 @@ function getDistanceModifierPhase(entry: ScenarioCombatModifierEntry): PhaseKey 
 function getCommittedDistanceRowsToPreserve(input: {
   attackPhases: readonly PhaseKey[];
   combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
   distanceModifiers: readonly CombatActionGeneratedDistanceModifierInput[];
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<PhaseKey, string | undefined>>;
@@ -241,6 +243,7 @@ function getCommittedDistanceRowsToPreserve(input: {
 export function projectCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
   encounterParticipant?: EncounterSession["participants"][number];
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
@@ -297,6 +300,10 @@ export function projectCombatActionGeneratedModifiers(input: {
             }),
           ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry))
         : [],
+    parryModifier:
+      input.actionId === "parry" && input.dodgeSkillValue !== undefined
+        ? deriveParryPrimaryActionModifier(input.dodgeSkillValue)
+        : undefined,
     sourceEncounterId: input.roundState?.encounterId,
     sourceRoundNumber: input.roundState?.roundNumber,
   });

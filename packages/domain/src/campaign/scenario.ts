@@ -177,6 +177,13 @@ export const scenarioParticipantCombatContextSchema = z.object({
   targetParticipantId: idSchema.optional(),
 });
 
+export const scenarioParticipantSecondaryActionContextSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("observe_opponent"),
+    targetParticipantId: idSchema,
+  }),
+]);
+
 export const scenarioParticipantStateSchema = z.object({
   combat: z.object({
     combatContext: scenarioParticipantCombatContextSchema.default({
@@ -414,6 +421,9 @@ export type ScenarioParticipantTargetLocation = z.infer<typeof hitLocationTarget
 export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;
 export type ScenarioParticipantCombatContext = z.infer<
   typeof scenarioParticipantCombatContextSchema
+>;
+export type ScenarioParticipantSecondaryActionContext = z.infer<
+  typeof scenarioParticipantSecondaryActionContextSchema
 >;
 export type ScenarioParticipantState = z.infer<typeof scenarioParticipantStateSchema>;
 export type ScenarioParticipantSnapshot = z.infer<typeof scenarioParticipantSnapshotSchema>;

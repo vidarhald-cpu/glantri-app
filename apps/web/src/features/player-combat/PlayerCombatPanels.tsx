@@ -4,6 +4,7 @@ import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
+  getCombatDeclarationCompatibilityRule,
   type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
@@ -30,6 +31,7 @@ import {
 import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
@@ -56,10 +58,11 @@ export interface PlayerCombatModifierBucketView {
 }
 
 export interface PlayerCombatModifierDisplayEntry {
+  application?: ScenarioCombatModifierEntry["application"];
   details?: string;
   id: string;
   scopeLabel: string;
-  sourceLabel: "Character/state" | "Feint · OB/DB" | "Situational";
+  sourceLabel: "Character/state" | "Feint · OB/DB" | "Parry" | "Situational";
   value: number;
 }
 
@@ -170,6 +173,8 @@ interface PlayerCombatActionSelectorPanelProps {
 
 interface PlayerCombatOpponentSelectorProps {
   controlsDisabled?: boolean;
+  emptyLabel?: string;
+  label?: string;
   onSelectedOpponentChange: (participantId: string) => void;
   opponentOptions: readonly PlayerEncounterOpponentOption[];
   readOnly?: boolean;
@@ -574,7 +579,9 @@ export function formatCombatModifierDisplayLine(input: {
   const details = formatCombatModifierDetailsLabel(input.entry);
 
   return [
-    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}`,
+    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}${
+      input.entry.application === "percentage" ? "%" : ""
+    }`,
     formatCombatModifierScopeLabel(input.entry),
     details,
   ]
@@ -821,6 +828,7 @@ function buildImportedModifierDisplayEntry(
   entry: ScenarioCombatModifierEntry,
 ): PlayerCombatModifierDisplayEntry {
   return {
+    application: entry.application,
     details: entry.notes,
     id: entry.id,
     scopeLabel:
@@ -835,10 +843,11 @@ function buildSituationalModifierDisplayEntry(
   entry: ScenarioCombatModifierEntry,
 ): PlayerCombatModifierDisplayEntry {
   return {
+    application: entry.application,
     details: formatCombatModifierDetailsLabel(entry),
     id: entry.id,
     scopeLabel: formatCombatModifierScopeLabel(entry),
-    sourceLabel: "Situational",
+    sourceLabel: entry.sourceActionId === "parry" ? "Parry" : "Situational",
     value: entry.value,
   };
 }
@@ -850,17 +859,21 @@ function ModifierDisplayEntryRow({
   bucketLabel: string;
   entry: PlayerCombatModifierDisplayEntry;
 }) {
+  const formattedValue = `${formatSignedCombatModifier(entry.value)}${
+    entry.application === "percentage" ? "%" : ""
+  }`;
+
   return (
     <div
       key={`${entry.sourceLabel}:${entry.id}`}
       style={compactModifierDisplayRowStyle}
-      title={`${bucketLabel} ${formatSignedCombatModifier(entry.value)} · ${entry.scopeLabel}${
+      title={`${bucketLabel} ${formattedValue} · ${entry.scopeLabel}${
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
       <div style={compactModifierDisplayTopRowStyle}>
         <span>{entry.sourceLabel}</span>
-        <span>{formatSignedCombatModifier(entry.value)}</span>
+        <span>{formattedValue}</span>
         <span>{entry.scopeLabel}</span>
       </div>
       <div style={compactModifierDetailsRowStyle}>
@@ -901,7 +914,9 @@ function ModifierEditableEntryRow({
   return (
     <div style={compactModifierMiniTableEntryRowStyle}>
       <div style={compactModifierEntryTopRowStyle}>
-        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational · {scopeLabel}</span>
+        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+          {entry.sourceActionId === "parry" ? "Parry" : "Situational"} · {scopeLabel}
+        </span>
         <input
           aria-label={`${bucketLabel} modifier value`}
           disabled={controlsDisabled}
@@ -1137,11 +1152,18 @@ export function PlayerCombatModifierPanel({
         );
       })}
       {pendingEntries.length > 0 ? (
-        <div style={{ borderTop: "1px solid #d7d1c2", display: "grid", gap: "0.35rem", paddingTop: "0.55rem" }}>
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.35rem",
+            paddingTop: "0.55rem",
+          }}
+        >
           <strong style={{ fontSize: "0.9rem" }}>Pending modifiers</strong>
           {pendingEntries.map((entry) => (
             <div key={entry.id} style={{ fontSize: "0.82rem" }}>
-              {(entry.notes?.trim() || "Combat effect")} {entry.value >= 0 ? "+" : ""}
+              {entry.notes?.trim() || "Combat effect"} {entry.value >= 0 ? "+" : ""}
               {entry.value}
               <div style={{ color: "#5e5a50" }}>
                 {pendingActivationLabel ?? "Effective from the next initiative group"}
@@ -1172,6 +1194,13 @@ export function PlayerCombatActionSelectorPanel({
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
+  const allowedSecondaryActions =
+    getCombatDeclarationCompatibilityRule(actionId)?.allowedSecondaryActions;
+  const secondaryActionOptions = allowedSecondaryActions
+    ? PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
+        (allowedSecondaryActions as readonly string[]).includes(option.value),
+      )
+    : PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS;
   const effectiveMovementIntent =
     movementIntent ??
     ({
@@ -1239,6 +1268,11 @@ export function PlayerCombatActionSelectorPanel({
           ))}
         </select>
       </label>
+      {actionId === "parry" ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+          Focus on defense for this round. Parry assumes sufficient room to maneuver.
+        </div>
+      ) : null}
 
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
@@ -1250,7 +1284,7 @@ export function PlayerCombatActionSelectorPanel({
           value={secondaryActionId}
         >
           <option value="">Open</option>
-          {actionOptions.map((option) => (
+          {secondaryActionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -1634,6 +1668,8 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
 
 export function PlayerCombatOpponentSelector({
   controlsDisabled = false,
+  emptyLabel = "Choose opponent",
+  label = "Opponent to counter",
   onSelectedOpponentChange,
   opponentOptions,
   readOnly = false,
@@ -1647,7 +1683,7 @@ export function PlayerCombatOpponentSelector({
   if (readOnly) {
     return (
       <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
-        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Opponent to counter</span>
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{label}</span>
         <span style={compactPhaseTargetSelectStyle}>
           {selectedOpponent?.displayName ?? "Opponent unavailable"}
         </span>
@@ -1657,15 +1693,15 @@ export function PlayerCombatOpponentSelector({
 
   return (
     <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
-      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Opponent to counter</span>
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{label}</span>
       <select
-        aria-label="Opponent to counter"
+        aria-label={label}
         disabled={controlsDisabled}
         onChange={(event) => onSelectedOpponentChange(event.target.value)}
         style={compactPhaseTargetSelectStyle}
         value={selectedOpponentId ?? ""}
       >
-        <option value="">Choose opponent</option>
+        <option value="">{emptyLabel}</option>
         {selectedOpponentUnavailable ? (
           <option value={selectedOpponentId}>Opponent unavailable</option>
         ) : null}

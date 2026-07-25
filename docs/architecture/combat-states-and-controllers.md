@@ -351,6 +351,8 @@ not inferred from the word “lock.”
 Observe Opponent may create directional knowledge or preparation state. An observer-to-subject
 relationship does not imply tactical control unless the rule explicitly grants a controller
 capability.
+The current declaration slice persists that subject in an independently owned secondary-action
+context but creates no Combat State, Controller relationship, roll, bonus, duration, or result.
 
 ### Mounted Combat
 

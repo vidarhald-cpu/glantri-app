@@ -410,6 +410,20 @@ An optional collapsed `Contribution details` section lists canonical contributio
 
 Current intentional rule differences should remain. Current accidental presentation inconsistencies should not: attack uses an inline formula while Dodge uses five labeled rows, GM and Player have duplicate formatter branches, and generic events sometimes render humanized raw object keys. Standardization changes formatting only, never formulas.
 
+### Parry declaration and targeted secondary context
+
+Parry is displayed as an untargeted primary action. During declaration, Current Action describes
+the defensive focus; no independent roll button appears until an ordinary incoming attack creates
+defensive work. The generated modifier appears in DB/Parry preview and review as
+`Parry +<derived>%`, with concise Dodge and one-fifth provenance. The ordinary parry calculation
+shows the non-zero raw percentage row and uses authoritative workbook arithmetic.
+
+Observe Opponent is displayed in the secondary-action selector. When selected, its
+`Opponent to observe` participant selector appears in the shared Phase 1 panel, never in the
+general action selector. It is separate from any primary attack, Feint, Adjust Distance, Offensive
+Parry, or Reactive Attack target. This declaration-only slice presents no Observe roll, result,
+modifier, or tracker marker.
+
 ### 8.1 Implemented Offensive Parry Brawling subset
 
 Offensive Parry Brawling now uses the reusable combat roll/contest presentation model without

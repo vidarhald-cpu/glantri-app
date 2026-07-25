@@ -21,6 +21,21 @@ function readSource(): string {
 }
 
 describe("PlayerCombatPanels", () => {
+  it("labels percentage-applied Parry modifier rows as percentages", () => {
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "DB/Parry",
+        entry: {
+          application: "percentage",
+          id: "generated:parry:round:db-parry-percentage",
+          notes: "Parry: Dodge 17; one fifth, rounded down; Parry +3%",
+          scope: "until",
+          value: 3,
+        },
+      }),
+    ).toContain("DB/Parry +3%");
+  });
+
   it("formats recorded initiative modifier facts without recalculating current context", () => {
     expect(
       formatCombatInitiativeFormula({
@@ -587,7 +602,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("characterStateEntries");
     expect(source).toContain("Character/state");
     expect(source).toContain("Situational");
-    expect(source).toContain("Situational · {scopeLabel}");
+    expect(source).toContain('entry.sourceActionId === "parry" ? "Parry" : "Situational"');
+    expect(source).toContain("{entry.sourceActionId ===");
     expect(source).toContain("ModifierDisplayEntryRow");
     expect(source).toContain("ModifierEditableEntryRow");
     expect(source).toContain("createModifierEntryDraft");

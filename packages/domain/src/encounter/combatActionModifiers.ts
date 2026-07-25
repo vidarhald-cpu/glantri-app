@@ -41,6 +41,8 @@ export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE =
 export const OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
   "generated:offensive-parry:round:flat-db";
 export const OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-flat-db";
+export const PARRY_ROUND_PERCENTAGE_MODIFIER_ID = "generated:parry:round:db-parry-percentage";
+export const PARRY_ROUND_PERCENTAGE_SOURCE_RULE = "parry-dodge-one-fifth";
 
 export interface CombatActionGeneratedDistanceModifierInput {
   actualDistance: CombatDistance | number;
@@ -206,13 +208,21 @@ export function isOffensiveParryGeneratedDbModifier(
   );
 }
 
+export function isParryGeneratedPercentageModifier(entry: ScenarioCombatModifierEntry): boolean {
+  return (
+    entry.id === PARRY_ROUND_PERCENTAGE_MODIFIER_ID ||
+    entry.sourceRule === PARRY_ROUND_PERCENTAGE_SOURCE_RULE
+  );
+}
+
 function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     isAttackParryGeneratedDbParryModifier(entry) ||
     isParryAttackGeneratedDbParryModifier(entry) ||
     isDoubleAttackGeneratedDbParryModifier(entry) ||
     isAdjustRangeAttackGeneratedDbParryModifier(entry) ||
-    isOffensiveParryGeneratedDbModifier(entry)
+    isOffensiveParryGeneratedDbModifier(entry) ||
+    isParryGeneratedPercentageModifier(entry)
   );
 }
 
@@ -509,6 +519,26 @@ export function buildOffensiveParryGeneratedDbModifier(input?: {
   });
 }
 
+export function buildParryGeneratedPercentageModifier(input: {
+  dodgeSkillValue: number;
+  percentageModifier: number;
+  roundNumber?: number;
+}): ScenarioCombatModifierEntry {
+  return scenarioCombatModifierEntrySchema.parse({
+    application: "percentage",
+    durationRounds: 1,
+    expiresAtRound: input.roundNumber,
+    generated: true,
+    id: PARRY_ROUND_PERCENTAGE_MODIFIER_ID,
+    notes: `Parry: Dodge ${input.dodgeSkillValue}; one fifth, rounded down; Parry +${input.percentageModifier}%`,
+    scope: "until",
+    sourceActionId: "parry",
+    sourceRoundNumber: input.roundNumber,
+    sourceRule: PARRY_ROUND_PERCENTAGE_SOURCE_RULE,
+    value: input.percentageModifier,
+  });
+}
+
 export function buildReactiveAttackPhase2GeneratedInitiativeModifier(input: {
   reason: string;
   value: number;
@@ -690,6 +720,7 @@ export function applyCombatActionGeneratedModifiers(input: {
   combatContext: ScenarioParticipantCombatContext;
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
   initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
+  parryModifier?: { dodgeSkillValue: number; percentageModifier: number };
   adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
   sourceEncounterId?: string;
   sourceRoundNumber?: number;
@@ -721,7 +752,14 @@ export function applyCombatActionGeneratedModifiers(input: {
                     roundNumber: input.sourceRoundNumber,
                   }),
                 ]
-            : [];
+              : input.actionId === "parry" && input.parryModifier
+                ? [
+                    buildParryGeneratedPercentageModifier({
+                      ...input.parryModifier,
+                      roundNumber: input.sourceRoundNumber,
+                    }),
+                  ]
+                : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];
   const generatedDistanceObSkillModifiers = (input.distanceModifiers ?? [])

@@ -798,6 +798,11 @@ describe("combat history projection", () => {
           ],
           mode: "set_distance_preferences" as const,
         },
+        secondaryActionContext: {
+          action: "observe_opponent" as const,
+          targetParticipantId: "borin",
+        },
+        secondaryActionId: "observe_opponent",
       },
       participantId: "aria",
       participantLabel: "Aria old label",
@@ -845,6 +850,8 @@ describe("combat history projection", () => {
       movementIntent: {
         distancePreferences: [{ desiredDistance: 2, targetParticipantId: "borin" }],
       },
+      secondaryActionId: "observe_opponent",
+      secondaryActionTargetParticipantId: "borin",
     });
     expect(projection.activeRound.snapshots[0]?.panels.phase1).toMatchObject({
       mainHandParryItemLabel: "Long sword",

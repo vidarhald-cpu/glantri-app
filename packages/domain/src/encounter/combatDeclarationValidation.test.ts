@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getCombatDeclarationAttackPhases,
   getCombatDeclarationActionLabel,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
@@ -28,6 +29,47 @@ describe("combat declaration target validation", () => {
   it("keeps legacy action ids while returning renamed labels", () => {
     expect(getCombatDeclarationActionLabel("attack_parry")).toBe("Single attack");
     expect(getCombatDeclarationActionLabel("parry_attack")).toBe("Reactive attack");
+    expect(getCombatDeclarationActionLabel("parry")).toBe("Parry");
+  });
+
+  it("allows untargeted Parry with Observe Opponent's independent target", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "actor",
+        actionId: "parry",
+        movementKind: "hold_position",
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "observer-target",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toEqual(expect.objectContaining({ valid: true }));
+    expect(getCombatDeclarationAttackPhases({ actionId: "parry" })).toEqual([]);
+  });
+
+  it("requires a non-self Observe Opponent target", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "actor",
+        actionId: "parry",
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({ message: "Select an opponent to observe.", valid: false });
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "actor",
+        actionId: "parry",
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "actor",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({
+      message: "Observe Opponent cannot target the acting participant.",
+      valid: false,
+    });
   });
 
   it("requires a Phase 1 target for Single attack", () => {

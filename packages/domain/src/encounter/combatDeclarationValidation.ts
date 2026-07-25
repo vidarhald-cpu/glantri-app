@@ -1,4 +1,9 @@
 import type { CombatRoundPhaseContexts } from "./combatRoundManager";
+import type { ScenarioParticipantSecondaryActionContext } from "../campaign/scenario";
+import {
+  getCombatDeclarationRequiredContexts,
+  validateCombatDeclarationCompatibility,
+} from "./combatDeclarationCompatibility";
 
 export type CombatDeclarationPhaseKey = "phase1" | "phase2";
 
@@ -28,6 +33,7 @@ export const COMBAT_DECLARATION_ACTION_LABELS: Record<string, string> = {
   observe_opponent: "Observe Opponent",
   offensive_parry: "Offensive Parry",
   other: "Other",
+  parry: "Parry",
   parry_attack: "Reactive attack",
   parry_disarm: "Parry - Disarm",
 };
@@ -85,8 +91,11 @@ function formatMissingTargetMessage(
 }
 
 export function validateCombatDeclarationTargets(input: {
+  actingParticipantId?: string;
   actionId?: string;
+  movementKind?: string;
   phaseContexts?: CombatRoundPhaseContexts;
+  secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   selectedOpponentId?: string;
   secondaryActionId?: string;
 }): CombatDeclarationTargetValidationResult {
@@ -120,20 +129,53 @@ export function validateCombatDeclarationTargets(input: {
   const offensiveParryOpponentMissing =
     input.actionId === "offensive_parry" &&
     (!input.selectedOpponentId || input.selectedOpponentId.trim().length === 0);
+  const compatibility = validateCombatDeclarationCompatibility({
+    movementKind: input.movementKind,
+    primaryAction: input.actionId,
+    secondaryAction: input.secondaryActionId,
+  });
+  const requiredContexts = getCombatDeclarationRequiredContexts({
+    primaryAction: input.actionId,
+    secondaryAction: input.secondaryActionId,
+  });
+  const observeTargetMissing =
+    requiredContexts.includes("secondary_target_participant") &&
+    (!input.secondaryActionContext ||
+      input.secondaryActionContext.action !== "observe_opponent" ||
+      input.secondaryActionContext.targetParticipantId.trim().length === 0);
+  const secondaryContextMismatch =
+    Boolean(input.secondaryActionContext) &&
+    input.secondaryActionContext?.action !== input.secondaryActionId;
+  const observeTargetsSelf =
+    input.secondaryActionId === "observe_opponent" &&
+    Boolean(input.actingParticipantId) &&
+    input.secondaryActionContext?.targetParticipantId === input.actingParticipantId;
 
   return {
     missingPhases,
-    message: offensiveParryOpponentMissing
-      ? "Select an opponent to counter with Offensive Parry."
-      : doubleAttackTargetsDiffer
-      ? "Double Attack must target the same opponent in both phases."
-      : feintTargetDiffers
-        ? "Feint and attack must target the same opponent."
-        : formatMissingTargetMessage(missingPhases),
+    message: !compatibility.valid
+      ? compatibility.message
+      : observeTargetMissing
+        ? "Select an opponent to observe."
+        : secondaryContextMismatch
+          ? "The secondary action context does not match the selected secondary action."
+          : observeTargetsSelf
+            ? "Observe Opponent cannot target the acting participant."
+            : offensiveParryOpponentMissing
+              ? "Select an opponent to counter with Offensive Parry."
+              : doubleAttackTargetsDiffer
+                ? "Double Attack must target the same opponent in both phases."
+                : feintTargetDiffers
+                  ? "Feint and attack must target the same opponent."
+                  : formatMissingTargetMessage(missingPhases),
     valid:
       missingPhases.length === 0 &&
       !doubleAttackTargetsDiffer &&
       !feintTargetDiffers &&
-      !offensiveParryOpponentMissing,
+      !offensiveParryOpponentMissing &&
+      compatibility.valid &&
+      !observeTargetMissing &&
+      !secondaryContextMismatch &&
+      !observeTargetsSelf,
   };
 }

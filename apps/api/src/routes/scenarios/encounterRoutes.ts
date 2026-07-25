@@ -139,6 +139,7 @@ import {
   removeDistanceGeneratedObSkillModifiers,
   resolveCombatFeintWeaponSkillDefinition,
   scenarioParticipantCombatContextSchema,
+  scenarioParticipantSecondaryActionContextSchema,
   combatFeintMethodSchema,
   combatFeintProposalSchema,
   combatFeintRollResultSchema,
@@ -181,6 +182,7 @@ import type {
 import {
   buildCharacterSheetSummary,
   calculateWorkbookPercentageAdjustmentTrace,
+  deriveParryPrimaryActionModifier,
   isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
@@ -288,6 +290,19 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
         : undefined,
     healthStat: build.data.profile.rolledStats.health,
   };
+}
+
+function getScenarioParticipantDodgeSkillValue(
+  participant: ScenarioParticipant,
+): number | undefined {
+  const build = characterBuildSchema.safeParse(participant.snapshot.build);
+  if (!build.success) return undefined;
+  const sheet = buildCharacterSheetSummary({
+    build: build.data,
+    content: defaultCanonicalContent,
+  });
+  const dodge = sheet.draftView.skills.find((skill) => skill.skillId === "dodge");
+  return dodge?.effectiveSkillNumber;
 }
 
 function buildRoundEndParticipantInputs(input: {
@@ -525,6 +540,7 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
   phaseAttackSources?: ReturnType<typeof parseCombatDeclarationPhaseAttackSources>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
   scenarioParticipantId: string;
+  secondaryActionContext?: ReturnType<typeof scenarioParticipantSecondaryActionContextSchema.parse>;
   secondaryActionId?: string;
   feint?: {
     attackerSkillId?: string;
@@ -566,6 +582,10 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
     phaseAttackSources: parseCombatDeclarationPhaseAttackSources(value.phaseAttackSources),
     phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
     scenarioParticipantId,
+    secondaryActionContext:
+      value.secondaryActionContext === undefined
+        ? undefined
+        : scenarioParticipantSecondaryActionContextSchema.parse(value.secondaryActionContext),
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
     feint:
       value.feint && typeof value.feint === "object"
@@ -2223,6 +2243,10 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
       state: input.roundState,
     })?.participantId ?? input.encounterParticipant.id;
 
+  const dodgeSkillValue =
+    input.actionId === "parry"
+      ? getScenarioParticipantDodgeSkillValue(input.scenarioParticipant)
+      : undefined;
   return applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     adjustDistance: input.adjustDistance,
@@ -2246,6 +2270,8 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
         state: input.roundState,
       }),
     ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry)),
+    parryModifier:
+      dodgeSkillValue === undefined ? undefined : deriveParryPrimaryActionModifier(dodgeSkillValue),
   });
 }
 
@@ -3700,6 +3726,38 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Select an active opponent to counter with Offensive Parry.",
         });
       }
+      const selectedObserveOpponent =
+        body.secondaryActionId === "observe_opponent"
+          ? findCombatRoundParticipantByAlias({
+              id: body.secondaryActionContext?.targetParticipantId,
+              state: roundState,
+            })
+          : undefined;
+      if (
+        body.secondaryActionId === "observe_opponent" &&
+        body.secondaryActionContext?.targetParticipantId &&
+        (!selectedObserveOpponent ||
+          selectedObserveOpponent.participantId === encounterParticipant.id)
+      ) {
+        return reply.code(400).send({
+          error: "Select an active opponent to observe.",
+        });
+      }
+      const canonicalSecondaryActionContext =
+        body.secondaryActionId === "observe_opponent" && selectedObserveOpponent
+          ? scenarioParticipantSecondaryActionContextSchema.parse({
+              action: "observe_opponent",
+              targetParticipantId: selectedObserveOpponent.participantId,
+            })
+          : body.secondaryActionContext;
+      if (
+        body.actionId === "parry" &&
+        getScenarioParticipantDodgeSkillValue(scenarioParticipant) === undefined
+      ) {
+        return reply.code(400).send({
+          error: "Parry requires the participant's canonical Dodge skill.",
+        });
+      }
       const canonicalRequestedCombatContext = scenarioParticipantCombatContextSchema.parse({
         ...body.combatContext,
         selectedOpponentId:
@@ -4291,8 +4349,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const targetValidation = validateCombatDeclarationTargets({
+        actingParticipantId: encounterParticipant.id,
         actionId: body.actionId,
+        movementKind: submittedMovementIntent?.mode,
         phaseContexts: declarationPhaseContexts,
+        secondaryActionContext: canonicalSecondaryActionContext,
         selectedOpponentId: submittedCombatContext.selectedOpponentId,
         secondaryActionId: body.secondaryActionId,
       });
@@ -4343,6 +4404,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           movementIntent: submittedMovementIntent,
           phaseContexts: declarationPhaseContexts,
           roundNumber: roundState.roundNumber,
+          secondaryActionContext: canonicalSecondaryActionContext,
           secondaryActionId: body.secondaryActionId,
           submittedAt,
           submittedByUserId: user.id,

@@ -5174,6 +5174,10 @@ describe("combat round manager", () => {
           mode: "set_distance_preferences",
         },
         movementPreferenceTargets: [{ displayName: "City guard", id: "guard" }],
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "goblin",
+        },
         secondaryActionId: "observe_opponent",
         secondaryActionLabel: "Observe Opponent",
       },
@@ -5741,6 +5745,10 @@ describe("combat round manager", () => {
           },
         },
         roundNumber: state.roundNumber,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "goblin",
+        },
         secondaryActionId: "observe_opponent",
         submittedAt: "2026-01-01T00:01:00.000Z",
         submittedByUserId: "player-1",
@@ -5771,6 +5779,10 @@ describe("combat round manager", () => {
         }),
       },
       roundNumber: 3,
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: "goblin",
+      },
       secondaryActionId: "observe_opponent",
       submittedBy: "player",
       submittedByUserId: "player-1",

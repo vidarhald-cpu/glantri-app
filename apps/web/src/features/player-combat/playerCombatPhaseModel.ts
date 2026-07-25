@@ -271,9 +271,9 @@ function getRelevantLoadoutFieldId(
     case "adjust_range_attack":
     case "counterattack":
     case "offensive_parry":
+    case "parry":
     case "parry_disarm":
     case "disarm":
-    case "observe_opponent":
     case "break_off_engagement":
     case "other":
       return "primary";

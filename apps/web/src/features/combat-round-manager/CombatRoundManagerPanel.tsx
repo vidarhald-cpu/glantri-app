@@ -44,6 +44,7 @@ import type {
   ScenarioCombatModifierEntry,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
+  ScenarioParticipantSecondaryActionContext,
   WeaponTemplate,
   ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
@@ -427,6 +428,7 @@ interface CombatInspectorDeclarationDraft {
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
   phaseContexts: CombatInspectorPhaseContextDrafts;
+  secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   secondaryActionId: PlayerEncounterActionId | "";
   feintMethod: "movement" | "weapon";
   feintSkillId: string;
@@ -651,6 +653,7 @@ function buildDeclarationDraft(
       scopedCombat?.lastMovementIntent ??
       createDefaultMovementIntent(),
     phaseContexts: buildInspectorPhaseContexts(participant, declaration, scope),
+    secondaryActionContext: declaration?.secondaryActionContext,
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
       : isPlayerEncounterActionId(scopedCombat?.lastDeclaredSecondaryActionId)
@@ -723,6 +726,7 @@ function buildInspectorDisplayDraft(input: {
     movementIntent:
       input.snapshot.declarationSummary?.movementIntent ?? createDefaultMovementIntent(),
     phaseContexts: buildHistoricalInspectorPhaseContexts(input.snapshot),
+    secondaryActionContext: input.snapshot.declarationSummary?.secondaryActionContext,
     feintMethod: input.snapshot.declarationSummary?.feint?.method ?? input.draft.feintMethod,
     feintSkillId:
       input.snapshot.declarationSummary?.feint?.attackerSkillId ?? input.draft.feintSkillId,
@@ -4560,6 +4564,14 @@ export default function CombatRoundManagerPanel({
     participantName: selectedScenarioParticipant?.snapshot.displayName,
     status: inspectorEquipmentStatus,
   });
+  const inspectorDodgeSkillValue = useMemo(() => {
+    if (!content) return undefined;
+    const build = characterBuildSchema.safeParse(selectedScenarioParticipant?.snapshot.build);
+    if (!build.success) return undefined;
+    return buildCharacterSheetSummary({ build: build.data, content }).draftView.skills.find(
+      (skill) => skill.skillId === "dodge",
+    )?.effectiveSkillNumber;
+  }, [content, selectedScenarioParticipant?.snapshot.build]);
   const inspectorGeneratedCombatContext = useMemo(() => {
     if (inspectorHasLocalModifierEdits) {
       return inspectorDraft.combatContext;
@@ -4568,6 +4580,7 @@ export default function CombatRoundManagerPanel({
     return projectCombatActionGeneratedModifiers({
       actionId: inspectorDraft.actionId || undefined,
       combatContext: inspectorDraft.combatContext,
+      dodgeSkillValue: inspectorDodgeSkillValue,
       encounterParticipant: selectedEncounterParticipant,
       movementIntent: inspectorDraft.movementIntent,
       phaseContexts: inspectorDraft.phaseContexts,
@@ -4584,6 +4597,7 @@ export default function CombatRoundManagerPanel({
     inspectorDraft.secondaryActionId,
     inspectorEquipmentState,
     inspectorHasLocalModifierEdits,
+    inspectorDodgeSkillValue,
     selectedEncounterParticipant,
     selectedScenarioParticipant,
     selectedTimelineRoundState,
@@ -4659,8 +4673,11 @@ export default function CombatRoundManagerPanel({
   const inspectorTargetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
+        actingParticipantId: inspector.participant?.participantId,
         actionId: inspectorDraft.actionId || undefined,
+        movementKind: inspectorDraft.movementIntent.mode,
         phaseContexts: inspectorDraft.phaseContexts,
+        secondaryActionContext: inspectorDraft.secondaryActionContext,
         selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       }),
@@ -4668,7 +4685,10 @@ export default function CombatRoundManagerPanel({
       inspectorDraft.actionId,
       inspectorDraft.combatContext.selectedOpponentId,
       inspectorDraft.phaseContexts,
+      inspectorDraft.secondaryActionContext,
       inspectorDraft.secondaryActionId,
+      inspectorDraft.movementIntent.mode,
+      inspector.participant?.participantId,
     ],
   );
   const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
@@ -6750,6 +6770,7 @@ export default function CombatRoundManagerPanel({
                 : [];
             },
           ),
+          secondaryActionContext: draft.secondaryActionContext,
           secondaryActionId: draft.secondaryActionId || undefined,
           secondaryActionLabel: draft.secondaryActionId
             ? getPlayerEncounterActionLabel(draft.secondaryActionId)
@@ -7268,8 +7289,11 @@ export default function CombatRoundManagerPanel({
     const targetValidation = isModifierReview
       ? { valid: true as const }
       : validateCombatDeclarationTargets({
+          actingParticipantId: taskEncounterParticipant.id,
           actionId: inspectorDraft.actionId || undefined,
+          movementKind: inspectorDraft.movementIntent.mode,
           phaseContexts: requestPhaseContexts,
+          secondaryActionContext: inspectorDraft.secondaryActionContext,
           selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
           secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         });
@@ -7336,6 +7360,7 @@ export default function CombatRoundManagerPanel({
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
         },
         scenarioParticipantId: taskScenarioParticipant.id,
+        secondaryActionContext: inspectorDraft.secondaryActionContext,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
@@ -9495,7 +9520,12 @@ export default function CombatRoundManagerPanel({
                         updateInspectorDraft({ movementIntent })
                       }
                       onSecondaryActionChange={(secondaryActionId) =>
-                        updateInspectorDraft({ secondaryActionId })
+                        updateInspectorDraft({
+                          secondaryActionId,
+                          ...(secondaryActionId === "observe_opponent"
+                            ? {}
+                            : { secondaryActionContext: undefined }),
+                        })
                       }
                       roundNumber={selectedRoundNumber}
                       secondaryActionId={inspectorDisplayDraft.secondaryActionId}
@@ -9624,20 +9654,61 @@ export default function CombatRoundManagerPanel({
                           </div>
                         ) : inspectorDisplayDraft.actionId === "offensive_parry" &&
                           phaseKey === "phase1" ? (
+                          <div style={{ display: "grid", gap: "0.65rem" }}>
+                            <PlayerCombatOpponentSelector
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              onSelectedOpponentChange={(selectedOpponentId) =>
+                                updateInspectorDraft({
+                                  combatContext: {
+                                    ...inspectorDisplayDraft.combatContext,
+                                    selectedOpponentId: selectedOpponentId || undefined,
+                                  },
+                                })
+                              }
+                              opponentOptions={inspectorTargetOptions}
+                              readOnly={inspectorIsHistorical}
+                              selectedOpponentId={
+                                inspectorDisplayDraft.combatContext.selectedOpponentId
+                              }
+                            />
+                            {inspectorDisplayDraft.secondaryActionId === "observe_opponent" ? (
+                              <PlayerCombatOpponentSelector
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                label="Opponent to observe"
+                                onSelectedOpponentChange={(targetParticipantId) =>
+                                  updateInspectorDraft({
+                                    secondaryActionContext: targetParticipantId
+                                      ? {
+                                          action: "observe_opponent",
+                                          targetParticipantId,
+                                        }
+                                      : undefined,
+                                  })
+                                }
+                                opponentOptions={inspectorTargetOptions}
+                                readOnly={inspectorIsHistorical}
+                                selectedOpponentId={
+                                  inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
+                                }
+                              />
+                            ) : null}
+                          </div>
+                        ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
+                          phaseKey === "phase1" ? (
                           <PlayerCombatOpponentSelector
                             controlsDisabled={saving || inspectorIsHistorical}
-                            onSelectedOpponentChange={(selectedOpponentId) =>
+                            label="Opponent to observe"
+                            onSelectedOpponentChange={(targetParticipantId) =>
                               updateInspectorDraft({
-                                combatContext: {
-                                  ...inspectorDisplayDraft.combatContext,
-                                  selectedOpponentId: selectedOpponentId || undefined,
-                                },
+                                secondaryActionContext: targetParticipantId
+                                  ? { action: "observe_opponent", targetParticipantId }
+                                  : undefined,
                               })
                             }
                             opponentOptions={inspectorTargetOptions}
                             readOnly={inspectorIsHistorical}
                             selectedOpponentId={
-                              inspectorDisplayDraft.combatContext.selectedOpponentId
+                              inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
                             }
                           />
                         ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&

@@ -43,6 +43,7 @@ import {
   validateCombatDeclarationTargets,
   type EncounterSession,
   type ScenarioParticipantCombatContext,
+  type ScenarioParticipantSecondaryActionContext,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
   type ScenarioPlayerVisibleParticipant,
@@ -796,6 +797,7 @@ interface PlayerCombatDeclarationDraft {
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
   phaseContexts: PlayerCombatPhaseContextDrafts;
+  secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   secondaryActionId: PlayerEncounterActionId | "";
 }
 
@@ -951,6 +953,7 @@ function buildPlayerCombatDeclarationDraft(input: {
       scopedCombat?.lastMovementIntent ??
       createDefaultMovementIntent(),
     phaseContexts: buildPlayerCombatPhaseContexts(input),
+    secondaryActionContext: declaration?.secondaryActionContext,
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
       : isPlayerEncounterActionId(scopedCombat?.lastDeclaredSecondaryActionId)
@@ -1076,6 +1079,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
+  const [secondaryActionContext, setSecondaryActionContext] =
+    useState<ScenarioParticipantSecondaryActionContext>();
   const [selectedMovementId, setSelectedMovementId] = useState<PlayerEncounterMovementId | "">(
     "hold",
   );
@@ -1526,8 +1531,11 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const selectedStoredDeclarationTargetValidation = selectedRoundDeclaration
     ? validateCombatDeclarationTargets({
+        actingParticipantId: selectedRoundParticipant?.participantId,
         actionId: selectedRoundDeclaration.actionId,
+        movementKind: selectedRoundDeclaration.movementIntent?.mode,
         phaseContexts: selectedRoundDeclaration.phaseContexts,
+        secondaryActionContext: selectedRoundDeclaration.secondaryActionContext,
         selectedOpponentId: selectedRoundDeclaration.combatContext?.selectedOpponentId,
         secondaryActionId: selectedRoundDeclaration.secondaryActionId,
       })
@@ -1624,6 +1632,7 @@ export default function ScenarioPlayerCombatPageContent({
     if (!selectedParticipant) {
       setSelectedActionId("");
       setSelectedSecondaryActionId("");
+      setSecondaryActionContext(undefined);
       setSelectedMovementId("hold");
       setSelectedMovementIntent(createDefaultMovementIntent());
       setAdditionalActionNotes("");
@@ -1654,6 +1663,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     setSelectedActionId(nextDraft.actionId);
     setSelectedSecondaryActionId(nextDraft.secondaryActionId);
+    setSecondaryActionContext(nextDraft.secondaryActionContext);
     setSelectedMovementId(nextDraft.movementId);
     setSelectedMovementIntent(nextDraft.movementIntent);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
@@ -1948,6 +1958,9 @@ export default function ScenarioPlayerCombatPageContent({
       projectCombatActionGeneratedModifiers({
         actionId: selectedActionId || undefined,
         combatContext: combatContextDraft,
+        dodgeSkillValue: selectedSheetSummary?.draftView.skills.find(
+          (skill) => skill.skillId === "dodge",
+        )?.effectiveSkillNumber,
         encounterParticipant: selectedRoundParticipant
           ? encounterSession?.participants.find((participant) =>
               getCombatDistanceParticipantAliases(selectedRoundParticipant).some((alias) =>
@@ -1972,6 +1985,7 @@ export default function ScenarioPlayerCombatPageContent({
       selectedActionId,
       selectedParticipant,
       selectedRoundParticipant,
+      selectedSheetSummary,
       selectedSecondaryActionId,
     ],
   );
@@ -2205,8 +2219,11 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
     const targetValidation = validateCombatDeclarationTargets({
+      actingParticipantId: selectedRoundParticipant?.participantId,
       actionId: selectedActionId || undefined,
+      movementKind: selectedMovementIntent.mode,
       phaseContexts: requestPhaseContexts,
+      secondaryActionContext,
       selectedOpponentId: combatContextDraft.selectedOpponentId,
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
@@ -2265,6 +2282,7 @@ export default function ScenarioPlayerCombatPageContent({
           phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName,
         },
         scenarioParticipantId: descriptor.participantId!,
+        secondaryActionContext,
         secondaryActionId: selectedSecondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
@@ -3474,15 +3492,20 @@ export default function ScenarioPlayerCombatPageContent({
   const targetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
+        actingParticipantId: selectedRoundParticipant?.participantId,
         actionId: selectedActionId || undefined,
+        movementKind: selectedMovementIntent.mode,
         phaseContexts: phaseCombatContextDrafts,
+        secondaryActionContext,
         selectedOpponentId: combatContextDraft.selectedOpponentId,
         secondaryActionId: selectedSecondaryActionId || undefined,
       }),
     [
       combatContextDraft.selectedOpponentId,
       phaseCombatContextDrafts,
+      secondaryActionContext,
       selectedActionId,
+      selectedMovementIntent.mode,
       selectedSecondaryActionId,
     ],
   );
@@ -3878,6 +3901,9 @@ export default function ScenarioPlayerCombatPageContent({
               onSecondaryActionChange={(actionId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedSecondaryActionId(actionId);
+                if (actionId !== "observe_opponent") {
+                  setSecondaryActionContext(undefined);
+                }
               }}
               roundNumber={combatRoundState?.roundNumber}
               secondaryActionId={selectedSecondaryActionId}
@@ -3924,17 +3950,51 @@ export default function ScenarioPlayerCombatPageContent({
               return (
                 <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
                   {selectedActionId === "offensive_parry" && phaseKey === "phase1" ? (
+                    <div style={{ display: "grid", gap: "0.65rem" }}>
+                      <PlayerCombatOpponentSelector
+                        controlsDisabled={declarationControlsDisabled}
+                        onSelectedOpponentChange={(selectedOpponentId) => {
+                          markCombatDeclarationDraftDirty();
+                          setCombatContextDraft((current) => ({
+                            ...current,
+                            selectedOpponentId: selectedOpponentId || undefined,
+                          }));
+                        }}
+                        opponentOptions={targetOptions}
+                        selectedOpponentId={combatContextDraft.selectedOpponentId}
+                      />
+                      {selectedSecondaryActionId === "observe_opponent" ? (
+                        <PlayerCombatOpponentSelector
+                          controlsDisabled={declarationControlsDisabled}
+                          label="Opponent to observe"
+                          onSelectedOpponentChange={(targetParticipantId) => {
+                            markCombatDeclarationDraftDirty();
+                            setSecondaryActionContext(
+                              targetParticipantId
+                                ? { action: "observe_opponent", targetParticipantId }
+                                : undefined,
+                            );
+                          }}
+                          opponentOptions={targetOptions}
+                          selectedOpponentId={secondaryActionContext?.targetParticipantId}
+                        />
+                      ) : null}
+                    </div>
+                  ) : selectedSecondaryActionId === "observe_opponent" && phaseKey === "phase1" ? (
                     <PlayerCombatOpponentSelector
                       controlsDisabled={declarationControlsDisabled}
-                      onSelectedOpponentChange={(selectedOpponentId) => {
+                      emptyLabel="Choose opponent"
+                      label="Opponent to observe"
+                      onSelectedOpponentChange={(targetParticipantId) => {
                         markCombatDeclarationDraftDirty();
-                        setCombatContextDraft((current) => ({
-                          ...current,
-                          selectedOpponentId: selectedOpponentId || undefined,
-                        }));
+                        setSecondaryActionContext(
+                          targetParticipantId
+                            ? { action: "observe_opponent", targetParticipantId }
+                            : undefined,
+                        );
                       }}
                       opponentOptions={targetOptions}
-                      selectedOpponentId={combatContextDraft.selectedOpponentId}
+                      selectedOpponentId={secondaryActionContext?.targetParticipantId}
                     />
                   ) : selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
                     <div style={{ display: "grid", gap: "0.65rem" }}>

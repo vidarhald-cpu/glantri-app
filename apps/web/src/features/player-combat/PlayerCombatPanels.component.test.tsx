@@ -33,6 +33,37 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
   });
 
+  it("offers Parry as a primary action and Observe Opponent only as a secondary action", () => {
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId="parry"
+        additionalActionNotes=""
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId="observe_opponent"
+      />,
+    );
+
+    const primary = screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement;
+    const secondary = screen.getByRole("combobox", {
+      name: "Secondary action",
+    }) as HTMLSelectElement;
+    expect(Array.from(primary.options).some((option) => option.text === "Parry")).toBe(true);
+    expect(Array.from(primary.options).some((option) => option.text === "Observe Opponent")).toBe(
+      false,
+    );
+    expect(Array.from(secondary.options).some((option) => option.text === "Observe Opponent")).toBe(
+      true,
+    );
+    expect(Array.from(secondary.options).some((option) => option.text === "Offensive Parry")).toBe(
+      false,
+    );
+    expect(screen.getByText("Focus on defense for this round.", { exact: false })).toBeTruthy();
+  });
+
   it("keeps Offensive Parry opponent selection out of the general action selector", () => {
     render(
       <PlayerCombatActionSelectorPanel
@@ -67,6 +98,19 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(selector).toHaveValue("encounter-participant-borin");
     fireEvent.change(selector, { target: { value: "encounter-participant-cora" } });
     expect(onSelectedOpponentChange).toHaveBeenCalledWith("encounter-participant-cora");
+  });
+
+  it("renders the shared selector with Observe Opponent's Phase 1 label", () => {
+    render(
+      <PlayerCombatOpponentSelector
+        label="Opponent to observe"
+        onSelectedOpponentChange={vi.fn()}
+        opponentOptions={[{ displayName: "Borin", id: "encounter-participant-borin" }]}
+        selectedOpponentId="encounter-participant-borin"
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: "Opponent to observe" })).toBeTruthy();
   });
 });
 

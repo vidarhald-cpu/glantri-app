@@ -121,6 +121,37 @@ function buildCommittedContext(): ScenarioParticipantCombatContext {
 }
 
 describe("projectCombatActionGeneratedModifiers", () => {
+  it("projects Parry's Dodge-derived percentage modifier into declaration and review rows", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 17,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const modifierRows = buildPlayerCombatModifierRows({
+      combatContext: projectedContext,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const dbRow = modifierRows.find((row) => row.bucketKey === "situation_db");
+
+    expect(dbRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          application: "percentage",
+          id: "generated:parry:round:db-parry-percentage",
+          notes: expect.stringContaining("Dodge 17"),
+          sourceActionId: "parry",
+          value: 3,
+        }),
+      ],
+      total: 3,
+    });
+  });
+
   it("projects the Offensive Parry round DB drawback into declaration and review rows", () => {
     const roundState = buildRoundStateWithDistance(3);
     const projectedContext = projectCombatActionGeneratedModifiers({

@@ -18,6 +18,7 @@ export type PlayerEncounterActionId =
   | "counterattack"
   | "observe_opponent"
   | "offensive_parry"
+  | "parry"
   | "parry_disarm"
   | "disarm"
   | "break_off_engagement"
@@ -77,20 +78,38 @@ export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncoun
   { label: "Feint - Attack", value: "feint_attack" },
   { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
   { label: "Counterattack", value: "counterattack" },
-  { label: "Observe Opponent", value: "observe_opponent" },
   { label: "Offensive Parry", value: "offensive_parry" },
+  { label: getCombatDeclarationActionLabel("parry"), value: "parry" },
   { label: "Parry - Disarm", value: "parry_disarm" },
   { label: "Disarm", value: "disarm" },
   { label: "Break Off Engagement", value: "break_off_engagement" },
   { label: "Other", value: "other" },
 ];
 
+export const PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] =
+  [
+    { label: getCombatDeclarationActionLabel("attack_parry"), value: "attack_parry" },
+    { label: getCombatDeclarationActionLabel("parry_attack"), value: "parry_attack" },
+    { label: "Double Attack", value: "double_attack" },
+    { label: "Feint - Attack", value: "feint_attack" },
+    { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
+    { label: "Counterattack", value: "counterattack" },
+    { label: getCombatDeclarationActionLabel("observe_opponent"), value: "observe_opponent" },
+    { label: "Offensive Parry", value: "offensive_parry" },
+    { label: "Parry - Disarm", value: "parry_disarm" },
+    { label: "Disarm", value: "disarm" },
+    { label: "Break Off Engagement", value: "break_off_engagement" },
+    { label: "Other", value: "other" },
+  ];
+
 export function isPlayerEncounterActionId(value: unknown): value is PlayerEncounterActionId {
   if (typeof value !== "string") {
     return false;
   }
 
-  return PLAYER_ENCOUNTER_ACTION_OPTIONS.some((option) => option.value === value);
+  return [...PLAYER_ENCOUNTER_ACTION_OPTIONS, ...PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS].some(
+    (option) => option.value === value,
+  );
 }
 
 export const PLAYER_ENCOUNTER_MOVEMENT_OPTIONS: PlayerEncounterOption<PlayerEncounterMovementId>[] =
@@ -289,7 +308,9 @@ export function getPlayerEncounterActionLabel(actionId: PlayerEncounterActionId 
   }
 
   return (
-    PLAYER_ENCOUNTER_ACTION_OPTIONS.find((option) => option.value === actionId)?.label ?? "Open"
+    [...PLAYER_ENCOUNTER_ACTION_OPTIONS, ...PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS].find(
+      (option) => option.value === actionId,
+    )?.label ?? "Open"
   );
 }
 
@@ -323,6 +344,7 @@ export function isPlayerEncounterDefenseAction(actionId: PlayerEncounterActionId
     actionId === "attack_parry" ||
     actionId === "parry_attack" ||
     actionId === "offensive_parry" ||
+    actionId === "parry" ||
     actionId === "parry_disarm"
   );
 }
