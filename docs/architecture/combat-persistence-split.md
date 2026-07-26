@@ -184,16 +184,44 @@ History-source and full-composition reads remained history-sized at 558.40 ms an
 ## Remaining boundaries
 
 - Combat command handlers still begin from the backward-compatible full encounter
-  service because their mutation responses retain the full `EncounterSession`
-  contract. The split makes their persistence write bounded, but the initial
-  composition and response remain history-sized.
-- Public mutation responses still contain the backward-compatible full encounter,
-  so response serialization/transfer grows with history.
+  service because current domain mutation functions consume `EncounterSession`.
+  Their pre-mutation read and projection remain history-sized.
+- Production web combat clients negotiate the active-only mutation response, so
+  ordinary response serialization and transfer no longer grow with history.
+  A legacy full-response branch remains temporarily for rollback compatibility
+  and the `complete_round` GM boundary whose tracker still consumes the newly
+  archived round from the encounter.
 - Exact full GET and history projection remain history-sized by design.
 - Scenario participant writes are still separate from the encounter persistence
   transaction, matching pre-split behavior.
 - Commands/events/results remain JSON inside their bounded active/archive payloads.
 
-A later API slice can introduce an active-only mutation response while keeping the
-same canonical revision and read models. That is now the highest-value persistence
-follow-up.
+The active-only response is documented in
+`active-combat-mutation-response.md`. The next persistence optimization should
+move command handlers to an active mutation source without changing their strict
+authorization or the exact full-GET contract.
+
+## First-write concurrency and transaction conflicts
+
+Legacy-to-`split_v1` materialization is part of the first accepted combat
+mutation's serializable transaction. Read endpoints, including exact encounter
+GET and revision polling, must not normalize or materialize persistence. They may
+project normalized state in memory, but the first canonical write remains the
+only authority that changes storage mode.
+
+The persistence repository retries only Prisma `P2034` write-conflict/deadlock
+errors. Each bounded retry starts a new complete transaction and re-reads storage
+mode, archive count, and canonical revision. It never retries an individual
+`updateMany`, reuses a transaction client, or catches validation/domain errors.
+The original expected revision remains fixed:
+
+- if PostgreSQL aborted the only attempted write, the fresh attempt may commit;
+- if another accepted command advanced the revision, the fresh attempt returns
+  `stale_revision`;
+- after three `P2034` attempts, the service returns the typed
+  `transaction_conflict` error.
+
+This preserves exactly one revision advance and prevents duplicate active rows,
+archives, commands, or events. Concurrent first commands may therefore yield one
+accepted mutation and one canonical stale rejection; they cannot both succeed
+against the same prior revision.

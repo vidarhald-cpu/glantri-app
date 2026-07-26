@@ -307,6 +307,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
       brawlingStart,
     );
     const brawlingHandler = source.slice(brawlingStart, brawlingEnd);
+    const acceptStart = source.indexOf("const acceptEncounterSession = useCallback");
+    const acceptEnd = source.indexOf("useEffect(() => {", acceptStart);
+    const acceptHandler = source.slice(acceptStart, acceptEnd);
 
     expect(slowContext).toContain("loadScenarioPlayerProjection(scenarioId)");
     expect(slowContext).toContain("loadContent: loadCanonicalContent");
@@ -319,6 +322,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("historyCoordinator.request(identity)");
     expect(source).not.toContain("loadCombatHistory(");
     expect(source).not.toContain("encounterSession?.updatedAt, isGameMaster");
+    expect(acceptHandler).not.toContain("setRevisionBoundHistory(undefined);");
+    expect(source).toContain("currentEncounter: encounterSession");
     expect(brawlingHandler).toContain("acceptEncounterSession(encounter)");
     expect(brawlingHandler).not.toContain("loadCombatHistory");
   });

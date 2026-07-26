@@ -3921,6 +3921,7 @@ export default function CombatRoundManagerPanel({
   const [combatExperienceDifficultyDrafts, setCombatExperienceDifficultyDrafts] = useState<
     Record<string, string>
   >({});
+  const combatExperienceDifficultyRequestInFlightRef = useRef(false);
   const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
   const [roundEndHealthDifficultyDrafts, setRoundEndHealthDifficultyDrafts] = useState<
     Record<string, string>
@@ -4385,6 +4386,7 @@ export default function CombatRoundManagerPanel({
     roundEndAutoPrepareAttemptRef.current = attemptKey;
     setSaving(true);
     void prepareCombatRoundEndReviewOnServer({
+      currentEncounter: encounter,
       encounterId: encounter.id,
       executionGroupId: descriptor.executionGroupId!,
       expectedRevision: descriptor.expectedRevision,
@@ -6843,6 +6845,7 @@ export default function CombatRoundManagerPanel({
           encounter: nextEncounter,
           participants,
         } = await commitPhaseInitiativeResolutionOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
@@ -6906,6 +6909,11 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participants,
       } = await advanceCombatRoundCurrentStepOnServer({
+        // Completing a round adds an immutable archive that is intentionally absent from the
+        // active-only response. Keep the legacy response for this boundary until GM history is
+        // revision-keyed independently from the full encounter.
+        currentEncounter:
+          boundaryTransitionAction.commandType === "complete_round" ? undefined : encounter,
         commandType: boundaryTransitionAction.commandType,
         encounterId: boundaryTransitionAction.encounterId,
         executionGroupId: boundaryTransitionAction.executionGroupId,
@@ -6968,6 +6976,7 @@ export default function CombatRoundManagerPanel({
         step: currentSelection?.step ?? roundState.currentStep,
       };
       const { encounter: nextEncounter, participants } = await clearCurrentCombatRoundStepOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         participantId: clearedSelection.participantId,
         step: clearedSelection.step,
@@ -7318,6 +7327,7 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participant,
       } = await submitCombatDeclarationOnServer({
+        currentEncounter: encounter,
         actionId: inspectorDraft.actionId || undefined,
         adjustDistance:
           inspectorDraft.actionId === "adjust_range_attack" &&
@@ -7445,6 +7455,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
     try {
       const { encounter: nextEncounter } = await rollCombatFeintOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7479,6 +7490,7 @@ export default function CombatRoundManagerPanel({
       ) {
         if (!scenarioParticipant) return;
         nextEncounter = await respondCombatAdjustDistanceOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
@@ -7498,6 +7510,7 @@ export default function CombatRoundManagerPanel({
         };
         const request = buildAdjustDistanceGmAdjustmentRequest(draft);
         nextEncounter = await reviewCombatAdjustDistanceOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
@@ -7511,6 +7524,7 @@ export default function CombatRoundManagerPanel({
       ) {
         if (!scenarioParticipant) return;
         nextEncounter = await rollCombatAdjustDistanceOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
@@ -7523,6 +7537,7 @@ export default function CombatRoundManagerPanel({
         proposal.status === "awaiting_review"
       ) {
         nextEncounter = await commitCombatAdjustDistanceOnServer({
+          currentEncounter: encounter,
           committedDistance: Number.parseInt(inspectorAdjustDistanceCommittedDistance, 10),
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
@@ -7566,6 +7581,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
     try {
       const { encounter: nextEncounter, participants } = await commitCombatFeintOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7614,6 +7630,7 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { encounter: nextEncounter, participant } = await rollCombatExperienceOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7664,6 +7681,7 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { encounter: nextEncounter, participant } = await backOutPhaseAttackOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7713,6 +7731,7 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { encounter: nextEncounter, participant } = await continuePhaseAttackOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -7764,6 +7783,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
     try {
       const { encounter: nextEncounter, participant } = await decideDoubleAttackPhase2OnServer({
+        currentEncounter: encounter,
         decision: inspectorDoubleAttackDecision,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
@@ -7800,6 +7820,9 @@ export default function CombatRoundManagerPanel({
     candidate: CurrentActionCommandDescriptor,
     value = inspectorCombatExperienceDifficulty,
   ) {
+    if (combatExperienceDifficultyRequestInFlightRef.current) {
+      return;
+    }
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
       expectedCommandTypes: ["set_combat_experience_difficulty"],
@@ -7818,10 +7841,12 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    combatExperienceDifficultyRequestInFlightRef.current = true;
     setSaving(true);
 
     try {
       const { encounter: nextEncounter } = await setCombatExperienceDifficultyOnServer({
+        currentEncounter: encounter,
         difficulty,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
@@ -7851,6 +7876,7 @@ export default function CombatRoundManagerPanel({
           : "Unable to set Combat Experience difficulty.",
       );
     } finally {
+      combatExperienceDifficultyRequestInFlightRef.current = false;
       setSaving(false);
     }
   }
@@ -7887,6 +7913,7 @@ export default function CombatRoundManagerPanel({
 
       for (const change of changes) {
         const { encounter: nextEncounter, participants } = await setPairDistanceOnServer({
+          currentEncounter: encounter,
           distance: change.distance,
           encounterId: encounter.id,
           participantAId: change.row.edge.participantAId,
@@ -7952,6 +7979,7 @@ export default function CombatRoundManagerPanel({
         (participant) => participant.participantId,
       );
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
+        currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -8134,6 +8162,7 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participant,
       } = await rollCombatAttackOnServer({
+        currentEncounter: encounter,
         actionId: descriptor.actionId,
         attackIndex: descriptor.attackIndex!,
         attackModeId: descriptor.attackModeId!,
@@ -8271,9 +8300,7 @@ export default function CombatRoundManagerPanel({
           scenarioParticipants: effectiveScenarioParticipants,
         })
       : undefined;
-    const projectedParryTask = projectedCurrentTasks.find(
-      (task) => task.id === descriptor.taskId,
-    );
+    const projectedParryTask = projectedCurrentTasks.find((task) => task.id === descriptor.taskId);
 
     if (!defenderScenarioParticipant || !defenderRoundParticipant) {
       setSaveError("Defender scenario participant is required to roll parry.");
@@ -8323,6 +8350,7 @@ export default function CombatRoundManagerPanel({
 
     try {
       const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
+        currentEncounter: encounter,
         attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
@@ -8411,6 +8439,7 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
     try {
       const nextEncounter = await rollOffensiveParryBrawlingOnServer({
+        currentEncounter: encounter,
         attackResultId: descriptor.attackResultId!,
         contestId: descriptor.contestId!,
         declarationId: descriptor.declarationId!,
@@ -8478,6 +8507,7 @@ export default function CombatRoundManagerPanel({
         encounter: nextEncounter,
         participant: updatedParticipant,
       } = await rollContinuedContactMaintenanceOnServer({
+        currentEncounter: encounter,
         contestId: descriptor.contestId!,
         continuedContactId: descriptor.continuedContactId!,
         encounterId: descriptor.encounterId,
@@ -8561,6 +8591,7 @@ export default function CombatRoundManagerPanel({
     try {
       const { commandEnvelope, encounter: nextEncounter } =
         await saveCurrentCombatDamageReviewOnServer({
+          currentEncounter: encounter,
           attackResultId: descriptor.attackResultId!,
           attackerParticipantId: descriptor.attackerParticipantId!,
           commandType: "commit_phase_damage",
@@ -8658,6 +8689,7 @@ export default function CombatRoundManagerPanel({
     try {
       if (descriptor.commandType === "roll_hit_location") {
         const nextEncounter = await rollCombatHitLocationOnServer({
+          currentEncounter: encounter,
           attackResultId: descriptor.attackResultId!,
           attackerParticipantId: descriptor.attackerParticipantId!,
           defenderParticipantId: descriptor.defenderParticipantId!,
@@ -8677,6 +8709,7 @@ export default function CombatRoundManagerPanel({
         onEncounterUpdated?.(nextEncounter);
       } else if (descriptor.commandType === "roll_critical") {
         const nextEncounter = await rollCombatCriticalOnServer({
+          currentEncounter: encounter,
           attackResultId: descriptor.attackResultId!,
           attackerParticipantId: descriptor.attackerParticipantId!,
           criticalResultId: descriptor.criticalResultId!,
@@ -8698,6 +8731,7 @@ export default function CombatRoundManagerPanel({
       } else if (descriptor.commandType === "resolve_damage") {
         const { commandEnvelope, encounter: nextEncounter } =
           await resolveCurrentCombatPhaseDamageOnServer({
+            currentEncounter: encounter,
             attackResultId: descriptor.attackResultId!,
             attackerParticipantId: descriptor.attackerParticipantId!,
             commandType: "resolve_damage",
@@ -8736,6 +8770,7 @@ export default function CombatRoundManagerPanel({
         }
         const { commandEnvelope, encounter: nextEncounter } =
           await commitCurrentCombatPhaseDamageOnServer({
+            currentEncounter: encounter,
             attackResultId: descriptor.attackResultId!,
             attackerParticipantId: descriptor.attackerParticipantId!,
             commandType: "commit_phase_damage",
@@ -8812,6 +8847,7 @@ export default function CombatRoundManagerPanel({
           encounter: nextEncounter,
           participant: updatedParticipant,
         } = await commitRoundEndParticipantReviewOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
@@ -8865,6 +8901,7 @@ export default function CombatRoundManagerPanel({
 
         const { encounter: nextEncounter, participant: updatedParticipant } =
           await rollRoundEndHealthCheckOnServer({
+            currentEncounter: encounter,
             difficulty,
             encounterId: encounter.id,
             executionGroupId: descriptor.executionGroupId!,
@@ -8918,6 +8955,7 @@ export default function CombatRoundManagerPanel({
           : undefined;
       const { commandEnvelope, encounter: nextEncounter } =
         await commitRoundEndDistanceControlOnServer({
+          currentEncounter: encounter,
           chosenDistance: controlledByContinuedContact ? selectedDistance : undefined,
           distanceOverride: controlledByContinuedContact ? undefined : selectedDistance,
           distanceProposalId: descriptor.proposalId!,
@@ -8982,6 +9020,7 @@ export default function CombatRoundManagerPanel({
     try {
       const { commandEnvelope, encounter: nextEncounter } =
         await rollCurrentRoundEndDistanceControlOnServer({
+          currentEncounter: encounter,
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,

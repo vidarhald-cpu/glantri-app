@@ -623,3 +623,37 @@ and narrow GM polling complete, the next measured optimization slice is Player
 Combat refresh consolidation. It should atomically adopt mutation responses,
 separate slow participant/content context from combat revision checks, and
 remove duplicate history fetches before React restructuring or generic caching.
+
+## Active-only mutation response follow-up
+
+GM Combat, Player Combat, and GM Player Combat now request versioned active-only
+mutation responses. A 33,755,559-byte synthetic history-bearing legacy response
+produced a 1,954-byte active response (99.9942% smaller). Median local
+serialization changed from 4.241 ms for the full response to 0.009 ms for the
+active response; compact composition measured 0.312 ms. Mutation-family samples
+for attack, parry, initiative, modifier review, distance, Brawling, and round-end
+review were 1,912–1,982 bytes with the same active fixture.
+
+This removes archived-round serialization and transfer from ordinary mutations.
+It does not remove the pre-mutation full encounter read used by current command
+handlers, the explicit `complete_round` compatibility response, history
+projection cost, or GM tracker/render rebuilding. The
+recommended next server optimization is an active-source mutation boundary with
+one indexed authorization/projection context per request. See
+`active-combat-mutation-response.md`.
+
+## Split-storage first-write follow-up
+
+The first live `split_v1` failure exposed a hidden write on exact encounter GET:
+the route persisted participant modifier normalization and, when round state
+normalization differed, called combat persistence. A mount/focus GET could
+therefore overlap the first CE mutation after both read legacy revision N.
+Serializable PostgreSQL correctly aborted one `Encounter.updateMany` transaction
+as Prisma `P2034`.
+
+Exact GET now performs those projections in memory only. This removes the
+initialization/polling writer and avoids an unnecessary full split materialization
+outside an explicit command. The persistence adapter additionally performs a
+bounded full-transaction retry for legitimate `P2034` conflicts. This is a
+correctness and tail-latency repair; it does not change the previously measured
+active-response or history costs.

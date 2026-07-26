@@ -680,3 +680,43 @@ prevent new commits from writing them.
 
 The initiative route retains strict task/group/revision authorization. Its response now carries the
 saved encounter and canonical command envelope without returning the same command separately.
+
+## 15. Active-only mutation response conformance
+
+Production GM Combat, Player Combat, and GM Player Combat send the versioned
+`active-v1` response preference. The strict shared response contains canonical
+revision, active combat state, command envelope, concise next-task identity,
+updated participant shells, and bounded mutation-specific presentation only.
+It rejects archived rounds, full encounter/history fields, and duplicated
+top-level command payloads.
+
+The API transforms the legacy internal route payload before serialization, so
+strict authorization and player-safe route sanitation remain unchanged. The
+client applies the active state only to the matching encounter and passes the
+result through existing monotonic revision acceptance. Revision-keyed history
+is fetched once and cannot be replaced by an older encounter, revision, or GM
+perspective response. The local current encounter is never serialized into the
+command request.
+
+Legacy full responses remain header-gated for rollback compatibility; exact
+encounter GET is unchanged. This response migration does not weaken revision,
+task, execution-group, initiative-group, effect-cutoff, lineage, source, or
+modifier-fingerprint checks. See `active-combat-mutation-response.md`.
+
+## 16. Split first-write conflict conformance
+
+Exact encounter GET and revision polling perform no combat or participant
+persistence. Presentation normalization on GET is in-memory only, so initialization,
+focus refresh, and Strict Mode requests cannot race the first canonical mutation
+as hidden writers.
+
+The split persistence adapter retries only typed Prisma `P2034` failures and
+restarts the entire serializable transaction. Every attempt re-reads storage mode
+and revision while retaining the command's original expected revision. A committed
+competing command therefore becomes `stale_revision`, never a successful replay.
+Retry exhaustion becomes the typed `transaction_conflict` response; validation,
+authorization, duplicate-command, domain, and other Prisma errors are not retried.
+
+The GM CE control also has a synchronous in-flight guard in addition to its
+disabled state. One deliberate action produces one POST even if two click events
+arrive before React commits the pending render.

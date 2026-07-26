@@ -23,12 +23,35 @@ export class CombatPersistenceError extends Error {
       | "archive_delta_invalid"
       | "malformed_split_storage"
       | "stale_revision"
+      | "transaction_conflict"
       | "unsupported_storage_mode",
     message: string,
+    cause?: unknown,
   ) {
     super(message);
     this.name = "CombatPersistenceError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        configurable: true,
+        enumerable: false,
+        value: cause,
+        writable: true,
+      });
+    }
   }
+}
+
+const DEFAULT_COMBAT_TRANSACTION_ATTEMPTS = 3;
+
+export function isRetryableCombatTransactionError(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+}
+
+async function defaultCombatTransactionRetryDelay(attempt: number): Promise<void> {
+  const delayMs = attempt * 5 + Math.floor(Math.random() * 5);
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -233,143 +256,175 @@ export interface CombatStatePersistenceRepository {
 
 export function createPrismaCombatStatePersistenceRepository(
   client: PrismaClient = prisma,
+  options: {
+    maxTransactionAttempts?: number;
+    retryDelay?: (attempt: number) => Promise<void>;
+  } = {},
 ): CombatStatePersistenceRepository {
+  const maxTransactionAttempts = Math.max(
+    1,
+    options.maxTransactionAttempts ?? DEFAULT_COMBAT_TRANSACTION_ATTEMPTS,
+  );
+  const retryDelay = options.retryDelay ?? defaultCombatTransactionRetryDelay;
+
   return {
     async updateCombatEncounter(input) {
-      return client.$transaction(
-        async (transaction) => {
-          const existing = await transaction.encounter.findUniqueOrThrow({
-            select: {
-              combatArchiveCount: true,
-              combatStorageMode: true,
-              updatedAt: true,
-            },
-            where: { id: input.encounterId },
-          });
-          const storageMode = asStorageMode(existing.combatStorageMode);
-
-          if (existing.updatedAt.toISOString() !== input.expectedRevision) {
-            throw new CombatPersistenceError(
-              "stale_revision",
-              "Encounter revision changed before combat state could be saved.",
-            );
-          }
-
-          const legacyNormalized =
-            storageMode === COMBAT_STORAGE_MODE_LEGACY
-              ? encounterSessionSchema.parse({
-                  ...input.session,
-                  campaignId: input.campaignId ?? input.session.campaignId,
-                  id: input.encounterId,
-                  scenarioId: input.scenarioId ?? input.session.scenarioId,
-                })
-              : undefined;
-          const parts = legacyNormalized
-            ? splitEncounterSessionForCombatPersistence(legacyNormalized)
-            : splitCurrentCombatMutation(input);
-          const normalized = legacyNormalized ?? parts.sessionWithoutCombatState;
-          const priorArchiveCount =
-            storageMode === COMBAT_STORAGE_MODE_LEGACY ? 0 : existing.combatArchiveCount;
-          const nextArchiveCount = parts.archivedRounds.length;
-          const archiveDelta = nextArchiveCount - priorArchiveCount;
-
-          if (
-            (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 && ![-1, 0, 1].includes(archiveDelta)) ||
-            (storageMode === COMBAT_STORAGE_MODE_LEGACY && archiveDelta < 0)
-          ) {
-            throw new CombatPersistenceError(
-              "archive_delta_invalid",
-              "Combat persistence may append or remove only the exact boundary archive.",
-            );
-          }
-
-          const updatedAt = await updateMetadataWithExpectedRevision({
-            archiveCount: nextArchiveCount,
-            encounterId: input.encounterId,
-            expectedRevision: input.expectedRevision,
-            normalized,
-            sessionWithoutCombatState: parts.sessionWithoutCombatState,
-            transaction,
-          });
-
-          if (!parts.activeCombatState) {
-            throw new CombatPersistenceError(
-              "malformed_split_storage",
-              "Combat persistence requires one active combat state.",
-            );
-          }
-
-          await transaction.encounterActiveCombatState.upsert({
-            create: {
-              encounterId: input.encounterId,
-              revision: updatedAt,
-              schemaVersion: 1,
-              stateJson: asJson(parts.activeCombatState),
-            },
-            update: {
-              revision: updatedAt,
-              schemaVersion: 1,
-              stateJson: asJson(parts.activeCombatState),
-            },
-            where: { encounterId: input.encounterId },
-          });
-
-          if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
-            for (const rawRound of parts.archivedRounds) {
-              const round = completedCombatRoundSchema.parse(rawRound);
-              await transaction.encounterArchivedCombatRound.create({
-                data: {
-                  encounterId: input.encounterId,
-                  roundJson: asJson(round),
-                  roundNumber: round.roundNumber,
-                  schemaVersion: 1,
-                  sourceRevision: updatedAt,
+      for (let attempt = 1; attempt <= maxTransactionAttempts; attempt += 1) {
+        try {
+          return await client.$transaction(
+            async (transaction) => {
+              const existing = await transaction.encounter.findUniqueOrThrow({
+                select: {
+                  combatArchiveCount: true,
+                  combatStorageMode: true,
+                  updatedAt: true,
                 },
+                where: { id: input.encounterId },
               });
-            }
-          } else if (archiveDelta === 1) {
-            const rawRound = parts.archivedRounds.at(-1);
-            const round = rawRound ? completedCombatRoundSchema.parse(rawRound) : undefined;
-            if (!round || round.roundNumber !== nextArchiveCount) {
-              throw new CombatPersistenceError(
-                "archive_delta_invalid",
-                "The appended archived round must be the next canonical round.",
-              );
-            }
-            await transaction.encounterArchivedCombatRound.create({
-              data: {
-                encounterId: input.encounterId,
-                roundJson: asJson(round),
-                roundNumber: round.roundNumber,
-                schemaVersion: 1,
-                sourceRevision: updatedAt,
-              },
-            });
-          } else if (archiveDelta === -1) {
-            const removed = await transaction.encounterArchivedCombatRound.deleteMany({
-              where: {
-                encounterId: input.encounterId,
-                roundNumber: priorArchiveCount,
-              },
-            });
-            if (removed.count !== 1) {
-              throw new CombatPersistenceError(
-                "malformed_split_storage",
-                "The archived round required by boundary undo was not present.",
-              );
-            }
-          }
+              const storageMode = asStorageMode(existing.combatStorageMode);
 
-          return {
-            ...parts.sessionWithoutCombatState,
-            combatRoundState: {
-              ...parts.activeCombatState,
-              rounds: parts.archivedRounds,
+              if (existing.updatedAt.toISOString() !== input.expectedRevision) {
+                throw new CombatPersistenceError(
+                  "stale_revision",
+                  "Encounter revision changed before combat state could be saved.",
+                );
+              }
+
+              const legacyNormalized =
+                storageMode === COMBAT_STORAGE_MODE_LEGACY
+                  ? encounterSessionSchema.parse({
+                      ...input.session,
+                      campaignId: input.campaignId ?? input.session.campaignId,
+                      id: input.encounterId,
+                      scenarioId: input.scenarioId ?? input.session.scenarioId,
+                    })
+                  : undefined;
+              const parts = legacyNormalized
+                ? splitEncounterSessionForCombatPersistence(legacyNormalized)
+                : splitCurrentCombatMutation(input);
+              const normalized = legacyNormalized ?? parts.sessionWithoutCombatState;
+              const priorArchiveCount =
+                storageMode === COMBAT_STORAGE_MODE_LEGACY ? 0 : existing.combatArchiveCount;
+              const nextArchiveCount = parts.archivedRounds.length;
+              const archiveDelta = nextArchiveCount - priorArchiveCount;
+
+              if (
+                (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
+                  ![-1, 0, 1].includes(archiveDelta)) ||
+                (storageMode === COMBAT_STORAGE_MODE_LEGACY && archiveDelta < 0)
+              ) {
+                throw new CombatPersistenceError(
+                  "archive_delta_invalid",
+                  "Combat persistence may append or remove only the exact boundary archive.",
+                );
+              }
+
+              const updatedAt = await updateMetadataWithExpectedRevision({
+                archiveCount: nextArchiveCount,
+                encounterId: input.encounterId,
+                expectedRevision: input.expectedRevision,
+                normalized,
+                sessionWithoutCombatState: parts.sessionWithoutCombatState,
+                transaction,
+              });
+
+              if (!parts.activeCombatState) {
+                throw new CombatPersistenceError(
+                  "malformed_split_storage",
+                  "Combat persistence requires one active combat state.",
+                );
+              }
+
+              await transaction.encounterActiveCombatState.upsert({
+                create: {
+                  encounterId: input.encounterId,
+                  revision: updatedAt,
+                  schemaVersion: 1,
+                  stateJson: asJson(parts.activeCombatState),
+                },
+                update: {
+                  revision: updatedAt,
+                  schemaVersion: 1,
+                  stateJson: asJson(parts.activeCombatState),
+                },
+                where: { encounterId: input.encounterId },
+              });
+
+              if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
+                for (const rawRound of parts.archivedRounds) {
+                  const round = completedCombatRoundSchema.parse(rawRound);
+                  await transaction.encounterArchivedCombatRound.create({
+                    data: {
+                      encounterId: input.encounterId,
+                      roundJson: asJson(round),
+                      roundNumber: round.roundNumber,
+                      schemaVersion: 1,
+                      sourceRevision: updatedAt,
+                    },
+                  });
+                }
+              } else if (archiveDelta === 1) {
+                const rawRound = parts.archivedRounds.at(-1);
+                const round = rawRound ? completedCombatRoundSchema.parse(rawRound) : undefined;
+                if (!round || round.roundNumber !== nextArchiveCount) {
+                  throw new CombatPersistenceError(
+                    "archive_delta_invalid",
+                    "The appended archived round must be the next canonical round.",
+                  );
+                }
+                await transaction.encounterArchivedCombatRound.create({
+                  data: {
+                    encounterId: input.encounterId,
+                    roundJson: asJson(round),
+                    roundNumber: round.roundNumber,
+                    schemaVersion: 1,
+                    sourceRevision: updatedAt,
+                  },
+                });
+              } else if (archiveDelta === -1) {
+                const removed = await transaction.encounterArchivedCombatRound.deleteMany({
+                  where: {
+                    encounterId: input.encounterId,
+                    roundNumber: priorArchiveCount,
+                  },
+                });
+                if (removed.count !== 1) {
+                  throw new CombatPersistenceError(
+                    "malformed_split_storage",
+                    "The archived round required by boundary undo was not present.",
+                  );
+                }
+              }
+
+              return {
+                ...parts.sessionWithoutCombatState,
+                combatRoundState: {
+                  ...parts.activeCombatState,
+                  rounds: parts.archivedRounds,
+                },
+                updatedAt: updatedAt.toISOString(),
+              } as EncounterSession;
             },
-            updatedAt: updatedAt.toISOString(),
-          } as EncounterSession;
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          );
+        } catch (error) {
+          if (!isRetryableCombatTransactionError(error)) {
+            throw error;
+          }
+          if (attempt === maxTransactionAttempts) {
+            throw new CombatPersistenceError(
+              "transaction_conflict",
+              "Combat state changed while saving. Refresh and try again.",
+              error,
+            );
+          }
+          await retryDelay(attempt);
+        }
+      }
+
+      throw new CombatPersistenceError(
+        "transaction_conflict",
+        "Combat state changed while saving. Refresh and try again.",
       );
     },
 

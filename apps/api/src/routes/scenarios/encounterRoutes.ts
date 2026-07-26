@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import {
   defaultCanonicalContent,
@@ -11,6 +11,7 @@ import {
   CampaignService,
   CharacterService,
   CombatStateReadService,
+  EncounterCombatWriteError,
   EncounterService,
   ScenarioService,
 } from "@glantri/database";
@@ -153,6 +154,11 @@ import {
   setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
+import {
+  ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
+  buildRequestedCombatMutationResponse,
+  prefersActiveCombatMutationResponse,
+} from "./combatMutationResponse";
 import type {
   CombatAttackModifierValidationProjection,
   CombatParryModifierValidationProjection,
@@ -529,6 +535,24 @@ function authorizeCombatTaskCommand(input: {
     initiativeValue: input.identity.initiativeValue,
     projection: buildCombatProgressionProjection(input.roundState),
     taskId: input.identity.taskId,
+  });
+}
+
+function sendCombatWriteError(reply: FastifyReply, error: unknown): unknown | undefined {
+  if (!(error instanceof EncounterCombatWriteError)) {
+    return undefined;
+  }
+
+  if (error.code === "transaction_conflict") {
+    return reply.code(409).send({
+      code: "transaction_conflict",
+      error: "Combat state changed while saving. Refresh and try again.",
+    });
+  }
+
+  return reply.code(409).send({
+    code: "stale_revision",
+    error: "Combat state changed before this task could be completed.",
   });
 }
 
@@ -2045,6 +2069,7 @@ function initializeMaterializedCombatRoundState(input: {
 async function normalizeScenarioParticipantModifierRowsForEncounter(input: {
   encounter: EncounterSession;
   initializingNewEncounter?: boolean;
+  persistChanges?: boolean;
   scenarioParticipants: ScenarioParticipant[];
 }): Promise<ScenarioParticipant[]> {
   if (!Array.isArray(input.encounter.participants)) return input.scenarioParticipants;
@@ -2072,13 +2097,20 @@ async function normalizeScenarioParticipantModifierRowsForEncounter(input: {
       if (!combatContextsDiffer(combatContext, participant.state.combat.combatContext)) {
         return participant;
       }
-      return encounterService.updateScenarioParticipantState({
-        participantId: participant.id,
-        scenarioId: participant.scenarioId,
+      const normalizedParticipant = {
+        ...participant,
         state: {
           ...participant.state,
           combat: { ...participant.state.combat, combatContext },
         },
+      };
+      if (input.persistChanges === false) {
+        return normalizedParticipant;
+      }
+      return encounterService.updateScenarioParticipantState({
+        participantId: participant.id,
+        scenarioId: participant.scenarioId,
+        state: normalizedParticipant.state,
       });
     }),
   );
@@ -3117,6 +3149,14 @@ function preservePlayerCombatModifierBuckets(input: {
 }
 
 export const encounterRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preSerialization", async (request, _reply, payload) =>
+    buildRequestedCombatMutationResponse({
+      activeResponseRequested: prefersActiveCombatMutationResponse(
+        request.headers[ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER],
+      ),
+      payload,
+    }),
+  );
   app.get("/scenarios/:scenarioId/encounters", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -3335,6 +3375,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const loadedScenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const scenarioParticipants = await normalizeScenarioParticipantModifierRowsForEncounter({
         encounter,
+        persistChanges: false,
         scenarioParticipants: loadedScenarioParticipants,
       });
       const roundState = initializeMaterializedCombatRoundState({
@@ -3346,17 +3387,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (!encounter.combatRoundState ||
           combatRoundStatesDiffer(roundState, encounter.combatRoundState));
       const normalizedEncounter = shouldNormalizeCombatRoundState
-        ? await encounterService.updateCombatEncounter({
-            campaignId: access.campaignId,
-            encounterId,
-            expectedRevision: encounter.updatedAt,
-            scenarioId,
-            session: {
-              ...encounter,
-              combatRoundState: roundState,
-              currentRound: roundState.roundNumber,
-              updatedAt: new Date().toISOString(),
-            },
+        ? encounterSessionSchema.parse({
+            ...encounter,
+            combatRoundState: roundState,
+            currentRound: roundState.roundNumber,
           })
         : encounter;
 
@@ -5804,6 +5838,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           windowOpen: isCombatRoundCombatExperienceWindowOpen(nextRoundState),
         };
       } catch (error) {
+        const persistenceErrorResponse = sendCombatWriteError(reply, error);
+        if (persistenceErrorResponse !== undefined) {
+          return persistenceErrorResponse;
+        }
         return reply.code(400).send({
           error:
             error instanceof Error ? error.message : "Unable to set Combat Experience difficulty.",

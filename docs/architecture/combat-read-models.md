@@ -159,7 +159,14 @@ Intentionally unchanged:
 - exact GM and player-safe encounter GETs;
 - full encounter-list editing routes;
 - every mutation, authorization, reload, and undo path;
-- mutation response contracts.
+- canonical mutation semantics and authorization.
+
+Ordinary production web mutation responses now use the separate
+`ActiveCombatMutationResponse` contract. That response is built from the
+active-state portion of the authoritative post-command source and does not
+require an archived-round read or full encounter validation. Exact GET and
+history continue to use their existing read views. See
+`active-combat-mutation-response.md`.
 
 ## Measurements
 
@@ -186,9 +193,9 @@ database-I/O reduction: Prisma must still materialize almost the same 33.96 MB
 JSON document. Response sizes and history semantics are unchanged. These
 figures are local diagnostics, not CI timing thresholds.
 
-## Future persistence seam
+## Persistence and response seams
 
-A later physical split can replace only the repository adapter:
+The physical split now implements the repository adapter:
 
 - top-level encounter metadata remains the metadata source;
 - an active-state column/table implements `getActiveCombatStateById`;
@@ -198,6 +205,18 @@ A later physical split can replace only the repository adapter:
 - the authoritative write service coordinates those stores transactionally.
 
 The domain read schemas, history projector signature, route authorization,
-player-safe sanitation, and client history identity do not need to change.
-Until that split, `EncounterSession` remains the only authoritative write model;
-the read views are not a second canonical combat model.
+player-safe sanitation, and client history identity did not change. The active
+mutation response is likewise a transport read projection, not a second
+canonical write model.
+
+## Read-only exact encounter projection
+
+Exact encounter GET is a read boundary. Legacy modifier-row and active-round
+normalization needed for presentation is projected in memory and returned with
+the stored canonical revision. The route does not persist scenario participant
+normalization and does not call combat-state persistence. Revision polling is
+metadata-only as before.
+
+Canonical normalization is persisted by the next explicitly authorized mutation.
+This removes an otherwise hidden concurrent writer during legacy first-write
+materialization without introducing a second write model or weakening validation.

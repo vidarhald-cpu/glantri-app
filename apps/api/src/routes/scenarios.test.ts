@@ -116,6 +116,15 @@ vi.mock("@glantri/database", () => ({
   CampaignService: vi.fn(() => mocks.campaignService),
   CharacterService: vi.fn(() => mocks.characterService),
   CombatStateReadService: vi.fn(() => mocks.combatStateReadService),
+  EncounterCombatWriteError: class EncounterCombatWriteError extends Error {
+    constructor(
+      readonly code: "stale_revision" | "transaction_conflict",
+      message: string,
+    ) {
+      super(message);
+      this.name = "EncounterCombatWriteError";
+    }
+  },
   EncounterService: vi.fn(() => mocks.encounterService),
   ScenarioService: vi.fn(() => mocks.scenarioService),
 }));
@@ -3121,9 +3130,9 @@ describe("scenarios route contract", () => {
     ]);
     expect(response.body).not.toContain("participants");
     expect(response.body).not.toContain("combatRoundState");
-    expect(
-      mocks.combatStateReadService.listEncounterAccessMetadataByScenario,
-    ).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.combatStateReadService.listEncounterAccessMetadataByScenario).toHaveBeenCalledWith(
+      "scenario-1",
+    );
   });
 
   it("returns a compact canonical active-encounter revision", async () => {
@@ -5029,6 +5038,8 @@ describe("scenarios route contract", () => {
     expect(historyResponse.json().history.rows).toEqual([
       expect.objectContaining({ participantId: "scenario-fallback-participant-1" }),
     ]);
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
   it("accepts the projected fallback encounter alias for the controlling player", async () => {
@@ -8297,6 +8308,7 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
+      headers: { "x-glantri-combat-response": "active-v1" },
       method: "POST",
       payload: {
         difficulty: 36,
@@ -8307,10 +8319,84 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().difficulty).toBe(36);
-    expect(response.json().windowOpen).toBe(true);
+    expect(response.json()).toMatchObject({
+      encounterId: "encounter-1",
+      mutationPresentation: {
+        difficulty: 36,
+        windowOpen: true,
+      },
+      version: 1,
+    });
+    expect(response.json()).not.toHaveProperty("encounter");
+    expect(response.json()).not.toHaveProperty("archivedRounds");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.combatExperienceDifficulty).toBe(36);
+  });
+
+  it("returns a typed action conflict without exposing persistence details", async () => {
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      user: mocks.adminUser,
+    });
+    const { EncounterCombatWriteError } = await import("@glantri/database");
+    mocks.encounterService.updateCombatEncounter.mockRejectedValueOnce(
+      new EncounterCombatWriteError(
+        "transaction_conflict",
+        "Internal Prisma P2034 detail should not be returned.",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      payload: {
+        difficulty: 36,
+      },
+      url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "transaction_conflict",
+      error: "Combat state changed while saving. Refresh and try again.",
+    });
+    expect(response.body).not.toContain("Prisma");
+    expect(response.body).not.toContain("updateMany");
+  });
+
+  it("preserves stale-revision semantics after persistence detects a newer revision", async () => {
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      user: mocks.adminUser,
+    });
+    const { EncounterCombatWriteError } = await import("@glantri/database");
+    mocks.encounterService.updateCombatEncounter.mockRejectedValueOnce(
+      new EncounterCombatWriteError(
+        "stale_revision",
+        "Encounter revision changed before combat state could be saved.",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        difficulty: 36,
+      },
+      url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "stale_revision",
+      error: "Combat state changed before this task could be completed.",
+    });
   });
 
   it("lets the GM set a shared pairwise combat distance", async () => {
@@ -14558,7 +14644,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.phaseResolutionResults).toEqual([]);
   });
 
-  it("persists repaired state when loading an encounter with stale out-of-encounter target A1", async () => {
+  it("projects repaired state without writing when loading a stale out-of-encounter target A1", async () => {
     const combatEncounter = makeCombatEncounter({
       participants: [
         {
@@ -14660,7 +14746,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const updatedEncounter = response.json().encounter;
     expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
       participantId: "encounter-participant-2",
@@ -14669,6 +14755,7 @@ describe("scenarios route contract", () => {
     });
     expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[1].declaration).toBeUndefined();
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
   });
 
   it("clears a player-originated command-backed DE declaration", async () => {

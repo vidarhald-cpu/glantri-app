@@ -1068,8 +1068,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [revisionRefreshPending, setRevisionRefreshPending] = useState(false);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
-  const [revisionBoundHistory, setRevisionBoundHistory] =
-    useState<RevisionKeyedCombatHistory>();
+  const [revisionBoundHistory, setRevisionBoundHistory] = useState<RevisionKeyedCombatHistory>();
   const combatHistory = revisionBoundHistory?.history;
   const [combatLogSelection, setCombatLogSelection] = useState<CombatLogPresentationSelection>();
   const acceptedEncounterRef = useRef<EncounterSession | undefined>(undefined);
@@ -1197,42 +1196,34 @@ export default function ScenarioPlayerCombatPageContent({
     [getHistoryIdentity, historyCoordinator],
   );
 
-  const acceptEncounterSession = useCallback((nextEncounter: EncounterSession | undefined) => {
-    if (
-      !nextEncounter ||
-      !encounterId ||
-      !shouldAcceptPlayerCombatEncounter({
-        accepted: acceptedEncounterRef.current,
-        candidate: nextEncounter,
-        expectedEncounterId: encounterId,
-      })
-    ) {
-      return false;
-    }
+  const acceptEncounterSession = useCallback(
+    (nextEncounter: EncounterSession | undefined) => {
+      if (
+        !nextEncounter ||
+        !encounterId ||
+        !shouldAcceptPlayerCombatEncounter({
+          accepted: acceptedEncounterRef.current,
+          candidate: nextEncounter,
+          expectedEncounterId: encounterId,
+        })
+      ) {
+        return false;
+      }
 
-    acceptedEncounterRef.current = nextEncounter;
-    const nextHistoryIdentity = getHistoryIdentity(nextEncounter);
-    if (
-      !nextHistoryIdentity ||
-      !isMatchingPlayerCombatHistory({
-        candidate: acceptedHistoryRef.current,
-        identity: nextHistoryIdentity,
-      })
-    ) {
-      acceptedHistoryRef.current = undefined;
-      setRevisionBoundHistory(undefined);
-    }
-    setEncounterSession((current) =>
-      isCombatViewRevisionUnchanged({
-        acceptedUpdatedAt: current?.updatedAt,
-        candidateUpdatedAt: nextEncounter.updatedAt,
-      })
-        ? current
-        : nextEncounter,
-    );
-    void ensureCombatHistory(nextEncounter);
-    return true;
-  }, [encounterId, ensureCombatHistory, getHistoryIdentity]);
+      acceptedEncounterRef.current = nextEncounter;
+      setEncounterSession((current) =>
+        isCombatViewRevisionUnchanged({
+          acceptedUpdatedAt: current?.updatedAt,
+          candidateUpdatedAt: nextEncounter.updatedAt,
+        })
+          ? current
+          : nextEncounter,
+      );
+      void ensureCombatHistory(nextEncounter);
+      return true;
+    },
+    [encounterId, ensureCombatHistory, getHistoryIdentity],
+  );
   const rememberedParticipantSelection = useRememberedSelection(
     buildRememberedScopedSelectionKey({
       baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
@@ -1272,10 +1263,10 @@ export default function ScenarioPlayerCombatPageContent({
           loadContent: loadCanonicalContent,
           loadParticipants: () =>
             isGameMaster
-            ? loadScenarioParticipants(scenarioId)
-            : loadScenarioMyParticipant(scenarioId).then((participant) =>
-                participant ? [participant] : [],
-              ),
+              ? loadScenarioParticipants(scenarioId)
+              : loadScenarioMyParticipant(scenarioId).then((participant) =>
+                  participant ? [participant] : [],
+                ),
           loadProjection: () => loadScenarioPlayerProjection(scenarioId),
         });
 
@@ -1307,12 +1298,7 @@ export default function ScenarioPlayerCombatPageContent({
   }, [currentUser, historyCoordinator, isGameMaster, scenarioId, sessionLoading]);
 
   useEffect(() => {
-    if (
-      !currentUser ||
-      !encounterId ||
-      !slowContextReady ||
-      !historyPerspectiveKey
-    ) {
+    if (!currentUser || !encounterId || !slowContextReady || !historyPerspectiveKey) {
       return;
     }
 
@@ -2406,6 +2392,7 @@ export default function ScenarioPlayerCombatPageContent({
       }
 
       const { encounter, participant } = await submitCombatDeclarationOnServer({
+        currentEncounter: encounterSession,
         actionId: selectedActionId || undefined,
         adjustDistance:
           selectedActionId === "adjust_range_attack" &&
@@ -2480,6 +2467,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const { encounter } = await rollCombatFeintOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2510,6 +2498,7 @@ export default function ScenarioPlayerCombatPageContent({
       const encounter =
         descriptor.commandType === "respond_adjust_distance"
           ? await respondCombatAdjustDistanceOnServer({
+              currentEncounter: encounterSession,
               encounterId,
               executionGroupId: descriptor.executionGroupId!,
               expectedRevision: descriptor.expectedRevision,
@@ -2520,6 +2509,7 @@ export default function ScenarioPlayerCombatPageContent({
             })
           : descriptor.commandType === "roll_adjust_distance"
             ? await rollCombatAdjustDistanceOnServer({
+                currentEncounter: encounterSession,
                 encounterId,
                 executionGroupId: descriptor.executionGroupId!,
                 expectedRevision: descriptor.expectedRevision,
@@ -2558,6 +2548,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter } = await rollCombatInitiativeOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2591,6 +2582,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollCombatExperienceOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2630,6 +2622,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollRoundEndDistanceControlOnServer({
+        currentEncounter: encounterSession,
         distanceProposalId: descriptor.proposalId,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
@@ -2669,6 +2662,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const { encounter, participant } = await chooseRoundEndContinuedContactDistanceOnServer({
+        currentEncounter: encounterSession,
         chosenDistance: Number.parseInt(continuedContactDistanceChoice, 10),
         distanceProposalId: descriptor.proposalId,
         encounterId,
@@ -2712,6 +2706,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollRoundEndHealthCheckOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2749,6 +2744,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await backOutPhaseAttackOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2784,6 +2780,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await continuePhaseAttackOnServer({
+        currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2810,6 +2807,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const { encounter, participant } = await decideDoubleAttackPhase2OnServer({
+        currentEncounter: encounterSession,
         decision: doubleAttackPhase2Decision,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
@@ -2913,6 +2911,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
+        currentEncounter: encounterSession,
         actionId: descriptor.actionId,
         attackIndex: descriptor.attackIndex,
         attackModeId: descriptor.attackModeId,
@@ -3025,6 +3024,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     try {
       const encounter = await rollCombatParryOnServer({
+        currentEncounter: encounterSession,
         attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
@@ -3100,6 +3100,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const encounter = await rollOffensiveParryBrawlingOnServer({
+        currentEncounter: encounterSession,
         attackResultId: descriptor.attackResultId!,
         contestId: descriptor.contestId!,
         declarationId: descriptor.declarationId!,
@@ -3167,6 +3168,7 @@ export default function ScenarioPlayerCombatPageContent({
       const encounter =
         kind === "hitLocation"
           ? await rollCombatHitLocationOnServer({
+              currentEncounter: encounterSession,
               attackResultId: descriptor.attackResultId!,
               attackerParticipantId: descriptor.attackerParticipantId!,
               defenderParticipantId: descriptor.defenderParticipantId!,
@@ -3180,6 +3182,7 @@ export default function ScenarioPlayerCombatPageContent({
               taskId: descriptor.taskId,
             })
           : await rollCombatCriticalOnServer({
+              currentEncounter: encounterSession,
               attackResultId: descriptor.attackResultId!,
               attackerParticipantId: descriptor.attackerParticipantId!,
               criticalResultId: descriptor.criticalResultId!,
@@ -3243,6 +3246,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
     try {
       const { encounter } = await resolveCurrentCombatPhaseDamageOnServer({
+        currentEncounter: encounterSession,
         attackResultId: descriptor.attackResultId!,
         attackerParticipantId: descriptor.attackerParticipantId!,
         commandType: "resolve_damage",

@@ -166,6 +166,17 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("onClick={() => input.onInspect(cell)}");
   });
 
+  it("adopts compact mutation responses from the current authoritative encounter", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("currentEncounter: encounter");
+    expect(source).toContain(
+      'boundaryTransitionAction.commandType === "complete_round" ? undefined : encounter',
+    );
+    expect(source).toContain("acceptCanonicalEncounterState(nextEncounter");
+    expect(source).toContain("canAcceptCombatRoundViewRevision({");
+  });
+
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
     const source = readSource();
 

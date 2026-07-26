@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { scenarioParticipantStateSchema } from "@glantri/domain";
+import { encounterSessionSchema, scenarioParticipantStateSchema } from "@glantri/domain";
 
-import { EncounterService } from "./encounterService";
+import { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
+import { EncounterCombatWriteError, EncounterService } from "./encounterService";
 import { createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("EncounterService participant effect modifier refresh", () => {
@@ -89,4 +90,47 @@ describe("EncounterService participant effect modifier refresh", () => {
     ]);
     expect(eventLogs.at(-1)?.payload).toEqual(updated.state);
   });
+});
+
+describe("EncounterService combat persistence errors", () => {
+  it.each(["stale_revision", "transaction_conflict"] as const)(
+    "exposes %s through the service boundary without repository details",
+    async (code) => {
+      const repository = {
+        updateCombatEncounter: vi
+          .fn()
+          .mockRejectedValue(
+            new CombatPersistenceError(
+              code,
+              code === "transaction_conflict"
+                ? "Combat state changed while saving. Refresh and try again."
+                : "Encounter revision changed before combat state could be saved.",
+            ),
+          ),
+      };
+      const service = new EncounterService(repository as never, {} as never);
+      const session = encounterSessionSchema.parse({
+        actionLog: [],
+        createdAt: "2026-07-26T09:00:00.000Z",
+        currentRound: 1,
+        id: "encounter-1",
+        kind: "combat",
+        participants: [],
+        status: "active",
+        title: "Courtyard",
+        updatedAt: "2026-07-26T10:00:00.000Z",
+      });
+
+      const error = await service
+        .updateCombatEncounter({
+          encounterId: session.id,
+          expectedRevision: session.updatedAt,
+          session,
+        })
+        .catch((caughtError: unknown) => caughtError);
+
+      expect(error).toBeInstanceOf(EncounterCombatWriteError);
+      expect(error).toMatchObject({ code });
+    },
+  );
 });

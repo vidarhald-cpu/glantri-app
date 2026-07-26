@@ -6,6 +6,13 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(resolve(__dirname, "encounterRoutes.ts"), "utf8");
 
 describe("combat route canonical-conformance guards", () => {
+  it("negotiates compact active-only mutation responses before serialization", () => {
+    expect(source).toContain('app.addHook("preSerialization"');
+    expect(source).toContain("buildRequestedCombatMutationResponse({");
+    expect(source).toContain("prefersActiveCombatMutationResponse(");
+    expect(source).toContain("request.headers[ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER]");
+  });
+
   it("keeps workspace summaries and revision polling off the full encounter-list path", () => {
     expect(source).toContain('app.get("/scenarios/:scenarioId/encounter-summaries"');
     expect(source).toContain("listEncounterSummariesByScenario");
@@ -13,6 +20,18 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain('app.get("/encounters/:encounterId/revision"');
     expect(source).toContain("getEncounterMetadataById");
     expect(source).toContain("buildEncounterSessionRevisionFromMetadataView");
+  });
+
+  it("keeps exact encounter GET projection-only", () => {
+    const routeStart = source.indexOf('app.get("/encounters/:encounterId"');
+    const nextRoute = source.indexOf('app.get("/encounters/:encounterId/revision"', routeStart);
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).toContain("persistChanges: false");
+    expect(routeSource).not.toContain("updateCombatEncounter");
+    expect(routeSource).not.toContain("updateScenarioParticipantState");
   });
 
   it("loads combat history through the narrow history-source boundary", () => {

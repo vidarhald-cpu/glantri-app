@@ -7,6 +7,7 @@ import {
   encounterSessionSchema,
   type EncounterSession,
 } from "@glantri/domain";
+import { Prisma } from "@prisma/client";
 
 import {
   COMBAT_STORAGE_MODE_LEGACY,
@@ -54,15 +55,17 @@ function createClientFixture(input?: {
   storageMode?: string;
   updateCount?: number;
 }) {
+  const currentRecord = {
+    combatArchiveCount: input?.archiveCount ?? 0,
+    combatStorageMode: input?.storageMode ?? COMBAT_STORAGE_MODE_LEGACY,
+    updatedAt: new Date(revision1),
+  };
   const encounter = {
     findUniqueOrThrow: vi
       .fn()
-      .mockResolvedValueOnce({
-        combatArchiveCount: input?.archiveCount ?? 0,
-        combatStorageMode: input?.storageMode ?? COMBAT_STORAGE_MODE_LEGACY,
-        updatedAt: new Date(revision1),
-      })
-      .mockResolvedValue({ updatedAt: revision2 }),
+      .mockImplementation(async (query: { select?: { combatStorageMode?: boolean } }) =>
+        query.select?.combatStorageMode ? currentRecord : { updatedAt: revision2 },
+      ),
     updateMany: vi.fn().mockResolvedValue({ count: input?.updateCount ?? 1 }),
     update: vi.fn().mockResolvedValue({ updatedAt: revision2 }),
   };
@@ -79,6 +82,16 @@ function createClientFixture(input?: {
     },
   };
   return client;
+}
+
+function retryableTransactionConflict() {
+  return new Prisma.PrismaClientKnownRequestError(
+    "Transaction failed due to a write conflict or a deadlock.",
+    {
+      clientVersion: "6.19.2",
+      code: "P2034",
+    },
+  );
 }
 
 describe("combatStatePersistenceRepository", () => {
@@ -209,6 +222,110 @@ describe("combatStatePersistenceRepository", () => {
     expect(staleClient.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
   });
 
+  it("retries the complete serializable transaction only for Prisma P2034", async () => {
+    const client = createClientFixture();
+    client.encounter.updateMany
+      .mockRejectedValueOnce(retryableTransactionConflict())
+      .mockResolvedValueOnce({ count: 1 });
+    const retryDelay = vi.fn().mockResolvedValue(undefined);
+    const repository = createPrismaCombatStatePersistenceRepository(client as never, {
+      retryDelay,
+    });
+
+    const saved = await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      session: buildSession(0),
+    });
+
+    expect(saved.updatedAt).toBe(revision2.toISOString());
+    expect(client.$transaction).toHaveBeenCalledTimes(2);
+    expect(retryDelay).toHaveBeenCalledTimes(1);
+    expect(client.encounter.findUniqueOrThrow).toHaveBeenCalledTimes(3);
+    expect(client.encounterActiveCombatState.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads storage mode and preserves stale revision after a retryable conflict", async () => {
+    const client = createClientFixture();
+    client.encounter.findUniqueOrThrow
+      .mockResolvedValueOnce({
+        combatArchiveCount: 0,
+        combatStorageMode: COMBAT_STORAGE_MODE_LEGACY,
+        updatedAt: new Date(revision1),
+      })
+      .mockResolvedValueOnce({
+        combatArchiveCount: 0,
+        combatStorageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+        updatedAt: revision2,
+      });
+    client.encounter.updateMany.mockRejectedValueOnce(retryableTransactionConflict());
+    const repository = createPrismaCombatStatePersistenceRepository(client as never, {
+      retryDelay: async () => undefined,
+    });
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(0),
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+
+    expect(client.$transaction).toHaveBeenCalledTimes(2);
+    expect(client.encounter.updateMany).toHaveBeenCalledTimes(1);
+    expect(client.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed conflict after bounded P2034 exhaustion", async () => {
+    const client = createClientFixture();
+    client.encounter.updateMany.mockRejectedValue(retryableTransactionConflict());
+    const retryDelay = vi.fn().mockResolvedValue(undefined);
+    const repository = createPrismaCombatStatePersistenceRepository(client as never, {
+      maxTransactionAttempts: 3,
+      retryDelay,
+    });
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(0),
+      }),
+    ).rejects.toMatchObject({
+      code: "transaction_conflict",
+      message: "Combat state changed while saving. Refresh and try again.",
+    });
+
+    expect(client.$transaction).toHaveBeenCalledTimes(3);
+    expect(retryDelay).toHaveBeenCalledTimes(2);
+    expect(client.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not retry validation or non-P2034 persistence errors", async () => {
+    const client = createClientFixture();
+    client.encounter.updateMany.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed.", {
+        clientVersion: "6.19.2",
+        code: "P2002",
+      }),
+    );
+    const retryDelay = vi.fn().mockResolvedValue(undefined);
+    const repository = createPrismaCombatStatePersistenceRepository(client as never, {
+      retryDelay,
+    });
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(0),
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
+
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(retryDelay).not.toHaveBeenCalled();
+  });
+
   it("active payload size is independent of archived round count", async () => {
     const sizes: number[] = [];
     for (const count of [0, 10, 30, 50]) {
@@ -292,5 +409,7 @@ describe("combatStatePersistenceRepository", () => {
     expect(source).not.toContain("encounterArchivedCombatRound.updateMany");
     expect(source).toContain("encounterArchivedCombatRound.create");
     expect(source).toContain("encounterArchivedCombatRound.deleteMany");
+    expect(source).toContain('error.code === "P2034"');
+    expect(source).not.toContain("catch (error) {\n          if (error instanceof Error)");
   });
 });

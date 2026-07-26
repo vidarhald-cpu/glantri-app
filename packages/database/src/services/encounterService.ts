@@ -11,6 +11,7 @@ import {
   createPrismaEncounterRepository,
   type EncounterRepository,
 } from "../repositories/encounterRepository";
+import { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
 import {
   createPrismaScenarioRepository,
   type ScenarioRepository,
@@ -21,6 +22,25 @@ import {
   setScenarioPhase,
   startScenario,
 } from "@glantri/domain";
+
+export class EncounterCombatWriteError extends Error {
+  constructor(
+    readonly code: "stale_revision" | "transaction_conflict",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "EncounterCombatWriteError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        configurable: true,
+        enumerable: false,
+        value: cause,
+        writable: true,
+      });
+    }
+  }
+}
 
 export class EncounterService {
   constructor(
@@ -49,9 +69,7 @@ export class EncounterService {
     return this.encounterRepository.listEncountersByScenario(scenarioId);
   }
 
-  async listEncounterSummariesByScenario(
-    scenarioId: string,
-  ): Promise<EncounterSessionSummary[]> {
+  async listEncounterSummariesByScenario(scenarioId: string): Promise<EncounterSessionSummary[]> {
     return this.encounterRepository.listEncounterSummariesByScenario(scenarioId);
   }
 
@@ -71,7 +89,17 @@ export class EncounterService {
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession> {
-    return this.encounterRepository.updateCombatEncounter(input);
+    try {
+      return await this.encounterRepository.updateCombatEncounter(input);
+    } catch (error) {
+      if (
+        error instanceof CombatPersistenceError &&
+        (error.code === "stale_revision" || error.code === "transaction_conflict")
+      ) {
+        throw new EncounterCombatWriteError(error.code, error.message, error);
+      }
+      throw error;
+    }
   }
 
   async updateScenarioLiveState(input: {
@@ -99,7 +127,10 @@ export class EncounterService {
 
   async startScenario(scenarioId: string): Promise<Scenario> {
     const existingScenario = await this.assertScenarioExists(scenarioId);
-    const liveState = startScenario(existingScenario.liveState ?? createScenarioLiveState(), new Date().toISOString());
+    const liveState = startScenario(
+      existingScenario.liveState ?? createScenarioLiveState(),
+      new Date().toISOString(),
+    );
     const scenario = await this.scenarioRepository.updateScenarioLiveState(scenarioId, liveState);
 
     await this.scenarioRepository.createScenarioEventLog({
@@ -131,10 +162,7 @@ export class EncounterService {
     return scenario;
   }
 
-  async setScenarioPhase(input: {
-    phase: 1 | 2;
-    scenarioId: string;
-  }): Promise<Scenario> {
+  async setScenarioPhase(input: { phase: 1 | 2; scenarioId: string }): Promise<Scenario> {
     const existingScenario = await this.assertScenarioExists(input.scenarioId);
     const liveState = setScenarioPhase(
       existingScenario.liveState ?? createScenarioLiveState(),

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CombatRoundStepSnapshot, EncounterParticipant } from "@glantri/domain";
+import {
+  buildActiveCombatMutationResponse,
+  combatRoundStateSchema,
+  encounterSessionSchema,
+  type CombatRoundStepSnapshot,
+  type EncounterParticipant,
+} from "@glantri/domain";
 
 type LocalServiceClientModule = typeof import("./localServiceClient");
 type FetchMock = ReturnType<
@@ -363,9 +369,7 @@ describe("localServiceClient wire contract", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = await loadClient();
 
-    await expect(client.loadScenarioEncounterSummaries("scenario-1")).resolves.toEqual([
-      summary,
-    ]);
+    await expect(client.loadScenarioEncounterSummaries("scenario-1")).resolves.toEqual([summary]);
     await expect(client.loadEncounterRevision("encounter-1")).resolves.toEqual(revision);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
@@ -633,6 +637,121 @@ describe("localServiceClient wire contract", () => {
       },
       method: "POST",
       url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+    });
+  });
+
+  it("adopts an active-only combat mutation response and preserves local archived rounds", async () => {
+    const currentEncounter = encounterSessionSchema.parse({
+      combatRoundState: combatRoundStateSchema.parse({
+        encounterId: "encounter-1",
+        participants: [{ label: "Aria", participantId: "aria" }],
+        rounds: [{ encounterId: "encounter-1", roundNumber: 1 }],
+      }),
+      createdAt: "2026-07-26T09:00:00.000Z",
+      id: "encounter-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const nextEncounter = encounterSessionSchema.parse({
+      ...currentEncounter,
+      combatRoundState: {
+        ...currentEncounter.combatRoundState!,
+        currentStep: "initiative_phase_1",
+      },
+      updatedAt: "2026-07-26T10:01:00.000Z",
+    });
+    const response = buildActiveCombatMutationResponse({
+      encounter: nextEncounter,
+      mutationPresentation: {
+        initiative: { rolls: [6, 2], total: 8 },
+      },
+    });
+    const fetchMock = stubFetch(response);
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatInitiativeOnServer({
+        currentEncounter,
+        encounterId: "encounter-1",
+        executionGroupId: "group-initiative",
+        expectedRevision: currentEncounter.updatedAt,
+        initiativeBase: 3,
+        initiativeModifierAdjustment: -1,
+        scenarioParticipantId: "participant-1",
+        taskId: "task-initiative",
+      }),
+    ).resolves.toMatchObject({
+      encounter: {
+        combatRoundState: {
+          currentStep: "initiative_phase_1",
+          rounds: [{ encounterId: "encounter-1", roundNumber: 1 }],
+        },
+        updatedAt: "2026-07-26T10:01:00.000Z",
+      },
+      initiative: { rolls: [6, 2], total: 8 },
+    });
+    expectFetchCall(fetchMock, {
+      body: {
+        initiativeBase: 3,
+        initiativeModifierAdjustment: -1,
+        scenarioParticipantId: "participant-1",
+        executionGroupId: "group-initiative",
+        expectedRevision: currentEncounter.updatedAt,
+        taskId: "task-initiative",
+      },
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+    });
+  });
+
+  it("does not serialize the local authoritative encounter in a generic mutation body", async () => {
+    const currentEncounter = encounterSessionSchema.parse({
+      combatRoundState: combatRoundStateSchema.parse({
+        encounterId: "encounter-1",
+        participants: [{ label: "Aria", participantId: "aria" }],
+        rounds: [{ encounterId: "encounter-1", roundNumber: 1 }],
+      }),
+      createdAt: "2026-07-26T09:00:00.000Z",
+      id: "encounter-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const response = buildActiveCombatMutationResponse({
+      encounter: {
+        ...currentEncounter,
+        updatedAt: "2026-07-26T10:01:00.000Z",
+      },
+    });
+    const fetchMock = stubFetch(response);
+    const client = await loadClient();
+
+    await client.respondCombatAdjustDistanceOnServer({
+      currentEncounter,
+      encounterId: "encounter-1",
+      executionGroupId: "adjust-distance-group",
+      expectedRevision: currentEncounter.updatedAt,
+      proposalId: "adjust-distance-proposal",
+      response: "allow",
+      scenarioParticipantId: "aria",
+      taskId: "adjust-distance-task",
+    });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        encounterId: "encounter-1",
+        executionGroupId: "adjust-distance-group",
+        expectedRevision: currentEncounter.updatedAt,
+        proposalId: "adjust-distance-proposal",
+        response: "allow",
+        scenarioParticipantId: "aria",
+        taskId: "adjust-distance-task",
+      },
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/respond-adjust-distance",
     });
   });
 

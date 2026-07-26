@@ -708,3 +708,18 @@ work completed sees a recorded/waiting state rather than an unavailable-task err
 calculation contract may include a `Pending` subsection, but those rows never enter `Modifiers`,
 `Effective skill`, or `Total` for the creating group. See
 `combat-initiative-group-timing.md` for lifecycle and undo/reload rules.
+
+## Active mutation adoption
+
+Ordinary GM, Player, and GM-selected Player combat mutations adopt
+`ActiveCombatMutationResponse` as the authoritative post-command state. The
+accepted revision, active combat state, command envelope, next-task identity,
+and participant updates replace prior revision-bound action data immediately.
+Current Action, tracker, inspector, modifier panels, and live result panels
+reproject from that active state; no client synthesizes a next task.
+
+Immutable history presentation is not cleared during active replacement. It is
+replaced by the revision-keyed history coordinator only when the matching safe
+projection arrives. Archived rounds, history, and a full encounter never appear
+in the active mutation response. Exact encounter GET/reload remains unchanged.
+See `active-combat-mutation-response.md`.

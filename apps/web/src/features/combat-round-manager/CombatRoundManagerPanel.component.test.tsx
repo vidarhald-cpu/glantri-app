@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   loadEncounter: vi.fn(),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
+  setCombatExperienceDifficulty: vi.fn(),
   submitDeclaration: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
+    setCombatExperienceDifficultyOnServer: mocks.setCombatExperienceDifficulty,
     submitCombatDeclarationOnServer: mocks.submitDeclaration,
   };
 });
@@ -207,6 +209,19 @@ function buildEncounter(): EncounterSession {
   return encounterSessionSchema.parse({
     ...encounter,
     combatRoundState: declarationReady,
+  });
+}
+
+function buildCombatExperiencePendingEncounter(): EncounterSession {
+  const resolved = buildEncounter();
+  const withoutCombatState = encounterSessionSchema.parse({
+    ...resolved,
+    combatRoundState: undefined,
+  });
+
+  return encounterSessionSchema.parse({
+    ...withoutCombatState,
+    combatRoundState: initializeCombatRoundState({ encounter: withoutCombatState }),
   });
 }
 
@@ -402,6 +417,14 @@ function scenarioParticipant(input: {
     scenarioId: "scenario-1",
     snapshot: {
       displayName: input.name,
+      equipmentState: {
+        activeLoadoutByCharacterId: {
+          [input.id]: { activeAmmoItemIds: [] },
+        },
+        itemsById: {},
+        locationsById: {},
+        templatesById: {},
+      },
       sourceUpdatedAt: "2026-07-23T10:00:00.000Z",
     },
     sourceType: "character",
@@ -433,6 +456,80 @@ function scenarioParticipant(input: {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
+  it("sends one request and disables the action while the save is pending", async () => {
+    const encounter = buildCombatExperiencePendingEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const savedState = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: combatRoundStateSchema.parse(encounter.combatRoundState),
+    });
+    let resolveRequest:
+      | ((value: { difficulty: number; encounter: EncounterSession }) => void)
+      | undefined;
+    mocks.setCombatExperienceDifficulty.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    const action = await screen.findByRole("button", {
+      name: "Open Combat Experience",
+    });
+    fireEvent.click(action);
+    fireEvent.click(action);
+
+    expect(mocks.setCombatExperienceDifficulty).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect((action as HTMLButtonElement).disabled).toBe(true));
+
+    resolveRequest?.({
+      difficulty: 26,
+      encounter: encounterSessionSchema.parse({
+        ...encounter,
+        combatRoundState: savedState,
+        updatedAt: "2026-07-23T10:00:01.000Z",
+      }),
+    });
+    await waitFor(() => expect(mocks.setCombatExperienceDifficulty).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the encounter rendered and shows a transaction conflict in the action error area", async () => {
+    const encounter = buildCombatExperiencePendingEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.setCombatExperienceDifficulty.mockRejectedValue(
+      new (await import("@/lib/api/apiClient")).ApiRequestError(
+        "Combat state changed while saving. Refresh and try again.",
+        409,
+        { code: "transaction_conflict" },
+      ),
+    );
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open Combat Experience" }));
+
+    expect(
+      await screen.findByText("Combat state changed while saving. Refresh and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Combat Round Manager" })).toBeInTheDocument();
+    expect(screen.queryByText("Load failed")).not.toBeInTheDocument();
+  });
 });
 
 describe("CombatRoundManagerPanel Double Attack declaration form", () => {
@@ -611,11 +708,9 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
     ];
     mocks.rollAttack.mockRejectedValue(
-      new (await import("@/lib/api/apiClient")).ApiRequestError(
-        "Combat state changed.",
-        409,
-        { code: "stale_revision" },
-      ),
+      new (await import("@/lib/api/apiClient")).ApiRequestError("Combat state changed.", 409, {
+        code: "stale_revision",
+      }),
     );
     mocks.loadEncounter.mockResolvedValue(refreshedEncounter);
     mocks.loadParticipants.mockResolvedValue(participants);

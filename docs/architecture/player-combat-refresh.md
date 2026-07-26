@@ -86,13 +86,21 @@ Every accepted Player Combat mutation passes its returned encounter through
 the same adoption function:
 
 1. validate encounter identity and monotonic revision;
-2. replace the authoritative encounter immediately;
-3. invalidate history and action descriptors from the older revision;
+2. replace the authoritative active combat state and revision immediately;
+3. invalidate action descriptors from the older revision while retaining the
+   last confirmed history presentation;
 4. request the matching player-safe history once;
 5. accept history only if the encounter revision and perspective still match.
 
 The mutation is never replayed. A concurrent older poll or history response
 cannot replace the mutation result.
+
+Ordinary combat mutations now negotiate `ActiveCombatMutationResponse` version
+1 rather than transferring a complete `EncounterSession`. The shared client
+retains immutable locally loaded rounds and non-combat metadata while replacing
+the active state. History remains owned by the revision-keyed coordinator and
+is not embedded in the mutation response. See
+`active-combat-mutation-response.md`.
 
 ## Polling and focus
 
