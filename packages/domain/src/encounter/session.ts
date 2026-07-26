@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { ScenarioParticipant } from "../campaign/scenario";
 import { combatRoundStateSchema, type CombatRoundState } from "./combatRoundManager";
+import type { EncounterParticipantReadSource } from "./combatReadModels";
 
 const idSchema = z.string().min(1);
 const encounterCombatRoundStateSchema = combatRoundStateSchema as z.ZodType<CombatRoundState>;
@@ -418,7 +419,7 @@ function encounterParticipantMatchesScenarioParticipant(input: {
 }
 
 export function resolveEncounterParticipantMembership(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
 }): EffectiveEncounterParticipants {
   const explicitMode =
@@ -509,7 +510,7 @@ export function resolveEncounterParticipantByRollParticipantId(input: {
  */
 export function resolveEncounterParticipantForViewer(input: {
   characterId?: string | null;
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   requestedParticipantId?: string | null;
   scenarioParticipants: ScenarioParticipant[];
   viewer: EncounterParticipantViewer;
@@ -596,7 +597,7 @@ export function resolveEncounterParticipantForViewer(input: {
 }
 
 export function formatEncounterParticipantMembershipLabel(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
 }): string {
   const membership = resolveEncounterParticipantMembership(input);
@@ -607,7 +608,7 @@ export function formatEncounterParticipantMembershipLabel(input: {
 }
 
 export function isUserAssignedToEncounterMembership(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
 }): boolean {

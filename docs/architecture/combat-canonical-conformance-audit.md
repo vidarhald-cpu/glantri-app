@@ -12,6 +12,8 @@ Attack-lineage remediation: 2026-07-23
 
 Workspace loading remediation: 2026-07-26
 
+Combat read-boundary remediation: 2026-07-26
+
 Campaign workspace lists now use the strict shared
 `EncounterSessionSummary` contract and the GM database path does not select
 `sessionJson`. Summary facts authorize no combat command and cannot project
@@ -22,6 +24,16 @@ Only a newer revision triggers one exact encounter load. Selection request
 tokens, encounter-ID checks, and latest-revision adoption prevent late list,
 selection, or poll responses from replacing newer mutation state. Scenario
 authorization for summary, full, and revision endpoints remains unchanged.
+
+Read-only combat routes now declare one strict source contract. Revision uses
+metadata only; history uses active history facts plus immutable archived rounds;
+and explicit full encounter reads remain available for exact encounter and
+mutation consumers. `projectCombatHistory` cannot accept an
+`EncounterSession`. Player authorization and viewer-aware sanitation still
+occur before an outward history response, and every read view carries the exact
+persisted encounter revision. The transitional repository still materializes
+the unified `sessionJson` for active/archive/history views; this is a storage
+cost, not a fallback authority path.
 
 ## 1. Executive summary
 
@@ -126,30 +138,30 @@ The classification used by this audit is:
 
 “Fully conformant” here means the current task-specific path, not adjacent obsolete API routes.
 
-| Task kind                                       | Status                 | Audit result                                                                                                                                                                                                         |
-| ----------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `submit_declaration`                            | Confirmed violation    | Projection, descriptor, parsing, and authorization are exact. GM submission uses `inspectorDraft`, phase loadout summaries, and generated context without proving those values belong to the descriptor participant. |
-| `combat_experience`                             | Fully conformant       | Declaration and A1/A2 triggers are task-bound; phase/opportunity/trigger are recorded; player-safe result facts retain completion.                                                                                   |
-| `modifier_review`                               | Confirmed violation    | Task identity is exact, but the shared GM declaration/review handler submits the current inspector draft/loadout for the descriptor participant.                                                                     |
-| `roll_initiative`                               | Fully conformant       | Participant, phase, group, task, revision, actor, and authoritative initiative inputs are checked. Local UI values are calculation input, not task identity.                                                         |
-| `commit_initiative`                             | Minor conformance risk | Current endpoint is descriptor-bound, but the ownerless task fabricates tracker ownership from `currentCursor`.                                                                                                      |
+| Task kind                                       | Status                 | Audit result                                                                                                                                                                                                                             |
+| ----------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `submit_declaration`                            | Confirmed violation    | Projection, descriptor, parsing, and authorization are exact. GM submission uses `inspectorDraft`, phase loadout summaries, and generated context without proving those values belong to the descriptor participant.                     |
+| `combat_experience`                             | Fully conformant       | Declaration and A1/A2 triggers are task-bound; phase/opportunity/trigger are recorded; player-safe result facts retain completion.                                                                                                       |
+| `modifier_review`                               | Confirmed violation    | Task identity is exact, but the shared GM declaration/review handler submits the current inspector draft/loadout for the descriptor participant.                                                                                         |
+| `roll_initiative`                               | Fully conformant       | Participant, phase, group, task, revision, actor, and authoritative initiative inputs are checked. Local UI values are calculation input, not task identity.                                                                             |
+| `commit_initiative`                             | Minor conformance risk | Current endpoint is descriptor-bound, but the ownerless task fabricates tracker ownership from `currentCursor`.                                                                                                                          |
 | `attack`                                        | Fully conformant       | The exact opportunity, declaration, attack index, target, weapon source/template/instance, mode, task, execution/initiative group, revision, effect cutoff, and modifier fingerprints flow through GM/player invocation and persistence. |
-| `parry`                                         | Fully conformant       | Task/group/attack-result identities authorize directly and retain the exact upstream opportunity lineage.                                                                                                            |
-| `damage_roll`                                   | Fully conformant       | Task and roll expression are exact; new attack results persist the opportunity-specific weapon DMB and armor class used by downstream damage.                                                                        |
-| `hit_location`                                  | Fully conformant       | Exact attack/result/opportunity lineage is retained; new live attacks use persisted source-specific DMB/armor inputs. Legacy snapshot fallback is read-only compatibility.                                           |
-| `critical`                                      | Fully conformant       | Exact critical identities authorize against an attack result that retains its opportunity and source lineage.                                                                                                        |
-| `damage_review`                                 | Fully conformant       | Both resolution and commit validate exact attack/result/review/group/task identities; editable review rows remain intentional GM input.                                                                              |
-| `double_attack_decision`                        | Fully conformant       | Choice is form input; participant, phase, opportunity, group, task, and revision are descriptor-bound.                                                                                                               |
-| `feint_attacker_roll` / `feint_defender_roll`   | Fully conformant       | Current roll routes require exact proposal, participant, group, task, and revision. The obsolete feasibility mutation route was removed.                                                                             |
-| `feint_commit`                                  | Fully conformant       | Proposal and task identities are exact; GM adjustment/review values are intentional command input.                                                                                                                   |
-| Adjust Distance response/adjustment/roll/commit | Fully conformant       | Proposal/pair/opportunity/participant identities are validated. GM adjustment participant is editable input but domain-limited to the proposal's attacker/defender.                                                  |
-| `distance_roll`                                 | Fully conformant       | Both player and GM proxy routes authorize exact participant, opponent, pair, proposal, group, task, and revision.                                                                                                    |
-| `distance_commit`                               | Minor conformance risk | Mutation is exact. The ownerless task assigns its tracker facet to participant A and GM UI separately chooses a projected SU task.                                                                                   |
-| `health_review`                                 | Fully conformant       | Participant, health-roll, proposal, group, task, revision, and proxy authority are exact.                                                                                                                            |
-| `participant_review`                            | Not applicable         | This is a process/stage kind, not a currently emitted task. The actual mutation task is `effect_review`. Keeping it in `CombatProgressionTaskKind` is a P3 type/matrix ambiguity.                                    |
-| `effect_review`                                 | Fully conformant       | Exact active participant, group, task, and revision; ownerless GM mutation is authoritative.                                                                                                                         |
-| `round_end_prepare`                             | Minor conformance risk | Invocation uses the exact descriptor and is keyed by task + revision. Its tracker participant is fabricated from `currentCursor`.                                                                                    |
-| `gm_advance_boundary`                           | Minor conformance risk | Authority is fully descriptor-bound, including command, revision, task, group, current boundary, and target boundary. Some ownerless boundary tasks still fabricate a tracker owner.                                 |
+| `parry`                                         | Fully conformant       | Task/group/attack-result identities authorize directly and retain the exact upstream opportunity lineage.                                                                                                                                |
+| `damage_roll`                                   | Fully conformant       | Task and roll expression are exact; new attack results persist the opportunity-specific weapon DMB and armor class used by downstream damage.                                                                                            |
+| `hit_location`                                  | Fully conformant       | Exact attack/result/opportunity lineage is retained; new live attacks use persisted source-specific DMB/armor inputs. Legacy snapshot fallback is read-only compatibility.                                                               |
+| `critical`                                      | Fully conformant       | Exact critical identities authorize against an attack result that retains its opportunity and source lineage.                                                                                                                            |
+| `damage_review`                                 | Fully conformant       | Both resolution and commit validate exact attack/result/review/group/task identities; editable review rows remain intentional GM input.                                                                                                  |
+| `double_attack_decision`                        | Fully conformant       | Choice is form input; participant, phase, opportunity, group, task, and revision are descriptor-bound.                                                                                                                                   |
+| `feint_attacker_roll` / `feint_defender_roll`   | Fully conformant       | Current roll routes require exact proposal, participant, group, task, and revision. The obsolete feasibility mutation route was removed.                                                                                                 |
+| `feint_commit`                                  | Fully conformant       | Proposal and task identities are exact; GM adjustment/review values are intentional command input.                                                                                                                                       |
+| Adjust Distance response/adjustment/roll/commit | Fully conformant       | Proposal/pair/opportunity/participant identities are validated. GM adjustment participant is editable input but domain-limited to the proposal's attacker/defender.                                                                      |
+| `distance_roll`                                 | Fully conformant       | Both player and GM proxy routes authorize exact participant, opponent, pair, proposal, group, task, and revision.                                                                                                                        |
+| `distance_commit`                               | Minor conformance risk | Mutation is exact. The ownerless task assigns its tracker facet to participant A and GM UI separately chooses a projected SU task.                                                                                                       |
+| `health_review`                                 | Fully conformant       | Participant, health-roll, proposal, group, task, revision, and proxy authority are exact.                                                                                                                                                |
+| `participant_review`                            | Not applicable         | This is a process/stage kind, not a currently emitted task. The actual mutation task is `effect_review`. Keeping it in `CombatProgressionTaskKind` is a P3 type/matrix ambiguity.                                                        |
+| `effect_review`                                 | Fully conformant       | Exact active participant, group, task, and revision; ownerless GM mutation is authoritative.                                                                                                                                             |
+| `round_end_prepare`                             | Minor conformance risk | Invocation uses the exact descriptor and is keyed by task + revision. Its tracker participant is fabricated from `currentCursor`.                                                                                                        |
+| `gm_advance_boundary`                           | Minor conformance risk | Authority is fully descriptor-bound, including command, revision, task, group, current boundary, and target boundary. Some ownerless boundary tasks still fabricate a tracker owner.                                                     |
 
 Reload and undo are generally canonical: task IDs are deterministic projections of surviving facts,
 and undo removes/reverts the underlying command facts. The important limitation is that task/group

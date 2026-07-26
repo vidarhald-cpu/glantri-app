@@ -2227,7 +2227,9 @@ export interface CombatRoundState {
   unbalancedConditions: z.infer<typeof unbalancedCombatConditionSchema>[];
 }
 
-export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, unknown> = z.object({
+export type ActiveCombatRoundState = Omit<CombatRoundState, "rounds">;
+
+const activeCombatRoundStateShape = {
   adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
@@ -2246,11 +2248,25 @@ export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, u
   participants: z.array(combatRoundParticipantStateSchema).default([]),
   roundEndReview: combatRoundEndReviewSchema.optional(),
   roundNumber: z.number().int().positive().default(1),
-  rounds: z.array(completedCombatRoundSchema).default([]),
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
   unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
+};
+
+/**
+ * Canonical mutable-round read view. Archived rounds are intentionally not
+ * accepted here so active-state consumers cannot acquire history implicitly.
+ */
+export const activeCombatRoundStateSchema: z.ZodType<
+  ActiveCombatRoundState,
+  z.ZodTypeDef,
+  unknown
+> = z.object(activeCombatRoundStateShape).strict();
+
+export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, unknown> = z.object({
+  ...activeCombatRoundStateShape,
+  rounds: z.array(completedCombatRoundSchema).default([]),
 });
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;

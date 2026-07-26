@@ -32,15 +32,20 @@ endpoint when workspace presentation needs the selected encounter.
   behavior.
 - `GET /encounters/:encounterId/revision`
   returns only the compact revision contract after the same scenario access
-  check.
+  check. Its repository source is metadata-only and cannot materialize combat
+  state.
 - `GET /scenarios/:scenarioId/encounters`
   remains the explicit full-list endpoint for the scenario editor, which edits
   membership across encounters. It is not used by the campaign workspace.
 
 Player summaries carry only `viewerAssigned`; they do not expose encounter
 participant identities. The API currently derives that fact from the full
-player-safe membership model. The measured GM performance path uses the
-metadata-only repository query.
+player-safe membership model. That derivation now uses the strict
+`EncounterAccessMetadataView`, so it no longer constructs a full
+`EncounterSession`; because membership is still stored in `sessionJson`, the
+database must nevertheless materialize that JSON for player summaries. The
+measured GM path uses `EncounterMetadataView` and does not select `sessionJson`.
+See `combat-read-models.md`.
 
 ## Workspace initialization
 

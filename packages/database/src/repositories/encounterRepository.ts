@@ -12,7 +12,7 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
-function mapEncounter(record: {
+export function mapEncounterRecord(record: {
   campaignId: string | null;
   createdAt: Date;
   id: string;
@@ -97,14 +97,14 @@ export function createPrismaEncounterRepository(): EncounterRepository {
         },
       });
 
-      return mapEncounter(record);
+      return mapEncounterRecord(record);
     },
     async getEncounterById(encounterId) {
       const record = await prisma.encounter.findUnique({
         where: { id: encounterId },
       });
 
-      return record ? mapEncounter(record) : null;
+      return record ? mapEncounterRecord(record) : null;
     },
     async getEncounterSummaryById(encounterId) {
       const record = await prisma.encounter.findUnique({
@@ -128,7 +128,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
         where: { scenarioId },
       });
 
-      return records.map(mapEncounter);
+      return records.map(mapEncounterRecord);
     },
     async listEncounterSummariesByScenario(scenarioId) {
       const records = await prisma.encounter.findMany({
@@ -165,7 +165,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
         where: { id: input.encounterId },
       });
 
-      return mapEncounter(record);
+      return mapEncounterRecord(record);
     },
   };
 }

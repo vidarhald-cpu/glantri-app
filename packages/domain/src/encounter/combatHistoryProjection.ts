@@ -11,6 +11,10 @@ import type {
   CompletedCombatRound,
 } from "./combatRoundManager";
 import {
+  materializeCombatHistoryRoundState,
+  type CombatHistorySourceView,
+} from "./combatReadModels";
+import {
   buildCombatProgressionProjection,
   projectCombatProgressionPresentation,
   type CombatProgressionPresentationProjection,
@@ -637,12 +641,15 @@ export function projectCombatHistory(input: {
   currentParryModifierValidation?: CombatParryModifierValidationProjection;
   participants: readonly CombatHistoryParticipantInput[];
   progressionProjection?: CombatProgressionProjection;
-  sourceUpdatedAt?: string;
-  state: CombatRoundState;
+  source: CombatHistorySourceView;
   viewer: CombatHistoryViewer;
 }): CombatHistoryProjection {
+  const state = materializeCombatHistoryRoundState(input.source);
+  if (!state) {
+    throw new Error("Combat history projection requires an active combat state.");
+  }
   const progression = projectCombatProgressionPresentation({
-    projection: input.progressionProjection ?? buildCombatProgressionProjection(input.state),
+    projection: input.progressionProjection ?? buildCombatProgressionProjection(state),
     viewer: input.viewer,
   });
   const visibleParticipants = input.participants.filter((participant) =>
@@ -651,11 +658,11 @@ export function projectCombatHistory(input: {
   const labels = new Map(
     visibleParticipants.map((participant) => [participant.participantId, participant.displayName]),
   );
-  const archivedRounds = input.state.rounds.map((round: CompletedCombatRound) =>
+  const archivedRounds = state.rounds.map((round: CompletedCombatRound) =>
     projectRound({
       events: eventsWithDerivedCombatExperience({
         commands: round.commands,
-        encounterId: round.encounterId ?? input.state.encounterId ?? "combat-history",
+        encounterId: round.encounterId ?? state.encounterId ?? "combat-history",
         events: round.events,
         participants: round.participants,
         phaseResolutionResults: round.phaseResolutionResults,
@@ -674,32 +681,32 @@ export function projectCombatHistory(input: {
   return {
     activeRound: projectRound({
       events: eventsWithDerivedCombatExperience({
-        commands: input.state.commands,
-        encounterId: input.state.encounterId ?? "combat-history",
-        events: input.state.events,
-        participants: input.state.participants,
-        phaseResolutionResults: input.state.phaseResolutionResults,
-        roundEndReview: input.state.roundEndReview,
-        roundNumber: input.state.roundNumber,
-        stepSnapshots: input.state.stepSnapshots,
+        commands: state.commands,
+        encounterId: state.encounterId ?? "combat-history",
+        events: state.events,
+        participants: state.participants,
+        phaseResolutionResults: state.phaseResolutionResults,
+        roundEndReview: state.roundEndReview,
+        roundNumber: state.roundNumber,
+        stepSnapshots: state.stepSnapshots,
       }),
       labels,
       participants: visibleParticipants,
-      roundNumber: input.state.roundNumber,
-      snapshots: input.state.stepSnapshots,
+      roundNumber: state.roundNumber,
+      snapshots: state.stepSnapshots,
       viewer: input.viewer,
     }),
     archivedRounds,
-    ...(input.sourceUpdatedAt && input.state.encounterId
+    ...(state.encounterId
       ? {
           combatLog: projectCombatLogForViewer({
             projection: buildCombatLogProjection({
-              encounterId: input.state.encounterId,
-              sourceRevision: input.sourceUpdatedAt,
-              state: input.state,
+              encounterId: state.encounterId,
+              sourceRevision: input.source.revision,
+              state,
             }),
             unpublishedDeclarationRoundNumber:
-              progression.boundary.kind === "declaration" ? input.state.roundNumber : undefined,
+              progression.boundary.kind === "declaration" ? state.roundNumber : undefined,
             viewer: input.viewer,
           }),
         }
@@ -711,7 +718,7 @@ export function projectCombatHistory(input: {
       displayName: participant.displayName,
       participantId: participant.participantId,
     })),
-    ...(input.state.encounterId ? { sourceEncounterId: input.state.encounterId } : {}),
-    ...(input.sourceUpdatedAt ? { sourceUpdatedAt: input.sourceUpdatedAt } : {}),
+    sourceEncounterId: input.source.encounterId,
+    sourceUpdatedAt: input.source.revision,
   };
 }

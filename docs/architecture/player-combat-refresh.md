@@ -8,15 +8,15 @@ Status: implemented on 2026-07-26.
 loading, five-second polling, and focus/visibility refresh. Every invocation
 loaded:
 
-| Data | Trigger | Duplicate path |
-| --- | --- | --- |
-| scenario player projection | mount, interval, focus | slow context was treated as combat state |
-| canonical content | mount, interval, focus | slow context was treated as combat state |
-| participant context | mount, interval, focus, GM perspective change | participant selection restarted the broad effect |
-| exact encounter | mount, interval, focus, GM perspective change | unchanged polls still read the full session |
-| combat history | broad refresh | also loaded by the revision effect |
-| combat history | `encounterSession.updatedAt` effect | duplicated initial, external, and mutation refreshes |
-| combat history | Offensive Parry Brawling success | duplicated again by the revision effect |
+| Data                       | Trigger                                       | Duplicate path                                       |
+| -------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| scenario player projection | mount, interval, focus                        | slow context was treated as combat state             |
+| canonical content          | mount, interval, focus                        | slow context was treated as combat state             |
+| participant context        | mount, interval, focus, GM perspective change | participant selection restarted the broad effect     |
+| exact encounter            | mount, interval, focus, GM perspective change | unchanged polls still read the full session          |
+| combat history             | broad refresh                                 | also loaded by the revision effect                   |
+| combat history             | `encounterSession.updatedAt` effect           | duplicated initial, external, and mutation refreshes |
+| combat history             | Offensive Parry Brawling success              | duplicated again by the revision effect              |
 
 The broad refresh's local in-flight boolean coordinated only one mounted effect
 instance. It did not coordinate mutation responses with interval, focus, or
@@ -63,6 +63,12 @@ encounter ID + encounter revision + optional GM perspective participant ID
 must match that identity. A single coordinator deduplicates in-flight and
 completed requests for the identity.
 
+The history API now obtains its canonical input through
+`CombatHistorySourceView`, not a full `EncounterSession`. Authorization and
+viewer sanitation remain above that internal read boundary, so this does not
+change what a player can see. Unified persistence still means the history
+repository physically reads the session JSON; see `combat-read-models.md`.
+
 Initial exact loading, changed-revision polling, every mutation handler, and GM
 perspective changes all use this coordinator. There is no
 `encounterSession.updatedAt` history effect and no maneuver-specific history
@@ -96,13 +102,13 @@ check is unchanged.
 
 For a normal player perspective:
 
-| Flow | Before | After |
-| --- | ---: | ---: |
-| initial load | 6 requests: 3 context + encounter + history + duplicate history | 5 requests: 3 context + encounter + history |
-| unchanged poll | 5 requests | 1 revision request |
-| changed external revision | 6 requests including duplicate history | 3 requests: revision + encounter + history |
-| ordinary accepted mutation | 1 history request through revision effect | 1 keyed history request |
-| Offensive Parry Brawling mutation | 2 history requests | 1 keyed history request |
+| Flow                              |                                                          Before |                                       After |
+| --------------------------------- | --------------------------------------------------------------: | ------------------------------------------: |
+| initial load                      | 6 requests: 3 context + encounter + history + duplicate history | 5 requests: 3 context + encounter + history |
+| unchanged poll                    |                                                      5 requests |                          1 revision request |
+| changed external revision         |                          6 requests including duplicate history |  3 requests: revision + encounter + history |
+| ordinary accepted mutation        |                       1 history request through revision effect |                     1 keyed history request |
+| Offensive Parry Brawling mutation |                                              2 history requests |                     1 keyed history request |
 
 GM-selected Player Combat previously could restart the entire broad effect when
 its participant perspective resolved. It now changes only the history identity;

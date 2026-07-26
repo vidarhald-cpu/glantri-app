@@ -10,6 +10,7 @@ import {
 import {
   CampaignService,
   CharacterService,
+  CombatStateReadService,
   EncounterService,
   ScenarioService,
 } from "@glantri/database";
@@ -20,8 +21,8 @@ import {
   advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
   backOutCombatRoundPhaseAttack,
-  buildEncounterSessionRevision,
-  buildEncounterSessionSummary,
+  buildEncounterSessionRevisionFromMetadataView,
+  buildEncounterSessionSummaryFromMetadataView,
   buildCombatRoundCommandEnvelope,
   buildCombatRoundAttackRollResult,
   buildCombatProgressionProjection,
@@ -138,6 +139,7 @@ import {
   normalizeMovementIntent,
   normalizeCombatModifierRowsForEncounter,
   projectCombatHistory,
+  withCombatHistoryRoundState,
   removeDistanceGeneratedObSkillModifiers,
   resolveCombatFeintWeaponSkillDefinition,
   scenarioParticipantCombatContextSchema,
@@ -174,6 +176,7 @@ import type {
   CombatRoundPhaseContexts,
   CombatCalculationContext,
   CombatProgressionProjection,
+  EncounterParticipantReadSource,
   EncounterSession,
   MovementIntent,
   ScenarioCombatModifierEntry,
@@ -203,6 +206,7 @@ import { selectCurrentCombatModifierValidationTask } from "./combatModifierValid
 
 const campaignService = new CampaignService();
 const characterService = new CharacterService();
+const combatStateReadService = new CombatStateReadService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
@@ -1059,10 +1063,7 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     effectCutoffInitiativeGroupId:
       value.effectCutoffInitiativeGroupId === undefined
         ? undefined
-        : parseNonEmptyString(
-            value.effectCutoffInitiativeGroupId,
-            "effectCutoffInitiativeGroupId",
-          ),
+        : parseNonEmptyString(value.effectCutoffInitiativeGroupId, "effectCutoffInitiativeGroupId"),
     defenderParticipantId,
     modifierValidationTaskId,
     ob: parseInteger(value.ob, "ob"),
@@ -1184,10 +1185,7 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     effectCutoffInitiativeGroupId:
       value.effectCutoffInitiativeGroupId === undefined
         ? undefined
-        : parseNonEmptyString(
-            value.effectCutoffInitiativeGroupId,
-            "effectCutoffInitiativeGroupId",
-          ),
+        : parseNonEmptyString(value.effectCutoffInitiativeGroupId, "effectCutoffInitiativeGroupId"),
     declarationId,
     declaredOpponentParticipantId,
     defenderParticipantId: parseNonEmptyString(
@@ -1818,7 +1816,9 @@ function findScenarioParticipantForEncounterParticipant(input: {
 
 function buildCurrentAttackModifierValidation(input: {
   allowedAttackerParticipantIds?: ReadonlySet<string>;
-  encounter: EncounterSession;
+  encounterId: string;
+  encounterParticipants: EncounterSession["participants"];
+  encounterRevision: string;
   projection: CombatProgressionProjection;
   roundState: CombatRoundState;
   scenarioParticipants: ScenarioParticipant[];
@@ -1830,7 +1830,7 @@ function buildCurrentAttackModifierValidation(input: {
   });
   if (!task || task.owner?.kind !== "combatant" || !task.identity.phase) return undefined;
   const attackerParticipantId = task.owner.participantId;
-  const attackerEncounterParticipant = input.encounter.participants.find((participant) =>
+  const attackerEncounterParticipant = input.encounterParticipants.find((participant) =>
     participantAliasesInclude({ id: attackerParticipantId, participant }),
   );
   const candidate = getCombatRoundPhaseAttackCandidates({
@@ -1841,7 +1841,7 @@ function buildCurrentAttackModifierValidation(input: {
       entry.participantId === attackerParticipantId &&
       (task.identity.opportunityId === undefined || entry.id === task.identity.opportunityId),
   );
-  const defenderEncounterParticipant = input.encounter.participants.find((participant) =>
+  const defenderEncounterParticipant = input.encounterParticipants.find((participant) =>
     participantAliasesInclude({ id: candidate?.targetParticipantId, participant }),
   );
   if (!attackerEncounterParticipant || !defenderEncounterParticipant) return undefined;
@@ -1859,7 +1859,7 @@ function buildCurrentAttackModifierValidation(input: {
     attackerScenarioParticipant,
     defenderCombatantId: defenderEncounterParticipant.id,
     defenderScenarioParticipant,
-    encounterId: input.encounter.id,
+    encounterId: input.encounterId,
     opportunityId: candidate?.id ?? task.identity.opportunityId,
     phase: task.identity.phase,
     state: input.roundState,
@@ -1873,8 +1873,8 @@ function buildCurrentAttackModifierValidation(input: {
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: defenderEncounterParticipant.id,
     effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
-    encounterId: input.encounter.id,
-    expectedRevision: input.encounter.updatedAt,
+    encounterId: input.encounterId,
+    expectedRevision: input.encounterRevision,
     initiativeGroupId: task.identity.initiativeGroupId,
     initiativeValue: task.identity.initiativeValue,
     obSkillRaw: facts.attackerResolution.total,
@@ -1888,7 +1888,9 @@ function buildCurrentAttackModifierValidation(input: {
 
 function buildCurrentParryModifierValidation(input: {
   allowedDefenderParticipantIds?: ReadonlySet<string>;
-  encounter: EncounterSession;
+  encounterId: string;
+  encounterParticipants: EncounterSession["participants"];
+  encounterRevision: string;
   projection: CombatProgressionProjection;
   roundState: CombatRoundState;
   scenarioParticipants: ScenarioParticipant[];
@@ -1914,13 +1916,13 @@ function buildCurrentParryModifierValidation(input: {
     attackResultId: task.identity.attackResultId,
     state: input.roundState,
   });
-  const defenderEncounterParticipant = input.encounter.participants.find((participant) =>
+  const defenderEncounterParticipant = input.encounterParticipants.find((participant) =>
     participantAliasesInclude({
       id: task.identity.defenderParticipantId,
       participant,
     }),
   );
-  const attackerEncounterParticipant = input.encounter.participants.find((participant) =>
+  const attackerEncounterParticipant = input.encounterParticipants.find((participant) =>
     participantAliasesInclude({
       id: task.identity.attackerParticipantId,
       participant,
@@ -1947,7 +1949,7 @@ function buildCurrentParryModifierValidation(input: {
     attackResult,
     defenderCombatantId: defenderEncounterParticipant.id,
     defenderScenarioParticipant,
-    encounterId: input.encounter.id,
+    encounterId: input.encounterId,
     state: input.roundState,
   });
 
@@ -1959,8 +1961,8 @@ function buildCurrentParryModifierValidation(input: {
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: defenderEncounterParticipant.id,
     effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
-    encounterId: input.encounter.id,
-    expectedRevision: input.encounter.updatedAt,
+    encounterId: input.encounterId,
+    expectedRevision: input.encounterRevision,
     initiativeGroupId: task.identity.initiativeGroupId,
     initiativeValue: task.identity.initiativeValue,
     opportunityId: task.identity.opportunityId,
@@ -1973,7 +1975,7 @@ function buildCurrentParryModifierValidation(input: {
 }
 
 function buildDistanceDefaultWeaponsByParticipantId(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
 }): Record<string, readonly CombatDistanceWeaponLike[]> {
   const membership = resolveEncounterParticipantMembership(input);
@@ -1996,7 +1998,7 @@ function buildDistanceDefaultWeaponsByParticipantId(input: {
 }
 
 function materializeCombatRoundDistanceDefaults(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   roundState: CombatRoundState;
   scenarioParticipants: ScenarioParticipant[];
 }): CombatRoundState {
@@ -2016,7 +2018,11 @@ function materializeCombatRoundDistanceDefaults(input: {
 }
 
 function initializeMaterializedCombatRoundState(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource & {
+    combatRoundState?: CombatRoundState;
+    currentRound: number;
+    id: string;
+  };
   scenarioParticipants: ScenarioParticipant[];
 }): CombatRoundState {
   const membership = resolveEncounterParticipantMembership(input);
@@ -2367,7 +2373,7 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
 }
 
 function getEncounterParticipantsControlledByUser(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): EncounterSession["participants"] {
@@ -2419,7 +2425,10 @@ function hasCombatDistanceVisibility(input: {
 }
 
 function buildPlayerSafeCombatScopeForUser(input: {
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource & {
+    participantVisibility?: NonNullable<EncounterSession["roleplayState"]>["visibility"];
+    roleplayState?: Pick<NonNullable<EncounterSession["roleplayState"]>, "visibility">;
+  };
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): {
@@ -2436,7 +2445,10 @@ function buildPlayerSafeCombatScopeForUser(input: {
 
 function buildPlayerSafeCombatScopeForParticipants(input: {
   controlledEncounterParticipants: EncounterSession["participants"];
-  encounter: EncounterSession;
+  encounter: EncounterParticipantReadSource & {
+    participantVisibility?: NonNullable<EncounterSession["roleplayState"]>["visibility"];
+    roleplayState?: Pick<NonNullable<EncounterSession["roleplayState"]>, "visibility">;
+  };
   scenarioParticipants: ScenarioParticipant[];
 }): {
   controlledEncounterParticipantIds: Set<string>;
@@ -2451,7 +2463,8 @@ function buildPlayerSafeCombatScopeForParticipants(input: {
       getCombatDistanceParticipantAliases(participant),
     ),
   );
-  const visibility = input.encounter.roleplayState?.visibility;
+  const visibility =
+    input.encounter.participantVisibility ?? input.encounter.roleplayState?.visibility;
   const hasVisibilityRows = Object.keys(visibility ?? {}).length > 0;
   const visibleParticipantIds = new Set(
     membership.participants
@@ -3183,16 +3196,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       if (access.mode === "player") {
-        const [encounters, scenarioParticipants] = await Promise.all([
-          encounterService.listEncountersByScenario(scenarioId),
+        const [encounterMetadata, scenarioParticipants] = await Promise.all([
+          combatStateReadService.listEncounterAccessMetadataByScenario(scenarioId),
           scenarioService.listScenarioParticipants(scenarioId),
         ]);
 
         return {
-          encounters: encounters.map((encounter) =>
-            buildEncounterSessionSummary(encounter, {
+          encounters: encounterMetadata.map((source) =>
+            buildEncounterSessionSummaryFromMetadataView(source.metadata, {
               viewerAssigned: isUserAssignedToEncounterMembership({
-                encounter,
+                encounter: {
+                  participantMembershipMode: source.participantMembershipMode,
+                  participants: source.participants,
+                  scenarioId: source.metadata.scenarioId,
+                  status: source.metadata.status,
+                },
                 scenarioParticipants,
                 userId: user.id,
               }),
@@ -3206,8 +3224,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       };
     } catch (error) {
       return reply.code(400).send({
-        error:
-          error instanceof Error ? error.message : "Unable to list encounter summaries.",
+        error: error instanceof Error ? error.message : "Unable to list encounter summaries.",
       });
     }
   });
@@ -3369,7 +3386,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const encounter = await encounterService.getEncounterSummaryById(encounterId);
+      const encounter = await combatStateReadService.getEncounterMetadataById(encounterId);
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
@@ -3396,7 +3413,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return {
-        encounter: buildEncounterSessionRevision(encounter),
+        encounter: buildEncounterSessionRevisionFromMetadataView(encounter),
       };
     } catch (error) {
       return reply.code(400).send({
@@ -3414,16 +3431,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
-      const encounter = await encounterService.getEncounterById(encounterId);
+      const historySource = await combatStateReadService.getCombatHistorySourceById(encounterId);
 
-      if (!encounter?.scenarioId) {
+      if (!historySource?.scenarioId) {
         return reply.code(404).send({ error: "Encounter not found." });
       }
 
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
         {
-          scenarioId: encounter.scenarioId,
+          scenarioId: historySource.scenarioId,
           userId: user.id,
           userRoles: user.roles,
         },
@@ -3434,22 +3451,39 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const scenarioParticipants = await scenarioService.listScenarioParticipants(
-        encounter.scenarioId,
+        historySource.scenarioId,
       );
       const membership = resolveEncounterParticipantMembership({
-        encounter,
+        encounter: historySource,
         scenarioParticipants,
       });
       const state = initializeMaterializedCombatRoundState({
-        encounter,
+        encounter: {
+          combatRoundState: historySource.activeCombatState
+            ? {
+                ...historySource.activeCombatState,
+                rounds: historySource.archivedRounds,
+              }
+            : undefined,
+          currentRound: historySource.currentRound,
+          id: historySource.encounterId,
+          participantMembershipMode: historySource.participantMembershipMode,
+          participants: historySource.participants,
+          scenarioId: historySource.scenarioId,
+          status: historySource.status,
+        },
         scenarioParticipants,
+      });
+      const materializedHistorySource = withCombatHistoryRoundState({
+        source: historySource,
+        state,
       });
       const participants = membership.participants.map((participant) => ({
         displayName: participant.label,
         participantId: participant.id,
       }));
       const playerScope = buildPlayerSafeCombatScopeForUser({
-        encounter,
+        encounter: historySource,
         scenarioParticipants,
         userId: user.id,
       });
@@ -3460,7 +3494,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const perspectiveParticipant =
         access.mode === "gm" && typeof requestedPerspectiveParticipantId === "string"
           ? resolveEncounterParticipantForViewer({
-              encounter,
+              encounter: historySource,
               requestedParticipantId: requestedPerspectiveParticipantId,
               scenarioParticipants,
               viewer: { kind: "gm" },
@@ -3476,7 +3510,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const perspectiveScope = perspectiveParticipant
         ? buildPlayerSafeCombatScopeForParticipants({
             controlledEncounterParticipants: [perspectiveParticipant],
-            encounter,
+            encounter: historySource,
             scenarioParticipants,
           })
         : undefined;
@@ -3495,7 +3529,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const currentAttackModifierValidation = buildCurrentAttackModifierValidation({
         allowedAttackerParticipantIds:
           viewer.kind === "player" ? viewer.controlledParticipantIds : undefined,
-        encounter,
+        encounterId: historySource.encounterId,
+        encounterParticipants: membership.participants,
+        encounterRevision: historySource.revision,
         projection: progressionProjection,
         roundState: state,
         scenarioParticipants,
@@ -3503,7 +3539,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const currentParryModifierValidation = buildCurrentParryModifierValidation({
         allowedDefenderParticipantIds:
           viewer.kind === "player" ? viewer.controlledParticipantIds : undefined,
-        encounter,
+        encounterId: historySource.encounterId,
+        encounterParticipants: membership.participants,
+        encounterRevision: historySource.revision,
         projection: progressionProjection,
         roundState: state,
         scenarioParticipants,
@@ -3515,8 +3553,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           currentParryModifierValidation,
           participants,
           progressionProjection,
-          sourceUpdatedAt: encounter.updatedAt,
-          state,
+          source: materializedHistorySource,
           viewer,
         }),
       };

@@ -4,6 +4,8 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildCombatHistorySourceViewFromPersistedSession,
+  buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
   combatRoundStateSchema,
@@ -69,6 +71,11 @@ const mocks = vi.hoisted(() => {
     getCharacterById: vi.fn(),
     getOwnedCharacter: vi.fn(),
   };
+  const combatStateReadService = {
+    getCombatHistorySourceById: vi.fn(),
+    getEncounterMetadataById: vi.fn(),
+    listEncounterAccessMetadataByScenario: vi.fn(),
+  };
   const encounterService = {
     createEncounter: vi.fn(),
     getEncounterById: vi.fn(),
@@ -94,6 +101,7 @@ const mocks = vi.hoisted(() => {
     adminUser,
     campaignService,
     characterService,
+    combatStateReadService,
     encounterService,
     playerUser,
     requireAdminUser: vi.fn(),
@@ -105,6 +113,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@glantri/database", () => ({
   CampaignService: vi.fn(() => mocks.campaignService),
   CharacterService: vi.fn(() => mocks.characterService),
+  CombatStateReadService: vi.fn(() => mocks.combatStateReadService),
   EncounterService: vi.fn(() => mocks.encounterService),
   ScenarioService: vi.fn(() => mocks.scenarioService),
 }));
@@ -122,6 +131,35 @@ function emptyModifierBuckets() {
     situationDb: [],
     situationInitiative: [],
     situationObSkill: [],
+  };
+}
+
+function combatHistorySource(encounter: EncounterSession) {
+  return buildCombatHistorySourceViewFromPersistedSession({
+    metadata: {
+      campaignId: encounter.campaignId,
+      createdAt: encounter.createdAt,
+      encounterId: encounter.id,
+      revision: encounter.updatedAt,
+      scenarioId: encounter.scenarioId,
+      status: encounter.status,
+      title: encounter.title,
+    },
+    sessionJson: encounter,
+  });
+}
+
+function encounterMetadata(encounter: EncounterSession) {
+  return {
+    campaignId: encounter.campaignId,
+    createdAt: encounter.createdAt,
+    encounterId: encounter.id,
+    revision: encounter.updatedAt,
+    scenarioId: encounter.scenarioId,
+    status: encounter.status,
+    title: encounter.title,
+    updatedAt: encounter.updatedAt,
+    viewVersion: 1 as const,
   };
 }
 
@@ -2361,6 +2399,37 @@ describe("scenarios route contract", () => {
     vi.clearAllMocks();
     mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    mocks.combatStateReadService.getEncounterMetadataById.mockImplementation(
+      async (encounterId: string) => {
+        const encounter = await mocks.encounterService.getEncounterSummaryById(encounterId);
+        return encounter ? encounterMetadata(encounter as EncounterSession) : null;
+      },
+    );
+    mocks.combatStateReadService.getCombatHistorySourceById.mockImplementation(
+      async (encounterId: string) => {
+        const encounter = await mocks.encounterService.getEncounterById(encounterId);
+        return encounter ? combatHistorySource(encounter as EncounterSession) : null;
+      },
+    );
+    mocks.combatStateReadService.listEncounterAccessMetadataByScenario.mockImplementation(
+      async (scenarioId: string) => {
+        const encounters = await mocks.encounterService.listEncountersByScenario(scenarioId);
+        return (encounters as EncounterSession[]).map((encounter) =>
+          buildEncounterAccessMetadataViewFromPersistedSession({
+            metadata: {
+              campaignId: encounter.campaignId,
+              createdAt: encounter.createdAt,
+              encounterId: encounter.id,
+              revision: encounter.updatedAt,
+              scenarioId: encounter.scenarioId,
+              status: encounter.status,
+              title: encounter.title,
+            },
+            sessionJson: encounter,
+          }),
+        );
+      },
+    );
   });
 
   it("lists campaigns for the authenticated game master", async () => {
@@ -3050,6 +3119,9 @@ describe("scenarios route contract", () => {
     ]);
     expect(response.body).not.toContain("participants");
     expect(response.body).not.toContain("combatRoundState");
+    expect(
+      mocks.combatStateReadService.listEncounterAccessMetadataByScenario,
+    ).toHaveBeenCalledWith("scenario-1");
   });
 
   it("returns a compact canonical active-encounter revision", async () => {
@@ -3090,6 +3162,9 @@ describe("scenarios route contract", () => {
       },
     });
     expect(response.body.length).toBeLessThan(200);
+    expect(mocks.combatStateReadService.getEncounterMetadataById).toHaveBeenCalledWith(
+      "encounter-1",
+    );
     expect(mocks.encounterService.getEncounterById).not.toHaveBeenCalled();
   });
 
@@ -3393,6 +3468,9 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().history.sourceEncounterId).toBe("encounter-1");
     expect(response.json().history.sourceUpdatedAt).toBe(encounter.updatedAt);
+    expect(mocks.combatStateReadService.getCombatHistorySourceById).toHaveBeenCalledWith(
+      "encounter-1",
+    );
     expect(response.json().history.progression).toMatchObject({
       boundary: { roundNumber: 1 },
       roundNumber: 1,

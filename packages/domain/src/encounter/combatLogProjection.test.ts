@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatLogProjection,
+  buildCombatHistorySourceViewFromState,
   buildCombatRoundAttackRollResult,
   completedCombatRoundSchema,
   combatRoundStateSchema,
@@ -718,14 +719,18 @@ describe("CombatLogProjection", () => {
     }));
     const gm = projectCombatHistory({
       participants,
-      sourceUpdatedAt: "revision-7",
-      state: roundState,
+      source: buildCombatHistorySourceViewFromState({
+        revision: "revision-7",
+        state: roundState,
+      }),
       viewer: { kind: "gm" },
     });
     const player = projectCombatHistory({
       participants,
-      sourceUpdatedAt: "revision-7",
-      state: roundState,
+      source: buildCombatHistorySourceViewFromState({
+        revision: "revision-7",
+        state: roundState,
+      }),
       viewer: {
         controlledParticipantIds: new Set(["gladiator"]),
         kind: "player",

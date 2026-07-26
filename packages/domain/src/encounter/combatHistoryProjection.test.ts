@@ -4,12 +4,14 @@ import {
   combatRoundCommandSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
+  buildCombatHistorySourceViewFromState,
   buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
   deriveCombatHistoryStepOutcome,
   projectCombatHistory,
   projectCombatHistoryEvent,
   type CombatStepEvent,
+  type CombatRoundState,
 } from "../index";
 
 const participants = [
@@ -18,6 +20,16 @@ const participants = [
   { displayName: "Cyra", participantId: "cyra" },
   { displayName: "Hidden foe", participantId: "hidden" },
 ];
+
+function historySource(state: CombatRoundState, revision = "revision-1") {
+  return buildCombatHistorySourceViewFromState({
+    revision,
+    state: {
+      ...state,
+      encounterId: state.encounterId ?? "encounter-1",
+    },
+  });
+}
 
 function event(input: Partial<CombatStepEvent> & Pick<CombatStepEvent, "type">): CombatStepEvent {
   return combatStepEventSchema.parse({
@@ -276,8 +288,7 @@ describe("combat history projection", () => {
 
     const projection = projectCombatHistory({
       participants,
-      sourceUpdatedAt: "revision-ce",
-      state,
+      source: historySource(state, "revision-ce"),
       viewer: player(["aria"], ["aria", "borin"]),
     });
 
@@ -329,8 +340,7 @@ describe("combat history projection", () => {
     const projection = projectCombatHistory({
       currentAttackModifierValidation,
       participants,
-      sourceUpdatedAt: "revision-7",
-      state,
+      source: historySource(state, "revision-7"),
       viewer: player(["aria"], ["aria"]),
     });
     const serialized = JSON.stringify(projection.progression);
@@ -386,7 +396,7 @@ describe("combat history projection", () => {
 
     const projection = projectCombatHistory({
       participants,
-      state,
+      source: historySource(state),
       viewer: player(["aria"], ["aria", "borin"]),
     });
 
@@ -639,7 +649,7 @@ describe("combat history projection", () => {
     const state = combatRoundStateSchema.parse({ encounterId: "encounter-1", events: [attack] });
     const projection = projectCombatHistory({
       participants,
-      state,
+      source: historySource(state),
       viewer: player(["aria"], ["aria", "borin"]),
     });
     const serialized = JSON.stringify(projection);
@@ -765,7 +775,7 @@ describe("combat history projection", () => {
     });
     const projection = projectCombatHistory({
       participants,
-      state,
+      source: historySource(state),
       viewer: player(["aria"], ["aria", "borin"]),
     });
 
@@ -834,7 +844,7 @@ describe("combat history projection", () => {
     });
     const projection = projectCombatHistory({
       participants,
-      state,
+      source: historySource(state),
       viewer: player(["aria"], ["aria", "borin"]),
     });
     const serialized = JSON.stringify(projection);

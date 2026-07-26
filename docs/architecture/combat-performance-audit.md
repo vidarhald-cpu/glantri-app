@@ -74,6 +74,17 @@ same 163-byte revision contract. The duplicate revision history effect and
 Offensive Parry-specific history reload were removed. See
 `player-combat-refresh.md`.
 
+Update (2026-07-26): a read-focused combat-state boundary now separates
+metadata, active state, archived rounds, history source, and explicit full
+encounter reads. Revision and GM-summary reads do not select `sessionJson`;
+combat history no longer constructs or exposes an `EncounterSession` to its
+projector. On the current 33.96 MB representative row, narrow and full
+already-materialized validation were effectively equal at 1.48 ms and 1.46 ms
+median, while physical history reads remained 632.86 ms because Prisma must
+still materialize the unified JSON. This establishes the seam, but does not
+claim a latency improvement or that the storage I/O problem is solved. See
+`combat-read-models.md`.
+
 ## Scope and method
 
 This was a read-only application-code audit. No application or test code was
@@ -106,19 +117,19 @@ relevant source paths were audited.
 
 ### Actual API mutation samples
 
-| Interaction | Persisted state before request | API first byte | Total | Response |
-| --- | ---: | ---: | ---: | ---: |
-| Declare action | 33.95 MB encounter | 4,163 ms | 4,178 ms | 34.28 MB |
-| Complete modifier review | 33.95 MB encounter | 4,198 ms | 4,213 ms | 34.28 MB |
-| Roll initiative | 33.95 MB encounter | 4,133 ms | 4,149 ms | 33.97 MB |
-| Commit initiative | 33.95 MB encounter | 8,196 ms | 8,246 ms | 101.90 MB |
-| Roll attack after commit | 67.94 MB encounter | measured through Fetch | 9,016 ms | 67.95 MB |
-| Roll parry | no unresolved canonical clone task | not replayed | not replayed | — |
-| Offensive Parry Brawling | no unresolved canonical clone task | not replayed | not replayed | — |
-| Commit ordinary distance | 3.34 MB encounter, round 3 | 448 ms | 449 ms | 3.35 MB |
-| Round-end participant review | 33.95 MB encounter | 4,297 ms | 4,318 ms | 34.25 MB |
-| Open declarations | compact 293 KB, eight completed rounds | 146 ms | 146 ms | 298 KB |
-| Open declarations | bloated 33.95 MB, four rounds | 4,148 ms | 4,164 ms | 33.96 MB |
+| Interaction                  |         Persisted state before request |         API first byte |        Total |  Response |
+| ---------------------------- | -------------------------------------: | ---------------------: | -----------: | --------: |
+| Declare action               |                     33.95 MB encounter |               4,163 ms |     4,178 ms |  34.28 MB |
+| Complete modifier review     |                     33.95 MB encounter |               4,198 ms |     4,213 ms |  34.28 MB |
+| Roll initiative              |                     33.95 MB encounter |               4,133 ms |     4,149 ms |  33.97 MB |
+| Commit initiative            |                     33.95 MB encounter |               8,196 ms |     8,246 ms | 101.90 MB |
+| Roll attack after commit     |                     67.94 MB encounter | measured through Fetch |     9,016 ms |  67.95 MB |
+| Roll parry                   |     no unresolved canonical clone task |           not replayed | not replayed |         — |
+| Offensive Parry Brawling     |     no unresolved canonical clone task |           not replayed | not replayed |         — |
+| Commit ordinary distance     |             3.34 MB encounter, round 3 |                 448 ms |       449 ms |   3.35 MB |
+| Round-end participant review |                     33.95 MB encounter |               4,297 ms |     4,318 ms |  34.25 MB |
+| Open declarations            | compact 293 KB, eight completed rounds |                 146 ms |       146 ms |    298 KB |
+| Open declarations            |          bloated 33.95 MB, four rounds |               4,148 ms |     4,164 ms |  33.96 MB |
 
 Parry is handled by
 `apps/api/src/routes/scenarios/encounterRoutes.ts` in the
@@ -136,21 +147,21 @@ within the next animation frame. The large delay began after request dispatch.
 
 The following components were isolated on the post-attack 67.94 MB state:
 
-| Layer | Measured time | Method |
-| --- | ---: | --- |
-| PostgreSQL/Prisma encounter read | 1,178 ms | `findUnique` of the JSON session |
-| JSON parse, already-materialized 67.94 MB value | 101 ms | Node median |
-| Pure initiative-commit domain mutation at 33.95 MB | 165–182 ms | three direct runs |
-| Progression projection at 33.95 MB | 43 ms | direct run |
-| Combat log projection at 33.95 MB | 18 ms | direct run |
-| GM combat-history projection with shared progression | 16 ms | direct run |
-| PostgreSQL/Prisma same-value whole JSON rewrite | 7,222 ms | isolated clone |
-| JSON stringify, 67.95 MB response | 29 ms | Node median |
-| JSON parse, 67.95 MB response | 93 ms | Node median |
-| JSON stringify, 101.90 MB initiative response | 44 ms | Node median |
-| JSON parse, 101.90 MB initiative response | 138 ms | Node median |
-| Local transfer after first byte, initiative response | 50 ms | curl |
-| Browser receipt to usable GM Current Action | 321 ms | Chrome trace, 33.95 MB state |
+| Layer                                                | Measured time | Method                           |
+| ---------------------------------------------------- | ------------: | -------------------------------- |
+| PostgreSQL/Prisma encounter read                     |      1,178 ms | `findUnique` of the JSON session |
+| JSON parse, already-materialized 67.94 MB value      |        101 ms | Node median                      |
+| Pure initiative-commit domain mutation at 33.95 MB   |    165–182 ms | three direct runs                |
+| Progression projection at 33.95 MB                   |         43 ms | direct run                       |
+| Combat log projection at 33.95 MB                    |         18 ms | direct run                       |
+| GM combat-history projection with shared progression |         16 ms | direct run                       |
+| PostgreSQL/Prisma same-value whole JSON rewrite      |      7,222 ms | isolated clone                   |
+| JSON stringify, 67.95 MB response                    |         29 ms | Node median                      |
+| JSON parse, 67.95 MB response                        |         93 ms | Node median                      |
+| JSON stringify, 101.90 MB initiative response        |         44 ms | Node median                      |
+| JSON parse, 101.90 MB initiative response            |        138 ms | Node median                      |
+| Local transfer after first byte, initiative response |         50 ms | curl                             |
+| Browser receipt to usable GM Current Action          |        321 ms | Chrome trace, 33.95 MB state     |
 
 The database rewrite is the largest measured server component once recursive
 state reaches 67.94 MB. Domain projection is material, but an order of magnitude
@@ -247,11 +258,11 @@ The Player Combat tracker is better isolated:
 1425–1434. Pure player tracker measurements were small:
 
 | Archived rounds | Cells | Median tracker view-model time |
-| ---: | ---: | ---: |
-| 0 | 24 | 0.032 ms |
-| 3 | 96 | 0.107 ms |
-| 10 | 240 | 0.142 ms |
-| 30 | 720 | 0.403 ms |
+| --------------: | ----: | -----------------------------: |
+|               0 |    24 |                       0.032 ms |
+|               3 |    96 |                       0.107 ms |
+|              10 |   240 |                       0.142 ms |
+|              30 |   720 |                       0.403 ms |
 
 Therefore tracker JSX/view-model work is not the current P0. The GM inline
 construction and React reconciliation are P1/P2 work after payload volume is
@@ -283,14 +294,14 @@ command.facts.previousState = normalized
 `normalized` contains all prior commands. Prior initiative commits contain
 their own full `previousState`. In the baseline active round:
 
-| Object | JSON bytes |
-| --- | ---: |
-| `combatRoundState` | 33,934,023 |
-| active `commands` | 25,464,442 |
-| archived `rounds` | 8,418,024 |
-| active snapshots | 26,204 |
-| active events | 12,712 |
-| phase-1 initiative commit | 8,448,079 |
+| Object                    | JSON bytes |
+| ------------------------- | ---------: |
+| `combatRoundState`        | 33,934,023 |
+| active `commands`         | 25,464,442 |
+| archived `rounds`         |  8,418,024 |
+| active snapshots          |     26,204 |
+| active events             |     12,712 |
+| phase-1 initiative commit |  8,448,079 |
 | phase-2 initiative commit | 16,952,120 |
 
 The undo path around lines 19047–19070 reparses that full previous state.
@@ -322,11 +333,11 @@ Synthetic history-only measurements using realistic round content and a shared
 progression projection:
 
 | Archived rounds | History projection median | Projected payload |
-| ---: | ---: | ---: |
-| 0 | 0.58 ms | 37 KB |
-| 3 | 2.49 ms | 210 KB |
-| 10 | 5.38 ms | 593 KB |
-| 30 | 13.45 ms | 1.70 MB |
+| --------------: | ------------------------: | ----------------: |
+|               0 |                   0.58 ms |             37 KB |
+|               3 |                   2.49 ms |            210 KB |
+|              10 |                   5.38 ms |            593 KB |
+|              30 |                  13.45 ms |           1.70 MB |
 
 This grows approximately linearly and is currently much smaller than reading
 the recursive source state. An indexed event context is worthwhile later,
@@ -398,12 +409,12 @@ summary, and revision. The active combat session should be fetched by exact ID.
 
 Actual warm read samples:
 
-| Persisted combat | Encounter response | GET time |
-| --- | ---: | ---: |
-| fresh round 1 | 6.7 KB | 29 ms |
-| round 3, two archived rounds | 1.48 MB | 81 ms |
-| round 7, compact history | 1.79 MB | 254 ms |
-| round 4, recursive initiative snapshots | 33.95 MB | 947 ms |
+| Persisted combat                        | Encounter response | GET time |
+| --------------------------------------- | -----------------: | -------: |
+| fresh round 1                           |             6.7 KB |    29 ms |
+| round 3, two archived rounds            |            1.48 MB |    81 ms |
+| round 7, compact history                |            1.79 MB |   254 ms |
+| round 4, recursive initiative snapshots |           33.95 MB |   947 ms |
 
 A compact eight-round encounter opened declarations in 146 ms, while the
 recursive four-round encounter took 4.16 seconds for the same transition.

@@ -46,6 +46,15 @@ There are no remaining task-integration gaps. Editable rule inputs (declarations
 sources, and GM review values) remain local form state by design, but no handler derives combat
 identity or command eligibility from those forms, the inspector, cursors, or latest-result chains.
 
+Read-source separation (2026-07-26): task authority and mutation projection
+continue to load the full authoritative write model. Read-only revision and
+history routes now use strict metadata and `CombatHistorySourceView` contracts,
+respectively. The history view carries the exact active/archive facts and
+revision needed for presentation, but cannot authorize a command and cannot be
+cast back to `EncounterSession`. Player-safe history remains viewer-projected
+after access checks. This read seam changes no task identity or progression
+behavior.
+
 Declaration-context ownership (2026-07-25): Parry is an untargeted primary action and therefore
 projects no outgoing A1/A2 opportunity. Its one deterministic round modifier is derived from the
 stable total Dodge skill identity as `floor(Dodge / 5)%`, stored in the DB/Parry bucket, reviewed

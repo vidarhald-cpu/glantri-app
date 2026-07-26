@@ -9,9 +9,38 @@ describe("combat route canonical-conformance guards", () => {
   it("keeps workspace summaries and revision polling off the full encounter-list path", () => {
     expect(source).toContain('app.get("/scenarios/:scenarioId/encounter-summaries"');
     expect(source).toContain("listEncounterSummariesByScenario");
+    expect(source).toContain("listEncounterAccessMetadataByScenario");
     expect(source).toContain('app.get("/encounters/:encounterId/revision"');
-    expect(source).toContain("getEncounterSummaryById");
-    expect(source).toContain("buildEncounterSessionRevision");
+    expect(source).toContain("getEncounterMetadataById");
+    expect(source).toContain("buildEncounterSessionRevisionFromMetadataView");
+  });
+
+  it("loads combat history through the narrow history-source boundary", () => {
+    const routeStart = source.indexOf('app.get("/encounters/:encounterId/combat-history"');
+    const nextRoute = source.indexOf('app.put("/encounters/:encounterId"', routeStart);
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).toContain("getCombatHistorySourceById");
+    expect(routeSource).toContain("withCombatHistoryRoundState");
+    expect(routeSource).not.toContain("encounterService.getEncounterById");
+  });
+
+  it("keeps the history projector independent of EncounterSession", () => {
+    const projectionSource = readFileSync(
+      resolve(__dirname, "../../../../../packages/domain/src/encounter/combatHistoryProjection.ts"),
+      "utf8",
+    );
+    const signatureStart = projectionSource.indexOf("export function projectCombatHistory(input:");
+    const signatureEnd = projectionSource.indexOf("): CombatHistoryProjection", signatureStart);
+    const signatureSource = projectionSource.slice(signatureStart, signatureEnd);
+
+    expect(signatureStart).toBeGreaterThanOrEqual(0);
+    expect(signatureEnd).toBeGreaterThan(signatureStart);
+    expect(signatureSource).toContain("source: CombatHistorySourceView");
+    expect(signatureSource).not.toContain("sourceUpdatedAt?:");
+    expect(signatureSource).not.toContain("state: CombatRoundState;");
   });
 
   it("does not expose the removed cursor-authorized GM mutation routes", () => {
@@ -120,9 +149,7 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain(
       "body.defenderModifierFingerprint !== canonicalDefenderModifierFingerprint",
     );
-    expect(source).toContain(
-      "body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId",
-    );
+    expect(source).toContain("body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId");
   });
 
   it("uses workbook percentage composition for Offensive Parry and maintenance Brawling", () => {
