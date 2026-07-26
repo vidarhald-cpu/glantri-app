@@ -34,7 +34,10 @@ export function applyLocalCors(app: FastifyInstance): void {
       reply.header("access-control-allow-origin", allowedOrigin);
       reply.header("access-control-allow-credentials", "true");
       reply.header("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-      reply.header("access-control-allow-headers", "content-type");
+      reply.header(
+        "access-control-allow-headers",
+        "content-type,x-glantri-combat-response",
+      );
       reply.header("vary", "origin");
     }
 

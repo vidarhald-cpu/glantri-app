@@ -5708,6 +5708,11 @@ export default function CombatRoundManagerPanel({
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>CE difficulty</span>
         <input
           disabled={combatExperienceDifficultyControlsDisabled}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+            }
+          }}
           onChange={(event) => {
             setCombatExperienceDifficultyDrafts((current) => ({
               ...current,
@@ -7871,9 +7876,11 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to set Combat Experience difficulty.",
+        caughtError instanceof TypeError && caughtError.message === "Failed to fetch"
+          ? "Could not reach the combat service. Try again."
+          : caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to set Combat Experience difficulty.",
       );
     } finally {
       combatExperienceDifficultyRequestInFlightRef.current = false;

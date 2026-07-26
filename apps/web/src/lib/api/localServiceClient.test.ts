@@ -706,6 +706,62 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("sends the CE mutation through the active-v1 production client without a load signal", async () => {
+    const currentEncounter = encounterSessionSchema.parse({
+      combatRoundState: combatRoundStateSchema.parse({
+        encounterId: "encounter-1",
+        participants: [{ label: "Aria", participantId: "aria" }],
+        rounds: [{ encounterId: "encounter-1", roundNumber: 1 }],
+      }),
+      createdAt: "2026-07-26T09:00:00.000Z",
+      id: "encounter-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const response = buildActiveCombatMutationResponse({
+      encounter: {
+        ...currentEncounter,
+        updatedAt: "2026-07-26T10:01:00.000Z",
+      },
+      mutationPresentation: {
+        difficulty: 26,
+        windowOpen: true,
+      },
+    });
+    const fetchMock = stubFetch(response);
+    const client = await loadClient();
+
+    await expect(
+      client.setCombatExperienceDifficultyOnServer({
+        currentEncounter,
+        difficulty: 26,
+        encounterId: "encounter-1",
+        executionGroupId: "group-ce",
+        expectedRevision: currentEncounter.updatedAt,
+        taskId: "task-ce",
+      }),
+    ).resolves.toMatchObject({
+      difficulty: 26,
+      encounter: {
+        updatedAt: "2026-07-26T10:01:00.000Z",
+      },
+    });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        difficulty: 26,
+        executionGroupId: "group-ce",
+        expectedRevision: currentEncounter.updatedAt,
+        taskId: "task-ce",
+      },
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/combat-experience-difficulty",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeUndefined();
+  });
+
   it("does not serialize the local authoritative encounter in a generic mutation body", async () => {
     const currentEncounter = encounterSessionSchema.parse({
       combatRoundState: combatRoundStateSchema.parse({

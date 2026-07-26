@@ -459,12 +459,14 @@ afterEach(() => {
 });
 
 describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
-  it("sends one request and disables the action while the save is pending", async () => {
+  it("uses a non-submit action, sends one request, and disables it while saving", async () => {
     const encounter = buildCombatExperiencePendingEncounter();
     const participants = [
       scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
       scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
     ];
+    const onEncounterUpdated = vi.fn();
+    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
     const savedState = setCombatRoundCombatExperienceDifficulty({
       difficulty: 26,
       state: combatRoundStateSchema.parse(encounter.combatRoundState),
@@ -479,20 +481,24 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
     );
 
     render(
-      <CombatRoundManagerPanel
-        encounter={encounter}
-        onEncounterUpdated={vi.fn()}
-        scenarioParticipants={participants}
-      />,
+      <form onSubmit={onSubmit}>
+        <CombatRoundManagerPanel
+          encounter={encounter}
+          onEncounterUpdated={onEncounterUpdated}
+          scenarioParticipants={participants}
+        />
+      </form>,
     );
 
     const action = await screen.findByRole("button", {
       name: "Open Combat Experience",
     });
+    expect((action as HTMLButtonElement).type).toBe("button");
     fireEvent.click(action);
     fireEvent.click(action);
 
     expect(mocks.setCombatExperienceDifficulty).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
     await waitFor(() => expect((action as HTMLButtonElement).disabled).toBe(true));
 
     resolveRequest?.({
@@ -503,7 +509,30 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
         updatedAt: "2026-07-23T10:00:01.000Z",
       }),
     });
-    await waitFor(() => expect(mocks.setCombatExperienceDifficulty).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onEncounterUpdated).toHaveBeenCalledTimes(1));
+    expect(mocks.setCombatExperienceDifficulty).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not submit or invoke the CE command when Enter is pressed in the difficulty input", async () => {
+    const encounter = buildCombatExperiencePendingEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+
+    render(
+      <form onSubmit={onSubmit}>
+        <CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />
+      </form>,
+    );
+
+    const difficulty = await screen.findByRole("spinbutton", { name: "CE difficulty" });
+    fireEvent.keyDown(difficulty, { code: "Enter", key: "Enter" });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mocks.setCombatExperienceDifficulty).not.toHaveBeenCalled();
   });
 
   it("keeps the encounter rendered and shows a transaction conflict in the action error area", async () => {
@@ -526,6 +555,25 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
 
     expect(
       await screen.findByText("Combat state changed while saving. Refresh and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Combat Round Manager" })).toBeInTheDocument();
+    expect(screen.queryByText("Load failed")).not.toBeInTheDocument();
+  });
+
+  it("keeps the encounter rendered and normalizes a CE fetch failure in the action error area", async () => {
+    const encounter = buildCombatExperiencePendingEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.setCombatExperienceDifficulty.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open Combat Experience" }));
+
+    expect(
+      await screen.findByText("Could not reach the combat service. Try again."),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Combat Round Manager" })).toBeInTheDocument();
     expect(screen.queryByText("Load failed")).not.toBeInTheDocument();

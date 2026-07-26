@@ -1440,7 +1440,10 @@ export function PlayerCombatActionButtonPanel({
       {primaryActionAvailable ? (
         <button
           disabled={actionDisabled}
-          onClick={() => onDeclareAction?.(primaryAction?.descriptor)}
+          onClick={(event) => {
+            event.preventDefault();
+            onDeclareAction?.(primaryAction?.descriptor);
+          }}
           style={{
             background: actionDisabled ? "#e4e0d6" : "#ded4b1",
             border: "1px solid #bdb39a",
@@ -1461,7 +1464,10 @@ export function PlayerCombatActionButtonPanel({
       {secondaryButtonLabel ? (
         <button
           disabled={secondaryButtonDisabled || saving}
-          onClick={onSecondaryAction}
+          onClick={(event) => {
+            event.preventDefault();
+            onSecondaryAction?.();
+          }}
           style={{ justifySelf: "center", width: "80%" }}
           type="button"
         >

@@ -386,8 +386,9 @@ describe("PlayerCombatModifierPanel", () => {
 });
 
 describe("PlayerCombatActionButtonPanel", () => {
-  it("renders the canonical context and invokes the immutable descriptor", () => {
+  it("renders a non-submit primary command and invokes the immutable descriptor once", () => {
     const onAction = vi.fn();
+    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
     const descriptor = {
       commandType: "roll_attack" as const,
       encounterId: "encounter-1",
@@ -398,34 +399,36 @@ describe("PlayerCombatActionButtonPanel", () => {
       taskId: "task-1",
     };
     render(
-      <PlayerCombatActionButtonPanel
-        onDeclareAction={onAction}
-        presentation={{
-          actionName: "Single Attack",
-          actor: { hidden: false, id: "aria", label: "Aria" },
-          boundary: "phase1_resolution",
-          encounterId: "encounter-1",
-          encounterRevision: "revision-4",
-          heading: "Phase 1",
-          primaryAction: {
-            descriptor,
-            enabled: true,
-            gmProxyAvailable: true,
-            label: "Roll attack",
-            viewerMayInvoke: true,
-          },
-          reason: "",
-          requiredActor: { hidden: false, id: "aria", label: "Aria" },
-          requiredNow: "Roll attack.",
-          status: "executable",
-          summary: "Aria is attacking Borin.",
-          target: { hidden: false, id: "borin", label: "Borin" },
-          taskHeading: "Roll attack",
-          taskId: "task-1",
-          taskKind: "attack",
-          weapon: { id: "weapon-1", label: "Long Sword" },
-        }}
-      />,
+      <form onSubmit={onSubmit}>
+        <PlayerCombatActionButtonPanel
+          onDeclareAction={onAction}
+          presentation={{
+            actionName: "Single Attack",
+            actor: { hidden: false, id: "aria", label: "Aria" },
+            boundary: "phase1_resolution",
+            encounterId: "encounter-1",
+            encounterRevision: "revision-4",
+            heading: "Phase 1",
+            primaryAction: {
+              descriptor,
+              enabled: true,
+              gmProxyAvailable: true,
+              label: "Roll attack",
+              viewerMayInvoke: true,
+            },
+            reason: "",
+            requiredActor: { hidden: false, id: "aria", label: "Aria" },
+            requiredNow: "Roll attack.",
+            status: "executable",
+            summary: "Aria is attacking Borin.",
+            target: { hidden: false, id: "borin", label: "Borin" },
+            taskHeading: "Roll attack",
+            taskId: "task-1",
+            taskKind: "attack",
+            weapon: { id: "weapon-1", label: "Long Sword" },
+          }}
+        />
+      </form>,
     );
 
     expect(screen.getByText("Phase 1")).toBeInTheDocument();
@@ -434,8 +437,33 @@ describe("PlayerCombatActionButtonPanel", () => {
     expect(screen.getByText("Roll attack.")).toBeInTheDocument();
     expect(screen.queryByText(/^Reason:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Roll attack" }));
+    const action = screen.getByRole("button", { name: "Roll attack" });
+    expect((action as HTMLButtonElement).type).toBe("button");
+    fireEvent.click(action);
     expect(onAction).toHaveBeenCalledWith(descriptor);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("renders the shared secondary combat command with non-submit semantics", () => {
+    const onSecondaryAction = vi.fn();
+    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+
+    render(
+      <form onSubmit={onSubmit}>
+        <PlayerCombatActionButtonPanel
+          onSecondaryAction={onSecondaryAction}
+          secondaryButtonLabel="Secondary combat command"
+        />
+      </form>,
+    );
+
+    const action = screen.getByRole("button", { name: "Secondary combat command" });
+    expect((action as HTMLButtonElement).type).toBe("button");
+    fireEvent.click(action);
+
+    expect(onSecondaryAction).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("shows contextual waiting state without rendering a fallback action", () => {
