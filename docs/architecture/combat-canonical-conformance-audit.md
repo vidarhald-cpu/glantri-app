@@ -1,5 +1,13 @@
 # Combat canonical-conformance audit
 
+## Physical persistence conformance
+
+Normal combat routes persist through `updateCombatEncounter` with the accepted
+encounter revision. Metadata, active state, and the bounded archive delta commit in
+one transaction. Ordinary combat routes no longer invoke generic full-session
+persistence. Split reads fail closed on partial storage and never fall back to the
+legacy combat tree.
+
 Audit date: 2026-07-23
 
 Branch: `feature/player-general-encounter-screen`

@@ -1,5 +1,16 @@
 # Combat read models
 
+## Physical persistence
+
+The transitional unified-JSON adapter remains for `legacy` encounters. Encounters
+marked `split_v1` now read metadata/reduced session state, one active-state row, and
+ordered archive rows behind these same contracts. Callers and history projection do
+not change. See [combat-persistence-split.md](./combat-persistence-split.md).
+
+Active reads no longer select archive JSON. History reads deliberately compose the
+active row and all archive rows. Exact full reads remain explicit and compose a
+backward-compatible `EncounterSession`.
+
 Status: implemented as a transitional read boundary on 2026-07-26.
 
 ## Purpose

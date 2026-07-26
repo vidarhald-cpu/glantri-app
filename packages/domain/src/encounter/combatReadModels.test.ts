@@ -7,11 +7,14 @@ import {
   buildCombatHistorySourceViewFromPersistedSession,
   buildCombatHistorySourceViewFromState,
   buildEncounterMetadataView,
+  composeEncounterSessionFromSplitCombatPersistence,
   combatHistorySourceViewSchema,
   combatRoundStateSchema,
+  encounterSessionSchema,
   encounterMetadataViewSchema,
   materializeCombatHistoryRoundState,
   projectCombatHistory,
+  splitEncounterSessionForCombatPersistence,
 } from "../index";
 
 const metadata = {
@@ -252,5 +255,33 @@ describe("combat read models", () => {
     expect(gm.activeRound.events[0]?.facts.gmReview).toEqual({ secret: "gm only" });
     expect(player.activeRound.events[0]?.facts.gmReview).toBeUndefined();
     expect(player.activeRound.events[0]?.facts.privateCalculation).toEqual({ die: 12 });
+  });
+
+  it("round-trips the canonical encounter through physical split parts", () => {
+    const encounter = encounterSessionSchema.parse({
+      ...sessionJson(),
+      actionLog: [],
+      campaignId: metadata.campaignId,
+      createdAt: metadata.createdAt,
+      id: metadata.encounterId,
+      kind: "combat",
+      scenarioId: metadata.scenarioId,
+      status: metadata.status,
+      title: metadata.title,
+      updatedAt: metadata.revision,
+    });
+    const split = splitEncounterSessionForCombatPersistence(encounter);
+
+    expect(split.sessionWithoutCombatState).not.toHaveProperty("combatRoundState");
+    expect(split.activeCombatState).not.toHaveProperty("rounds");
+    expect(split.archivedRounds.map((round) => round.roundNumber)).toEqual([1, 2]);
+    expect(
+      composeEncounterSessionFromSplitCombatPersistence({
+        activeCombatState: split.activeCombatState,
+        archivedRounds: split.archivedRounds,
+        metadata,
+        sessionWithoutCombatState: split.sessionWithoutCombatState,
+      }),
+    ).toEqual(encounter);
   });
 });

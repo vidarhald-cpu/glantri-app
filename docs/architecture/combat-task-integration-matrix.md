@@ -1,5 +1,12 @@
 # Combat task integration matrix
 
+## Persistence boundary
+
+Every accepted task mutation retains its existing descriptor and domain transition,
+then persists through the revision-guarded active-state boundary. Task kind does not
+select a storage path. Only canonical round transition may append one archive row,
+and only cross-boundary undo may remove that exact row.
+
 This matrix records whether a projected combat task is invoked through an immutable
 `CurrentActionCommandDescriptor`, or whether a handler still reconstructs command context from
 component or inspector state. It is an implementation audit, not a combat-rule specification.

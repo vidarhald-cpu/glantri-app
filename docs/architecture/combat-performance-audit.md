@@ -1,5 +1,14 @@
 # Combat performance audit
 
+Update (2026-07-26): `split_v1` physical persistence now stores the active combat
+round separately from immutable archive rows. In isolated 0/10/30/50-archive
+fixtures, legacy active reads grew from 1.62 to 195.92 ms while split active reads
+stayed at 1.24/0.79/0.78/0.81 ms. Legacy whole-JSON rewrites grew from 1.89 to
+973.30 ms while split active writes stayed at 5.13/2.90/2.84/2.89 ms. The exact
+33.95 MB representative active read fell from 600.14 ms to 0.89 ms after
+materialization. History and exact full reads remain linear, as expected.
+See `combat-persistence-split.md`.
+
 Date: 2026-07-25  
 Branch: `feature/player-general-encounter-screen`
 

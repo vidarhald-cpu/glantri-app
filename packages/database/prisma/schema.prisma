@@ -182,19 +182,49 @@ model Weapon {
 }
 
 model Encounter {
-  id              String   @id @default(cuid())
-  name            String
-  campaignId      String?
-  scenarioId      String?
-  status          String   @default("setup")
-  sessionJson     Json?
-  createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                   String                         @id @default(cuid())
+  name                 String
+  campaignId           String?
+  scenarioId           String?
+  status               String                         @default("setup")
+  sessionJson          Json?
+  combatStorageMode    String                         @default("legacy")
+  combatArchiveCount   Int                            @default(0)
+  createdByUserId      String?
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  activeCombatState    EncounterActiveCombatState?
+  archivedCombatRounds EncounterArchivedCombatRound[]
 
   @@index([campaignId])
   @@index([scenarioId])
   @@index([scenarioId, updatedAt])
+}
+
+model EncounterActiveCombatState {
+  encounterId   String    @id
+  revision      DateTime
+  stateJson     Json
+  schemaVersion Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  encounter     Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+
+  @@index([revision])
+}
+
+model EncounterArchivedCombatRound {
+  id             String    @id @default(cuid())
+  encounterId    String
+  roundNumber    Int
+  roundJson      Json
+  sourceRevision DateTime
+  schemaVersion  Int       @default(1)
+  createdAt      DateTime  @default(now())
+  encounter      Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+
+  @@unique([encounterId, roundNumber])
+  @@index([encounterId, roundNumber])
 }
 
 model User {

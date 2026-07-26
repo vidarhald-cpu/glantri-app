@@ -1,5 +1,12 @@
 # Encounter summary loading and GM polling
 
+## Split persistence
+
+Summary and revision endpoints continue to read only `Encounter` metadata. They do
+not join active state or archives. `Encounter.updatedAt` remains the one canonical
+revision across metadata, split active state, composed history, and exact encounter
+responses.
+
 Status: implemented for the campaign workspace on 2026-07-26.
 
 ## Contracts

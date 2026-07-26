@@ -48,7 +48,11 @@ const encounter = encounterSessionSchema.parse({
 });
 
 const record = {
+  activeCombatState: null,
+  archivedCombatRounds: [],
   campaignId: encounter.campaignId ?? null,
+  combatArchiveCount: 0,
+  combatStorageMode: "legacy",
   createdAt: new Date(encounter.createdAt),
   id: encounter.id,
   name: encounter.title,
@@ -173,5 +177,71 @@ describe("combatStateReadRepository", () => {
       }),
     ]);
     expect(mocks.prisma.encounter.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads split active state without selecting archived round payloads", async () => {
+    const { rounds: _rounds, ...activeCombatState } = encounter.combatRoundState!;
+    mocks.prisma.encounter.findUnique.mockResolvedValue({
+      ...record,
+      activeCombatState: {
+        revision: new Date(encounter.updatedAt),
+        stateJson: activeCombatState,
+      },
+      combatArchiveCount: 1,
+      combatStorageMode: "split_v1",
+      sessionJson: {
+        ...encounter,
+        combatRoundState: undefined,
+      },
+    });
+    const repository = createPrismaCombatStateReadRepository();
+
+    await expect(repository.getActiveCombatStateById(encounter.id)).resolves.toMatchObject({
+      activeCombatState: expect.objectContaining({ roundNumber: 2 }),
+      encounterId: encounter.id,
+      revision: encounter.updatedAt,
+    });
+    const select = mocks.prisma.encounter.findUnique.mock.calls[0]?.[0]?.select;
+    expect(select).toHaveProperty("activeCombatState");
+    expect(select).not.toHaveProperty("archivedCombatRounds");
+  });
+
+  it("composes split full encounters and fails closed on partial split storage", async () => {
+    const { rounds, ...activeCombatState } = encounter.combatRoundState!;
+    mocks.prisma.encounter.findUnique.mockResolvedValue({
+      ...record,
+      activeCombatState: {
+        revision: new Date(encounter.updatedAt),
+        stateJson: activeCombatState,
+      },
+      archivedCombatRounds: rounds.map((round) => ({
+        roundJson: round,
+        roundNumber: round.roundNumber,
+      })),
+      combatArchiveCount: rounds.length,
+      combatStorageMode: "split_v1",
+      sessionJson: {
+        ...encounter,
+        combatRoundState: undefined,
+      },
+    });
+    const repository = createPrismaCombatStateReadRepository();
+
+    await expect(repository.getFullEncounterById(encounter.id)).resolves.toMatchObject({
+      encounter,
+      encounterId: encounter.id,
+    });
+
+    mocks.prisma.encounter.findUnique.mockResolvedValue({
+      ...record,
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      combatArchiveCount: 0,
+      combatStorageMode: "split_v1",
+      sessionJson: { ...encounter, combatRoundState: undefined },
+    });
+    await expect(repository.getFullEncounterById(encounter.id)).rejects.toMatchObject({
+      code: "malformed_split_storage",
+    });
   });
 });

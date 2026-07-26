@@ -64,6 +64,16 @@ export class EncounterService {
     return this.encounterRepository.updateEncounter(input);
   }
 
+  async updateCombatEncounter(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedRevision: string;
+    scenarioId?: string | null;
+    session: EncounterSession;
+  }): Promise<EncounterSession> {
+    return this.encounterRepository.updateCombatEncounter(input);
+  }
+
   async updateScenarioLiveState(input: {
     liveState: Scenario["liveState"];
     scenarioId: string;

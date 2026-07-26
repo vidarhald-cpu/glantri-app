@@ -1,0 +1,296 @@
+import { readFileSync } from "node:fs";
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  combatRoundStateSchema,
+  encounterSessionSchema,
+  type EncounterSession,
+} from "@glantri/domain";
+
+import {
+  COMBAT_STORAGE_MODE_LEGACY,
+  COMBAT_STORAGE_MODE_SPLIT_V1,
+  createPrismaCombatStatePersistenceRepository,
+} from "./combatStatePersistenceRepository";
+
+const revision1 = "2026-07-26T10:00:00.000Z";
+const revision2 = new Date("2026-07-26T10:00:01.000Z");
+
+function buildSession(archiveCount: number): EncounterSession {
+  return encounterSessionSchema.parse({
+    actionLog: [],
+    combatRoundState: combatRoundStateSchema.parse({
+      commands: [],
+      encounterId: "encounter-1",
+      participants: [{ label: "Aria", participantId: "aria" }],
+      roundNumber: archiveCount + 1,
+      rounds: Array.from({ length: archiveCount }, (_, index) => ({
+        encounterId: "encounter-1",
+        roundNumber: index + 1,
+      })),
+    }),
+    createdAt: "2026-07-26T09:00:00.000Z",
+    currentRound: archiveCount + 1,
+    id: "encounter-1",
+    kind: "combat",
+    participants: [
+      {
+        id: "aria",
+        label: "Aria",
+        participantType: "scenario",
+        scenarioParticipantId: "scenario-aria",
+      },
+    ],
+    scenarioId: "scenario-1",
+    status: "active",
+    title: "Courtyard",
+    updatedAt: revision1,
+  });
+}
+
+function createClientFixture(input?: {
+  archiveCount?: number;
+  storageMode?: string;
+  updateCount?: number;
+}) {
+  const encounter = {
+    findUniqueOrThrow: vi
+      .fn()
+      .mockResolvedValueOnce({
+        combatArchiveCount: input?.archiveCount ?? 0,
+        combatStorageMode: input?.storageMode ?? COMBAT_STORAGE_MODE_LEGACY,
+        updatedAt: new Date(revision1),
+      })
+      .mockResolvedValue({ updatedAt: revision2 }),
+    updateMany: vi.fn().mockResolvedValue({ count: input?.updateCount ?? 1 }),
+    update: vi.fn().mockResolvedValue({ updatedAt: revision2 }),
+  };
+  const client = {
+    $transaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback(client)),
+    encounter,
+    encounterActiveCombatState: {
+      update: vi.fn().mockResolvedValue({}),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+    encounterArchivedCombatRound: {
+      create: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+  };
+  return client;
+}
+
+describe("combatStatePersistenceRepository", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("materializes legacy active state and each existing archive transactionally", async () => {
+    const client = createClientFixture();
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+
+    const saved = await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      scenarioId: "scenario-1",
+      session: buildSession(2),
+    });
+
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(client.encounter.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          combatArchiveCount: 2,
+          combatStorageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+          sessionJson: expect.not.objectContaining({ combatRoundState: expect.anything() }),
+        }),
+        where: { id: "encounter-1", updatedAt: new Date(revision1) },
+      }),
+    );
+    expect(client.encounterActiveCombatState.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          encounterId: "encounter-1",
+          stateJson: expect.not.objectContaining({ rounds: expect.anything() }),
+        }),
+      }),
+    );
+    expect(client.encounterArchivedCombatRound.create).toHaveBeenCalledTimes(2);
+    expect(saved.combatRoundState?.rounds).toHaveLength(2);
+    expect(saved.updatedAt).toBe(revision2.toISOString());
+  });
+
+  it("ordinary split combat writes touch metadata and active state but not archives", async () => {
+    const client = createClientFixture({
+      archiveCount: 30,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+    });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+
+    await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      session: buildSession(30),
+    });
+
+    expect(client.encounterActiveCombatState.upsert).toHaveBeenCalledTimes(1);
+    expect(client.encounterArchivedCombatRound.create).not.toHaveBeenCalled();
+    expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("round transition appends exactly one bounded archive row", async () => {
+    const client = createClientFixture({
+      archiveCount: 1,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+    });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+
+    await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      session: buildSession(2),
+    });
+
+    expect(client.encounterArchivedCombatRound.create).toHaveBeenCalledTimes(1);
+    expect(client.encounterArchivedCombatRound.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ encounterId: "encounter-1", roundNumber: 2 }),
+    });
+  });
+
+  it("cross-boundary undo removes only the exact last archive row", async () => {
+    const client = createClientFixture({
+      archiveCount: 2,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+    });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+
+    await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      session: buildSession(1),
+    });
+
+    expect(client.encounterArchivedCombatRound.deleteMany).toHaveBeenCalledWith({
+      where: { encounterId: "encounter-1", roundNumber: 2 },
+    });
+    expect(client.encounterArchivedCombatRound.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-boundary archive rewrites and stale metadata revisions", async () => {
+    const invalidClient = createClientFixture({
+      archiveCount: 1,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+    });
+    const invalidRepository = createPrismaCombatStatePersistenceRepository(invalidClient as never);
+    await expect(
+      invalidRepository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(3),
+      }),
+    ).rejects.toMatchObject({
+      code: "archive_delta_invalid",
+    });
+
+    const staleClient = createClientFixture({
+      archiveCount: 1,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+      updateCount: 0,
+    });
+    const staleRepository = createPrismaCombatStatePersistenceRepository(staleClient as never);
+    await expect(
+      staleRepository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(1),
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+    expect(staleClient.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
+  });
+
+  it("active payload size is independent of archived round count", async () => {
+    const sizes: number[] = [];
+    for (const count of [0, 10, 30, 50]) {
+      const client = createClientFixture({
+        archiveCount: count,
+        storageMode: count === 0 ? COMBAT_STORAGE_MODE_LEGACY : COMBAT_STORAGE_MODE_SPLIT_V1,
+      });
+      const repository = createPrismaCombatStatePersistenceRepository(client as never);
+      await repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(count),
+      });
+      const call = client.encounterActiveCombatState.upsert.mock.calls[0]?.[0];
+      sizes.push(JSON.stringify(call.create.stateJson).length);
+    }
+
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(2);
+  });
+
+  it("non-combat edits preserve authoritative split combat instead of caller combat", async () => {
+    const client = createClientFixture({
+      archiveCount: 1,
+      storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+    });
+    const canonical = buildSession(1);
+    const { rounds, ...activeCombatState } = canonical.combatRoundState!;
+    client.encounter.findUniqueOrThrow.mockReset();
+    client.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: {
+        revision: new Date(revision1),
+        stateJson: activeCombatState,
+      },
+      archivedCombatRounds: rounds.map((round) => ({
+        roundJson: round,
+        roundNumber: round.roundNumber,
+      })),
+      campaignId: null,
+      combatArchiveCount: 1,
+      combatStorageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+      createdAt: new Date(canonical.createdAt),
+      id: canonical.id,
+      name: canonical.title,
+      scenarioId: canonical.scenarioId ?? null,
+      sessionJson: {
+        ...canonical,
+        combatRoundState: undefined,
+      },
+      status: canonical.status,
+      updatedAt: new Date(revision1),
+    });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+    const staleEditorState = buildSession(0).combatRoundState;
+
+    const saved = await repository.updateEncounterPreservingSplitCombat({
+      encounterId: canonical.id,
+      session: {
+        ...canonical,
+        combatRoundState: staleEditorState,
+        title: "Renamed",
+      },
+    });
+
+    expect(saved.title).toBe("Renamed");
+    expect(saved.combatRoundState).toEqual(canonical.combatRoundState);
+    expect(client.encounterActiveCombatState.update).toHaveBeenCalledWith({
+      data: { revision: revision2 },
+      where: { encounterId: canonical.id },
+    });
+    expect(client.encounterArchivedCombatRound.create).not.toHaveBeenCalled();
+    expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("exposes no ordinary archive update path", () => {
+    const source = readFileSync(
+      new URL("./combatStatePersistenceRepository.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("encounterArchivedCombatRound.update");
+    expect(source).not.toContain("encounterArchivedCombatRound.updateMany");
+    expect(source).toContain("encounterArchivedCombatRound.create");
+    expect(source).toContain("encounterArchivedCombatRound.deleteMany");
+  });
+});

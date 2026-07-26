@@ -3346,9 +3346,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (!encounter.combatRoundState ||
           combatRoundStatesDiffer(roundState, encounter.combatRoundState));
       const normalizedEncounter = shouldNormalizeCombatRoundState
-        ? await encounterService.updateEncounter({
+        ? await encounterService.updateCombatEncounter({
             campaignId: access.campaignId,
             encounterId,
+            expectedRevision: encounter.updatedAt,
             scenarioId,
             session: {
               ...encounter,
@@ -4075,7 +4076,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           step: roundState.currentStep,
           submittedBy: "gm",
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -4573,7 +4575,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               submittedBy: "gm",
             })
           : declaredRoundState;
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -4677,7 +4680,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId: encounter.scenarioId,
@@ -4773,7 +4777,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           response,
           state: roundState,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId: encounter.scenarioId,
@@ -4856,7 +4861,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           value,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId: encounter.scenarioId,
@@ -5049,7 +5055,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         result,
         state: roundState,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId: encounter.scenarioId,
@@ -5152,7 +5159,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             }),
           );
         }
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId: encounter.scenarioId,
@@ -5345,7 +5353,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         tableResult: difference === undefined ? undefined : resolveCombatFeintTable(difference),
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId: encounter.scenarioId,
@@ -5504,7 +5513,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         proposalId,
         state: roundState,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId: encounter.scenarioId,
@@ -5684,7 +5694,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
         visibility: encounter.roleplayState?.visibility,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -5774,7 +5785,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
         const submittedAt = new Date().toISOString();
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -5870,7 +5882,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         );
       }
 
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -6066,7 +6079,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             combatEffects: rolled.combatEffects,
           },
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6346,7 +6360,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           );
         }
 
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6500,7 +6515,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
           state: roundState,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6619,7 +6635,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           rolledBy: "gm_proxy",
           state: roundState,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6721,7 +6738,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           participantId: encounterParticipant?.id,
           state: roundState,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6829,7 +6847,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           scenarioId,
           state: { ...scenarioParticipant.state, combatEffects: committed.combatEffects },
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -6965,7 +6984,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatEffects: rolled.combatEffects,
         },
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -7110,7 +7130,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -7237,7 +7258,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -7317,7 +7339,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           }),
           state: roundState,
         });
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -7429,7 +7452,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               )
             ).filter((participant): participant is ScenarioParticipant => participant !== undefined)
           : [];
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -7566,7 +7590,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         reviewedByUserId: user.id,
         state: roundState,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -7734,7 +7759,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatEffects: committed.combatEffects,
         },
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -7893,7 +7919,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           ),
         );
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -8285,7 +8312,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -8551,7 +8579,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: access.mode === "gm" ? "gm" : "player",
         updatedAt: submittedAt,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -8894,7 +8923,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
 
-        const savedEncounter = await encounterService.updateEncounter({
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
           campaignId: access.campaignId,
           encounterId,
           scenarioId,
@@ -9130,7 +9160,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             ?.targetLocation,
         updatedAt: submittedAt,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -9333,7 +9364,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           attackResult.weaponArmorClass ??
           normalizeCombatArmorModifierClass(latestAttackerSnapshot?.attackSummary?.attackMode),
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -9514,7 +9546,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: access.mode === "gm" ? "gm" : "player",
         updatedAt: submittedAt,
       });
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,
@@ -9614,7 +9647,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatRoundStatesDiffer(roundState, encounter.combatRoundState)
         ) {
           const repairedAt = new Date().toISOString();
-          const savedEncounter = await encounterService.updateEncounter({
+          const savedEncounter = await encounterService.updateCombatEncounter({
+            expectedRevision: encounter.updatedAt,
             campaignId: access.campaignId,
             encounterId,
             scenarioId,
@@ -9744,7 +9778,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
-      const savedEncounter = await encounterService.updateEncounter({
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId,

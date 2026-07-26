@@ -15,9 +15,10 @@ import {
 /**
  * Read-only combat persistence boundary.
  *
- * The current adapter still reads the single Encounter.sessionJson document
- * for state/history views. Callers are insulated from that storage shape and
- * request only the canonical view they consume.
+ * Split-v1 encounters read metadata, active state, and archives from their
+ * physical stores. Legacy encounters retain the validated sessionJson adapter.
+ * Callers remain insulated from both persistence shapes and request only the
+ * canonical view they consume.
  */
 export class CombatStateReadService {
   constructor(

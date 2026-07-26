@@ -1,5 +1,11 @@
 # Player Combat refresh and history coordination
 
+## Split persistence
+
+The revision-keyed refresh contract is unchanged. Exact player encounter and history
+responses are composed from split canonical storage and sanitized at the existing
+player-safe boundary. Storage mode and row identities never enter Player Combat.
+
 Status: implemented on 2026-07-26.
 
 ## Previous request graph

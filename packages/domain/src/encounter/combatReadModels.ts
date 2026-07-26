@@ -247,6 +247,12 @@ interface PersistedEncounterReadMetadataInput {
   title: string;
 }
 
+export interface SplitCombatPersistenceParts {
+  activeCombatState?: ActiveCombatRoundState;
+  archivedRounds: CompletedCombatRound[];
+  sessionWithoutCombatState: EncounterSession;
+}
+
 const persistedCombatReadSessionSchema = z
   .object({
     combatRoundState: z.unknown().optional(),
@@ -291,6 +297,126 @@ function splitPersistedCombatState(value: unknown): {
     activeCombatState: activeState,
     archivedRounds: rounds ?? [],
   };
+}
+
+export function splitEncounterSessionForCombatPersistence(
+  encounter: EncounterSession,
+): SplitCombatPersistenceParts {
+  const normalized = encounterSessionSchema.parse(encounter);
+  const { combatRoundState, ...sessionWithoutCombatState } = normalized;
+
+  if (!combatRoundState) {
+    return {
+      archivedRounds: [],
+      sessionWithoutCombatState: encounterSessionSchema.parse(sessionWithoutCombatState),
+    };
+  }
+
+  const { rounds, ...activeCombatState } = combatRoundStateSchema.parse(combatRoundState);
+
+  return {
+    activeCombatState: activeCombatRoundStateSchema.parse(activeCombatState),
+    archivedRounds: rounds.map((round) => completedCombatRoundSchema.parse(round)),
+    sessionWithoutCombatState: encounterSessionSchema.parse(sessionWithoutCombatState),
+  };
+}
+
+export function composeEncounterSessionFromSplitCombatPersistence(input: {
+  activeCombatState?: unknown;
+  archivedRounds: unknown[];
+  metadata: PersistedEncounterReadMetadataInput;
+  sessionWithoutCombatState: unknown;
+}): EncounterSession {
+  const metadata = parseMetadata(input.metadata);
+  const session = encounterSessionSchema.parse(input.sessionWithoutCombatState);
+  const activeCombatState =
+    input.activeCombatState === undefined || input.activeCombatState === null
+      ? undefined
+      : activeCombatRoundStateSchema.parse(input.activeCombatState);
+  const archivedRounds = input.archivedRounds.map((round) =>
+    completedCombatRoundSchema.parse(round),
+  );
+
+  return encounterSessionSchema.parse({
+    ...session,
+    campaignId: metadata.campaignId,
+    combatRoundState: activeCombatState
+      ? combatRoundStateSchema.parse({
+          ...activeCombatState,
+          encounterId: metadata.encounterId,
+          rounds: archivedRounds,
+        })
+      : undefined,
+    createdAt: metadata.createdAt,
+    id: metadata.encounterId,
+    scenarioId: metadata.scenarioId,
+    status: metadata.status,
+    title: metadata.title,
+    updatedAt: metadata.revision,
+  });
+}
+
+export function buildActiveCombatStateViewFromSplitStorage(input: {
+  activeCombatState?: unknown;
+  metadata: PersistedEncounterReadMetadataInput;
+  sessionWithoutCombatState: unknown;
+}): ActiveCombatStateView {
+  const metadata = parseMetadata(input.metadata);
+  const session = persistedCombatReadSessionSchema.parse(input.sessionWithoutCombatState ?? {});
+
+  return activeCombatStateViewSchema.parse({
+    activeCombatState: input.activeCombatState,
+    currentRound: session.currentRound,
+    encounterId: metadata.encounterId,
+    participantMembershipMode: session.participantMembershipMode,
+    participants: session.participants,
+    participantVisibility: session.roleplayState?.visibility ?? {},
+    revision: metadata.revision,
+    scenarioId: metadata.scenarioId,
+    status: metadata.status,
+    updatedAt: metadata.updatedAt,
+    viewVersion: 1,
+  });
+}
+
+export function buildArchivedCombatRoundsViewFromSplitStorage(input: {
+  archivedRounds: unknown[];
+  metadata: PersistedEncounterReadMetadataInput;
+}): ArchivedCombatRoundsView {
+  const metadata = parseMetadata(input.metadata);
+
+  return archivedCombatRoundsViewSchema.parse({
+    archivedRounds: input.archivedRounds,
+    encounterId: metadata.encounterId,
+    revision: metadata.revision,
+    updatedAt: metadata.updatedAt,
+    viewVersion: 1,
+  });
+}
+
+export function buildCombatHistorySourceViewFromSplitStorage(input: {
+  activeCombatState?: unknown;
+  archivedRounds: unknown[];
+  metadata: PersistedEncounterReadMetadataInput;
+  sessionWithoutCombatState: unknown;
+}): CombatHistorySourceView {
+  const metadata = parseMetadata(input.metadata);
+  const session = persistedCombatReadSessionSchema.parse(input.sessionWithoutCombatState ?? {});
+
+  return combatHistorySourceViewSchema.parse({
+    activeCombatState: input.activeCombatState,
+    archivedRounds: input.archivedRounds,
+    currentRound: session.currentRound,
+    encounterId: metadata.encounterId,
+    participantMembershipMode: session.participantMembershipMode,
+    participants: session.participants,
+    participantVisibility: session.roleplayState?.visibility ?? {},
+    revision: metadata.revision,
+    scenarioId: metadata.scenarioId,
+    status: metadata.status,
+    updatedAt: metadata.updatedAt,
+    viewVersion: 1,
+  });
 }
 
 export function buildEncounterMetadataView(

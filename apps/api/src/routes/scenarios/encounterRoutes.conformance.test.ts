@@ -177,4 +177,21 @@ describe("combat route canonical-conformance guards", () => {
     expect(routeSource).toContain("commandEnvelope");
     expect(routeSource).toContain("encounter: savedEncounter");
   });
+
+  it("persists ordinary combat mutations through the revision-guarded split boundary", () => {
+    const combatStart = source.indexOf('app.post("/encounters/:encounterId/combat-declaration"');
+    const roleplayStart = source.indexOf(
+      'app.post("/encounters/:encounterId/player-roll"',
+      combatStart,
+    );
+    const combatRoutes = source.slice(combatStart, roleplayStart);
+
+    expect(combatStart).toBeGreaterThanOrEqual(0);
+    expect(roleplayStart).toBeGreaterThan(combatStart);
+    expect(combatRoutes).toContain("updateCombatEncounter");
+    expect(combatRoutes).not.toContain("encounterService.updateEncounter");
+    expect(combatRoutes.match(/expectedRevision: encounter\.updatedAt/g)?.length).toBeGreaterThan(
+      20,
+    );
+  });
 });

@@ -1,5 +1,13 @@
 # Combat command undo facts
 
+## Split archive interaction
+
+Compact initiative undo remains entirely inside the active-state row. In-round undo
+therefore rewrites no archive payload. The existing canonical cross-round undo seam
+is persisted as an explicit removal of the exact last archived-round row plus the
+replacement active state in one transaction. Legacy full `previousState` commands
+remain readable after composition.
+
 Status: implemented for phase initiative commitment on 2026-07-26.
 
 ## Rule

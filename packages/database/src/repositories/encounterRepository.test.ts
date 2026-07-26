@@ -4,10 +4,12 @@ import type { EncounterSession } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
+    $transaction: vi.fn(),
     encounter: {
       create: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -79,6 +81,21 @@ describe("encounterRepository trusted identifiers", () => {
   it("updates the trusted encounter id instead of the body id", async () => {
     const repository = createPrismaEncounterRepository();
     const persistedUpdatedAt = "2026-01-01T00:00:01.000Z";
+    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
+    mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      campaignId: "campaign-1",
+      combatArchiveCount: 0,
+      combatStorageMode: "legacy",
+      createdAt: new Date(baseSession.createdAt),
+      id: baseSession.id,
+      name: baseSession.title,
+      scenarioId: "scenario-1",
+      sessionJson: baseSession,
+      status: baseSession.status,
+      updatedAt: new Date(baseSession.updatedAt),
+    });
     mocks.prisma.encounter.update.mockImplementation(async ({ data, where }) => ({
       campaignId: data.campaignId,
       createdAt: new Date(baseSession.createdAt),

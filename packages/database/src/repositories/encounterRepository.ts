@@ -7,6 +7,8 @@ import {
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "../client";
+import { createPrismaCombatStatePersistenceRepository } from "./combatStatePersistenceRepository";
+import { createPrismaCombatStateReadRepository } from "./combatStateReadRepository";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -75,9 +77,19 @@ export interface EncounterRepository {
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession>;
+  updateCombatEncounter(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedRevision: string;
+    scenarioId?: string | null;
+    session: EncounterSession;
+  }): Promise<EncounterSession>;
 }
 
 export function createPrismaEncounterRepository(): EncounterRepository {
+  const combatReadRepository = createPrismaCombatStateReadRepository();
+  const combatPersistenceRepository = createPrismaCombatStatePersistenceRepository();
+
   return {
     async createEncounter(input) {
       const normalized = encounterSessionSchema.parse({
@@ -100,11 +112,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       return mapEncounterRecord(record);
     },
     async getEncounterById(encounterId) {
-      const record = await prisma.encounter.findUnique({
-        where: { id: encounterId },
-      });
-
-      return record ? mapEncounterRecord(record) : null;
+      return (await combatReadRepository.getFullEncounterById(encounterId))?.encounter ?? null;
     },
     async getEncounterSummaryById(encounterId) {
       const record = await prisma.encounter.findUnique({
@@ -125,10 +133,14 @@ export function createPrismaEncounterRepository(): EncounterRepository {
     async listEncountersByScenario(scenarioId) {
       const records = await prisma.encounter.findMany({
         orderBy: { updatedAt: "desc" },
+        select: { id: true },
         where: { scenarioId },
       });
 
-      return records.map(mapEncounterRecord);
+      const encounters = await Promise.all(
+        records.map((record) => combatReadRepository.getFullEncounterById(record.id)),
+      );
+      return encounters.flatMap((view) => (view ? [view.encounter] : []));
     },
     async listEncounterSummariesByScenario(scenarioId) {
       const records = await prisma.encounter.findMany({
@@ -148,24 +160,10 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       return records.map(mapEncounterSummary);
     },
     async updateEncounter(input) {
-      const normalized = encounterSessionSchema.parse({
-        ...input.session,
-        campaignId: input.campaignId ?? input.session.campaignId,
-        id: input.encounterId,
-        scenarioId: input.scenarioId ?? input.session.scenarioId,
-      });
-      const record = await prisma.encounter.update({
-        data: {
-          campaignId: normalized.campaignId ?? null,
-          name: normalized.title,
-          scenarioId: normalized.scenarioId ?? null,
-          sessionJson: asJson(normalized),
-          status: normalized.status,
-        },
-        where: { id: input.encounterId },
-      });
-
-      return mapEncounterRecord(record);
+      return combatPersistenceRepository.updateEncounterPreservingSplitCombat(input);
+    },
+    async updateCombatEncounter(input) {
+      return combatPersistenceRepository.updateCombatEncounter(input);
     },
   };
 }

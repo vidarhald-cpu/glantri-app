@@ -76,13 +76,15 @@ const mocks = vi.hoisted(() => {
     getEncounterMetadataById: vi.fn(),
     listEncounterAccessMetadataByScenario: vi.fn(),
   };
+  const updateEncounter = vi.fn();
   const encounterService = {
     createEncounter: vi.fn(),
     getEncounterById: vi.fn(),
     getEncounterSummaryById: vi.fn(),
     listEncounterSummariesByScenario: vi.fn(),
     listEncountersByScenario: vi.fn(),
-    updateEncounter: vi.fn(),
+    updateCombatEncounter: updateEncounter,
+    updateEncounter,
     updateScenarioParticipantState: vi.fn(),
   };
   const scenarioService = {
