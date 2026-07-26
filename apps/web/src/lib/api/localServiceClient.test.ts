@@ -78,6 +78,8 @@ describe("localServiceClient wire contract", () => {
       activeRound: { events: [], roundNumber: 2, snapshots: [] },
       archivedRounds: [],
       rows: [],
+      sourceEncounterId: "encounter-1",
+      sourceUpdatedAt: "revision-2",
     };
     const fetchMock = stubFetch({ history });
     const client = await loadClient();
@@ -94,6 +96,8 @@ describe("localServiceClient wire contract", () => {
       activeRound: { events: [], roundNumber: 1, snapshots: [] },
       archivedRounds: [],
       rows: [],
+      sourceEncounterId: "encounter-1",
+      sourceUpdatedAt: "revision-1",
     };
     const fetchMock = stubFetch({ history });
     const client = await loadClient();

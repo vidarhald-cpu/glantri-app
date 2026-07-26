@@ -115,3 +115,10 @@ uses the post-review revision on its first click. Player Combat invalidates any 
 whose source revision no longer matches its accepted encounter while it loads the new sanitized
 projection. Genuine cross-client stale requests still fail closed, refresh canonical state once,
 and are never replayed automatically.
+
+Player Combat refresh consolidation (2026-07-26): every player-enabled mutation adopts its returned
+exact encounter through one monotonic revision gate, then requests at most one player-safe history
+projection keyed by encounter, revision, and optional GM perspective. Interval and focus refreshes
+poll only compact revision metadata; unchanged polls project no task and fetch no encounter or
+history. A newer revision invalidates action controls until the exact player-safe encounter and
+matching progression/history projection arrive.

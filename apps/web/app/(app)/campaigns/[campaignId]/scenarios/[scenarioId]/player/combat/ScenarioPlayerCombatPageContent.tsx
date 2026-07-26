@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type CombatHistoryProjection,
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
@@ -60,7 +59,6 @@ import {
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
   getCombatProgressionPresentationTasks,
-  isCombatViewRevisionAtLeast,
   isCombatViewRevisionUnchanged,
   PlayerCombatHistoryInspector,
   resolveProjectedCombatHistoryPanelSnapshot,
@@ -119,6 +117,7 @@ import {
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import { ApiRequestError } from "@/lib/api/apiClient";
 import { buildCharacterSheetSummary, type CombatAllocationState } from "@glantri/rules-engine";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -138,6 +137,7 @@ import {
   loadCombatHistory,
   loadCharacterEquipmentState,
   loadEncounterById,
+  loadEncounterRevision,
   loadScenarioMyParticipant,
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
@@ -172,6 +172,15 @@ import {
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
 import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
+import { pollActiveEncounterRevision } from "@/lib/campaigns/activeEncounterPolling";
+import {
+  createPlayerCombatHistoryRequestCoordinator,
+  isMatchingPlayerCombatHistory,
+  loadPlayerCombatSlowContext,
+  shouldAcceptPlayerCombatEncounter,
+  type PlayerCombatHistoryIdentity,
+  type RevisionKeyedCombatHistory,
+} from "@/lib/campaigns/playerCombatRefresh";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -1048,15 +1057,34 @@ export default function ScenarioPlayerCombatPageContent({
   const searchParams = useSearchParams();
   const searchParamString = searchParams.toString();
   const { currentUser, loading: sessionLoading } = useSessionUser();
+  const isGameMaster = Boolean(
+    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
+  );
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
   const [combatActionError, setCombatActionError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [slowContextReady, setSlowContextReady] = useState(false);
+  const [revisionRefreshPending, setRevisionRefreshPending] = useState(false);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
-  const [combatHistory, setCombatHistory] = useState<CombatHistoryProjection>();
+  const [revisionBoundHistory, setRevisionBoundHistory] =
+    useState<RevisionKeyedCombatHistory>();
+  const combatHistory = revisionBoundHistory?.history;
   const [combatLogSelection, setCombatLogSelection] = useState<CombatLogPresentationSelection>();
-  const acceptedEncounterUpdatedAtRef = useRef<string | undefined>(undefined);
+  const acceptedEncounterRef = useRef<EncounterSession | undefined>(undefined);
+  const acceptedHistoryRef = useRef<RevisionKeyedCombatHistory | undefined>(undefined);
+  const encounterRequestIdRef = useRef(0);
+  const selectedParticipantIdRef = useRef("");
+  const historyCoordinatorRef = useRef<
+    ReturnType<typeof createPlayerCombatHistoryRequestCoordinator> | undefined
+  >(undefined);
+  if (!historyCoordinatorRef.current) {
+    historyCoordinatorRef.current = createPlayerCombatHistoryRequestCoordinator({
+      loadHistory: loadCombatHistory,
+    });
+  }
+  const historyCoordinator = historyCoordinatorRef.current;
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -1103,27 +1131,97 @@ export default function ScenarioPlayerCombatPageContent({
     useState<PhaseAttackChoiceSelection>("continue");
   const [doubleAttackPhase2Decision, setDoubleAttackPhase2Decision] =
     useState<DoubleAttackPhase2Decision>("continue");
-  const isGameMaster = Boolean(
-    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
+  const controlsDisabled = readOnlyInspection || revisionRefreshPending;
+  const historyPerspectiveKey = isGameMaster ? selectedParticipantId : "player";
+  selectedParticipantIdRef.current = selectedParticipantId;
+
+  const getHistoryIdentity = useCallback(
+    (encounter: EncounterSession): PlayerCombatHistoryIdentity | undefined => {
+      const perspectiveParticipantId = isGameMaster
+        ? selectedParticipantIdRef.current || undefined
+        : undefined;
+      if (isGameMaster && !perspectiveParticipantId) return undefined;
+
+      return {
+        encounterId: encounter.id,
+        perspectiveParticipantId,
+        revision: encounter.updatedAt,
+      };
+    },
+    [isGameMaster],
   );
-  const controlsDisabled = readOnlyInspection;
+
+  const ensureCombatHistory = useCallback(
+    async (encounter: EncounterSession) => {
+      const identity = getHistoryIdentity(encounter);
+      if (!identity) return false;
+      if (
+        isMatchingPlayerCombatHistory({
+          candidate: acceptedHistoryRef.current,
+          identity,
+        })
+      ) {
+        return true;
+      }
+
+      try {
+        const candidate = await historyCoordinator.request(identity);
+        const acceptedEncounter = acceptedEncounterRef.current;
+        const currentIdentity = acceptedEncounter
+          ? getHistoryIdentity(acceptedEncounter)
+          : undefined;
+        if (
+          !currentIdentity ||
+          !isMatchingPlayerCombatHistory({
+            candidate,
+            identity: currentIdentity,
+          })
+        ) {
+          return false;
+        }
+
+        acceptedHistoryRef.current = candidate;
+        setRevisionBoundHistory(candidate);
+        return true;
+      } catch {
+        const acceptedEncounter = acceptedEncounterRef.current;
+        if (
+          acceptedEncounter?.id === identity.encounterId &&
+          acceptedEncounter.updatedAt === identity.revision
+        ) {
+          setError("Combat view could not refresh. Showing the latest confirmed state.");
+        }
+        return false;
+      }
+    },
+    [getHistoryIdentity, historyCoordinator],
+  );
+
   const acceptEncounterSession = useCallback((nextEncounter: EncounterSession | undefined) => {
-    if (!nextEncounter) {
-      return false;
-    }
-    const acceptedUpdatedAt = acceptedEncounterUpdatedAtRef.current;
     if (
-      !isCombatViewRevisionAtLeast({
-        acceptedUpdatedAt,
-        candidateUpdatedAt: nextEncounter.updatedAt,
+      !nextEncounter ||
+      !encounterId ||
+      !shouldAcceptPlayerCombatEncounter({
+        accepted: acceptedEncounterRef.current,
+        candidate: nextEncounter,
+        expectedEncounterId: encounterId,
       })
     ) {
       return false;
     }
-    acceptedEncounterUpdatedAtRef.current = nextEncounter.updatedAt;
-    setCombatHistory((current) =>
-      current?.sourceUpdatedAt === nextEncounter.updatedAt ? current : undefined,
-    );
+
+    acceptedEncounterRef.current = nextEncounter;
+    const nextHistoryIdentity = getHistoryIdentity(nextEncounter);
+    if (
+      !nextHistoryIdentity ||
+      !isMatchingPlayerCombatHistory({
+        candidate: acceptedHistoryRef.current,
+        identity: nextHistoryIdentity,
+      })
+    ) {
+      acceptedHistoryRef.current = undefined;
+      setRevisionBoundHistory(undefined);
+    }
     setEncounterSession((current) =>
       isCombatViewRevisionUnchanged({
         acceptedUpdatedAt: current?.updatedAt,
@@ -1132,8 +1230,9 @@ export default function ScenarioPlayerCombatPageContent({
         ? current
         : nextEncounter,
     );
+    void ensureCombatHistory(nextEncounter);
     return true;
-  }, []);
+  }, [encounterId, ensureCombatHistory, getHistoryIdentity]);
   const rememberedParticipantSelection = useRememberedSelection(
     buildRememberedScopedSelectionKey({
       baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
@@ -1149,70 +1248,46 @@ export default function ScenarioPlayerCombatPageContent({
     if (!currentUser) {
       setProjection(undefined);
       setContent(undefined);
+      setSlowContextReady(false);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-
-    let refreshInFlight = false;
-    async function refreshCombatView(input: { showLoading?: boolean } = {}) {
-      if (refreshInFlight) return;
-      refreshInFlight = true;
-      if (input.showLoading ?? false) {
-        setLoading(true);
-      }
-
+    setLoading(true);
+    setSlowContextReady(false);
+    historyCoordinator.clear();
+    encounterRequestIdRef.current += 1;
+    acceptedEncounterRef.current = undefined;
+    acceptedHistoryRef.current = undefined;
+    setEncounterSession(undefined);
+    setRevisionBoundHistory(undefined);
+    async function loadSlowContext() {
       try {
-        const [nextProjection, nextContent, nextParticipants, nextEncounter, nextHistory] =
-          await Promise.all([
-            loadScenarioPlayerProjection(scenarioId),
-            loadCanonicalContent(),
+        const {
+          content: nextContent,
+          participants: nextParticipants,
+          projection: nextProjection,
+        } = await loadPlayerCombatSlowContext({
+          loadContent: loadCanonicalContent,
+          loadParticipants: () =>
             isGameMaster
-              ? loadScenarioParticipants(scenarioId)
-              : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
-            encounterId ? loadEncounterById(encounterId) : Promise.resolve(undefined),
-            encounterId
-              ? isGameMaster
-                ? selectedParticipantId
-                  ? loadCombatHistory(encounterId, {
-                      perspectiveParticipantId: selectedParticipantId,
-                    })
-                  : Promise.resolve(undefined)
-                : loadCombatHistory(encounterId)
-              : Promise.resolve(undefined),
-          ]);
+            ? loadScenarioParticipants(scenarioId)
+            : loadScenarioMyParticipant(scenarioId).then((participant) =>
+                participant ? [participant] : [],
+              ),
+          loadProjection: () => loadScenarioPlayerProjection(scenarioId),
+        });
 
-        if (cancelled) {
-          return;
-        }
-
-        const acceptedEncounter = nextEncounter ? acceptEncounterSession(nextEncounter) : true;
-        if (!acceptedEncounter) return;
+        if (cancelled) return;
         setProjection(nextProjection);
         setContent(nextContent);
         setSelectableParticipants(nextParticipants);
-        if (
-          nextHistory &&
-          (!nextEncounter ||
-            !nextHistory.sourceUpdatedAt ||
-            isCombatViewRevisionUnchanged({
-              acceptedUpdatedAt: nextEncounter.updatedAt,
-              candidateUpdatedAt: nextHistory.sourceUpdatedAt,
-            }))
-        ) {
-          setCombatHistory((current) =>
-            current && current.sourceUpdatedAt === nextHistory.sourceUpdatedAt
-              ? current
-              : nextHistory,
-          );
-        }
+        setSlowContextReady(true);
         setError(undefined);
         setCombatActionError(undefined);
       } catch (caughtError) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setError(
           caughtError instanceof Error
@@ -1220,83 +1295,168 @@ export default function ScenarioPlayerCombatPageContent({
             : "Unable to load the player combat screen.",
         );
       } finally {
-        refreshInFlight = false;
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
-    void refreshCombatView({ showLoading: true });
-
-    const intervalId = window.setInterval(() => {
-      if (cancelled) {
-        return;
-      }
-
-      void refreshCombatView();
-    }, 5000);
-
-    function refreshOnFocus() {
-      if (cancelled || document.visibilityState === "hidden") {
-        return;
-      }
-
-      void refreshCombatView();
-    }
-
-    window.addEventListener("focus", refreshOnFocus);
-    document.addEventListener("visibilitychange", refreshOnFocus);
+    void loadSlowContext();
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [currentUser, historyCoordinator, isGameMaster, scenarioId, sessionLoading]);
+
+  useEffect(() => {
+    if (
+      !currentUser ||
+      !encounterId ||
+      !slowContextReady ||
+      !historyPerspectiveKey
+    ) {
+      return;
+    }
+
+    if (acceptedEncounterRef.current?.id === encounterId) {
+      void ensureCombatHistory(acceptedEncounterRef.current);
+      setLoading(false);
+      return;
+    }
+
+    const requestId = encounterRequestIdRef.current + 1;
+    encounterRequestIdRef.current = requestId;
+    let cancelled = false;
+    setLoading(true);
+    acceptedEncounterRef.current = undefined;
+    acceptedHistoryRef.current = undefined;
+    setEncounterSession(undefined);
+    setRevisionBoundHistory(undefined);
+
+    loadEncounterById(encounterId)
+      .then(async (candidate) => {
+        if (cancelled || encounterRequestIdRef.current !== requestId) return;
+        if (acceptEncounterSession(candidate)) {
+          await ensureCombatHistory(candidate);
+        }
+      })
+      .catch((caughtError) => {
+        if (!cancelled && encounterRequestIdRef.current === requestId) {
+          setError(
+            caughtError instanceof Error ? caughtError.message : "Unable to load encounter.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled && encounterRequestIdRef.current === requestId) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      encounterRequestIdRef.current += 1;
     };
   }, [
     acceptEncounterSession,
     currentUser,
     encounterId,
+    ensureCombatHistory,
+    historyPerspectiveKey,
     isGameMaster,
-    scenarioId,
-    selectedParticipantId,
-    sessionLoading,
+    slowContextReady,
   ]);
 
   useEffect(() => {
-    if (!encounterId || !encounterSession || !currentUser) return;
-    let cancelled = false;
-    void loadCombatHistory(
-      encounterId,
-      isGameMaster && selectedParticipantId
-        ? { perspectiveParticipantId: selectedParticipantId }
-        : {},
-    )
-      .then((history) => {
-        if (
-          cancelled ||
-          (history.sourceUpdatedAt &&
-            !isCombatViewRevisionUnchanged({
-              acceptedUpdatedAt: encounterSession.updatedAt,
-              candidateUpdatedAt: history.sourceUpdatedAt,
-            }))
-        ) {
+    const acceptedEncounter = acceptedEncounterRef.current;
+    if (
+      sessionLoading ||
+      !currentUser ||
+      !encounterId ||
+      !acceptedEncounter ||
+      acceptedEncounter.id !== encounterId ||
+      acceptedEncounter.kind !== "combat" ||
+      acceptedEncounter.status === "complete" ||
+      acceptedEncounter.status === "archived"
+    ) {
+      return;
+    }
+
+    const polledEncounterId = encounterId;
+    let disposed = false;
+    let refreshInFlight = false;
+    async function refreshActiveCombatRevision() {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const result = await pollActiveEncounterRevision({
+          acceptedRevision: acceptedEncounterRef.current?.updatedAt,
+          encounterId: polledEncounterId,
+          loadEncounter: loadEncounterById,
+          loadRevision: loadEncounterRevision,
+          onNewerRevision: () => {
+            if (!disposed) setRevisionRefreshPending(true);
+          },
+        });
+        if (disposed || result.kind === "stale") return;
+        if (result.kind === "unchanged") {
+          const current = acceptedEncounterRef.current;
+          if (current && (await ensureCombatHistory(current))) {
+            setError(undefined);
+          }
           return;
         }
-        setCombatHistory((current) =>
-          current && current.sourceUpdatedAt === history.sourceUpdatedAt ? current : history,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError("Combat view could not refresh. Showing the latest confirmed state.");
+        if (
+          acceptEncounterSession(result.encounter) &&
+          (await ensureCombatHistory(result.encounter))
+        ) {
+          setError(undefined);
         }
-      });
+      } catch (caughtError) {
+        if (!disposed) {
+          if (caughtError instanceof ApiRequestError && caughtError.status === 404) {
+            acceptedEncounterRef.current = undefined;
+            acceptedHistoryRef.current = undefined;
+            setEncounterSession(undefined);
+            setRevisionBoundHistory(undefined);
+          }
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to refresh the player combat screen.",
+          );
+        }
+      } finally {
+        refreshInFlight = false;
+        if (!disposed) setRevisionRefreshPending(false);
+      }
+    }
+
+    function refreshVisibleCombat() {
+      if (document.visibilityState !== "hidden") {
+        void refreshActiveCombatRevision();
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshActiveCombatRevision();
+    }, 5000);
+    window.addEventListener("focus", refreshVisibleCombat);
+    document.addEventListener("visibilitychange", refreshVisibleCombat);
+
     return () => {
-      cancelled = true;
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleCombat);
+      document.removeEventListener("visibilitychange", refreshVisibleCombat);
     };
-  }, [currentUser, encounterId, encounterSession?.updatedAt, isGameMaster, selectedParticipantId]);
+  }, [
+    acceptEncounterSession,
+    currentUser,
+    encounterId,
+    encounterSession?.id,
+    encounterSession?.status,
+    ensureCombatHistory,
+    sessionLoading,
+  ]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -1384,10 +1544,15 @@ export default function ScenarioPlayerCombatPageContent({
   ]);
 
   useEffect(() => {
-    setCombatHistory(undefined);
+    acceptedHistoryRef.current = undefined;
+    setRevisionBoundHistory(undefined);
     setCombatLogSelection(undefined);
     setHistoryInspection(undefined);
-  }, [selectedParticipantId]);
+    const acceptedEncounter = acceptedEncounterRef.current;
+    if (acceptedEncounter) {
+      void ensureCombatHistory(acceptedEncounter);
+    }
+  }, [ensureCombatHistory, selectedParticipantId]);
 
   const selectedParticipant = useMemo(
     () =>
@@ -2953,27 +3118,7 @@ export default function ScenarioPlayerCombatPageContent({
         taskId: descriptor.taskId,
       });
 
-      if (acceptEncounterSession(encounter)) {
-        try {
-          const nextHistory = await loadCombatHistory(
-            encounterId,
-            isGameMaster && selectedParticipantId
-              ? { perspectiveParticipantId: selectedParticipantId }
-              : {},
-          );
-          if (
-            nextHistory.sourceUpdatedAt &&
-            isCombatViewRevisionUnchanged({
-              acceptedUpdatedAt: encounter.updatedAt,
-              candidateUpdatedAt: nextHistory.sourceUpdatedAt,
-            })
-          ) {
-            setCombatHistory(nextHistory);
-          }
-        } catch {
-          // The accepted encounter remains authoritative; polling will retry the projection.
-        }
-      }
+      acceptEncounterSession(encounter);
       setCombatActionError(undefined);
     } catch (caughtError) {
       setCombatActionError(

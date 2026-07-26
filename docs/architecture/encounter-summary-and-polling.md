@@ -80,6 +80,11 @@ Accepted same-client mutations remain authoritative immediately. Their
 encounter replaces local state and updates the selected summary locally;
 polling is only for cross-client changes.
 
+Player Combat now uses the same narrow revision contract. Its selected
+player-safe encounter and revision-keyed player-safe history are coordinated
+separately from scenario projection, content, and participant context. See
+`player-combat-refresh.md`.
+
 ## Summary refresh policy
 
 Summaries reload when:

@@ -304,6 +304,7 @@ describe("combat history projection", () => {
     const state = combatRoundStateSchema.parse({
       currentCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
       currentStep: "select_actions",
+      encounterId: "encounter-1",
       participants: [
         { label: "Aria", participantId: "aria" },
         { label: "Hidden foe", participantId: "hidden" },
@@ -335,6 +336,7 @@ describe("combat history projection", () => {
     const serialized = JSON.stringify(projection.progression);
 
     expect(projection.sourceUpdatedAt).toBe("revision-7");
+    expect(projection.sourceEncounterId).toBe("encounter-1");
     expect(projection.currentAttackModifierValidation).toEqual(originalValidation);
     expect(currentAttackModifierValidation).toEqual(originalValidation);
     expect(projection.progression).toMatchObject({

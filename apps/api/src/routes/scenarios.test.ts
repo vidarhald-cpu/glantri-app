@@ -3093,6 +3093,70 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.getEncounterById).not.toHaveBeenCalled();
   });
 
+  it("allows an authorized player to read only compact encounter revision metadata", async () => {
+    mocks.encounterService.getEncounterSummaryById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/revision",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain("combatRoundState");
+    expect(response.body).not.toContain("participants");
+    expect(response.body).not.toContain("commands");
+  });
+
+  it("rejects encounter revision access when the player cannot access the scenario", async () => {
+    mocks.encounterService.getEncounterSummaryById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(false);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/revision",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Encounter not found." });
+  });
+
   it("returns not found for a missing encounter revision", async () => {
     mocks.encounterService.getEncounterSummaryById.mockResolvedValue(null);
     const app = await buildScenarioTestApp();
@@ -3327,6 +3391,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().history.sourceEncounterId).toBe("encounter-1");
     expect(response.json().history.sourceUpdatedAt).toBe(encounter.updatedAt);
     expect(response.json().history.progression).toMatchObject({
       boundary: { roundNumber: 1 },

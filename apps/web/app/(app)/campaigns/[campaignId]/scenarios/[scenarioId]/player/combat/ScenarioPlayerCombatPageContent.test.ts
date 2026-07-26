@@ -49,7 +49,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatParryContextPanel");
-    expect(source).toContain("perspectiveParticipantId: selectedParticipantId");
+    expect(source).toContain("perspectiveParticipantId,");
     expect(source).toContain("setHistoryInspection(undefined)");
     expect(source).toContain("resolveProjectedCombatHistoryPanelSnapshot");
     expect(source).toContain("playerCombatTopPanelRowStyle");
@@ -127,9 +127,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("expectedRevision: modifierRequest.expectedRevision");
     expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
     expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
-    expect(source).toContain(
-      "current?.sourceUpdatedAt === nextEncounter.updatedAt ? current : undefined",
-    );
+    expect(source).toContain("createPlayerCombatHistoryRequestCoordinator");
+    expect(source).toContain("isMatchingPlayerCombatHistory");
     expect(source).toContain("rollCombatParryOnServer");
     expect(source).toContain("buildCombatParryModifierRequest({");
     expect(source).toContain("dbParryRaw: modifierRequest.dbParryRaw");
@@ -228,10 +227,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("descriptor.opportunityId");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("visibilitychange");
-    expect(source).toContain("loadCombatHistory(encounterId)");
+    expect(source).toContain("loadRevision: loadEncounterRevision");
     expect(source).toContain("buildProjectedCombatTrackerModel");
     expect(source).toContain("combatHistory?.progression");
-    expect(source).toContain("perspectiveParticipantId: selectedParticipantId");
+    expect(source).toContain("perspectiveParticipantId,");
     expect(source).not.toContain("buildCombatProgressionProjection");
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("setHistoryInspection({");
@@ -293,6 +292,35 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("isGameMaster");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
+  });
+
+  it("separates slow context from revision-bound encounter and history refresh", () => {
+    const source = readSource();
+    const slowContextStart = source.indexOf("async function loadSlowContext()");
+    const slowContextEnd = source.indexOf("useEffect(() => {", slowContextStart + 20);
+    const slowContext = source.slice(slowContextStart, slowContextEnd);
+    const brawlingStart = source.indexOf(
+      "async function rollCurrentOffensiveParryBrawling",
+    );
+    const brawlingEnd = source.indexOf(
+      "async function rollAttackerPrivilegedCombatDie",
+      brawlingStart,
+    );
+    const brawlingHandler = source.slice(brawlingStart, brawlingEnd);
+
+    expect(slowContext).toContain("loadScenarioPlayerProjection(scenarioId)");
+    expect(slowContext).toContain("loadContent: loadCanonicalContent");
+    expect(slowContext).toContain("loadScenarioParticipants(scenarioId)");
+    expect(slowContext).not.toContain("loadEncounterById");
+    expect(slowContext).not.toContain("loadCombatHistory");
+    expect(source).toContain("pollActiveEncounterRevision({");
+    expect(source).toContain("loadRevision: loadEncounterRevision");
+    expect(source).toContain("ensureCombatHistory(result.encounter)");
+    expect(source).toContain("historyCoordinator.request(identity)");
+    expect(source).not.toContain("loadCombatHistory(");
+    expect(source).not.toContain("encounterSession?.updatedAt, isGameMaster");
+    expect(brawlingHandler).toContain("acceptEncounterSession(encounter)");
+    expect(brawlingHandler).not.toContain("loadCombatHistory");
   });
 
   it("shows player-owned damage-chain facts only to involved attackers and defenders", () => {

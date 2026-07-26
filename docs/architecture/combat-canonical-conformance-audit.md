@@ -610,6 +610,13 @@ result without collapsing distinct opportunities. Player-safe task identity reta
 contest ID, and a successful mutation immediately reloads the accepted history revision; the first
 parallel roll therefore becomes a waiting state instead of a stale parent-parry action.
 
+Player Combat refresh preserves that identity through one
+encounter/revision/perspective-keyed history coordinator. Initial loading,
+external revision changes, ordinary mutations, and Offensive Parry Brawling no
+longer use separate history paths. Older encounter/history responses cannot
+replace a newer mutation result, and the compact revision response never
+authorizes a command or supplies hidden combat facts.
+
 Ownerless tracker cleanup and descriptor-keyed GM editing remain unrelated conformance cleanup; the
 new Brawling path does not depend on either.
 

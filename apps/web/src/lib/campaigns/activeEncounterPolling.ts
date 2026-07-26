@@ -10,6 +10,7 @@ export async function pollActiveEncounterRevision(input: {
   encounterId: string;
   loadEncounter: (encounterId: string) => Promise<EncounterSession>;
   loadRevision: (encounterId: string) => Promise<EncounterSessionRevision>;
+  onNewerRevision?: (revision: EncounterSessionRevision) => void;
 }): Promise<ActiveEncounterPollResult> {
   const revision = await input.loadRevision(input.encounterId);
 
@@ -26,6 +27,7 @@ export async function pollActiveEncounterRevision(input: {
       : { kind: "stale" };
   }
 
+  input.onNewerRevision?.(revision);
   const encounter = await input.loadEncounter(input.encounterId);
 
   if (

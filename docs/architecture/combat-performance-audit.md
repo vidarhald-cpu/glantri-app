@@ -67,6 +67,13 @@ same local 50-encounter scenario produced a 12,508-byte summary response in
 polls no longer load encounter sessions, participants, content, or history.
 See `encounter-summary-and-polling.md`.
 
+Update (2026-07-26): the Player Combat refresh slice is complete. Slow scenario
+context now loads once, while the exact player-safe encounter and history are
+keyed to the accepted encounter revision. Interval and focus polling use the
+same 163-byte revision contract. The duplicate revision history effect and
+Offensive Parry-specific history reload were removed. See
+`player-combat-refresh.md`.
+
 ## Scope and method
 
 This was a read-only application-code audit. No application or test code was
@@ -192,6 +199,9 @@ effect instance; it does not make the payload narrow and does not coordinate
 with mutation requests.
 
 ### P1: Player Combat performs broad polling and duplicate history reads
+
+Status: resolved by the Player Combat refresh slice documented in
+`player-combat-refresh.md`.
 
 `ScenarioPlayerCombatPageContent.tsx`:
 

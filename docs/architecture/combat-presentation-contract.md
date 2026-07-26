@@ -39,6 +39,12 @@ mutation responses remain authoritative immediately and must not wait for or be
 overwritten by polling. Encounter ID and revision guards discard late
 selection/poll responses.
 
+Player Combat history is revision-bound presentation, not an independent
+latest-state feed. Its `sourceEncounterId`, `sourceUpdatedAt`, and optional GM
+perspective participant must match the exact accepted player-safe encounter.
+A known newer revision invalidates action controls until the exact replacement
+and its matching history are accepted.
+
 ## 2. Current presentation paths
 
 The audited implementation has several strong canonical foundations:

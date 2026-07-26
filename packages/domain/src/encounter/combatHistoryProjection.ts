@@ -140,6 +140,8 @@ export interface CombatHistoryProjection {
   /** Sanitized canonical live progression for the same encounter revision. */
   progression?: CombatProgressionPresentationProjection;
   rows: ProjectedCombatHistoryRow[];
+  /** Encounter identity used to build this projection. */
+  sourceEncounterId?: string;
   /** Encounter revision used to build this projection. */
   sourceUpdatedAt?: string;
 }
@@ -709,6 +711,7 @@ export function projectCombatHistory(input: {
       displayName: participant.displayName,
       participantId: participant.participantId,
     })),
+    ...(input.state.encounterId ? { sourceEncounterId: input.state.encounterId } : {}),
     ...(input.sourceUpdatedAt ? { sourceUpdatedAt: input.sourceUpdatedAt } : {}),
   };
 }

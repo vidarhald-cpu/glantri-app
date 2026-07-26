@@ -53,6 +53,7 @@ describe("active encounter revision polling", () => {
       status: "active",
       updatedAt: nextEncounter.updatedAt,
     });
+    const onNewerRevision = vi.fn();
 
     await expect(
       pollActiveEncounterRevision({
@@ -60,6 +61,7 @@ describe("active encounter revision polling", () => {
         encounterId: "encounter-1",
         loadEncounter,
         loadRevision,
+        onNewerRevision,
       }),
     ).resolves.toEqual({
       encounter: nextEncounter,
@@ -68,6 +70,7 @@ describe("active encounter revision polling", () => {
     expect(loadRevision).toHaveBeenCalledTimes(1);
     expect(loadEncounter).toHaveBeenCalledTimes(1);
     expect(loadEncounter).toHaveBeenCalledWith("encounter-1");
+    expect(onNewerRevision).toHaveBeenCalledTimes(1);
   });
 
   it("rejects stale or mismatched poll responses without replacing accepted state", async () => {
