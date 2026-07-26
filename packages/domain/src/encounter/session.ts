@@ -323,8 +323,32 @@ export const encounterSessionSchema = z.object({
   updatedAt: z.string().min(1)
 });
 
+export const encounterSessionSummarySchema = z
+  .object({
+    campaignId: idSchema.optional(),
+    createdAt: z.string().min(1),
+    id: idSchema,
+    scenarioId: idSchema.optional(),
+    status: encounterStatusSchema,
+    title: z.string().min(1),
+    updatedAt: z.string().min(1),
+    viewerAssigned: z.boolean().optional()
+  })
+  .strict();
+
+export const encounterSessionRevisionSchema = z
+  .object({
+    encounterId: idSchema,
+    revision: z.string().min(1),
+    status: encounterStatusSchema,
+    updatedAt: z.string().min(1)
+  })
+  .strict();
+
 export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
 export type EncounterKind = z.infer<typeof encounterKindSchema>;
+export type EncounterSessionSummary = z.infer<typeof encounterSessionSummarySchema>;
+export type EncounterSessionRevision = z.infer<typeof encounterSessionRevisionSchema>;
 export type EncounterParticipantMembershipMode = z.infer<
   typeof encounterParticipantMembershipModeSchema
 >;
@@ -605,6 +629,35 @@ export function isUserAssignedToEncounterMembership(input: {
   );
 }
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;
+
+export function buildEncounterSessionSummary(
+  encounter: EncounterSession,
+  options?: {
+    viewerAssigned?: boolean;
+  }
+): EncounterSessionSummary {
+  return encounterSessionSummarySchema.parse({
+    campaignId: encounter.campaignId,
+    createdAt: encounter.createdAt,
+    id: encounter.id,
+    scenarioId: encounter.scenarioId,
+    status: encounter.status,
+    title: encounter.title,
+    updatedAt: encounter.updatedAt,
+    viewerAssigned: options?.viewerAssigned
+  });
+}
+
+export function buildEncounterSessionRevision(
+  encounter: Pick<EncounterSessionSummary, "id" | "status" | "updatedAt">
+): EncounterSessionRevision {
+  return encounterSessionRevisionSchema.parse({
+    encounterId: encounter.id,
+    revision: encounter.updatedAt,
+    status: encounter.status,
+    updatedAt: encounter.updatedAt
+  });
+}
 
 export function buildPlayerSafeRoleplayState(state: RoleplayState): RoleplayState {
   return {

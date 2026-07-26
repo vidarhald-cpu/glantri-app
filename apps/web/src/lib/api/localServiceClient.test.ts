@@ -326,6 +326,54 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("loads compact encounter summaries and active revision metadata", async () => {
+    const summary = {
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    };
+    const revision = {
+      encounterId: "encounter-1",
+      revision: summary.updatedAt,
+      status: "active",
+      updatedAt: summary.updatedAt,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ encounters: [summary] }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ encounter: revision }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await loadClient();
+
+    await expect(client.loadScenarioEncounterSummaries("scenario-1")).resolves.toEqual([
+      summary,
+    ]);
+    await expect(client.loadEncounterRevision("encounter-1")).resolves.toEqual(revision);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/scenarios/scenario-1/encounter-summaries",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("GET");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "https://api.example.test/encounters/encounter-1/revision",
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("GET");
+  });
+
   it("updates encounter status through the narrow status endpoint", async () => {
     const encounter = {
       id: "encounter-1",

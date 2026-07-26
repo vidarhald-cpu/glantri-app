@@ -10,6 +10,19 @@ Authority remediation: 2026-07-23
 
 Attack-lineage remediation: 2026-07-23
 
+Workspace loading remediation: 2026-07-26
+
+Campaign workspace lists now use the strict shared
+`EncounterSessionSummary` contract and the GM database path does not select
+`sessionJson`. Summary facts authorize no combat command and cannot project
+progression; the exact selected encounter remains the sole live combat source.
+
+GM polling is keyed by exact encounter ID and canonical `updatedAt` revision.
+Only a newer revision triggers one exact encounter load. Selection request
+tokens, encounter-ID checks, and latest-revision adoption prevent late list,
+selection, or poll responses from replacing newer mutation state. Scenario
+authorization for summary, full, and revision endpoints remains unchanged.
+
 ## 1. Executive summary
 
 The canonical architecture is established and is used by most current combat paths:

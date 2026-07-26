@@ -24,6 +24,21 @@ persisted combat facts + canonical progression + canonical events
   -> shared GM / Player / GM Player components
 ```
 
+### Workspace loading boundary
+
+Campaign workspace navigation uses compact `EncounterSessionSummary` facts.
+Those summaries may select an encounter but must never drive combat
+progression, Current Action, tracker, modifiers, or results. Live combat
+presentation is built only after the exact selected `EncounterSession` has been
+loaded.
+
+GM cross-client polling checks the selected encounter's canonical revision. An
+unchanged revision causes no presentation replacement. A newer revision causes
+one exact encounter fetch and authoritative replacement. Accepted same-client
+mutation responses remain authoritative immediately and must not wait for or be
+overwritten by polling. Encounter ID and revision guards discard late
+selection/poll responses.
+
 ## 2. Current presentation paths
 
 The audited implementation has several strong canonical foundations:

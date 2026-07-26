@@ -6,6 +6,14 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(resolve(__dirname, "encounterRoutes.ts"), "utf8");
 
 describe("combat route canonical-conformance guards", () => {
+  it("keeps workspace summaries and revision polling off the full encounter-list path", () => {
+    expect(source).toContain('app.get("/scenarios/:scenarioId/encounter-summaries"');
+    expect(source).toContain("listEncounterSummariesByScenario");
+    expect(source).toContain('app.get("/encounters/:encounterId/revision"');
+    expect(source).toContain("getEncounterSummaryById");
+    expect(source).toContain("buildEncounterSessionRevision");
+  });
+
   it("does not expose the removed cursor-authorized GM mutation routes", () => {
     for (const route of [
       "combat-round/feint-feasibility",

@@ -67,12 +67,14 @@ import type {
 interface ScenarioDetailPageContentProps {
   campaignId: string;
   embedded?: boolean;
+  onWorkspaceEncountersChanged?: () => void;
   scenarioId: string;
 }
 
 export default function ScenarioDetailPageContent({
   campaignId,
   embedded = false,
+  onWorkspaceEncountersChanged,
   scenarioId
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
@@ -503,6 +505,7 @@ export default function ScenarioDetailPageContent({
       )
     );
     await refreshScenario();
+    onWorkspaceEncountersChanged?.();
   }
 
   async function refreshScenario() {
@@ -569,6 +572,7 @@ export default function ScenarioDetailPageContent({
       setEncounterTimelineLabel("");
       setFeedback(`Created encounter ${encounter.title}.`);
       await refreshScenario();
+      onWorkspaceEncountersChanged?.();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to create encounter.",
@@ -723,6 +727,7 @@ export default function ScenarioDetailPageContent({
 
       setFeedback(`Updated encounter ${updated.title}.`);
       await refreshScenario();
+      onWorkspaceEncountersChanged?.();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update encounter.");
     }

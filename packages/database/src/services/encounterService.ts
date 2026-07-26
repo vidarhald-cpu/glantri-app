@@ -1,6 +1,7 @@
 import {
   refreshScenarioParticipantPersistentCombatModifiers,
   type EncounterSession,
+  type EncounterSessionSummary,
   type Scenario,
   type ScenarioParticipant,
   type ScenarioParticipantState,
@@ -40,8 +41,18 @@ export class EncounterService {
     return this.encounterRepository.getEncounterById(encounterId);
   }
 
+  async getEncounterSummaryById(encounterId: string): Promise<EncounterSessionSummary | null> {
+    return this.encounterRepository.getEncounterSummaryById(encounterId);
+  }
+
   async listEncountersByScenario(scenarioId: string): Promise<EncounterSession[]> {
     return this.encounterRepository.listEncountersByScenario(scenarioId);
+  }
+
+  async listEncounterSummariesByScenario(
+    scenarioId: string,
+  ): Promise<EncounterSessionSummary[]> {
+    return this.encounterRepository.listEncounterSummariesByScenario(scenarioId);
   }
 
   async updateEncounter(input: {

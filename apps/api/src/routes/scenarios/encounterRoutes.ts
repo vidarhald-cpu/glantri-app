@@ -20,6 +20,8 @@ import {
   advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
   backOutCombatRoundPhaseAttack,
+  buildEncounterSessionRevision,
+  buildEncounterSessionSummary,
   buildCombatRoundCommandEnvelope,
   buildCombatRoundAttackRollResult,
   buildCombatProgressionProjection,
@@ -3153,6 +3155,63 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.get("/scenarios/:scenarioId/encounter-summaries", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Scenario not found.",
+        });
+      }
+
+      if (access.mode === "player") {
+        const [encounters, scenarioParticipants] = await Promise.all([
+          encounterService.listEncountersByScenario(scenarioId),
+          scenarioService.listScenarioParticipants(scenarioId),
+        ]);
+
+        return {
+          encounters: encounters.map((encounter) =>
+            buildEncounterSessionSummary(encounter, {
+              viewerAssigned: isUserAssignedToEncounterMembership({
+                encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
+          ),
+        };
+      }
+
+      return {
+        encounters: await encounterService.listEncounterSummariesByScenario(scenarioId),
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error:
+          error instanceof Error ? error.message : "Unable to list encounter summaries.",
+      });
+    }
+  });
+
   app.post("/scenarios/:scenarioId/encounters", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
@@ -3297,6 +3356,51 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load encounter.",
+      });
+    }
+  });
+
+  app.get("/encounters/:encounterId/revision", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterSummaryById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      return {
+        encounter: buildEncounterSessionRevision(encounter),
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load encounter revision.",
       });
     }
   });

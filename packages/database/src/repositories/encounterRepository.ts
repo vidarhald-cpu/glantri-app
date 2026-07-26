@@ -1,4 +1,9 @@
-import { encounterSessionSchema, type EncounterSession } from "@glantri/domain";
+import {
+  encounterSessionSchema,
+  encounterSessionSummarySchema,
+  type EncounterSession,
+  type EncounterSessionSummary,
+} from "@glantri/domain";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "../client";
@@ -33,6 +38,26 @@ function mapEncounter(record: {
   });
 }
 
+function mapEncounterSummary(record: {
+  campaignId: string | null;
+  createdAt: Date;
+  id: string;
+  name: string;
+  scenarioId: string | null;
+  status: string;
+  updatedAt: Date;
+}): EncounterSessionSummary {
+  return encounterSessionSummarySchema.parse({
+    campaignId: record.campaignId ?? undefined,
+    createdAt: record.createdAt.toISOString(),
+    id: record.id,
+    scenarioId: record.scenarioId ?? undefined,
+    status: record.status,
+    title: record.name,
+    updatedAt: record.updatedAt.toISOString(),
+  });
+}
+
 export interface EncounterRepository {
   createEncounter(input: {
     campaignId?: string | null;
@@ -41,7 +66,9 @@ export interface EncounterRepository {
     session: EncounterSession;
   }): Promise<EncounterSession>;
   getEncounterById(encounterId: string): Promise<EncounterSession | null>;
+  getEncounterSummaryById(encounterId: string): Promise<EncounterSessionSummary | null>;
   listEncountersByScenario(scenarioId: string): Promise<EncounterSession[]>;
+  listEncounterSummariesByScenario(scenarioId: string): Promise<EncounterSessionSummary[]>;
   updateEncounter(input: {
     campaignId?: string | null;
     encounterId: string;
@@ -79,6 +106,22 @@ export function createPrismaEncounterRepository(): EncounterRepository {
 
       return record ? mapEncounter(record) : null;
     },
+    async getEncounterSummaryById(encounterId) {
+      const record = await prisma.encounter.findUnique({
+        select: {
+          campaignId: true,
+          createdAt: true,
+          id: true,
+          name: true,
+          scenarioId: true,
+          status: true,
+          updatedAt: true,
+        },
+        where: { id: encounterId },
+      });
+
+      return record ? mapEncounterSummary(record) : null;
+    },
     async listEncountersByScenario(scenarioId) {
       const records = await prisma.encounter.findMany({
         orderBy: { updatedAt: "desc" },
@@ -86,6 +129,23 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       });
 
       return records.map(mapEncounter);
+    },
+    async listEncounterSummariesByScenario(scenarioId) {
+      const records = await prisma.encounter.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: {
+          campaignId: true,
+          createdAt: true,
+          id: true,
+          name: true,
+          scenarioId: true,
+          status: true,
+          updatedAt: true,
+        },
+        where: { scenarioId },
+      });
+
+      return records.map(mapEncounterSummary);
     },
     async updateEncounter(input) {
       const normalized = encounterSessionSchema.parse({

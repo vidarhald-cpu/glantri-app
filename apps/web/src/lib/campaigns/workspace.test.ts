@@ -78,6 +78,42 @@ function scenarioParticipant(input: {
 }
 
 describe("campaign workspace", () => {
+  it("uses the player-assignment fact carried by compact encounter summaries", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        {
+          campaignId: "camp-1",
+          createdAt: "2026-04-23T00:00:00.000Z",
+          id: "enc-unassigned",
+          scenarioId: "scn-1",
+          status: "active",
+          title: "Hidden elsewhere",
+          updatedAt: "2026-04-23T00:00:00.000Z",
+          viewerAssigned: false,
+        },
+        {
+          campaignId: "camp-1",
+          createdAt: "2026-04-23T00:00:00.000Z",
+          id: "enc-assigned",
+          scenarioId: "scn-1",
+          status: "active",
+          title: "Player encounter",
+          updatedAt: "2026-04-23T00:01:00.000Z",
+          viewerAssigned: true,
+        },
+      ],
+      requestedEncounterId: "enc-unassigned",
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeEncounterId).toBe("enc-assigned");
+  });
+
   it("keeps the intended left-to-right shared workspace tab order", () => {
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)

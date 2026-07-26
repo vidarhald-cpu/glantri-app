@@ -1,4 +1,8 @@
-import type {
+import {
+  encounterSessionRevisionSchema,
+  encounterSessionSummarySchema,
+  type EncounterSessionRevision,
+  type EncounterSessionSummary,
   CombatAttackSourceRef,
   CombatHistoryProjection,
   CombatProgressionBoundaryKind,
@@ -37,6 +41,19 @@ export async function loadScenarioEncounters(scenarioId: string): Promise<Encoun
   return payload.encounters;
 }
 
+export async function loadScenarioEncounterSummaries(
+  scenarioId: string,
+): Promise<EncounterSessionSummary[]> {
+  const payload = await sendJson<{ encounters: unknown[] }>(
+    `/scenarios/${scenarioId}/encounter-summaries`,
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.encounters.map((encounter) => encounterSessionSummarySchema.parse(encounter));
+}
+
 export async function createEncounterOnServer(input: {
   scenarioId: string;
   session: EncounterSession;
@@ -60,6 +77,16 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   });
 
   return payload.encounter;
+}
+
+export async function loadEncounterRevision(
+  encounterId: string,
+): Promise<EncounterSessionRevision> {
+  const payload = await sendJson<{ encounter: unknown }>(`/encounters/${encounterId}/revision`, {
+    method: "GET",
+  });
+
+  return encounterSessionRevisionSchema.parse(payload.encounter);
 }
 
 export async function loadCombatHistory(

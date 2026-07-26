@@ -1,4 +1,9 @@
-import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  EncounterSessionSummary,
+  Scenario,
+  ScenarioParticipant,
+} from "@glantri/domain";
 
 import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallback";
 
@@ -147,7 +152,9 @@ function resolveRequestedCampaignWorkspaceTab(input: {
   }
 }
 
-function getEncounterStatusRank(status: EncounterSession["status"]): number {
+type WorkspaceEncounterSummary = EncounterSessionSummary | EncounterSession;
+
+function getEncounterStatusRank(status: EncounterSessionSummary["status"]): number {
   switch (status) {
     case "active":
       return 0;
@@ -166,15 +173,26 @@ function getEncounterStatusRank(status: EncounterSession["status"]): number {
   }
 }
 
-function isSelectableWorkspaceEncounter(encounter: EncounterSession): boolean {
+function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): boolean {
   return encounter.status !== "archived" && encounter.status !== "complete";
 }
 
 function isPlayerAssignedToEncounter(input: {
-  encounter: EncounterSession;
+  encounter: WorkspaceEncounterSummary;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
 }): boolean {
+  if (
+    "viewerAssigned" in input.encounter &&
+    input.encounter.viewerAssigned !== undefined
+  ) {
+    return input.encounter.viewerAssigned;
+  }
+
+  if (!("participants" in input.encounter)) {
+    return false;
+  }
+
   return isUserAssignedToEffectiveEncounter({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
@@ -184,11 +202,11 @@ function isPlayerAssignedToEncounter(input: {
 
 function resolvePlayerEncounterSelection(input: {
   activeScenarioId?: string;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   requestedEncounterId?: string | null;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
-}): EncounterSession | undefined {
+}): WorkspaceEncounterSummary | undefined {
   const candidateEncounters = input.encounters
     .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
     .filter(isSelectableWorkspaceEncounter)
@@ -219,9 +237,9 @@ function resolvePlayerEncounterSelection(input: {
 
 function resolveGmCombatEncounterSelection(input: {
   activeScenarioId?: string;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   requestedEncounterId?: string | null;
-}): EncounterSession | undefined {
+}): WorkspaceEncounterSummary | undefined {
   const candidateEncounters = input.encounters
     .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
     .filter(isSelectableWorkspaceEncounter);
@@ -240,7 +258,7 @@ function resolveGmCombatEncounterSelection(input: {
 export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   currentUserId?: string | null;
   rememberedEncounterId?: string | null;
   rememberedScenarioId?: string | null;

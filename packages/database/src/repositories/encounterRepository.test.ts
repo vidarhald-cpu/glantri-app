@@ -124,4 +124,46 @@ describe("encounterRepository trusted identifiers", () => {
       updatedAt: baseSession.updatedAt,
     });
   });
+
+  it("loads scenario summaries without selecting the full session JSON", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        createdAt: new Date(baseSession.createdAt),
+        id: baseSession.id,
+        name: baseSession.title,
+        scenarioId: "scenario-1",
+        status: baseSession.status,
+        updatedAt: new Date(baseSession.updatedAt),
+      },
+    ]);
+
+    await expect(
+      repository.listEncounterSummariesByScenario("scenario-1"),
+    ).resolves.toEqual([
+      {
+        campaignId: "campaign-1",
+        createdAt: baseSession.createdAt,
+        id: baseSession.id,
+        scenarioId: "scenario-1",
+        status: baseSession.status,
+        title: baseSession.title,
+        updatedAt: baseSession.updatedAt,
+      },
+    ]);
+    expect(mocks.prisma.encounter.findMany).toHaveBeenCalledWith({
+      orderBy: { updatedAt: "desc" },
+      select: {
+        campaignId: true,
+        createdAt: true,
+        id: true,
+        name: true,
+        scenarioId: true,
+        status: true,
+        updatedAt: true,
+      },
+      where: { scenarioId: "scenario-1" },
+    });
+  });
 });

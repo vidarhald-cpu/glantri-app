@@ -22,7 +22,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain("loadScenarioParticipants");
     expect(source).toContain("loadScenarioMyParticipant");
-    expect(source).toContain('workspaceAccess.accessMode === "player"');
+    expect(source).toContain("loadCampaignWorkspaceInitialData");
     expect(source).toContain("currentUserId: currentUser?.id");
     expect(source).toContain("WorkspaceParticipantInspectionHeader");
     expect(source).toContain("buildGmCharacterWorkspaceCandidates");
@@ -38,7 +38,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("No skill rolls are currently available.");
     expect(source).toContain("Waiting for GM to add you to an encounter.");
     expect(source).toContain("You are in this scenario, but not assigned to this encounter.");
-    expect(source).toContain("refreshWorkspaceContextWithErrorHandling");
+    expect(source).toContain("loadScenarioEncounterSummaries");
     expect(source).toContain("visibilitychange");
     expect(source).toContain("const searchParamString = searchParams.toString()");
     expect(source).not.toContain("Accessible scenarios:");
@@ -75,8 +75,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
 
     expect(source).toContain('workspaceState.activeTab === "combat"');
     expect(source).toContain("CombatRoundManagerPanel");
-    expect(source).toContain("key={activeEncounter.id}");
-    expect(source).toContain("canAccessGmEncounter && activeEncounter");
+    expect(source).toContain("key={selectedActiveEncounter.id}");
+    expect(source).toContain("canAccessGmEncounter && selectedActiveEncounter");
     expect(source).toContain("sortedActiveScenarioEncounters");
     expect(source).toContain("Select an encounter to open the Combat Round Manager.");
     expect(source).toContain("Create or open an encounter on Scenario tab");
@@ -87,13 +87,29 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).not.toContain('workspaceTab="combat"');
     expect(source).toContain("GM_COMBAT_REFRESH_INTERVAL_MS");
     expect(source).toContain('workspaceState.activeTab !== "combat"');
-    expect(source).toContain("await refreshWorkspaceContextWithErrorHandling()");
+    expect(source).toContain("pollActiveEncounterRevision");
+    expect(source).toContain("loadEncounterRevision");
+    expect(source).toContain("loadEncounterById");
+    expect(source).not.toContain("refreshWorkspaceContextWithErrorHandling");
     expect(source).toContain("Combat Round Manager is a GM tool.");
     expect(source).toContain("Open Player combat");
     expect(source).toContain("No encounter is currently available for combat tools.");
     expect(source).not.toContain("Player combat inspection");
     expect(source).not.toContain('screenName="Combat"');
     expect(source).toContain("selectLatestCombatViewRevision({");
+  });
+
+  it("initializes once from summaries and keeps polling scoped to the selected encounter", () => {
+    const source = readSource();
+
+    expect(source.match(/loadCampaignWorkspaceAccessForUser\(\{/g)).toHaveLength(1);
+    expect(source).toContain("async function initializeWorkspace()");
+    expect(source).toContain("encounterSummaries");
+    expect(source).toContain("activeEncounterIdRef.current !== polledEncounterId");
+    expect(source).toContain("activeEncounterRequestIdRef.current !== requestId");
+    expect(source).toContain("result.kind !== \"updated\"");
+    expect(source).toContain("caughtError.status === 404");
+    expect(source).not.toContain("loadScenarioEncounters");
   });
 
   it("routes Player combat through its own GM inspection tab", () => {
@@ -104,7 +120,9 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="player-combat"');
     expect(source).toContain("showParticipantSelector={false}");
-    expect(source).toContain("key={`${activeEncounter.id}:${selectedGmInspectableCandidate.id}`}");
+    expect(source).toContain(
+      "key={`${selectedActiveEncounter.id}:${selectedGmInspectableCandidate.id}`}",
+    );
     expect(source).toContain(
       'selectInspectableParticipant({ participantId, tab: "player-combat" })',
     );

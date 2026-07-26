@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { ScenarioParticipant } from "../campaign/scenario";
 
 import {
+  buildEncounterSessionRevision,
+  buildEncounterSessionSummary,
   encounterSessionSchema,
+  encounterSessionSummarySchema,
   buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
   isUserAssignedToEncounterMembership,
@@ -84,6 +87,50 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("encounter session normalization invariants", () => {
+  it("projects strict compact summary and revision contracts without session history", () => {
+    const fullEncounter = encounter({
+      campaignId: "campaign-1",
+      description: "Private encounter detail",
+      participants: [
+        encounterParticipant({
+          id: "participant-1",
+          label: "The Gladiator",
+          scenarioParticipantId: "scenario-participant-1",
+        }),
+      ],
+      status: "active",
+    });
+    const summary = buildEncounterSessionSummary(fullEncounter, {
+      viewerAssigned: true,
+    });
+
+    expect(summary).toEqual({
+      campaignId: "campaign-1",
+      createdAt: fullEncounter.createdAt,
+      id: fullEncounter.id,
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Market shadows",
+      updatedAt: fullEncounter.updatedAt,
+      viewerAssigned: true,
+    });
+    expect(summary).not.toHaveProperty("actionLog");
+    expect(summary).not.toHaveProperty("combatRoundState");
+    expect(summary).not.toHaveProperty("participants");
+    expect(
+      encounterSessionSummarySchema.safeParse({
+        ...summary,
+        commands: [],
+      }).success,
+    ).toBe(false);
+    expect(buildEncounterSessionRevision(summary)).toEqual({
+      encounterId: fullEncounter.id,
+      revision: fullEncounter.updatedAt,
+      status: "active",
+      updatedAt: fullEncounter.updatedAt,
+    });
+  });
+
   it("normalizes older roleplay session JSON with safe defaults and legacy difficulty values", () => {
     const session = encounterSessionSchema.parse({
       actionLog: [],

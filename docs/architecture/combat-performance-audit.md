@@ -59,6 +59,14 @@ state from 33.93 MB to 8.54 MB; the remaining size is archived legacy data that
 this non-migration slice intentionally preserves. See
 `combat-undo-facts.md` for the exact schema and measurements.
 
+Update (2026-07-26): the GM workspace polling slice is also complete. Campaign
+workspace navigation now consumes `EncounterSessionSummary`, loads only the
+selected full encounter, and polls a 163-byte active revision contract. The
+same local 50-encounter scenario produced a 12,508-byte summary response in
+13.21 ms instead of the prior 83,021,322-byte full-list response. Unchanged
+polls no longer load encounter sessions, participants, content, or history.
+See `encounter-summary-and-polling.md`.
+
 ## Scope and method
 
 This was a read-only application-code audit. No application or test code was
@@ -580,6 +588,8 @@ narrow encounter polling provide the highest-confidence path to restoring
 interactive combat while retaining canonical progression, strict descriptor
 authorization, reload, undo, and player-safe views.
 
-With compact initiative undo and response deduplication complete, the next
-measured P0 slice is summary workspace loading and narrow GM polling. That work
-should precede React restructuring or generic caching.
+With compact initiative undo, response deduplication, summary workspace loading,
+and narrow GM polling complete, the next measured optimization slice is Player
+Combat refresh consolidation. It should atomically adopt mutation responses,
+separate slow participant/content context from combat revision checks, and
+remove duplicate history fetches before React restructuring or generic caching.
