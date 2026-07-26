@@ -624,3 +624,19 @@ is idempotent across reload and reversible under undo without a cursor/latest-ef
 Damage operational action cancellation keeps existing consequence semantics for later initiative
 groups. Exact-tie sibling opportunities are excluded because their legality was established at
 group start. No new incapacitation or interruption rule was invented.
+
+## 14. Initiative-commit undo conformance
+
+New `commit_phase_initiative_resolution` commands use
+`combatRoundInitiativeCommitUndoFactsSchema` version 1. The inverse binds the exact command, round,
+and phase and stores only prior navigation plus changed phase/action/proposal facts. It contains no
+participant arrays, command history, events, snapshots, completed rounds, or unknown JSON.
+
+Undo validates the compact identity against the command before applying it. Removing the exact
+commit restores initiative-group availability because group identity/effect cutoff are derived from
+the unchanged initiative/effect facts and committed-command presence. A legacy-only fallback still
+parses old `facts.previousState` values, but source-conformance and serialization-growth tests
+prevent new commits from writing them.
+
+The initiative route retains strict task/group/revision authorization. Its response now carries the
+saved encounter and canonical command envelope without returning the same command separately.

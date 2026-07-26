@@ -7451,6 +7451,8 @@ describe("scenarios route contract", () => {
     });
     expect(payload.commandEnvelope).not.toHaveProperty("commands");
     expect(payload.commandEnvelope).not.toHaveProperty("state");
+    expect(payload).not.toHaveProperty("command");
+    expect(response.body.length).toBeLessThan(250_000);
     expect(updatedEncounter).toMatchObject({
       id: "encounter-1",
       combatRoundState: expect.objectContaining({

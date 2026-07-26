@@ -51,6 +51,7 @@ import {
   buildCombatAdjustDistanceProposalId,
   combatAdjustDistanceProposalSchema,
   combatAdjustDistanceRollResultSchema,
+  combatAdjustDistanceStatusSchema,
   getCombatAdjustDistanceDirection,
   resolveCombatAdjustDistanceStandardProposal,
   type CombatAdjustDistanceProposal,
@@ -92,6 +93,7 @@ import {
   combatFeintMethodSchema,
   combatFeintProposalSchema,
   combatFeintRollResultSchema,
+  combatFeintStatusSchema,
   type CombatFeintProposal,
   type CombatFeintRollResult,
   type CombatFeintTableResult,
@@ -1055,6 +1057,73 @@ export const combatRoundPhaseResolutionStatusesSchema = z.record(
     })
     .default({}),
 );
+
+const combatRoundInitiativeCommitParticipantUndoFactSchema = z
+  .object({
+    participantId: idSchema,
+    priorActionStepStatus: combatRoundStepStatusSchema.nullable(),
+  })
+  .strict();
+
+const combatRoundInitiativeCommitPhaseStatusUndoFactSchema = z
+  .object({
+    participantId: idSchema,
+    priorParticipantEntryExisted: z.boolean(),
+    priorStatus: combatRoundPhaseResolutionParticipantStatusSchema.nullable(),
+  })
+  .strict();
+
+const combatRoundInitiativeCommitFeintUndoFactSchema = z
+  .object({
+    priorIndex: z.number().int().nonnegative(),
+    priorStatus: combatFeintStatusSchema,
+    proposalId: idSchema,
+  })
+  .strict();
+
+const combatRoundInitiativeCommitAdjustDistanceUndoFactSchema = z
+  .object({
+    priorIndex: z.number().int().nonnegative(),
+    priorStatus: combatAdjustDistanceStatusSchema,
+    proposalId: idSchema,
+  })
+  .strict();
+
+/**
+ * Exact inverse for one initiative-commit transition. Keep this schema narrow:
+ * full participants, commands, events, snapshots, rounds, and arbitrary JSON
+ * are deliberately not valid undo facts.
+ */
+export const combatRoundInitiativeCommitUndoFactsSchema = z
+  .object({
+    adjustDistanceProposals: z
+      .array(combatRoundInitiativeCommitAdjustDistanceUndoFactSchema)
+      .default([]),
+    commandId: idSchema,
+    feintProposals: z.array(combatRoundInitiativeCommitFeintUndoFactSchema).default([]),
+    navigation: z
+      .object({
+        currentCursor: combatRoundCursorSchema.nullable(),
+        currentStep: combatRoundStepSchema,
+        phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.nullable(),
+        selectedParticipantId: idSchema.nullable(),
+        selectedStep: combatRoundStepSchema.nullable(),
+      })
+      .strict(),
+    participantActionSteps: z
+      .array(combatRoundInitiativeCommitParticipantUndoFactSchema)
+      .default([]),
+    phase: combatRoundPhaseSchema,
+    phaseResolutionStatuses: z
+      .array(combatRoundInitiativeCommitPhaseStatusUndoFactSchema)
+      .default([]),
+    roundNumber: z.number().int().positive(),
+    version: z.literal(1),
+  })
+  .strict();
+export type CombatRoundInitiativeCommitUndoFacts = z.infer<
+  typeof combatRoundInitiativeCommitUndoFactsSchema
+>;
 
 export const combatRoundParryModifierBreakdownEntrySchema = z.object({
   label: z.string().min(1),
@@ -7063,6 +7132,108 @@ function applyCommittedPhaseBackOut(input: {
   });
 }
 
+function phaseResolutionStatusesEqual(
+  left: CombatRoundPhaseResolutionParticipantStatus | undefined,
+  right: CombatRoundPhaseResolutionParticipantStatus | undefined,
+): boolean {
+  return left?.substep === right?.substep && left?.updatedAt === right?.updatedAt;
+}
+
+function buildCombatRoundInitiativeCommitUndoFacts(input: {
+  commandId: string;
+  phase: CombatRoundPhase;
+  priorState: CombatRoundState;
+  stateAfterPhaseOpen: CombatRoundState;
+}): CombatRoundInitiativeCommitUndoFacts {
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const priorParticipantsById = new Map(
+    input.priorState.participants.map((participant) => [participant.participantId, participant]),
+  );
+  const priorFeintById = new Map(
+    input.priorState.feintProposals.map((proposal, index) => [
+      proposal.id,
+      { index, proposal },
+    ]),
+  );
+  const priorAdjustDistanceById = new Map(
+    input.priorState.adjustDistanceProposals.map((proposal, index) => [
+      proposal.id,
+      { index, proposal },
+    ]),
+  );
+
+  return combatRoundInitiativeCommitUndoFactsSchema.parse({
+    adjustDistanceProposals: input.stateAfterPhaseOpen.adjustDistanceProposals.flatMap(
+      (proposal) => {
+        const prior = priorAdjustDistanceById.get(proposal.id);
+        return prior && prior.proposal.status !== proposal.status
+          ? [
+              {
+                priorIndex: prior.index,
+                priorStatus: prior.proposal.status,
+                proposalId: proposal.id,
+              },
+            ]
+          : [];
+      },
+    ),
+    commandId: input.commandId,
+    feintProposals: input.stateAfterPhaseOpen.feintProposals.flatMap((proposal) => {
+      const prior = priorFeintById.get(proposal.id);
+      return prior && prior.proposal.status !== proposal.status
+        ? [
+            {
+              priorIndex: prior.index,
+              priorStatus: prior.proposal.status,
+              proposalId: proposal.id,
+            },
+          ]
+        : [];
+    }),
+    navigation: {
+      currentCursor: input.priorState.currentCursor ?? null,
+      currentStep: input.priorState.currentStep,
+      phaseResolutionCursor: input.priorState.phaseResolutionCursor ?? null,
+      selectedParticipantId: input.priorState.selectedParticipantId ?? null,
+      selectedStep: input.priorState.selectedStep ?? null,
+    },
+    participantActionSteps: input.stateAfterPhaseOpen.participants.flatMap((participant) => {
+      const priorStatus =
+        priorParticipantsById.get(participant.participantId)?.stepStatuses[actionStep];
+      const nextStatus = participant.stepStatuses[actionStep];
+      return priorStatus !== nextStatus
+        ? [
+            {
+              participantId: participant.participantId,
+              priorActionStepStatus: priorStatus ?? null,
+            },
+          ]
+        : [];
+    }),
+    phase: input.phase,
+    phaseResolutionStatuses: input.stateAfterPhaseOpen.participants.flatMap((participant) => {
+      const participantId = participant.participantId;
+      const priorStatus = input.priorState.phaseResolutionStatuses[participantId]?.[input.phase];
+      const nextStatus =
+        input.stateAfterPhaseOpen.phaseResolutionStatuses[participantId]?.[input.phase];
+      return phaseResolutionStatusesEqual(priorStatus, nextStatus)
+        ? []
+        : [
+            {
+              participantId,
+              priorParticipantEntryExisted: Object.hasOwn(
+                input.priorState.phaseResolutionStatuses,
+                participantId,
+              ),
+              priorStatus: priorStatus ?? null,
+            },
+          ];
+    }),
+    roundNumber: input.priorState.roundNumber,
+    version: 1,
+  });
+}
+
 export function commitCombatRoundPhaseInitiativeResolution(input: {
   command: {
     commandId?: string;
@@ -7127,6 +7298,12 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     state: normalized,
     updatedAt: input.command.createdAt,
   });
+  const initiativeCommitUndo = buildCombatRoundInitiativeCommitUndoFacts({
+    commandId,
+    phase: input.phase,
+    priorState: normalized,
+    stateAfterPhaseOpen,
+  });
   const afterCursor = stateAfterPhaseOpen.currentCursor ?? beforeCursor;
   const command = combatRoundCommandSchema.parse({
     afterCursor,
@@ -7144,8 +7321,8 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
         (choice) => choice.choice === "continue_without_ce" && choice.defaultedOnCommit === true,
       ).length,
       difficulty,
+      initiativeCommitUndo,
       phase: input.phase,
-      previousState: normalized,
       softenedModifiers,
       source: "phase_initiative_resolution_commit",
     },
@@ -19057,6 +19234,101 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
     command.type !== "commit_phase_initiative_resolution"
   ) {
     return undefined;
+  }
+
+  const compactUndo = combatRoundInitiativeCommitUndoFactsSchema.safeParse(
+    command.facts.initiativeCommitUndo,
+  );
+
+  if (compactUndo.success) {
+    const undo = compactUndo.data;
+    if (
+      undo.commandId !== command.id ||
+      undo.phase !== command.phase ||
+      undo.roundNumber !== command.roundNumber
+    ) {
+      return undefined;
+    }
+
+    const phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses = {
+      ...normalized.phaseResolutionStatuses,
+    };
+    for (const fact of undo.phaseResolutionStatuses) {
+      const participantStatuses = {
+        ...(phaseResolutionStatuses[fact.participantId] ?? {}),
+      };
+      if (fact.priorStatus) {
+        participantStatuses[undo.phase] = fact.priorStatus;
+      } else {
+        delete participantStatuses[undo.phase];
+      }
+      if (
+        !fact.priorParticipantEntryExisted &&
+        participantStatuses.phase1 === undefined &&
+        participantStatuses.phase2 === undefined
+      ) {
+        delete phaseResolutionStatuses[fact.participantId];
+      } else {
+        phaseResolutionStatuses[fact.participantId] = participantStatuses;
+      }
+    }
+
+    const participantActionStepsById = new Map(
+      undo.participantActionSteps.map((fact) => [fact.participantId, fact]),
+    );
+    const participants = normalized.participants.map((participant) => {
+      const fact = participantActionStepsById.get(participant.participantId);
+      if (!fact) return participant;
+      const stepStatuses = { ...participant.stepStatuses };
+      const actionStep = getCombatRoundPhaseActionStepForPhase(undo.phase);
+      if (fact.priorActionStepStatus) {
+        stepStatuses[actionStep] = fact.priorActionStepStatus;
+      } else {
+        delete stepStatuses[actionStep];
+      }
+      return { ...participant, stepStatuses };
+    });
+
+    const restoreProposalOrder = <
+      T extends { id: string; status: string },
+      U extends { priorIndex: number; priorStatus: T["status"]; proposalId: string },
+    >(
+      proposals: T[],
+      facts: U[],
+    ): T[] => {
+      const factsById = new Map(facts.map((fact) => [fact.proposalId, fact]));
+      const restoredById = new Map(
+        proposals.flatMap((proposal) => {
+          const fact = factsById.get(proposal.id);
+          return fact
+            ? [[proposal.id, { ...proposal, status: fact.priorStatus } as T] as const]
+            : [];
+        }),
+      );
+      const restored = proposals.filter((proposal) => !factsById.has(proposal.id));
+      for (const fact of [...facts].sort((left, right) => left.priorIndex - right.priorIndex)) {
+        const proposal = restoredById.get(fact.proposalId);
+        if (proposal) restored.splice(Math.min(fact.priorIndex, restored.length), 0, proposal);
+      }
+      return restored;
+    };
+
+    return combatRoundStateSchema.parse({
+      ...normalized,
+      adjustDistanceProposals: restoreProposalOrder(
+        normalized.adjustDistanceProposals,
+        undo.adjustDistanceProposals,
+      ),
+      commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+      currentCursor: undo.navigation.currentCursor ?? undefined,
+      currentStep: undo.navigation.currentStep,
+      feintProposals: restoreProposalOrder(normalized.feintProposals, undo.feintProposals),
+      participants,
+      phaseResolutionCursor: undo.navigation.phaseResolutionCursor ?? undefined,
+      phaseResolutionStatuses,
+      selectedParticipantId: undo.navigation.selectedParticipantId ?? undefined,
+      selectedStep: undo.navigation.selectedStep ?? undefined,
+    });
   }
 
   const previousState = combatRoundStateSchema.safeParse(command.facts.previousState);

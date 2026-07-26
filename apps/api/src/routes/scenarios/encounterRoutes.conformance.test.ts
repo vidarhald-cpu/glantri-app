@@ -125,4 +125,21 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("percentageModifierTotal: modifierTrace.rawModifierTotal");
     expect(source).toContain("finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue");
   });
+
+  it("does not duplicate the initiative commit command beside the authoritative encounter", () => {
+    const routeStart = source.indexOf(
+      '"/encounters/:encounterId/combat-round/commit-phase-initiative-resolution"',
+    );
+    const nextRoute = source.indexOf(
+      'app.post("/encounters/:encounterId/combat-round/roll-attack"',
+      routeStart,
+    );
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).not.toContain("command: committed.command");
+    expect(routeSource).toContain("commandEnvelope");
+    expect(routeSource).toContain("encounter: savedEncounter");
+  });
 });

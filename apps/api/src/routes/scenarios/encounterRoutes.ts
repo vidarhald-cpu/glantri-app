@@ -7772,7 +7772,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
 
         return {
-          command: committed.command,
           commandEnvelope,
           encounter: savedEncounter,
           participants: updatedParticipants.filter(

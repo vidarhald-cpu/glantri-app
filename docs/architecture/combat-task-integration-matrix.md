@@ -95,6 +95,14 @@ carry the stable round/phase/initiative group identity and value with existing t
 group, opportunity, and result lineage. Child work keeps the initiative group open, so lower values
 cannot authorize until damage/effect commit closes it.
 
+Initiative-commit undo compaction (2026-07-26): `commit_initiative` keeps the same projected
+task/group/revision authorization and next-task envelope, but new persisted commands carry a strict
+versioned inverse for only the navigation, changed phase/action statuses, and opened
+Feint/Adjust Distance proposal states. Full `CombatRoundState` snapshots are forbidden for new
+commits. Legacy `facts.previousState` commands remain readable and undoable. The API returns the
+authoritative encounter and compact command envelope without duplicating the committed command as
+a second top-level payload.
+
 Damage and Offensive Parry consequences created in a tie persist their source group and activation
 boundary. They remain visible but non-effective within that group and become effective
 automatically for the next group. No activation endpoint or GM review task was added.

@@ -25,6 +25,7 @@ import {
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundInitiativeCommitUndoFactsSchema,
   combatRoundStateSchema,
   combatRoundStepSnapshotSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
@@ -3037,6 +3038,235 @@ describe("combat round manager", () => {
         visibility,
       }),
     ).toBe("phase1_attack");
+  });
+
+  it.each(["phase1", "phase2"] as const)(
+    "persists compact %s initiative undo facts and restores the exact pre-commit state after reload",
+    (phase) => {
+      const beforeCommit = preparePhaseInitiativeCompleteState({
+        actionId: "attack_parry",
+        gladiatorInitiative: 6,
+        guardInitiative: 6,
+        phase,
+      });
+      const committed = commitCombatRoundPhaseInitiativeResolution({
+        command: {
+          createdAt: phase === "phase1" ? "2026-01-01T00:03:00.000Z" : "2026-01-01T00:06:00.000Z",
+          createdByUserId: "gm-1",
+        },
+        phase,
+        state: beforeCommit,
+      });
+      const command = committed.command;
+      const undoFacts = combatRoundInitiativeCommitUndoFactsSchema.parse(
+        command.facts.initiativeCommitUndo,
+      );
+
+      expect(command.facts).not.toHaveProperty("previousState");
+      expect(undoFacts).toMatchObject({
+        commandId: command.id,
+        phase,
+        roundNumber: beforeCommit.roundNumber,
+        version: 1,
+      });
+      expect(JSON.stringify(command).length).toBeLessThan(20_000);
+
+      const reloaded = combatRoundStateSchema.parse(
+        JSON.parse(JSON.stringify(committed.state)) as unknown,
+      );
+      const undone = clearCombatRoundStep({
+        state: reloaded,
+        step: phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
+      });
+
+      expect(undone).toEqual(beforeCommit);
+    },
+  );
+
+  it("restores initiative-opened Feint and Adjust Distance proposal status and ordering", () => {
+    const base = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const beforeCommit = combatRoundStateSchema.parse({
+      ...base,
+      adjustDistanceProposals: [
+        {
+          attackerParticipantId: "gladiator",
+          currentDistance: 3,
+          defenderParticipantId: "guard",
+          direction: "closer",
+          id: "adjust-gladiator",
+          pairId: "gladiator:guard",
+          phase1OpportunityId: "adjust-gladiator-a1",
+          phase2AttackOpportunityId: "adjust-gladiator-a2",
+          requestedDistance: 1,
+          roundNumber: base.roundNumber,
+          status: "awaiting_action_turn",
+        },
+        {
+          attackerParticipantId: "guard",
+          currentDistance: 3,
+          defenderParticipantId: "gladiator",
+          direction: "unchanged",
+          id: "adjust-guard",
+          pairId: "gladiator:guard",
+          phase1OpportunityId: "adjust-guard-a1",
+          phase2AttackOpportunityId: "adjust-guard-a2",
+          requestedDistance: 3,
+          roundNumber: base.roundNumber,
+          status: "committed",
+        },
+      ],
+      feintProposals: [
+        {
+          attackerParticipantId: "gladiator",
+          attackerSkillId: "dodge",
+          attackerSkillLabel: "Dodge",
+          defenderParticipantId: "guard",
+          defenderSkillId: "brawling",
+          defenderSkillLabel: "Brawling",
+          id: "feint-gladiator",
+          method: "movement",
+          pairId: "gladiator:guard",
+          phase1OpportunityId: "feint-gladiator-a1",
+          phase2AttackOpportunityId: "feint-gladiator-a2",
+          roundNumber: base.roundNumber,
+          status: "awaiting_action_turn",
+        },
+        {
+          attackerParticipantId: "guard",
+          attackerSkillId: "dodge",
+          attackerSkillLabel: "Dodge",
+          defenderParticipantId: "gladiator",
+          defenderSkillId: "brawling",
+          defenderSkillLabel: "Brawling",
+          id: "feint-guard",
+          method: "movement",
+          pairId: "gladiator:guard",
+          phase1OpportunityId: "feint-guard-a1",
+          phase2AttackOpportunityId: "feint-guard-a2",
+          roundNumber: base.roundNumber,
+          status: "committed",
+        },
+      ],
+    });
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: beforeCommit,
+    });
+
+    expect(committed.state.feintProposals.map((proposal) => proposal.id)).toEqual([
+      "feint-guard",
+      "feint-gladiator",
+    ]);
+    expect(committed.state.adjustDistanceProposals.map((proposal) => proposal.id)).toEqual([
+      "adjust-guard",
+      "adjust-gladiator",
+    ]);
+    expect(
+      clearCombatRoundStep({
+        state: combatRoundStateSchema.parse(
+          JSON.parse(JSON.stringify(committed.state)) as unknown,
+        ),
+        step: "phase_1_actions",
+      }),
+    ).toEqual(beforeCommit);
+  });
+
+  it("keeps initiative undo facts bounded when unrelated command history grows", () => {
+    const base = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const withLargeUnrelatedHistory = combatRoundStateSchema.parse({
+      ...base,
+      commands: base.commands.map((command, index) => ({
+        ...command,
+        facts: {
+          ...command.facts,
+          unrelatedAuditText: `${index}:`.padEnd(100_000, "x"),
+        },
+      })),
+    });
+    const compactBase = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: base,
+    }).command;
+    const compactWithHistory = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: withLargeUnrelatedHistory,
+    }).command;
+    const baseSize = JSON.stringify(compactBase).length;
+    const historySize = JSON.stringify(compactWithHistory).length;
+
+    expect(historySize).toBeLessThan(20_000);
+    expect(Math.abs(historySize - baseSize)).toBeLessThan(200);
+    expect(JSON.stringify(compactWithHistory)).not.toContain("unrelatedAuditText");
+    expect(compactWithHistory.facts).not.toHaveProperty("previousState");
+  });
+
+  it("rejects recursive command and history fields in compact initiative undo facts", () => {
+    const state = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const command = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state,
+    }).command;
+    const undoFacts = command.facts.initiativeCommitUndo;
+
+    expect(
+      combatRoundInitiativeCommitUndoFactsSchema.safeParse({
+        ...(undoFacts as Record<string, unknown>),
+        commands: state.commands,
+      }).success,
+    ).toBe(false);
+    expect(
+      combatRoundInitiativeCommitUndoFactsSchema.safeParse({
+        ...(undoFacts as Record<string, unknown>),
+        previousState: state,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("continues to undo legacy initiative commits containing previousState", () => {
+    const beforeCommit = preparePhaseInitiativeCompleteState({
+      actionId: "attack_parry",
+      phase: "phase1",
+    });
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z" },
+      phase: "phase1",
+      state: beforeCommit,
+    });
+    const legacyCommand = {
+      ...committed.command,
+      facts: {
+        ...committed.command.facts,
+        initiativeCommitUndo: undefined,
+        previousState: beforeCommit,
+      },
+    };
+    const legacyState = combatRoundStateSchema.parse({
+      ...committed.state,
+      commands: [
+        ...committed.state.commands.slice(0, -1),
+        legacyCommand,
+      ],
+    });
+
+    expect(
+      clearCombatRoundStep({
+        state: legacyState,
+        step: "phase_1_actions",
+      }),
+    ).toEqual(beforeCommit);
   });
 
   it("keeps completed i1 in initiative review until GM commits normal A1", () => {
