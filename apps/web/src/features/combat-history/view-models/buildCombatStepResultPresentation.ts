@@ -11,6 +11,8 @@ import {
   buildCombatContestCalculationPresentation,
   buildCombatRollCalculationPresentation,
   formatCombatContestCalculationLines,
+  formatObservationContestDifference,
+  formatObservationCalculationLines,
 } from "./combatCalculationPresentation";
 
 export type CombatStepResultEntryCategory =
@@ -238,6 +240,50 @@ function calculationsForEvents(input: {
       ? input.events
       : input.events.filter((event) => event.ownerParticipantId === input.participantId);
   return buildCombatEventResultModel(visibleEvents).items.flatMap((item) => {
+    if (item.type === "observation") {
+      const event = visibleEvents.find((candidate) => candidate.id === item.id);
+      if (!event) return [];
+      const observerLines = formatObservationCalculationLines(event.facts.privateCalculation);
+      const targetCalculation =
+        input.viewer.kind === "gm" &&
+        event.facts.gmReview?.targetCalculation &&
+        typeof event.facts.gmReview.targetCalculation === "object"
+          ? (event.facts.gmReview.targetCalculation as Record<string, unknown>)
+          : undefined;
+      const opponentLines = formatObservationCalculationLines(targetCalculation);
+      const observerLabel =
+        identityLabel(event, "actor") ??
+        event.identities.find((identity) => identity.role === "roller")?.displayName;
+      const opponentLabel = identityLabel(event, "target");
+      return [
+        ...(observerLines.length
+          ? [
+              {
+                collapsedByDefault: true as const,
+                id: `${item.id}:observer-calculation`,
+                lines: observerLines,
+                title: observerLabel
+                  ? `Observer — ${observerLabel}`
+                  : "Observer calculation",
+                visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
+              },
+            ]
+          : []),
+        ...(opponentLines.length
+          ? [
+              {
+                collapsedByDefault: true as const,
+                id: `${item.id}:opponent-calculation`,
+                lines: opponentLines,
+                title: opponentLabel
+                  ? `Opponent — ${opponentLabel}`
+                  : "Opponent calculation",
+                visibility: "gm_full" as const,
+              },
+            ]
+          : []),
+      ];
+    }
     const lines = item.calculationRows
       .map((row) => row.text)
       .filter((line) => line !== "Outcome: Awaiting opponent roll");
@@ -374,7 +420,144 @@ function supplementalEntries(input: {
     ),
   );
 
+  const resolvedObservationAttemptIds = new Set(
+    input.events.flatMap((event) => {
+      const attemptId = visibleOutcome(event, "observationAttemptId");
+      return event.type === "observation" &&
+        typeof attemptId === "string" &&
+        visibleOutcome(event, "difference") !== undefined
+        ? [attemptId]
+        : [];
+    }),
+  );
+  const canonicalResolvedObservationEventIdByAttempt = new Map<string, string>();
+  for (const event of [...input.events].sort(
+    (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+  )) {
+    const attemptId = visibleOutcome(event, "observationAttemptId");
+    if (
+      event.type !== "observation" ||
+      typeof attemptId !== "string" ||
+      visibleOutcome(event, "difference") === undefined
+    ) {
+      continue;
+    }
+    const existingId = canonicalResolvedObservationEventIdByAttempt.get(attemptId);
+    const existing = existingId
+      ? input.events.find((candidate) => candidate.id === existingId)
+      : undefined;
+    const score = Number(Boolean(event.facts.privateCalculation?.finalTotal)) +
+      Number(Boolean(event.facts.gmReview?.targetTotal));
+    const existingScore = existing
+      ? Number(Boolean(existing.facts.privateCalculation?.finalTotal)) +
+        Number(Boolean(existing.facts.gmReview?.targetTotal))
+      : -1;
+    if (score >= existingScore) {
+      canonicalResolvedObservationEventIdByAttempt.set(attemptId, event.id);
+    }
+  }
+
   return input.events.flatMap((event): OrderedEntry[] => {
+    if (event.type === "observation") {
+      const observationStatus = visibleOutcome(event, "observationStatus");
+      const noProgressReason = visibleOutcome(event, "observationNoProgressReason");
+      const observationAttemptId = visibleOutcome(event, "observationAttemptId");
+      if (
+        typeof observationAttemptId === "string" &&
+        visibleOutcome(event, "difference") !== undefined &&
+        canonicalResolvedObservationEventIdByAttempt.get(observationAttemptId) !== event.id
+      ) {
+        return [];
+      }
+      if (
+        observationStatus === "period_complete" &&
+        typeof observationAttemptId === "string" &&
+        resolvedObservationAttemptIds.has(observationAttemptId)
+      ) {
+        return [];
+      }
+      const observer = identitySubject(event, "actor") ?? identitySubject(event, "roller");
+      const target = identitySubject(event, "target");
+      const targetLabel = target?.label ?? "opponent";
+      if (
+        observationStatus === "progress" ||
+        observationStatus === "no_progress" ||
+        observationStatus === "period_complete"
+      ) {
+        const progress = visibleOutcome(event, "roundsTowardNextAttempt");
+        const required = visibleOutcome(event, "requiredQualifyingRounds");
+        return [
+          {
+            entry: {
+              actor: observer,
+              calculations: [],
+              category: "review",
+              heading: `Observe Opponent — ${targetLabel}`,
+              id: `current-step:${event.id}`,
+              sourceEventIds: [event.id],
+              state: observationStatus === "period_complete" ? "pending" : "final",
+              summary:
+                observationStatus === "no_progress"
+                  ? noProgressReason === "observer_hit"
+                    ? "No progress · observer was hit"
+                    : "No progress"
+                  : observationStatus === "period_complete"
+                    ? "Observation period complete · roll pending"
+                    : typeof progress === "number" && typeof required === "number"
+                      ? `Progress ${progress} / ${required}`
+                      : "Observation progress recorded",
+              target,
+            },
+            order: event.sequence,
+            semanticOrder: 0,
+          },
+        ];
+      }
+      const candidateBonus = visibleOutcome(event, "candidateBonus");
+      const bestBonus = visibleOutcome(event, "bestBonusAfter");
+      const difference = visibleOutcome(event, "difference");
+      const observerTotal =
+        input.viewer.kind === "gm"
+          ? event.facts.gmReview?.observerTotal
+          : event.facts.privateCalculation?.finalTotal;
+      const targetTotal =
+        input.viewer.kind === "gm" ? event.facts.gmReview?.targetTotal : undefined;
+      const margin =
+        typeof difference === "number" ? formatObservationContestDifference(difference) : "";
+      const bonus =
+        typeof candidateBonus === "number" && typeof bestBonus === "number"
+          ? `result +${candidateBonus}% · best +${bestBonus}%`
+          : "";
+      const comparison =
+        typeof observerTotal === "number" && typeof targetTotal === "number"
+          ? `Observer ${observerTotal} vs opponent ${targetTotal}`
+          : typeof observerTotal === "number"
+            ? `Roll ${observerTotal}`
+            : margin || bonus || "Observation result recorded";
+      return [
+        {
+          entry: {
+            actor: observer,
+            calculations: calculationsForEvents({
+              events: [event],
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
+            category: "contest",
+            heading: `Observe Opponent — ${targetLabel}`,
+            id: `current-step:${event.id}`,
+            outcome: [margin, bonus].filter(Boolean).join(" · "),
+            sourceEventIds: [event.id],
+            state: "final",
+            summary: comparison,
+            target,
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
+
     if (event.type === "combat_experience" && !loggedSourceIds.has(event.id)) {
       const participant = identitySubject(event, "actor") ?? identitySubject(event, "roller");
       const maySeeOwnCalculation =

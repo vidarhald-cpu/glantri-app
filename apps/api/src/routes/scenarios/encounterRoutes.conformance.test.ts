@@ -88,7 +88,53 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain('skill.skillId === "dodge"');
     expect(source).toContain("deriveParryPrimaryActionModifier(dodgeSkillValue)");
     expect(source).toContain("secondaryActionContext: canonicalSecondaryActionContext");
+    expect(source).toContain("secondaryActions: canonicalSecondaryActionContext");
     expect(source).toContain("Parry requires the participant's canonical Dodge skill.");
+  });
+
+  it("projects an observer-owned Observe Opponent command and keeps the hidden roll player-safe", () => {
+    expect(source).toContain("recordCombatObservationRoll({");
+    expect(source).toContain("buildCombatObservationModifierContributions({");
+    expect(source).toContain("buildPlayerSafeCombatObservationAttempts({");
+    expect(source).toContain("buildPlayerSafeCombatObservationRelationships({");
+    expect(source).toContain('"/encounters/:encounterId/combat-round/roll-observation"');
+    expect(source).toContain('commandType: "roll_observation"');
+    expect(source).toContain("buildObservationRollBasis({");
+    expect(source).toContain('rollPurpose: "observe_opponent"');
+    expect(source).toContain('rollType: "observation"');
+    expect(source).toContain("observerModifierProjection.contributions");
+    expect(source).toContain("targetModifierProjection.contributions");
+  });
+
+  it("authorizes complete_round before applying observation boundary progress", () => {
+    const advanceSource = readFileSync(
+      resolve(
+        __dirname,
+        "../../../../../packages/domain/src/encounter/combatProgressionProjection/advance.ts",
+      ),
+      "utf8",
+    );
+    const routeStart = source.indexOf(
+      'app.post("/encounters/:encounterId/combat-round/advance-current-step"',
+    );
+    const nextRoute = source.indexOf(
+      'app.post("/encounters/:encounterId/combat-round/save-damage-review"',
+      routeStart,
+    );
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).not.toContain("resolveCombatObservationRoundBoundary");
+    expect(routeSource).toContain("state: roundState");
+    expect(advanceSource).toContain("const authorization = authorizeCombatProgressionTask({");
+    expect(
+      advanceSource.indexOf("const authorization = authorizeCombatProgressionTask({"),
+    ).toBeLessThan(
+      advanceSource.indexOf(
+        "const observationBoundary = resolveCombatObservationRoundBoundary({",
+      ),
+    );
   });
 
   it("forwards initiative-group identity into projected-task authorization", () => {

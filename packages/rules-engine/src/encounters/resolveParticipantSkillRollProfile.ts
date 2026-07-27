@@ -16,10 +16,14 @@ import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroup
 
 export interface ParticipantSkillRollProfile {
   avgStats: number;
+  /** Average before character/stat modifiers; retained for reproducible roll facts. */
+  baseAvgStats: number;
   derivedXP: number;
   groupXP: number;
   known: boolean;
   linkedStats: string[];
+  /** Net characteristic adjustment included in avgStats. */
+  linkedStatXp: number;
   participantId?: string;
   participantName?: string;
   rollBaseValue: number;
@@ -49,6 +53,8 @@ export interface ResolveParticipantSkillRollProfileInput {
   sheetSummary?: unknown;
   /** Rule-specific characteristic override; skill XP remains the canonical effectiveSkillNumber. */
   linkedStatsOverride?: string[];
+  /** Prefer the sheet's adjusted characteristic values for rules that consume characteristic XP. */
+  preferAdjustedStats?: boolean;
   skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
 }
 
@@ -329,9 +335,13 @@ export function resolveParticipantSkillRollProfile(
     snapshot: input.build,
     skillId: input.skill.id,
   });
-  const stats =
-    readProfileStats(input.build) ?? readSheetStats(sheetSummary) ?? readSnapshotStats(input.build);
+  const profileStats = readProfileStats(input.build) ?? readSnapshotStats(input.build);
+  const adjustedStats = readSheetStats(sheetSummary);
+  const stats = input.preferAdjustedStats
+    ? adjustedStats ?? profileStats
+    : profileStats ?? adjustedStats;
   const linkedStats = input.linkedStatsOverride ?? input.skill.linkedStats;
+  const baseAvgStats = getLinkedStatAverage({ linkedStats, stats: profileStats }) ?? 0;
   const avgStats =
     (input.linkedStatsOverride ? undefined : readNumber(skillView?.linkedStatAverage)) ??
     getLinkedStatAverage({ linkedStats, stats }) ??
@@ -373,10 +383,12 @@ export function resolveParticipantSkillRollProfile(
 
   return {
     avgStats,
+    baseAvgStats,
     derivedXP,
     groupXP,
     known,
     linkedStats: [...linkedStats],
+    linkedStatXp: avgStats - baseAvgStats,
     participantId: input.participantId,
     participantName: input.participantName,
     rollBaseValue: known ? totalSkillLevel : avgStats,

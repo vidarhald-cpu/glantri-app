@@ -45,6 +45,7 @@ export interface CurrentActionCommandDescriptor {
   readonly opponentParticipantId?: string;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
+  readonly observationAttemptId?: string;
   readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
@@ -53,6 +54,7 @@ export interface CurrentActionCommandDescriptor {
   readonly phase?: CombatRoundPhase;
   readonly processId?: string;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
   readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
@@ -201,8 +203,10 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   health_review: "Health Review",
   initiative: "Initiative",
   modifier_review: "Modifier Review",
+  observe_opponent_contest: "Observe Opponent",
   offensive_parry: "Offensive Parry",
   offensive_parry_brawling_roll: "Offensive Parry",
+  observation_roll: "Observe Opponent",
   participant_review: "Participant Review",
   reactive_attack: "Reactive Attack",
   round_end: "Round End",
@@ -233,6 +237,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   health_review: "Health Review",
   hit_location: "Hit Location",
   modifier_review: "Modifier Review",
+  observation_roll: "Observe Opponent",
   offensive_parry_brawling_roll: "Offensive Parry",
   parry: "Parry",
   participant_review: "Participant Review",
@@ -406,6 +411,8 @@ function summaryFor(input: {
         "continued_contact_maintenance_controller"
         ? `Maintain Continued Contact with ${target ?? "the opponent"}.`
         : `Attempt to escape ${actor}'s Continued Contact.`;
+    case "observation_roll":
+      return `You have completed an observation interval against ${target ?? "the opponent"}.`;
     case "hit_location":
     case "critical":
     case "damage_roll":
@@ -537,6 +544,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Roll Brawling";
     case "continued_contact_maintenance_roll":
       return "Roll Brawling";
+    case "observation_roll":
+      return "Roll observation";
     case "hit_location":
       return "Roll hit location";
     case "critical":
@@ -613,6 +622,8 @@ function requiredNowFor(
       return task.presentationContext?.actionKind === "continued_contact_maintenance_controller"
         ? "Maintain Continued Contact. Roll Brawling."
         : "Attempt to escape Continued Contact. Roll Brawling.";
+    case "observation_roll":
+      return "Roll your observation contest.";
     case "hit_location":
       return "Roll hit location.";
     case "critical":
@@ -800,6 +811,7 @@ export function buildCurrentActionPresentation(
     opponentParticipantId: task.identity.opponentParticipantId,
     opportunityId: task.identity.opportunityId,
     offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
+    observationAttemptId: task.identity.observationAttemptId,
     parryPurpose: task.identity.parryPurpose,
     parryResultId: task.identity.parryResultId,
     parrySourceId: task.identity.parrySourceId,
@@ -809,6 +821,7 @@ export function buildCurrentActionPresentation(
     phase,
     processId: task.processId,
     proposalId: task.identity.proposalId,
+    relationshipId: task.identity.relationshipId,
     rollPurpose: task.identity.rollPurpose,
     stageId: task.stageId,
     targetBoundary: task.transition?.targetBoundary,

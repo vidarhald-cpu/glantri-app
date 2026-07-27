@@ -348,11 +348,12 @@ not inferred from the word “lock.”
 
 ### Observe Opponent
 
-Observe Opponent may create directional knowledge or preparation state. An observer-to-subject
-relationship does not imply tactical control unless the rule explicitly grants a controller
-capability.
-The current declaration slice persists that subject in an independently owned secondary-action
-context but creates no Combat State, Controller relationship, roll, bonus, duration, or result.
+Observe Opponent creates a directional preparation relationship, not a controller relationship.
+The canonical relationship owns qualifying-round progress, completed attempts, opposed-roll facts,
+and the best pair-specific bonus. Derived modifier contributions are read-only views of that one
+source. It grants no tactical control capability and does not change declaration, distance, or
+escape authority. Player-safe projection exposes only relationships owned by the viewing observer;
+the subject is not told that observation occurred.
 
 ### Mounted Combat
 

@@ -159,6 +159,7 @@ import {
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryCommandOnServer,
+  rollCombatObservationOnServer,
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
   rollCombatCriticalOnServer,
@@ -200,6 +201,7 @@ import {
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
@@ -3358,6 +3360,7 @@ function CombatRoundEndParticipantReviewPanel(input: {
   controlsDisabled?: boolean;
   difficultyDrafts: Record<string, string>;
   onDifficultyDraftChange: (healthRollId: string, value: string) => void;
+  observationPending?: boolean;
   participantLabel?: string;
   review?: RoundEndParticipantReview;
 }) {
@@ -3375,7 +3378,9 @@ function CombatRoundEndParticipantReviewPanel(input: {
         <>
           <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
             {input.participantLabel ? `${input.participantLabel}: ` : ""}
-            {review.status.replaceAll("_", " ")}
+            {input.observationPending
+              ? "observation roll pending"
+              : review.status.replaceAll("_", " ")}
           </div>
           {review.proposedEffects.length > 0 ? (
             <section style={{ display: "grid", gap: "0.25rem" }}>
@@ -8557,6 +8562,66 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function rollObservation(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_observation"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "observationAttemptId",
+        "opponentParticipantId",
+        "participantId",
+        "processId",
+        "relationshipId",
+        "stageId",
+        "taskId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    if (!descriptor || !participant) {
+      setSaveError("The Observe Opponent task is no longer available.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await rollCombatObservationOnServer({
+          currentEncounter: encounter,
+          encounterId: descriptor.encounterId,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          observationAttemptId: descriptor.observationAttemptId!,
+          opponentParticipantId: descriptor.opponentParticipantId!,
+          processId: descriptor.processId!,
+          relationshipId: descriptor.relationshipId!,
+          scenarioParticipantId: participant.id,
+          stageId: descriptor.stageId!,
+          taskId: descriptor.taskId,
+        });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll Observe Opponent.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveInspectorDamageReview() {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: currentActionPresentation?.primaryAction.descriptor,
@@ -9092,6 +9157,9 @@ export default function CombatRoundManagerPanel({
         return;
       case "roll_continued_contact_maintenance":
         void rollContinuedContactMaintenance(descriptor);
+        return;
+      case "roll_observation":
+        void rollObservation(descriptor);
         return;
       case "roll_hit_location":
       case "roll_critical":
@@ -9718,46 +9786,40 @@ export default function CombatRoundManagerPanel({
                                 inspectorDisplayDraft.combatContext.selectedOpponentId
                               }
                             />
-                            {inspectorDisplayDraft.secondaryActionId === "observe_opponent" ? (
-                              <PlayerCombatOpponentSelector
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                label="Opponent to observe"
-                                onSelectedOpponentChange={(targetParticipantId) =>
-                                  updateInspectorDraft({
-                                    secondaryActionContext: targetParticipantId
-                                      ? {
-                                          action: "observe_opponent",
-                                          targetParticipantId,
-                                        }
-                                      : undefined,
-                                  })
-                                }
-                                opponentOptions={inspectorTargetOptions}
-                                readOnly={inspectorIsHistorical}
-                                selectedOpponentId={
-                                  inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
-                                }
-                              />
-                            ) : null}
                           </div>
                         ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
                           phaseKey === "phase1" ? (
-                          <PlayerCombatOpponentSelector
-                            controlsDisabled={saving || inspectorIsHistorical}
-                            label="Opponent to observe"
-                            onSelectedOpponentChange={(targetParticipantId) =>
-                              updateInspectorDraft({
-                                secondaryActionContext: targetParticipantId
-                                  ? { action: "observe_opponent", targetParticipantId }
-                                  : undefined,
-                              })
-                            }
-                            opponentOptions={inspectorTargetOptions}
-                            readOnly={inspectorIsHistorical}
-                            selectedOpponentId={
-                              inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
-                            }
-                          />
+                          <div style={{ display: "grid", gap: "0.65rem" }}>
+                            <PlayerCombatOpponentSelector
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              label="Opponent"
+                              onSelectedOpponentChange={(targetParticipantId) =>
+                                updateInspectorDraft({
+                                  secondaryActionContext: targetParticipantId
+                                    ? { action: "observe_opponent", targetParticipantId }
+                                    : undefined,
+                                })
+                              }
+                              opponentOptions={inspectorTargetOptions}
+                              readOnly={inspectorIsHistorical}
+                              selectedOpponentId={
+                                inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
+                              }
+                            />
+                            <PlayerCombatObservationProgress
+                              relationships={selectedTimelineRoundState.observationRelationships.filter(
+                                (relationship) =>
+                                  relationship.observerParticipantId ===
+                                  selectedEncounterParticipant?.id,
+                              )}
+                              targetLabels={Object.fromEntries(
+                                selectedTimelineRoundState.participants.map((participant) => [
+                                  participant.participantId,
+                                  participant.label,
+                                ]),
+                              )}
+                            />
+                          </div>
                         ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
                           phaseKey === "phase1" ? (
                           <div style={{ display: "grid", gap: "0.65rem" }}>
@@ -10081,6 +10143,19 @@ export default function CombatRoundManagerPanel({
                       pendingEntries={inspectorIsHistorical ? [] : inspectorPendingModifierEntries}
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
+                      observationRelationships={
+                        selectedTimelineRoundState.observationRelationships.filter(
+                          (relationship) =>
+                            relationship.observerParticipantId ===
+                            selectedEncounterParticipant?.id,
+                        )
+                      }
+                      observationTargetLabels={Object.fromEntries(
+                        selectedTimelineRoundState.participants.map((participant) => [
+                          participant.participantId,
+                          participant.label,
+                        ]),
+                      )}
                     />
                   )}
                   <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -10261,6 +10336,12 @@ export default function CombatRoundManagerPanel({
                                 ...current,
                                 [healthRollId]: value,
                               }))
+                            }
+                            observationPending={
+                              inspectorRoundEndTask?.kind === "observation_roll" &&
+                              inspectorRoundEndTask.owner?.kind === "combatant" &&
+                              inspectorRoundEndTask.owner.participantId ===
+                                inspector.participant?.participantId
                             }
                             participantLabel={inspector.participant?.label}
                             review={inspectorRoundEndReview}

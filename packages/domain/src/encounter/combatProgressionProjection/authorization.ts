@@ -54,6 +54,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly initiativeValue?: number;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
+  readonly observationAttemptId?: string;
   readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
@@ -65,6 +66,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly processId?: string;
   readonly projection: CombatProgressionProjection;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
   readonly taskId?: string;
   readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
@@ -85,7 +87,10 @@ export type CombatProgressionAuthorizationResult =
 interface CommandTaskRule {
   boundary?:
     | CombatProgressionBoundaryKind
-    | ((phase?: CombatRoundPhase) => CombatProgressionBoundaryKind | undefined);
+    | readonly CombatProgressionBoundaryKind[]
+    | ((
+        phase?: CombatRoundPhase,
+      ) => CombatProgressionBoundaryKind | readonly CombatProgressionBoundaryKind[] | undefined);
   kind: CombatProgressionTaskKind | readonly CombatProgressionTaskKind[];
   process?: CombatProgressionProcessKind;
   stage: CombatProgressionStageKind | readonly CombatProgressionStageKind[];
@@ -172,6 +177,14 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     boundary: "round_end",
     kind: "continued_contact_maintenance_roll",
     process: "continued_contact_maintenance",
+    stage: "contest",
+  },
+  roll_observation: {
+    // Participant/effect reviews are complete before observation becomes executable, so the
+    // canonical cursor may already identify the explicit round boundary while SU remains open.
+    boundary: ["round_end", "round_boundary"],
+    kind: "observation_roll",
+    process: "observation",
     stage: "contest",
   },
   roll_hit_location: {
@@ -354,7 +367,7 @@ export function authorizeCombatProgressionTask(
       : typeof rule.boundary === "function"
         ? rule.boundary(input.phase)
         : rule.boundary;
-  if (!expectedBoundary || input.projection.boundary.kind !== expectedBoundary) {
+  if (!expectedBoundary || !ruleMatches(input.projection.boundary.kind, expectedBoundary)) {
     return failure(
       input.currentBoundary ? "stale_boundary" : "boundary_closed",
       "The projected combat boundary is closed for this command.",
@@ -423,9 +436,11 @@ export function authorizeCombatProgressionTask(
       [input.initiativeValue, "initiativeValue"],
       [input.declaredOpponentParticipantId, "declaredOpponentParticipantId"],
       [input.offensiveParryAttemptId, "offensiveParryAttemptId"],
+      [input.observationAttemptId, "observationAttemptId"],
       [input.parryPurpose, "parryPurpose"],
       [input.parrySourceId, "parrySourceId"],
       [input.rollPurpose, "rollPurpose"],
+      [input.relationshipId, "relationshipId"],
       [input.weaponInstanceId, "weaponInstanceId"],
       [input.weaponSourceId, "weaponSourceId"],
       [input.weaponSourceSlot, "weaponSourceSlot"],

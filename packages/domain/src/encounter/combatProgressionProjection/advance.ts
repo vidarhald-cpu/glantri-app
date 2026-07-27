@@ -6,6 +6,7 @@ import {
   getCombatRoundCursorStepForStep,
   getFirstCombatRoundPendingModifierReviewParticipantId,
   getCombatRoundStartNextRoundBlocker,
+  resolveCombatObservationRoundBoundary,
   upsertCombatRoundStepSnapshots,
   type CombatRoundState,
   type CombatRoundStep,
@@ -115,6 +116,7 @@ export function advanceCombatProgressionBoundary(input: {
     commandId?: string;
     createdAt: string;
     createdByUserId?: string;
+    facts?: Record<string, unknown>;
   };
   expectedCommandType: Extract<
     CombatProgressionExpectedCommand,
@@ -169,8 +171,17 @@ export function advanceCombatProgressionBoundary(input: {
   }
 
   if (commandType === "complete_round") {
-    return advanceCombatRoundStep(normalized, {
-      command: input.command,
+    const observationBoundary = resolveCombatObservationRoundBoundary({
+      state: normalized,
+    });
+    return advanceCombatRoundStep(observationBoundary.state, {
+      command: {
+        ...input.command,
+        facts: {
+          ...input.command.facts,
+          observationUndoFacts: observationBoundary.undoFacts,
+        },
+      },
       stepSnapshots: input.stepSnapshots,
       visibility: input.visibility,
     });

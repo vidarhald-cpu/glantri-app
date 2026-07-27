@@ -42,6 +42,71 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+export function formatObservationCalculationLines(
+  calculation: Record<string, unknown> | undefined,
+): readonly string[] {
+  if (!calculation) return [];
+  const finalTotal = finiteNumber(calculation.finalTotal);
+  const rollTotal = finiteNumber(calculation.rollTotal);
+  const skillLabel = typeof calculation.skillLabel === "string" ? calculation.skillLabel : undefined;
+  const skillXp = finiteNumber(calculation.skillXp);
+  const intelligenceValue = finiteNumber(calculation.intelligenceValue);
+  const intelligenceXp = finiteNumber(calculation.intelligenceXp);
+  if (
+    finalTotal === undefined ||
+    rollTotal === undefined ||
+    !skillLabel ||
+    skillXp === undefined ||
+    intelligenceValue === undefined ||
+    intelligenceXp === undefined
+  ) {
+    return [];
+  }
+  const appliedModifiers = Array.isArray(calculation.appliedModifiers)
+    ? calculation.appliedModifiers.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const record = entry as Record<string, unknown>;
+        const label = typeof record.label === "string" ? record.label : undefined;
+        const value = finiteNumber(record.value);
+        return label && value !== undefined && value !== 0 ? [{ label, value }] : [];
+      })
+    : [];
+  const openEndedD10s = Array.isArray(calculation.openEndedD10s)
+    ? calculation.openEndedD10s.filter((value): value is number => typeof value === "number")
+    : [];
+  const effectiveSkillValue = finiteNumber(calculation.effectiveSkillValue);
+  const percentageAdjustment = finiteNumber(calculation.percentageAdjustment);
+
+  return [
+    `Skill: ${skillLabel}`,
+    `Skill XP: ${skillXp}`,
+    `Intelligence: ${intelligenceValue}`,
+    `Intelligence XP: ${intelligenceXp}`,
+    ...(typeof effectiveSkillValue === "number"
+      ? [`Effective skill: ${effectiveSkillValue}`]
+      : []),
+    ...appliedModifiers.map(
+      (modifier) => `${modifier.label}: ${formatSignedCombatModifier(modifier.value)}%`,
+    ),
+    ...(appliedModifiers.length === 0
+      ? [
+          typeof percentageAdjustment === "number" && percentageAdjustment !== 0
+            ? `Percentage adjustment: ${formatSignedCombatModifier(percentageAdjustment)}%`
+            : "Modifiers: +0",
+        ]
+      : []),
+    `Roll: ${rollTotal}`,
+    ...(openEndedD10s.length ? [`Open-ended rolls: ${openEndedD10s.join(" + ")}`] : []),
+    `Final total: ${finalTotal}`,
+  ];
+}
+
+export function formatObservationContestDifference(difference: number): string {
+  if (difference > 0) return `Won by ${difference}`;
+  if (difference < 0) return `Lost by ${Math.abs(difference)}`;
+  return "Tied";
+}
+
 function formatModifier(value: number): string {
   return value === 0 ? "+0" : formatSignedCombatModifier(value);
 }

@@ -66,9 +66,16 @@ Declaration-context ownership (2026-07-25): Parry is an untargeted primary actio
 projects no outgoing A1/A2 opportunity. Its one deterministic round modifier is derived from the
 stable total Dodge skill identity as `floor(Dodge / 5)%`, stored in the DB/Parry bucket, reviewed
 and consumed by the ordinary parry pipeline. Observe Opponent is primary-ineligible and is
-selectable only as a secondary declaration. Its independently persisted participant target appears
-in Phase 1 and creates no post-declaration task in this slice. Primary action context, secondary
-action context, and movement intent remain separate canonical facts.
+selectable only as a typed Parry secondary declaration. Its independently persisted participant
+target appears in Phase 1 and creates no attack-phase task. The complete-round boundary
+first authorizes the exact currently projected `complete_round` descriptor, then advances
+non-threshold progress from immutable declaration and attack-result facts before archiving the
+round. Progress mutation must not be used to re-project or replace the command being authorized.
+At a threshold, SU instead projects one observer-owned `observation_roll` task; the observed target
+receives no task. The accepted command resolves both canonical rolls server-side in one revision,
+records compact inverse facts, and derives pair-scoped OB and DB/Parry contributions from the
+relationship's single best-bonus source. Primary action context, secondary action context, and
+movement intent remain separate canonical facts.
 
 Tracker round isolation (2026-07-24): the completed round retains its declaration, initiative,
 attack, defense, damage, and round-end facts, while the new active participant state clears both

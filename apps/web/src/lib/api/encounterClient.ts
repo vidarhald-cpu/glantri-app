@@ -1241,6 +1241,46 @@ export async function rollContinuedContactMaintenanceOnServer(input: {
   );
 }
 
+export async function rollCombatObservationOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  observationAttemptId: string;
+  opponentParticipantId: string;
+  processId: string;
+  relationshipId: string;
+  scenarioParticipantId: string;
+  stageId: string;
+  taskId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendCombatMutationJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(
+    `/encounters/${input.encounterId}/combat-round/roll-observation`,
+    {
+      body: JSON.stringify({
+        commandType: "roll_observation",
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
+        observationAttemptId: input.observationAttemptId,
+        opponentParticipantId: input.opponentParticipantId,
+        processId: input.processId,
+        relationshipId: input.relationshipId,
+        scenarioParticipantId: input.scenarioParticipantId,
+        stageId: input.stageId,
+        taskId: input.taskId,
+      }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
 export async function rollCombatParryCommandOnServer(input: {
   attackResultModifier: number;
   attackResultId: string;

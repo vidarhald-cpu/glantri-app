@@ -720,3 +720,29 @@ authorization, duplicate-command, domain, and other Prisma errors are not retrie
 The GM CE control also has a synchronous in-flight guard in addition to its
 disabled state. One deliberate action produces one POST even if two click events
 arrive before React commits the pending render.
+
+## 17. Observe Opponent V1 conformance
+
+Observe Opponent is a typed secondary action, with a maximum of one secondary action in V1.
+Compatibility validation permits it only beside Parry and preserves legacy declarations without
+the collection field. Its target belongs to the secondary action rather than any primary attack
+context.
+
+The active round owns one ordered observer-to-target relationship. During the completing round's SU
+boundary, the domain resolver reads that round's committed declaration and exact attack outcomes; a
+hit by the observed target suppresses only that round. A due contest projects one observer-owned
+task. Its accepted command resolves the observer's open-ended roll and the hidden target roll
+server-side in one revision, using Intelligence-substituted Dodge or close-combat skill profiles.
+The relationship alone owns progress, attempts, and best bonus. Modifier contributions are derived
+once per explicit opposing pair, so mutual observations coexist without cancellation or duplicated
+arithmetic.
+
+Observation-roll and boundary command facts contain compact per-relationship inverse records rather
+than prior combat state. The relationship is carried into the next active round and archived with
+the completed round. The revision-keyed history round now carries that exact archived relationship
+snapshot. Final SU review records one observer-only status event per declared relationship, while
+the roll event snapshots both calculations and replaces its pending period result without duplicate
+narration. Player-safe active/history projection retains only relationships and results owned by a
+controlled observer, including the observer-safe latest attempt, and removes the hidden target
+calculation; other participants' Observe declaration context is also suppressed. No client counts
+rounds, resolves contests, constructs modifiers, or derives historical calculation facts.

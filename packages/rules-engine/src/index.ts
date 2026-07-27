@@ -21,6 +21,7 @@ export * from "./combat/deriveCombatValues";
 export * from "./combat/deriveParryPrimaryActionModifier";
 export * from "./combat/resolveCombatParry";
 export * from "./combat/resolveCombatFeint";
+export * from "./combat/resolveCombatObservation";
 export * from "./combat/workbookCombatMath";
 export * from "./calculators/ob/calculateBaseOB";
 export * from "./calculators/db/calculateDB";

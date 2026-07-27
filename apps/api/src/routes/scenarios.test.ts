@@ -6636,6 +6636,118 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("accepts the projected round boundary before applying non-threshold observation progress", async () => {
+    const fixture = makeDistanceControlReviewFixture();
+    const readyState = commitDistanceControlFixture({
+      proposalId: fixture.proposalId,
+      state: rollDistanceControlFixtureBothSides({
+        encounter: fixture.encounter,
+        proposalId: fixture.proposalId,
+      }),
+    });
+    const firstReview = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:13:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-1",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-1",
+      state: readyState,
+    }).state;
+    const completedReview = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:14:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-2",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-2",
+      state: firstReview,
+    }).state;
+    const completedState = combatRoundStateSchema.parse({
+      ...completedReview,
+      observationRelationships: [
+        {
+          bestBonus: 0,
+          completedAttempts: 0,
+          id: "observation:encounter-participant-2:encounter-participant-1",
+          observerParticipantId: "encounter-participant-2",
+          roundsTowardNextAttempt: 1,
+          targetParticipantId: "encounter-participant-1",
+        },
+      ],
+      participants: completedReview.participants.map((participant) =>
+        participant.participantId === "encounter-participant-2"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "parry",
+                roundNumber: completedReview.roundNumber,
+                secondaryActions: [
+                  {
+                    action: "observe_opponent",
+                    targetParticipantId: "encounter-participant-1",
+                  },
+                ],
+                secondaryActionContext: {
+                  action: "observe_opponent",
+                  targetParticipantId: "encounter-participant-1",
+                },
+                secondaryActionId: "observe_opponent",
+                submittedBy: "gm",
+              },
+            }
+          : participant,
+      ),
+    });
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: completedState,
+        currentRound: completedState.roundNumber,
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const descriptor = {
+      ...buildBoundaryTaskPayload(
+        completedState,
+        lifecycle.encounter.updatedAt,
+        "declaration",
+      ),
+      expectedBoundary: "round_boundary" as const,
+      stepSnapshots: [],
+      targetBoundary: "declaration" as const,
+    };
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: descriptor,
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json().encounter.combatRoundState).toMatchObject({
+      observationRelationships: [
+        expect.objectContaining({
+          id: "observation:encounter-participant-2:encounter-participant-1",
+          roundsTowardNextAttempt: 2,
+        }),
+      ],
+      roundNumber: completedState.roundNumber + 1,
+    });
+    expect(response.json().encounter.combatRoundState.rounds[0]).toMatchObject({
+      observationRelationships: [
+        expect.objectContaining({
+          id: "observation:encounter-participant-2:encounter-participant-1",
+          roundsTowardNextAttempt: 2,
+        }),
+      ],
+      roundNumber: completedState.roundNumber,
+    });
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+  });
+
   it("reloads an applied contested distance and starts the next round exactly once", async () => {
     const fixture = makeDistanceControlReviewFixture();
     const rolledState = rollDistanceControlFixtureBothSides({
@@ -11785,6 +11897,89 @@ describe("scenarios route contract", () => {
     });
     expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.rollerPrivate).toMatchObject({
       ob: 14,
+    });
+  });
+
+  it("applies an established Observe Opponent bonus once to the matching attack", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const roundState = {
+      ...makeOpenPhase1AttackRoundState({ snapshotOb: "10" }),
+      observationRelationships: [
+        {
+          bestBonus: 3,
+          completedAttempts: 1,
+          id: "observation:encounter-participant-1:encounter-participant-2",
+          observerParticipantId: "encounter-participant-1",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "encounter-participant-2",
+        },
+      ],
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          id: "participant-1",
+          snapshot: { displayName: "The Gladiator" },
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: { displayName: "Scyrian cavalry guy" },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 3,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
+      ob: 13,
+      phase: "phase1",
+    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: {
+        obBeforeOpponentSpecificModifier: 10,
+        obSkillRaw: 3,
+        opponentSpecificObPercentageAdjustment: 3,
+        opponentSpecificObRaw: 3,
+        opponentSpecificObModifierRows: [
+          {
+            label: "Observe Opponent · Scyrian cavalry guy",
+            value: 3,
+          },
+        ],
+      },
+      type: "roll_attack",
+    });
+    expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.rollerPrivate).toMatchObject({
+      ob: 13,
+      obBeforeOpponentSpecificModifier: 10,
+      opponentSpecificObModifierRows: [
+        {
+          label: "Observe Opponent · Scyrian cavalry guy",
+          value: 3,
+        },
+      ],
     });
   });
 

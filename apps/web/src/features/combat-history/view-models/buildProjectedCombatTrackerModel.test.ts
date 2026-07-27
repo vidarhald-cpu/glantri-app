@@ -49,7 +49,7 @@ function snapshot(
 
 function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection {
   return {
-    activeRound: { events, roundNumber: 1, snapshots: [snapshot()] },
+    activeRound: { events, observationRelationships: [], roundNumber: 1, snapshots: [snapshot()] },
     archivedRounds: [],
     rows: [{ displayName: "Aria", participantId: "aria" }],
   };
@@ -700,10 +700,16 @@ describe("buildProjectedCombatTrackerModel", () => {
 
   it("preserves immutable historical attack markers without live attention classification", () => {
     const projection = history([]);
-    projection.activeRound = { events: [], roundNumber: 2, snapshots: [] };
+    projection.activeRound = {
+      events: [],
+      observationRelationships: [],
+      roundNumber: 2,
+      snapshots: [],
+    };
     projection.archivedRounds = [
       {
         events: [event({ facts: { publicOutcome: { hit: true } } })],
+        observationRelationships: [],
         roundNumber: 1,
         snapshots: [],
       },

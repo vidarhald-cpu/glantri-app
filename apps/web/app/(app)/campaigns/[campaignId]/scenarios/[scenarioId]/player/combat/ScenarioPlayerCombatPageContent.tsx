@@ -87,6 +87,7 @@ import {
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
@@ -149,6 +150,7 @@ import {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
+  rollCombatObservationOnServer,
   rollOffensiveParryBrawlingOnServer,
   rollCombatFeintOnServer,
   respondCombatAdjustDistanceOnServer,
@@ -2731,6 +2733,47 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollObservation(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.observationAttemptId ||
+      !descriptor.opponentParticipantId ||
+      !descriptor.participantId ||
+      !descriptor.processId ||
+      !descriptor.relationshipId ||
+      !descriptor.stageId
+    ) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const { encounter } = await rollCombatObservationOnServer({
+        currentEncounter: encounterSession,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        observationAttemptId: descriptor.observationAttemptId,
+        opponentParticipantId: descriptor.opponentParticipantId,
+        processId: descriptor.processId,
+        relationshipId: descriptor.relationshipId,
+        scenarioParticipantId: descriptor.participantId,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+      setCombatActionError(undefined);
+    } catch (caughtError) {
+      setCombatActionError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll Observe Opponent.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function backOutPhaseAttack(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
@@ -3769,6 +3812,9 @@ export default function ScenarioPlayerCombatPageContent({
       case "roll_round_end_health_check":
         void rollHealthCheck(descriptor);
         return;
+      case "roll_observation":
+        void rollObservation(descriptor);
+        return;
       case "respond_adjust_distance":
       case "roll_adjust_distance":
         void advanceAdjustDistance(descriptor);
@@ -4015,6 +4061,13 @@ export default function ScenarioPlayerCombatPageContent({
       {historyInspection ? (
         <PlayerCombatHistoryInspector
           events={inspectedHistoryEvents}
+          observationRelationships={inspectedHistoryRound?.observationRelationships}
+          observationTargetLabels={Object.fromEntries(
+            (combatHistory?.rows ?? []).map((participant) => [
+              participant.participantId,
+              participant.displayName,
+            ]),
+          )}
           snapshot={inspectedHistorySnapshot}
         />
       ) : displayedParticipant ? (
@@ -4115,7 +4168,7 @@ export default function ScenarioPlayerCombatPageContent({
                       {selectedSecondaryActionId === "observe_opponent" ? (
                         <PlayerCombatOpponentSelector
                           controlsDisabled={declarationControlsDisabled}
-                          label="Opponent to observe"
+                          label="Opponent"
                           onSelectedOpponentChange={(targetParticipantId) => {
                             markCombatDeclarationDraftDirty();
                             setSecondaryActionContext(
@@ -4130,21 +4183,38 @@ export default function ScenarioPlayerCombatPageContent({
                       ) : null}
                     </div>
                   ) : selectedSecondaryActionId === "observe_opponent" && phaseKey === "phase1" ? (
-                    <PlayerCombatOpponentSelector
-                      controlsDisabled={declarationControlsDisabled}
-                      emptyLabel="Choose opponent"
-                      label="Opponent to observe"
-                      onSelectedOpponentChange={(targetParticipantId) => {
-                        markCombatDeclarationDraftDirty();
-                        setSecondaryActionContext(
-                          targetParticipantId
-                            ? { action: "observe_opponent", targetParticipantId }
-                            : undefined,
-                        );
-                      }}
-                      opponentOptions={targetOptions}
-                      selectedOpponentId={secondaryActionContext?.targetParticipantId}
-                    />
+                    <div style={{ display: "grid", gap: "0.65rem" }}>
+                      <PlayerCombatOpponentSelector
+                        controlsDisabled={declarationControlsDisabled}
+                        emptyLabel="Choose opponent"
+                        label="Opponent"
+                        onSelectedOpponentChange={(targetParticipantId) => {
+                          markCombatDeclarationDraftDirty();
+                          setSecondaryActionContext(
+                            targetParticipantId
+                              ? { action: "observe_opponent", targetParticipantId }
+                              : undefined,
+                          );
+                        }}
+                        opponentOptions={targetOptions}
+                        selectedOpponentId={secondaryActionContext?.targetParticipantId}
+                      />
+                      <PlayerCombatObservationProgress
+                        relationships={
+                          combatRoundState?.observationRelationships.filter(
+                            (relationship) =>
+                              relationship.observerParticipantId ===
+                              selectedRoundParticipant?.participantId,
+                          ) ?? []
+                        }
+                        targetLabels={Object.fromEntries(
+                          (combatRoundState?.participants ?? []).map((participant) => [
+                            participant.participantId,
+                            participant.label,
+                          ]),
+                        )}
+                      />
+                    </div>
                   ) : selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
                     <div style={{ display: "grid", gap: "0.65rem" }}>
                       <PlayerCombatAttackTargetSelector
@@ -4389,6 +4459,18 @@ export default function ScenarioPlayerCombatPageContent({
               pendingEntries={pendingModifierEntries}
               readOnly
               rows={modifierRows}
+              observationRelationships={
+                combatRoundState?.observationRelationships.filter(
+                  (relationship) =>
+                    relationship.observerParticipantId === selectedRoundParticipant?.participantId,
+                ) ?? []
+              }
+              observationTargetLabels={Object.fromEntries(
+                (combatRoundState?.participants ?? []).map((participant) => [
+                  participant.participantId,
+                  participant.label,
+                ]),
+              )}
             />
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {showInitiativeContextPanel ? (

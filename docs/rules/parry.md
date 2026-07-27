@@ -38,9 +38,10 @@ Parry does not change attack, parry, or dice formulas.
 ## Secondary action compatibility
 
 Parry may be declared with an open secondary action or with Observe Opponent. Observe Opponent is a
-secondary action, not a primary action, and owns a separate Phase 1 participant target. This slice
-records the target but intentionally creates no Observe Opponent roll, modifier, result, duration,
-or progression task.
+secondary action, not a primary action, and owns a separate Phase 1 participant target. Its
+directional relationship, round-boundary progress, opposed contest, best bonus, modifier
+application, and player-safe visibility are specified in [observe-opponent.md](./observe-opponent.md).
+Parry without that optional secondary action remains unchanged.
 
 ## Movement treatment
 

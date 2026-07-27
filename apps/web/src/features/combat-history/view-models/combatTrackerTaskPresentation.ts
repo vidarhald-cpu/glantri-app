@@ -61,6 +61,7 @@ export function classifyCombatTrackerTaskAttention(
     case "health_review":
     case "hit_location":
     case "offensive_parry_brawling_roll":
+    case "observation_roll":
     case "parry":
       return "exceptional";
     default: {
@@ -103,6 +104,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Offensive Parry";
     case "continued_contact_maintenance_roll":
       return "Continued Contact";
+    case "observation_roll":
+      return "Observe Opponent";
     case "hit_location":
       return "Hit location";
     case "critical":
@@ -230,6 +233,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} must roll Brawling${opponent ? ` against ${opponent}` : ""} for Continued Contact.`
           : "A Continued Contact Brawling roll is required.";
+        break;
+      case "observation_roll":
+        text = owner
+          ? `${owner} must roll Observe Opponent${opponent ? ` against ${opponent}` : ""}.`
+          : "An Observe Opponent roll is required.";
         break;
       case "adjust_distance_response":
         text = owner

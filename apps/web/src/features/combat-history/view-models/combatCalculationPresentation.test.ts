@@ -4,10 +4,44 @@ import {
   buildCombatContestCalculationPresentation,
   buildCombatRollCalculationPresentation,
   formatCombatContestCalculationLines,
+  formatObservationCalculationLines,
   formatCombatRollCalculationLines,
 } from "./combatCalculationPresentation";
 
 describe("combat calculation presentation", () => {
+  it("formats reproducible observation facts without internal IDs or a die-type label", () => {
+    const lines = formatObservationCalculationLines({
+      appliedModifiers: [
+        { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
+        { bucket: "skill_ob", label: "Fatigue", value: -1 },
+      ],
+      effectiveSkillValue: 22,
+      finalTotal: 24,
+      intelligenceValue: 11,
+      intelligenceXp: 3,
+      openEndedD10s: [],
+      rollD20: 2,
+      rollTotal: 2,
+      skillId: "one-handed-edged",
+      skillLabel: "One-handed edged",
+      skillXp: 7,
+    });
+
+    expect(lines).toEqual([
+      "Skill: One-handed edged",
+      "Skill XP: 7",
+      "Intelligence: 11",
+      "Intelligence XP: 3",
+      "Effective skill: 22",
+      "Combat Experience: +1%",
+      "Fatigue: -1%",
+      "Roll: 2",
+      "Final total: 24",
+    ]);
+    expect(lines.join(" ")).not.toContain("Skill ID");
+    expect(lines.join(" ")).not.toContain("D20");
+  });
+
   it("shows canonical percentage modifiers and their persisted effective skill", () => {
     const calculation = buildCombatRollCalculationPresentation({
       calculation: {

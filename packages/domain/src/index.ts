@@ -29,6 +29,7 @@ export * from "./encounter/combatFeint";
 export * from "./encounter/combatAdjustDistance";
 export * from "./encounter/combatModifierProjection";
 export * from "./encounter/combatModifierContributions";
+export * from "./encounter/combatObservation";
 export * from "./encounter/combatActionModifiers";
 export * from "./encounter/combatDeclarationValidation";
 export * from "./encounter/combatDeclarationCompatibility";

@@ -58,10 +58,12 @@ export function buildRoundEndProcesses(
               contestId: task.contestId,
               continuedContactId: task.continuedContactId,
               healthRollId: task.healthRollId,
+              observationAttemptId: task.observationAttemptId,
               opponentParticipantId: task.opponentParticipantId,
               pairId: task.pairId,
               participantId: task.ownerParticipantId,
               proposalId: task.proposalId,
+              relationshipId: task.relationshipId,
               rollPurpose:
                 task.kind === "continued_contact_maintenance_roll"
                   ? ("escape_continued_contact" as const)
@@ -78,6 +80,8 @@ export function buildRoundEndProcesses(
                     : "continued_contact_maintenance_escape"
                   : distanceProposal?.controlMode === "continued_contact"
                     ? "continued_contact_distance_control"
+                    : task.kind === "observation_roll"
+                      ? "observe_opponent_contest"
                     : process.kind,
               actor:
                 maintenanceController ??
@@ -106,6 +110,8 @@ export function buildRoundEndProcesses(
               skill:
                 task.kind === "continued_contact_maintenance_roll"
                   ? { id: "brawling", label: "Brawling" }
+                  : task.kind === "observation_roll"
+                    ? { label: "Observation" }
                   : task.kind === "health_review"
                     ? { label: "Health" }
                     : undefined,

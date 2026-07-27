@@ -17,7 +17,7 @@ function history(input: {
   revision: string;
 }): CombatHistoryProjection {
   return {
-    activeRound: { events: [], roundNumber: 1, snapshots: [] },
+    activeRound: { events: [], observationRelationships: [], roundNumber: 1, snapshots: [] },
     archivedRounds: [],
     rows: [],
     sourceEncounterId: input.encounterId,

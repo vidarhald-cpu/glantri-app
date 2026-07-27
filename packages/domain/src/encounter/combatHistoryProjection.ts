@@ -20,6 +20,10 @@ import {
   type CombatProgressionPresentationProjection,
   type CombatProgressionProjection,
 } from "./combatProgressionProjection";
+import {
+  buildPlayerSafeCombatObservationRelationships,
+  type CombatObservationRelationship,
+} from "./combatObservation";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -128,6 +132,7 @@ export interface ProjectedCombatHistoryPhasePanel {
 
 export interface ProjectedCombatHistoryRound {
   events: ProjectedCombatHistoryEvent[];
+  observationRelationships: CombatObservationRelationship[];
   roundNumber: number;
   snapshots: ProjectedCombatHistorySnapshot[];
 }
@@ -581,6 +586,7 @@ function projectSnapshot(input: {
 function projectRound(input: {
   events: readonly CombatStepEvent[];
   labels: ReadonlyMap<string, string>;
+  observationRelationships: readonly CombatObservationRelationship[];
   participants: readonly CombatHistoryParticipantInput[];
   roundNumber: number;
   snapshots: readonly CombatRoundStepSnapshot[];
@@ -596,6 +602,13 @@ function projectRound(input: {
         }),
       )
       .filter((event): event is ProjectedCombatHistoryEvent => Boolean(event)),
+    observationRelationships:
+      input.viewer.kind === "gm"
+        ? [...input.observationRelationships]
+        : buildPlayerSafeCombatObservationRelationships({
+            controlledParticipantIds: input.viewer.controlledParticipantIds,
+            relationships: input.observationRelationships,
+          }),
     roundNumber: input.roundNumber,
     snapshots: input.snapshots
       .map((snapshot) => projectSnapshot({ labels: input.labels, snapshot, viewer: input.viewer }))
@@ -671,6 +684,7 @@ export function projectCombatHistory(input: {
         stepSnapshots: round.stepSnapshots,
       }),
       labels,
+      observationRelationships: round.observationRelationships,
       participants: visibleParticipants,
       roundNumber: round.roundNumber,
       snapshots: round.stepSnapshots,
@@ -691,6 +705,7 @@ export function projectCombatHistory(input: {
         stepSnapshots: state.stepSnapshots,
       }),
       labels,
+      observationRelationships: state.observationRelationships,
       participants: visibleParticipants,
       roundNumber: state.roundNumber,
       snapshots: state.stepSnapshots,

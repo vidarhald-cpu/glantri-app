@@ -288,6 +288,202 @@ describe("buildCombatStepResultPresentation", () => {
     ).toBe(true);
   });
 
+  it("presents the observation contest in the completing round's SU results", () => {
+    const observerEvent = historyEvent("observation", 7, {
+      facts: {
+        involvedOutcome: {
+          bestBonusAfter: 3,
+          candidateBonus: 3,
+          difference: 16,
+        },
+        privateCalculation: {
+          appliedModifiers: [{ bucket: "general_fatigue", label: "CE", value: 1 }],
+          effectiveSkillValue: 20,
+          finalTotal: 38,
+          intelligenceValue: 11,
+          intelligenceXp: 2,
+          openEndedD10s: [],
+          rollD20: 18,
+          rollTotal: 18,
+          skillLabel: "Dodge",
+          skillXp: 7,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      phase: undefined,
+      step: "round_summary",
+    });
+    const gmEvent = {
+      ...observerEvent,
+      facts: {
+        ...observerEvent.facts,
+        gmReview: {
+          observerTotal: 38,
+          targetCalculation: {
+            appliedModifiers: [],
+            effectiveSkillValue: 12,
+            finalTotal: 22,
+            intelligenceValue: 9,
+            intelligenceXp: 1,
+            openEndedD10s: [],
+            rollD20: 10,
+            rollTotal: 10,
+            skillLabel: "One-handed edged",
+            skillXp: 2,
+          },
+          targetTotal: 22,
+        },
+      },
+    } satisfies ProjectedCombatHistoryEvent;
+
+    const observer = build({
+      boundary: "round_end",
+      events: [observerEvent],
+      participantId: "gladiator",
+    });
+    const gm = build({
+      boundary: "round_end",
+      events: [gmEvent],
+      participantId: "gladiator",
+      viewer: "gm",
+    });
+    const observedTarget = build({
+      boundary: "round_end",
+      events: [],
+      participantId: "scyrian",
+    });
+
+    expect(observer.entries[0]).toMatchObject({
+      heading: "Observe Opponent — Scyrian cavalry guy",
+      outcome: "Won by 16 · result +3% · best +3%",
+      summary: "Roll 38",
+    });
+    expect(gm.entries[0]?.summary).toBe("Observer 38 vs opponent 22");
+    expect(gm.entries[0]?.calculations.map((calculation) => calculation.title)).toEqual([
+      "Observer — The Gladiator",
+      "Opponent — Scyrian cavalry guy",
+    ]);
+    expect(observer.entries[0]?.calculations.map((calculation) => calculation.title)).toEqual([
+      "Observer — The Gladiator",
+    ]);
+    expect(observedTarget.entries).toEqual([]);
+  });
+
+  it("presents concise observation progress and suppresses pending once its contest resolves", () => {
+    const pending = historyEvent("observation", 5, {
+      facts: {
+        involvedOutcome: {
+          observationAttemptId: "attempt-1",
+          observationStatus: "period_complete",
+          requiredQualifyingRounds: 3,
+          roundsTowardNextAttempt: 3,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+    const resolved = historyEvent("observation", 6, {
+      ...pending,
+      facts: {
+        involvedOutcome: {
+          bestBonusAfter: 1,
+          candidateBonus: 1,
+          difference: 8,
+          observationAttemptId: "attempt-1",
+        },
+        publicOutcome: {},
+      },
+      id: "resolved-observation",
+      sequence: 6,
+    });
+    const result = build({
+      boundary: "round_end",
+      events: [pending, resolved],
+      participantId: "gladiator",
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]?.outcome).toBe("Won by 8 · result +1% · best +1%");
+    expect(result.entries[0]?.summary).not.toContain("contest resolved");
+  });
+
+  it("states why a hit-disqualified observation round made no progress", () => {
+    const noProgress = historyEvent("observation", 5, {
+      facts: {
+        involvedOutcome: {
+          observationNoProgressReason: "observer_hit",
+          observationStatus: "no_progress",
+          requiredQualifyingRounds: 3,
+          roundsTowardNextAttempt: 1,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+
+    const result = build({
+      boundary: "round_end",
+      events: [noProgress],
+      participantId: "gladiator",
+    });
+
+    expect(result.entries[0]).toMatchObject({
+      heading: "Observe Opponent — Scyrian cavalry guy",
+      summary: "No progress · observer was hit",
+    });
+  });
+
   it("fails closed instead of mixing contradictory revisions", () => {
     const result = buildCombatStepResultPresentation({
       boundary: "phase1_resolution",

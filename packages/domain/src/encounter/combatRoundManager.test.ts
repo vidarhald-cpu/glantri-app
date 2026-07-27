@@ -5949,7 +5949,7 @@ describe("combat round manager", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const playerDeclared = recordCombatRoundDeclaration({
       declaration: {
-        actionId: "attack_parry",
+        actionId: "parry",
         additionalActionNotes: "Hold the bridge.",
         movementId: "hold",
         phaseContexts: {
@@ -5995,7 +5995,7 @@ describe("combat round manager", () => {
 
     expect(gmDeclared.participants[0]?.stepStatuses.select_actions).toBe("submitted");
     expect(gmDeclared.participants[0]?.declaration).toMatchObject({
-      actionId: "attack_parry",
+      actionId: "parry",
       additionalActionNotes: "Hold the bridge.",
       movementId: "hold",
       phaseContexts: {

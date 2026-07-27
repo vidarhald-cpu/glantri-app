@@ -66,6 +66,60 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("projects revision-correct archived observation relationships without current-state fallback", () => {
+    const state = combatRoundStateSchema.parse({
+      observationRelationships: [
+        {
+          bestBonus: 3,
+          completedAttempts: 2,
+          id: "observation:aria:borin",
+          observerParticipantId: "aria",
+          roundsTowardNextAttempt: 4,
+          targetParticipantId: "borin",
+        },
+      ],
+      roundNumber: 2,
+      rounds: [
+        {
+          observationRelationships: [
+            {
+              bestBonus: 1,
+              completedAttempts: 1,
+              id: "observation:aria:borin",
+              observerParticipantId: "aria",
+              roundsTowardNextAttempt: 0,
+              targetParticipantId: "borin",
+            },
+          ],
+          roundNumber: 1,
+        },
+      ],
+    });
+    const observer = projectCombatHistory({
+      participants,
+      source: historySource(state),
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const target = projectCombatHistory({
+      participants,
+      source: historySource(state),
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(observer.archivedRounds[0]?.observationRelationships[0]).toMatchObject({
+      bestBonus: 1,
+      completedAttempts: 1,
+      roundsTowardNextAttempt: 0,
+    });
+    expect(observer.activeRound.observationRelationships[0]).toMatchObject({
+      bestBonus: 3,
+      completedAttempts: 2,
+      roundsTowardNextAttempt: 4,
+    });
+    expect(target.archivedRounds[0]?.observationRelationships).toEqual([]);
+    expect(target.activeRound.observationRelationships).toEqual([]);
+  });
+
   it("retains safe declaration completion facts for every visible participant", () => {
     const declaration = event({
       facts: {

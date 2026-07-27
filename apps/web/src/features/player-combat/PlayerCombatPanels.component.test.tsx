@@ -6,6 +6,7 @@ import {
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
   PlayerCombatModifierPanel,
+  PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
 } from "./PlayerCombatPanels";
 
@@ -33,7 +34,8 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
   });
 
-  it("offers Parry as a primary action and Observe Opponent only as a secondary action", () => {
+  it("offers Observe Opponent as an explicit Parry secondary action", () => {
+    const onSecondaryActionChange = vi.fn();
     render(
       <PlayerCombatActionSelectorPanel
         actionId="parry"
@@ -42,8 +44,8 @@ describe("PlayerCombatActionSelectorPanel", () => {
         onActionChange={vi.fn()}
         onAdditionalActionNotesChange={vi.fn()}
         onMovementChange={vi.fn()}
-        onSecondaryActionChange={vi.fn()}
-        secondaryActionId="observe_opponent"
+        onSecondaryActionChange={onSecondaryActionChange}
+        secondaryActionId=""
       />,
     );
 
@@ -56,12 +58,13 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(Array.from(primary.options).some((option) => option.text === "Observe Opponent")).toBe(
       false,
     );
-    expect(Array.from(secondary.options).some((option) => option.text === "Observe Opponent")).toBe(
-      true,
-    );
-    expect(Array.from(secondary.options).some((option) => option.text === "Offensive Parry")).toBe(
-      false,
-    );
+    expect(Array.from(secondary.options).map((option) => option.text)).toEqual([
+      "None",
+      "Observe opponent",
+    ]);
+    expect(secondary.value).toBe("");
+    fireEvent.change(secondary, { target: { value: "observe_opponent" } });
+    expect(onSecondaryActionChange).toHaveBeenCalledWith("observe_opponent");
     expect(movement.value).toBe("hold_position");
     expect(screen.queryByText("Focus on defense for this round.", { exact: false })).toBeNull();
     expect(
@@ -108,14 +111,49 @@ describe("PlayerCombatActionSelectorPanel", () => {
   it("renders the shared selector with Observe Opponent's Phase 1 label", () => {
     render(
       <PlayerCombatOpponentSelector
-        label="Opponent to observe"
+        label="Opponent"
         onSelectedOpponentChange={vi.fn()}
         opponentOptions={[{ displayName: "Borin", id: "encounter-participant-borin" }]}
         selectedOpponentId="encounter-participant-borin"
       />,
     );
 
-    expect(screen.getByRole("combobox", { name: "Opponent to observe" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Opponent" })).toBeTruthy();
+  });
+});
+
+describe("PlayerCombatObservationProgress", () => {
+  it("renders separate progress and best bonus for every observed target", () => {
+    render(
+      <PlayerCombatObservationProgress
+        relationships={[
+          {
+            bestBonus: 0,
+            completedAttempts: 0,
+            id: "observation:observer:gladiator",
+            observerParticipantId: "observer",
+            roundsTowardNextAttempt: 2,
+            targetParticipantId: "gladiator",
+          },
+          {
+            bestBonus: 1,
+            completedAttempts: 1,
+            id: "observation:observer:orc",
+            observerParticipantId: "observer",
+            roundsTowardNextAttempt: 4,
+            targetParticipantId: "orc",
+          },
+        ]}
+        targetLabels={{ gladiator: "Gladiator", orc: "Orc captain" }}
+      />,
+    );
+
+    expect(screen.getByText("Observation progress")).toBeInTheDocument();
+    expect(screen.getByText("Gladiator: 2 / 3")).toBeInTheDocument();
+    expect(
+      screen.getByText("Orc captain: 4 / 6 · best +1% · attempts 1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Observation", { exact: true })).not.toBeInTheDocument();
   });
 });
 
@@ -248,8 +286,40 @@ describe("PlayerCombatModifierPanel", () => {
     );
 
     expect(screen.getAllByText("+1%")).toHaveLength(2);
-    expect(screen.getByText("Parry")).toBeInTheDocument();
-    expect(screen.getByText(/Dodge 7/)).toBeInTheDocument();
+    expect(screen.getByText("Parry 7")).toBeInTheDocument();
+    expect(screen.queryByText(/one fifth/i)).not.toBeInTheDocument();
+  });
+
+  it("shows only established pair-specific observation bonuses", () => {
+    render(
+      <PlayerCombatModifierPanel
+        observationRelationships={[
+          {
+            bestBonus: 0,
+            completedAttempts: 0,
+            id: "observation:observer:gladiator",
+            observerParticipantId: "observer",
+            roundsTowardNextAttempt: 2,
+            targetParticipantId: "gladiator",
+          },
+          {
+            bestBonus: 3,
+            completedAttempts: 1,
+            id: "observation:observer:orc",
+            observerParticipantId: "observer",
+            roundsTowardNextAttempt: 0,
+            targetParticipantId: "orc",
+          },
+        ]}
+        observationTargetLabels={{ gladiator: "Gladiator", orc: "Orc captain" }}
+        readOnly
+        rows={[]}
+      />,
+    );
+
+    expect(screen.getByText("Observe Opponent · Orc captain")).toBeInTheDocument();
+    expect(screen.getByText("+3%")).toBeInTheDocument();
+    expect(screen.queryByText("Observe Opponent · Gladiator")).not.toBeInTheDocument();
   });
 
   it("keeps editable modifier details on a full-width row", () => {

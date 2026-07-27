@@ -4,6 +4,8 @@ import { formatSignedCombatModifier } from "./formatCombatModifier";
 import {
   buildCombatRollCalculationPresentation,
   formatCombatRollCalculationLines,
+  formatObservationContestDifference,
+  formatObservationCalculationLines,
 } from "./combatCalculationPresentation";
 
 export interface CombatEventResultItemModel {
@@ -42,6 +44,7 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   initiative: "Initiative",
   parry: "Parry",
   offensive_parry_brawling: "Offensive Parry — Brawling",
+  observation: "Observe Opponent",
   participant_su_review: "Participant SU review",
   feint_feasibility: "Feint ruling",
   feint_roll: "Feint roll",
@@ -128,7 +131,36 @@ function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventR
     typeof db === "number" &&
     typeof total === "number"
   ) {
+    const opponentSpecificRows = Array.isArray(calculation.opponentSpecificObModifierRows)
+      ? calculation.opponentSpecificObModifierRows.flatMap((row, index) => {
+          if (
+            !row ||
+            typeof row !== "object" ||
+            typeof row.label !== "string" ||
+            typeof row.value !== "number"
+          ) {
+            return [];
+          }
+          return [
+            {
+              key: `${event.id}:calculation:attack:opponent-specific:${index}`,
+              text: `${row.label}: ${formatSignedCombatModifier(row.value)}%`,
+            },
+          ];
+        })
+      : [];
+    const baseOb =
+      typeof calculation.obBeforeOpponentSpecificModifier === "number"
+        ? [
+            {
+              key: `${event.id}:calculation:attack:base-ob`,
+              text: `OB before opponent modifier: ${calculation.obBeforeOpponentSpecificModifier}`,
+            },
+          ]
+        : [];
     return [
+      ...baseOb,
+      ...opponentSpecificRows,
       {
         key: `${event.id}:calculation:attack-total`,
         text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}`,
@@ -223,6 +255,46 @@ function offensiveParryBrawlingCalculationRows(
         text,
       }))
     : [];
+}
+
+function observationCalculationRows(
+  event: ProjectedCombatHistoryEvent,
+): CombatEventResultFactRow[] {
+  const observer = formatObservationCalculationLines(event.facts.privateCalculation);
+  const observerName = identity(event, "actor") ?? identity(event, "roller");
+  const opponentName = identity(event, "target");
+  const targetCalculation =
+    event.facts.gmReview?.targetCalculation &&
+    typeof event.facts.gmReview.targetCalculation === "object"
+      ? (event.facts.gmReview.targetCalculation as Record<string, unknown>)
+      : undefined;
+  const opponent = formatObservationCalculationLines(targetCalculation);
+  return [
+    ...(observer.length
+      ? [
+          {
+            key: `${event.id}:calculation:observer-heading`,
+            text: observerName ? `Observer — ${observerName}` : "Observer calculation",
+          },
+          ...observer.map((text, index) => ({
+            key: `${event.id}:calculation:observer:${index}`,
+            text,
+          })),
+        ]
+      : []),
+    ...(opponent.length
+      ? [
+          {
+            key: `${event.id}:calculation:opponent-heading`,
+            text: opponentName ? `Opponent — ${opponentName}` : "Opponent calculation",
+          },
+          ...opponent.map((text, index) => ({
+            key: `${event.id}:calculation:opponent:${index}`,
+            text,
+          })),
+        ]
+      : []),
+  ];
 }
 
 function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
@@ -347,6 +419,54 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
             ? "The defender remains Unbalanced. The controller chooses engagement distance for the next round."
             : "Unbalanced was removed. Ordinary distance control resumes."
           : `${roller ?? "Participant"} rolled Brawling.`,
+      };
+    }
+    case "observation": {
+      const status = factValue(event, "observationStatus");
+      const noProgressReason = factValue(event, "observationNoProgressReason");
+      const progress = factValue(event, "roundsTowardNextAttempt");
+      const required = factValue(event, "requiredQualifyingRounds");
+      if (status === "no_progress" || status === "progress" || status === "period_complete") {
+        return {
+          outcomeRows: [],
+          summary:
+            status === "no_progress"
+              ? noProgressReason === "observer_hit"
+                ? "No progress · observer was hit"
+                : "No progress"
+              : status === "period_complete"
+                ? "Observation period complete · roll pending"
+                : typeof progress === "number" && typeof required === "number"
+                  ? `Progress ${progress} / ${required}`
+                  : "Observation progress recorded",
+        };
+      }
+      const candidate = factValue(event, "candidateBonus");
+      const best = factValue(event, "bestBonusAfter");
+      const difference = factValue(event, "difference");
+      return {
+        outcomeRows: [
+          ...(typeof difference === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:margin`,
+                  text: formatObservationContestDifference(difference),
+                },
+              ]
+            : []),
+          ...(typeof candidate === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:result`,
+                  text: `Result +${candidate}%`,
+                },
+              ]
+            : []),
+          ...(typeof best === "number"
+            ? [{ key: `${event.id}:outcome:best`, text: `Best +${best}%` }]
+            : []),
+        ],
+        summary: `Observe Opponent${event.identities.find((identity) => identity.role === "target")?.displayName ? ` — ${event.identities.find((identity) => identity.role === "target")?.displayName}` : ""}.`,
       };
     }
     case "hit_location": {
@@ -603,8 +723,53 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
 export function buildCombatEventResultModel(
   events: readonly ProjectedCombatHistoryEvent[],
 ): CombatEventResultModel {
+  const canonicalResolvedObservationEventByAttemptId = new Map<string, string>();
+  const resolvedObservationAttemptIds = new Set(
+    events.flatMap((event) => {
+      const attemptId = factValue(event, "observationAttemptId");
+      const resolved =
+        event.type === "observation" &&
+        typeof attemptId === "string" &&
+        factValue(event, "difference") !== undefined;
+      if (resolved) {
+        const existingId = canonicalResolvedObservationEventByAttemptId.get(attemptId);
+        const existing = existingId
+          ? events.find((candidate) => candidate.id === existingId)
+          : undefined;
+        const eventDetail =
+          Number(event.facts.privateCalculation !== undefined) +
+          Number(event.facts.gmReview?.targetCalculation !== undefined);
+        const existingDetail = existing
+          ? Number(existing.facts.privateCalculation !== undefined) +
+            Number(existing.facts.gmReview?.targetCalculation !== undefined)
+          : -1;
+        if (!existing || eventDetail >= existingDetail) {
+          canonicalResolvedObservationEventByAttemptId.set(attemptId, event.id);
+        }
+      }
+      return resolved ? [attemptId] : [];
+    }),
+  );
   return {
     items: [...events]
+      .filter((event) => {
+        if (event.type === "participant_su_review" && event.status === "proposed") return false;
+        const attemptId = factValue(event, "observationAttemptId");
+        if (
+          event.type === "observation" &&
+          typeof attemptId === "string" &&
+          factValue(event, "difference") !== undefined &&
+          canonicalResolvedObservationEventByAttemptId.get(attemptId) !== event.id
+        ) {
+          return false;
+        }
+        return !(
+          event.type === "observation" &&
+          factValue(event, "observationStatus") === "period_complete" &&
+          typeof attemptId === "string" &&
+          resolvedObservationAttemptIds.has(attemptId)
+        );
+      })
       .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
       .map((event) => {
         const identityById = new Map(
@@ -621,6 +786,8 @@ export function buildCombatEventResultModel(
               ? dodgeCalculationRows(event)
               : event.type === "offensive_parry_brawling"
                 ? offensiveParryBrawlingCalculationRows(event)
+                : event.type === "observation"
+                  ? observationCalculationRows(event)
                 : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
           completenessLabel:
             event.completeness === "complete"

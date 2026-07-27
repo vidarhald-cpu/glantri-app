@@ -1,6 +1,8 @@
 import {
   combatRoundStateSchema,
+  getPendingCombatObservationAttempts,
   getCombatRoundEndDistanceProposalLifecycle,
+  sortCombatRoundParticipantsByInitiative,
   type CombatRoundCommandType,
   type CombatRoundState,
 } from "./combatRoundManager";
@@ -10,6 +12,7 @@ export type CombatRoundEndProcessKind =
   | "distance"
   | "effect_review"
   | "health_review"
+  | "observation"
   | "participant_review"
   | "round_end";
 
@@ -30,6 +33,7 @@ export type CombatRoundEndProcessTaskKind =
   | "effect_review"
   | "gm_advance_boundary"
   | "health_review"
+  | "observation_roll"
   | "round_end_prepare";
 
 export interface CombatRoundEndProcessTaskPlan {
@@ -41,10 +45,12 @@ export interface CombatRoundEndProcessTaskPlan {
   readonly key: string;
   readonly kind: CombatRoundEndProcessTaskKind;
   readonly opponentParticipantId?: string;
+  readonly observationAttemptId?: string;
   readonly ownerParticipantId?: string;
   readonly ownerRole: "gm" | "participant";
   readonly pairId?: string;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
   readonly trackerParticipantId?: string;
 }
 
@@ -348,19 +354,23 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
     ],
   };
 
-  const participantIds = normalized.participants.map((participant) => participant.participantId);
+  const participantIds = sortCombatRoundParticipantsByInitiative({
+    phase: "phase2",
+    state: normalized,
+  }).map((participant) => participant.participantId);
+  const pendingObservationAttempts = getPendingCombatObservationAttempts(normalized);
   const completedParticipantIds = new Set(
     participantIds.filter(
-      (participantId) => validReview.participantReviews[participantId]?.status === "complete",
+      (participantId) =>
+        validReview.participantReviews[participantId]?.status === "complete" &&
+        !pendingObservationAttempts.some(
+          (attempt) => attempt.observerParticipantId === participantId,
+        ),
     ),
   );
   const iteration = buildOrderedParticipantIteration({
     completedParticipantIds,
     participantIds,
-    preferredParticipantId:
-      normalized.currentCursor?.step === "SU" && normalized.currentCursor.participantId
-        ? normalized.currentCursor.participantId
-        : undefined,
   });
   const activeParticipantId = distancePending
     ? undefined
@@ -452,7 +462,44 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
     });
   }
 
-  const complete = !distancePending && completedParticipantIds.size === participantIds.length;
+  const participantReviewsComplete =
+    !distancePending && completedParticipantIds.size === participantIds.length;
+  const observationProcessId = processId(roundNumber, "observation");
+  const observationTasks = !distancePending && activeParticipantId
+    ? pendingObservationAttempts
+        .filter((attempt) => attempt.observerParticipantId === activeParticipantId)
+        .map((attempt) => ({
+        expectedCommand: "roll_observation" as const,
+        key: attempt.attemptId,
+        kind: "observation_roll" as const,
+        observationAttemptId: attempt.attemptId,
+        opponentParticipantId: attempt.targetParticipantId,
+        ownerParticipantId: attempt.observerParticipantId,
+        ownerRole: "participant" as const,
+        relationshipId: attempt.relationshipId,
+        trackerParticipantId: attempt.observerParticipantId,
+      }))
+    : [];
+  processes.push({
+    id: observationProcessId,
+    kind: "observation",
+    stages: [
+      stage({
+        executionStrategy: "ordered_all",
+        kind: "contest",
+        processId: observationProcessId,
+        state:
+          observationTasks.length > 0
+            ? "active"
+            : participantReviewsComplete
+              ? "complete"
+              : "pending",
+        tasks: observationTasks,
+      }),
+    ],
+  });
+
+  const complete = participantReviewsComplete && observationTasks.length === 0;
   const boundaryProcessId = processId(roundNumber, "round_end");
   processes.push({
     id: boundaryProcessId,

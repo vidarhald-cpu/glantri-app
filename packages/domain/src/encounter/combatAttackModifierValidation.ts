@@ -12,6 +12,7 @@ import {
   type CombatModifierResolution,
 } from "./combatModifierContributions";
 import { buildLiveCombatModifierContributionProjection } from "./combatModifierProjection";
+import { buildCombatObservationModifierContributions } from "./combatObservation";
 import {
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundPhaseActionStepForPhase,
@@ -25,6 +26,7 @@ import {
 export interface CanonicalCombatAttackModifierFacts {
   attackerActionId: string;
   attackerCombatContext: ScenarioParticipantCombatContext;
+  attackerOpponentResolution: CombatModifierResolution;
   attackerProposalId?: string;
   attackerResolution: CombatModifierResolution;
   declaredOpportunity?: CombatRoundAttackOpportunity;
@@ -147,22 +149,43 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     phase: input.phase,
     state: input.state,
   })?.id;
-  const attackerContributions = buildLiveCombatModifierContributionProjection({
-    combatContext: attackerCombatContext,
-    combatEffects: input.attackerScenarioParticipant.state.combatEffects,
-    currentInitiativeGroupId,
-    currentRound: input.state.roundNumber,
+  const attackerObservationContributions = buildCombatObservationModifierContributions({
     encounterId: input.encounterId,
-    ownerParticipantId: input.attackerScenarioParticipant.id,
-  }).contributions;
-  const defenderContributions = buildLiveCombatModifierContributionProjection({
-    combatContext: defenderCombatContext,
-    combatEffects: input.defenderScenarioParticipant.state.combatEffects,
-    currentInitiativeGroupId,
-    currentRound: input.state.roundNumber,
-    encounterId: input.encounterId,
-    ownerParticipantId: input.defenderScenarioParticipant.id,
-  }).contributions;
+    observerCombatantId: input.attackerCombatantId,
+    observerParticipantId: input.attackerScenarioParticipant.id,
+    opponentCombatantId: input.defenderCombatantId,
+    opponentParticipantId: input.defenderScenarioParticipant.id,
+    relationships: input.state.observationRelationships,
+  });
+  const attackerContributions = [
+    ...buildLiveCombatModifierContributionProjection({
+      combatContext: attackerCombatContext,
+      combatEffects: input.attackerScenarioParticipant.state.combatEffects,
+      currentInitiativeGroupId,
+      currentRound: input.state.roundNumber,
+      encounterId: input.encounterId,
+      ownerParticipantId: input.attackerScenarioParticipant.id,
+    }).contributions,
+    ...attackerObservationContributions,
+  ];
+  const defenderContributions = [
+    ...buildLiveCombatModifierContributionProjection({
+      combatContext: defenderCombatContext,
+      combatEffects: input.defenderScenarioParticipant.state.combatEffects,
+      currentInitiativeGroupId,
+      currentRound: input.state.roundNumber,
+      encounterId: input.encounterId,
+      ownerParticipantId: input.defenderScenarioParticipant.id,
+    }).contributions,
+    ...buildCombatObservationModifierContributions({
+      encounterId: input.encounterId,
+      observerCombatantId: input.defenderCombatantId,
+      observerParticipantId: input.defenderScenarioParticipant.id,
+      opponentCombatantId: input.attackerCombatantId,
+      opponentParticipantId: input.attackerScenarioParticipant.id,
+      relationships: input.state.observationRelationships,
+    }),
+  ];
   const opportunityId = declaredOpportunity?.id ?? input.opportunityId;
   const attackerCalculationContext = {
     actionId: attackerActionId,
@@ -194,6 +217,11 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
   return {
     attackerActionId,
     attackerCombatContext,
+    attackerOpponentResolution: resolveCombatModifierContributions({
+      bucket: "skill_ob",
+      context: attackerCalculationContext,
+      contributions: attackerObservationContributions,
+    }),
     attackerProposalId,
     attackerResolution: combineCombatModifierResolutions({
       additional: resolveCombatWideGeneralModifiers({
@@ -260,17 +288,29 @@ export function resolveCanonicalCombatParryModifierFacts(input: {
   const defenderCombatContext = scenarioParticipantCombatContextSchema.parse(
     input.defenderScenarioParticipant.state.combat.combatContext ?? {},
   );
-  const contributions = buildLiveCombatModifierContributionProjection({
-    combatContext: defenderCombatContext,
-    combatEffects: input.defenderScenarioParticipant.state.combatEffects,
-    currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
-      phase: input.attackResult.phase,
-      state: input.state,
-    })?.id,
-    currentRound: input.state.roundNumber,
-    encounterId: input.encounterId,
-    ownerParticipantId: input.defenderScenarioParticipant.id,
-  }).contributions;
+  const contributions = [
+    ...buildLiveCombatModifierContributionProjection({
+      combatContext: defenderCombatContext,
+      combatEffects: input.defenderScenarioParticipant.state.combatEffects,
+      currentInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
+        phase: input.attackResult.phase,
+        state: input.state,
+      })?.id,
+      currentRound: input.state.roundNumber,
+      encounterId: input.encounterId,
+      ownerParticipantId: input.defenderScenarioParticipant.id,
+    }).contributions,
+    ...(input.attackerScenarioParticipant
+      ? buildCombatObservationModifierContributions({
+          encounterId: input.encounterId,
+          observerCombatantId: input.defenderCombatantId,
+          observerParticipantId: input.defenderScenarioParticipant.id,
+          opponentCombatantId: input.attackResult.attackerParticipantId,
+          opponentParticipantId: input.attackerScenarioParticipant.id,
+          relationships: input.state.observationRelationships,
+        })
+      : []),
+  ];
   const pairKey = input.attackerScenarioParticipant
     ? createCombatParticipantPairKey(
         input.defenderScenarioParticipant.id,

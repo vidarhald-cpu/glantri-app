@@ -910,6 +910,7 @@ describe("CombatProgressionProjection", () => {
       "participant_review",
       "health_review",
       "effect_review",
+      "observation",
       "round_end",
     ]);
     expect(effectReview?.stages[0]?.tasks[0]).toMatchObject({

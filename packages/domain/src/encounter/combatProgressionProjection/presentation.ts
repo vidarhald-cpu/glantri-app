@@ -55,7 +55,8 @@ function taskIsVisible(
   if (
     task.expectedCommand === "submit_phase_initiative_choice" ||
     task.kind === "combat_experience" ||
-    task.kind === "health_review"
+    task.kind === "health_review" ||
+    task.kind === "observation_roll"
   ) {
     return Boolean(owner && viewer.controlledParticipantIds.has(owner.participantId));
   }
@@ -122,6 +123,7 @@ function visibleTaskIdentity(
     hitLocationResultId: task.identity.hitLocationResultId,
     opportunityId: task.identity.opportunityId,
     offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
+    observationAttemptId: task.identity.observationAttemptId,
     opponentParticipantId: participantVisible(task.identity.opponentParticipantId)
       ? task.identity.opponentParticipantId
       : undefined,
@@ -138,6 +140,7 @@ function visibleTaskIdentity(
       : undefined,
     phase: task.identity.phase,
     proposalId: task.identity.proposalId,
+    relationshipId: task.identity.relationshipId,
     weaponInstanceId: task.identity.weaponInstanceId,
     weaponSourceId: task.identity.weaponSourceId,
     weaponSourceSlot: task.identity.weaponSourceSlot,

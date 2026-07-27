@@ -12,6 +12,7 @@ import {
   type MovementIntent,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
+  type CombatObservationRelationship,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
@@ -144,6 +145,13 @@ interface PlayerCombatModifierPanelProps {
   pendingEntries?: readonly ScenarioCombatModifierEntry[];
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
+  observationRelationships?: readonly CombatObservationRelationship[];
+  observationTargetLabels?: Readonly<Record<string, string>>;
+}
+
+interface PlayerCombatObservationProgressProps {
+  relationships: readonly CombatObservationRelationship[];
+  targetLabels: Readonly<Record<string, string>>;
 }
 
 interface PlayerCombatPhasePanelProps {
@@ -569,6 +577,11 @@ export function formatCombatModifierDetailsLabel(
     return "reactive attack";
   }
 
+  if (entry.sourceActionId === "parry") {
+    const dodge = entry.notes?.match(/\bDodge\s+(-?\d+)\b/i)?.[1];
+    return dodge ? `Parry ${dodge}` : "Parry";
+  }
+
   return entry.notes?.trim() || undefined;
 }
 
@@ -984,6 +997,8 @@ export function PlayerCombatModifierPanel({
   readOnly = false,
   rows,
   sourceLabel,
+  observationRelationships = [],
+  observationTargetLabels = {},
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
   const groupedFeintDisplays = buildGroupedFeintModifierDisplays(rows);
@@ -1177,7 +1192,77 @@ export function PlayerCombatModifierPanel({
           ))}
         </div>
       ) : null}
+      {observationRelationships.some((relationship) => relationship.bestBonus > 0) ? (
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.3rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          {observationRelationships
+            .filter((relationship) => relationship.bestBonus > 0)
+            .map((relationship) => (
+              <div
+                key={`observation-modifier:${relationship.id}`}
+                style={{
+                  alignItems: "center",
+                  display: "grid",
+                  fontSize: "0.84rem",
+                  gridTemplateColumns: "1fr auto",
+                  gap: "0.5rem",
+                }}
+              >
+                <span>
+                  Observe Opponent ·{" "}
+                  {observationTargetLabels[relationship.targetParticipantId] ??
+                    relationship.targetParticipantId}
+                </span>
+                <strong>+{relationship.bestBonus}%</strong>
+              </div>
+            ))}
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+export function PlayerCombatObservationProgress({
+  relationships,
+  targetLabels,
+}: PlayerCombatObservationProgressProps) {
+  if (relationships.length === 0) return null;
+
+  return (
+    <div style={{ display: "grid", gap: "0.35rem" }}>
+      <strong style={{ fontSize: "0.88rem" }}>Observation progress</strong>
+      <div style={{ display: "grid", gap: "0.55rem" }}>
+        {relationships.map((relationship) => {
+          const required = relationship.completedAttempts === 0
+            ? 3
+            : relationship.completedAttempts === 1
+              ? 6
+              : 10;
+          return (
+            <div key={relationship.id} style={{ fontSize: "0.84rem" }}>
+              <span>
+                {targetLabels[relationship.targetParticipantId] ??
+                  relationship.targetParticipantId}
+                : {relationship.roundsTowardNextAttempt} / {required}
+                {relationship.bestBonus > 0 ? ` · best +${relationship.bestBonus}%` : ""}
+                {relationship.completedAttempts > 0
+                  ? ` · attempts ${relationship.completedAttempts}`
+                  : ""}
+                {relationship.lastAttempt
+                  ? ` · last margin ${relationship.lastAttempt.difference >= 0 ? "+" : ""}${relationship.lastAttempt.difference} / candidate +${relationship.lastAttempt.candidateBonus}%`
+                  : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1282,10 +1367,13 @@ export function PlayerCombatActionSelectorPanel({
           }
           value={secondaryActionId}
         >
-          <option value="">Open</option>
-          {secondaryActionOptions.map((option) => (
+          <option value="">{actionId === "parry" ? "None" : "Open"}</option>
+          {(actionId === "parry"
+            ? secondaryActionOptions.filter((option) => option.value === "observe_opponent")
+            : secondaryActionOptions
+          ).map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {option.value === "observe_opponent" ? "Observe opponent" : option.label}
             </option>
           ))}
         </select>

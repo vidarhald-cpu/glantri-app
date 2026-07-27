@@ -46,7 +46,9 @@ export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationC
   COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
     allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
     allowedSecondaryActions:
-      primaryAction === "parry" ? (["observe_opponent"] as const) : COMBAT_SECONDARY_ACTION_IDS,
+      primaryAction === "parry"
+        ? (["observe_opponent"] as const)
+        : COMBAT_SECONDARY_ACTION_IDS.filter((action) => action !== "observe_opponent"),
     primaryAction,
     requiredContexts: [],
   }));

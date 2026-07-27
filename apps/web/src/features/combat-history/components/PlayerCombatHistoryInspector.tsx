@@ -1,5 +1,6 @@
 import React from "react";
 import type {
+  CombatObservationRelationship,
   ProjectedCombatHistoryEvent,
   ProjectedCombatHistoryPhasePanel,
   ProjectedCombatHistorySnapshot,
@@ -14,6 +15,7 @@ import {
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatObservationProgress,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelCardStyle,
@@ -43,8 +45,11 @@ function MissingHistoricalPanel(input: { title: string }) {
 
 function HistoricalPhasePanel(input: {
   actionId?: string;
+  observationRelationships: readonly CombatObservationRelationship[];
+  observationTargetLabels: Readonly<Record<string, string>>;
   panel: ProjectedCombatHistoryPhasePanel;
   phaseLabel: "Phase 1" | "Phase 2";
+  secondaryActionId?: string;
 }) {
   const recorded = Object.keys(input.panel).length > 0;
   if (!recorded) return <MissingHistoricalPanel title={input.phaseLabel} />;
@@ -94,6 +99,14 @@ function HistoricalPhasePanel(input: {
         </>
       ) : null}
       <>
+        {input.phaseLabel === "Phase 1" &&
+        input.actionId === "parry" &&
+        input.secondaryActionId === "observe_opponent" ? (
+          <PlayerCombatObservationProgress
+            relationships={input.observationRelationships}
+            targetLabels={input.observationTargetLabels}
+          />
+        ) : null}
         {input.panel.defenseSummary ? (
           <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
         ) : (
@@ -115,6 +128,8 @@ function HistoricalPhasePanel(input: {
 
 export function PlayerCombatHistoryInspector(input: {
   events: readonly ProjectedCombatHistoryEvent[];
+  observationRelationships?: readonly CombatObservationRelationship[];
+  observationTargetLabels?: Readonly<Record<string, string>>;
   snapshot?: ProjectedCombatHistorySnapshot;
 }) {
   const selector = input.snapshot?.panels.actionSelector;
@@ -178,13 +193,19 @@ export function PlayerCombatHistoryInspector(input: {
         )}
         <HistoricalPhasePanel
           actionId={selector?.actionId}
+          observationRelationships={input.observationRelationships ?? []}
+          observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase1 ?? {}}
           phaseLabel="Phase 1"
+          secondaryActionId={selector?.secondaryActionId}
         />
         <HistoricalPhasePanel
           actionId={selector?.actionId}
+          observationRelationships={input.observationRelationships ?? []}
+          observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase2 ?? {}}
           phaseLabel="Phase 2"
+          secondaryActionId={selector?.secondaryActionId}
         />
       </div>
       <div style={playerCombatPanelRowStyle}>
@@ -194,6 +215,8 @@ export function PlayerCombatHistoryInspector(input: {
             readOnly
             rows={modifierRows}
             sourceLabel="History"
+            observationRelationships={input.observationRelationships ?? []}
+            observationTargetLabels={input.observationTargetLabels ?? {}}
           />
         ) : (
           <MissingHistoricalPanel title="Combat modifiers" />

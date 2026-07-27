@@ -36,6 +36,7 @@ export type CombatProgressionProcessKind =
   | "health_review"
   | "initiative"
   | "modifier_review"
+  | "observation"
   | "offensive_parry"
   | "participant_review"
   | "round_end";
@@ -103,6 +104,7 @@ export type CombatProgressionTaskKind =
   | "hit_location"
   | "modifier_review"
   | "offensive_parry_brawling_roll"
+  | "observation_roll"
   | "parry"
   | "participant_review"
   | "round_end_prepare"
@@ -174,6 +176,7 @@ export interface CombatProgressionTaskIdentity {
   readonly initiativeValue?: number;
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
+  readonly observationAttemptId?: string;
   readonly parryPurpose?: CombatParryPurpose;
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
@@ -183,6 +186,7 @@ export interface CombatProgressionTaskIdentity {
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
   readonly weaponInstanceId?: string;
   readonly weaponSourceId?: string;
   readonly weaponSourceSlot?: string;

@@ -25,6 +25,9 @@ import {
   buildEncounterSessionRevisionFromMetadataView,
   buildEncounterSessionSummaryFromMetadataView,
   buildCombatRoundCommandEnvelope,
+  buildCombatObservationModifierContributions,
+  buildPlayerSafeCombatObservationAttempts,
+  buildPlayerSafeCombatObservationRelationships,
   buildCombatRoundAttackRollResult,
   buildCombatProgressionProjection,
   buildCombatRoundDeclaredAttackOpportunities,
@@ -109,6 +112,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
+  recordCombatObservationRoll,
   recordContinuedContactMaintenanceRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundParticipantStepReview,
@@ -181,6 +185,7 @@ import type {
   CombatProgressionExpectedCommand,
   CombatRoundPhaseContexts,
   CombatCalculationContext,
+  CombatModifierContribution,
   CombatProgressionProjection,
   EncounterParticipantReadSource,
   EncounterSession,
@@ -202,6 +207,7 @@ import {
   resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
   resolveParticipantSkillRollProfile,
+  resolveCombatObservationSkillProfile,
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -215,6 +221,58 @@ const characterService = new CharacterService();
 const combatStateReadService = new CombatStateReadService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
+
+function buildObservationRollBasis(input: {
+  contributions: readonly CombatModifierContribution[];
+  context: CombatCalculationContext;
+  profile: NonNullable<ReturnType<typeof resolveCombatObservationSkillProfile>>;
+}) {
+  const general = resolveCombatModifierContributions({
+    bucket: "general_fatigue",
+    context: input.context,
+    contributions: input.contributions,
+  });
+  const skill = resolveCombatModifierContributions({
+    bucket: "skill_ob",
+    context: input.context,
+    contributions: input.contributions,
+  });
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.profile.baseValue,
+    rawModifiers: [
+      { label: "General/Fatigue", value: general.total },
+      { label: "Skill/OB", value: skill.total },
+    ],
+  });
+  if (!trace) {
+    throw new RangeError("Observation modifiers are outside the canonical workbook table.");
+  }
+  return {
+    appliedModifiers: [
+      ...general.rows.map((row) => ({
+        bucket: "general_fatigue" as const,
+        label: row.label,
+        sourceId: row.sourceId,
+        value: row.value,
+      })),
+      ...skill.rows.map((row) => ({
+        bucket: "skill_ob" as const,
+        label: row.label,
+        sourceId: row.sourceId,
+        value: row.value,
+      })),
+    ],
+    baseValue: input.profile.baseValue,
+    effectiveSkillValue: trace.finalValue,
+    intelligenceValue: input.profile.intelligenceValue,
+    intelligenceXp: input.profile.intelligenceXp,
+    percentageAdjustment: trace.percentageAdjustment,
+    percentageModifierTotal: trace.rawModifierTotal,
+    skillId: input.profile.skillId,
+    skillLabel: input.profile.skillLabel,
+    skillXp: input.profile.skillXp,
+  };
+}
 
 function parseInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isInteger(value)) {
@@ -836,6 +894,35 @@ function parseContinuedContactMaintenanceRollBody(
     ),
     processId: parseNonEmptyString(value.processId, "processId"),
     rollPurpose: "escape_continued_contact",
+    stageId: parseNonEmptyString(value.stageId, "stageId"),
+  };
+}
+
+function parseCombatObservationRollBody(
+  body: unknown,
+): ParsedCombatTaskCommandIdentity & {
+  observationAttemptId: string;
+  opponentParticipantId: string;
+  processId: string;
+  relationshipId: string;
+  scenarioParticipantId: string;
+  stageId: string;
+} {
+  const value = parseBodyObject(body, "Observe Opponent roll payload");
+  const parsed = parseParticipantCommandBody(value, "Observe Opponent roll payload");
+  return {
+    ...parsed,
+    ...parseCombatTaskCommandIdentity(value),
+    observationAttemptId: parseNonEmptyString(
+      value.observationAttemptId,
+      "observationAttemptId",
+    ),
+    opponentParticipantId: parseNonEmptyString(
+      value.opponentParticipantId,
+      "opponentParticipantId",
+    ),
+    processId: parseNonEmptyString(value.processId, "processId"),
+    relationshipId: parseNonEmptyString(value.relationshipId, "relationshipId"),
     stageId: parseNonEmptyString(value.stageId, "stageId"),
   };
 }
@@ -2787,6 +2874,20 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     };
   }
 
+  if (input.command.type === "roll_observation") {
+    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+      return undefined;
+    }
+    return {
+      ...input.command,
+      facts: {
+        observationAttemptId: input.command.facts.observationAttemptId,
+        relationshipId: input.command.facts.relationshipId,
+        targetParticipantId: input.command.facts.targetParticipantId,
+      },
+    };
+  }
+
   return input.command;
 }
 
@@ -2942,6 +3043,15 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           ? contest.responderRoll
           : undefined,
       })),
+    observationRelationships: buildPlayerSafeCombatObservationRelationships({
+      controlledParticipantIds: controlledEncounterParticipantIds,
+      relationships: roundState.observationRelationships,
+    }),
+    observationAttempts: buildPlayerSafeCombatObservationAttempts({
+      attempts: roundState.observationAttempts,
+      controlledParticipantIds: controlledEncounterParticipantIds,
+      relationships: roundState.observationRelationships,
+    }),
     continuedContacts: roundState.continuedContacts.filter((contact) =>
       isPlayerVisibleCombatRoundResultPair({
         attackerParticipantId: contact.controllerParticipantId,
@@ -2963,6 +3073,18 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
                       ...participant.declaration,
                       additionalActionNotes: undefined,
                       movementIntent: undefined,
+                      secondaryActions:
+                        participant.declaration.secondaryActionId === "observe_opponent"
+                          ? undefined
+                          : participant.declaration.secondaryActions,
+                      secondaryActionContext:
+                        participant.declaration.secondaryActionId === "observe_opponent"
+                          ? undefined
+                          : participant.declaration.secondaryActionContext,
+                      secondaryActionId:
+                        participant.declaration.secondaryActionId === "observe_opponent"
+                          ? undefined
+                          : participant.declaration.secondaryActionId,
                     }
                   : undefined,
           },
@@ -4581,6 +4703,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           movementIntent: submittedMovementIntent,
           phaseContexts: declarationPhaseContexts,
           roundNumber: roundState.roundNumber,
+          secondaryActions: canonicalSecondaryActionContext
+            ? [canonicalSecondaryActionContext]
+            : undefined,
           secondaryActionContext: canonicalSecondaryActionContext,
           secondaryActionId: body.secondaryActionId,
           submittedAt,
@@ -5057,11 +5182,35 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
       const baseDodgeResolution = resolveCombatDodgeModifiers({
         context: dodgeContext,
-        contributions: profile.modifierContributions ?? [],
+        contributions: [
+          ...(profile.modifierContributions ?? []),
+          ...(opponentScenarioParticipant
+            ? buildCombatObservationModifierContributions({
+                encounterId,
+                observerCombatantId: encounterParticipant.id,
+                observerParticipantId: scenarioParticipant.id,
+                opponentCombatantId: opponentEncounterParticipantId,
+                opponentParticipantId: opponentScenarioParticipant.id,
+                relationships: roundState.observationRelationships,
+              })
+            : []),
+        ],
       });
       const dodgeResolution = resolveCombatDodgeModifiers({
         context: dodgeContext,
-        contributions: profile.modifierContributions ?? [],
+        contributions: [
+          ...(profile.modifierContributions ?? []),
+          ...(opponentScenarioParticipant
+            ? buildCombatObservationModifierContributions({
+                encounterId,
+                observerCombatantId: encounterParticipant.id,
+                observerParticipantId: scenarioParticipant.id,
+                opponentCombatantId: opponentEncounterParticipantId,
+                opponentParticipantId: opponentScenarioParticipant.id,
+                relationships: roundState.observationRelationships,
+              })
+            : []),
+        ],
         rollAdjustments: rollAdjustment ? [rollAdjustment] : [],
       });
       const generalFatigueModifier =
@@ -5322,6 +5471,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounterId,
         ownerParticipantId: scenarioParticipant.id,
       });
+      const observationContributions = opponentScenarioParticipant
+        ? buildCombatObservationModifierContributions({
+            encounterId,
+            observerCombatantId: encounterParticipant.id,
+            observerParticipantId: scenarioParticipant.id,
+            opponentCombatantId: opponentEncounterParticipantId,
+            opponentParticipantId: opponentScenarioParticipant.id,
+            relationships: roundState.observationRelationships,
+          })
+        : [];
       const feintCalculationContext: CombatCalculationContext = {
         actionId: "feint_attack",
         encounterId,
@@ -5345,12 +5504,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       };
       let canonicalCombatModifier = resolveCombatWideGeneralModifiers({
         context: feintCalculationContext,
-        contributions: projection.contributions,
-      }).total;
+        contributions: [...projection.contributions, ...observationContributions],
+      }).total +
+        resolveCombatModifierContributions({
+          bucket: "skill_ob",
+          context: feintCalculationContext,
+          contributions: observationContributions,
+        }).total;
       if (proposal.method === "movement" && skillId === "dodge") {
         const dodgeResolution = resolveCombatDodgeModifiers({
           context: feintCalculationContext,
-          contributions: projection.contributions,
+          contributions: [...projection.contributions, ...observationContributions],
         });
         canonicalCombatModifier = dodgeResolution.total;
       }
@@ -6258,6 +6422,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounterId,
           ownerParticipantId: roller.id,
         });
+        const observationContributions = opponentScenarioParticipant
+          ? buildCombatObservationModifierContributions({
+              encounterId,
+              observerCombatantId: encounterParticipant.id,
+              observerParticipantId: roller.id,
+              opponentCombatantId: body.opponentParticipantId,
+              opponentParticipantId: opponentScenarioParticipant.id,
+              relationships: roundState.observationRelationships,
+            })
+          : [];
         const modifierContext: CombatCalculationContext = {
           actionId: "offensive_parry",
           encounterId,
@@ -6278,12 +6452,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const generalResolution = resolveCombatModifierContributions({
           bucket: "general_fatigue",
           context: modifierContext,
-          contributions: modifierProjection.contributions,
+          contributions: [...modifierProjection.contributions, ...observationContributions],
         });
         const skillResolution = resolveCombatModifierContributions({
           bucket: "skill_ob",
           context: modifierContext,
-          contributions: modifierProjection.contributions,
+          contributions: [...modifierProjection.contributions, ...observationContributions],
         });
         const brawlingBaseValue = profile.rollBaseValue + profile.unknownSkillPenalty;
         const modifierTrace = calculateWorkbookPercentageAdjustmentTrace({
@@ -6438,6 +6612,241 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error instanceof Error
               ? error.message
               : "Unable to roll Continued Contact maintenance.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/roll-observation",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+
+        const body = parseCombatObservationRollBody(request.body);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
+          encounter,
+          requestedParticipantId: body.scenarioParticipantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        const observer = participantResolution?.scenarioParticipant;
+        const observerEncounterParticipant = participantResolution?.encounterParticipant;
+        if (!observer || !observer.isActive || !observerEncounterParticipant) {
+          return reply.code(403).send({
+            error: "Participant is not assigned to this encounter.",
+          });
+        }
+        const gmAuthorizedOperation = access.mode === "gm";
+        if (
+          !gmAuthorizedOperation &&
+          (observer.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant.",
+          });
+        }
+
+        const targetEncounterParticipant = encounter.participants.find(
+          (participant) => participant.id === body.opponentParticipantId,
+        );
+        const target = findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: targetEncounterParticipant,
+          scenarioParticipants,
+        });
+        if (!target || !target.isActive) {
+          return reply.code(409).send({
+            error: "The observed opponent is no longer available.",
+          });
+        }
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: observerEncounterParticipant.id },
+            commandType: "roll_observation",
+            observationAttemptId: body.observationAttemptId,
+            opponentParticipantId: body.opponentParticipantId,
+            participantId: observerEncounterParticipant.id,
+            processId: body.processId,
+            relationshipId: body.relationshipId,
+            stageId: body.stageId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply
+            .code(409)
+            .send({ code: authorization.code, error: authorization.message });
+        }
+
+        const observerProfile = resolveCombatObservationSkillProfile({
+          ...getScenarioParticipantFeintSkillInput(observer),
+          skills: defaultCanonicalContent.skills,
+        });
+        const targetProfile = resolveCombatObservationSkillProfile({
+          ...getScenarioParticipantFeintSkillInput(target),
+          skills: defaultCanonicalContent.skills,
+        });
+        if (!observerProfile || !targetProfile) {
+          return reply.code(409).send({
+            error:
+              "Observe Opponent requires canonical Intelligence-based Dodge or close-combat skill profiles.",
+          });
+        }
+        const observerModifierProjection = buildLiveCombatModifierContributionProjection({
+          combatContext: observer.state.combat.combatContext,
+          combatEffects: observer.state.combatEffects,
+          currentRound: roundState.roundNumber,
+          encounterId,
+          ownerParticipantId: observer.id,
+        });
+        const targetModifierProjection = buildLiveCombatModifierContributionProjection({
+          combatContext: target.state.combat.combatContext,
+          combatEffects: target.state.combatEffects,
+          currentRound: roundState.roundNumber,
+          encounterId,
+          ownerParticipantId: target.id,
+        });
+        const observerObservationContributions =
+          buildCombatObservationModifierContributions({
+            encounterId,
+            observerCombatantId: observerEncounterParticipant.id,
+            observerParticipantId: observer.id,
+            opponentCombatantId: targetEncounterParticipant!.id,
+            opponentParticipantId: target.id,
+            relationships: roundState.observationRelationships,
+          });
+        const targetObservationContributions =
+          buildCombatObservationModifierContributions({
+            encounterId,
+            observerCombatantId: targetEncounterParticipant!.id,
+            observerParticipantId: target.id,
+            opponentCombatantId: observerEncounterParticipant.id,
+            opponentParticipantId: observer.id,
+            relationships: roundState.observationRelationships,
+          });
+        const observationContext = (input: {
+          ownerParticipantId: string;
+          opponentParticipantId: string;
+          skillId: string;
+        }): CombatCalculationContext => ({
+          actionId: "observe_opponent",
+          encounterId,
+          ownerParticipantId: input.ownerParticipantId,
+          opponentParticipantId: input.opponentParticipantId,
+          pairKey: createCombatParticipantPairKey(
+            input.ownerParticipantId,
+            input.opponentParticipantId,
+          ),
+          rollPurpose: "observe_opponent",
+          rollType: "observation",
+          roundNumber: roundState.roundNumber,
+          skillId: input.skillId,
+          step: "round_summary",
+        });
+        const submittedAt = new Date().toISOString();
+        const rolled = recordCombatObservationRoll({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          completedAtRevision: submittedAt,
+          executionGroupId: body.executionGroupId,
+          observerBasis: buildObservationRollBasis({
+            context: observationContext({
+              ownerParticipantId: observer.id,
+              opponentParticipantId: target.id,
+              skillId: observerProfile.skillId,
+            }),
+            contributions: [
+              ...observerModifierProjection.contributions,
+              ...observerObservationContributions,
+            ],
+            profile: observerProfile,
+          }),
+          observerParticipantId: observerEncounterParticipant.id,
+          observationAttemptId: body.observationAttemptId,
+          relationshipId: body.relationshipId,
+          state: roundState,
+          targetBasis: buildObservationRollBasis({
+            context: observationContext({
+              ownerParticipantId: target.id,
+              opponentParticipantId: observer.id,
+              skillId: targetProfile.skillId,
+            }),
+            contributions: [
+              ...targetModifierProjection.contributions,
+              ...targetObservationContributions,
+            ],
+            profile: targetProfile,
+          }),
+          targetParticipantId: body.opponentParticipantId,
+        });
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        const responseEncounter = gmAuthorizedOperation
+          ? savedEncounter
+          : buildPlayerSafeCombatRollMutationEncounterForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            });
+        const safeAttempt = gmAuthorizedOperation
+          ? rolled.attempt
+          : { ...rolled.attempt, targetRoll: undefined };
+
+        return {
+          attempt: safeAttempt,
+          command: gmAuthorizedOperation
+            ? rolled.command
+            : buildPlayerSafeCombatRoundCommandForUser({
+                command: rolled.command,
+                ...buildPlayerSafeCombatScopeForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+              }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: rolled.state }),
+          encounter: responseEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to roll Observe Opponent.",
         });
       }
     },
@@ -8307,6 +8716,28 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot: latestAttackerSnapshot,
           }),
       );
+      // Phase/loadout OB already contains the committed round modifiers. Observation is
+      // opponent-specific, so apply only that direct-action layer here rather than
+      // recomputing (and duplicating) the whole phase modifier stack.
+      const opponentSpecificObModifierRows =
+        canonicalModifierFacts.attackerOpponentResolution.rows.map((row) => ({
+          label: `${row.label} · ${defenderScenarioParticipant.snapshot.displayName}`,
+          sourceId: row.sourceId,
+          value: row.value,
+        }));
+      const opponentSpecificObTrace = calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: body.ob,
+        rawModifiers: opponentSpecificObModifierRows.map((row) => ({
+          label: row.label,
+          value: row.value,
+        })),
+      });
+      if (!opponentSpecificObTrace) {
+        return reply.code(409).send({
+          code: "attacker_modifier_out_of_range",
+          error: "Attack modifiers are outside the canonical calculation table.",
+        });
+      }
       const roll = rollOpenEndedCombatToHitD20();
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
@@ -8318,7 +8749,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         declarationId: canonicalOpportunityIdentity.declarationId,
         defenderDb,
         defenderParticipantId: defenderEncounterParticipant.id,
-        ob: body.ob,
+        ob: opponentSpecificObTrace.finalValue,
         openEndedD10s: roll.openEndedD10s,
         phase: body.phase,
         rollD20: roll.rollD20,
@@ -8343,6 +8774,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             defenderFlatDbAdjustment,
             ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
             obSkillRaw: canonicalObSkillRaw,
+            ...(opponentSpecificObModifierRows.length > 0
+              ? {
+                  obBeforeOpponentSpecificModifier: body.ob,
+                  opponentSpecificObPercentageAdjustment:
+                    opponentSpecificObTrace.percentageAdjustment,
+                  opponentSpecificObRaw:
+                    canonicalModifierFacts.attackerOpponentResolution.total,
+                  opponentSpecificObModifierRows,
+                }
+              : {}),
           },
         },
         participantId: encounterParticipant.id,
@@ -8783,6 +9224,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounterId,
           ownerParticipantId: roller.id,
         });
+        const observationContributions = opponentScenarioParticipant
+          ? buildCombatObservationModifierContributions({
+              encounterId,
+              observerCombatantId: encounterParticipant.id,
+              observerParticipantId: roller.id,
+              opponentCombatantId: body.opponentParticipantId,
+              opponentParticipantId: opponentScenarioParticipant.id,
+              relationships: roundState.observationRelationships,
+            })
+          : [];
         const modifierContext: CombatCalculationContext = {
           actionId: "offensive_parry",
           encounterId,
@@ -8802,12 +9253,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const generalResolution = resolveCombatModifierContributions({
           bucket: "general_fatigue",
           context: modifierContext,
-          contributions: modifierProjection.contributions,
+          contributions: [...modifierProjection.contributions, ...observationContributions],
         });
         const skillResolution = resolveCombatModifierContributions({
           bucket: "skill_ob",
           context: modifierContext,
-          contributions: modifierProjection.contributions,
+          contributions: [...modifierProjection.contributions, ...observationContributions],
         });
         const parryQualityModifier =
           encounterParticipant.id === contest.controllerParticipantId

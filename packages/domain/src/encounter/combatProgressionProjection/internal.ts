@@ -1,5 +1,6 @@
 import {
   type CombatRoundInitiativeExecutionGroup,
+  getPendingCombatObservationAttempts,
   isCombatRoundEndReviewComplete,
   type CombatRoundCursorStep,
   type CombatRoundPhase,
@@ -130,7 +131,10 @@ export function boundaryForStep(
   if (step === "phase_2_actions" || step === "review_phase_2_damage" || step === "phase_2_damage") {
     return "phase2_resolution";
   }
-  return isCombatRoundEndReviewComplete(state) ? "round_boundary" : "round_end";
+  return isCombatRoundEndReviewComplete(state) &&
+    getPendingCombatObservationAttempts(state).length === 0
+    ? "round_boundary"
+    : "round_end";
 }
 
 export function getCombatProgressionProcessId(

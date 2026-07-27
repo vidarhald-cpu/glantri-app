@@ -13,9 +13,11 @@ import {
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
   recordCombatRoundDeclaration,
+  recordCombatObservationRoll,
   rollCombatRoundCombatExperience,
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundParticipantInitiative,
+  type CombatProgressionTask,
   type EncounterSession,
   type ScenarioParticipant,
 } from "@glantri/domain";
@@ -26,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   loadEncounter: vi.fn(),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
+  rollObservation: vi.fn(),
   setCombatExperienceDifficulty: vi.fn(),
   submitDeclaration: vi.fn(),
 }));
@@ -38,6 +41,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
+    rollCombatObservationOnServer: mocks.rollObservation,
     setCombatExperienceDifficultyOnServer: mocks.setCombatExperienceDifficulty,
     submitCombatDeclarationOnServer: mocks.submitDeclaration,
   };
@@ -396,6 +400,100 @@ function buildFinalParticipantReviewEncounter(): {
       combatRoundState: firstCommitted.state,
       updatedAt: "2026-07-23T10:03:10.000Z",
     }),
+  };
+}
+
+function buildFinalObservationEncounter(): {
+  afterObservation: EncounterSession;
+  beforeObservation: EncounterSession;
+  boundaryTask: CombatProgressionTask;
+  observationTask: CombatProgressionTask;
+} {
+  const { afterFinalReview } = buildFinalParticipantReviewEncounter();
+  const finalReviewState = combatRoundStateSchema.parse(afterFinalReview.combatRoundState);
+  const beforeState = combatRoundStateSchema.parse({
+    ...finalReviewState,
+    currentCursor: {
+      participantId: "encounter-attacker",
+      roundNumber: finalReviewState.roundNumber,
+      step: "SU",
+    },
+    observationRelationships: [
+      {
+        bestBonus: 3,
+        completedAttempts: 1,
+        id: "observation:encounter-attacker:encounter-defender",
+        observerParticipantId: "encounter-attacker",
+        roundsTowardNextAttempt: 5,
+        targetParticipantId: "encounter-defender",
+      },
+    ],
+    participants: finalReviewState.participants.map((participant) =>
+      participant.participantId === "encounter-attacker"
+        ? {
+            ...participant,
+            declaration: {
+              actionId: "parry",
+              roundNumber: finalReviewState.roundNumber,
+              secondaryActions: [
+                {
+                  action: "observe_opponent",
+                  targetParticipantId: "encounter-defender",
+                },
+              ],
+              secondaryActionContext: {
+                action: "observe_opponent",
+                targetParticipantId: "encounter-defender",
+              },
+              secondaryActionId: "observe_opponent",
+              submittedBy: "gm",
+            },
+          }
+        : participant,
+    ),
+    selectedParticipantId: "encounter-attacker",
+    selectedStep: "round_summary",
+  });
+  const observationTask = buildCombatProgressionProjection(beforeState)
+    .boundary.processes.flatMap((process) => process.stages)
+    .flatMap((stage) => stage.tasks)
+    .find((task) => task.kind === "observation_roll");
+  if (!observationTask) throw new Error("Expected an observation task.");
+  const rolled = recordCombatObservationRoll({
+    command: {
+      createdAt: "2026-07-23T10:03:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    completedAtRevision: "2026-07-23T10:03:30.000Z",
+    executionGroupId: observationTask.executionGroupId,
+    observerBasis: { baseValue: 20, skillId: "dodge", skillLabel: "Dodge" },
+    observerParticipantId: "encounter-attacker",
+    observationAttemptId: observationTask.identity.observationAttemptId!,
+    relationshipId: observationTask.identity.relationshipId!,
+    rng: () => 0.5,
+    state: beforeState,
+    targetBasis: { baseValue: 10, skillId: "sword", skillLabel: "Sword" },
+    targetParticipantId: "encounter-defender",
+  });
+  const boundaryTask = buildCombatProgressionProjection(rolled.state)
+    .boundary.processes.flatMap((process) => process.stages)
+    .flatMap((stage) => stage.tasks)
+    .find((task) => task.kind === "gm_advance_boundary");
+  if (!boundaryTask) throw new Error("Expected a round-boundary task.");
+
+  return {
+    afterObservation: encounterSessionSchema.parse({
+      ...afterFinalReview,
+      combatRoundState: rolled.state,
+      updatedAt: "2026-07-23T10:03:30.000Z",
+    }),
+    beforeObservation: encounterSessionSchema.parse({
+      ...afterFinalReview,
+      combatRoundState: beforeState,
+      updatedAt: "2026-07-23T10:03:20.000Z",
+    }),
+    boundaryTask,
+    observationTask,
   };
 }
 
@@ -836,6 +934,53 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
       executionGroupId: finalBoundaryTask?.executionGroupId,
       expectedRevision: afterFinalReview.updatedAt,
       taskId: finalBoundaryTask?.id,
+    });
+  });
+
+  it("uses the final observation response descriptor to open declarations on the first click", async () => {
+    const { afterObservation, beforeObservation, boundaryTask, observationTask } =
+      buildFinalObservationEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.rollObservation.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: combatRoundStateSchema.parse(afterObservation.combatRoundState),
+      }),
+      encounter: afterObservation,
+    });
+    mocks.advanceCurrentStep.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: combatRoundStateSchema.parse(afterObservation.combatRoundState),
+      }),
+      encounter: afterObservation,
+      participants: [],
+    });
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={beforeObservation}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Roll observation" }));
+    await waitFor(() => expect(mocks.rollObservation).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open declarations" }));
+    await waitFor(() => expect(mocks.advanceCurrentStep).toHaveBeenCalledTimes(1));
+    expect(mocks.advanceCurrentStep.mock.calls[0]?.[0]).toMatchObject({
+      commandType: "complete_round",
+      executionGroupId: boundaryTask.executionGroupId,
+      expectedRevision: afterObservation.updatedAt,
+      taskId: boundaryTask.id,
+    });
+    expect(mocks.advanceCurrentStep.mock.calls[0]?.[0]).not.toMatchObject({
+      executionGroupId: observationTask.executionGroupId,
+      taskId: observationTask.id,
     });
   });
 });

@@ -44,6 +44,15 @@ describe("combat declaration compatibility", () => {
       message: "offensive_parry is not compatible with the selected primary action.",
       valid: false,
     });
+    expect(
+      validateCombatDeclarationCompatibility({
+        primaryAction: "attack_parry",
+        secondaryAction: "observe_opponent",
+      }),
+    ).toEqual({
+      message: "observe_opponent is not compatible with the selected primary action.",
+      valid: false,
+    });
   });
 
   it("rejects Observe Opponent as a primary action", () => {

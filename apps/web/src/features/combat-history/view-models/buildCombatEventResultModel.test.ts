@@ -116,6 +116,131 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[1]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 8");
   });
 
+  it("shows the opponent-specific Observe Opponent contribution in attack history", () => {
+    const model = buildCombatEventResultModel([
+      event("attack", 1, {
+        facts: {
+          involvedOutcome: { tableResult: "Miss", weaponName: "Long sword" },
+          privateCalculation: {
+            defenderDb: 16,
+            lookupTotal: 15,
+            ob: 13,
+            obBeforeOpponentSpecificModifier: 10,
+            opponentSpecificObModifierRows: [
+              {
+                label: "Observe Opponent · Scyrian cavalry guy",
+                value: 3,
+              },
+            ],
+            rollTotal: 18,
+          },
+          publicOutcome: {},
+        },
+      }),
+    ]);
+
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
+      "OB before opponent modifier: 10",
+      "Observe Opponent · Scyrian cavalry guy: +3%",
+      "OB 13 + roll 18 - DB 16 = 15",
+    ]);
+  });
+
+  it("presents one resolved observation contest with natural wording and named calculations", () => {
+    const identities = [
+      {
+        displayName: "The Gladiator",
+        participantId: "gladiator",
+        role: "actor" as const,
+        visibility: "visible" as const,
+      },
+      {
+        displayName: "Scyrian cavalry guy",
+        participantId: "scyrian",
+        role: "target" as const,
+        visibility: "visible" as const,
+      },
+    ];
+    const resolved = event("observation", 2, {
+      facts: {
+        gmReview: {
+          targetCalculation: {
+            appliedModifiers: [],
+            effectiveSkillValue: 17,
+            finalTotal: 37,
+            intelligenceValue: 12,
+            intelligenceXp: 1,
+            rollTotal: 13,
+            skillLabel: "Dodge",
+            skillXp: 5,
+          },
+        },
+        involvedOutcome: {
+          bestBonusAfter: 0,
+          candidateBonus: 0,
+          difference: -11,
+          observationAttemptId: "attempt-1",
+        },
+        privateCalculation: {
+          appliedModifiers: [],
+          effectiveSkillValue: 22,
+          finalTotal: 26,
+          intelligenceValue: 14,
+          intelligenceXp: 0,
+          rollTotal: 4,
+          skillLabel: "One-handed edged",
+          skillXp: 8,
+        },
+        publicOutcome: {},
+      },
+      identities,
+    });
+    const placeholder = event("observation", 1, {
+      facts: {
+        involvedOutcome: {
+          observationAttemptId: "attempt-1",
+          observationStatus: "period_complete",
+        },
+        publicOutcome: {},
+      },
+      identities,
+    });
+    const proposedReview = event("participant_su_review", 3, {
+      identities,
+      status: "proposed",
+    });
+
+    const model = buildCombatEventResultModel([placeholder, resolved, proposedReview]);
+
+    expect(model.items).toHaveLength(1);
+    expect(model.items[0]?.summary).toBe("Observe Opponent — Scyrian cavalry guy.");
+    expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
+      "Lost by 11",
+      "Result +0%",
+      "Best +0%",
+    ]);
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
+      "Observer — The Gladiator",
+      "Skill: One-handed edged",
+      "Skill XP: 8",
+      "Intelligence: 14",
+      "Intelligence XP: 0",
+      "Effective skill: 22",
+      "Modifiers: +0",
+      "Roll: 4",
+      "Final total: 26",
+      "Opponent — Scyrian cavalry guy",
+      "Skill: Dodge",
+      "Skill XP: 5",
+      "Intelligence: 12",
+      "Intelligence XP: 1",
+      "Effective skill: 17",
+      "Modifiers: +0",
+      "Roll: 13",
+      "Final total: 37",
+    ]);
+  });
+
   it("orders distance rolls before result and applied distance", () => {
     const model = buildCombatEventResultModel([
       event("distance_control_applied", 4),

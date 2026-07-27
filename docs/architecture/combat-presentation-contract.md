@@ -436,14 +436,21 @@ Current intentional rule differences should remain. Current accidental presentat
 Parry is displayed as an untargeted primary action. During declaration, Current Action describes
 the defensive focus; no independent roll button appears until an ordinary incoming attack creates
 defensive work. The generated modifier appears in DB/Parry preview and review as
-`Parry +<derived>%`, with concise Dodge and one-fifth provenance. The ordinary parry calculation
-shows the non-zero raw percentage row and uses authoritative workbook arithmetic.
+`Parry +<derived>%`, with a concise `Parry <Dodge>` source label. Formula provenance remains in
+canonical facts and diagnostics rather than ordinary combat-panel prose. The ordinary parry
+calculation shows the non-zero raw percentage row and uses authoritative workbook arithmetic.
 
 Observe Opponent is displayed in the secondary-action selector. When selected, its
-`Opponent to observe` participant selector appears in the shared Phase 1 panel, never in the
-general action selector. It is separate from any primary attack, Feint, Adjust Distance, Offensive
-Parry, or Reactive Attack target. This declaration-only slice presents no Observe roll, result,
-modifier, or tracker marker.
+`Opponent` participant selector and compact owned progress appear in the shared Phase 1 panel,
+never as a standalone main-grid card. It is separate from any primary attack, Feint, Adjust
+Distance, Offensive Parry, or Reactive Attack target. A due contest appears as an observer-owned SU
+Current Action. Completed contests remain in the completing round's SU results; established
+pair-specific bonuses appear concisely in Combat modifiers. The observed target receives no task,
+relationship status, or result disclosure. Every completed observation round contributes one
+concise SU result (`Progress`, `No progress`, or `Observation period complete`). Archived
+inspection receives the exact round's player-safe relationship snapshot rather than consulting
+live state. A resolved GM result exposes separately labelled observer and opponent calculation
+facts; the observer-safe result contains only the observer calculation.
 
 ### 8.1 Implemented Offensive Parry Brawling subset
 

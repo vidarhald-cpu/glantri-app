@@ -673,6 +673,48 @@ describe("CurrentActionPresentation", () => {
     expect(result?.requiredNow).toBe("Roll Combat Experience.");
   });
 
+  it("presents the observer-owned SU contest as the single current action", () => {
+    const observationTask = {
+      ...task({
+        actionKind: "observe_opponent_contest",
+        actor: aria,
+        command: "roll_observation",
+        kind: "observation_roll",
+        owner: aria,
+        target: borin,
+      }),
+      identity: {
+        executionGroupId: "group:observation",
+        observationAttemptId: "observation:aria:borin:attempt:1",
+        opponentParticipantId: "borin",
+        participantId: "aria",
+        relationshipId: "observation:aria:borin",
+      },
+      trackerFacet: { owner: aria, step: "SU" as const },
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-observation",
+      progression: progression({ boundary: "round_end", tasks: [observationTask] }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      actionName: "Observe Opponent",
+      primaryAction: {
+        label: "Roll observation",
+        viewerMayInvoke: true,
+      },
+      requiredNow: "Roll your observation contest.",
+      summary: "You have completed an observation interval against Borin.",
+    });
+    expect(result?.primaryAction.descriptor).toMatchObject({
+      commandType: "roll_observation",
+      observationAttemptId: "observation:aria:borin:attempt:1",
+      relationshipId: "observation:aria:borin",
+    });
+  });
+
   it("presents an explicit GM boundary transition and immutable target", () => {
     const transitionTask = {
       ...task({

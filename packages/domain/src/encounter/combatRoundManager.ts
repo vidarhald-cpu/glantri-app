@@ -104,6 +104,18 @@ import {
   type CombatModifierContribution,
 } from "./combatModifierContributions";
 import {
+  buildCombatObservationRelationshipId,
+  combatObservationAttemptSchema,
+  combatObservationRelationshipSchema,
+  combatObservationRoundUndoFactSchema,
+  getCombatObservationRequiredRounds,
+  resolveCombatObservationAttempt,
+  type CombatObservationRelationship,
+  type CombatObservationAttempt,
+  type CombatObservationRollBasis,
+  type CombatObservationRoundUndoFact,
+} from "./combatObservation";
+import {
   appendCanonicalCombatStepEventForCommand,
   getCombatStepEventPhaseStep,
   removeCanonicalCombatStepEventsForCommand,
@@ -402,6 +414,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_parry",
   "roll_offensive_parry_brawling",
   "roll_continued_contact_maintenance",
+  "roll_observation",
   "roll_hit_location",
   "roll_critical",
   "decide_double_attack_phase2",
@@ -2020,6 +2033,7 @@ export const combatRoundDeclarationSchema = z.object({
   movementIntent: movementIntentSchema.optional(),
   phaseContexts: combatRoundPhaseContextsSchema.optional(),
   roundNumber: z.number().int().positive(),
+  secondaryActions: z.array(scenarioParticipantSecondaryActionContextSchema).max(1).optional(),
   secondaryActionContext: scenarioParticipantSecondaryActionContextSchema.optional(),
   secondaryActionId: idSchema.optional(),
   submittedAt: z.string().datetime().optional(),
@@ -2186,6 +2200,8 @@ export const completedCombatRoundSchema = z.object({
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
   offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
+  observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+  observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
   adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -2214,6 +2230,8 @@ export interface CombatRoundState {
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
+  observationAttempts: CombatObservationAttempt[];
+  observationRelationships: CombatObservationRelationship[];
   phaseResolutionCursor?: z.infer<typeof combatRoundPhaseResolutionCursorSchema>;
   phaseResolutionResults: z.infer<typeof combatRoundPhaseResolutionResultSchema>[];
   phaseResolutionStatuses: z.infer<typeof combatRoundPhaseResolutionStatusesSchema>;
@@ -2242,6 +2260,8 @@ const activeCombatRoundStateShape = {
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
   offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
+  observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+  observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
@@ -2293,6 +2313,537 @@ export type CombatRoundPhaseResolutionStatuses = z.infer<
 >;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
+
+function getCombatRoundObservationDeclaration(
+  declaration?: CombatRoundDeclaration,
+): { targetParticipantId: string } | undefined {
+  const secondaryAction =
+    declaration?.secondaryActions?.find((action) => action.action === "observe_opponent") ??
+    (declaration?.secondaryActionId === "observe_opponent" &&
+    declaration.secondaryActionContext?.action === "observe_opponent"
+      ? declaration.secondaryActionContext
+      : undefined);
+
+  return declaration?.actionId === "parry" && secondaryAction?.action === "observe_opponent"
+    ? { targetParticipantId: secondaryAction.targetParticipantId }
+    : undefined;
+}
+
+function getCombatRoundAttackResults(state: CombatRoundState): CombatRoundAttackRollResult[] {
+  const results = new Map<string, CombatRoundAttackRollResult>();
+  for (const participant of state.participants) {
+    for (const result of [
+      ...Object.values(participant.attackResults),
+      ...Object.values(participant.attackResultsByOpportunity ?? {}),
+    ]) {
+      if (!result) continue;
+      const key =
+        result.attackOpportunityId ??
+        `${result.attackerParticipantId}:${result.defenderParticipantId}:${result.phase}:${result.rolledAt}`;
+      results.set(key, result);
+    }
+  }
+  return [...results.values()];
+}
+
+/**
+ * Returns whether an incoming attack remains a hit after the canonical defence
+ * lineage has finished. The attack roll's `hit` flag is deliberately only the
+ * pre-defence outcome: a successful linked parry negates that hit.
+ */
+export function combatRoundAttackRemainsHitAfterDefense(input: {
+  result: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): boolean {
+  if (!input.result.hit) return false;
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.result,
+    roundNumber: input.state.roundNumber,
+  });
+  const resolution = input.state.phaseResolutionResults.find(
+    (entry) => entry.attackResultId === attackResultId,
+  );
+  return resolution?.parryResolution.success !== true;
+}
+
+function combatRoundObserverWasHitByTarget(input: {
+  observerParticipantId: string;
+  results: readonly CombatRoundAttackRollResult[];
+  state: CombatRoundState;
+  targetParticipantId: string;
+}): boolean {
+  return input.results.some(
+    (result) =>
+      result.attackerParticipantId === input.targetParticipantId &&
+      result.defenderParticipantId === input.observerParticipantId &&
+      combatRoundAttackRemainsHitAfterDefense({ result, state: input.state }),
+  );
+}
+
+export interface PendingCombatObservationAttempt {
+  attemptId: string;
+  observerParticipantId: string;
+  relationshipId: string;
+  requiredQualifyingRounds: number;
+  targetParticipantId: string;
+}
+
+/**
+ * Projects threshold-qualified observation work from the current round's immutable
+ * declaration and attack-result facts. No progress or dice are mutated here.
+ */
+export function getPendingCombatObservationAttempts(
+  state: CombatRoundState,
+): PendingCombatObservationAttempt[] {
+  const normalized = combatRoundStateSchema.parse(state);
+  const results = getCombatRoundAttackResults(normalized);
+
+  return normalized.participants.flatMap((observer) => {
+    const observation = getCombatRoundObservationDeclaration(observer.declaration);
+    if (!observation) return [];
+    const target = normalized.participants.find(
+      (participant) => participant.participantId === observation.targetParticipantId,
+    );
+    if (!target || target.participantId === observer.participantId) return [];
+    if (
+      combatRoundObserverWasHitByTarget({
+        observerParticipantId: observer.participantId,
+        results,
+        state: normalized,
+        targetParticipantId: target.participantId,
+      })
+    ) {
+      return [];
+    }
+
+    const relationshipId = buildCombatObservationRelationshipId({
+      observerParticipantId: observer.participantId,
+      targetParticipantId: target.participantId,
+    });
+    const relationship = normalized.observationRelationships.find(
+      (entry) => entry.id === relationshipId,
+    );
+    const completedAttempts = relationship?.completedAttempts ?? 0;
+    const requiredQualifyingRounds = getCombatObservationRequiredRounds(completedAttempts);
+    const qualifyingRounds = (relationship?.roundsTowardNextAttempt ?? 0) + 1;
+    const attemptId = `${relationshipId}:attempt:${completedAttempts + 1}`;
+    const alreadyResolved = normalized.observationAttempts.some(
+      (attempt) => attempt.id === attemptId && attempt.roundNumber === normalized.roundNumber,
+    );
+    return qualifyingRounds >= requiredQualifyingRounds && !alreadyResolved
+      ? [
+          {
+            attemptId,
+            observerParticipantId: observer.participantId,
+            relationshipId,
+            requiredQualifyingRounds,
+            targetParticipantId: target.participantId,
+          },
+        ]
+      : [];
+  });
+}
+
+/**
+ * Records the observer-owned SU command. The observer's open-ended roll and the
+ * hidden target roll resolve together in this one canonical mutation.
+ */
+export function recordCombatObservationRoll(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  completedAtRevision: string;
+  executionGroupId: string;
+  observerBasis: CombatObservationRollBasis;
+  observerParticipantId: string;
+  observationAttemptId: string;
+  relationshipId: string;
+  rng?: () => number;
+  state: CombatRoundState;
+  targetBasis: CombatObservationRollBasis;
+  targetParticipantId: string;
+}): {
+  attempt: CombatObservationAttempt;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const pending = getPendingCombatObservationAttempts(normalized).find(
+    (attempt) =>
+      attempt.attemptId === input.observationAttemptId &&
+      attempt.relationshipId === input.relationshipId &&
+      attempt.observerParticipantId === input.observerParticipantId &&
+      attempt.targetParticipantId === input.targetParticipantId,
+  );
+  if (!pending) {
+    throw new RangeError("The Observe Opponent roll is no longer available.");
+  }
+  const previousRelationship = normalized.observationRelationships.find(
+    (relationship) => relationship.id === pending.relationshipId,
+  );
+  const relationshipBeforeRoll = combatObservationRelationshipSchema.parse({
+    ...(previousRelationship ?? {
+      id: pending.relationshipId,
+      observerParticipantId: pending.observerParticipantId,
+      targetParticipantId: pending.targetParticipantId,
+    }),
+    roundsTowardNextAttempt:
+      (previousRelationship?.roundsTowardNextAttempt ?? 0) + 1,
+  });
+  const nextRelationship = resolveCombatObservationAttempt({
+    completedAt: input.command.createdAt,
+    completedAtRevision: input.completedAtRevision,
+    observerBasis: input.observerBasis,
+    observerParticipantId: input.observerParticipantId,
+    previousRelationship: relationshipBeforeRoll,
+    rng: input.rng,
+    roundNumber: normalized.roundNumber,
+    targetBasis: input.targetBasis,
+    targetParticipantId: input.targetParticipantId,
+  });
+  const attempt = nextRelationship.lastAttempt;
+  if (!attempt || attempt.id !== pending.attemptId) {
+    throw new RangeError("Observe Opponent produced an invalid attempt identity.");
+  }
+  const relationships = previousRelationship
+    ? normalized.observationRelationships.map((relationship) =>
+        relationship.id === nextRelationship.id ? nextRelationship : relationship,
+      )
+    : [...normalized.observationRelationships, nextRelationship];
+  const orderedEventsBeforeRoll = [...normalized.events].sort(
+    (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+  );
+  const participantReviewEvent = orderedEventsBeforeRoll.find(
+    (event) =>
+      event.type === "participant_su_review" &&
+      event.ownerParticipantId === input.observerParticipantId,
+  );
+  const participantReviewEventPreviousIndex = participantReviewEvent
+    ? orderedEventsBeforeRoll.findIndex((event) => event.id === participantReviewEvent.id)
+    : undefined;
+  const participantReviewEventPreviousStatus = participantReviewEvent?.status;
+  let nextState = combatRoundStateSchema.parse({
+    ...normalized,
+    observationAttempts: [...normalized.observationAttempts, attempt],
+    observationRelationships: relationships,
+  });
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: input.observerParticipantId,
+    state: normalized,
+  });
+  const nextTask = getNextCombatRoundEndTask({ state: nextState });
+  const afterCursor = getCombatRoundEndTaskCursor({ state: nextState, task: nextTask });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      executionGroupId: input.executionGroupId,
+      observationAttemptId: attempt.id,
+      participantReviewEventId: participantReviewEvent?.id,
+      participantReviewEventPreviousIndex,
+      participantReviewEventPreviousStatus,
+      previousRelationship,
+      relationshipId: pending.relationshipId,
+      targetParticipantId: pending.targetParticipantId,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.observerParticipantId,
+        state: normalized,
+        type: "roll_observation",
+      }),
+    participantId: input.observerParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: "SU",
+    type: "roll_observation",
+  });
+  nextState = combatRoundStateSchema.parse({
+    ...nextState,
+    commands: [...nextState.commands, command],
+    currentCursor: afterCursor,
+    currentStep: "round_summary",
+    selectedParticipantId: afterCursor.participantId,
+    selectedStep: "round_summary",
+  });
+  nextState = appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.observerParticipantId,
+      facts: {
+        gmReview: {
+          observerTotal: attempt.observerRoll.finalTotal,
+          targetCalculation: {
+            appliedModifiers: attempt.targetRoll?.appliedModifiers,
+            baseValue: attempt.targetRoll?.baseValue,
+            effectiveSkillValue: attempt.targetRoll?.effectiveSkillValue,
+            finalTotal: attempt.targetRoll?.finalTotal,
+            intelligenceValue: attempt.targetRoll?.intelligenceValue,
+            intelligenceXp: attempt.targetRoll?.intelligenceXp,
+            openEndedD10s: attempt.targetRoll?.openEndedD10s,
+            percentageAdjustment: attempt.targetRoll?.percentageAdjustment,
+            percentageModifierTotal: attempt.targetRoll?.percentageModifierTotal,
+            rollD20: attempt.targetRoll?.rollD20,
+            rollTotal: attempt.targetRoll?.rollTotal,
+            skillLabel: attempt.targetRoll?.skillLabel,
+            skillXp: attempt.targetRoll?.skillXp,
+          },
+          targetTotal: attempt.targetRoll?.finalTotal,
+        },
+        involvedOutcome: {
+          bestBonusAfter: attempt.bestBonusAfter,
+          candidateBonus: attempt.candidateBonus,
+          completedAttempts: nextRelationship.completedAttempts,
+          difference: attempt.difference,
+          observationAttemptId: attempt.id,
+          relationshipId: nextRelationship.id,
+          requiredQualifyingRounds: getCombatObservationRequiredRounds(
+            nextRelationship.completedAttempts,
+          ),
+          roundsTowardNextAttempt: nextRelationship.roundsTowardNextAttempt,
+          targetParticipantId: input.targetParticipantId,
+        },
+        publicOutcome: {},
+        rollerPrivate: {
+          appliedModifiers: attempt.observerRoll.appliedModifiers,
+          baseValue: attempt.observerRoll.baseValue,
+          effectiveSkillValue: attempt.observerRoll.effectiveSkillValue,
+          finalTotal: attempt.observerRoll.finalTotal,
+          intelligenceValue: attempt.observerRoll.intelligenceValue,
+          intelligenceXp: attempt.observerRoll.intelligenceXp,
+          openEndedD10s: attempt.observerRoll.openEndedD10s,
+          percentageAdjustment: attempt.observerRoll.percentageAdjustment,
+          percentageModifierTotal: attempt.observerRoll.percentageModifierTotal,
+          rollD20: attempt.observerRoll.rollD20,
+          rollTotal: attempt.observerRoll.rollTotal,
+          skillLabel: attempt.observerRoll.skillLabel,
+          skillXp: attempt.observerRoll.skillXp,
+        },
+      },
+      involvedParticipantIds: [input.observerParticipantId],
+      outcomeScope: "gm_only",
+      ownerParticipantId: input.observerParticipantId,
+      rollerParticipantId: input.observerParticipantId,
+      sourceIds: [pending.relationshipId, attempt.id],
+      sourceToken: attempt.id,
+      status: "recorded",
+      step: "round_summary",
+      targetParticipantId: input.targetParticipantId,
+      type: "observation",
+    },
+    state: nextState,
+  });
+  if (participantReviewEvent) {
+    const orderedEvents = [...nextState.events].sort(
+      (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+    );
+    const deferredReview = orderedEvents.find((event) => event.id === participantReviewEvent.id);
+    const withoutReview = orderedEvents.filter((event) => event.id !== participantReviewEvent.id);
+    nextState = combatRoundStateSchema.parse({
+      ...nextState,
+      events: deferredReview
+        ? [
+            ...withoutReview,
+            {
+              ...deferredReview,
+              status: "committed" as const,
+            },
+          ].map((event, sequence) => ({
+            ...event,
+            sequence,
+          }))
+        : orderedEvents,
+    });
+  }
+  return { attempt, command, state: nextState };
+}
+
+function appendCombatObservationRoundStatusEvents(input: {
+  command: CombatRoundCommand;
+  observerParticipantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResults = getCombatRoundAttackResults(normalized);
+  const pendingAttempts = getPendingCombatObservationAttempts(normalized);
+  let nextState = normalized;
+
+  for (const observer of normalized.participants) {
+    if (observer.participantId !== input.observerParticipantId) continue;
+    const declaration = getCombatRoundObservationDeclaration(observer.declaration);
+    if (!declaration) continue;
+    const target = normalized.participants.find(
+      (participant) => participant.participantId === declaration.targetParticipantId,
+    );
+    if (!target || target.participantId === observer.participantId) continue;
+
+    const relationshipId = buildCombatObservationRelationshipId({
+      observerParticipantId: observer.participantId,
+      targetParticipantId: target.participantId,
+    });
+    const relationship = normalized.observationRelationships.find(
+      (entry) => entry.id === relationshipId,
+    );
+    const requiredQualifyingRounds = getCombatObservationRequiredRounds(
+      relationship?.completedAttempts ?? 0,
+    );
+    const wasHit = combatRoundObserverWasHitByTarget({
+      observerParticipantId: observer.participantId,
+      results: attackResults,
+      state: normalized,
+      targetParticipantId: target.participantId,
+    });
+    const pending = pendingAttempts.find((attempt) => attempt.relationshipId === relationshipId);
+    const roundsTowardNextAttempt = wasHit
+      ? (relationship?.roundsTowardNextAttempt ?? 0)
+      : pending
+        ? requiredQualifyingRounds
+        : (relationship?.roundsTowardNextAttempt ?? 0) + 1;
+    const observationStatus = wasHit
+      ? "no_progress"
+      : pending
+        ? "period_complete"
+        : "progress";
+
+    nextState = appendCombatRoundEventForCommand({
+      command: input.command,
+      draft: {
+        actorParticipantId: observer.participantId,
+        facts: {
+          involvedOutcome: {
+            bestBonusAfter: relationship?.bestBonus ?? 0,
+            completedAttempts: relationship?.completedAttempts ?? 0,
+            observationAttemptId: pending?.attemptId,
+            observationNoProgressReason: wasHit ? "observer_hit" : undefined,
+            observationStatus,
+            relationshipId,
+            requiredQualifyingRounds,
+            roundsTowardNextAttempt,
+            targetParticipantId: target.participantId,
+          },
+          publicOutcome: {},
+        },
+        involvedParticipantIds: [observer.participantId],
+        outcomeScope: "gm_only",
+        ownerParticipantId: observer.participantId,
+        sourceIds: [relationshipId, ...(pending ? [pending.attemptId] : [])],
+        sourceToken: `${relationshipId}:round:${normalized.roundNumber}:status`,
+        status: "recorded",
+        step: "round_summary",
+        targetParticipantId: target.participantId,
+        type: "observation",
+      },
+      state: nextState,
+    });
+  }
+
+  return nextState;
+}
+
+/** Applies non-threshold observation progress at the immutable round boundary. */
+export function resolveCombatObservationRoundBoundary(input: {
+  state: CombatRoundState;
+}): {
+  state: CombatRoundState;
+  undoFacts: CombatObservationRoundUndoFact[];
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const results = getCombatRoundAttackResults(normalized);
+  const relationships = [...normalized.observationRelationships];
+  const undoFacts: CombatObservationRoundUndoFact[] = [];
+
+  for (const observer of normalized.participants) {
+    const observation = getCombatRoundObservationDeclaration(observer.declaration);
+    if (!observation) continue;
+    const target = normalized.participants.find(
+      (participant) => participant.participantId === observation.targetParticipantId,
+    );
+    if (!target || target.participantId === observer.participantId) continue;
+
+    const relationshipId = buildCombatObservationRelationshipId({
+      observerParticipantId: observer.participantId,
+      targetParticipantId: target.participantId,
+    });
+    const relationshipIndex = relationships.findIndex((entry) => entry.id === relationshipId);
+    const previousRelationship =
+      relationshipIndex >= 0 ? relationships[relationshipIndex] : undefined;
+    undoFacts.push(
+      combatObservationRoundUndoFactSchema.parse({
+        previousRelationship,
+        relationshipId,
+      }),
+    );
+
+    const observerWasHitByTarget = combatRoundObserverWasHitByTarget({
+      observerParticipantId: observer.participantId,
+      results,
+      state: normalized,
+      targetParticipantId: target.participantId,
+    });
+    const current =
+      previousRelationship ??
+      combatObservationRelationshipSchema.parse({
+        id: relationshipId,
+        observerParticipantId: observer.participantId,
+        targetParticipantId: target.participantId,
+      });
+    let next = current;
+
+    if (!observerWasHitByTarget) {
+      const completedThisRound = normalized.observationAttempts.some(
+        (attempt) =>
+          attempt.roundNumber === normalized.roundNumber &&
+          attempt.id.startsWith(`${relationshipId}:attempt:`),
+      );
+      if (!completedThisRound) {
+        const prospectiveProgress = current.roundsTowardNextAttempt + 1;
+        if (
+          prospectiveProgress <
+          getCombatObservationRequiredRounds(current.completedAttempts)
+        ) {
+          next = combatObservationRelationshipSchema.parse({
+            ...current,
+            roundsTowardNextAttempt: prospectiveProgress,
+          });
+        }
+      }
+    }
+
+    if (relationshipIndex >= 0) relationships[relationshipIndex] = next;
+    else relationships.push(next);
+  }
+
+  return {
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      observationRelationships: relationships,
+    }),
+    undoFacts,
+  };
+}
+
+export function restoreCombatObservationRelationships(input: {
+  relationships: readonly CombatObservationRelationship[];
+  undoFacts: readonly CombatObservationRoundUndoFact[];
+}): CombatObservationRelationship[] {
+  const restored = new Map(
+    input.relationships.map((relationship) => [relationship.id, relationship]),
+  );
+  for (const fact of input.undoFacts) {
+    const parsed = combatObservationRoundUndoFactSchema.parse(fact);
+    if (parsed.previousRelationship) {
+      restored.set(parsed.relationshipId, parsed.previousRelationship);
+    } else {
+      restored.delete(parsed.relationshipId);
+    }
+  }
+  return [...restored.values()];
+}
 
 function appendCombatRoundEventForCommand(input: {
   command: CombatRoundCommand;
@@ -4598,6 +5149,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "roll_parry" ||
     type === "roll_offensive_parry_brawling" ||
     type === "roll_continued_contact_maintenance" ||
+    type === "roll_observation" ||
     type === "roll_hit_location" ||
     type === "roll_critical" ||
     type === "decide_double_attack_phase2" ||
@@ -11508,6 +12060,13 @@ export type CombatRoundEndTask =
       participantId: string;
     }
   | {
+      kind: "observation_roll";
+      observationAttemptId: string;
+      opponentParticipantId: string;
+      participantId: string;
+      relationshipId: string;
+    }
+  | {
       kind: "participant_review";
       participantId: string;
     }
@@ -11530,22 +12089,19 @@ function getRoundEndReviewParticipantTaskId(input: {
   roundEndReview: CombatRoundEndReview;
   state: CombatRoundState;
 }): string | undefined {
-  const participantIndex = input.afterParticipantId
-    ? input.state.participants.findIndex(
-        (participant) => participant.participantId === input.afterParticipantId,
-      )
-    : -1;
-  const orderedParticipants =
-    participantIndex >= 0
-      ? [
-          ...input.state.participants.slice(participantIndex + 1),
-          ...input.state.participants.slice(0, participantIndex + 1),
-        ]
-      : input.state.participants;
+  const orderedParticipants = sortCombatRoundParticipantsByInitiative({
+    phase: "phase2",
+    state: input.state,
+  });
 
   return orderedParticipants.find(
-    (participant) =>
-      input.roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
+    (participant) => {
+      const review = input.roundEndReview.participantReviews[participant.participantId];
+      if (review?.status !== "complete") return true;
+      return getPendingCombatObservationAttempts(input.state).some(
+        (attempt) => attempt.observerParticipantId === participant.participantId,
+      );
+    },
   )?.participantId;
 }
 
@@ -11628,9 +12184,37 @@ export function getNextCombatRoundEndTask(input: {
   });
 
   if (reviewParticipantId) {
+    const reviewStatus =
+      roundEndReview.participantReviews[reviewParticipantId]?.status;
+    const observationAttempt =
+      reviewStatus === "complete"
+        ? getPendingCombatObservationAttempts(normalized).find(
+            (attempt) => attempt.observerParticipantId === reviewParticipantId,
+          )
+        : undefined;
+    if (observationAttempt) {
+      return {
+        kind: "observation_roll",
+        observationAttemptId: observationAttempt.attemptId,
+        opponentParticipantId: observationAttempt.targetParticipantId,
+        participantId: observationAttempt.observerParticipantId,
+        relationshipId: observationAttempt.relationshipId,
+      };
+    }
     return {
       kind: "participant_review",
       participantId: reviewParticipantId,
+    };
+  }
+
+  const observationAttempt = getPendingCombatObservationAttempts(normalized)[0];
+  if (observationAttempt) {
+    return {
+      kind: "observation_roll",
+      observationAttemptId: observationAttempt.attemptId,
+      opponentParticipantId: observationAttempt.targetParticipantId,
+      participantId: observationAttempt.observerParticipantId,
+      relationshipId: observationAttempt.relationshipId,
     };
   }
 
@@ -13321,6 +13905,9 @@ export function commitCombatRoundEndParticipantReview(input: {
         .map((proposal) => proposal.id),
       createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
       createdCombatEffectIds: effectApplication.createdCombatEffectIds,
+      participantReviewCompletionDeferred: getPendingCombatObservationAttempts(
+        normalized,
+      ).some((attempt) => attempt.observerParticipantId === input.participantId),
       nextReviewStatus: nextStatus,
       nextStatus,
       previousReviewStatus: participantReview.status,
@@ -13329,12 +13916,34 @@ export function commitCombatRoundEndParticipantReview(input: {
     },
   });
 
-  return {
-    combatEffects: effectApplication.combatEffects,
+  let nextState = combatRoundStateSchema.parse({
+    ...normalized,
+    commands: [...normalized.commands, command],
+    currentCursor: afterCursor,
+    currentStep: "round_summary",
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              round_summary: nextStatus === "complete" ? "complete" : "ready",
+            },
+          }
+        : participant,
+    ),
+    roundEndReview: nextRoundEndReview,
+    selectedParticipantId: afterCursor.participantId,
+    selectedStep: "round_summary",
+  });
+  nextState = appendCombatObservationRoundStatusEvents({
     command,
-    state: appendCombatRoundEventForCommand({
-      command,
-      draft: {
+    observerParticipantId: input.participantId,
+    state: nextState,
+  });
+  nextState = appendCombatRoundEventForCommand({
+    command,
+    draft: {
         actorParticipantId: input.participantId,
         combatEffectEventId: effectApplication.createdCombatEffectEventId,
         combatEffectIds: effectApplication.createdCombatEffectIds,
@@ -13381,31 +13990,20 @@ export function commitCombatRoundEndParticipantReview(input: {
             ? [effectApplication.createdCombatEffectEventId]
             : []),
         ],
-        status: "committed",
+        status:
+          command.facts.participantReviewCompletionDeferred === true
+            ? "proposed"
+            : "committed",
         step: "round_summary",
         type: "participant_su_review",
       },
-      state: combatRoundStateSchema.parse({
-        ...normalized,
-        commands: [...normalized.commands, command],
-        currentCursor: afterCursor,
-        currentStep: "round_summary",
-        participants: normalized.participants.map((participant) =>
-          participant.participantId === input.participantId
-            ? {
-                ...participant,
-                stepStatuses: {
-                  ...participant.stepStatuses,
-                  round_summary: nextStatus === "complete" ? "complete" : "ready",
-                },
-              }
-            : participant,
-        ),
-        roundEndReview: nextRoundEndReview,
-        selectedParticipantId: afterCursor.participantId,
-        selectedStep: "round_summary",
-      }),
-    }),
+    state: nextState,
+  });
+
+  return {
+    combatEffects: effectApplication.combatEffects,
+    command,
+    state: nextState,
   };
 }
 
@@ -15661,6 +16259,8 @@ function buildCompletedCombatRound(input: {
     events: normalized.events,
     feintProposals: normalized.feintProposals,
     offensiveParryContests: normalized.offensiveParryContests,
+    observationAttempts: normalized.observationAttempts,
+    observationRelationships: normalized.observationRelationships,
     phaseResolutionCursor: normalized.phaseResolutionCursor,
     phaseResolutionResults: normalized.phaseResolutionResults,
     phaseResolutionStatuses: normalized.phaseResolutionStatuses,
@@ -16140,6 +16740,14 @@ export function initializeCombatRoundState(input: {
         participantIds.has(contest.controllerParticipantId) &&
         participantIds.has(contest.affectedParticipantId),
     ),
+    observationAttempts: (existing?.observationAttempts ?? []).filter(
+      (attempt) => attempt.roundNumber === roundNumber,
+    ),
+    observationRelationships: (existing?.observationRelationships ?? []).filter(
+      (relationship) =>
+        participantIds.has(relationship.observerParticipantId) &&
+        participantIds.has(relationship.targetParticipantId),
+    ),
     unbalancedConditions: (existing?.unbalancedConditions ?? []).filter((condition) =>
       participantIds.has(condition.affectedParticipantId),
     ),
@@ -16437,6 +17045,8 @@ export function advanceCombatRoundStep(
       adjustDistanceProposals: [],
       feintProposals: [],
       offensiveParryContests: [],
+      observationAttempts: [],
+      observationRelationships: completedRoundState.observationRelationships,
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
       phaseResolutionStatuses: {},
@@ -18179,7 +18789,14 @@ function recordCombatRoundAttackCommand(input: {
           defenderDb: input.result.defenderDb,
           lookupTotal: input.result.lookupTotal,
           ob: input.result.ob,
+          obBeforeOpponentSpecificModifier:
+            input.command.facts?.obBeforeOpponentSpecificModifier,
           openEndedD10s: input.result.openEndedD10s,
+          opponentSpecificObModifierRows:
+            input.command.facts?.opponentSpecificObModifierRows,
+          opponentSpecificObPercentageAdjustment:
+            input.command.facts?.opponentSpecificObPercentageAdjustment,
+          opponentSpecificObRaw: input.command.facts?.opponentSpecificObRaw,
           rollD20: input.result.rollD20,
           rollTotal: input.result.rollTotal,
         },
@@ -20759,6 +21376,83 @@ function undoContinuedContactMaintenanceCommandAtIndex(input: {
   });
 }
 
+function undoCombatObservationCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.type !== "roll_observation") return undefined;
+  const relationshipId =
+    typeof command.facts.relationshipId === "string"
+      ? command.facts.relationshipId
+      : undefined;
+  const attemptId =
+    typeof command.facts.observationAttemptId === "string"
+      ? command.facts.observationAttemptId
+      : undefined;
+  if (!relationshipId || !attemptId) return undefined;
+  const previousRelationship = combatObservationRelationshipSchema.safeParse(
+    command.facts.previousRelationship,
+  );
+  const relationships = previousRelationship.success
+    ? normalized.observationRelationships.map((relationship) =>
+        relationship.id === relationshipId ? previousRelationship.data : relationship,
+      )
+    : normalized.observationRelationships.filter(
+        (relationship) => relationship.id !== relationshipId,
+      );
+  const participantReviewEventId =
+    typeof command.facts.participantReviewEventId === "string"
+      ? command.facts.participantReviewEventId
+      : undefined;
+  const participantReviewEventPreviousIndex =
+    typeof command.facts.participantReviewEventPreviousIndex === "number" &&
+    Number.isInteger(command.facts.participantReviewEventPreviousIndex)
+      ? command.facts.participantReviewEventPreviousIndex
+      : undefined;
+  const participantReviewEventPreviousStatus =
+    command.facts.participantReviewEventPreviousStatus === "proposed" ||
+    command.facts.participantReviewEventPreviousStatus === "committed"
+      ? command.facts.participantReviewEventPreviousStatus
+      : undefined;
+  const stateWithoutRollEvents = removeCombatRoundEventsForCommand({
+    commandId: command.id,
+    state: normalized,
+  });
+  let restoredEvents = [...stateWithoutRollEvents.events].sort(
+    (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+  );
+  if (participantReviewEventId && participantReviewEventPreviousIndex !== undefined) {
+    const participantReviewEvent = restoredEvents.find(
+      (event) => event.id === participantReviewEventId,
+    );
+    if (participantReviewEvent) {
+      restoredEvents = restoredEvents.filter((event) => event.id !== participantReviewEventId);
+      restoredEvents.splice(
+        Math.min(participantReviewEventPreviousIndex, restoredEvents.length),
+        0,
+        participantReviewEventPreviousStatus
+          ? { ...participantReviewEvent, status: participantReviewEventPreviousStatus }
+          : participantReviewEvent,
+      );
+    }
+  }
+  return combatRoundStateSchema.parse({
+    ...stateWithoutRollEvents,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    events: restoredEvents.map((event, sequence) => ({ ...event, sequence })),
+    observationAttempts: normalized.observationAttempts.filter(
+      (attempt) => attempt.id !== attemptId,
+    ),
+    observationRelationships: relationships,
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
 function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -20821,6 +21515,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "roll_continued_contact_maintenance") {
     return undoContinuedContactMaintenanceCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "roll_observation") {
+    return undoCombatObservationCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
@@ -22538,6 +23239,8 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
         encounterId: round.encounterId ?? normalized.encounterId,
         events: round.events,
         feintProposals: round.feintProposals,
+        observationAttempts: round.observationAttempts,
+        observationRelationships: round.observationRelationships,
         phaseResolutionCursor: round.phaseResolutionCursor,
         phaseResolutionResults: round.phaseResolutionResults,
         phaseResolutionStatuses: round.phaseResolutionStatuses,

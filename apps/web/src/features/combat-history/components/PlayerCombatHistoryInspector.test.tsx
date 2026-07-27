@@ -189,4 +189,37 @@ describe("PlayerCombatHistoryInspector", () => {
     expect(container.textContent).toContain("Visible opponent");
     expect(container.textContent).not.toContain("Hidden opponent");
   });
+
+  it("renders archived observation progress and established bonus inside existing panels", () => {
+    const observed = snapshot();
+    observed.panels.actionSelector = {
+      actionId: "parry",
+      actionLabel: "Parry",
+      secondaryActionId: "observe_opponent",
+      secondaryActionLabel: "Observe opponent",
+      secondaryActionTargetParticipantId: "visible",
+    };
+    render(
+      <PlayerCombatHistoryInspector
+        events={[]}
+        observationRelationships={[
+          {
+            bestBonus: 1,
+            completedAttempts: 1,
+            id: "observation:aria:visible",
+            observerParticipantId: "aria",
+            roundsTowardNextAttempt: 4,
+            targetParticipantId: "visible",
+          },
+        ]}
+        observationTargetLabels={{ visible: "Visible opponent" }}
+        snapshot={observed}
+      />,
+    );
+
+    expect(screen.getByText("Observation progress")).toBeTruthy();
+    expect(screen.getByText("Visible opponent: 4 / 6 · best +1% · attempts 1")).toBeTruthy();
+    expect(screen.getByText("Observe Opponent · Visible opponent")).toBeTruthy();
+    expect(screen.getAllByText("Current action")).toHaveLength(1);
+  });
 });

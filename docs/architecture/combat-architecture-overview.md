@@ -463,7 +463,7 @@ requires non-tied and exact-tie coverage.
 
 Expected gameplay work includes:
 
-- Observe Opponent mechanics;
+- further Observe Opponent tactical insights beyond the implemented V1 modifier;
 - Drop, Pick Up, and Exchange Item;
 - Disarm;
 - Break Off Engagement;
@@ -492,3 +492,4 @@ No future work should weaken the invariants in this document.
 - [combat-initiative-group-timing.md](./combat-initiative-group-timing.md)
 - [combat-states-and-controllers.md](./combat-states-and-controllers.md)
 - [combat-performance-audit.md](./combat-performance-audit.md)
+- [Observe Opponent rules](../rules/observe-opponent.md)

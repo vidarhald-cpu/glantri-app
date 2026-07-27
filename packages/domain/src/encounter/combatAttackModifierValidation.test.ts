@@ -215,4 +215,81 @@ describe("canonical combat attack modifier validation", () => {
     });
     expect(state).toEqual(original);
   });
+
+  it("applies mutual observation independently and exactly once to the matching opponent", () => {
+    const attacker = participant({ id: "scenario-attacker", modifierBuckets: emptyBuckets() });
+    const defender = participant({ id: "scenario-defender", modifierBuckets: emptyBuckets() });
+    const state = combatRoundStateSchema.parse({
+      currentStep: "phase_1_actions",
+      observationRelationships: [
+        {
+          bestBonus: 2,
+          completedAttempts: 1,
+          id: "observation:encounter-attacker:encounter-defender",
+          observerParticipantId: "encounter-attacker",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "encounter-defender",
+        },
+        {
+          bestBonus: 1,
+          completedAttempts: 1,
+          id: "observation:encounter-defender:encounter-attacker",
+          observerParticipantId: "encounter-defender",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "encounter-attacker",
+        },
+      ],
+      participants: [
+        {
+          declaration: {
+            actionId: "attack_parry",
+            attackOpportunities: [
+              {
+                id: "opportunity",
+                origin: "declared",
+                phase: "phase1",
+                slot: "attack_1",
+                targetParticipantId: "encounter-defender",
+              },
+            ],
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "Attacker",
+          participantId: "encounter-attacker",
+          scenarioParticipantId: attacker.id,
+        },
+        {
+          label: "Defender",
+          participantId: "encounter-defender",
+          scenarioParticipantId: defender.id,
+        },
+      ],
+      roundNumber: 1,
+    });
+    const facts = resolveCanonicalCombatAttackModifierFacts({
+      attackerCombatantId: "encounter-attacker",
+      attackerScenarioParticipant: attacker,
+      defenderCombatantId: "encounter-defender",
+      defenderScenarioParticipant: defender,
+      encounterId: "encounter-1",
+      opportunityId: "opportunity",
+      phase: "phase1",
+      state,
+    });
+
+    expect(facts.attackerResolution.total).toBe(2);
+    expect(facts.attackerResolution.rows).toHaveLength(1);
+    expect(facts.attackerOpponentResolution).toMatchObject({
+      rows: [
+        {
+          label: "Observe Opponent",
+          value: 2,
+        },
+      ],
+      total: 2,
+    });
+    expect(facts.defenderResolution.total).toBe(1);
+    expect(facts.defenderResolution.rows).toHaveLength(1);
+  });
 });

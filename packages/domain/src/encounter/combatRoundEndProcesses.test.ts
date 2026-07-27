@@ -29,6 +29,20 @@ function state(review?: Record<string, unknown>): CombatRoundState {
   });
 }
 
+function initiativeOrderedState(reviewInput?: Record<string, unknown>): CombatRoundState {
+  const source = state(reviewInput);
+  return combatRoundStateSchema.parse({
+    ...source,
+    currentCursor: { participantId: "hero", roundNumber: 3, step: "SU" },
+    participants: source.participants.map((participant) => ({
+      ...participant,
+      initiatives: {
+        phase2: participant.participantId === "guard" ? 10 : 4,
+      },
+    })),
+  });
+}
+
 function participantReview(
   participantId: string,
   status: "complete" | "health_roll_pending" | "review_ready",
@@ -129,6 +143,26 @@ describe("combat round-end process plans", () => {
     ]);
   });
 
+  it("starts and continues SU in the same committed order rendered by the tracker", () => {
+    const first = buildCombatRoundEndProcessPlan(
+      initiativeOrderedState(review({ guardStatus: "review_ready", heroStatus: "review_ready" })),
+    );
+    expect(first.activeParticipantId).toBe("guard");
+    expect(
+      first.processes.find((process) => process.kind === "participant_review")?.stages.map(
+        (entry) => [entry.key, entry.state],
+      ),
+    ).toEqual([
+      ["guard", "active"],
+      ["hero", "pending"],
+    ]);
+
+    const second = buildCombatRoundEndProcessPlan(
+      initiativeOrderedState(review({ guardStatus: "complete", heroStatus: "review_ready" })),
+    );
+    expect(second.activeParticipantId).toBe("hero");
+  });
+
   it("keeps pair rolls parallel and locks participant review behind distance", () => {
     const source = state(review({ proposedDistances: [pendingDistance()] }));
     const plan = buildCombatRoundEndProcessPlan(source);
@@ -180,6 +214,7 @@ describe("combat round-end process plans", () => {
       "participant_review",
       "health_review",
       "effect_review",
+      "observation",
       "round_end",
     ]);
     expect(

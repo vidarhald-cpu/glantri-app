@@ -75,6 +75,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('aria-label="Latest combat event"');
   });
 
+  it("keeps observation progress inside Phase 1 instead of adding a main-grid card", () => {
+    const source = readPanelSource();
+
+    expect(source.match(/<PlayerCombatObservationProgress/g)).toHaveLength(1);
+    expect(source).not.toContain("PlayerCombatObservationStatus");
+    expect(source).toContain('label="Opponent"');
+    expect(source.indexOf("<PlayerCombatObservationProgress")).toBeGreaterThan(
+      source.indexOf("<PlayerCombatPhasePanel"),
+    );
+    expect(source.indexOf("<PlayerCombatObservationProgress")).toBeLessThan(
+      source.indexOf("<PlayerCombatModifierPanel"),
+    );
+  });
+
   it("keeps Combat Log selection independent from live current-step results", () => {
     const source = readPanelSource();
     const handlerStart = source.indexOf("const handleCombatLogSelection = useCallback");

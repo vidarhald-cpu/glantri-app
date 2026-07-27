@@ -501,7 +501,12 @@ function projectParry(input: {
   labels: ReadonlyMap<string, string>;
   sourceRevision: string;
 }): Candidate | undefined {
-  if (input.event.status === "not_applicable") return undefined;
+  if (
+    input.event.status === "not_applicable" ||
+    (input.event.type === "participant_su_review" && input.event.status === "proposed")
+  ) {
+    return undefined;
+  }
   const success = booleanFact(input.event.facts.publicOutcome, "success");
   if (success === undefined) return undefined;
   const actor = subject(
