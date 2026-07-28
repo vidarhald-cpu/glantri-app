@@ -131,6 +131,62 @@ describe("combat performance capture persistence", () => {
     });
   });
 
+  it("persists a bounded client-only archived-inspection capture", () => {
+    const path = mergeCombatPerformanceClientCapture({
+      client: {
+        clickToSettledMs: 18,
+        followUpRequests: [],
+        renderCount: 1,
+        requestCount: 0,
+        responseBytes: 4096,
+        stages: [
+          {
+            archivedRoundCount: 4,
+            command: "inspect_archived_tracker_cell",
+            durationMs: 0,
+            encounterId: "encounter-1",
+            participantCount: 2,
+            revision: "revision-5",
+            roundNumber: 3,
+            stage: "click",
+          },
+          {
+            durationMs: 12,
+            historical: true,
+            stage: "panel_historical_snapshot_resolution",
+          },
+          {
+            archivedRoundCount: 4,
+            durationMs: 0,
+            stage: "tracker_view_model",
+          },
+        ],
+      },
+      correlationId: "correlation-client-only",
+    });
+
+    expect(path).toBeTruthy();
+    expect(JSON.parse(readFileSync(path!, "utf8"))).toMatchObject({
+      archivedRoundCount: 4,
+      client: {
+        clickToSettledMs: 18,
+        requestCount: 0,
+      },
+      command: "inspect_archived_tracker_cell",
+      correlationId: "correlation-client-only",
+      encounterId: "encounter-1",
+      participantCount: 2,
+      responseBytes: 4096,
+      revision: "revision-5",
+      round: 3,
+      server: {
+        broadEncounterReads: 0,
+        repositoryOperations: 0,
+        stages: [],
+      },
+    });
+  });
+
   it("rotates old captures and is disabled outside the explicit development flag", () => {
     vi.stubEnv("GLANTRI_COMBAT_PERF_MAX_FILES", "2");
     persistCapture("correlation-a");

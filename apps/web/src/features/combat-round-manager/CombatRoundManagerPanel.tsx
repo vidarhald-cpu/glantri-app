@@ -170,6 +170,7 @@ import {
 import {
   beginCombatPerformanceInteraction,
   combatPerformanceNow,
+  measureCombatPerformanceStage,
   recordCombatPerformanceAdoption,
   recordCombatPerformanceReactCommit,
   recordCombatPerformanceStage,
@@ -4070,19 +4071,16 @@ export default function CombatRoundManagerPanel({
       activePresentationRebuilt = true;
       return buildActiveCombatPresentation({
         encounterId: roundView.encounterId,
-        encounterRevision:
-          descriptorRevision ?? roundView.encounterRevision ?? encounter.updatedAt,
+        encounterRevision: descriptorRevision ?? roundView.encounterRevision ?? encounter.updatedAt,
         resolveStepStatus: getParticipantDeclarationStatus,
         roundState,
       });
     },
   );
-  const presentationParticipantRows = activePresentation.displayParticipants.map(
-    (participant) => ({
+  const presentationParticipantRows = activePresentation.displayParticipants.map((participant) => ({
       label: participant.label,
       participantId: participant.participantId,
-    }),
-  );
+  }));
   const archivedPresentationIdentity = buildArchivedCombatPresentationIdentity({
     participantRows: presentationParticipantRows,
     roundState,
@@ -4163,8 +4161,7 @@ export default function CombatRoundManagerPanel({
       archivedRoundCount: archivedPresentation.roundStates.length,
       trackerBaseRebuilt,
       trackerCellCount:
-        archivedPresentation.trackerCellFacts.length +
-        activePresentation.trackerCellFacts.length,
+        archivedPresentation.trackerCellFacts.length + activePresentation.trackerCellFacts.length,
     },
   );
   const combatProgressionProjection = combatPresentation.active.progressionProjection;
@@ -4177,16 +4174,17 @@ export default function CombatRoundManagerPanel({
   const currentActionPresentation = combatPresentation.active.currentAction;
   const liveInspectorContext = combatPresentation.active.liveInspectorContext;
   const currentTaskSelection = combatPresentation.active.currentTaskSelection;
-  const renderedInspectionSelection =
-    combatPresentation.selection.renderedInspectionSelection;
+  const renderedInspectionSelection = combatPresentation.selection.renderedInspectionSelection;
   const timelineRoundNumbers = combatPresentation.timelineRoundNumbers;
   const combatLogProjection = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_combat_log_presentation", () =>
       buildCombatLogProjection({
         encounterId: encounter.id,
         sourceRevision: roundView.encounterRevision ?? encounter.updatedAt,
         state: roundState,
       }),
+      ),
     [encounter.id, encounter.updatedAt, roundState, roundView.encounterRevision],
   );
   const [combatLogSelection, setCombatLogSelection] = useState(() =>
@@ -4210,6 +4208,7 @@ export default function CombatRoundManagerPanel({
   );
   const combatDistanceRows = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_distance_table_presentation", () =>
       buildCombatDistanceTableRows({
         encounter,
         resolvedEquipmentStateByScenarioParticipantId: Object.fromEntries(
@@ -4221,6 +4220,7 @@ export default function CombatRoundManagerPanel({
         roundState,
         scenarioParticipants: effectiveScenarioParticipants,
       }),
+      ),
     [effectiveScenarioParticipants, encounter, resolvedCharacterStateByParticipantId, roundState],
   );
   const dirtyCombatDistanceRows = useMemo(
@@ -4271,13 +4271,16 @@ export default function CombatRoundManagerPanel({
     liveInspectorContext?.taskId,
     roundState.roundNumber,
   ]);
-  const inspector = buildCombatRoundInspector({
+  const inspector = measureCombatPerformanceStage("panel_build_combat_round_inspector", () =>
+    buildCombatRoundInspector({
     participantId: renderedInspectionSelection.participantId,
     state: selectedTimelineRoundState,
     step: renderedInspectionSelection.step,
-  });
+    }),
+  );
   const gmCurrentStepResultPresentation = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_current_event_result_selection", () =>
       inspector.participant
         ? buildCombatStepResultPresentation({
             boundary: combatProgressionPresentation.boundary.kind,
@@ -4293,6 +4296,7 @@ export default function CombatRoundManagerPanel({
             viewer: { kind: "gm" },
           })
         : undefined,
+      ),
     [
       combatLogProjection,
       combatProgressionPresentation.boundary.kind,
@@ -4525,6 +4529,7 @@ export default function CombatRoundManagerPanel({
           encounterId: encounter.id,
           roundNumber: selectedRoundNumber,
         });
+  const historicalSnapshotResolutionStartedAt = combatPerformanceNow();
   const inspectorSnapshot = getCombatRoundStepSnapshot({
     participantId: inspector.participant?.participantId,
     roundNumber: selectedRoundNumber,
@@ -4576,6 +4581,14 @@ export default function CombatRoundManagerPanel({
     draft: inspectorDraft,
     snapshot: inspectorPanelSnapshot,
   });
+  recordCombatPerformanceStage(
+    "panel_historical_snapshot_resolution",
+    combatPerformanceNow() - historicalSnapshotResolutionStartedAt,
+    {
+      historical: inspectorIsHistorical,
+      snapshotFound: Boolean(inspectorPanelSnapshot),
+    },
+  );
   const inspectorHistoricalDeclarationSummary = inspectorPanelSnapshot?.declarationSummary;
   const inspectorHistoricalSelectorFactsComplete = Boolean(
     inspectorHistoricalDeclarationSummary?.movementLabel &&
@@ -4619,12 +4632,14 @@ export default function CombatRoundManagerPanel({
     step: inspector.step,
   });
   const inspectorEquipmentState = useMemo(() => {
-    return resolveScenarioCombatEquipmentState({
+    return measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
+      resolveScenarioCombatEquipmentState({
       resolvedEquipmentState:
         resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
           ?.equipmentState,
       scenarioEquipmentState: selectedScenarioParticipant?.snapshot.equipmentState,
-    });
+      }),
+    );
   }, [
     resolvedCharacterStateByParticipantId,
     selectedScenarioParticipant?.id,
@@ -4663,6 +4678,7 @@ export default function CombatRoundManagerPanel({
     )?.effectiveSkillNumber;
   }, [content, selectedScenarioParticipant?.snapshot.build]);
   const inspectorGeneratedCombatContext = useMemo(() => {
+    return measureCombatPerformanceStage("panel_active_modifier_presentation", () => {
     if (inspectorHasLocalModifierEdits) {
       return inspectorDraft.combatContext;
     }
@@ -4679,6 +4695,7 @@ export default function CombatRoundManagerPanel({
       scenarioParticipant: selectedScenarioParticipant,
       secondaryActionId: inspectorDraft.secondaryActionId || undefined,
     });
+    });
   }, [
     inspectorDraft.actionId,
     inspectorDraft.combatContext,
@@ -4694,6 +4711,7 @@ export default function CombatRoundManagerPanel({
   ]);
   const inspectorLiveModifiers = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_active_modifier_presentation", () =>
       buildEncounterLiveCombatModifierSummary({
         combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
@@ -4701,6 +4719,7 @@ export default function CombatRoundManagerPanel({
           combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
         phaseKey: inspectorModifierPhase,
       }),
+      ),
     [
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
       inspectorGeneratedCombatContext,
@@ -4710,6 +4729,7 @@ export default function CombatRoundManagerPanel({
   );
   const inspectorModifierRows = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_active_modifier_presentation", () =>
       buildPlayerCombatModifierRows({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
@@ -4722,6 +4742,7 @@ export default function CombatRoundManagerPanel({
         phaseKey: inspectorModifierPhase,
         visibleAtStep: inspector.step,
       }),
+      ),
     [
       inspectorGeneratedCombatContext,
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
@@ -4734,6 +4755,9 @@ export default function CombatRoundManagerPanel({
   );
   const inspectorPendingModifierEntries = useMemo(
     () =>
+      measureCombatPerformanceStage(
+        "panel_active_modifier_presentation",
+    () =>
       buildLiveCombatModifierContributionProjection({
         combatContext: inspectorGeneratedCombatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
@@ -4743,6 +4767,7 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         ownerParticipantId: selectedScenarioParticipant?.id,
       }).pendingModifierEntries,
+      ),
     [
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
       encounter.id,
@@ -4752,10 +4777,16 @@ export default function CombatRoundManagerPanel({
       selectedScenarioParticipant?.state.combatEffects,
     ],
   );
+  const historicalModifierPresentationStartedAt = combatPerformanceNow();
   const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
     inspectorIsHistorical
       ? (inspectorPanelSnapshot?.modifierSummary?.rows ?? [])
       : inspectorModifierRows;
+  recordCombatPerformanceStage(
+    "panel_historical_modifier_presentation",
+    combatPerformanceNow() - historicalModifierPresentationStartedAt,
+    { historical: inspectorIsHistorical },
+  );
   const inspectorModifierSourceMode: CombatInspectorSourceMode = inspectorIsHistorical
     ? "history"
     : "current";
@@ -4887,12 +4918,14 @@ export default function CombatRoundManagerPanel({
   ]);
   const inspectorSheetSummary = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
       content && inspectorBuild
         ? buildCharacterSheetSummary({
             build: inspectorBuild,
             content,
           })
         : undefined,
+      ),
     [content, inspectorBuild],
   );
   const inspectorCombatExperienceSkillLookup = useMemo(
@@ -5007,6 +5040,7 @@ export default function CombatRoundManagerPanel({
     Boolean(inspectorSnapshot);
   const inspectorLoadoutModel = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
       buildEquipmentLoadoutModuleModel({
         characterContext:
           content && inspectorBuild
@@ -5022,6 +5056,7 @@ export default function CombatRoundManagerPanel({
         state: inspectorEquipmentState,
         throwingWeaponItemId: null,
       }),
+      ),
     [
       content,
       inspectorBuild,
@@ -5032,13 +5067,16 @@ export default function CombatRoundManagerPanel({
   );
   const inspectorLoadoutSummary = useMemo(
     () =>
+      measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
       buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
         allowUnarmedFallback:
-          inspectorEquipmentStatus.kind === "ready" || inspectorEquipmentStatus.kind === "unarmed",
+            inspectorEquipmentStatus.kind === "ready" ||
+            inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: inspectorLoadoutModel,
         secondaryActionId: inspectorDraft.secondaryActionId,
       }),
+      ),
     [inspectorDraft.actionId, inspectorDraft.secondaryActionId, inspectorLoadoutModel],
   );
   const inspectorTargetOptions = useMemo(() => {
@@ -5095,6 +5133,7 @@ export default function CombatRoundManagerPanel({
     return resolution.ok ? resolution.phaseContexts : inspectorDisplayDraft.phaseContexts;
   }, [encounter.participants, inspectorDisplayDraft.actionId, inspectorDisplayDraft.phaseContexts]);
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
+    return measureCombatPerformanceStage("panel_phase_summary_presentation", () => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
         combatContext: inspectorGeneratedCombatContext,
@@ -5120,7 +5159,8 @@ export default function CombatRoundManagerPanel({
       return buildPlayerCombatLoadoutSummary({
         actionId: inspectorDraft.actionId,
         allowUnarmedFallback:
-          inspectorEquipmentStatus.kind === "ready" || inspectorEquipmentStatus.kind === "unarmed",
+            inspectorEquipmentStatus.kind === "ready" ||
+            inspectorEquipmentStatus.kind === "unarmed",
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
@@ -5132,6 +5172,7 @@ export default function CombatRoundManagerPanel({
       phase1: buildPhaseSummary("phase1"),
       phase2: buildPhaseSummary("phase2"),
     };
+    });
   }, [
     content,
     inspectorBuild,
@@ -5241,6 +5282,7 @@ export default function CombatRoundManagerPanel({
           total: roundState.participants.length,
         }
       : undefined;
+  const attackParryResultPresentationStartedAt = combatPerformanceNow();
   const inspectorDisplayAttackResult = inspectorIsHistorical
     ? inspectorSnapshot?.attackResult
     : inspector.participant && inspectorAttackPhase
@@ -5350,6 +5392,13 @@ export default function CombatRoundManagerPanel({
     ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
     : 0;
   const inspectorParryModifierBreakdown = inspectorParryModifierCalculation?.rawModifiers ?? [];
+  recordCombatPerformanceStage(
+    inspectorIsHistorical
+      ? "panel_historical_attack_parry_result_presentation"
+      : "panel_active_attack_parry_result_presentation",
+    combatPerformanceNow() - attackParryResultPresentationStartedAt,
+    { source: "inspector_resolution" },
+  );
   const inspectorSelectedAttackAlreadyRolled = Boolean(
     inspectorAttackPhase && inspectorDisplayAttackResult,
   );
@@ -6210,7 +6259,10 @@ export default function CombatRoundManagerPanel({
     !showInspectorModifierReviewContextPanel &&
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceIsCombatStart;
-  const inspectorCanonicalActionResultEvents = projectGmCombatEvents({
+  const inspectorCanonicalActionResultEvents = measureCombatPerformanceStage(
+    "panel_current_event_result_selection",
+    () =>
+      projectGmCombatEvents({
     events: selectCombatEventsForTrackerCell({
       events: selectedTimelineRoundState.events,
       participantId: inspector.participant?.participantId,
@@ -6218,7 +6270,9 @@ export default function CombatRoundManagerPanel({
       step: inspector.step,
     }),
     participants: selectedTimelineRoundState.participants,
-  });
+      }),
+    { historical: inspectorIsHistorical },
+  );
   const inspectorHasCanonicalActionResult = inspectorCanonicalActionResultEvents.length > 0;
   const inspectorShowsLegacyResultFallback = Boolean(
     inspectorIsHistorical &&
@@ -6229,14 +6283,18 @@ export default function CombatRoundManagerPanel({
       inspectorSnapshot.initiativeResult ||
       inspectorSnapshot.actionResultSummary),
   );
-  const inspectorHistoricalActionResult = inspectorIsHistorical
+  const inspectorHistoricalActionResult = measureCombatPerformanceStage(
+    "panel_historical_attack_parry_result_presentation",
+    () =>
+      inspectorIsHistorical
     ? inspectorHistoricalStepOutcome
       ? { interpretedResult: inspectorHistoricalStepOutcome.message }
       : buildHistoricalCombatActionResult({
           participantId: inspector.participant?.participantId,
           snapshot: inspectorSnapshot,
         })
-    : undefined;
+        : undefined,
+  );
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorHistoricalStatusLabel = inspectorHistoricalStepOutcome
     ? inspectorHistoricalStepOutcome.category === "not_required"
@@ -7204,6 +7262,16 @@ export default function CombatRoundManagerPanel({
     selection: CombatRoundTimelineSelection,
     mode: CombatRoundTimelineScrollMode = "nearest",
   ) {
+    if (selection.roundNumber !== roundState.roundNumber) {
+      beginCombatPerformanceInteraction({
+        command: "inspect_archived_tracker_cell",
+        encounterId: encounter.id,
+        expectedRevision: descriptorRevision,
+        participantCount: roundState.participants.length,
+        requestExpected: false,
+        roundNumber: selection.roundNumber,
+      });
+    }
     setSelectedRoundNumber(selection.roundNumber);
     manualSelectionRef.current = {
       participantId: selection.participantId,
@@ -7214,6 +7282,9 @@ export default function CombatRoundManagerPanel({
       step: selection.step,
     });
     scrollTimelineCellIntoView(selection, mode);
+    if (selection.roundNumber !== roundState.roundNumber) {
+      settleCombatPerformanceInteraction();
+    }
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep, roundNumber: number) {
@@ -9750,8 +9821,12 @@ export default function CombatRoundManagerPanel({
                           ),
                           participantBId: phaseTargetEncounterParticipant?.id,
                           participantBAliases: [
-                            ...getCombatDistanceParticipantAliases(phaseTargetEncounterParticipant),
-                            ...getCombatDistanceParticipantAliases(phaseTargetScenarioParticipant),
+                              ...getCombatDistanceParticipantAliases(
+                                phaseTargetEncounterParticipant,
+                              ),
+                              ...getCombatDistanceParticipantAliases(
+                                phaseTargetScenarioParticipant,
+                              ),
                           ],
                           rows: combatDistanceRows,
                         })
@@ -9784,13 +9859,15 @@ export default function CombatRoundManagerPanel({
                             attackResultId: inspectorDisplayPhaseResolutionResult.attackResultId,
                             parryBase: inspectorParryBase,
                             parryModifierCalculation: inspectorParryModifierCalculation,
-                            parryResolution: inspectorDisplayPhaseResolutionResult.parryResolution,
+                              parryResolution:
+                                inspectorDisplayPhaseResolutionResult.parryResolution,
                             parrySourceLabel: formatSelectedCombatParrySourceName({
                               selection: inspectorParrySelection,
                               sources: inspectorParryDefenderPhaseSummary?.parrySources,
                             }),
                           }
                         : undefined;
+                      const phaseProjectionStartedAt = combatPerformanceNow();
                     const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
                       attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats,
@@ -9814,6 +9891,11 @@ export default function CombatRoundManagerPanel({
                       snapshotAttackStats: historicalPhasePanel?.attackSummary,
                       snapshotDefenseStats: historicalPhasePanel?.defenseSummary,
                     });
+                      recordCombatPerformanceStage(
+                        "panel_phase_summary_presentation",
+                        combatPerformanceNow() - phaseProjectionStartedAt,
+                        { historical: inspectorIsHistorical, phaseKey },
+                      );
                     const phaseModel = phaseProjection.phaseModel;
 
                     /*
@@ -10041,7 +10123,8 @@ export default function CombatRoundManagerPanel({
                         {(!inspectorIsHistorical || historicalPhasePanel) &&
                         phaseModel.showAttackLocationSelector &&
                         !(
-                          inspectorDisplayDraft.actionId === "feint_attack" && phaseKey === "phase1"
+                            inspectorDisplayDraft.actionId === "feint_attack" &&
+                            phaseKey === "phase1"
                         ) ? (
                           <>
                             <PlayerCombatAttackTargetSelector
@@ -10057,7 +10140,8 @@ export default function CombatRoundManagerPanel({
                                       ? {
                                           phase1: {
                                             ...inspectorDraft.phaseContexts.phase1,
-                                            targetParticipantId: combatContext.targetParticipantId,
+                                              targetParticipantId:
+                                                combatContext.targetParticipantId,
                                           },
                                           phase2: combatContext,
                                         }
@@ -10206,7 +10290,9 @@ export default function CombatRoundManagerPanel({
                           ? `Effective after Initiative ${combatProgressionProjection.executionOrder.currentInitiativeValue} finishes`
                           : undefined
                       }
-                      pendingEntries={inspectorIsHistorical ? [] : inspectorPendingModifierEntries}
+                        pendingEntries={
+                          inspectorIsHistorical ? [] : inspectorPendingModifierEntries
+                        }
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
                       observationRelationships={selectedTimelineRoundState.observationRelationships.filter(
@@ -10233,7 +10319,9 @@ export default function CombatRoundManagerPanel({
                             gap: "0.2rem",
                           }}
                         >
-                          <div>Base initiative {inspectorInitiativeCalculation.baseInitiative}</div>
+                            <div>
+                              Base initiative {inspectorInitiativeCalculation.baseInitiative}
+                            </div>
                           <div>
                             Initiative modifiers{" "}
                             {inspectorInitiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
@@ -10643,7 +10731,9 @@ export default function CombatRoundManagerPanel({
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
               <button
-                disabled={saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0}
+                  disabled={
+                    saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0
+                  }
                 onClick={() => void saveCombatDistanceChanges()}
                 type="button"
               >

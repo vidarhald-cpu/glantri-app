@@ -33,9 +33,12 @@ export type CombatPerformanceServerCapture = {
 type ClientCapture = {
   clickToSettledMs?: number;
   followUpRequests: Array<{
+    durationMs?: number;
     method?: string;
     path?: string;
+    responseBytes?: number;
     startedAtMs?: number;
+    status?: number;
   }>;
   networkMs?: number;
   panelBuildMs?: number;
@@ -96,9 +99,7 @@ function captureDirectory(): string {
 
 function maxCaptureFiles(): number {
   const configured = Number(process.env.GLANTRI_COMBAT_PERF_MAX_FILES);
-  return Number.isInteger(configured) && configured > 0
-    ? configured
-    : DEFAULT_MAX_CAPTURE_FILES;
+  return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_MAX_CAPTURE_FILES;
 }
 
 function safeFilePart(value: string): string {
@@ -261,9 +262,7 @@ function boundedString(value: unknown, maximumLength: number): string | undefine
 }
 
 function boundedNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Number(value.toFixed(2))
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : undefined;
 }
 
 function sanitizeStage(value: unknown): CombatPerformanceStageRecord | undefined {
@@ -299,7 +298,10 @@ function sanitizeClientCapture(value: unknown): ClientCapture | undefined {
   }
   const candidate = value as Record<string, unknown>;
   const stages = Array.isArray(candidate.stages)
-    ? candidate.stages.slice(0, 200).map(sanitizeStage).filter((stage) => stage !== undefined)
+    ? candidate.stages
+        .slice(0, 200)
+        .map(sanitizeStage)
+        .filter((stage) => stage !== undefined)
     : [];
   const requests = Array.isArray(candidate.followUpRequests)
     ? candidate.followUpRequests.slice(0, 50).flatMap((request) => {
@@ -309,9 +311,12 @@ function sanitizeClientCapture(value: unknown): ClientCapture | undefined {
         const entry = request as Record<string, unknown>;
         return [
           {
+            durationMs: boundedNumber(entry.durationMs),
             method: boundedString(entry.method, 20),
             path: boundedString(entry.path, 300),
+            responseBytes: boundedNumber(entry.responseBytes),
             startedAtMs: boundedNumber(entry.startedAtMs),
+            status: boundedNumber(entry.status),
           },
         ];
       })
@@ -333,6 +338,41 @@ function sanitizeClientCapture(value: unknown): ClientCapture | undefined {
   };
 }
 
+function buildClientOnlyCapture(input: {
+  client: ClientCapture;
+  correlationId: string;
+}): CombatPerformanceCapture {
+  const click = input.client.stages.find((stage) => stage.stage === "click");
+  const presentationStage =
+    input.client.stages.find((stage) => stage.stage === "tracker_view_model") ??
+    input.client.stages.find((stage) => stage.stage === "combat_panel_view_model");
+  const command =
+    (typeof click?.command === "string" && click.command) || "client_combat_interaction";
+  return {
+    archivedRoundCount:
+      typeof presentationStage?.archivedRoundCount === "number"
+        ? presentationStage.archivedRoundCount
+        : undefined,
+    capturedAt: new Date().toISOString(),
+    client: input.client,
+    command,
+    correlationId: input.correlationId,
+    encounterId: typeof click?.encounterId === "string" ? click.encounterId : undefined,
+    participantCount:
+      typeof click?.participantCount === "number" ? click.participantCount : undefined,
+    responseBytes: input.client.responseBytes,
+    revision: typeof click?.revision === "string" ? click.revision : undefined,
+    round: typeof click?.roundNumber === "number" ? click.roundNumber : undefined,
+    server: {
+      broadEncounterReads: 0,
+      repositoryOperations: 0,
+      stages: [],
+    },
+    task: command,
+    version: 1,
+  };
+}
+
 export function mergeCombatPerformanceClientCapture(input: {
   client: unknown;
   correlationId: string;
@@ -340,11 +380,21 @@ export function mergeCombatPerformanceClientCapture(input: {
   if (!isEnabled()) {
     return undefined;
   }
-  const path = capturePaths.get(input.correlationId);
   const client = sanitizeClientCapture(input.client);
-  if (!path || !client) {
+  if (!client) {
     return undefined;
   }
+  const reservedPath = capturePaths.get(input.correlationId);
+  if (!reservedPath) {
+    const clientOnlyCapture = buildClientOnlyCapture({
+      client,
+      correlationId: input.correlationId,
+    });
+    const clientOnlyPath = capturePath(clientOnlyCapture);
+    writeCapture(clientOnlyPath, clientOnlyCapture);
+    return clientOnlyPath;
+  }
+  const path = reservedPath;
   const existing = readCapture(path);
   if (!existing) {
     pendingClientCaptures.set(input.correlationId, client);

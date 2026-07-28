@@ -39,6 +39,12 @@ contain timing stages, counters, response sizes, endpoint paths,
 encounter/revision identifiers, and command identity only. The directory is
 git-ignored.
 
+Repeated browser samples are compacted into one record per stage before
+delivery. Each compact stage records cumulative duration and `executionCount`;
+presentation-cache stages also report rebuild and reuse counts. This keeps
+fine-grained traces below diagnostic request-size limits without retaining
+application data.
+
 The newest 100 captures are retained by default. Set
 `GLANTRI_COMBAT_PERF_MAX_FILES` to another positive limit when needed.
 
@@ -46,6 +52,18 @@ The main stages are:
 
 - browser `click`, `request_start`, `network_and_parse`, `canonical_state_adoption`;
 - browser `tracker_view_model`, `combat_panel_view_model`, `react_commit`, `click_to_settled`;
+- browser presentation substages:
+  `panel_build_combat_round_inspector`, `panel_active_modifier_presentation`,
+  `panel_historical_modifier_presentation`,
+  `panel_equipment_loadout_presentation`, `panel_phase_summary_presentation`,
+  `panel_current_task_action_presentation`,
+  `panel_current_event_result_selection`,
+  `panel_active_attack_parry_result_presentation`,
+  `panel_historical_attack_parry_result_presentation`,
+  `panel_active_calculation_presentation`,
+  `panel_historical_calculation_presentation`,
+  `panel_historical_snapshot_resolution`, `panel_combat_log_presentation`, and
+  `panel_distance_table_presentation`;
 - API `authentication_complete`, `workspace_authorization`;
 - API `repository_read_full_encounter`, `repository_read_active`, `repository_read_history_source`;
 - API `active_state_materialization`, `descriptor_projection_and_authorization`;
@@ -53,6 +71,18 @@ The main stages are:
 - API `response_construction`, `response_serialization_probe`, `api_total`.
 
 Repository operation and broad/full-encounter-read counters are attached to server records. The response serialization probe performs one extra `JSON.stringify` only while measurement is enabled; it never replaces Fastify's canonical serializer.
+
+`combat_panel_view_model` contains the tracker and the panel substages executed
+inside `CombatRoundManagerPanel`; do not add it to its children when calculating
+total wall time. Event calculation records are contained by their corresponding
+event/result builder where both are emitted. Child result-list stages can run
+after the parent panel timer has closed because React renders that child
+component separately.
+
+Selecting an archived tracker cell creates a client-only
+`inspect_archived_tracker_cell` trace. It uses the same correlation and capture
+format, records no server mutation stages, and treats every character/equipment
+request triggered by the selection as follow-up work.
 
 ## Reproduction
 

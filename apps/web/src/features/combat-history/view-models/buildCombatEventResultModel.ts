@@ -1,5 +1,7 @@
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
+import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
+
 import { formatSignedCombatModifier } from "./formatCombatModifier";
 import {
   buildCombatRollCalculationPresentation,
@@ -735,6 +737,10 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
 
 export function buildCombatEventResultModel(
   events: readonly ProjectedCombatHistoryEvent[],
+  instrumentation?: {
+    calculationStage?: string;
+    resultStage?: string;
+  },
 ): CombatEventResultModel {
   const canonicalResolvedObservationEventByAttemptId = new Map<string, string>();
   const resolvedObservationAttemptIds = new Set(
@@ -791,9 +797,33 @@ export function buildCombatEventResultModel(
           ),
         );
         const attack = event.type === "attack";
-        const presentation = eventPresentation(event);
-        return {
-          calculationRows: attack
+        const presentation = instrumentation?.resultStage
+          ? measureCombatPerformanceStage(
+              instrumentation.resultStage,
+              () => eventPresentation(event),
+              { eventType: event.type },
+            )
+          : eventPresentation(event);
+        const calculationRows = instrumentation?.calculationStage
+          ? measureCombatPerformanceStage(
+              instrumentation.calculationStage,
+              () =>
+                attack
+                  ? attackCalculationRows(event)
+                  : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
+                    ? dodgeCalculationRows(event)
+                    : event.type === "offensive_parry_brawling"
+                      ? offensiveParryBrawlingCalculationRows(event)
+                      : event.type === "observation"
+                        ? observationCalculationRows(event)
+                        : calculationFactRows(
+                            event.id,
+                            event.facts.privateCalculation,
+                            identityById,
+                          ),
+              { eventType: event.type },
+            )
+          : attack
             ? attackCalculationRows(event)
             : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
               ? dodgeCalculationRows(event)
@@ -801,7 +831,9 @@ export function buildCombatEventResultModel(
                 ? offensiveParryBrawlingCalculationRows(event)
                 : event.type === "observation"
                   ? observationCalculationRows(event)
-                : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
+                  : calculationFactRows(event.id, event.facts.privateCalculation, identityById);
+        return {
+          calculationRows,
           completenessLabel:
             event.completeness === "complete"
               ? undefined

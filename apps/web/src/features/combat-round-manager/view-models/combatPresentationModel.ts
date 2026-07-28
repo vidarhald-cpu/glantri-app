@@ -29,6 +29,7 @@ import {
   type CombatTrackerModel,
   type CurrentActionPresentation,
 } from "@/features/combat-history";
+import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
 import {
   buildCombatRoundLiveInspectorContext,
   getCombatRoundLiveInspectorSelection,
@@ -149,26 +150,14 @@ export function buildArchivedCombatPresentationIdentity(input: {
 }
 
 export interface CombatPresentationLayerCache {
-  resolveActive(
-    identity: string,
-    build: () => ActiveCombatPresentation,
-  ): ActiveCombatPresentation;
+  resolveActive(identity: string, build: () => ActiveCombatPresentation): ActiveCombatPresentation;
   resolveArchived(
     identity: string,
     build: () => ArchivedCombatPresentation,
   ): ArchivedCombatPresentation;
-  resolveSelection(
-    identity: string,
-    build: () => CombatSelectionOverlay,
-  ): CombatSelectionOverlay;
-  resolveTrackerBase(
-    identity: string,
-    build: () => CombatTrackerModel,
-  ): CombatTrackerModel;
-  resolveTracker(
-    identity: string,
-    build: () => CombatTrackerModel,
-  ): CombatTrackerModel;
+  resolveSelection(identity: string, build: () => CombatSelectionOverlay): CombatSelectionOverlay;
+  resolveTrackerBase(identity: string, build: () => CombatTrackerModel): CombatTrackerModel;
+  resolveTracker(identity: string, build: () => CombatTrackerModel): CombatTrackerModel;
 }
 
 /**
@@ -347,22 +336,19 @@ function buildTrackerCellFactsForRound(input: {
                   participant.participantId === adjustDistanceProposal.defenderParticipantId,
               )?.label,
               requestedDistance: adjustDistanceProposal.requestedDistance,
-              status:
-                adjustDistanceProposal.status === "committed" ? "committed" : "pending",
+              status: adjustDistanceProposal.status === "committed" ? "committed" : "pending",
             }
           : undefined,
         adjustDistanceRollRecorded,
         actionResultStatus: snapshot?.actionResultStatus,
         attackAttackerLabel: attackResult
           ? roundState.participants.find(
-              (participant) =>
-                participant.participantId === attackResult.attackerParticipantId,
+              (participant) => participant.participantId === attackResult.attackerParticipantId,
             )?.label
           : undefined,
         attackDefenderLabel: attackResult
           ? roundState.participants.find(
-              (participant) =>
-                participant.participantId === attackResult.defenderParticipantId,
+              (participant) => participant.participantId === attackResult.defenderParticipantId,
             )?.label
           : undefined,
         attackResult,
@@ -371,8 +357,7 @@ function buildTrackerCellFactsForRound(input: {
         feint: feintProposal
           ? {
               defenderLabel: roundState.participants.find(
-                (participant) =>
-                  participant.participantId === feintProposal.defenderParticipantId,
+                (participant) => participant.participantId === feintProposal.defenderParticipantId,
               )?.label,
               defenderPhase2Modifier: feintModifier,
               method: feintProposal.method,
@@ -401,8 +386,7 @@ function buildTrackerCellFactsForRound(input: {
                 (command) =>
                   command.type === "commit_phase_initiative_resolution" &&
                   command.roundNumber === roundState.roundNumber &&
-                  command.phase ===
-                    (step === "initiative_phase_1" ? "phase1" : "phase2"),
+                  command.phase === (step === "initiative_phase_1" ? "phase1" : "phase2"),
               )
             : undefined,
         initiativeRollRecorded: Boolean(initiative),
@@ -476,10 +460,7 @@ export function buildActiveCombatPresentation(input: {
   });
   const progressionTrackerIndex = buildCombatProgressionTrackerIndex(progression);
   const participantById = new Map(
-    input.roundState.participants.map((participant) => [
-      participant.participantId,
-      participant,
-    ]),
+    input.roundState.participants.map((participant) => [participant.participantId, participant]),
   );
   const displayParticipants = getCombatRoundManagerDisplayParticipantIds(
     input.roundState,
@@ -496,13 +477,16 @@ export function buildActiveCombatPresentation(input: {
   const projectedCurrentTasks = getCombatProgressionPresentationTasks(progression).filter(
     (task) => task.contributesToProgression,
   );
-  const currentAction =
-    buildCurrentActionPresentation({
-      encounterId: input.encounterId,
-      encounterRevision: input.encounterRevision,
-      progression,
-      viewer: { kind: "gm" },
-    }) ?? undefined;
+  const currentAction = measureCombatPerformanceStage(
+    "panel_current_task_action_presentation",
+    () =>
+      buildCurrentActionPresentation({
+        encounterId: input.encounterId,
+        encounterRevision: input.encounterRevision,
+        progression,
+        viewer: { kind: "gm" },
+      }) ?? undefined,
+  );
   const currentTask =
     projectedCurrentTasks.find((task) => task.id === currentAction?.taskId) ??
     projectedCurrentTasks.find(
@@ -664,10 +648,7 @@ export function composeCombatPresentationModel(input: {
 }): CombatPresentationModel {
   return {
     ...input,
-    timelineRoundNumbers: [
-      ...input.archived.roundNumbers,
-      input.active.roundState.roundNumber,
-    ],
+    timelineRoundNumbers: [...input.archived.roundNumbers, input.active.roundState.roundNumber],
     timelineRoundStates: [...input.archived.roundStates, input.active.roundState],
   };
 }

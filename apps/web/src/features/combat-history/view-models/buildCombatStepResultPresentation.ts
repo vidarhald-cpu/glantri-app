@@ -239,7 +239,10 @@ function calculationsForEvents(input: {
     input.viewer.kind === "gm"
       ? input.events
       : input.events.filter((event) => event.ownerParticipantId === input.participantId);
-  return buildCombatEventResultModel(visibleEvents).items.flatMap((item) => {
+  return buildCombatEventResultModel(visibleEvents, {
+    calculationStage: "panel_active_calculation_presentation",
+    resultStage: "panel_active_attack_parry_result_presentation",
+  }).items.flatMap((item) => {
     if (item.type === "observation") {
       const event = visibleEvents.find((candidate) => candidate.id === item.id);
       if (!event) return [];
@@ -262,9 +265,7 @@ function calculationsForEvents(input: {
                 collapsedByDefault: true as const,
                 id: `${item.id}:observer-calculation`,
                 lines: observerLines,
-                title: observerLabel
-                  ? `Observer — ${observerLabel}`
-                  : "Observer calculation",
+                title: observerLabel ? `Observer — ${observerLabel}` : "Observer calculation",
                 visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
               },
             ]
@@ -275,9 +276,7 @@ function calculationsForEvents(input: {
                 collapsedByDefault: true as const,
                 id: `${item.id}:opponent-calculation`,
                 lines: opponentLines,
-                title: opponentLabel
-                  ? `Opponent — ${opponentLabel}`
-                  : "Opponent calculation",
+                title: opponentLabel ? `Opponent — ${opponentLabel}` : "Opponent calculation",
                 visibility: "gm_full" as const,
               },
             ]
@@ -446,7 +445,8 @@ function supplementalEntries(input: {
     const existing = existingId
       ? input.events.find((candidate) => candidate.id === existingId)
       : undefined;
-    const score = Number(Boolean(event.facts.privateCalculation?.finalTotal)) +
+    const score =
+      Number(Boolean(event.facts.privateCalculation?.finalTotal)) +
       Number(Boolean(event.facts.gmReview?.targetTotal));
     const existingScore = existing
       ? Number(Boolean(existing.facts.privateCalculation?.finalTotal)) +
@@ -957,7 +957,10 @@ function supplementalEntries(input: {
       (event.type === "hit_location" || event.type === "critical") &&
       !loggedSourceIds.has(event.id)
     ) {
-      const model = buildCombatEventResultModel([event]).items[0];
+      const model = buildCombatEventResultModel([event], {
+        calculationStage: "panel_active_calculation_presentation",
+        resultStage: "panel_active_attack_parry_result_presentation",
+      }).items[0];
       if (!model) return [];
       return [
         {

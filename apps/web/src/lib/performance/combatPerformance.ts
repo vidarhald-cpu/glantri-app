@@ -11,6 +11,7 @@ type CombatPerformanceInteraction = {
   participantCount: number;
   records: CombatPerformanceRecord[];
   requestCount: number;
+  requestExpected: boolean;
   requestResolved: boolean;
   renderCount: number;
   roundNumber: number;
@@ -77,6 +78,7 @@ export function beginCombatPerformanceInteraction(input: {
   encounterId: string;
   expectedRevision?: string;
   participantCount: number;
+  requestExpected?: boolean;
   roundNumber: number;
 }): string | undefined {
   if (!isCombatPerformanceEnabled()) {
@@ -94,7 +96,8 @@ export function beginCombatPerformanceInteraction(input: {
     renderCount: 0,
     roundNumber: input.roundNumber,
     requestCount: 0,
-    requestResolved: false,
+    requestExpected: input.requestExpected !== false,
+    requestResolved: input.requestExpected === false,
     settleRequested: false,
     startedAt: combatPerformanceNow(),
   };
@@ -104,6 +107,22 @@ export function beginCombatPerformanceInteraction(input: {
     roundNumber: input.roundNumber,
   });
   return activeInteraction.correlationId;
+}
+
+export function measureCombatPerformanceStage<T>(
+  stage: string,
+  operation: () => T,
+  extra?: Record<string, boolean | number | string | undefined>,
+): T {
+  if (!isCombatPerformanceEnabled() || !activeInteraction) {
+    return operation();
+  }
+  const startedAt = combatPerformanceNow();
+  try {
+    return operation();
+  } finally {
+    writeRecord(stage, combatPerformanceNow() - startedAt, extra);
+  }
 }
 
 export function getCombatPerformanceRequestHeaders(): Record<string, string> | undefined {
@@ -223,20 +242,107 @@ function sumStage(records: CombatPerformanceRecord[], stage: string): number | u
   return Number(matching.reduce((total, record) => total + record.durationMs, 0).toFixed(2));
 }
 
+function compactCombatPerformanceStages(
+  records: CombatPerformanceRecord[],
+): Array<{
+  activePresentationReuseCount?: number;
+  activePresentationRebuildCount?: number;
+  archivedPresentationReuseCount?: number;
+  archivedPresentationRebuildCount?: number;
+  archivedRoundCount?: number;
+  command?: string;
+  encounterId?: string;
+  durationMs: number;
+  executionCount: number;
+  historicalExecutionCount?: number;
+  participantCount?: number;
+  revision?: string;
+  roundNumber?: number;
+  stage: string;
+  trackerBaseReuseCount?: number;
+  trackerBaseRebuildCount?: number;
+}> {
+  const grouped = new Map<string, CombatPerformanceRecord[]>();
+  for (const record of records) {
+    const matching = grouped.get(record.stage);
+    if (matching) {
+      matching.push(record);
+    } else {
+      grouped.set(record.stage, [record]);
+    }
+  }
+
+  return Array.from(grouped, ([stage, matching]) => {
+    const countBoolean = (property: string, expected: boolean) =>
+      matching.filter((record) => record[property] === expected).length;
+    const optionalCount = (count: number) => (count > 0 ? count : undefined);
+    const first = matching[0];
+    const last = matching[matching.length - 1];
+
+    return {
+      activePresentationReuseCount: optionalCount(
+        countBoolean("activePresentationRebuilt", false),
+      ),
+      activePresentationRebuildCount: optionalCount(
+        countBoolean("activePresentationRebuilt", true),
+      ),
+      archivedPresentationReuseCount: optionalCount(
+        countBoolean("archivedPresentationRebuilt", false),
+      ),
+      archivedPresentationRebuildCount: optionalCount(
+        countBoolean("archivedPresentationRebuilt", true),
+      ),
+      archivedRoundCount:
+        typeof last?.archivedRoundCount === "number" ? last.archivedRoundCount : undefined,
+      command: stage === "click" ? first?.command : undefined,
+      encounterId: stage === "click" ? first?.encounterId : undefined,
+      durationMs: Number(
+        matching.reduce((total, record) => total + record.durationMs, 0).toFixed(2),
+      ),
+      executionCount: matching.length,
+      historicalExecutionCount: optionalCount(
+        matching.filter((record) => record.historical === true).length,
+      ),
+      participantCount:
+        stage === "click" && typeof first?.participantCount === "number"
+          ? first.participantCount
+          : undefined,
+      revision:
+        stage === "click" && typeof first?.revision === "string" ? first.revision : undefined,
+      roundNumber:
+        stage === "click" && typeof first?.roundNumber === "number"
+          ? first.roundNumber
+          : undefined,
+      stage,
+      trackerBaseReuseCount: optionalCount(countBoolean("trackerBaseRebuilt", false)),
+      trackerBaseRebuildCount: optionalCount(countBoolean("trackerBaseRebuilt", true)),
+    };
+  });
+}
+
 function flushCombatPerformanceCapture(interaction: CombatPerformanceInteraction): void {
   const requests = interaction.records.filter((record) => record.stage === "request_start");
-  const network = interaction.records.find((record) => record.stage === "network_and_parse");
-  const clickToSettled = interaction.records.find(
-    (record) => record.stage === "click_to_settled",
+  const requestResults = interaction.records.filter(
+    (record) => record.stage === "network_and_parse",
   );
+  const network = interaction.records.find((record) => record.stage === "network_and_parse");
+  const clickToSettled = interaction.records.find((record) => record.stage === "click_to_settled");
+  const firstFollowUpIndex = interaction.requestExpected ? 1 : 0;
   const payload = {
     client: {
       clickToSettledMs: clickToSettled?.durationMs,
-      followUpRequests: requests.slice(1).map((request) => ({
-        method: typeof request.method === "string" ? request.method : undefined,
-        path: typeof request.path === "string" ? request.path : undefined,
-        startedAtMs: request.durationMs,
-      })),
+      followUpRequests: requests.slice(firstFollowUpIndex).map((request, index) => {
+        const result = requestResults[index + firstFollowUpIndex];
+        return {
+          durationMs: result?.durationMs,
+          method: typeof request.method === "string" ? request.method : undefined,
+          path: typeof request.path === "string" ? request.path : undefined,
+          responseBytes:
+            result && typeof result.responseBytes === "number" ? result.responseBytes : undefined,
+          startedAtMs: request.durationMs,
+          status: result && typeof result.status === "number" ? result.status : undefined,
+        };
+      }),
       networkMs:
         network && typeof network.parseDurationMs === "number"
           ? Number((network.durationMs - network.parseDurationMs).toFixed(2))
@@ -252,15 +358,13 @@ function flushCombatPerformanceCapture(interaction: CombatPerformanceInteraction
         network && typeof network.parseDurationMs === "number"
           ? network.parseDurationMs
           : undefined,
-      stages: interaction.records,
+      stages: compactCombatPerformanceStages(interaction.records),
       trackerBuildMs: sumStage(interaction.records, "tracker_view_model"),
     },
   };
 
   void fetch(
-    `${API_BASE_URL}/internal/combat-performance/${encodeURIComponent(
-      interaction.correlationId,
-    )}`,
+    `${API_BASE_URL}/internal/combat-performance/${encodeURIComponent(interaction.correlationId)}`,
     {
       body: JSON.stringify(payload),
       credentials: "include",

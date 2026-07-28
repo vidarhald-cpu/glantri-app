@@ -8,7 +8,10 @@ export function CombatEventResultList(input: {
   events: readonly ProjectedCombatHistoryEvent[];
   title?: string;
 }) {
-  const model = buildCombatEventResultModel(input.events);
+  const model = buildCombatEventResultModel(input.events, {
+    calculationStage: "panel_historical_calculation_presentation",
+    resultStage: "panel_historical_attack_parry_result_presentation",
+  });
   const [expandedCalculationIds, setExpandedCalculationIds] = React.useState<Set<string>>(
     () => new Set(),
   );
