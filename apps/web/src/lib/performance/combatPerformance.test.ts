@@ -8,6 +8,7 @@ import {
   measureCombatPerformanceStage,
   recordCombatPerformanceRequestEnd,
   recordCombatPerformanceRequestStart,
+  recordCombatPerformanceStage,
   resetCombatPerformanceForTests,
   settleCombatPerformanceInteraction,
 } from "./combatPerformance";
@@ -121,6 +122,12 @@ describe("browser combat performance instrumentation", () => {
     });
     measureCombatPerformanceStage("panel_phase_summary_presentation", () => undefined);
     measureCombatPerformanceStage("panel_phase_summary_presentation", () => undefined);
+    recordCombatPerformanceStage("panel_active_inspector_presentation_cache", 0.1, {
+      activeInspectorRebuilt: true,
+    });
+    recordCombatPerformanceStage("panel_active_inspector_presentation_cache", 0.01, {
+      activeInspectorRebuilt: false,
+    });
     recordCombatPerformanceRequestEnd({
       parseDurationMs: 1,
       path: "/encounters/encounter-3/combat-round/modifier-review",
@@ -145,6 +152,12 @@ describe("browser combat performance instrumentation", () => {
           expect.objectContaining({
             executionCount: 2,
             stage: "panel_phase_summary_presentation",
+          }),
+          expect.objectContaining({
+            activeInspectorRebuildCount: 1,
+            activeInspectorReuseCount: 1,
+            executionCount: 2,
+            stage: "panel_active_inspector_presentation_cache",
           }),
         ]),
       },

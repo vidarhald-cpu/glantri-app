@@ -64,6 +64,10 @@ The main stages are:
   `panel_historical_calculation_presentation`,
   `panel_historical_snapshot_resolution`, `panel_combat_log_presentation`, and
   `panel_distance_table_presentation`;
+- Active Inspector Presentation cache
+  `panel_active_inspector_presentation_cache`, with per-capture rebuild and
+  reuse counts. Its duration contains a submodel builder on a miss, so it
+  overlaps the corresponding named builder stage and must not be added to it;
 - API `authentication_complete`, `workspace_authorization`;
 - API `repository_read_full_encounter`, `repository_read_active`, `repository_read_history_source`;
 - API `active_state_materialization`, `descriptor_projection_and_authorization`;

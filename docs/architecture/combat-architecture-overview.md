@@ -409,8 +409,14 @@ GM Combat presentation is partitioned by ownership identity:
    roster, so an active revision, selection change, or pending control cannot
    rebuild it.
 2. **Active Presentation** owns the current round, GM progression projection,
-   current task/action, current tracker cells, and other revision-bound live
-   facts. Its identity is encounter plus accepted canonical revision.
+   current task/action, current tracker cells, combat log, and revision-owned
+   active inspector candidates. The inspector owner retains stable participant
+   contexts, modifier rows, equipment/loadout summaries, phase summaries,
+   attack/parry resolution, calculations, current results, and distance
+   presentation. Its identity is encounter plus accepted canonical revision.
+   Slow-changing character/content dependencies are explicit submodel
+   dependencies; they can replace only the affected candidate without making
+   selection or pending state an active-presentation identity.
 3. **Selection Overlay** owns only the selected round, participant, and tracker
    facet. It selects cached live or historical presentation; it does not project
    either source again.
@@ -420,7 +426,9 @@ GM Combat presentation is partitioned by ownership identity:
 `CombatRoundManagerPanel` composes these layers through one
 `CombatPresentationModel`. A cached archived tracker cell remains the same object
 when active state changes; only the bounded active tracker model is regenerated
-and composed with it. Current Action is sourced only from Active Presentation.
+and composed with it. Selection performs keyed lookup against stable active
+inspector candidates rather than reconstructing their canonical facts. Current
+Action is sourced only from Active Presentation.
 This identity boundary is a correctness rule first and a performance boundary
 second; component-level memoization must not create competing view models.
 

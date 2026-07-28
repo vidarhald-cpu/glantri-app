@@ -105,6 +105,28 @@ describe("combat presentation model layers", () => {
     expect(buildSecond).toHaveBeenCalledTimes(1);
   });
 
+  it("replaces the active inspector owner with the active revision", () => {
+    const cache = createCombatPresentationLayerCache();
+    const firstInspectorPresentation = { resolve: vi.fn() };
+    const secondInspectorPresentation = { resolve: vi.fn() };
+    const first = cache.resolveActive("revision-1", () => ({
+      ...active("revision-1"),
+      inspectorPresentation: firstInspectorPresentation,
+    }));
+    const same = cache.resolveActive("revision-1", () => ({
+      ...active("unexpected"),
+      inspectorPresentation: secondInspectorPresentation,
+    }));
+    const second = cache.resolveActive("revision-2", () => ({
+      ...active("revision-2"),
+      inspectorPresentation: secondInspectorPresentation,
+    }));
+
+    expect(same.inspectorPresentation).toBe(firstInspectorPresentation);
+    expect(second.inspectorPresentation).toBe(secondInspectorPresentation);
+    expect(second.inspectorPresentation).not.toBe(first.inspectorPresentation);
+  });
+
   it("rebuilds selection independently and only overlays the selected tracker cell", () => {
     const cache = createCombatPresentationLayerCache();
     const activeLayer = cache.resolveActive("revision-1", () => active("revision-1"));

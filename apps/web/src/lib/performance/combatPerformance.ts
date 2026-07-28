@@ -242,9 +242,9 @@ function sumStage(records: CombatPerformanceRecord[], stage: string): number | u
   return Number(matching.reduce((total, record) => total + record.durationMs, 0).toFixed(2));
 }
 
-function compactCombatPerformanceStages(
-  records: CombatPerformanceRecord[],
-): Array<{
+function compactCombatPerformanceStages(records: CombatPerformanceRecord[]): Array<{
+  activeInspectorReuseCount?: number;
+  activeInspectorRebuildCount?: number;
   activePresentationReuseCount?: number;
   activePresentationRebuildCount?: number;
   archivedPresentationReuseCount?: number;
@@ -280,9 +280,9 @@ function compactCombatPerformanceStages(
     const last = matching[matching.length - 1];
 
     return {
-      activePresentationReuseCount: optionalCount(
-        countBoolean("activePresentationRebuilt", false),
-      ),
+      activeInspectorReuseCount: optionalCount(countBoolean("activeInspectorRebuilt", false)),
+      activeInspectorRebuildCount: optionalCount(countBoolean("activeInspectorRebuilt", true)),
+      activePresentationReuseCount: optionalCount(countBoolean("activePresentationRebuilt", false)),
       activePresentationRebuildCount: optionalCount(
         countBoolean("activePresentationRebuilt", true),
       ),
@@ -310,9 +310,7 @@ function compactCombatPerformanceStages(
       revision:
         stage === "click" && typeof first?.revision === "string" ? first.revision : undefined,
       roundNumber:
-        stage === "click" && typeof first?.roundNumber === "number"
-          ? first.roundNumber
-          : undefined,
+        stage === "click" && typeof first?.roundNumber === "number" ? first.roundNumber : undefined,
       stage,
       trackerBaseReuseCount: optionalCount(countBoolean("trackerBaseRebuilt", false)),
       trackerBaseRebuildCount: optionalCount(countBoolean("trackerBaseRebuilt", true)),

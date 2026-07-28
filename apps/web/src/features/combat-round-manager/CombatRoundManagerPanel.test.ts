@@ -827,9 +827,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("snapshotAttackStats: historicalPhasePanel?.attackSummary");
     expect(source).toContain("snapshotDefenseStats: historicalPhasePanel?.defenseSummary");
     expect(source).toContain("liveModifiers: inspectorIsHistorical");
-    expect(source).toContain("? undefined\n                        : phaseKey");
-    expect(source).toContain(
-      "attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats",
+    expect(source).toMatch(
+      /liveModifiers:\s*inspectorIsHistorical\s*\?\s*undefined\s*:\s*phaseKey/,
+    );
+    expect(source).toMatch(
+      /attackStats:\s*inspectorIsHistorical\s*\?\s*null\s*:\s*phaseLoadoutSummary\.attackStats/,
     );
     expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
     expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows ?? []");

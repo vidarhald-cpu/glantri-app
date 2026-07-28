@@ -31,6 +31,11 @@ import {
 } from "@/features/combat-history";
 import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
 import {
+  buildActiveCombatLogPresentation,
+  createActiveInspectorPresentationStore,
+  type ActiveInspectorPresentationStore,
+} from "./activeInspectorPresentation";
+import {
   buildCombatRoundLiveInspectorContext,
   getCombatRoundLiveInspectorSelection,
   getCombatRoundManagerDisplayParticipantIds,
@@ -49,11 +54,14 @@ export interface ArchivedCombatPresentation {
 }
 
 export interface ActiveCombatPresentation {
+  readonly combatLog: ReturnType<typeof buildActiveCombatLogPresentation>["combatLog"];
   readonly currentAction?: CurrentActionPresentation;
   readonly currentTask?: CombatProgressionPresentationTask;
   readonly currentTaskSelection?: CombatRoundSelectionTarget;
   readonly displayParticipants: readonly CombatRoundParticipant[];
+  readonly gmEvents: ReturnType<typeof buildActiveCombatLogPresentation>["gmEvents"];
   readonly identity: string;
+  readonly inspectorPresentation: ActiveInspectorPresentationStore;
   readonly liveInspectorContext: ReturnType<typeof buildCombatRoundLiveInspectorContext>;
   readonly progression: CombatProgressionPresentationProjection;
   readonly progressionProjection: ReturnType<typeof buildCombatProgressionProjection>;
@@ -447,12 +455,22 @@ export function buildArchivedCombatPresentation(input: {
 }
 
 export function buildActiveCombatPresentation(input: {
+  combatLogSourceRevision?: string;
   encounterId: string;
   encounterRevision: string;
   participantRows?: readonly CombatPresentationParticipantRow[];
   resolveStepStatus: ResolveStepStatus;
   roundState: CombatRoundState;
 }): ActiveCombatPresentation {
+  const activeCombatLogPresentation = measureCombatPerformanceStage(
+    "panel_combat_log_presentation",
+    () =>
+      buildActiveCombatLogPresentation({
+        encounterId: input.encounterId,
+        encounterRevision: input.combatLogSourceRevision ?? input.encounterRevision,
+        roundState: input.roundState,
+      }),
+  );
   const progressionProjection = buildCombatProgressionProjection(input.roundState);
   const progression = projectCombatProgressionPresentation({
     projection: progressionProjection,
@@ -508,11 +526,14 @@ export function buildActiveCombatPresentation(input: {
   });
 
   return {
+    combatLog: activeCombatLogPresentation.combatLog,
     currentAction,
     currentTask,
     currentTaskSelection,
     displayParticipants,
+    gmEvents: activeCombatLogPresentation.gmEvents,
     identity: `${input.encounterId}:${input.encounterRevision}`,
+    inspectorPresentation: createActiveInspectorPresentationStore(),
     liveInspectorContext,
     progression,
     progressionProjection,

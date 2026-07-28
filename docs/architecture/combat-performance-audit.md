@@ -744,3 +744,38 @@ This fixture verifies identity reuse, not the reported authenticated 11.6-second
 production-path panel build. A comparable real encounter replay is still required
 to measure click-to-settled, render count, and the absolute reduction after this
 slice. Compatibility `EncounterSession` reads are intentionally unchanged.
+
+## Combat Presentation Model — Slice 2A
+
+Active inspector presentation is now owned by the accepted active revision.
+The active layer owns the GM combat log and a bounded, dependency-checked store
+of participant inspector candidates: inspector/result ledgers, declaration
+defaults, combat modifiers, equipment/loadout summaries, phase summaries,
+attack/parry resolution, calculations, initiative calculation, and distance
+presentation. Selection chooses a candidate by identity. Pending controls,
+workflow choice, local errors, and JSX remain panel concerns and are not cache
+dependencies.
+
+An authenticated replay used the same three-participant Round 5 encounter, four
+archived rounds, and canonical `roll_adjust_distance` command as the accepted
+Slice 1 baseline. The first post-change trace retained ten panel executions and
+measured 603.4 ms of non-tracker work, a conservative 26.3% reduction. A
+controlled trace taken immediately after revision polling measured:
+
+| Stage | Slice 1 | Slice 2A | Change |
+| --- | ---: | ---: | ---: |
+| Click to settled | 1,472.0 ms | 962.1 ms | -34.6% |
+| Total panel work | 1,147.2 ms | 680.0 ms | -40.7% |
+| Tracker work | 328.6 ms | 301.7 ms | -8.2% |
+| Non-tracker panel work | 818.6 ms | 378.3 ms | -53.8% |
+| React commits | 5 / 65.9 ms | 3 / 40.1 ms | -40.0% / -39.2% |
+| API total | 347.75 ms | 334.50 ms | -3.8% |
+| Network | 350.5 ms | 337.0 ms | -3.9% |
+| Mutation response | 71,023 bytes | 71,035 bytes | effectively flat |
+
+The controlled capture recorded one active-presentation rebuild, five reuses,
+39 active-inspector submodel rebuilds, 35 submodel reuses, no archived
+presentation rebuild, one request, and no follow-up request. The response and
+server path are unchanged; the measured reduction comes from presentation
+identity reuse. Compatibility `EncounterSession` reads, tracker construction,
+historical inspector ownership, and response contracts remain untouched.
