@@ -1163,6 +1163,9 @@ describe("CombatRoundManagerPanel performance fixture", () => {
       combatPanelViewModelMs: number;
       reactCommitMs: number;
       roundNumber: number;
+      transientPanelViewModelMs: number;
+      transientReactCommitMs: number;
+      transientTrackerViewModelMs: number;
       trackerCellCount: number;
       trackerViewModelMs: number;
     }> = [];
@@ -1171,6 +1174,9 @@ describe("CombatRoundManagerPanel performance fixture", () => {
       const samples: Array<{
         combatPanelViewModelMs: number;
         reactCommitMs: number;
+        transientPanelViewModelMs: number;
+        transientReactCommitMs: number;
+        transientTrackerViewModelMs: number;
         trackerCellCount: number;
         trackerViewModelMs: number;
       }> = [];
@@ -1210,9 +1216,27 @@ describe("CombatRoundManagerPanel performance fixture", () => {
         const tracker = records.find((record) => record.stage === "tracker_view_model");
         const panel = records.find((record) => record.stage === "combat_panel_view_model");
         const commit = records.find((record) => record.stage === "react_commit");
+        info.mockClear();
+        fireEvent.change(screen.getByLabelText("Workflow"), {
+          target: { value: "complete_remaining" },
+        });
+        const transientRecords = info.mock.calls.flatMap((call) => {
+          const record = call[1];
+          return record && typeof record === "object" ? [record as Record<string, unknown>] : [];
+        });
+        const transientTracker = transientRecords.find(
+          (record) => record.stage === "tracker_view_model",
+        );
+        const transientPanel = transientRecords.find(
+          (record) => record.stage === "combat_panel_view_model",
+        );
+        const transientCommit = transientRecords.find((record) => record.stage === "react_commit");
         samples.push({
           combatPanelViewModelMs: Number(panel?.durationMs ?? 0),
           reactCommitMs: Number(commit?.durationMs ?? 0),
+          transientPanelViewModelMs: Number(transientPanel?.durationMs ?? 0),
+          transientReactCommitMs: Number(transientCommit?.durationMs ?? 0),
+          transientTrackerViewModelMs: Number(transientTracker?.durationMs ?? 0),
           trackerCellCount: Number(tracker?.trackerCellCount ?? 0),
           trackerViewModelMs: Number(tracker?.durationMs ?? 0),
         });
@@ -1225,6 +1249,13 @@ describe("CombatRoundManagerPanel performance fixture", () => {
         combatPanelViewModelMs: median(samples.map((sample) => sample.combatPanelViewModelMs)),
         reactCommitMs: median(samples.map((sample) => sample.reactCommitMs)),
         roundNumber: archivedRoundCount + 1,
+        transientPanelViewModelMs: median(
+          samples.map((sample) => sample.transientPanelViewModelMs),
+        ),
+        transientReactCommitMs: median(samples.map((sample) => sample.transientReactCommitMs)),
+        transientTrackerViewModelMs: median(
+          samples.map((sample) => sample.transientTrackerViewModelMs),
+        ),
         trackerCellCount: median(samples.map((sample) => sample.trackerCellCount)),
         trackerViewModelMs: median(samples.map((sample) => sample.trackerViewModelMs)),
       });

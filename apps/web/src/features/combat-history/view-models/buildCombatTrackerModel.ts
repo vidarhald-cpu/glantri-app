@@ -339,13 +339,15 @@ function cellDetail(input: CombatTrackerCellFacts): string {
 }
 
 export function buildCombatTrackerModel(input: {
+  activeRoundNumber?: number;
   cellFacts: readonly CombatTrackerCellFacts[];
   rounds: readonly CombatTrackerRoundView[];
   rows: readonly CombatTrackerRowView[];
   steps: readonly CombatRoundStep[];
 }): CombatTrackerModel {
   const cells: Record<string, CombatTrackerCellView> = {};
-  const activeRoundNumber = Math.max(...input.rounds.map((round) => round.roundNumber));
+  const activeRoundNumber =
+    input.activeRoundNumber ?? Math.max(...input.rounds.map((round) => round.roundNumber));
   for (const facts of input.cellFacts) {
     const markerKind = getCombatTrackerCellMarkerKind(facts);
     const marker: CombatTrackerFacetPresentation["marker"] =

@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "CombatRoundManagerPanel.tsx");
 const combatHistoryPath = join(dirname(fileURLToPath(import.meta.url)), "../combat-history");
+const presentationModelPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "view-models/combatPresentationModel.ts",
+);
 
 function readSource(): string {
   return [
     sourcePath,
+    presentationModelPath,
     join(combatHistoryPath, "components/CombatTracker.tsx"),
     join(combatHistoryPath, "view-models/buildCombatTrackerModel.ts"),
     join(combatHistoryPath, "view-models/combatTrackerTaskPresentation.ts"),
@@ -92,7 +97,7 @@ describe("CombatRoundManagerPanel", () => {
   it("keeps Combat Log selection independent from live current-step results", () => {
     const source = readPanelSource();
     const handlerStart = source.indexOf("const handleCombatLogSelection = useCallback");
-    const handlerEnd = source.indexOf("const selectedTimelineRoundState", handlerStart);
+    const handlerEnd = source.indexOf("const combatDistanceRows", handlerStart);
     const handler = source.slice(handlerStart, handlerEnd);
 
     expect(handlerStart).toBeGreaterThan(-1);
@@ -134,19 +139,23 @@ describe("CombatRoundManagerPanel", () => {
 
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {
     const source = readSource();
+    const panelSource = readPanelSource();
 
     expect(source).toContain("buildCombatTrackerModel({");
-    expect(source).toContain("buildCombatProgressionProjection(roundState)");
-    expect(source).toContain("buildCombatProgressionTrackerIndex(combatProgressionPresentation)");
-    expect(source).toContain(
-      "renderedInspectionSelection.participantId === timelineParticipant.participantId",
+    expect(source).toContain("buildActiveCombatPresentation");
+    expect(source).toContain("buildArchivedCombatPresentation");
+    expect(source).toContain("buildCombatSelectionOverlay");
+    expect(source).toContain("buildCombatPendingOverlay");
+    expect(source).toContain("createCombatPresentationLayerCache");
+    expect(source).toContain("applyCombatTrackerSelectionOverlay");
+    expect(source).toContain("buildCombatProgressionProjection(input.roundState)");
+    expect(source).toContain("buildCombatProgressionTrackerIndex(progression)");
+    expect(panelSource).toContain("const combatPresentation = composeCombatPresentationModel");
+    expect(panelSource).toContain(
+      "const currentActionPresentation = combatPresentation.active.currentAction",
     );
-    expect(source).not.toContain(
-      "inspectionSelection.participantId === timelineParticipant.participantId",
-    );
-    expect(source.match(/buildCombatProgressionProjection\(roundState\)/g)).toHaveLength(1);
-    expect(source).toContain(
-      "const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult",
+    expect(panelSource).toContain(
+      "const selectedTimelineRoundState = combatPresentation.selection.selectedRoundState",
     );
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("model={trackerModel}");
@@ -156,7 +165,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("activeCurrentCellRef.current = node");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
-    expect(source).toContain("const trackerPhaseResolutionResult = trackerSnapshot");
+    expect(source).toContain("const phaseResolutionResult = snapshot");
     expect(source).not.toContain("commitCurrentStep(participant.participantId");
   });
 
@@ -792,7 +801,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getAdjacentCombatRoundTimelineStepSelection");
     expect(source).toContain("getAdjacentCombatRoundTimelineParticipantSelection");
     expect(source).toContain("getParticipantIdsForTimelineRound");
-    expect(source).toContain("roundNumbers: timelineRoundNumbers");
+    expect(source).toContain("roundNumbers: [...timelineRoundNumbers]");
     expect(source).toContain("selectedRoundNumber");
   });
 
@@ -887,7 +896,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const projectedCurrentTasks = getCombatProgressionPresentationTasks");
-    expect(source).toContain("buildCombatRoundLiveInspectorContext(projectedCurrentTask)");
+    expect(source).toContain("buildCombatRoundLiveInspectorContext(currentTask)");
     expect(source).toContain("getCombatRoundLiveInspectorSelection({");
     expect(source).toContain("function selectCurrentTask()");
     expect(source).toContain("manualSelectionRef.current = undefined");
@@ -1048,7 +1057,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const [inspectionSelection, setInspectionSelection]");
-    expect(source).toContain("combatProgressionTrackerIndex.byCellKey");
+    expect(source).toContain("input.progressionTrackerIndex?.byCellKey[cellKey]");
     expect(source).toContain("inspectorSelectionIsCurrentProgression");
     expect(source).toContain(
       'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',

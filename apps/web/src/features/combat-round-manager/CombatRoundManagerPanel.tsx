@@ -51,9 +51,7 @@ import type {
 } from "@glantri/domain";
 import {
   COMBAT_ROUND_STEP_LABELS,
-  COMBAT_ROUND_STEPS,
   buildCombatRoundPhaseResolutionResult,
-  buildCombatProgressionProjection,
   buildLiveCombatModifierContributionProjection,
   buildCombatLogProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
@@ -87,7 +85,6 @@ import {
   getCombatRoundPhaseResolutionStatus,
   getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeRanks,
-  getCombatRoundInitiativeTotal,
   getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
@@ -102,7 +99,6 @@ import {
   hasCombatRoundCombatExperienceRoll,
   getWeaponPreferredDistances,
   projectCombatHistoryEvent,
-  projectCombatProgressionPresentation,
   reviewCombatRoundDamageResult,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -113,12 +109,8 @@ import {
 } from "@glantri/rules-engine";
 
 import {
-  buildCombatTrackerModel,
-  buildCombatProgressionTrackerIndex,
   buildCombatStepResultPresentation,
-  buildCombatTrackerCellKey,
   buildConciseDodgeCalculationRows,
-  buildCurrentActionPresentation,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatLog,
@@ -126,14 +118,12 @@ import {
   CombatTracker,
   createDefaultCombatLogSelection,
   formatSignedCombatModifier,
-  getCombatProgressionPresentationTasks,
   labelCurrentActionAsDeclarationEdit,
   reconcileCombatLogSelection,
   resolveCombatTaskCommandContext,
   resolveCombatHistoryPanelSnapshot,
   selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
-  type CombatTrackerCellFacts,
   type CombatLogEventSelection,
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
@@ -267,11 +257,7 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
-  buildCombatRoundLiveInspectorContext,
   getCombatRoundManagerInspectionSelection,
-  getCombatRoundManagerDisplayParticipantIds,
-  getCombatRoundLiveInspectorSelection,
-  getCombatRoundRenderedInspectorSelection,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isCombatRoundInspectionSelectionLive,
@@ -293,6 +279,17 @@ import {
   type CombatRoundTimelineScrollMode,
 } from "./combatRoundTimelineScroll";
 import { buildCombatBoundaryTransitionAction } from "./combatBoundaryTransitionAction";
+import {
+  applyCombatTrackerSelectionOverlay,
+  buildActiveCombatPresentation,
+  buildArchivedCombatPresentation,
+  buildArchivedCombatPresentationIdentity,
+  buildCombatPendingOverlay,
+  buildCombatSelectionOverlay,
+  buildCombatTrackerBasePresentation,
+  composeCombatPresentationModel,
+  createCombatPresentationLayerCache,
+} from "./view-models/combatPresentationModel";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -3829,6 +3826,12 @@ export default function CombatRoundManagerPanel({
   scenarioParticipants = [],
 }: CombatRoundManagerPanelProps) {
   const panelViewModelStartedAt = combatPerformanceNow();
+  const presentationLayerCacheRef = useRef<ReturnType<
+    typeof createCombatPresentationLayerCache
+  > | null>(null);
+  if (!presentationLayerCacheRef.current) {
+    presentationLayerCacheRef.current = createCombatPresentationLayerCache();
+  }
   const initialRoundState = useMemo(() => initializeCombatRoundState({ encounter }), [encounter]);
   const initialInspectionSelection = useMemo(
     () =>
@@ -4046,29 +4049,137 @@ export default function CombatRoundManagerPanel({
     () =>
       scenarioParticipants.map(
         (participant) => scenarioParticipantOverrides[participant.id] ?? participant,
-      ),
+    ),
     [scenarioParticipantOverrides, scenarioParticipants],
   );
-  const combatProgressionProjection = useMemo(
-    () => buildCombatProgressionProjection(roundState),
-    [roundState],
+  const descriptorRevision = getCombatRoundDescriptorRevision({
+    acceptedEncounter: {
+      encounterId: encounter.id,
+      encounterRevision: encounter.updatedAt,
+    },
+    currentView: roundView,
+  });
+  const trackerProjectionStartedAt = combatPerformanceNow();
+  const activePresentationIdentity = `${roundView.encounterId}:${
+    descriptorRevision ?? roundView.encounterRevision ?? encounter.updatedAt
+  }`;
+  let activePresentationRebuilt = false;
+  const activePresentation = presentationLayerCacheRef.current.resolveActive(
+    activePresentationIdentity,
+    () => {
+      activePresentationRebuilt = true;
+      return buildActiveCombatPresentation({
+        encounterId: roundView.encounterId,
+        encounterRevision:
+          descriptorRevision ?? roundView.encounterRevision ?? encounter.updatedAt,
+        resolveStepStatus: getParticipantDeclarationStatus,
+        roundState,
+      });
+    },
   );
-  const combatProgressionPresentation = useMemo(
+  const presentationParticipantRows = activePresentation.displayParticipants.map(
+    (participant) => ({
+      label: participant.label,
+      participantId: participant.participantId,
+    }),
+  );
+  const archivedPresentationIdentity = buildArchivedCombatPresentationIdentity({
+    participantRows: presentationParticipantRows,
+    roundState,
+  });
+  let archivedPresentationRebuilt = false;
+  const archivedPresentation = presentationLayerCacheRef.current.resolveArchived(
+    archivedPresentationIdentity,
+    () => {
+      archivedPresentationRebuilt = true;
+      return buildArchivedCombatPresentation({
+        identity: archivedPresentationIdentity,
+        participantRows: presentationParticipantRows,
+        resolveStepStatus: getParticipantDeclarationStatus,
+        roundState,
+      });
+    },
+  );
+  const selectionOverlayIdentity = [
+    activePresentation.identity,
+    archivedPresentation.identity,
+    selectedRoundNumber,
+    inspectionSelection.participantId,
+    inspectionSelection.step,
+    manualSelectionRef.current?.participantId,
+    manualSelectionRef.current?.step,
+    pendingSelectionRef.current?.participantId,
+    pendingSelectionRef.current?.step,
+  ].join(":");
+  const selectionOverlay = presentationLayerCacheRef.current.resolveSelection(
+    selectionOverlayIdentity,
     () =>
-      projectCombatProgressionPresentation({
-        projection: combatProgressionProjection,
-        viewer: { kind: "gm" },
+      buildCombatSelectionOverlay({
+        active: activePresentation,
+        archived: archivedPresentation,
+        localSelection: inspectionSelection,
+        manualSelection: manualSelectionRef.current,
+        pendingSelection: pendingSelectionRef.current,
+        selectedRoundNumber,
       }),
-    [combatProgressionProjection],
   );
-  const combatProgressionTrackerIndex = useMemo(
-    () => buildCombatProgressionTrackerIndex(combatProgressionPresentation),
-    [combatProgressionPresentation],
+  const pendingOverlay = buildCombatPendingOverlay({
+    error: saveError,
+    saving,
+    workflow: inspectorCurrentActionOutcomeSelection,
+  });
+  let trackerBaseRebuilt = false;
+  const trackerBasePresentation = presentationLayerCacheRef.current.resolveTrackerBase(
+    `${archivedPresentation.identity}:${activePresentation.identity}`,
+    () => {
+      trackerBaseRebuilt = true;
+      return buildCombatTrackerBasePresentation({
+        active: activePresentation,
+        archived: archivedPresentation,
+      });
+    },
   );
-  const timelineRoundStates = useMemo(
-    () => getCombatRoundTimelineRoundStates(roundState),
-    [roundState],
+  const trackerModel = presentationLayerCacheRef.current.resolveTracker(
+    `${archivedPresentation.identity}:${activePresentation.identity}:${selectionOverlay.identity}`,
+    () =>
+      applyCombatTrackerSelectionOverlay({
+        base: trackerBasePresentation,
+        selection: selectionOverlay,
+      }),
   );
+  const combatPresentation = composeCombatPresentationModel({
+    active: activePresentation,
+    archived: archivedPresentation,
+    pending: pendingOverlay,
+    selection: selectionOverlay,
+    tracker: trackerModel,
+  });
+  recordCombatPerformanceStage(
+    "tracker_view_model",
+    combatPerformanceNow() - trackerProjectionStartedAt,
+    {
+      activePresentationRebuilt,
+      archivedPresentationRebuilt,
+      archivedRoundCount: archivedPresentation.roundStates.length,
+      trackerBaseRebuilt,
+      trackerCellCount:
+        archivedPresentation.trackerCellFacts.length +
+        activePresentation.trackerCellFacts.length,
+    },
+  );
+  const combatProgressionProjection = combatPresentation.active.progressionProjection;
+  const combatProgressionPresentation = combatPresentation.active.progression;
+  const timelineRoundStates = combatPresentation.timelineRoundStates;
+  const selectedTimelineRoundState = combatPresentation.selection.selectedRoundState;
+  const selectedRoundIsActive = combatPresentation.selection.selectedRoundIsActive;
+  const displayParticipants = combatPresentation.active.displayParticipants;
+  const projectedCurrentTasks = combatPresentation.active.projectedCurrentTasks;
+  const currentActionPresentation = combatPresentation.active.currentAction;
+  const liveInspectorContext = combatPresentation.active.liveInspectorContext;
+  const currentTaskSelection = combatPresentation.active.currentTaskSelection;
+  const renderedInspectionSelection =
+    combatPresentation.selection.renderedInspectionSelection;
+  const timelineRoundNumbers = combatPresentation.timelineRoundNumbers;
   const combatLogProjection = useMemo(
     () =>
       buildCombatLogProjection({
@@ -4097,21 +4208,6 @@ export default function CombatRoundManagerPanel({
     },
     [combatLogProjection],
   );
-  const selectedTimelineRoundState =
-    timelineRoundStates.find((candidate) => candidate.roundNumber === selectedRoundNumber) ??
-    roundState;
-  const selectedRoundIsActive = selectedTimelineRoundState.roundNumber === roundState.roundNumber;
-  const displayParticipants = useMemo(() => {
-    const participantById = new Map(
-      roundState.participants.map((participant) => [participant.participantId, participant]),
-    );
-
-    return getCombatRoundManagerDisplayParticipantIds(roundState, combatProgressionPresentation)
-      .map((participantId) => participantById.get(participantId))
-      .filter((participant): participant is CombatRoundState["participants"][number] =>
-        Boolean(participant),
-      );
-  }, [combatProgressionPresentation, roundState]);
   const combatDistanceRows = useMemo(
     () =>
       buildCombatDistanceTableRows({
@@ -4136,20 +4232,9 @@ export default function CombatRoundManagerPanel({
       }),
     [combatDistanceRows, distanceDrafts],
   );
-  const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
-  const projectedCurrentTasks = getCombatProgressionPresentationTasks(
-    combatProgressionPresentation,
-  ).filter((task) => task.contributesToProgression);
   const projectedBoundaryTransitionTask = projectedCurrentTasks.find(
     (task) => task.kind === "gm_advance_boundary" && task.state === "executable" && task.transition,
   );
-  const descriptorRevision = getCombatRoundDescriptorRevision({
-    acceptedEncounter: {
-      encounterId: encounter.id,
-      encounterRevision: encounter.updatedAt,
-    },
-    currentView: roundView,
-  });
   const projectedBoundaryTransitionAction = buildCombatBoundaryTransitionAction({
     encounterId: roundView.encounterId,
     encounterRevision: descriptorRevision,
@@ -4173,27 +4258,6 @@ export default function CombatRoundManagerPanel({
         "adjust_distance_commit",
       ].includes(task.kind) && task.state === "executable",
   );
-  const currentActionPresentation = useMemo(
-    () =>
-      buildCurrentActionPresentation({
-        encounterId: roundView.encounterId,
-        encounterRevision: descriptorRevision,
-        progression: combatProgressionPresentation,
-        viewer: { kind: "gm" },
-      }),
-    [combatProgressionPresentation, descriptorRevision, roundView.encounterId],
-  );
-  const projectedCurrentTask =
-    projectedCurrentTasks.find((task) => task.id === currentActionPresentation?.taskId) ??
-    projectedCurrentTasks.find(
-      (task) => task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
-    ) ??
-    projectedCurrentTasks[0];
-  const liveInspectorContext = buildCombatRoundLiveInspectorContext(projectedCurrentTask);
-  const currentTaskSelection = getCombatRoundLiveInspectorSelection({
-    context: liveInspectorContext,
-    state: roundState,
-  });
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
   useEffect(() => {
     if (!currentTaskSelection || manualSelectionRef.current || pendingSelectionRef.current) {
@@ -4207,12 +4271,6 @@ export default function CombatRoundManagerPanel({
     liveInspectorContext?.taskId,
     roundState.roundNumber,
   ]);
-  const renderedInspectionSelection = getCombatRoundRenderedInspectorSelection({
-    currentTaskSelection,
-    localSelection: inspectionSelection,
-    manualSelection: manualSelectionRef.current,
-    pendingSelection: pendingSelectionRef.current,
-  });
   const inspector = buildCombatRoundInspector({
     participantId: renderedInspectionSelection.participantId,
     state: selectedTimelineRoundState,
@@ -7171,13 +7229,13 @@ export default function CombatRoundManagerPanel({
     const participantIds = getParticipantIdsForTimelineRound({
       fallbackParticipantIds: displayParticipants.map((participant) => participant.participantId),
       roundNumber: selectedRoundNumber,
-      timelineRoundStates,
+      timelineRoundStates: [...timelineRoundStates],
     });
     const nextSelection =
       input.stepOffset !== undefined
         ? getAdjacentCombatRoundTimelineStepSelection({
             participantId: inspectionSelection.participantId,
-            roundNumbers: timelineRoundNumbers,
+            roundNumbers: [...timelineRoundNumbers],
             selectedRoundNumber,
             step: currentStep,
             stepOffset: input.stepOffset,
@@ -9437,244 +9495,6 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  const trackerProjectionStartedAt = combatPerformanceNow();
-  const trackerCellFacts: CombatTrackerCellFacts[] = [];
-
-  for (const timelineRoundState of timelineRoundStates) {
-    const snapshotByCellKey = new Map(
-      timelineRoundState.stepSnapshots.map((snapshot) => [
-        buildCombatTrackerCellKey({
-          participantId: snapshot.participantId,
-          roundNumber: snapshot.roundNumber,
-          step: snapshot.step,
-        }),
-        snapshot,
-      ]),
-    );
-    const feintByAttackerId = new Map(
-      timelineRoundState.feintProposals
-        .filter((proposal) => proposal.roundNumber === timelineRoundState.roundNumber)
-        .map((proposal) => [proposal.attackerParticipantId, proposal]),
-    );
-    const adjustDistanceByAttackerId = new Map(
-      timelineRoundState.adjustDistanceProposals
-        .filter((proposal) => proposal.roundNumber === timelineRoundState.roundNumber)
-        .map((proposal) => [proposal.attackerParticipantId, proposal]),
-    );
-    const outgoingAttackByParticipantPhase = new Map<string, CombatRoundAttackRollResult>();
-    const incomingAttackByParticipantPhase = new Map<string, CombatRoundAttackRollResult>();
-    for (const participant of timelineRoundState.participants) {
-      for (const phase of ["phase1", "phase2"] as const) {
-        const key = `${participant.participantId}:${phase}`;
-        const outgoing = getCombatRoundOutgoingAttackResultForParticipantPhase({
-          participantId: participant.participantId,
-          phase,
-          state: timelineRoundState,
-        });
-        const incoming = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-          participantId: participant.participantId,
-          phase,
-          state: timelineRoundState,
-        });
-        if (outgoing) outgoingAttackByParticipantPhase.set(key, outgoing);
-        if (incoming) incomingAttackByParticipantPhase.set(key, incoming);
-      }
-    }
-    for (const timelineParticipant of displayParticipants) {
-      const roundParticipant =
-        timelineRoundState.participants.find(
-          (candidate) => candidate.participantId === timelineParticipant.participantId,
-        ) ?? timelineParticipant;
-
-      for (const step of COMBAT_ROUND_STEPS) {
-        const stepStatus = getParticipantDeclarationStatus({
-          participantId: timelineParticipant.participantId,
-          roundState: timelineRoundState,
-          status: roundParticipant.stepStatuses[step] ?? "pending",
-          step,
-        });
-        const initiative =
-          step === "initiative_phase_1"
-            ? roundParticipant.initiatives.phase1
-            : step === "initiative_phase_2"
-              ? roundParticipant.initiatives.phase2
-              : undefined;
-        const trackerAttackPhase = getCombatAttackPhaseForStep(step);
-        const trackerSnapshot = snapshotByCellKey.get(
-          buildCombatTrackerCellKey({
-            participantId: timelineParticipant.participantId,
-            roundNumber: timelineRoundState.roundNumber,
-            step,
-          }),
-        );
-        const trackerCanonicalAttackResult = trackerAttackPhase
-          ? outgoingAttackByParticipantPhase.get(
-              `${timelineParticipant.participantId}:${trackerAttackPhase}`,
-            )
-          : undefined;
-        const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult;
-        const trackerResolutionPhase = getCombatRoundResolutionPhaseForStep(step);
-        const trackerResolutionAttackResult = trackerSnapshot
-          ? trackerSnapshot.attackResult
-          : trackerResolutionPhase
-            ? incomingAttackByParticipantPhase.get(
-                `${timelineParticipant.participantId}:${trackerResolutionPhase}`,
-              )
-            : undefined;
-        const trackerPhaseResolutionResult = trackerSnapshot
-          ? trackerSnapshot.phaseResolutionResult
-          : trackerResolutionAttackResult
-            ? getCombatRoundPhaseResolutionResultForAttack({
-                attackResult: trackerResolutionAttackResult,
-                state: timelineRoundState,
-              })
-            : undefined;
-        const trackerFeintProposal =
-          step === "phase_1_actions"
-            ? feintByAttackerId.get(timelineParticipant.participantId)
-            : undefined;
-        const trackerFeintModifier = trackerFeintProposal?.review
-          ? (trackerFeintProposal.review.gmDefenderObDbModifier ??
-            trackerFeintProposal.review.proposedDefenderObDbModifier)
-          : undefined;
-        const trackerAdjustDistanceProposal =
-          step === "phase_1_actions"
-            ? adjustDistanceByAttackerId.get(timelineParticipant.participantId)
-            : undefined;
-        const trackerAdjustDistanceRollRecorded =
-          step === "phase_1_actions"
-            ? timelineRoundState.adjustDistanceProposals.some(
-                (proposal) =>
-                  proposal.roundNumber === timelineRoundState.roundNumber &&
-                  ((proposal.attackerParticipantId === timelineParticipant.participantId &&
-                    proposal.attackerRollRecorded) ||
-                    (proposal.defenderParticipantId === timelineParticipant.participantId &&
-                      proposal.defenderRollRecorded)),
-              )
-            : false;
-        const trackerProgression =
-          timelineRoundState.roundNumber === roundState.roundNumber
-            ? combatProgressionTrackerIndex.byCellKey[
-                buildCombatTrackerCellKey({
-                  participantId: timelineParticipant.participantId,
-                  roundNumber: timelineRoundState.roundNumber,
-                  step,
-                })
-              ]
-            : undefined;
-        trackerCellFacts.push({
-          adjustDistance: trackerAdjustDistanceProposal
-            ? {
-                committedDistance: trackerAdjustDistanceProposal.review?.committedDistance,
-                currentDistance: trackerAdjustDistanceProposal.currentDistance,
-                defenderLabel: timelineRoundState.participants.find(
-                  (participant) =>
-                    participant.participantId ===
-                    trackerAdjustDistanceProposal.defenderParticipantId,
-                )?.label,
-                requestedDistance: trackerAdjustDistanceProposal.requestedDistance,
-                status:
-                  trackerAdjustDistanceProposal.status === "committed" ? "committed" : "pending",
-              }
-            : undefined,
-          adjustDistanceRollRecorded: trackerAdjustDistanceRollRecorded,
-          actionResultStatus: trackerSnapshot?.actionResultStatus,
-          attackAttackerLabel: trackerAttackResult
-            ? timelineRoundState.participants.find(
-                (participant) =>
-                  participant.participantId === trackerAttackResult.attackerParticipantId,
-              )?.label
-            : undefined,
-          attackDefenderLabel: trackerAttackResult
-            ? timelineRoundState.participants.find(
-                (participant) =>
-                  participant.participantId === trackerAttackResult.defenderParticipantId,
-              )?.label
-            : undefined,
-          attackResult: trackerAttackResult,
-          commands: timelineRoundState.commands,
-          declarationSubmittedBy: roundParticipant.declaration?.submittedBy,
-          feint: trackerFeintProposal
-            ? {
-                defenderLabel: timelineRoundState.participants.find(
-                  (participant) =>
-                    participant.participantId === trackerFeintProposal.defenderParticipantId,
-                )?.label,
-                defenderPhase2Modifier: trackerFeintModifier,
-                method: trackerFeintProposal.method,
-                status:
-                  trackerFeintProposal.status === "committed"
-                    ? "committed"
-                    : trackerFeintProposal.status === "impossible"
-                      ? "impossible"
-                      : "pending",
-              }
-            : undefined,
-          inspectable: Boolean(
-            trackerProgression ||
-            trackerSnapshot ||
-            trackerAttackResult ||
-            trackerPhaseResolutionResult ||
-            trackerFeintProposal ||
-            trackerAdjustDistanceProposal ||
-            trackerAdjustDistanceRollRecorded ||
-            initiative ||
-            stepStatus !== "pending",
-          ),
-          initiativeCommitted:
-            step === "initiative_phase_1" || step === "initiative_phase_2"
-              ? timelineRoundState.commands.some(
-                  (command) =>
-                    command.type === "commit_phase_initiative_resolution" &&
-                    command.roundNumber === timelineRoundState.roundNumber &&
-                    command.phase === (step === "initiative_phase_1" ? "phase1" : "phase2"),
-                )
-              : undefined,
-          initiativeRollRecorded: Boolean(initiative),
-          initiativeResolutionType:
-            initiative && "resolutionType" in initiative ? initiative.resolutionType : undefined,
-          initiativeTotal: getCombatRoundInitiativeTotal(initiative),
-          participantId: timelineParticipant.participantId,
-          participantLabel: timelineParticipant.label,
-          phaseResolutionResult: trackerPhaseResolutionResult,
-          progression: trackerProgression,
-          roundNumber: timelineRoundState.roundNumber,
-          selected:
-            timelineRoundState.roundNumber === selectedRoundNumber &&
-            renderedInspectionSelection.participantId === timelineParticipant.participantId &&
-            renderedInspectionSelection.step === step,
-          status: stepStatus,
-          step,
-          stepOutcome: deriveCombatHistoryStepOutcome(trackerSnapshot),
-        });
-      }
-    }
-  }
-
-  const trackerModel = buildCombatTrackerModel({
-    cellFacts: trackerCellFacts,
-    rounds: timelineRoundStates.map((timelineRoundState) => ({
-      currentStep:
-        timelineRoundState.roundNumber === roundState.roundNumber
-          ? roundState.currentStep
-          : undefined,
-      roundNumber: timelineRoundState.roundNumber,
-    })),
-    rows: displayParticipants.map((participant) => ({
-      label: participant.label,
-      participantId: participant.participantId,
-      selected: renderedInspectionSelection.participantId === participant.participantId,
-    })),
-    steps: COMBAT_ROUND_STEPS,
-  });
-  recordCombatPerformanceStage(
-    "tracker_view_model",
-    combatPerformanceNow() - trackerProjectionStartedAt,
-    {
-      archivedRoundCount: timelineRoundStates.length - 1,
-      trackerCellCount: trackerCellFacts.length,
-    },
-  );
   recordCombatPerformanceStage(
     "combat_panel_view_model",
     combatPerformanceNow() - panelViewModelStartedAt,

@@ -711,3 +711,36 @@ still begin from the compatibility full encounter in routes that call
 active-only. No optimization should be selected until one real slow click
 produces correlated `api_total`, repository, response, request-count, tracker,
 React, and `click_to_settled` records.
+
+## Combat Presentation Model — Slice 1
+
+The first presentation slice separates immutable archived presentation,
+revision-bound active presentation, selection, and pending workflow state.
+Archived tracker facts and cell presentations are constructed under archive
+lineage identity. A new active revision composes a bounded current-round tracker
+slice with the same archived cell objects. Selection and pending workflow changes
+reuse both source layers and the base tracker.
+
+The opt-in happy-dom fixture now records both initial construction and a transient
+workflow-overlay render. Initial construction still performs the required archive
+projection, so it remains proportional to archive depth. The transient render is
+the new identity-boundary measurement:
+
+| Active round | Cells | Initial panel | Initial commit | Transient panel | Transient tracker | Transient commit |
+| -----------: | ----: | ------------: | -------------: | --------------: | ----------------: | ---------------: |
+|            1 |    24 |       4.63 ms |       14.39 ms |         0.61 ms |           0.01 ms |          1.70 ms |
+|            3 |    72 |       7.37 ms |       25.63 ms |         0.56 ms |           0.01 ms |          0.64 ms |
+|            5 |   120 |      11.31 ms |       35.03 ms |         0.83 ms |           0.01 ms |          0.87 ms |
+|            7 |   168 |      14.78 ms |       45.81 ms |         1.37 ms |           0.01 ms |          1.14 ms |
+
+Before this slice every render followed the all-round construction path; the
+earlier Round 7 fixture measured 10.30 ms panel construction, 6.38 ms tracker
+construction, and 46.73 ms commit. The new transient Round 7 path measures
+1.37 ms, 0.01 ms, and 1.14 ms respectively. Initial construction is slightly more
+expensive because it establishes two explicit source layers; it happens only when
+their identities require it and is not evidence of improved first-load latency.
+
+This fixture verifies identity reuse, not the reported authenticated 11.6-second
+production-path panel build. A comparable real encounter replay is still required
+to measure click-to-settled, render count, and the absolute reduction after this
+slice. Compatibility `EncounterSession` reads are intentionally unchanged.

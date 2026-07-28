@@ -401,6 +401,29 @@ Tracker cells show live or completed markers only when that exact
 round/facet/participant has canonical task or result identity; no prior-round or
 “latest” fallback is permitted.
 
+GM Combat presentation is partitioned by ownership identity:
+
+1. **Archived Presentation** owns normalized completed-round facts, historical
+   tracker cells, declarations, calculations, modifiers, and result-ledger
+   references. Its identity is immutable archive lineage plus its participant
+   roster, so an active revision, selection change, or pending control cannot
+   rebuild it.
+2. **Active Presentation** owns the current round, GM progression projection,
+   current task/action, current tracker cells, and other revision-bound live
+   facts. Its identity is encounter plus accepted canonical revision.
+3. **Selection Overlay** owns only the selected round, participant, and tracker
+   facet. It selects cached live or historical presentation; it does not project
+   either source again.
+4. **Pending Overlay** owns local saving, error, and workflow-control state. It
+   never participates in archive or active identity.
+
+`CombatRoundManagerPanel` composes these layers through one
+`CombatPresentationModel`. A cached archived tracker cell remains the same object
+when active state changes; only the bounded active tracker model is regenerated
+and composed with it. Current Action is sourced only from Active Presentation.
+This identity boundary is a correctness rule first and a performance boundary
+second; component-level memoization must not create competing view models.
+
 Normal waiting is presentation state, not an unavailable-task error. Action controls
 must disappear or disable when their descriptor is stale, while stable non-actionable
 presentation may remain until an external replacement arrives.
