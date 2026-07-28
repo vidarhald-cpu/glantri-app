@@ -213,16 +213,70 @@ import {
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
+import {
+  instrumentCombatService,
+  measureCombatPerformanceStage,
+  probeCombatPerformanceSerialization,
+  timeCombatPerformanceStage,
+} from "../../lib/combatPerformance";
 import { combatRoundStatesDiffer } from "./combatRoundPersistence";
 import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
 
-const campaignService = new CampaignService();
+const campaignService = instrumentCombatService(new CampaignService(), {
+  getCampaignById: {
+    stage: "repository_read_campaign",
+  },
+});
 const characterService = new CharacterService();
-const combatStateReadService = new CombatStateReadService();
-const encounterService = new EncounterService();
-const scenarioService = new ScenarioService();
+const combatStateReadService = instrumentCombatService(new CombatStateReadService(), {
+  getActiveCombatStateById: {
+    stage: "repository_read_active",
+  },
+  getArchivedCombatRoundsById: {
+    stage: "repository_read_archives",
+  },
+  getCombatHistorySourceById: {
+    stage: "repository_read_history_source",
+  },
+  getEncounterMetadataById: {
+    stage: "repository_read_metadata",
+  },
+  getFullEncounterById: {
+    broadEncounterRead: true,
+    stage: "repository_read_full_encounter",
+    summarizeEncounter: true,
+  },
+});
+const encounterService = instrumentCombatService(new EncounterService(), {
+  getEncounterById: {
+    broadEncounterRead: true,
+    stage: "repository_read_full_encounter",
+    summarizeEncounter: true,
+  },
+  updateCombatEncounter: {
+    stage: "repository_write_transaction",
+    summarizeEncounter: true,
+  },
+  updateScenarioParticipantState: {
+    stage: "repository_write_participant",
+  },
+});
+const scenarioService = instrumentCombatService(new ScenarioService(), {
+  getScenarioById: {
+    stage: "repository_read_scenario",
+  },
+  listScenarioParticipants: {
+    stage: "repository_read_participants",
+  },
+  recordScenarioEvent: {
+    stage: "repository_write_scenario_event",
+  },
+  userHasPlayerScenarioAccess: {
+    stage: "repository_read_player_access",
+  },
+});
 
 function buildObservationRollBasis(input: {
   contributions: readonly CombatModifierContribution[];
@@ -581,6 +635,7 @@ function authorizeCombatTaskCommand(input: {
   identity: ParsedCombatTaskCommandIdentity;
   roundState: CombatRoundState;
 }) {
+  return measureCombatPerformanceStage("descriptor_projection_and_authorization", () => {
   if (input.identity.expectedRevision !== input.encounterRevision) {
     return {
       code: "stale_revision" as const,
@@ -595,6 +650,7 @@ function authorizeCombatTaskCommand(input: {
     initiativeValue: input.identity.initiativeValue,
     projection: buildCombatProgressionProjection(input.roundState),
     taskId: input.identity.taskId,
+  });
   });
 }
 
@@ -3268,7 +3324,8 @@ function preservePlayerCombatModifierBuckets(input: {
 }
 
 export const encounterRoutes: FastifyPluginAsync = async (app) => {
-  app.addHook("preSerialization", async (request, _reply, payload) =>
+  app.addHook("preSerialization", async (request, _reply, payload) => {
+    const response = measureCombatPerformanceStage("response_construction", () =>
     buildRequestedCombatMutationResponse({
       activeResponseRequested: prefersActiveCombatMutationResponse(
         request.headers[ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER],
@@ -3276,6 +3333,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       payload,
     }),
   );
+    try {
+      probeCombatPerformanceSerialization(response);
+    } catch {
+      // Fastify owns canonical serialization and error handling. The probe must never alter it.
+    }
+    return response;
+  });
   app.get("/scenarios/:scenarioId/encounters", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -5738,13 +5802,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const scenarioId = encounter.scenarioId;
-        const access = await resolveScenarioWorkspaceAccess(
+        const access = await timeCombatPerformanceStage("workspace_authorization", () =>
+          resolveScenarioWorkspaceAccess(
           { campaignService, scenarioService },
           {
             scenarioId,
             userId: user.id,
             userRoles: user.roles,
           },
+          ),
         );
         if (!access || access.mode !== "gm") {
           return reply.code(403).send({
@@ -5756,12 +5822,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const identity = parseCombatTaskCommandIdentity(value);
         const phase = combatRoundPhaseSchema.parse(value.phase);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const roundState = initializeMaterializedCombatRoundState({
+        const { playerOwnedParticipantIds, roundState } = measureCombatPerformanceStage(
+          "active_state_materialization",
+          () => {
+            const materializedRoundState = initializeMaterializedCombatRoundState({
           encounter,
           scenarioParticipants,
         });
-        const playerOwnedParticipantIds = new Set(
-          roundState.participants.flatMap((roundParticipant) => {
+            const ownedParticipantIds = new Set(
+              materializedRoundState.participants.flatMap((roundParticipant) => {
             const encounterParticipant = encounter.participants.find((candidate) =>
               participantAliasesInclude({
                 id: roundParticipant.participantId,
@@ -5778,6 +5847,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? [roundParticipant.participantId]
               : [];
           }),
+        );
+            return {
+              playerOwnedParticipantIds: ownedParticipantIds,
+              roundState: materializedRoundState,
+            };
+          },
         );
         const authorization = authorizeCombatTaskCommand({
           authorization: {
@@ -5799,7 +5874,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const completed = completeRemainingCombatRoundStep({
+        const completed = measureCombatPerformanceStage("domain_command_execution", () =>
+          completeRemainingCombatRoundStep({
           command: {
             createdAt: submittedAt,
             createdByUserId: user.id,
@@ -5807,7 +5883,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phase,
           playerOwnedParticipantIds,
           state: roundState,
-        });
+          }),
+        );
         const updatedParticipants =
           roundState.currentStep === "review_action_modifiers" ||
           roundState.currentStep === "review_phase_2_modifiers"

@@ -140,6 +140,10 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
 });
 
 import CombatRoundManagerPanel from "./CombatRoundManagerPanel";
+import {
+  beginCombatPerformanceInteraction,
+  resetCombatPerformanceForTests,
+} from "@/lib/performance/combatPerformance";
 
 function encounterParticipant(input: { id: string; label: string; scenarioParticipantId: string }) {
   return {
@@ -282,11 +286,7 @@ function buildInitiativeEncounter(): EncounterSession {
     state: combatRoundStateSchema.parse(encounter.combatRoundState),
   });
   let initiative = reviewed.state;
-  for (
-    let guard = 0;
-    guard < 20 && initiative.currentStep !== "initiative_phase_1";
-    guard += 1
-  ) {
+  for (let guard = 0; guard < 20 && initiative.currentStep !== "initiative_phase_1"; guard += 1) {
     initiative = advanceCombatRoundStep(initiative);
   }
 
@@ -1145,5 +1145,91 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
       executionGroupId: observationTask.executionGroupId,
       taskId: observationTask.id,
     });
+  });
+});
+
+const performanceFixtureIt = process.env.GLANTRI_COMBAT_PERF_FIXTURE === "1" ? it : it.skip;
+
+describe("CombatRoundManagerPanel performance fixture", () => {
+  performanceFixtureIt("measures tracker and render growth without combat mutations", () => {
+    vi.stubEnv("NEXT_PUBLIC_GLANTRI_COMBAT_PERF", "1");
+    vi.stubEnv("NODE_ENV", "development");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const rows: Array<{
+      combatPanelViewModelMs: number;
+      reactCommitMs: number;
+      roundNumber: number;
+      trackerCellCount: number;
+      trackerViewModelMs: number;
+    }> = [];
+
+    for (const archivedRoundCount of [0, 2, 4, 6]) {
+      const samples: Array<{
+        combatPanelViewModelMs: number;
+        reactCommitMs: number;
+        trackerCellCount: number;
+        trackerViewModelMs: number;
+      }> = [];
+      for (let sample = 0; sample < 5; sample += 1) {
+        const baseEncounter = buildModifierReviewEncounter();
+        const baseState = combatRoundStateSchema.parse(baseEncounter.combatRoundState);
+        const encounter = encounterSessionSchema.parse({
+          ...baseEncounter,
+          combatRoundState: {
+            ...baseState,
+            roundNumber: archivedRoundCount + 1,
+            rounds: Array.from({ length: archivedRoundCount }, (_, index) => ({
+              currentStep: "round_summary",
+              encounterId: baseEncounter.id,
+              participants: baseState.participants,
+              roundNumber: index + 1,
+            })),
+          },
+          currentRound: archivedRoundCount + 1,
+        });
+        info.mockClear();
+        beginCombatPerformanceInteraction({
+          command: "render_fixture",
+          encounterId: encounter.id,
+          participantCount: 2,
+          roundNumber: archivedRoundCount + 1,
+        });
+
+        render(
+          <CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />,
+        );
+
+        const records = info.mock.calls.flatMap((call) => {
+          const record = call[1];
+          return record && typeof record === "object" ? [record as Record<string, unknown>] : [];
+        });
+        const tracker = records.find((record) => record.stage === "tracker_view_model");
+        const panel = records.find((record) => record.stage === "combat_panel_view_model");
+        const commit = records.find((record) => record.stage === "react_commit");
+        samples.push({
+          combatPanelViewModelMs: Number(panel?.durationMs ?? 0),
+          reactCommitMs: Number(commit?.durationMs ?? 0),
+          trackerCellCount: Number(tracker?.trackerCellCount ?? 0),
+          trackerViewModelMs: Number(tracker?.durationMs ?? 0),
+        });
+        cleanup();
+        resetCombatPerformanceForTests();
+      }
+      const median = (values: number[]) =>
+        [...values].sort((left, right) => left - right)[Math.floor(values.length / 2)] ?? 0;
+      rows.push({
+        combatPanelViewModelMs: median(samples.map((sample) => sample.combatPanelViewModelMs)),
+        reactCommitMs: median(samples.map((sample) => sample.reactCommitMs)),
+        roundNumber: archivedRoundCount + 1,
+        trackerCellCount: median(samples.map((sample) => sample.trackerCellCount)),
+        trackerViewModelMs: median(samples.map((sample) => sample.trackerViewModelMs)),
+      });
+    }
+
+    process.stdout.write(`COMBAT_PERF_FIXTURE ${JSON.stringify(rows)}\n`);
   });
 });

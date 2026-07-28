@@ -1,6 +1,10 @@
 import Fastify from "fastify";
 
 import { applyLocalCors } from "./lib/sessionAuth";
+import {
+  finishCombatPerformanceRequest,
+  runCombatPerformanceRequest,
+} from "./lib/combatPerformance";
 import { checkReadiness } from "./lib/readiness";
 import { adminContentRoutes } from "./routes/adminContent";
 import { authRoutes } from "./routes/auth";
@@ -21,6 +25,13 @@ export function buildApiServer() {
   });
 
   applyLocalCors(app);
+  app.addHook("onRequest", (request, _reply, done) => {
+    runCombatPerformanceRequest(request, done);
+  });
+  app.addHook("onResponse", (request, reply, done) => {
+    finishCombatPerformanceRequest(reply.statusCode);
+    done();
+  });
 
   app.get("/health", async () => ({
     service: "@glantri/api",

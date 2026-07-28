@@ -32,6 +32,11 @@ import {
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
+import {
+  combatPerformanceNow,
+  getCombatPerformanceRequestHeaders,
+  recordCombatPerformanceStage,
+} from "../performance/combatPerformance";
 
 const ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER = "x-glantri-combat-response";
 const ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION = "active-v1";
@@ -56,25 +61,31 @@ async function sendCombatMutationJson<TResponse extends object>(
     delete parsedBody.currentEncounter;
     body = JSON.stringify(parsedBody);
   }
-  const compact = activeCombatMutationResponseSchema.parse(
-    await sendJson<unknown>(path, {
+  const responsePayload = await sendJson<unknown>(path, {
       ...init,
       body,
       headers: {
         ...Object.fromEntries(new Headers(init.headers).entries()),
         [ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER]: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+      ...getCombatPerformanceRequestHeaders(),
       },
-    }),
-  );
+  });
+  const activeResponseStartedAt = combatPerformanceNow();
+  const compact = activeCombatMutationResponseSchema.parse(responsePayload);
   const updatedParticipants = compact.updatedParticipants;
+  const nextEncounter = applyActiveCombatMutationResponse({
+    currentEncounter,
+    response: compact,
+  });
+  recordCombatPerformanceStage(
+    "active_response_parse_and_projection",
+    combatPerformanceNow() - activeResponseStartedAt,
+  );
 
   return {
     ...(compact.mutationPresentation ?? {}),
     commandEnvelope: compact.commandEnvelope,
-    encounter: applyActiveCombatMutationResponse({
-      currentEncounter,
-      response: compact,
-    }),
+    encounter: nextEncounter,
     participant: updatedParticipants?.[0],
     participants: updatedParticipants,
   } as TResponse;

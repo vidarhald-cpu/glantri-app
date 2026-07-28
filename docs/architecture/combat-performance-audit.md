@@ -657,3 +657,57 @@ outside an explicit command. The persistence adapter additionally performs a
 bounded full-transaction retry for legitimate `P2034` conflicts. This is a
 correctness and tail-latency repair; it does not change the previously measured
 active-response or history costs.
+
+## Progressive-slowdown instrumentation follow-up
+
+Development-only correlated instrumentation is documented in
+`combat-performance-instrumentation.md`. It follows one GM command from click
+through repository reads, authorization/projection, domain execution,
+transaction, compact response shaping, client adoption, tracker construction,
+React commit, and settled UI. It adds no requests or revisions and is disabled
+unless both process-specific flags are set.
+
+Disposable split-storage fixtures used two participants and bounded archived
+rounds at active rounds 1, 3, 5, and 7. Values are local medians and are
+diagnostic rather than CI thresholds.
+
+| Stage                                      |  Round 1 |  Round 3 |  Round 5 |  Round 7 | Growth                                  |
+| ------------------------------------------ | -------: | -------: | -------: | -------: | --------------------------------------- |
+| Split active read                          |  1.12 ms |  0.80 ms |  0.94 ms |  0.86 ms | Flat                                    |
+| Ordinary active mutation                   |  4.09 ms |  3.41 ms |  3.06 ms |  3.43 ms | Flat                                    |
+| Full encounter read                        |  1.34 ms | 10.48 ms | 19.79 ms | 26.35 ms | Linear in archives                      |
+| History-source read                        |  1.94 ms |  9.55 ms | 14.98 ms | 18.68 ms | Linear in archives                      |
+| Full serialization probe                   |  0.01 ms |  0.60 ms |  1.17 ms |  1.59 ms | Linear in payload                       |
+| Full composed bytes                        |   5.7 KB |   467 KB |   929 KB |  1.39 MB | Linear in archives                      |
+| Active-view bytes                          |   5.3 KB |   5.3 KB |   5.3 KB |   5.3 KB | Flat                                    |
+| Tracker cells                              |       24 |       72 |      120 |      168 | Linear in rounds × participants × steps |
+| Tracker view model (happy-dom fixture)     |  1.65 ms |  2.77 ms |  5.89 ms |  6.38 ms | Linear                                  |
+| Whole panel view model (happy-dom fixture) |  2.96 ms |  4.32 ms |  7.53 ms | 10.30 ms | Linear                                  |
+| React commit (happy-dom fixture)           | 13.59 ms | 25.64 ms | 35.97 ms | 46.73 ms | Linear                                  |
+
+The minimal browser fixture confirms repeated all-round tracker work, but its
+magnitude does not explain a 6–8 second command by itself. It is not a
+substitute for an authenticated browser sample against the reported long
+encounter.
+
+The largest representative local legacy encounter measured 33,947,986
+serialized bytes:
+
+- full read: 572.44 ms;
+- history-source read: 560.56 ms;
+- same-shape legacy rewrite: 3,524.61 ms;
+- first split materialization: 3,580.70 ms;
+- subsequent split active read: 0.97 ms.
+
+This is the strongest measured multi-second contributor. The local database
+still contains both `legacy` and `split_v1` encounters, so the correlation
+record's repository stage and response size are necessary before deciding
+whether a reported slow click is a legacy materialization, a compatibility
+full read, client tracker growth, or a combination.
+
+The measurement pass does not change the mutation boundary. Ordinary handlers
+still begin from the compatibility full encounter in routes that call
+`EncounterService.getEncounterById`, even when persistence and the response are
+active-only. No optimization should be selected until one real slow click
+produces correlated `api_total`, repository, response, request-count, tracker,
+React, and `click_to_settled` records.

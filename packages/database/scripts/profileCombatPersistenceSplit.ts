@@ -33,6 +33,21 @@ function requireUrl(name: "DATABASE_URL" | "DATABASE_URL_TEST"): string {
   return value;
 }
 
+function resolveArchiveCounts(): number[] {
+  const configured = process.env.COMBAT_PROFILE_ARCHIVE_COUNTS;
+  if (!configured) {
+    return [0, 10, 30, 50];
+  }
+  const counts = configured
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value >= 0);
+  if (counts.length === 0) {
+    throw new Error("COMBAT_PROFILE_ARCHIVE_COUNTS must contain non-negative integers.");
+  }
+  return counts;
+}
+
 async function loadRepresentativeLegacyEncounter(client: PrismaClient): Promise<EncounterSession> {
   const rows = await client.$queryRaw<
     Array<{
@@ -126,7 +141,7 @@ async function main(): Promise<void> {
     const persistenceRepository = createPrismaCombatStatePersistenceRepository(targetClient);
     const measurements: unknown[] = [];
 
-    for (const archiveCount of [0, 10, 30, 50]) {
+    for (const archiveCount of resolveArchiveCounts()) {
       const fixture = buildFixture(representative, archiveCount);
       await targetClient.encounter.deleteMany({ where: { id: fixture.id } });
       let created = await targetClient.encounter.create({
@@ -182,6 +197,14 @@ async function main(): Promise<void> {
         3,
       );
       const fullReadMs = await measure(() => readRepository.getFullEncounterById(fixture.id), 3);
+      const [activeView, historySource, fullEncounter] = await Promise.all([
+        readRepository.getActiveCombatStateById(fixture.id),
+        readRepository.getCombatHistorySourceById(fixture.id),
+        readRepository.getFullEncounterById(fixture.id),
+      ]);
+      const serializationStartedAt = performance.now();
+      const fullEncounterBytes = JSON.stringify(fullEncounter).length;
+      const fullSerializationMs = performance.now() - serializationStartedAt;
       const rowSizes = await targetClient.$queryRaw<
         Array<{
           activeBytes: number;
@@ -228,11 +251,15 @@ async function main(): Promise<void> {
       measurements.push({
         activeBytes: sizes.activeBytes,
         activeReadMs: Number(activeReadMs.toFixed(2)),
+        activeViewBytes: JSON.stringify(activeView).length,
         archiveBytes: Number(sizes.archiveBytes),
         archiveCount,
         archiveRows: Number(sizes.archiveRows),
         fullReadMs: Number(fullReadMs.toFixed(2)),
+        fullEncounterBytes,
+        fullSerializationMs: Number(fullSerializationMs.toFixed(2)),
         historyReadMs: Number(historyReadMs.toFixed(2)),
+        historySourceBytes: JSON.stringify(historySource).length,
         legacyActiveReadMs: Number(legacyActiveReadMs.toFixed(2)),
         legacyRewriteMs: Number(legacyRewriteMs.toFixed(2)),
         legacySessionBytes: legacySizeRows[0]?.bytes ?? 0,

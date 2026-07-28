@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  Profiler,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -176,6 +177,14 @@ import {
   prepareCombatRoundEndReviewOnServer,
   loadEncounterById,
 } from "@/lib/api/encounterClient";
+import {
+  beginCombatPerformanceInteraction,
+  combatPerformanceNow,
+  recordCombatPerformanceAdoption,
+  recordCombatPerformanceReactCommit,
+  recordCombatPerformanceStage,
+  settleCombatPerformanceInteraction,
+} from "@/lib/performance/combatPerformance";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import { loadScenarioParticipants } from "@/lib/api/scenarioClient";
 import {
@@ -3819,6 +3828,7 @@ export default function CombatRoundManagerPanel({
   onScenarioParticipantsUpdated,
   scenarioParticipants = [],
 }: CombatRoundManagerPanelProps) {
+  const panelViewModelStartedAt = combatPerformanceNow();
   const initialRoundState = useMemo(() => initializeCombatRoundState({ encounter }), [encounter]);
   const initialInspectionSelection = useMemo(
     () =>
@@ -3888,6 +3898,10 @@ export default function CombatRoundManagerPanel({
           candidateRevision: nextEncounter.updatedAt,
         })
       ) {
+        recordCombatPerformanceAdoption({
+          accepted: false,
+          revision: nextEncounter.updatedAt,
+        });
         return false;
       }
 
@@ -3903,6 +3917,10 @@ export default function CombatRoundManagerPanel({
           state,
         }),
       );
+      recordCombatPerformanceAdoption({
+        accepted: true,
+        revision: nextEncounter.updatedAt,
+      });
       return true;
     },
     [],
@@ -3910,6 +3928,11 @@ export default function CombatRoundManagerPanel({
   const [inspectionSelection, setInspectionSelection] = useState(initialInspectionSelection);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
+  useEffect(() => {
+    if (!saving) {
+      settleCombatPerformanceInteraction();
+    }
+  }, [roundView.encounterRevision, saving]);
   const [scenarioParticipantOverrides, setScenarioParticipantOverrides] = useState<
     Record<string, ScenarioParticipant>
   >({});
@@ -9312,6 +9335,17 @@ export default function CombatRoundManagerPanel({
       setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
+    beginCombatPerformanceInteraction({
+      command: inspectorBulkStepCompletionSelected
+        ? "complete_remaining_step"
+        : inspectorSkipActionSelected
+          ? "skip_current_phase_action"
+          : descriptor.commandType,
+      encounterId: encounter.id,
+      expectedRevision: descriptor.expectedRevision,
+      participantCount: roundState.participants.length,
+      roundNumber: roundState.roundNumber,
+    });
     if (inspectorBulkStepCompletionSelected) {
       void completeRemainingInspectorStep(descriptor);
       return;
@@ -9403,6 +9437,7 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  const trackerProjectionStartedAt = combatPerformanceNow();
   const trackerCellFacts: CombatTrackerCellFacts[] = [];
 
   for (const timelineRoundState of timelineRoundStates) {
@@ -9632,8 +9667,33 @@ export default function CombatRoundManagerPanel({
     })),
     steps: COMBAT_ROUND_STEPS,
   });
+  recordCombatPerformanceStage(
+    "tracker_view_model",
+    combatPerformanceNow() - trackerProjectionStartedAt,
+    {
+      archivedRoundCount: timelineRoundStates.length - 1,
+      trackerCellCount: trackerCellFacts.length,
+    },
+  );
+  recordCombatPerformanceStage(
+    "combat_panel_view_model",
+    combatPerformanceNow() - panelViewModelStartedAt,
+    {
+      archivedRoundCount: timelineRoundStates.length - 1,
+    },
+  );
 
   return (
+    <Profiler
+      id="CombatRoundManagerPanel"
+      onRender={(_id, phase, actualDuration, baseDuration) =>
+        recordCombatPerformanceReactCommit({
+          actualDuration,
+          baseDuration,
+          phase,
+        })
+      }
+    >
     <section style={panelStyle}>
       <div
         style={{
@@ -10785,5 +10845,6 @@ export default function CombatRoundManagerPanel({
         )}
       </section>
     </section>
+    </Profiler>
   );
 }

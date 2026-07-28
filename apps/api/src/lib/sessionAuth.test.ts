@@ -32,7 +32,7 @@ describe("session auth HTTP contract", () => {
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-methods"]).toBe("GET,POST,PUT,PATCH,DELETE,OPTIONS");
     expect(response.headers["access-control-allow-headers"]).toBe(
-      "content-type,x-glantri-combat-response",
+      "content-type,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
     );
     expect(response.headers.vary).toBe("origin");
   });
