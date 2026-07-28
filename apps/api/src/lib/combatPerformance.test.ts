@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   finishCombatPerformanceRequest,
@@ -7,8 +10,19 @@ import {
   runCombatPerformanceRequest,
   timeCombatPerformanceStage,
 } from "./combatPerformance";
+import { resetCombatPerformanceCapturesForTests } from "./combatPerformanceCapture";
+
+let captureDirectory: string;
+
+beforeEach(() => {
+  captureDirectory = mkdtempSync(`${tmpdir()}/glantri-combat-perf-test-`);
+  vi.stubEnv("GLANTRI_COMBAT_PERF_DIR", captureDirectory);
+  resetCombatPerformanceCapturesForTests();
+});
 
 afterEach(() => {
+  rmSync(captureDirectory, { force: true, recursive: true });
+  resetCombatPerformanceCapturesForTests();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });

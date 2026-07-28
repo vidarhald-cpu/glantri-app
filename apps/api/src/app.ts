@@ -5,6 +5,7 @@ import {
   finishCombatPerformanceRequest,
   runCombatPerformanceRequest,
 } from "./lib/combatPerformance";
+import { registerCombatPerformanceCaptureRoute } from "./lib/combatPerformanceCapture";
 import { checkReadiness } from "./lib/readiness";
 import { adminContentRoutes } from "./routes/adminContent";
 import { authRoutes } from "./routes/auth";
@@ -55,6 +56,7 @@ export function buildApiServer() {
     });
   });
 
+  registerCombatPerformanceCaptureRoute(app);
   app.register(authRoutes, { prefix: "/auth" });
   app.register(adminContentRoutes, { prefix: "/api/admin" });
   app.register(contentRoutes, { prefix: "/content" });

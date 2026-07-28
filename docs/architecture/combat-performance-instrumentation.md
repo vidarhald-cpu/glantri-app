@@ -25,6 +25,23 @@ PERF combat-command
 
 One browser click creates one correlation ID. The combat mutation sends that ID and the canonical command type to the API. Records include only timing, endpoint/stage names, revision identity, round and bounded counts. Request bodies, response bodies, participant facts, rolls, modifiers, and player-private data are never logged.
 
+Every completed measured command is also written automatically to:
+
+```text
+tmp/combat-performance/
+```
+
+The API writes the server stages and the browser posts its bounded timing
+summary after `click_to_settled`. Both halves are merged into one versioned JSON
+file by correlation ID. Capture delivery occurs after the measured interaction,
+does not invoke a combat mutation, and cannot create a combat revision. Files
+contain timing stages, counters, response sizes, endpoint paths,
+encounter/revision identifiers, and command identity only. The directory is
+git-ignored.
+
+The newest 100 captures are retained by default. Set
+`GLANTRI_COMBAT_PERF_MAX_FILES` to another positive limit when needed.
+
 The main stages are:
 
 - browser `click`, `request_start`, `network_and_parse`, `canonical_state_adoption`;
@@ -43,17 +60,18 @@ Use disposable encounters or an isolated profiling database.
 
 1. Prepare equivalent two-participant encounters at active rounds 1, 3, 5, and 7.
 2. Keep the declarations and current task comparable. `Complete remaining modifier review` is preferred because it is deterministic and contains no dice.
-3. Open GM Combat with browser DevTools Console and Network visible.
-4. Clear the console, perform the command once, and wait for `click_to_settled`.
+3. Open GM Combat and perform the command once.
+4. Wait for the UI to settle.
 5. Repeat three to five times per depth using separately prepared equivalent states; do not repeatedly mutate one source state and call the samples equivalent.
-6. Save API and browser console output as text.
-7. Aggregate either file:
+6. Inspect the merged files in `tmp/combat-performance/`.
+7. Aggregate one capture or the entire directory:
 
 ```sh
-node scripts/aggregate-combat-performance.mjs path/to/perf.log
+node scripts/aggregate-combat-performance.mjs tmp/combat-performance
 ```
 
-The aggregator groups stage medians by active round. Browser console object records should be saved in JSON-expanded text form; raw API lines already contain JSON.
+The aggregator groups client and server stage medians by active round. It still
+accepts the earlier console-line format for compatibility.
 
 ## Interpretation
 

@@ -5,6 +5,12 @@ import type { FastifyRequest } from "fastify";
 
 import type { EncounterSession } from "@glantri/domain";
 
+import {
+  persistCombatPerformanceServerCapture,
+  reserveCombatPerformanceCapture,
+  type CombatPerformanceStageRecord,
+} from "./combatPerformanceCapture";
+
 export const COMBAT_PERFORMANCE_CORRELATION_HEADER = "x-glantri-combat-correlation-id";
 export const COMBAT_PERFORMANCE_COMMAND_HEADER = "x-glantri-combat-command";
 
@@ -24,6 +30,7 @@ type CombatPerformanceContext = {
   repositoryOperations: number;
   requestStartedAt: number;
   revision?: string;
+  stages: CombatPerformanceStageRecord[];
 };
 
 const storage = new AsyncLocalStorage<CombatPerformanceContext>();
@@ -46,6 +53,12 @@ function writeCombatPerformanceRecord(input: {
     return;
   }
 
+  const stageRecord: CombatPerformanceStageRecord = {
+    durationMs: Number(input.durationMs.toFixed(2)),
+    stage: input.stage,
+    ...input.extra,
+  };
+  context.stages.push(stageRecord);
   process.stdout.write(
     `PERF combat-command ${JSON.stringify({
       archivedRoundCount: context.counts.archivedRoundCount,
@@ -53,7 +66,7 @@ function writeCombatPerformanceRecord(input: {
       command: context.command,
       commandCount: context.counts.commandCount,
       correlationId: context.correlationId,
-      durationMs: Number(input.durationMs.toFixed(2)),
+      durationMs: stageRecord.durationMs,
       encounterId: context.encounterId,
       participantCount: context.counts.participantCount,
       repositoryOperations: context.repositoryOperations,
@@ -74,17 +87,20 @@ export function runCombatPerformanceRequest(request: FastifyRequest, next: () =>
 
   const path = request.raw.url ?? request.url;
   const encounterMatch = path.match(/\/encounters\/([^/?]+)/);
+  const command =
+    firstHeader(request.headers[COMBAT_PERFORMANCE_COMMAND_HEADER]) ??
+    `${request.method} ${path.split("?")[0]}`;
+  reserveCombatPerformanceCapture({ command, correlationId });
   storage.run(
     {
       broadEncounterReads: 0,
-      command:
-        firstHeader(request.headers[COMBAT_PERFORMANCE_COMMAND_HEADER]) ??
-        `${request.method} ${path.split("?")[0]}`,
+      command,
       correlationId,
       counts: {},
       encounterId: encounterMatch?.[1],
       repositoryOperations: 0,
       requestStartedAt: performance.now(),
+      stages: [],
     },
     next,
   );
@@ -115,6 +131,23 @@ export function finishCombatPerformanceRequest(statusCode: number): void {
     extra: { statusCode },
     stage: "api_total",
   });
+  try {
+    persistCombatPerformanceServerCapture({
+      archivedRoundCount: context.counts.archivedRoundCount,
+      broadEncounterReads: context.broadEncounterReads,
+      command: context.command,
+      commandCount: context.counts.commandCount,
+      correlationId: context.correlationId,
+      encounterId: context.encounterId,
+      participantCount: context.counts.participantCount,
+      repositoryOperations: context.repositoryOperations,
+      revision: context.revision,
+      roundNumber: context.counts.roundNumber,
+      stages: context.stages,
+    });
+  } catch {
+    // Capture persistence is diagnostic only and must never affect the response.
+  }
 }
 
 export function annotateCombatPerformanceEncounter(

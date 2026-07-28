@@ -8,6 +8,7 @@ import {
   recordCombatPerformanceRequestEnd,
   recordCombatPerformanceRequestStart,
   resetCombatPerformanceForTests,
+  settleCombatPerformanceInteraction,
 } from "./combatPerformance";
 
 afterEach(() => {
@@ -65,5 +66,47 @@ describe("browser combat performance instrumentation", () => {
     vi.stubGlobal("performance", undefined);
     expect(() => combatPerformanceNow()).not.toThrow();
     expect(combatPerformanceNow()).toBeTypeOf("number");
+  });
+
+  it("posts one bounded client summary after the interaction settles", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GLANTRI_COMBAT_PERF", "1");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    const correlationId = beginCombatPerformanceInteraction({
+      command: "complete_modifier_review",
+      encounterId: "encounter-3",
+      expectedRevision: "revision-3",
+      participantCount: 2,
+      roundNumber: 5,
+    });
+    const requestStartedAt = recordCombatPerformanceRequestStart({
+      method: "POST",
+      path: "/encounters/encounter-3/combat-round/modifier-review",
+    });
+    recordCombatPerformanceRequestEnd({
+      parseDurationMs: 1,
+      path: "/encounters/encounter-3/combat-round/modifier-review",
+      requestStartedAt,
+      responseBytes: 2048,
+      status: 200,
+    });
+    settleCombatPerformanceInteraction();
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(fetch.mock.calls[0]?.[0]).toContain(
+      `/internal/combat-performance/${correlationId}`,
+    );
+    const request = fetch.mock.calls[0]?.[1];
+    expect(request).toMatchObject({
+      credentials: "include",
+      keepalive: true,
+      method: "POST",
+    });
+    expect(String(request?.body)).toContain('"responseBytes":2048');
+    expect(String(request?.body)).not.toContain("participantSheet");
   });
 });
