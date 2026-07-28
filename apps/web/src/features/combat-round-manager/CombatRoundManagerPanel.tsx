@@ -143,6 +143,7 @@ import {
   advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
+  completeRemainingCombatStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
   commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
@@ -170,6 +171,7 @@ import {
   resolveCurrentCombatPhaseDamageOnServer,
   setCombatExperienceDifficultyOnServer,
   setPairDistanceOnServer,
+  skipCurrentCombatPhaseActionOnServer,
   submitCombatDeclarationOnServer,
   prepareCombatRoundEndReviewOnServer,
   loadEncounterById,
@@ -293,7 +295,7 @@ interface CombatRoundManagerPanelProps {
 type PhaseAttackChoiceSelection = "continue" | "back_out";
 type DoubleAttackPhase2Decision = "continue" | "cancel";
 
-type InspectorCurrentActionOutcomeSelection = "normal" | "skip";
+type InspectorCurrentActionOutcomeSelection = "perform" | "skip" | "complete_remaining";
 
 const COMBAT_FEINT_REFERENCE_ROWS = [
   { attackerDbParry: -4, band: "defender_strong", defenderObDb: 2, difference: "≤ -16" },
@@ -3954,7 +3956,7 @@ export default function CombatRoundManagerPanel({
   >("unsuccessful");
   const [inspectorAdjustDistanceReviewNote, setInspectorAdjustDistanceReviewNote] = useState("");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
-    useState<InspectorCurrentActionOutcomeSelection>("normal");
+    useState<InspectorCurrentActionOutcomeSelection>("perform");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -5145,6 +5147,10 @@ export default function CombatRoundManagerPanel({
   const inspectorDisplayInitiative = inspectorIsHistorical
     ? inspectorSnapshot?.initiativeResult
     : inspectorCurrentInitiative;
+  const inspectorDisplayInitiativeResolutionType =
+    inspectorDisplayInitiative && "resolutionType" in inspectorDisplayInitiative
+      ? inspectorDisplayInitiative.resolutionType
+      : undefined;
   const inspectorInitiativeRollCounts =
     inspectorCurrentInitiativePhase && selectedRoundIsActive
       ? {
@@ -5291,7 +5297,9 @@ export default function CombatRoundManagerPanel({
       inspectorPhaseResolutionStatus.substep === "attack") &&
     !inspectorDisplayAttackResult;
   const inspectorSkipActionOutcomeSelectorAvailable =
-    inspectorCanSkipCurrentPhaseAction && !inspectorPhaseAttackChoiceSelectorAvailable;
+    inspectorCanSkipCurrentPhaseAction &&
+    currentActionPresentation?.taskKind === "attack" &&
+    !inspectorPhaseAttackChoiceSelectorAvailable;
   const inspectorCurrentAttackSourceMissing =
     inspectorCanRollPhaseAttack &&
     Boolean(inspectorCurrentAttackPhase) &&
@@ -5631,7 +5639,14 @@ export default function CombatRoundManagerPanel({
                                                                 substep:
                                                                   inspectorActionPhaseResolutionStatus?.substep,
                                                               });
-  const inspectorCurrentActionOutcomeKey = inspectorSkipActionOutcomeSelectorAvailable
+  const inspectorBulkStepCompletionAvailable =
+    inspectorCanExecuteSelectedStep &&
+    (currentActionPresentation?.taskKind === "modifier_review" ||
+      currentActionPresentation?.taskKind === "roll_initiative");
+  const inspectorWorkflowSelectorAvailable =
+    Boolean(currentActionPresentation?.primaryAction.descriptor) &&
+    (inspectorSkipActionOutcomeSelectorAvailable || inspectorBulkStepCompletionAvailable);
+  const inspectorCurrentActionOutcomeKey = inspectorWorkflowSelectorAvailable
     ? [
         selectedTimelineRoundState.roundNumber,
         selectedTimelineRoundState.currentCursor?.participantId ?? "none",
@@ -5641,22 +5656,27 @@ export default function CombatRoundManagerPanel({
     : "none";
 
   useEffect(() => {
-    setInspectorCurrentActionOutcomeSelection("normal");
+    setInspectorCurrentActionOutcomeSelection("perform");
   }, [inspectorCurrentActionOutcomeKey]);
 
-  const inspectorSkipActionSelected =
-    inspectorSkipActionOutcomeSelectorAvailable &&
-    inspectorCurrentActionOutcomeSelection === "skip";
+  const inspectorSkipActionSelected = inspectorCurrentActionOutcomeSelection === "skip";
+  const inspectorBulkStepCompletionSelected =
+    inspectorCurrentActionOutcomeSelection === "complete_remaining";
   const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage);
   const inspectorEffectiveActionButtonDisabled = inspectorSkipActionSelected
     ? saving ||
       Boolean(inspectorSnapshot) ||
       inspectorIsInspectionOnly ||
       !inspectorSkipActionOutcomeSelectorAvailable
-    : inspectorActionButtonDisabled;
-  const inspectorCurrentActionOutcomeControls = inspectorSkipActionOutcomeSelectorAvailable ? (
+    : inspectorBulkStepCompletionSelected
+      ? saving ||
+        Boolean(inspectorSnapshot) ||
+        inspectorIsInspectionOnly ||
+        !inspectorBulkStepCompletionAvailable
+      : inspectorActionButtonDisabled;
+  const inspectorCurrentActionOutcomeControls = inspectorWorkflowSelectorAvailable ? (
     <label style={compactFieldLabelStyle}>
-      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action outcome</span>
+      <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Workflow</span>
       <select
         disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
         onChange={(event) =>
@@ -5666,11 +5686,52 @@ export default function CombatRoundManagerPanel({
         }
         value={inspectorCurrentActionOutcomeSelection}
       >
-        <option value="normal">{inspectorActionButtonLabel}</option>
-        <option value="skip">Skip current action</option>
+        <option value="perform">Perform current action</option>
+        <option disabled={!inspectorSkipActionOutcomeSelectorAvailable} value="skip">
+          Skip this participant
+        </option>
+        <option disabled={!inspectorBulkStepCompletionAvailable} value="complete_remaining">
+          Complete remaining step
+        </option>
       </select>
     </label>
   ) : null;
+  const inspectorBulkStepLabel =
+    currentActionPresentation?.taskKind === "modifier_review"
+      ? "Complete remaining modifier review"
+      : "Complete remaining initiative";
+  const inspectorWorkflowActionLabel = inspectorSkipActionSelected
+    ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
+        inspector.participant?.label ?? "participant"
+      }`
+    : inspectorBulkStepCompletionSelected
+      ? inspectorBulkStepLabel
+      : undefined;
+  const inspectorWorkflowPresentation =
+    currentActionPresentation && inspectorWorkflowActionLabel
+      ? {
+          ...currentActionPresentation,
+          heading: inspectorBulkStepCompletionSelected
+            ? currentActionPresentation.taskKind === "modifier_review"
+              ? "Modifier review"
+              : "Initiative"
+            : currentActionPresentation.heading,
+          primaryAction: {
+            ...currentActionPresentation.primaryAction,
+            label: inspectorWorkflowActionLabel,
+          },
+          requiredNow: inspectorBulkStepCompletionSelected
+            ? currentActionPresentation.taskKind === "modifier_review"
+              ? "Stops at the first unresolved review."
+              : "Stops at the first required roll."
+            : `${inspectorWorkflowActionLabel}.`,
+          summary: inspectorBulkStepCompletionSelected
+            ? currentActionPresentation.taskKind === "modifier_review"
+              ? "Accept eligible remaining modifier reviews unchanged."
+              : "Complete eligible remaining initiative."
+            : currentActionPresentation.summary,
+        }
+      : currentActionPresentation;
   const inspectorPhaseAttackChoiceControls = inspectorPhaseAttackChoiceSelectorAvailable ? (
     <label style={compactFieldLabelStyle}>
       <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Phase choice</span>
@@ -8586,20 +8647,19 @@ export default function CombatRoundManagerPanel({
     }
     setSaving(true);
     try {
-      const { commandEnvelope, encounter: nextEncounter } =
-        await rollCombatObservationOnServer({
-          currentEncounter: encounter,
-          encounterId: descriptor.encounterId,
-          executionGroupId: descriptor.executionGroupId!,
-          expectedRevision: descriptor.expectedRevision,
-          observationAttemptId: descriptor.observationAttemptId!,
-          opponentParticipantId: descriptor.opponentParticipantId!,
-          processId: descriptor.processId!,
-          relationshipId: descriptor.relationshipId!,
-          scenarioParticipantId: participant.id,
-          stageId: descriptor.stageId!,
-          taskId: descriptor.taskId,
-        });
+      const { commandEnvelope, encounter: nextEncounter } = await rollCombatObservationOnServer({
+        currentEncounter: encounter,
+        encounterId: descriptor.encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        observationAttemptId: descriptor.observationAttemptId!,
+        opponentParticipantId: descriptor.opponentParticipantId!,
+        processId: descriptor.processId!,
+        relationshipId: descriptor.relationshipId!,
+        scenarioParticipantId: participant.id,
+        stageId: descriptor.stageId!,
+        taskId: descriptor.taskId,
+      });
       const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
         getCombatRoundManagerStateFromCommandEnvelope({
           commandEnvelope,
@@ -9125,6 +9185,122 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function completeRemainingInspectorStep(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: [
+        "review_modifiers_phase1",
+        "review_modifiers_phase2",
+        "roll_initiative_phase1",
+        "roll_initiative_phase2",
+      ],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+    });
+    if (!descriptor?.phase) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const {
+        blocker,
+        commandEnvelope,
+        encounter: nextEncounter,
+        participants,
+      } = await completeRemainingCombatStepOnServer({
+        currentEncounter: encounter,
+        encounterId: encounter.id,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        participantId: descriptor.participantId,
+        phase: descriptor.phase,
+        processId: descriptor.processId,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+      });
+      if (participants.length > 0) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          ...Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+        }));
+        onScenarioParticipantsUpdated?.(participants);
+      }
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(blocker?.message);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to complete the remaining combat step.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function skipInspectorCurrentPhaseAction(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["roll_attack"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+    });
+    if (!descriptor?.participantId || !descriptor.phase) {
+      setSaveError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await skipCurrentCombatPhaseActionOnServer({
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          participantId: descriptor.participantId,
+          phase: descriptor.phase,
+          processId: descriptor.processId,
+          stageId: descriptor.stageId,
+          taskId: descriptor.taskId,
+        });
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to skip the current action.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function invokeGmCurrentAction(candidate?: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
@@ -9134,6 +9310,14 @@ export default function CombatRoundManagerPanel({
     });
     if (!descriptor) {
       setSaveError("Combat state changed. Review the current action before continuing.");
+      return;
+    }
+    if (inspectorBulkStepCompletionSelected) {
+      void completeRemainingInspectorStep(descriptor);
+      return;
+    }
+    if (inspectorSkipActionSelected) {
+      void skipInspectorCurrentPhaseAction(descriptor);
       return;
     }
 
@@ -9412,6 +9596,8 @@ export default function CombatRoundManagerPanel({
                 )
               : undefined,
           initiativeRollRecorded: Boolean(initiative),
+          initiativeResolutionType:
+            initiative && "resolutionType" in initiative ? initiative.resolutionType : undefined,
           initiativeTotal: getCombatRoundInitiativeTotal(initiative),
           participantId: timelineParticipant.participantId,
           participantLabel: timelineParticipant.label,
@@ -10143,13 +10329,10 @@ export default function CombatRoundManagerPanel({
                       pendingEntries={inspectorIsHistorical ? [] : inspectorPendingModifierEntries}
                       rows={inspectorDisplayModifierRows}
                       sourceLabel={inspectorModifierSourceLabel}
-                      observationRelationships={
-                        selectedTimelineRoundState.observationRelationships.filter(
-                          (relationship) =>
-                            relationship.observerParticipantId ===
-                            selectedEncounterParticipant?.id,
-                        )
-                      }
+                      observationRelationships={selectedTimelineRoundState.observationRelationships.filter(
+                        (relationship) =>
+                          relationship.observerParticipantId === selectedEncounterParticipant?.id,
+                      )}
                       observationTargetLabels={Object.fromEntries(
                         selectedTimelineRoundState.participants.map((participant) => [
                           participant.participantId,
@@ -10191,7 +10374,11 @@ export default function CombatRoundManagerPanel({
                           ) : null}
                           {inspectorDisplayInitiative ? (
                             <div style={{ color: "#3f5f46" }}>
-                              Rolled initiative {inspectorDisplayInitiative.total}.
+                              {inspectorDisplayInitiativeResolutionType === "bulk_skipped"
+                                ? "Initiative bulk skipped by GM · effective 0."
+                                : inspectorDisplayInitiativeResolutionType === "gm_skipped"
+                                  ? "Initiative skipped by GM · effective 0."
+                                  : `Rolled initiative ${inspectorDisplayInitiative.total}.`}
                             </div>
                           ) : null}
                         </div>
@@ -10367,9 +10554,9 @@ export default function CombatRoundManagerPanel({
                         inspector.participant?.declaration
                           ? labelCurrentActionAsDeclarationEdit({
                               participantId: inspector.participant.participantId,
-                              presentation: currentActionPresentation,
+                              presentation: inspectorWorkflowPresentation,
                             })
-                          : currentActionPresentation
+                          : inspectorWorkflowPresentation
                       }
                       saving={saving}
                       statusText={

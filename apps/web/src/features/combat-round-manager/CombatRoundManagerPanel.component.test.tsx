@@ -7,6 +7,7 @@ import {
   buildCombatProgressionProjection,
   advanceCombatRoundStep,
   combatRoundStateSchema,
+  completeRemainingCombatRoundStep,
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseInitiativeResolution,
   encounterSessionSchema,
@@ -25,6 +26,7 @@ import {
 const mocks = vi.hoisted(() => ({
   advanceCurrentStep: vi.fn(),
   commitParticipantReview: vi.fn(),
+  completeRemainingStep: vi.fn(),
   loadEncounter: vi.fn(),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
   return {
     ...actual,
     advanceCombatRoundCurrentStepOnServer: mocks.advanceCurrentStep,
+    completeRemainingCombatStepOnServer: mocks.completeRemainingStep,
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
@@ -226,6 +229,71 @@ function buildCombatExperiencePendingEncounter(): EncounterSession {
   return encounterSessionSchema.parse({
     ...withoutCombatState,
     combatRoundState: initializeCombatRoundState({ encounter: withoutCombatState }),
+  });
+}
+
+function buildModifierReviewEncounter(): EncounterSession {
+  const encounter = buildEncounter();
+  const base = combatRoundStateSchema.parse(encounter.combatRoundState);
+  const withDeclarations = ["encounter-attacker", "encounter-defender"].reduce(
+    (current, participantId, index) =>
+      recordCombatRoundDeclaration({
+        command: {
+          createdAt: `2026-07-23T10:01:0${index}.000Z`,
+          createdByUserId: "gm-1",
+        },
+        declaration: {
+          actionId: "parry",
+          combatContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+          },
+          id: `declaration:${participantId}`,
+          roundNumber: base.roundNumber,
+          submittedAt: `2026-07-23T10:01:0${index}.000Z`,
+        },
+        participantId,
+        state: current,
+        submittedBy: "gm",
+      }),
+    base,
+  );
+  let review = withDeclarations;
+  for (let guard = 0; guard < 20 && review.currentStep !== "review_action_modifiers"; guard += 1) {
+    review = advanceCombatRoundStep(review);
+  }
+
+  return encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: review,
+    updatedAt: "2026-07-23T10:01:10.000Z",
+  });
+}
+
+function buildInitiativeEncounter(): EncounterSession {
+  const encounter = buildModifierReviewEncounter();
+  const reviewed = completeRemainingCombatRoundStep({
+    command: { createdAt: "2026-07-23T10:01:15.000Z", createdByUserId: "gm-1" },
+    phase: "phase1",
+    state: combatRoundStateSchema.parse(encounter.combatRoundState),
+  });
+  let initiative = reviewed.state;
+  for (
+    let guard = 0;
+    guard < 20 && initiative.currentStep !== "initiative_phase_1";
+    guard += 1
+  ) {
+    initiative = advanceCombatRoundStep(initiative);
+  }
+
+  return encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: initiative,
+    updatedAt: "2026-07-23T10:01:20.000Z",
   });
 }
 
@@ -675,6 +743,101 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Combat Round Manager" })).toBeInTheDocument();
     expect(screen.queryByText("Load failed")).not.toBeInTheDocument();
+  });
+});
+
+describe("CombatRoundManagerPanel GM workflow selector", () => {
+  it("renders all workflows, defaults to perform, and submits one bulk command", async () => {
+    const encounter = buildModifierReviewEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const completed = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-07-23T10:01:20.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: combatRoundStateSchema.parse(encounter.combatRoundState),
+    });
+    const nextEncounter = encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: completed.state,
+      updatedAt: "2026-07-23T10:01:20.000Z",
+    });
+    mocks.completeRemainingStep.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state: completed.state }),
+      completedParticipantIds: completed.completedParticipantIds,
+      encounter: nextEncounter,
+      participants: [],
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    const workflow = await screen.findByRole("combobox", { name: "Workflow" });
+    expect(workflow).toHaveValue("perform");
+    expect(
+      Array.from((workflow as HTMLSelectElement).options).map((option) => option.text),
+    ).toEqual(["Perform current action", "Skip this participant", "Complete remaining step"]);
+
+    fireEvent.change(workflow, { target: { value: "complete_remaining" } });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Complete remaining modifier review" }),
+    );
+
+    await waitFor(() => expect(mocks.completeRemainingStep).toHaveBeenCalledTimes(1));
+    expect(mocks.completeRemainingStep.mock.calls[0]?.[0]).toMatchObject({
+      encounterId: encounter.id,
+      expectedRevision: encounter.updatedAt,
+      phase: "phase1",
+    });
+  });
+
+  it("presents bulk initiative once and submits the current initiative descriptor", async () => {
+    const encounter = buildInitiativeEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const completed = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-07-23T10:01:30.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      playerOwnedParticipantIds: new Set(["encounter-defender"]),
+      state: combatRoundStateSchema.parse(encounter.combatRoundState),
+    });
+    const nextEncounter = encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: completed.state,
+      updatedAt: "2026-07-23T10:01:30.000Z",
+    });
+    mocks.completeRemainingStep.mockResolvedValue({
+      blocker: completed.blocker,
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state: completed.state }),
+      completedParticipantIds: completed.completedParticipantIds,
+      encounter: nextEncounter,
+      participants: [],
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    const workflow = await screen.findByRole("combobox", { name: "Workflow" });
+    fireEvent.change(workflow, { target: { value: "complete_remaining" } });
+
+    expect(screen.getByText("Complete eligible remaining initiative.")).toBeInTheDocument();
+    expect(screen.getByText("Stops at the first required roll.")).toBeInTheDocument();
+    expect(screen.getAllByText("Complete remaining initiative")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete remaining initiative" }));
+
+    await waitFor(() => expect(mocks.completeRemainingStep).toHaveBeenCalledTimes(1));
+    expect(mocks.completeRemainingStep.mock.calls[0]?.[0]).toMatchObject({
+      encounterId: encounter.id,
+      expectedRevision: encounter.updatedAt,
+      phase: "phase1",
+    });
+    expect(
+      await screen.findByText(
+        "Bulk initiative stopped at Scyrian cavalry guy: initiative is player-owned.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 

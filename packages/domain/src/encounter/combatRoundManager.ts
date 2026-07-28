@@ -425,6 +425,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "review_adjust_distance_roll_adjustment",
   "roll_adjust_distance",
   "commit_adjust_distance",
+  "complete_remaining_step",
   "skip_phase_action",
   "back_out_phase_attack",
   "submit_phase_initiative_choice",
@@ -710,6 +711,7 @@ export type CombatRoundEndReview = z.infer<typeof combatRoundEndReviewSchema>;
 export const combatRoundInitiativeResultSchema = z.object({
   baseInitiative: z.number().int().default(0),
   modifierAdjustment: z.number().int().default(0),
+  resolutionType: z.enum(["rolled", "gm_override", "gm_skipped", "bulk_skipped"]).optional(),
   rolls: z.array(z.number().int().min(1).max(6)).default([]),
   rollTotal: z.number().int().optional(),
   total: z.number().int(),
@@ -1137,6 +1139,34 @@ export const combatRoundInitiativeCommitUndoFactsSchema = z
 export type CombatRoundInitiativeCommitUndoFacts = z.infer<
   typeof combatRoundInitiativeCommitUndoFactsSchema
 >;
+
+const combatRoundBulkStepParticipantUndoFactSchema = z
+  .object({
+    participantId: idSchema,
+    priorDeclarationSubmittedBy: z.enum(["gm", "player"]).nullable(),
+    priorInitiative: combatRoundInitiativeResultSchema.nullable(),
+    priorStepStatus: combatRoundStepStatusSchema.nullable(),
+  })
+  .strict();
+
+const combatRoundBulkStepUndoFactsSchema = z
+  .object({
+    commandId: idSchema,
+    navigation: z
+      .object({
+        currentCursor: combatRoundCursorSchema.nullable(),
+        currentStep: combatRoundStepSchema,
+        selectedParticipantId: idSchema.nullable(),
+        selectedStep: combatRoundStepSchema.nullable(),
+      })
+      .strict(),
+    participantFacts: z.array(combatRoundBulkStepParticipantUndoFactSchema),
+    phase: combatRoundPhaseSchema,
+    roundNumber: z.number().int().positive(),
+    step: combatRoundStepSchema,
+    version: z.literal(1),
+  })
+  .strict();
 
 export const combatRoundParryModifierBreakdownEntrySchema = z.object({
   label: z.string().min(1),
@@ -2489,8 +2519,7 @@ export function recordCombatObservationRoll(input: {
       observerParticipantId: pending.observerParticipantId,
       targetParticipantId: pending.targetParticipantId,
     }),
-    roundsTowardNextAttempt:
-      (previousRelationship?.roundsTowardNextAttempt ?? 0) + 1,
+    roundsTowardNextAttempt: (previousRelationship?.roundsTowardNextAttempt ?? 0) + 1,
   });
   const nextRelationship = resolveCombatObservationAttempt({
     completedAt: input.command.createdAt,
@@ -2704,11 +2733,7 @@ function appendCombatObservationRoundStatusEvents(input: {
       : pending
         ? requiredQualifyingRounds
         : (relationship?.roundsTowardNextAttempt ?? 0) + 1;
-    const observationStatus = wasHit
-      ? "no_progress"
-      : pending
-        ? "period_complete"
-        : "progress";
+    const observationStatus = wasHit ? "no_progress" : pending ? "period_complete" : "progress";
 
     nextState = appendCombatRoundEventForCommand({
       command: input.command,
@@ -2746,9 +2771,7 @@ function appendCombatObservationRoundStatusEvents(input: {
 }
 
 /** Applies non-threshold observation progress at the immutable round boundary. */
-export function resolveCombatObservationRoundBoundary(input: {
-  state: CombatRoundState;
-}): {
+export function resolveCombatObservationRoundBoundary(input: { state: CombatRoundState }): {
   state: CombatRoundState;
   undoFacts: CombatObservationRoundUndoFact[];
 } {
@@ -2802,10 +2825,7 @@ export function resolveCombatObservationRoundBoundary(input: {
       );
       if (!completedThisRound) {
         const prospectiveProgress = current.roundsTowardNextAttempt + 1;
-        if (
-          prospectiveProgress <
-          getCombatObservationRequiredRounds(current.completedAttempts)
-        ) {
+        if (prospectiveProgress < getCombatObservationRequiredRounds(current.completedAttempts)) {
           next = combatObservationRelationshipSchema.parse({
             ...current,
             roundsTowardNextAttempt: prospectiveProgress,
@@ -5160,6 +5180,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "review_adjust_distance_roll_adjustment" ||
     type === "roll_adjust_distance" ||
     type === "commit_adjust_distance" ||
+    type === "complete_remaining_step" ||
     type === "skip_phase_action" ||
     type === "back_out_phase_attack" ||
     type === "submit_phase_initiative_choice" ||
@@ -7718,10 +7739,7 @@ function buildCombatRoundInitiativeCommitUndoFacts(input: {
     input.priorState.participants.map((participant) => [participant.participantId, participant]),
   );
   const priorFeintById = new Map(
-    input.priorState.feintProposals.map((proposal, index) => [
-      proposal.id,
-      { index, proposal },
-    ]),
+    input.priorState.feintProposals.map((proposal, index) => [proposal.id, { index, proposal }]),
   );
   const priorAdjustDistanceById = new Map(
     input.priorState.adjustDistanceProposals.map((proposal, index) => [
@@ -7766,8 +7784,9 @@ function buildCombatRoundInitiativeCommitUndoFacts(input: {
       selectedStep: input.priorState.selectedStep ?? null,
     },
     participantActionSteps: input.stateAfterPhaseOpen.participants.flatMap((participant) => {
-      const priorStatus =
-        priorParticipantsById.get(participant.participantId)?.stepStatuses[actionStep];
+      const priorStatus = priorParticipantsById.get(participant.participantId)?.stepStatuses[
+        actionStep
+      ];
       const nextStatus = participant.stepStatuses[actionStep];
       return priorStatus !== nextStatus
         ? [
@@ -12094,15 +12113,13 @@ function getRoundEndReviewParticipantTaskId(input: {
     state: input.state,
   });
 
-  return orderedParticipants.find(
-    (participant) => {
-      const review = input.roundEndReview.participantReviews[participant.participantId];
-      if (review?.status !== "complete") return true;
-      return getPendingCombatObservationAttempts(input.state).some(
-        (attempt) => attempt.observerParticipantId === participant.participantId,
-      );
-    },
-  )?.participantId;
+  return orderedParticipants.find((participant) => {
+    const review = input.roundEndReview.participantReviews[participant.participantId];
+    if (review?.status !== "complete") return true;
+    return getPendingCombatObservationAttempts(input.state).some(
+      (attempt) => attempt.observerParticipantId === participant.participantId,
+    );
+  })?.participantId;
 }
 
 export function getNextCombatRoundEndTask(input: {
@@ -12184,8 +12201,7 @@ export function getNextCombatRoundEndTask(input: {
   });
 
   if (reviewParticipantId) {
-    const reviewStatus =
-      roundEndReview.participantReviews[reviewParticipantId]?.status;
+    const reviewStatus = roundEndReview.participantReviews[reviewParticipantId]?.status;
     const observationAttempt =
       reviewStatus === "complete"
         ? getPendingCombatObservationAttempts(normalized).find(
@@ -13905,9 +13921,9 @@ export function commitCombatRoundEndParticipantReview(input: {
         .map((proposal) => proposal.id),
       createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
       createdCombatEffectIds: effectApplication.createdCombatEffectIds,
-      participantReviewCompletionDeferred: getPendingCombatObservationAttempts(
-        normalized,
-      ).some((attempt) => attempt.observerParticipantId === input.participantId),
+      participantReviewCompletionDeferred: getPendingCombatObservationAttempts(normalized).some(
+        (attempt) => attempt.observerParticipantId === input.participantId,
+      ),
       nextReviewStatus: nextStatus,
       nextStatus,
       previousReviewStatus: participantReview.status,
@@ -13944,59 +13960,56 @@ export function commitCombatRoundEndParticipantReview(input: {
   nextState = appendCombatRoundEventForCommand({
     command,
     draft: {
-        actorParticipantId: input.participantId,
-        combatEffectEventId: effectApplication.createdCombatEffectEventId,
-        combatEffectIds: effectApplication.createdCombatEffectIds,
-        facts: {
-          gmReview: {
-            acceptedDamageProposalIds: command.facts.acceptedDamageProposalIds,
-            acceptedDurationProposalIds: command.facts.acceptedDurationProposalIds,
-            acceptedHealthRollIds: command.facts.acceptedHealthRollIds,
-            acceptedRemovalProposalIds: command.facts.acceptedRemovalProposalIds,
-            updatedEffects: command.facts.updatedEffects,
-          },
-          involvedOutcome: {
-            damageApplied: participantReview.proposedDamage
-              .filter((proposal) => proposal.accepted && proposal.amount > 0)
-              .map((proposal) => ({
-                amount: proposal.amount,
-                bleedType: proposal.bleedType,
-                proposalId: proposal.id,
-                sourceEffectId: proposal.sourceEffectId,
-              })),
-            durationChanges: participantReview.proposedEffects
-              .filter((proposal) => proposal.accepted)
-              .map((proposal) => ({
-                effectId: proposal.effectId,
-                nextDuration: proposal.nextDuration,
-                nextExpiresAtRound: proposal.nextExpiresAtRound,
-                proposalId: proposal.id,
-              })),
-            removals: participantReview.proposedRemovals
-              .filter((proposal) => proposal.accepted)
-              .map((proposal) => ({
-                effectId: proposal.effectId,
-                proposalId: proposal.id,
-              })),
-            status: nextStatus,
-          },
+      actorParticipantId: input.participantId,
+      combatEffectEventId: effectApplication.createdCombatEffectEventId,
+      combatEffectIds: effectApplication.createdCombatEffectIds,
+      facts: {
+        gmReview: {
+          acceptedDamageProposalIds: command.facts.acceptedDamageProposalIds,
+          acceptedDurationProposalIds: command.facts.acceptedDurationProposalIds,
+          acceptedHealthRollIds: command.facts.acceptedHealthRollIds,
+          acceptedRemovalProposalIds: command.facts.acceptedRemovalProposalIds,
+          updatedEffects: command.facts.updatedEffects,
         },
-        involvedParticipantIds: [input.participantId],
-        outcomeScope: "involved",
-        ownerParticipantId: input.participantId,
-        sourceIds: [
-          ...effectApplication.createdCombatEffectIds,
-          ...(effectApplication.createdCombatEffectEventId
-            ? [effectApplication.createdCombatEffectEventId]
-            : []),
-        ],
-        status:
-          command.facts.participantReviewCompletionDeferred === true
-            ? "proposed"
-            : "committed",
-        step: "round_summary",
-        type: "participant_su_review",
+        involvedOutcome: {
+          damageApplied: participantReview.proposedDamage
+            .filter((proposal) => proposal.accepted && proposal.amount > 0)
+            .map((proposal) => ({
+              amount: proposal.amount,
+              bleedType: proposal.bleedType,
+              proposalId: proposal.id,
+              sourceEffectId: proposal.sourceEffectId,
+            })),
+          durationChanges: participantReview.proposedEffects
+            .filter((proposal) => proposal.accepted)
+            .map((proposal) => ({
+              effectId: proposal.effectId,
+              nextDuration: proposal.nextDuration,
+              nextExpiresAtRound: proposal.nextExpiresAtRound,
+              proposalId: proposal.id,
+            })),
+          removals: participantReview.proposedRemovals
+            .filter((proposal) => proposal.accepted)
+            .map((proposal) => ({
+              effectId: proposal.effectId,
+              proposalId: proposal.id,
+            })),
+          status: nextStatus,
+        },
       },
+      involvedParticipantIds: [input.participantId],
+      outcomeScope: "involved",
+      ownerParticipantId: input.participantId,
+      sourceIds: [
+        ...effectApplication.createdCombatEffectIds,
+        ...(effectApplication.createdCombatEffectEventId
+          ? [effectApplication.createdCombatEffectEventId]
+          : []),
+      ],
+      status: command.facts.participantReviewCompletionDeferred === true ? "proposed" : "committed",
+      step: "round_summary",
+      type: "participant_su_review",
+    },
     state: nextState,
   });
 
@@ -18789,11 +18802,9 @@ function recordCombatRoundAttackCommand(input: {
           defenderDb: input.result.defenderDb,
           lookupTotal: input.result.lookupTotal,
           ob: input.result.ob,
-          obBeforeOpponentSpecificModifier:
-            input.command.facts?.obBeforeOpponentSpecificModifier,
+          obBeforeOpponentSpecificModifier: input.command.facts?.obBeforeOpponentSpecificModifier,
           openEndedD10s: input.result.openEndedD10s,
-          opponentSpecificObModifierRows:
-            input.command.facts?.opponentSpecificObModifierRows,
+          opponentSpecificObModifierRows: input.command.facts?.opponentSpecificObModifierRows,
           opponentSpecificObPercentageAdjustment:
             input.command.facts?.opponentSpecificObPercentageAdjustment,
           opponentSpecificObRaw: input.command.facts?.opponentSpecificObRaw,
@@ -18958,6 +18969,333 @@ export function recordCombatRoundParticipantStepReview(input: {
         type: commandType,
       })
     : withStatus;
+}
+
+const BULK_COMPLETABLE_STEP_STATUSES = new Set<CombatRoundStepStatus>([
+  "complete",
+  "gmEdited",
+  "locked",
+  "skipped",
+  "submitted",
+]);
+
+function combatRoundDeclarationIsBulkReviewable(participant: CombatRoundParticipantState): boolean {
+  const declaration = participant.declaration;
+  if (!declaration) return false;
+
+  return validateCombatDeclarationTargets({
+    actingParticipantId: participant.participantId,
+    actionId: declaration.actionId,
+    movementKind: declaration.movementIntent?.mode,
+    phaseContexts: declaration.phaseContexts,
+    secondaryActionContext: declaration.secondaryActionContext,
+    secondaryActionId: declaration.secondaryActionId,
+    selectedOpponentId: declaration.combatContext?.selectedOpponentId,
+  }).valid;
+}
+
+export type CombatRoundBulkStepCompletionResult = {
+  blocker?: CombatRoundBulkStepBlocker;
+  command: CombatRoundCommand;
+  completedParticipantIds: string[];
+  state: CombatRoundState;
+  stoppedAtParticipantId?: string;
+};
+
+export type CombatRoundBulkStepBlocker = {
+  code:
+    | "initiative_invalid_declaration"
+    | "initiative_player_owned"
+    | "initiative_roll_required"
+    | "modifier_review_invalid";
+  message: string;
+  participantId: string;
+};
+
+function getCombatRoundBulkInitiativeBlocker(input: {
+  phase: CombatRoundPhase;
+  playerOwnedParticipantIds: ReadonlySet<string>;
+  participant: CombatRoundParticipantState;
+  requiresInitiativeOrdering: boolean;
+  state: CombatRoundState;
+}): CombatRoundBulkStepBlocker | undefined {
+  const { participant } = input;
+  const label = participant.label;
+
+  if (!combatRoundDeclarationIsBulkReviewable(participant)) {
+    return {
+      code: "initiative_invalid_declaration",
+      message: `Bulk initiative stopped at ${label}: the declaration is incomplete or invalid.`,
+      participantId: participant.participantId,
+    };
+  }
+  if (input.playerOwnedParticipantIds.has(participant.participantId)) {
+    return {
+      code: "initiative_player_owned",
+      message: `Bulk initiative stopped at ${label}: initiative is player-owned.`,
+      participantId: participant.participantId,
+    };
+  }
+
+  if (input.phase === "phase1") {
+    const declarationRequiresOrderedManeuver =
+      participant.declaration?.actionId === "feint_attack" ||
+      participant.declaration?.actionId === "adjust_range_attack";
+    const adjustDistanceProposal = getCombatRoundAdjustDistanceProposal({
+      attackerParticipantId: participant.participantId,
+      state: input.state,
+    });
+    const feintProposal = getCombatRoundFeintProposal({
+      attackerParticipantId: participant.participantId,
+      state: input.state,
+    });
+    const unresolvedOrderedManeuver =
+      (adjustDistanceProposal && adjustDistanceProposal.status !== "committed") ||
+      (feintProposal &&
+        feintProposal.status !== "committed" &&
+        feintProposal.status !== "impossible");
+
+    if (declarationRequiresOrderedManeuver || unresolvedOrderedManeuver) {
+      return {
+        code: "initiative_roll_required",
+        message: `Bulk initiative stopped at ${label}: this action requires an initiative roll.`,
+        participantId: participant.participantId,
+      };
+    }
+  }
+
+  if (
+    input.requiresInitiativeOrdering &&
+    combatRoundParticipantHasExecutablePhaseAction({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: input.state,
+    })
+  ) {
+    return {
+      code: "initiative_roll_required",
+      message: `Bulk initiative stopped at ${label}: this action requires an initiative roll.`,
+      participantId: participant.participantId,
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Completes the contiguous, decision-free portion of one global combat step.
+ *
+ * This is intentionally one command and one state transition. It never calls the
+ * participant command recorders, so clients and persistence never observe
+ * intermediate revisions. The first participant that needs a decision remains
+ * pending and becomes the returned state's current participant.
+ */
+export function completeRemainingCombatRoundStep(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  phase: CombatRoundPhase;
+  playerOwnedParticipantIds?: ReadonlySet<string>;
+  state: CombatRoundState;
+}): CombatRoundBulkStepCompletionResult {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const modifierStep =
+    input.phase === "phase1" ? "review_action_modifiers" : "review_phase_2_modifiers";
+  const initiativeStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
+  const isModifierReview = normalized.currentStep === modifierStep;
+  const isInitiative = normalized.currentStep === initiativeStep;
+  const playerOwnedParticipantIds = input.playerOwnedParticipantIds ?? new Set<string>();
+
+  if (!isModifierReview && !isInitiative) {
+    throw new RangeError(
+      "Complete remaining step is only available for modifier review or initiative.",
+    );
+  }
+
+  const step = isModifierReview ? modifierStep : initiativeStep;
+  const completedParticipantIds: string[] = [];
+  const participantFacts: Array<{
+    participantId: string;
+    priorDeclarationSubmittedBy: "gm" | "player" | null;
+    priorInitiative: CombatRoundInitiativeResult | null;
+    priorStepStatus: CombatRoundStepStatus | null;
+  }> = [];
+  let blocker: CombatRoundBulkStepBlocker | undefined;
+  let stoppedAtParticipantId: string | undefined;
+  const executablePhaseActionCount = isInitiative
+    ? normalized.participants.filter((participant) =>
+        combatRoundParticipantHasExecutablePhaseAction({
+          participantId: participant.participantId,
+          phase: input.phase,
+          state: normalized,
+        }),
+      ).length
+    : 0;
+  const requiresInitiativeOrdering = executablePhaseActionCount > 1;
+
+  const participants = normalized.participants.map((participant) => {
+    const status = participant.stepStatuses[step] ?? "pending";
+    const initiative = participant.initiatives[input.phase];
+    const alreadyComplete =
+      BULK_COMPLETABLE_STEP_STATUSES.has(status) || (isInitiative && initiative !== undefined);
+
+    if (alreadyComplete || stoppedAtParticipantId) {
+      return participant;
+    }
+
+    const participantBlocker = isModifierReview
+      ? !combatRoundDeclarationIsBulkReviewable(participant)
+        ? {
+            code: "modifier_review_invalid" as const,
+            message: `Bulk modifier review stopped at ${participant.label}: the proposed modifier state is invalid.`,
+            participantId: participant.participantId,
+          }
+        : undefined
+      : getCombatRoundBulkInitiativeBlocker({
+          phase: input.phase,
+          playerOwnedParticipantIds,
+          participant,
+          requiresInitiativeOrdering,
+          state: normalized,
+        });
+
+    if (participantBlocker) {
+      blocker = participantBlocker;
+      stoppedAtParticipantId = participant.participantId;
+      return participant;
+    }
+
+    completedParticipantIds.push(participant.participantId);
+    participantFacts.push({
+      participantId: participant.participantId,
+      priorDeclarationSubmittedBy: participant.declaration?.submittedBy ?? null,
+      priorInitiative: initiative ?? null,
+      priorStepStatus: participant.stepStatuses[step] ?? null,
+    });
+
+    return {
+      ...participant,
+      declaration:
+        isModifierReview && participant.declaration
+          ? { ...participant.declaration, submittedBy: "gm" as const }
+          : participant.declaration,
+      initiatives: isInitiative
+        ? {
+            ...participant.initiatives,
+            [input.phase]: combatRoundInitiativeResultSchema.parse({
+              baseInitiative: 0,
+              modifierAdjustment: 0,
+              resolutionType: "bulk_skipped",
+              rolls: [],
+              rollTotal: 0,
+              total: 0,
+            }),
+          }
+        : participant.initiatives,
+      stepStatuses: {
+        ...participant.stepStatuses,
+        [step]: isInitiative ? "skipped" : "gmEdited",
+      },
+    };
+  });
+
+  if (completedParticipantIds.length === 0) {
+    throw new RangeError(
+      blocker?.message ?? "The remaining combat step cannot be completed automatically.",
+    );
+  }
+
+  const commandParticipantId =
+    normalized.currentCursor?.participantId ??
+    completedParticipantIds[0] ??
+    normalized.selectedParticipantId;
+  if (!commandParticipantId) {
+    throw new RangeError("No participant is available for bulk step completion.");
+  }
+  const beforeCursor =
+    normalized.currentCursor ??
+    getDefaultCombatRoundCursor({
+      participantId: commandParticipantId,
+      roundNumber: normalized.roundNumber,
+      step,
+    });
+  const nextPendingParticipantId =
+    stoppedAtParticipantId ??
+    participants.find((participant) => {
+      const status = participant.stepStatuses[step] ?? "pending";
+      return (
+        !BULK_COMPLETABLE_STEP_STATUSES.has(status) &&
+        (!isInitiative || participant.initiatives[input.phase] === undefined)
+      );
+    })?.participantId;
+  const afterParticipantId =
+    nextPendingParticipantId ??
+    completedParticipantIds[completedParticipantIds.length - 1] ??
+    commandParticipantId;
+  const afterCursor = getDefaultCombatRoundCursor({
+    participantId: afterParticipantId,
+    roundNumber: normalized.roundNumber,
+    step,
+  });
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: commandParticipantId,
+      state: normalized,
+      type: "complete_remaining_step",
+    });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      bulkStepUndo: {
+        commandId,
+        navigation: {
+          currentCursor: normalized.currentCursor ?? null,
+          currentStep: normalized.currentStep,
+          selectedParticipantId: normalized.selectedParticipantId ?? null,
+          selectedStep: normalized.selectedStep ?? null,
+        },
+        participantFacts,
+        phase: input.phase,
+        roundNumber: normalized.roundNumber,
+        step,
+        version: 1,
+      },
+      completedParticipantIds,
+      phase: input.phase,
+      resolutionType: isInitiative ? "bulk_skipped" : "accepted_unchanged",
+      source: "gm_bulk_completion",
+      step,
+      stoppedAtParticipantId,
+    },
+    id: commandId,
+    participantId: commandParticipantId,
+    phase: input.phase,
+    roundNumber: normalized.roundNumber,
+    step: beforeCursor.step,
+    type: "complete_remaining_step",
+  });
+
+  return {
+    blocker,
+    command,
+    completedParticipantIds,
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      currentCursor: afterCursor,
+      participants,
+      selectedParticipantId: afterParticipantId,
+      selectedStep: step,
+    }),
+    stoppedAtParticipantId,
+  };
 }
 
 function resetCombatRoundParryForAttackResult(input: {
@@ -19980,6 +20318,69 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
     phaseResolutionCursor: undefined,
     selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
     selectedStep,
+  });
+}
+
+function undoCombatRoundBulkStepCompletionCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "complete_remaining_step"
+  ) {
+    return undefined;
+  }
+
+  const parsedUndo = combatRoundBulkStepUndoFactsSchema.safeParse(command.facts.bulkStepUndo);
+  if (!parsedUndo.success) return undefined;
+  const undo = parsedUndo.data;
+  if (undo.commandId !== command.id || undo.roundNumber !== command.roundNumber) return undefined;
+
+  const participantFactsById = new Map(
+    undo.participantFacts.map((fact) => [fact.participantId, fact]),
+  );
+  const participants = normalized.participants.map((participant) => {
+    const fact = participantFactsById.get(participant.participantId);
+    if (!fact) return participant;
+
+    const stepStatuses = { ...participant.stepStatuses };
+    if (fact.priorStepStatus) {
+      stepStatuses[undo.step] = fact.priorStepStatus;
+    } else {
+      delete stepStatuses[undo.step];
+    }
+
+    const initiatives = { ...participant.initiatives };
+    if (fact.priorInitiative) {
+      initiatives[undo.phase] = fact.priorInitiative;
+    } else {
+      delete initiatives[undo.phase];
+    }
+
+    const declaration =
+      fact.priorDeclarationSubmittedBy && participant.declaration
+        ? {
+            ...participant.declaration,
+            submittedBy: fact.priorDeclarationSubmittedBy,
+          }
+        : participant.declaration;
+
+    return { ...participant, declaration, initiatives, stepStatuses };
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: undo.navigation.currentCursor ?? undefined,
+    currentStep: undo.navigation.currentStep,
+    participants,
+    selectedParticipantId: undo.navigation.selectedParticipantId ?? undefined,
+    selectedStep: undo.navigation.selectedStep ?? undefined,
   });
 }
 
@@ -21384,9 +21785,7 @@ function undoCombatObservationCommandAtIndex(input: {
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "roll_observation") return undefined;
   const relationshipId =
-    typeof command.facts.relationshipId === "string"
-      ? command.facts.relationshipId
-      : undefined;
+    typeof command.facts.relationshipId === "string" ? command.facts.relationshipId : undefined;
   const attemptId =
     typeof command.facts.observationAttemptId === "string"
       ? command.facts.observationAttemptId
@@ -21580,6 +21979,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "commit_phase_initiative_resolution") {
     return undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "complete_remaining_step") {
+    return undoCombatRoundBulkStepCompletionCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
@@ -22712,6 +23118,20 @@ function getCombatRoundLatestEventForCommand(input: {
       shortTitle: "New round started",
       step: command.afterCursor.step,
       summaryText: `Round ${nextRoundNumber}: New round started.`,
+    };
+  }
+
+  if (command.type === "complete_remaining_step") {
+    const resolutionType = getCombatRoundLatestEventFactString(facts, "resolutionType");
+    const completedLabel = resolutionType === "bulk_skipped" ? "initiative" : "modifier review";
+
+    return {
+      commandId: command.id,
+      phase: command.phase,
+      roundNumber: command.roundNumber,
+      shortTitle: `Remaining ${completedLabel} completed`,
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: GM completed remaining ${completedLabel}.`,
     };
   }
 

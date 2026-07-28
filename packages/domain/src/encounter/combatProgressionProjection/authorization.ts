@@ -92,6 +92,7 @@ interface CommandTaskRule {
         phase?: CombatRoundPhase,
       ) => CombatProgressionBoundaryKind | readonly CombatProgressionBoundaryKind[] | undefined);
   kind: CombatProgressionTaskKind | readonly CombatProgressionTaskKind[];
+  expectedCommand?: CombatProgressionExpectedCommand | readonly CombatProgressionExpectedCommand[];
   process?: CombatProgressionProcessKind;
   stage: CombatProgressionStageKind | readonly CombatProgressionStageKind[];
 }
@@ -130,6 +131,22 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     kind: "gm_advance_boundary",
     process: "round_end",
     stage: "boundary",
+  },
+  complete_remaining_step: {
+    boundary: [
+      "phase1_modifier_review",
+      "phase1_initiative",
+      "phase2_modifier_review",
+      "phase2_initiative",
+    ],
+    expectedCommand: [
+      "review_modifiers_phase1",
+      "roll_initiative_phase1",
+      "review_modifiers_phase2",
+      "roll_initiative_phase2",
+    ],
+    kind: ["modifier_review", "roll_initiative"],
+    stage: ["review", "roll"],
   },
   commit_round_end_distance_control: {
     boundary: "round_end",
@@ -285,6 +302,13 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "combat_experience",
     stage: "difficulty",
   },
+  skip_phase_action: {
+    boundary: resolutionBoundary,
+    expectedCommand: "roll_attack",
+    kind: "attack",
+    process: "attack",
+    stage: "attack",
+  },
   submit_phase_initiative_choice: {
     boundary: resolutionBoundary,
     kind: "combat_experience",
@@ -382,7 +406,9 @@ export function authorizeCombatProgressionTask(
     .flatMap((stage) => stage.executionGroups)
     .flatMap((group) => group.tasks)
     .filter(
-      (task) => ruleMatches(task.kind, rule.kind) && task.expectedCommand === input.commandType,
+      (task) =>
+        ruleMatches(task.kind, rule.kind) &&
+        ruleMatches(task.expectedCommand, rule.expectedCommand ?? input.commandType),
     );
 
   if (commandTasks.length === 0) {

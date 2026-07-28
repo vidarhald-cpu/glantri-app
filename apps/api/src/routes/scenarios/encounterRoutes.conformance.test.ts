@@ -83,6 +83,29 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("expectedTaskId: body.taskId");
   });
 
+  it("executes GM bulk step completion as one descriptor-bound domain mutation", () => {
+    const routeStart = source.indexOf(
+      '"/encounters/:encounterId/combat-round/complete-remaining-step"',
+    );
+    const nextRoute = source.indexOf(
+      '"/encounters/:encounterId/combat-round/skip-current-phase-action"',
+      routeStart,
+    );
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).toContain('commandType: "complete_remaining_step"');
+    expect(routeSource.match(/completeRemainingCombatRoundStep\(\{/g)).toHaveLength(1);
+    expect(routeSource.match(/updateCombatEncounter\(\{/g)).toHaveLength(1);
+    expect(routeSource).toContain("expectedRevision: encounter.updatedAt");
+    expect(routeSource).toContain("playerOwnedParticipantIds");
+    expect(routeSource).toContain("scenarioParticipant.controlledByUserId !== user.id");
+    expect(routeSource).toContain("blocker: completed.blocker");
+    expect(routeSource).toContain("declaration.combatContext");
+    expect(routeSource).toContain("buildCombatRoundCommandEnvelope({ state: completed.state })");
+  });
+
   it("canonicalizes targeted secondary declarations and derives Parry from stable Dodge identity", () => {
     expect(source).toContain("scenarioParticipantSecondaryActionContextSchema.parse");
     expect(source).toContain('skill.skillId === "dodge"');
@@ -131,9 +154,7 @@ describe("combat route canonical-conformance guards", () => {
     expect(
       advanceSource.indexOf("const authorization = authorizeCombatProgressionTask({"),
     ).toBeLessThan(
-      advanceSource.indexOf(
-        "const observationBoundary = resolveCombatObservationRoundBoundary({",
-      ),
+      advanceSource.indexOf("const observationBoundary = resolveCombatObservationRoundBoundary({"),
     );
   });
 

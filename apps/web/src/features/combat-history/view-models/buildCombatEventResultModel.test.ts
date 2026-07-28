@@ -26,6 +26,33 @@ function event(
 }
 
 describe("buildCombatEventResultModel", () => {
+  it("describes bulk-skipped initiative without claiming that a die was rolled", () => {
+    const model = buildCombatEventResultModel([
+      event("initiative", 1, {
+        facts: {
+          involvedOutcome: { resolutionType: "bulk_skipped", total: 0 },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "roller",
+            visibility: "visible",
+          },
+        ],
+        status: "skipped",
+        step: "initiative_phase_1",
+      }),
+    ]);
+
+    expect(model.items[0]).toMatchObject({
+      outcomeRows: [{ text: "Effective initiative: 0" }],
+      summary: "The Gladiator initiative was bulk skipped by GM.",
+    });
+    expect(model.items[0]?.summary).not.toContain("rolled");
+  });
+
   it("orders attack, parry, location, critical, and damage without collapsing the chain", () => {
     const model = buildCombatEventResultModel([
       event("damage_committed", 5),

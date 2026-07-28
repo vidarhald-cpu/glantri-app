@@ -369,6 +369,36 @@ describe("buildProjectedCombatTrackerModel", () => {
     });
   });
 
+  it("keeps bulk-skipped initiative distinct from a rolled or overridden history result", () => {
+    const projection = history([
+      event({
+        facts: {
+          involvedOutcome: { resolutionType: "bulk_skipped", total: 0 },
+          publicOutcome: {},
+        },
+        status: "skipped",
+        step: "initiative_phase_1",
+        type: "initiative",
+      }),
+    ]);
+    projection.progression = liveProgression({
+      boundary: "phase1_resolution",
+      kind: "attack",
+      step: "A1",
+    });
+
+    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
+      "1:aria:initiative_phase_1"
+    ];
+
+    expect(cell).toMatchObject({
+      initiativeValue: false,
+      marker: "–",
+      markerKind: "skipped",
+    });
+    expect(cell.hoverText).toContain("initiative bulk skipped by GM; effective initiative 0");
+  });
+
   it("keeps an ordinary current attack open without exceptional attention", () => {
     const projection = history([]);
     projection.progression = liveProgression({

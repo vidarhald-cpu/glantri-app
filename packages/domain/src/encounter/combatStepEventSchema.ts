@@ -144,6 +144,7 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "review_adjust_distance_roll_adjustment",
   "roll_adjust_distance",
   "commit_adjust_distance",
+  "complete_remaining_step",
 ]);
 
 export const combatStepEventSourceSchema = z.object({

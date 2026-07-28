@@ -39,6 +39,7 @@ import {
   canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
+  completeRemainingCombatRoundStep,
   commitCombatRoundPhaseInitiativeResolution,
   commitCombatRoundEndDistanceControl,
   commitCombatRoundEndParticipantReview,
@@ -156,6 +157,7 @@ import {
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundPairDistance,
   setCombatRoundSelection,
+  skipCombatRoundCurrentPhaseAction,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -898,9 +900,7 @@ function parseContinuedContactMaintenanceRollBody(
   };
 }
 
-function parseCombatObservationRollBody(
-  body: unknown,
-): ParsedCombatTaskCommandIdentity & {
+function parseCombatObservationRollBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   observationAttemptId: string;
   opponentParticipantId: string;
   processId: string;
@@ -913,10 +913,7 @@ function parseCombatObservationRollBody(
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
-    observationAttemptId: parseNonEmptyString(
-      value.observationAttemptId,
-      "observationAttemptId",
-    ),
+    observationAttemptId: parseNonEmptyString(value.observationAttemptId, "observationAttemptId"),
     opponentParticipantId: parseNonEmptyString(
       value.opponentParticipantId,
       "opponentParticipantId",
@@ -5502,10 +5499,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         skillId,
         step: "phase_1_actions",
       };
-      let canonicalCombatModifier = resolveCombatWideGeneralModifiers({
-        context: feintCalculationContext,
-        contributions: [...projection.contributions, ...observationContributions],
-      }).total +
+      let canonicalCombatModifier =
+        resolveCombatWideGeneralModifiers({
+          context: feintCalculationContext,
+          contributions: [...projection.contributions, ...observationContributions],
+        }).total +
         resolveCombatModifierContributions({
           bucket: "skill_ob",
           context: feintCalculationContext,
@@ -5725,6 +5723,237 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
     }
   });
+
+  app.post(
+    "/encounters/:encounterId/combat-round/complete-remaining-step",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          {
+            scenarioId,
+            userId: user.id,
+            userRoles: user.roles,
+          },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            error: "Only GM users can complete the remaining combat step.",
+          });
+        }
+
+        const value = parseBodyObject(request.body, "Complete remaining step payload");
+        const identity = parseCombatTaskCommandIdentity(value);
+        const phase = combatRoundPhaseSchema.parse(value.phase);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const playerOwnedParticipantIds = new Set(
+          roundState.participants.flatMap((roundParticipant) => {
+            const encounterParticipant = encounter.participants.find((candidate) =>
+              participantAliasesInclude({
+                id: roundParticipant.participantId,
+                participant: candidate,
+              }),
+            );
+            const scenarioParticipant = findScenarioParticipantForEncounterParticipant({
+              encounterParticipant,
+              scenarioParticipants,
+            });
+
+            return scenarioParticipant?.controlledByUserId &&
+              scenarioParticipant.controlledByUserId !== user.id
+              ? [roundParticipant.participantId]
+              : [];
+          }),
+        );
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "complete_remaining_step",
+            participantId:
+              typeof value.participantId === "string" ? value.participantId : undefined,
+            phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({
+            code: authorization.code,
+            error: "The remaining combat step is no longer available for bulk completion.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const completed = completeRemainingCombatRoundStep({
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          phase,
+          playerOwnedParticipantIds,
+          state: roundState,
+        });
+        const updatedParticipants =
+          roundState.currentStep === "review_action_modifiers" ||
+          roundState.currentStep === "review_phase_2_modifiers"
+            ? await Promise.all(
+                completed.completedParticipantIds.map(async (participantId) => {
+                  const encounterParticipant = encounter.participants.find(
+                    (participant) => participant.id === participantId,
+                  );
+                  const scenarioParticipant = scenarioParticipants.find(
+                    (participant) => participant.id === encounterParticipant?.scenarioParticipantId,
+                  );
+                  const declaration = completed.state.participants.find(
+                    (participant) => participant.participantId === participantId,
+                  )?.declaration;
+                  if (!encounterParticipant || !scenarioParticipant || !declaration) {
+                    throw new RangeError(
+                      "A participant in the remaining modifier review is no longer available.",
+                    );
+                  }
+
+                  return encounterService.updateScenarioParticipantState({
+                    participantId: scenarioParticipant.id,
+                    scenarioId,
+                    state: {
+                      ...scenarioParticipant.state,
+                      combat: {
+                        ...scenarioParticipant.state.combat,
+                        combatContext: scenarioParticipantCombatContextSchema.parse(
+                          declaration.combatContext ??
+                            scenarioParticipant.state.combat.combatContext,
+                        ),
+                      },
+                    },
+                  });
+                }),
+              )
+            : [];
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: completed.state,
+            currentRound: completed.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          blocker: completed.blocker,
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: completed.state }),
+          completedParticipantIds: completed.completedParticipantIds,
+          encounter: savedEncounter,
+          participants: updatedParticipants,
+          stoppedAtParticipantId: completed.stoppedAtParticipantId,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to complete the remaining combat step.";
+        return reply.code(error instanceof RangeError ? 409 : 400).send({ error: message });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/skip-current-phase-action",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({ error: "Only GM users can skip a combat action." });
+        }
+
+        const value = parseBodyObject(request.body, "Skip current phase action payload");
+        const identity = parseCombatTaskCommandIdentity(value);
+        const phase = combatRoundPhaseSchema.parse(value.phase);
+        const participantId = parseId(value, "participantId", "Participant id");
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            commandType: "skip_phase_action",
+            participantId,
+            phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({
+            code: authorization.code,
+            error: "The current phase action is no longer available to skip.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const nextRoundState = skipCombatRoundCurrentPhaseAction({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          participantId,
+          phase,
+          state: roundState,
+          submittedBy: "gm",
+          updatedAt: submittedAt,
+        });
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          expectedRevision: encounter.updatedAt,
+          campaignId: access.campaignId,
+          encounterId,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(error instanceof RangeError ? 409 : 400).send({
+          error: error instanceof Error ? error.message : "Unable to skip the current action.",
+        });
+      }
+    },
+  );
 
   app.post("/encounters/:encounterId/combat-initiative", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -6617,240 +6846,233 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.post(
-    "/encounters/:encounterId/combat-round/roll-observation",
-    async (request, reply) => {
-      const user = await requireAuthenticatedUser(request, reply);
-      if (!user) return;
+  app.post("/encounters/:encounterId/combat-round/roll-observation", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
 
-      try {
-        const encounterId = parseId(request.params, "encounterId", "Encounter id");
-        const encounter = await encounterService.getEncounterById(encounterId);
-        if (!encounter?.scenarioId) {
-          return reply.code(404).send({ error: "Encounter not found." });
-        }
-        const scenarioId = encounter.scenarioId;
-        const access = await resolveScenarioWorkspaceAccess(
-          { campaignService, scenarioService },
-          { scenarioId, userId: user.id, userRoles: user.roles },
-        );
-        if (!access) return reply.code(404).send({ error: "Encounter not found." });
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
 
-        const body = parseCombatObservationRollBody(request.body);
-        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
-        const participantResolution = resolveCombatParticipantForRequest({
-          accessMode: access.mode,
-          encounter,
-          requestedParticipantId: body.scenarioParticipantId,
-          scenarioParticipants,
-          userId: user.id,
-        });
-        const observer = participantResolution?.scenarioParticipant;
-        const observerEncounterParticipant = participantResolution?.encounterParticipant;
-        if (!observer || !observer.isActive || !observerEncounterParticipant) {
-          return reply.code(403).send({
-            error: "Participant is not assigned to this encounter.",
-          });
-        }
-        const gmAuthorizedOperation = access.mode === "gm";
-        if (
-          !gmAuthorizedOperation &&
-          (observer.controlledByUserId !== user.id ||
-            !isUserAssignedToEncounterMembership({
-              encounter,
-              scenarioParticipants,
-              userId: user.id,
-            }))
-        ) {
-          return reply.code(403).send({
-            error: "Player is not assigned to this encounter participant.",
-          });
-        }
-
-        const targetEncounterParticipant = encounter.participants.find(
-          (participant) => participant.id === body.opponentParticipantId,
-        );
-        const target = findScenarioParticipantForEncounterParticipant({
-          encounterParticipant: targetEncounterParticipant,
-          scenarioParticipants,
-        });
-        if (!target || !target.isActive) {
-          return reply.code(409).send({
-            error: "The observed opponent is no longer available.",
-          });
-        }
-        const roundState = initializeMaterializedCombatRoundState({
-          encounter,
-          scenarioParticipants,
-        });
-        const authorization = authorizeCombatTaskCommand({
-          authorization: {
-            actor: gmAuthorizedOperation
-              ? { kind: "gm" }
-              : { kind: "combatant", participantId: observerEncounterParticipant.id },
-            commandType: "roll_observation",
-            observationAttemptId: body.observationAttemptId,
-            opponentParticipantId: body.opponentParticipantId,
-            participantId: observerEncounterParticipant.id,
-            processId: body.processId,
-            relationshipId: body.relationshipId,
-            stageId: body.stageId,
-          },
-          encounterRevision: encounter.updatedAt,
-          identity: body,
-          roundState,
-        });
-        if (!authorization.ok) {
-          return reply
-            .code(409)
-            .send({ code: authorization.code, error: authorization.message });
-        }
-
-        const observerProfile = resolveCombatObservationSkillProfile({
-          ...getScenarioParticipantFeintSkillInput(observer),
-          skills: defaultCanonicalContent.skills,
-        });
-        const targetProfile = resolveCombatObservationSkillProfile({
-          ...getScenarioParticipantFeintSkillInput(target),
-          skills: defaultCanonicalContent.skills,
-        });
-        if (!observerProfile || !targetProfile) {
-          return reply.code(409).send({
-            error:
-              "Observe Opponent requires canonical Intelligence-based Dodge or close-combat skill profiles.",
-          });
-        }
-        const observerModifierProjection = buildLiveCombatModifierContributionProjection({
-          combatContext: observer.state.combat.combatContext,
-          combatEffects: observer.state.combatEffects,
-          currentRound: roundState.roundNumber,
-          encounterId,
-          ownerParticipantId: observer.id,
-        });
-        const targetModifierProjection = buildLiveCombatModifierContributionProjection({
-          combatContext: target.state.combat.combatContext,
-          combatEffects: target.state.combatEffects,
-          currentRound: roundState.roundNumber,
-          encounterId,
-          ownerParticipantId: target.id,
-        });
-        const observerObservationContributions =
-          buildCombatObservationModifierContributions({
-            encounterId,
-            observerCombatantId: observerEncounterParticipant.id,
-            observerParticipantId: observer.id,
-            opponentCombatantId: targetEncounterParticipant!.id,
-            opponentParticipantId: target.id,
-            relationships: roundState.observationRelationships,
-          });
-        const targetObservationContributions =
-          buildCombatObservationModifierContributions({
-            encounterId,
-            observerCombatantId: targetEncounterParticipant!.id,
-            observerParticipantId: target.id,
-            opponentCombatantId: observerEncounterParticipant.id,
-            opponentParticipantId: observer.id,
-            relationships: roundState.observationRelationships,
-          });
-        const observationContext = (input: {
-          ownerParticipantId: string;
-          opponentParticipantId: string;
-          skillId: string;
-        }): CombatCalculationContext => ({
-          actionId: "observe_opponent",
-          encounterId,
-          ownerParticipantId: input.ownerParticipantId,
-          opponentParticipantId: input.opponentParticipantId,
-          pairKey: createCombatParticipantPairKey(
-            input.ownerParticipantId,
-            input.opponentParticipantId,
-          ),
-          rollPurpose: "observe_opponent",
-          rollType: "observation",
-          roundNumber: roundState.roundNumber,
-          skillId: input.skillId,
-          step: "round_summary",
-        });
-        const submittedAt = new Date().toISOString();
-        const rolled = recordCombatObservationRoll({
-          command: { createdAt: submittedAt, createdByUserId: user.id },
-          completedAtRevision: submittedAt,
-          executionGroupId: body.executionGroupId,
-          observerBasis: buildObservationRollBasis({
-            context: observationContext({
-              ownerParticipantId: observer.id,
-              opponentParticipantId: target.id,
-              skillId: observerProfile.skillId,
-            }),
-            contributions: [
-              ...observerModifierProjection.contributions,
-              ...observerObservationContributions,
-            ],
-            profile: observerProfile,
-          }),
-          observerParticipantId: observerEncounterParticipant.id,
-          observationAttemptId: body.observationAttemptId,
-          relationshipId: body.relationshipId,
-          state: roundState,
-          targetBasis: buildObservationRollBasis({
-            context: observationContext({
-              ownerParticipantId: target.id,
-              opponentParticipantId: observer.id,
-              skillId: targetProfile.skillId,
-            }),
-            contributions: [
-              ...targetModifierProjection.contributions,
-              ...targetObservationContributions,
-            ],
-            profile: targetProfile,
-          }),
-          targetParticipantId: body.opponentParticipantId,
-        });
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId,
-          session: {
-            ...encounter,
-            combatRoundState: rolled.state,
-            currentRound: rolled.state.roundNumber,
-            updatedAt: submittedAt,
-          },
-        });
-        const responseEncounter = gmAuthorizedOperation
-          ? savedEncounter
-          : buildPlayerSafeCombatRollMutationEncounterForUser({
-              encounter: savedEncounter,
-              scenarioParticipants,
-              userId: user.id,
-            });
-        const safeAttempt = gmAuthorizedOperation
-          ? rolled.attempt
-          : { ...rolled.attempt, targetRoll: undefined };
-
-        return {
-          attempt: safeAttempt,
-          command: gmAuthorizedOperation
-            ? rolled.command
-            : buildPlayerSafeCombatRoundCommandForUser({
-                command: rolled.command,
-                ...buildPlayerSafeCombatScopeForUser({
-                  encounter: savedEncounter,
-                  scenarioParticipants,
-                  userId: user.id,
-                }),
-              }),
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: rolled.state }),
-          encounter: responseEncounter,
-        };
-      } catch (error) {
-        return reply.code(400).send({
-          error: error instanceof Error ? error.message : "Unable to roll Observe Opponent.",
+      const body = parseCombatObservationRollBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
+        encounter,
+        requestedParticipantId: body.scenarioParticipantId,
+        scenarioParticipants,
+        userId: user.id,
+      });
+      const observer = participantResolution?.scenarioParticipant;
+      const observerEncounterParticipant = participantResolution?.encounterParticipant;
+      if (!observer || !observer.isActive || !observerEncounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
         });
       }
-    },
-  );
+      const gmAuthorizedOperation = access.mode === "gm";
+      if (
+        !gmAuthorizedOperation &&
+        (observer.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const targetEncounterParticipant = encounter.participants.find(
+        (participant) => participant.id === body.opponentParticipantId,
+      );
+      const target = findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: targetEncounterParticipant,
+        scenarioParticipants,
+      });
+      if (!target || !target.isActive) {
+        return reply.code(409).send({
+          error: "The observed opponent is no longer available.",
+        });
+      }
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: gmAuthorizedOperation
+            ? { kind: "gm" }
+            : { kind: "combatant", participantId: observerEncounterParticipant.id },
+          commandType: "roll_observation",
+          observationAttemptId: body.observationAttemptId,
+          opponentParticipantId: body.opponentParticipantId,
+          participantId: observerEncounterParticipant.id,
+          processId: body.processId,
+          relationshipId: body.relationshipId,
+          stageId: body.stageId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity: body,
+        roundState,
+      });
+      if (!authorization.ok) {
+        return reply.code(409).send({ code: authorization.code, error: authorization.message });
+      }
+
+      const observerProfile = resolveCombatObservationSkillProfile({
+        ...getScenarioParticipantFeintSkillInput(observer),
+        skills: defaultCanonicalContent.skills,
+      });
+      const targetProfile = resolveCombatObservationSkillProfile({
+        ...getScenarioParticipantFeintSkillInput(target),
+        skills: defaultCanonicalContent.skills,
+      });
+      if (!observerProfile || !targetProfile) {
+        return reply.code(409).send({
+          error:
+            "Observe Opponent requires canonical Intelligence-based Dodge or close-combat skill profiles.",
+        });
+      }
+      const observerModifierProjection = buildLiveCombatModifierContributionProjection({
+        combatContext: observer.state.combat.combatContext,
+        combatEffects: observer.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: observer.id,
+      });
+      const targetModifierProjection = buildLiveCombatModifierContributionProjection({
+        combatContext: target.state.combat.combatContext,
+        combatEffects: target.state.combatEffects,
+        currentRound: roundState.roundNumber,
+        encounterId,
+        ownerParticipantId: target.id,
+      });
+      const observerObservationContributions = buildCombatObservationModifierContributions({
+        encounterId,
+        observerCombatantId: observerEncounterParticipant.id,
+        observerParticipantId: observer.id,
+        opponentCombatantId: targetEncounterParticipant!.id,
+        opponentParticipantId: target.id,
+        relationships: roundState.observationRelationships,
+      });
+      const targetObservationContributions = buildCombatObservationModifierContributions({
+        encounterId,
+        observerCombatantId: targetEncounterParticipant!.id,
+        observerParticipantId: target.id,
+        opponentCombatantId: observerEncounterParticipant.id,
+        opponentParticipantId: observer.id,
+        relationships: roundState.observationRelationships,
+      });
+      const observationContext = (input: {
+        ownerParticipantId: string;
+        opponentParticipantId: string;
+        skillId: string;
+      }): CombatCalculationContext => ({
+        actionId: "observe_opponent",
+        encounterId,
+        ownerParticipantId: input.ownerParticipantId,
+        opponentParticipantId: input.opponentParticipantId,
+        pairKey: createCombatParticipantPairKey(
+          input.ownerParticipantId,
+          input.opponentParticipantId,
+        ),
+        rollPurpose: "observe_opponent",
+        rollType: "observation",
+        roundNumber: roundState.roundNumber,
+        skillId: input.skillId,
+        step: "round_summary",
+      });
+      const submittedAt = new Date().toISOString();
+      const rolled = recordCombatObservationRoll({
+        command: { createdAt: submittedAt, createdByUserId: user.id },
+        completedAtRevision: submittedAt,
+        executionGroupId: body.executionGroupId,
+        observerBasis: buildObservationRollBasis({
+          context: observationContext({
+            ownerParticipantId: observer.id,
+            opponentParticipantId: target.id,
+            skillId: observerProfile.skillId,
+          }),
+          contributions: [
+            ...observerModifierProjection.contributions,
+            ...observerObservationContributions,
+          ],
+          profile: observerProfile,
+        }),
+        observerParticipantId: observerEncounterParticipant.id,
+        observationAttemptId: body.observationAttemptId,
+        relationshipId: body.relationshipId,
+        state: roundState,
+        targetBasis: buildObservationRollBasis({
+          context: observationContext({
+            ownerParticipantId: target.id,
+            opponentParticipantId: observer.id,
+            skillId: targetProfile.skillId,
+          }),
+          contributions: [
+            ...targetModifierProjection.contributions,
+            ...targetObservationContributions,
+          ],
+          profile: targetProfile,
+        }),
+        targetParticipantId: body.opponentParticipantId,
+      });
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: rolled.state,
+          currentRound: rolled.state.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+      const responseEncounter = gmAuthorizedOperation
+        ? savedEncounter
+        : buildPlayerSafeCombatRollMutationEncounterForUser({
+            encounter: savedEncounter,
+            scenarioParticipants,
+            userId: user.id,
+          });
+      const safeAttempt = gmAuthorizedOperation
+        ? rolled.attempt
+        : { ...rolled.attempt, targetRoll: undefined };
+
+      return {
+        attempt: safeAttempt,
+        command: gmAuthorizedOperation
+          ? rolled.command
+          : buildPlayerSafeCombatRoundCommandForUser({
+              command: rolled.command,
+              ...buildPlayerSafeCombatScopeForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
+        commandEnvelope: buildCombatRoundCommandEnvelope({ state: rolled.state }),
+        encounter: responseEncounter,
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll Observe Opponent.",
+      });
+    }
+  });
 
   app.post(
     "/encounters/:encounterId/combat-round/roll-distance-control",
@@ -8779,8 +9001,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   obBeforeOpponentSpecificModifier: body.ob,
                   opponentSpecificObPercentageAdjustment:
                     opponentSpecificObTrace.percentageAdjustment,
-                  opponentSpecificObRaw:
-                    canonicalModifierFacts.attackerOpponentResolution.total,
+                  opponentSpecificObRaw: canonicalModifierFacts.attackerOpponentResolution.total,
                   opponentSpecificObModifierRows,
                 }
               : {}),

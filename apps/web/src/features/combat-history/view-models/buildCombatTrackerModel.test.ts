@@ -354,6 +354,27 @@ describe("buildCombatTrackerModel", () => {
     ]);
   });
 
+  it("renders bulk-skipped initiative as skipped rather than as a fabricated roll total", () => {
+    const result = model([
+      facts({
+        initiativeCommitted: true,
+        initiativeResolutionType: "bulk_skipped",
+        initiativeRollRecorded: true,
+        initiativeTotal: 0,
+        status: "skipped",
+        step: "initiative_phase_1",
+      }),
+    ]);
+    const cell = result.cells["1:participant-a:initiative_phase_1"];
+
+    expect(cell).toMatchObject({
+      initiativeValue: false,
+      marker: "–",
+      markerKind: "skipped",
+    });
+    expect(cell.hoverText).toContain("initiative bulk skipped by GM; effective initiative 0");
+  });
+
   it("marks a recorded initiative roll complete without exposing its uncommitted value", () => {
     const result = model([
       facts({

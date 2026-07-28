@@ -483,24 +483,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit readiness");
     expect(source).toContain("Commit readiness appears after required damage rolls are resolved.");
     expect(source).toContain("Save review");
-    expect(source).toContain("Skip current action");
-    expect(source).not.toContain("skipCombatRoundCurrentActionOnServer");
-    expect(source).not.toContain("skipCombatRoundCurrentPhaseAction");
+    expect(source).toContain("Skip this participant");
+    expect(source).toContain("skipCurrentCombatPhaseActionOnServer");
+    expect(source).toContain("completeRemainingCombatStepOnServer");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
     expect(source).toContain("InspectorCurrentActionOutcomeSelection");
-    expect(source).toContain('useState<InspectorCurrentActionOutcomeSelection>("normal")');
+    expect(source).toContain('useState<InspectorCurrentActionOutcomeSelection>("perform")');
     expect(source).toContain("inspectorSkipActionOutcomeSelectorAvailable");
     expect(source).toContain("inspectorCurrentActionOutcomeControls");
     expect(source).toContain("inspectorSkipActionSelected");
-    expect(source).toContain(">Action outcome</span>");
-    expect(source).toContain('<option value="normal">{inspectorActionButtonLabel}</option>');
-    expect(source).toContain('<option value="skip">Skip current action</option>');
+    expect(source).toContain(">Workflow</span>");
+    expect(source).toContain('<option value="perform">Perform current action</option>');
+    expect(source).toContain("Complete remaining step");
     expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");
-    expect(source).not.toContain("skipInspectorCurrentPhaseAction");
-    expect(source).not.toContain(
-      "onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}",
-    );
+    expect(source).toContain("skipInspectorCurrentPhaseAction");
+    expect(source).toContain("completeRemainingInspectorStep");
     expect(source).not.toContain("secondaryButtonLabel={");
     expect(source).not.toContain("Edit character-sheet rows");
     expect(source).toContain("Add manual row");
@@ -695,9 +693,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey]",
     );
-    expect(source).toContain(
-      "inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey]",
-    );
+    expect(source).toContain("inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
@@ -968,9 +964,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatMutationConflictCode(caughtError)");
     expect(source).toContain("await refreshCanonicalCombatAfterConflict(caughtError)");
     expect(source).toContain("loadEncounterById(roundView.encounterId)");
-    expect(source).toContain(
-      "The current action was refreshed; review it before retrying.",
-    );
+    expect(source).toContain("The current action was refreshed; review it before retrying.");
   });
 
   it("routes phase damage commit through a narrow command instead of browser mutation", () => {
@@ -1126,7 +1120,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
     const mutationIndex = source.indexOf("await commitRoundEndParticipantReviewOnServer({");
     const nextHandlerIndex = source.indexOf(
-      "if (descriptor.commandType === \"roll_round_end_health_check\")",
+      'if (descriptor.commandType === "roll_round_end_health_check")',
       mutationIndex,
     );
     const handler = source.slice(mutationIndex, nextHandlerIndex);

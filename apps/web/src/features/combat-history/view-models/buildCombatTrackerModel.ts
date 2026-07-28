@@ -95,6 +95,11 @@ function markerMeaning(kind: CombatTrackerMarkerKind): CombatTrackerLegendItem {
 export function getCombatTrackerCellMarkerKind(
   input: CombatTrackerCellFacts,
 ): CombatTrackerMarkerKind {
+  if (
+    input.initiativeResolutionType === "bulk_skipped" ||
+    input.initiativeResolutionType === "gm_skipped"
+  )
+    return "skipped";
   if (input.initiativeCommitted && input.initiativeTotal !== undefined) return "roll_result";
   if (input.initiativeRollRecorded) return "complete";
   if (
@@ -238,6 +243,10 @@ function stepNoun(step: CombatRoundStep): string {
 }
 
 function cellDetail(input: CombatTrackerCellFacts): string {
+  if (input.initiativeResolutionType === "bulk_skipped")
+    return "initiative bulk skipped by GM; effective initiative 0.";
+  if (input.initiativeResolutionType === "gm_skipped")
+    return "initiative skipped by GM; effective initiative 0.";
   if (input.initiativeRollRecorded && !input.initiativeCommitted)
     return "initiative roll recorded; awaiting GM commit.";
   if (input.progression?.current) {
@@ -340,7 +349,9 @@ export function buildCombatTrackerModel(input: {
   for (const facts of input.cellFacts) {
     const markerKind = getCombatTrackerCellMarkerKind(facts);
     const marker: CombatTrackerFacetPresentation["marker"] =
-      facts.initiativeCommitted && facts.initiativeTotal !== undefined
+      markerKind === "roll_result" &&
+      facts.initiativeCommitted &&
+      facts.initiativeTotal !== undefined
         ? (String(facts.initiativeTotal) as CombatTrackerFacetPresentation["marker"])
         : (markerMeaning(markerKind).marker as CombatTrackerFacetPresentation["marker"]);
     const cellKey = buildCombatTrackerCellKey(facts);
@@ -365,7 +376,11 @@ export function buildCombatTrackerModel(input: {
       historical,
       hover,
       hoverText: `${facts.participantLabel} · Round ${facts.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[facts.step]}: ${hover.text}`,
-      initiativeValue: Boolean(facts.initiativeCommitted && facts.initiativeTotal !== undefined),
+      initiativeValue: Boolean(
+        markerKind === "roll_result" &&
+          facts.initiativeCommitted &&
+          facts.initiativeTotal !== undefined,
+      ),
       inspectable: facts.inspectable,
       marker,
       markerKind,

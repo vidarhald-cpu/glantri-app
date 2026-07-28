@@ -323,42 +323,57 @@ function initiativeCandidates(input: {
       phase,
       type: phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
     });
-    const missing = initiative.rolls.length === 0 ? ["facts.rollerPrivate.rolls"] : [];
+    const bulkCommand = input.commands.find(
+      ({ value }) =>
+        value.type === "complete_remaining_step" &&
+        value.phase === phase &&
+        stringArrayFact(value.facts, "completedParticipantIds").includes(
+          input.participant.participantId,
+        ),
+    );
+    const sourceCommand = command ?? bulkCommand;
+    const resolutionType = "resolutionType" in initiative ? initiative.resolutionType : undefined;
+    const skipped = resolutionType === "gm_skipped" || resolutionType === "bulk_skipped";
+    const missing = initiative.rolls.length === 0 && !skipped ? ["facts.rollerPrivate.rolls"] : [];
 
     return [
       buildCandidate({
-        command: command?.value,
-        commandIndex: command?.sourceIndex,
+        command: sourceCommand?.value,
+        commandIndex: sourceCommand?.sourceIndex,
         encounterId: input.encounterId,
         event: {
           actorParticipantId: input.participant.participantId,
           completenessMissing: missing,
           facts: {
-            publicOutcome: { total: initiative.total },
+            publicOutcome: {
+              resolutionType,
+              total: initiative.total,
+            },
             rollerPrivate: {
               baseInitiative: initiative.baseInitiative,
               modifierAdjustment: initiative.modifierAdjustment,
+              resolutionType,
               rolls: initiative.rolls,
               rollTotal: initiative.rollTotal,
               total: initiative.total,
             },
           },
           involvedParticipantIds: [input.participant.participantId],
-          occurredAt: command?.value.createdAt ?? null,
+          occurredAt: sourceCommand?.value.createdAt ?? null,
           outcomeScope: "involved",
           ownerParticipantId: input.participant.participantId,
           phase,
           rollerParticipantId: input.participant.participantId,
-          sourceIds: unique([command?.value.id]),
-          sourceKind: command ? "legacy_command" : "legacy_result",
-          status: "recorded",
+          sourceIds: unique([sourceCommand?.value.id]),
+          sourceKind: sourceCommand ? "legacy_command" : "legacy_result",
+          status: skipped ? "skipped" : "recorded",
           step: phaseStep(phase, "initiative"),
           type: "initiative",
         },
         roundNumber: input.roundNumber,
         sourceIndex: input.participantIndex * 2 + phaseIndex,
         sourceRank: 1,
-        sourceToken: command?.value.id ?? `${input.participant.participantId}:${phase}`,
+        sourceToken: sourceCommand?.value.id ?? `${input.participant.participantId}:${phase}`,
       }),
     ];
   });

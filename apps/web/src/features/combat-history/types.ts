@@ -1,6 +1,7 @@
 import type {
   CombatRoundAttackRollResult,
   CombatRoundCommand,
+  CombatRoundInitiativeResult,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
   CombatRoundStepSnapshot,
@@ -95,6 +96,7 @@ export interface CombatTrackerCellFacts {
   adjustDistanceRollRecorded?: boolean;
   inspectable: boolean;
   initiativeCommitted?: boolean;
+  initiativeResolutionType?: CombatRoundInitiativeResult["resolutionType"];
   initiativeRollRecorded?: boolean;
   initiativeTotal?: number;
   participantId: string;

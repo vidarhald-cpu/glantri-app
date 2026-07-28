@@ -88,13 +88,13 @@ cannot replace a newer accepted mutation.
 
 Combat rules must remain in the layer that owns them.
 
-| Layer | Responsibility |
-| --- | --- |
-| `packages/domain` | Combat state schemas, command facts, progression projection, canonical identity, undo facts, events/results, and deterministic state transitions |
-| `packages/rules-engine` | Workbook- or rule-backed calculations and formula composition |
-| `packages/database` | Validated read models, split persistence, transactions, optimistic concurrency, legacy materialization, and full composition |
-| `apps/api` | Authentication, access checks, request parsing, descriptor authorization, command orchestration, response projection, and player-safe boundaries |
-| `apps/web` | Draft input, authoritative response adoption, revision polling, history coordination, and presentation |
+| Layer                   | Responsibility                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/domain`       | Combat state schemas, command facts, progression projection, canonical identity, undo facts, events/results, and deterministic state transitions |
+| `packages/rules-engine` | Workbook- or rule-backed calculations and formula composition                                                                                    |
+| `packages/database`     | Validated read models, split persistence, transactions, optimistic concurrency, legacy materialization, and full composition                     |
+| `apps/api`              | Authentication, access checks, request parsing, descriptor authorization, command orchestration, response projection, and player-safe boundaries |
+| `apps/web`              | Draft input, authoritative response adoption, revision polling, history coordination, and presentation                                           |
 
 Dependencies continue to point downward according to `AGENTS.md`. In particular,
 rules and formulas are not reimplemented in API routes or React components, and
@@ -246,6 +246,26 @@ There are two explicit compatibility boundaries:
 Moving GM historical tracker/inspection to revision-keyed history is required before
 removing the round-boundary exception. New commands must not create additional
 full-response exceptions.
+
+### GM bulk step completion
+
+`complete_remaining_step` is a descriptor-bound workflow command, not a client loop.
+It consumes the exact current modifier-review or initiative task, advances the
+contiguous eligible participants inside one domain mutation, persists one command,
+and creates one revision. It stops before the first participant whose canonical
+state requires a decision.
+
+For modifier review, bulk completion accepts the already-projected declaration
+contexts unchanged and persists those same participant contexts. For initiative,
+it uses a bulk-specific eligibility predicate rather than treating every pending
+initiative task as a blocker. GM-owned passive work and a sole ordinary phase action
+whose ordering cannot affect another phase action may receive a bounded
+`bulk_skipped` resolution with effective initiative zero and no die. Ordered
+maneuvers, multiple competing executable phase actions, invalid declarations, and
+player-owned initiative remain blockers. The returned active state and command
+envelope identify the first blocker or the initiative-commit task after the
+completed iteration. One compact inverse restores all touched participant statuses,
+initiatives, and navigation.
 
 ## 8. Synchronization and refresh
 

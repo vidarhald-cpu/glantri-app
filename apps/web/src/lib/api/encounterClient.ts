@@ -10,6 +10,7 @@ import {
   CombatProgressionBoundaryKind,
   CombatParryPurpose,
   CombatRoundAttackRollResult,
+  CombatRoundBulkStepBlocker,
   CombatRoundCommand,
   CombatRoundCommandEnvelope,
   CombatRoundDamageReview,
@@ -349,7 +350,12 @@ export async function rollCombatFeintOnServer(input: {
   scenarioParticipantId: string;
   taskId: string;
 }): Promise<{ encounter: EncounterSession }> {
-  return sendCombatMutationJson(
+  return sendCombatMutationJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    completedParticipantIds: string[];
+    encounter: EncounterSession;
+    stoppedAtParticipantId?: string;
+  }>(
     `/encounters/${input.encounterId}/combat-round/roll-feint`,
     {
       body: JSON.stringify({
@@ -993,6 +999,61 @@ export async function rollCombatInitiativeOnServer(input: {
   );
 
   return payload;
+}
+
+export async function completeRemainingCombatStepOnServer(input: {
+  currentEncounter: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  participantId?: string;
+  phase: CombatRoundPhase;
+  processId?: string;
+  stageId?: string;
+  taskId: string;
+}): Promise<{
+  blocker?: CombatRoundBulkStepBlocker;
+  commandEnvelope: CombatRoundCommandEnvelope;
+  completedParticipantIds: string[];
+  encounter: EncounterSession;
+  participants: ScenarioParticipant[];
+  stoppedAtParticipantId?: string;
+}> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/complete-remaining-step`,
+    {
+      body: combatMutationBody(input),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
+export async function skipCurrentCombatPhaseActionOnServer(input: {
+  currentEncounter: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  participantId: string;
+  phase: CombatRoundPhase;
+  processId?: string;
+  stageId?: string;
+  taskId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendCombatMutationJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(
+    `/encounters/${input.encounterId}/combat-round/skip-current-phase-action`,
+    {
+      body: combatMutationBody(input),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
 }
 
 export async function rollCombatAttackOnServer(input: {

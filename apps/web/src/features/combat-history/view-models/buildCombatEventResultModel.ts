@@ -575,6 +575,19 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       return { outcomeRows: [], summary: `${attacker ?? "Participant"} completed SU review.` };
     case "initiative": {
       const total = factLabel(factValue(event, "total"));
+      const resolutionType = factValue(event, "resolutionType");
+      if (resolutionType === "bulk_skipped") {
+        return {
+          outcomeRows: resultRow(event, "Effective initiative: 0"),
+          summary: `${roller ?? "Participant"} initiative was bulk skipped by GM.`,
+        };
+      }
+      if (resolutionType === "gm_skipped") {
+        return {
+          outcomeRows: resultRow(event, "Effective initiative: 0"),
+          summary: `${roller ?? "Participant"} initiative was skipped by GM.`,
+        };
+      }
       return {
         outcomeRows: resultRow(event, total ? `Total: ${total}` : undefined),
         summary: `${roller ?? "Participant"} rolled initiative.`,

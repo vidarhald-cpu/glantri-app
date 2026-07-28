@@ -706,6 +706,75 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("submits one descriptor-bound request for GM bulk step completion", async () => {
+    const currentEncounter = encounterSessionSchema.parse({
+      combatRoundState: combatRoundStateSchema.parse({
+        currentStep: "review_action_modifiers",
+        encounterId: "encounter-1",
+        participants: [{ label: "Aria", participantId: "aria" }],
+      }),
+      createdAt: "2026-07-26T09:00:00.000Z",
+      id: "encounter-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const nextEncounter = encounterSessionSchema.parse({
+      ...currentEncounter,
+      updatedAt: "2026-07-26T10:01:00.000Z",
+    });
+    const fetchMock = stubFetch(
+      buildActiveCombatMutationResponse({
+        encounter: nextEncounter,
+        mutationPresentation: {
+          blocker: {
+            code: "initiative_player_owned",
+            message: "Bulk initiative stopped at Bera: initiative is player-owned.",
+            participantId: "bera",
+          },
+          completedParticipantIds: ["aria"],
+        },
+      }),
+    );
+    const client = await loadClient();
+
+    await expect(
+      client.completeRemainingCombatStepOnServer({
+        currentEncounter,
+        encounterId: "encounter-1",
+        executionGroupId: "group-modifiers",
+        expectedRevision: currentEncounter.updatedAt,
+        participantId: "aria",
+        phase: "phase1",
+        processId: "process-modifiers",
+        stageId: "stage-review",
+        taskId: "task-modifiers",
+      }),
+    ).resolves.toMatchObject({
+      blocker: {
+        code: "initiative_player_owned",
+        participantId: "bera",
+      },
+      completedParticipantIds: ["aria"],
+      encounter: { updatedAt: "2026-07-26T10:01:00.000Z" },
+    });
+    expectFetchCall(fetchMock, {
+      body: {
+        encounterId: "encounter-1",
+        executionGroupId: "group-modifiers",
+        expectedRevision: currentEncounter.updatedAt,
+        participantId: "aria",
+        phase: "phase1",
+        processId: "process-modifiers",
+        stageId: "stage-review",
+        taskId: "task-modifiers",
+      },
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/complete-remaining-step",
+    });
+  });
+
   it("sends the CE mutation through the active-v1 production client without a load signal", async () => {
     const currentEncounter = encounterSessionSchema.parse({
       combatRoundState: combatRoundStateSchema.parse({

@@ -579,6 +579,60 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(attack?.defenderParticipantId).toBeUndefined();
   });
 
+  it("projects bulk-skipped initiative as a complete skipped resolution without dice", () => {
+    const bulkSkipped = combatRoundParticipantStateSchema.parse({
+      initiatives: {
+        phase1: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          resolutionType: "bulk_skipped",
+          rolls: [],
+          rollTotal: 0,
+          total: 0,
+        },
+      },
+      label: "Bulk skipped",
+      participantId: ATTACKER_ID,
+    });
+    const initiative = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: {
+            completedParticipantIds: [ATTACKER_ID],
+            phase: "phase1",
+            resolutionType: "bulk_skipped",
+          },
+          id: "bulk-initiative",
+          participantId: ATTACKER_ID,
+          phase: "phase1",
+          step: "i1",
+          type: "complete_remaining_step",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      participants: [bulkSkipped],
+      roundNumber: 1,
+    }).find((event) => event.type === "initiative");
+
+    expect(initiative).toMatchObject({
+      completeness: "legacy_derived",
+      facts: {
+        publicOutcome: {
+          resolutionType: "bulk_skipped",
+          total: 0,
+        },
+        rollerPrivate: {
+          resolutionType: "bulk_skipped",
+          rolls: [],
+          total: 0,
+        },
+      },
+      missingFacts: [],
+      status: "skipped",
+    });
+  });
+
   it("fails safely for malformed source rows and uses incomplete snapshot fallback", () => {
     const events = deriveLegacyCombatStepEvents({
       commands: [{ type: "roll_attack" }],

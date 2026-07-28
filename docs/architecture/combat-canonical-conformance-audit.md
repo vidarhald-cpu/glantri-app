@@ -746,3 +746,22 @@ narration. Player-safe active/history projection retains only relationships and 
 controlled observer, including the observer-safe latest attempt, and removes the hidden target
 calculation; other participants' Observe declaration context is also suppressed. No client counts
 rounds, resolves contests, constructs modifiers, or derives historical calculation facts.
+
+## 18. Canonical GM bulk step completion
+
+The GM workflow selector delegates modifier-review and initiative bulk work to the
+`complete_remaining_step` command. Authorization aliases that command to the exact currently
+projected review or initiative task; revision, participant, task, execution group, process, stage,
+and phase remain descriptor-bound. The route invokes one domain mutation and one revision-guarded
+combat persistence call, then returns the authoritative active state and final command envelope.
+
+The domain iterator follows canonical participant order. Modifier reviews accept the current
+declaration contexts unchanged and stop before malformed or unresolved declarations. Initiative
+uses a bulk-specific eligibility predicate. It records an explicit `bulk_skipped` result with total
+zero and no die for GM-owned passive work and for a sole ordinary phase action when initiative
+ordering cannot affect another phase action. It stops before player-owned initiative, invalid
+declarations, ordered Feint/Adjust Distance work, or competing executable phase actions whose order
+is consequential. The command carries versioned compact inverse facts for only touched statuses,
+initiative results, and navigation.
+Undo removes the one bulk command and restores the exact pre-command task without a recursive state
+snapshot. Manual review and roll commands remain unchanged.

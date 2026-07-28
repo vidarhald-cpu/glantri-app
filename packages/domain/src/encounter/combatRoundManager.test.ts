@@ -25,6 +25,7 @@ import {
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  completeRemainingCombatRoundStep,
   combatRoundInitiativeCommitUndoFactsSchema,
   combatRoundStateSchema,
   combatRoundStepSnapshotSchema,
@@ -413,6 +414,209 @@ describe("canonical Dodge resolution in round-end distance control", () => {
       generalFatigueModifier: -1,
       finalTotal: 20,
     });
+  });
+});
+
+describe("canonical GM bulk step completion", () => {
+  function stateWithDeclarations(input: {
+    gladiatorActionId?: string;
+    scyrianActionId?: string;
+    step: "initiative_phase_1" | "review_action_modifiers";
+  }) {
+    const initial = initializeCombatRoundState({
+      encounter: encounter({
+        participants: [
+          participant({ id: "gladiator", label: "The Gladiator" }),
+          participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+        ],
+      }),
+    });
+    const declared = declareTestRoundAction({
+      actionId: input.scyrianActionId ?? "parry",
+      participantId: "scyrian",
+      phase1Target: "scenario-gladiator",
+      phase2Target: "scenario-gladiator",
+      state: declareTestRoundAction({
+        actionId: input.gladiatorActionId ?? "parry",
+        participantId: "gladiator",
+        phase1Target: "scenario-scyrian",
+        phase2Target: "scenario-scyrian",
+        state: initial,
+      }),
+    });
+    return advanceToStep(declared, input.step);
+  }
+
+  it("accepts every unchanged valid modifier proposal in one command", () => {
+    const before = stateWithDeclarations({ step: "review_action_modifiers" });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: before,
+    });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator", "scyrian"]);
+    expect(
+      result.state.participants.map((entry) => entry.stepStatuses.review_action_modifiers),
+    ).toEqual(["gmEdited", "gmEdited"]);
+    expect(result.state.participants.map((entry) => entry.declaration?.submittedBy)).toEqual([
+      "gm",
+      "gm",
+    ]);
+    expect(result.state.commands).toHaveLength(before.commands.length + 1);
+    expect(result.command.type).toBe("complete_remaining_step");
+    expect(result.command.facts.resolutionType).toBe("accepted_unchanged");
+    expect(buildCombatRoundCommandEnvelope({ state: result.state }).latestEvent).toMatchObject({
+      shortTitle: "Remaining modifier review completed",
+      summaryText: expect.stringContaining("GM completed remaining modifier review."),
+    });
+    const nextTask = buildCombatProgressionProjection(result.state)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.state === "executable");
+    expect(nextTask).toMatchObject({
+      expectedCommand: "advance_combat_boundary",
+      kind: "gm_advance_boundary",
+    });
+  });
+
+  it("stops modifier review at the first invalid declaration", () => {
+    const valid = stateWithDeclarations({ step: "review_action_modifiers" });
+    const before = combatRoundStateSchema.parse({
+      ...valid,
+      participants: valid.participants.map((entry) =>
+        entry.participantId === "scyrian" ? { ...entry, declaration: undefined } : entry,
+      ),
+    });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: before,
+    });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator"]);
+    expect(result.stoppedAtParticipantId).toBe("scyrian");
+    expect(result.state.currentCursor?.participantId).toBe("scyrian");
+    expect(result.state.participants[1]?.stepStatuses.review_action_modifiers).toBe("pending");
+  });
+
+  it("bulk-skips one timing-bearing action when no competing phase action makes order consequential", () => {
+    const before = stateWithDeclarations({
+      gladiatorActionId: "parry",
+      scyrianActionId: "attack_parry",
+      step: "initiative_phase_1",
+    });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: before,
+    });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator", "scyrian"]);
+    expect(result.stoppedAtParticipantId).toBeUndefined();
+    expect(
+      result.state.participants.map((participant) => participant.initiatives.phase1),
+    ).toEqual([
+      expect.objectContaining({
+        resolutionType: "bulk_skipped",
+        rolls: [],
+        total: 0,
+      }),
+      expect.objectContaining({
+        resolutionType: "bulk_skipped",
+        rolls: [],
+        total: 0,
+      }),
+    ]);
+    expect(
+      result.state.participants.map(
+        (participant) => participant.stepStatuses.initiative_phase_1,
+      ),
+    ).toEqual(["skipped", "skipped"]);
+    const nextTask = buildCombatProgressionProjection(result.state)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.state === "executable");
+    expect(nextTask).toMatchObject({
+      expectedCommand: "commit_phase_initiative_resolution",
+      kind: "commit_initiative",
+    });
+  });
+
+  it("stops after eligible initiative when the next participant has an unresolved ordered maneuver", () => {
+    const before = stateWithDeclarations({
+      gladiatorActionId: "parry",
+      scyrianActionId: "feint_attack",
+      step: "initiative_phase_1",
+    });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: before,
+    });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator"]);
+    expect(result.blocker).toEqual({
+      code: "initiative_roll_required",
+      message:
+        "Bulk initiative stopped at Scyrian cavalry guy: this action requires an initiative roll.",
+      participantId: "scyrian",
+    });
+    expect(result.stoppedAtParticipantId).toBe("scyrian");
+    expect(result.state.currentCursor?.participantId).toBe("scyrian");
+    expect(result.state.participants[0]?.initiatives.phase1).toMatchObject({
+      resolutionType: "bulk_skipped",
+      rolls: [],
+      total: 0,
+    });
+    expect(result.state.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(buildCombatRoundCommandEnvelope({ state: result.state }).currentTask).toMatchObject({
+      participantId: "scyrian",
+      step: "initiative_phase_1",
+    });
+  });
+
+  it("preserves player-owned initiative as a precise bulk blocker", () => {
+    const before = stateWithDeclarations({ step: "initiative_phase_1" });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      playerOwnedParticipantIds: new Set(["scyrian"]),
+      state: before,
+    });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator"]);
+    expect(result.blocker).toEqual({
+      code: "initiative_player_owned",
+      message: "Bulk initiative stopped at Scyrian cavalry guy: initiative is player-owned.",
+      participantId: "scyrian",
+    });
+    expect(result.state.participants[1]?.initiatives.phase1).toBeUndefined();
+
+    expect(() =>
+      completeRemainingCombatRoundStep({
+        command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+        phase: "phase1",
+        playerOwnedParticipantIds: new Set(["gladiator"]),
+        state: before,
+      }),
+    ).toThrow("Bulk initiative stopped at The Gladiator: initiative is player-owned.");
+  });
+
+  it("resolves all decision-free initiative and undo restores the exact prior task", () => {
+    const before = stateWithDeclarations({ step: "initiative_phase_1" });
+    const result = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:10:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: before,
+    });
+    const undone = undoLatestCombatRoundCommand({ state: result.state });
+
+    expect(result.completedParticipantIds).toEqual(["gladiator", "scyrian"]);
+    expect(isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: result.state })).toBe(
+      true,
+    );
+    expect(undone).toEqual(before);
   });
 });
 
@@ -3167,9 +3371,7 @@ describe("combat round manager", () => {
     ]);
     expect(
       clearCombatRoundStep({
-        state: combatRoundStateSchema.parse(
-          JSON.parse(JSON.stringify(committed.state)) as unknown,
-        ),
+        state: combatRoundStateSchema.parse(JSON.parse(JSON.stringify(committed.state)) as unknown),
         step: "phase_1_actions",
       }),
     ).toEqual(beforeCommit);
@@ -3255,10 +3457,7 @@ describe("combat round manager", () => {
     };
     const legacyState = combatRoundStateSchema.parse({
       ...committed.state,
-      commands: [
-        ...committed.state.commands.slice(0, -1),
-        legacyCommand,
-      ],
+      commands: [...committed.state.commands.slice(0, -1), legacyCommand],
     });
 
     expect(

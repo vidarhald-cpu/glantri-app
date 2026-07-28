@@ -50,6 +50,9 @@ function markerForEvents(input: {
     initiative?.facts.privateCalculation?.total ??
     initiative?.facts.involvedOutcome?.total ??
     initiative?.facts.publicOutcome.total;
+  if (initiative?.status === "skipped") {
+    return { kind: "skipped", marker: "–" };
+  }
   if (input.initiativeCommitted && typeof initiativeTotal === "number") {
     return { kind: "roll_result", marker: String(initiativeTotal) };
   }
@@ -151,12 +154,22 @@ export function formatProjectedCombatTrackerHoverDetail(
   if (events.some((event) => event.type === "feint_impossible")) {
     return "feint ruled impossible; no roll required.";
   }
+  const initiative = events.find((event) => event.type === "initiative");
+  const initiativeResolutionType =
+    initiative &&
+    (projectedFact(initiative, "resolutionType") ??
+      initiative.facts.privateCalculation?.resolutionType);
+  if (initiativeResolutionType === "bulk_skipped") {
+    return "initiative bulk skipped by GM; effective initiative 0.";
+  }
+  if (initiativeResolutionType === "gm_skipped") {
+    return "initiative skipped by GM; effective initiative 0.";
+  }
   const skipped = events.find(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
   if (skipped) return skipped.status === "skipped" ? "skipped." : "not applicable.";
 
-  const initiative = events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative &&
     (projectedFact(initiative, "total") ?? initiative.facts.privateCalculation?.total);
