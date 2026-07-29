@@ -196,6 +196,7 @@ import {
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
+  type PlayerCombatAttackStatsView,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
@@ -245,6 +246,8 @@ import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
+  buildTargetAwareEncounterLiveCombatModifierSummary,
+  resolveEncounterLiveCombatModifierContext,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
@@ -4789,11 +4792,26 @@ export default function CombatRoundManagerPanel({
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId;
     const build = () =>
       measureCombatPerformanceStage("panel_active_modifier_presentation", () =>
-        buildEncounterLiveCombatModifierSummary({
+        buildTargetAwareEncounterLiveCombatModifierSummary({
           combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
           combatEffects: selectedScenarioParticipant?.state.combatEffects,
+          context: resolveEncounterLiveCombatModifierContext({
+            actionId: inspectorDraft.actionId || undefined,
+            encounterId: encounter.id,
+            ownerCombatantId: inspector.participant?.participantId,
+            ownerParticipantId: selectedScenarioParticipant?.id,
+            participants: encounter.participants,
+            phaseKey: inspectorModifierPhase,
+            provisional: inspectorHasLocalModifierEdits,
+            relationships: selectedTimelineRoundState.observationRelationships,
+            roundNumber: selectedRoundNumber,
+            step: inspector.step,
+            targetParticipantId: inspectorModifierPhase
+              ? (inspectorDraft.secondaryActionContext?.targetParticipantId ??
+                inspectorDraft.phaseContexts[inspectorModifierPhase].targetParticipantId)
+              : undefined,
+          }),
           currentInitiativeGroupId,
-          phaseKey: inspectorModifierPhase,
         }),
       );
     return selectedRoundIsActive
@@ -4802,8 +4820,19 @@ export default function CombatRoundManagerPanel({
           dependencies: [
             currentInitiativeGroupId,
             inspectorGeneratedCombatContext,
+            inspectorDraft.actionId,
+            inspectorDraft.phaseContexts,
+            inspectorDraft.secondaryActionContext,
+            inspectorHasLocalModifierEdits,
             inspectorModifierPhase,
+            inspector.participant?.participantId,
+            inspector.step,
+            encounter.id,
+            encounter.participants,
+            selectedScenarioParticipant?.id,
             selectedScenarioParticipant?.state.combatEffects,
+            selectedRoundNumber,
+            selectedTimelineRoundState.observationRelationships,
           ],
           key: `live-modifiers:${inspector.participant?.participantId ?? "none"}:${inspectorModifierPhase ?? "none"}`,
         })
@@ -4813,9 +4842,19 @@ export default function CombatRoundManagerPanel({
     combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
     inspector.participant?.participantId,
     inspectorGeneratedCombatContext,
+    inspectorDraft.actionId,
+    inspectorDraft.phaseContexts,
+    inspectorDraft.secondaryActionContext,
+    inspectorHasLocalModifierEdits,
     inspectorModifierPhase,
+    inspector.step,
     selectedRoundIsActive,
+    encounter.id,
+    encounter.participants,
+    selectedScenarioParticipant?.id,
     selectedScenarioParticipant?.state.combatEffects,
+    selectedRoundNumber,
+    selectedTimelineRoundState.observationRelationships,
   ]);
   const inspectorModifierRows = useMemo(() => {
     const currentInitiativeGroupId =
@@ -5338,10 +5377,32 @@ export default function CombatRoundManagerPanel({
     const build = () =>
       measureCombatPerformanceStage("panel_phase_summary_presentation", () => {
         const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
-          const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
+          const basePhaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
             combatContext: inspectorGeneratedCombatContext,
             combatEffects: selectedScenarioParticipant?.state.combatEffects,
+            currentRound: selectedRoundNumber,
+            encounterId: encounter.id,
+            ownerParticipantId: selectedScenarioParticipant?.id,
             phaseKey,
+          });
+          const phaseLiveModifiers = buildTargetAwareEncounterLiveCombatModifierSummary({
+            combatContext: inspectorGeneratedCombatContext,
+            combatEffects: selectedScenarioParticipant?.state.combatEffects,
+            context: resolveEncounterLiveCombatModifierContext({
+              actionId: inspectorDraft.actionId || undefined,
+              encounterId: encounter.id,
+              ownerCombatantId: inspector.participant?.participantId,
+              ownerParticipantId: selectedScenarioParticipant?.id,
+              participants: encounter.participants,
+              phaseKey,
+              provisional: inspectorHasLocalModifierEdits,
+              relationships: selectedTimelineRoundState.observationRelationships,
+              roundNumber: selectedRoundNumber,
+              step: inspector.step,
+              targetParticipantId:
+                inspectorDraft.secondaryActionContext?.targetParticipantId ??
+                inspectorDraft.phaseContexts[phaseKey].targetParticipantId,
+            }),
           });
           const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
             characterContext:
@@ -5358,8 +5419,23 @@ export default function CombatRoundManagerPanel({
             state: inspectorEquipmentState,
             throwingWeaponItemId: null,
           });
+          const requestPhaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+            characterContext:
+              content && inspectorBuild
+                ? {
+                    content,
+                    record: {
+                      build: inspectorBuild,
+                    },
+                  }
+                : null,
+            characterId: inspectorEquipmentCharacterId,
+            liveCombatModifiers: basePhaseLiveModifiers,
+            state: inspectorEquipmentState,
+            throwingWeaponItemId: null,
+          });
 
-          return buildPlayerCombatLoadoutSummary({
+          const summary = buildPlayerCombatLoadoutSummary({
             actionId: inspectorDraft.actionId,
             allowUnarmedFallback:
               inspectorEquipmentStatus.kind === "ready" ||
@@ -5369,6 +5445,26 @@ export default function CombatRoundManagerPanel({
             selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
             secondaryActionId: inspectorDraft.secondaryActionId,
           });
+          const requestSummary = buildPlayerCombatLoadoutSummary({
+            actionId: inspectorDraft.actionId,
+            allowUnarmedFallback:
+              inspectorEquipmentStatus.kind === "ready" ||
+              inspectorEquipmentStatus.kind === "unarmed",
+            loadoutModel: requestPhaseLoadoutModel,
+            phaseKey,
+            selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
+            secondaryActionId: inspectorDraft.secondaryActionId,
+          });
+          return {
+            ...summary,
+            attackStats: summary.attackStats
+              ? {
+                  ...summary.attackStats,
+                  provisional: inspectorHasLocalModifierEdits,
+                }
+              : null,
+            requestAttackStats: requestSummary.attackStats,
+          };
         };
 
         return {
@@ -5384,12 +5480,21 @@ export default function CombatRoundManagerPanel({
             inspectorBuild,
             inspectorDraft.actionId,
             inspectorDraft.phaseContexts,
+            inspectorDraft.secondaryActionContext,
+            inspectorHasLocalModifierEdits,
             inspectorGeneratedCombatContext,
             inspectorDraft.secondaryActionId,
             inspectorEquipmentState,
             inspectorEquipmentCharacterId,
             inspectorEquipmentStatus.kind,
             selectedScenarioParticipant?.state.combatEffects,
+            selectedRoundNumber,
+            selectedTimelineRoundState.observationRelationships,
+            encounter.id,
+            encounter.participants,
+            inspector.participant?.participantId,
+            inspector.step,
+            selectedScenarioParticipant?.id,
           ],
           key: `phase-summaries:${inspector.participant?.participantId ?? "none"}`,
         })
@@ -5402,6 +5507,8 @@ export default function CombatRoundManagerPanel({
     inspector.participant?.participantId,
     inspectorDraft.actionId,
     inspectorDraft.phaseContexts,
+    inspectorDraft.secondaryActionContext,
+    inspectorHasLocalModifierEdits,
     inspectorGeneratedCombatContext,
     inspectorDraft.secondaryActionId,
     inspectorEquipmentState,
@@ -5409,6 +5516,12 @@ export default function CombatRoundManagerPanel({
     inspectorEquipmentStatus.kind,
     selectedRoundIsActive,
     selectedScenarioParticipant?.state.combatEffects,
+    selectedRoundNumber,
+    selectedTimelineRoundState.observationRelationships,
+    encounter.id,
+    encounter.participants,
+    inspector.step,
+    selectedScenarioParticipant?.id,
   ]);
   const inspectorRenderedDeclarationAttackSelection = useMemo(
     () =>
@@ -6848,6 +6961,7 @@ export default function CombatRoundManagerPanel({
 
   function buildScenarioParticipantPhaseSummary(input: {
     declaration?: CombatRoundDeclaration;
+    opponentCombatantId?: string;
     phaseKey?: PlayerCombatPhaseKey;
     scenarioParticipant?: ScenarioParticipant;
   }): {
@@ -6868,10 +6982,30 @@ export default function CombatRoundManagerPanel({
       encounterId: encounter.id,
       roundNumber: selectedRoundNumber,
     });
-    const liveModifiers = buildEncounterLiveCombatModifierSummary({
+    const encounterParticipant = encounter.participants.find(
+      (participant) =>
+        participant.scenarioParticipantId === input.scenarioParticipant?.id ||
+        participant.id === input.scenarioParticipant?.id,
+    );
+    const liveModifiers = buildTargetAwareEncounterLiveCombatModifierSummary({
       combatContext: draft.combatContext,
       combatEffects: input.scenarioParticipant?.state.combatEffects,
-      phaseKey: input.phaseKey,
+      context: resolveEncounterLiveCombatModifierContext({
+        actionId: draft.actionId || undefined,
+        encounterId: encounter.id,
+        ownerCombatantId: encounterParticipant?.id,
+        ownerParticipantId: input.scenarioParticipant?.id,
+        participants: encounter.participants,
+        phaseKey: input.phaseKey,
+        relationships: selectedTimelineRoundState.observationRelationships,
+        roundNumber: selectedRoundNumber,
+        step: selectedTimelineRoundState.currentStep,
+        targetParticipantId: input.phaseKey
+          ? (input.opponentCombatantId ??
+            draft.secondaryActionContext?.targetParticipantId ??
+            draft.phaseContexts[input.phaseKey].targetParticipantId)
+          : undefined,
+      }),
     });
     const modifierRows = buildPlayerCombatModifierRows({
       combatContext: draft.combatContext,
@@ -8585,7 +8719,12 @@ export default function CombatRoundManagerPanel({
     }
 
     const phaseLabel = formatCombatPhaseLabel(phase);
-    const canonicalAttackSummary = inspectorPhaseLoadoutSummaries[phase].attackStats;
+    const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phase];
+    const requestAttackStats =
+      "requestAttackStats" in phaseLoadoutSummary
+        ? (phaseLoadoutSummary.requestAttackStats as PlayerCombatAttackStatsView | null)
+        : undefined;
+    const canonicalAttackSummary = requestAttackStats ?? phaseLoadoutSummary.attackStats;
     if (!canonicalAttackSummary) {
       setSaveError(`${phaseLabel} attack calculation is unavailable.`);
       return;
@@ -8618,6 +8757,7 @@ export default function CombatRoundManagerPanel({
 
     const targetPhaseSummary = buildScenarioParticipantPhaseSummary({
       declaration: targetRoundParticipant?.declaration,
+      opponentCombatantId: selectedEncounterParticipant.id,
       phaseKey: phase,
       scenarioParticipant: targetScenarioParticipant,
     });
@@ -8817,6 +8957,7 @@ export default function CombatRoundManagerPanel({
 
     const defenderPhaseSummary = buildScenarioParticipantPhaseSummary({
       declaration: defenderRoundParticipant.declaration,
+      opponentCombatantId: attackResult.attackerParticipantId,
       phaseKey: phase,
       scenarioParticipant: defenderScenarioParticipant,
     });
@@ -10127,12 +10268,20 @@ export default function CombatRoundManagerPanel({
                       const buildPhaseProjection = () => {
                         const phaseProjectionStartedAt = combatPerformanceNow();
                         const phaseDefenseStats = !inspectorIsHistorical
-                          ? buildPlayerCombatDefenseStats({
-                              mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                              offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                              phaseContext: phaseCombatContext,
-                              reference: phaseLoadoutSummary.reference,
-                            })
+                          ? (() => {
+                              const stats = buildPlayerCombatDefenseStats({
+                                mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                                offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                                phaseContext: phaseCombatContext,
+                                reference: phaseLoadoutSummary.reference,
+                              });
+                              return stats
+                                ? {
+                                    ...stats,
+                                    provisional: inspectorHasLocalModifierEdits,
+                                  }
+                                : null;
+                            })()
                           : null;
                         const selectedResolutionContext =
                           !inspectorIsHistorical &&
@@ -10578,6 +10727,11 @@ export default function CombatRoundManagerPanel({
                       </section>
                     ) : (
                       <PlayerCombatModifierPanel
+                        activeSpecialEffectCount={
+                          inspectorIsHistorical
+                            ? 0
+                            : (inspectorLiveModifiers.specialEffectCount ?? 0)
+                        }
                         controlsDisabled={saving}
                         onAddEntry={(bucketKey, entry) =>
                           updateInspectorModifierBucket(bucketKey, (current) => [
@@ -10612,18 +10766,14 @@ export default function CombatRoundManagerPanel({
                         pendingEntries={
                           inspectorIsHistorical ? [] : inspectorPendingModifierEntries
                         }
+                        provisional={!inspectorIsHistorical && inspectorLiveModifiers.provisional}
                         rows={inspectorDisplayModifierRows}
+                        showEmptyCategories={
+                          !inspectorIsHistorical &&
+                          (inspector.step === "review_action_modifiers" ||
+                            inspector.step === "review_phase_2_modifiers")
+                        }
                         sourceLabel={inspectorModifierSourceLabel}
-                        observationRelationships={selectedTimelineRoundState.observationRelationships.filter(
-                          (relationship) =>
-                            relationship.observerParticipantId === selectedEncounterParticipant?.id,
-                        )}
-                        observationTargetLabels={Object.fromEntries(
-                          selectedTimelineRoundState.participants.map((participant) => [
-                            participant.participantId,
-                            participant.label,
-                          ]),
-                        )}
                       />
                     )}
                     <div style={{ display: "grid", gap: "0.75rem" }}>

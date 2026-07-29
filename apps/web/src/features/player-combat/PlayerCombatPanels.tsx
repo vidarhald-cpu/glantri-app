@@ -53,6 +53,7 @@ import {
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
   characterStateEntries?: PlayerCombatModifierDisplayEntry[];
+  derivedEntries?: PlayerCombatModifierDisplayEntry[];
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
@@ -65,7 +66,7 @@ export interface PlayerCombatModifierDisplayEntry {
   details?: string;
   id: string;
   scopeLabel: string;
-  sourceLabel: "Character/state" | "Feint · OB/DB" | "Parry" | "Situational";
+  sourceLabel: string;
   value: number;
 }
 
@@ -115,6 +116,7 @@ export interface PlayerCombatAttackStatsView {
   initiative: string;
   maxCrits: string;
   ob: string;
+  provisional?: boolean;
   weaponArmorClass?: string;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
@@ -125,10 +127,12 @@ export interface PlayerCombatDefenseStatsView {
   db: string;
   dm: string;
   parry: string;
+  provisional?: boolean;
   sourceName: string;
 }
 
 interface PlayerCombatModifierPanelProps {
+  activeSpecialEffectCount?: number;
   controlsDisabled?: boolean;
   onAddEntry?: (
     bucketKey: ScenarioCombatModifierBucket,
@@ -145,8 +149,11 @@ interface PlayerCombatModifierPanelProps {
   readOnly?: boolean;
   pendingActivationLabel?: string;
   pendingEntries?: readonly ScenarioCombatModifierEntry[];
+  provisional?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
+  showEmptyCategories?: boolean;
+  /** Bounded archived-snapshot compatibility; live observation rows use derivedEntries. */
   observationRelationships?: readonly CombatObservationRelationship[];
   observationTargetLabels?: Readonly<Record<string, string>>;
 }
@@ -793,26 +800,63 @@ export function buildPlayerCombatModifierRows(input: {
       !contribution.applicability.phase ||
       (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
   );
+  const opponentSpecificContributions = input.liveModifiers?.opponentSpecificContributions ?? [];
+  const derivedEntriesByBucket = new Map<
+    CombatModifierContributionBucket,
+    PlayerCombatModifierDisplayEntry[]
+  >();
+  for (const contribution of opponentSpecificContributions) {
+    const entries = derivedEntriesByBucket.get(contribution.bucket) ?? [];
+    entries.push({
+      application: "percentage",
+      id: contribution.id,
+      scopeLabel: "Opponent",
+      sourceLabel: `${contribution.label}${
+        input.liveModifiers?.opponentLabel ? ` · ${input.liveModifiers.opponentLabel}` : ""
+      }`,
+      value: contribution.value,
+    });
+    derivedEntriesByBucket.set(contribution.bucket, entries);
+  }
+  const legacyGeneralEntries = (input.liveModifiers?.legacyGeneralEffectEntries ?? []).map(
+    (entry): PlayerCombatModifierDisplayEntry => ({
+      application: "percentage",
+      id: `legacy-effect:${entry.id}`,
+      scopeLabel: "Active",
+      sourceLabel: entry.label,
+      value: entry.value,
+    }),
+  );
   const totals = {
     dbParry:
       applicableContributions
         .filter((contribution) => contribution.bucket === "db_parry")
         .reduce((total, contribution) => total + contribution.value, 0) +
-      visibleFlatDbEntries.reduce((total, entry) => total + entry.value, 0),
-    generalFatigue: applicableContributions
-      .filter((contribution) => contribution.bucket === "general_fatigue")
-      .reduce((total, contribution) => total + contribution.value, 0),
+      visibleFlatDbEntries.reduce((total, entry) => total + entry.value, 0) +
+      opponentSpecificContributions
+        .filter((contribution) => contribution.bucket === "db_parry")
+        .reduce((total, contribution) => total + contribution.value, 0),
+    generalFatigue:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "general_fatigue")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      legacyGeneralEntries.reduce((total, entry) => total + entry.value, 0),
     initiative: applicableContributions
       .filter((contribution) => contribution.bucket === "initiative")
       .reduce((total, contribution) => total + contribution.value, 0),
-    skillOb: applicableContributions
-      .filter((contribution) => contribution.bucket === "skill_ob")
-      .reduce((total, contribution) => total + contribution.value, 0),
+    skillOb:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "skill_ob")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      opponentSpecificContributions
+        .filter((contribution) => contribution.bucket === "skill_ob")
+        .reduce((total, contribution) => total + contribution.value, 0),
   };
 
   return [
     {
       bucketKey: "general",
+      derivedEntries: legacyGeneralEntries,
       entries: displayModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
@@ -827,12 +871,14 @@ export function buildPlayerCombatModifierRows(input: {
     {
       bucketKey: "situation_ob_skill",
       entries: displayModifierBuckets.situationObSkill,
+      derivedEntries: derivedEntriesByBucket.get("skill_ob"),
       label: "Skill/OB",
       total: totals.skillOb,
     },
     {
       bucketKey: "situation_db",
       entries: displayModifierBuckets.situationDb,
+      derivedEntries: derivedEntriesByBucket.get("db_parry"),
       label: "DB/Parry",
       total: totals.dbParry,
     },
@@ -990,14 +1036,17 @@ function ModifierEditableEntryRow({
 }
 
 export function PlayerCombatModifierPanel({
+  activeSpecialEffectCount = 0,
   controlsDisabled = false,
   onAddEntry,
   onRemoveEntry,
   onUpdateEntry,
   pendingActivationLabel,
   pendingEntries = [],
+  provisional = false,
   readOnly = false,
   rows,
+  showEmptyCategories = false,
   sourceLabel,
   observationRelationships = [],
   observationTargetLabels = {},
@@ -1029,150 +1078,168 @@ export function PlayerCombatModifierPanel({
   return (
     <section style={playerCombatPanelCardStyle}>
       <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
-      {rows.map((row) => {
-        const draftEntry = draftEntries[row.bucketKey];
-        const displayEntries = [...row.entries, ...(row.characterStateEntries ?? [])];
-        const totalIsPercentage =
-          displayEntries.length > 0 &&
-          displayEntries.every((entry) => entry.application === "percentage");
-        const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
-        const situationalEntries = row.entries.filter(
-          (entry) => !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
-        );
-        const groupedFeintDisplayEntries =
-          row.bucketKey === "situation_ob_skill"
-            ? groupedFeintDisplays.map(
-                (group): PlayerCombatModifierDisplayEntry => ({
-                  details: "feint result",
-                  id: `grouped-feint:${group.resultGroupId}`,
-                  scopeLabel: "P2",
-                  sourceLabel: "Feint · OB/DB",
-                  value: group.value,
-                }),
-              )
-            : [];
-        const persistentDisplayEntries = [
-          ...(row.characterStateEntries ?? []),
-          ...importedEntries.map(buildImportedModifierDisplayEntry),
-          ...groupedFeintDisplayEntries,
-        ];
-        const hasVisibleRows =
-          persistentDisplayEntries.length > 0 ||
-          situationalEntries.length > 0 ||
-          Boolean(draftEntry);
+      {provisional ? (
+        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
+      ) : null}
+      {rows
+        .filter(
+          (row) =>
+            showEmptyCategories ||
+            row.total !== 0 ||
+            row.entries.length > 0 ||
+            (row.characterStateEntries?.length ?? 0) > 0 ||
+            (row.derivedEntries?.length ?? 0) > 0,
+        )
+        .map((row) => {
+          const draftEntry = draftEntries[row.bucketKey];
+          const displayEntries = [
+            ...row.entries,
+            ...(row.characterStateEntries ?? []),
+            ...(row.derivedEntries ?? []),
+          ];
+          const totalIsPercentage =
+            displayEntries.length > 0 &&
+            displayEntries.every((entry) => entry.application === "percentage");
+          const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
+          const situationalEntries = row.entries.filter(
+            (entry) =>
+              !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
+          );
+          const groupedFeintDisplayEntries =
+            row.bucketKey === "situation_ob_skill"
+              ? groupedFeintDisplays.map(
+                  (group): PlayerCombatModifierDisplayEntry => ({
+                    details: "feint result",
+                    id: `grouped-feint:${group.resultGroupId}`,
+                    scopeLabel: "P2",
+                    sourceLabel: "Feint · OB/DB",
+                    value: group.value,
+                  }),
+                )
+              : [];
+          const persistentDisplayEntries = [
+            ...(row.characterStateEntries ?? []),
+            ...importedEntries.map(buildImportedModifierDisplayEntry),
+            ...groupedFeintDisplayEntries,
+            ...(row.derivedEntries ?? []),
+          ];
+          const hasVisibleRows =
+            persistentDisplayEntries.length > 0 ||
+            situationalEntries.length > 0 ||
+            Boolean(draftEntry);
 
-        return (
-          <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={compactModifierGroupHeaderStyle}>
-              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
-                <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  {getDisplayTotal(row) >= 0 ? "+" : ""}
-                  {getDisplayTotal(row)}
-                  {totalIsPercentage ? "%" : ""}
-                </span>
-              </div>
-              {editable && !row.locked ? (
-                <button
-                  disabled={controlsDisabled || Boolean(draftEntry)}
-                  onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
-                  style={{ justifySelf: "end" }}
-                  type="button"
-                >
-                  Add
-                </button>
-              ) : null}
-            </div>
-
-            {hasVisibleRows ? (
-              <div style={compactModifierMiniTableStyle}>
-                {persistentDisplayEntries.length > 0 ||
-                (!editable && situationalEntries.length > 0) ? (
-                  <div style={compactModifierDisplayHeaderStyle}>
-                    {["Source/scope", "Mod", "Dur"].map((heading) => (
-                      <span
-                        key={heading}
-                        style={{
-                          color: "#1f1b14",
-                          fontSize: "0.78rem",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {heading}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {persistentDisplayEntries.map((entry) => (
-                  <ModifierDisplayEntryRow
-                    bucketLabel={row.label}
-                    entry={entry}
-                    key={`${entry.sourceLabel}:${entry.id}`}
-                  />
-                ))}
+          return (
+            <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
+              <div style={compactModifierGroupHeaderStyle}>
+                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
+                  <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    {getDisplayTotal(row) >= 0 ? "+" : ""}
+                    {getDisplayTotal(row)}
+                    {totalIsPercentage ? "%" : ""}
+                  </span>
+                </div>
                 {editable && !row.locked ? (
-                  <>
-                    {situationalEntries.length > 0 || draftEntry ? (
-                      <div style={compactModifierMiniTableHeaderStyle}>
-                        {["Source/scope", "Mod", "Dur"].map((heading) => (
-                          <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                            {heading}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {situationalEntries.map((entry) => (
-                      <ModifierEditableEntryRow
-                        bucketLabel={row.label}
-                        controlsDisabled={controlsDisabled}
-                        entry={entry}
-                        key={entry.id}
-                        onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
-                        onUpdate={(patch) => {
-                          const nextEntry = { ...entry, ...patch };
+                  <button
+                    disabled={controlsDisabled || Boolean(draftEntry)}
+                    onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
+                    style={{ justifySelf: "end" }}
+                    type="button"
+                  >
+                    Add
+                  </button>
+                ) : null}
+              </div>
 
-                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
-                            onUpdateEntry(row.bucketKey, entry.id, patch);
-                          } else {
-                            onRemoveEntry(row.bucketKey, entry.id);
-                          }
-                        }}
-                      />
-                    ))}
-                    {draftEntry ? (
-                      <ModifierEditableEntryRow
-                        bucketLabel={row.label}
-                        controlsDisabled={controlsDisabled}
-                        entry={draftEntry}
-                        key={draftEntry.id}
-                        onRemove={() => setDraftEntry(row.bucketKey)}
-                        onUpdate={(patch) => {
-                          const nextEntry = { ...draftEntry, ...patch };
-
-                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
-                            onAddEntry(row.bucketKey, nextEntry);
-                            setDraftEntry(row.bucketKey);
-                          } else {
-                            setDraftEntry(row.bucketKey, nextEntry);
-                          }
-                        }}
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  situationalEntries.map((entry) => (
+              {hasVisibleRows ? (
+                <div style={compactModifierMiniTableStyle}>
+                  {persistentDisplayEntries.length > 0 ||
+                  (!editable && situationalEntries.length > 0) ? (
+                    <div style={compactModifierDisplayHeaderStyle}>
+                      {["Source/scope", "Mod", "Dur"].map((heading) => (
+                        <span
+                          key={heading}
+                          style={{
+                            color: "#1f1b14",
+                            fontSize: "0.78rem",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {heading}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {persistentDisplayEntries.map((entry) => (
                     <ModifierDisplayEntryRow
                       bucketLabel={row.label}
-                      entry={buildSituationalModifierDisplayEntry(entry)}
-                      key={`Situational:${entry.id}`}
+                      entry={entry}
+                      key={`${entry.sourceLabel}:${entry.id}`}
                     />
-                  ))
-                )}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+                  ))}
+                  {editable && !row.locked ? (
+                    <>
+                      {situationalEntries.length > 0 || draftEntry ? (
+                        <div style={compactModifierMiniTableHeaderStyle}>
+                          {["Source/scope", "Mod", "Dur"].map((heading) => (
+                            <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                              {heading}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {situationalEntries.map((entry) => (
+                        <ModifierEditableEntryRow
+                          bucketLabel={row.label}
+                          controlsDisabled={controlsDisabled}
+                          entry={entry}
+                          key={entry.id}
+                          onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
+                          onUpdate={(patch) => {
+                            const nextEntry = { ...entry, ...patch };
+
+                            if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                              onUpdateEntry(row.bucketKey, entry.id, patch);
+                            } else {
+                              onRemoveEntry(row.bucketKey, entry.id);
+                            }
+                          }}
+                        />
+                      ))}
+                      {draftEntry ? (
+                        <ModifierEditableEntryRow
+                          bucketLabel={row.label}
+                          controlsDisabled={controlsDisabled}
+                          entry={draftEntry}
+                          key={draftEntry.id}
+                          onRemove={() => setDraftEntry(row.bucketKey)}
+                          onUpdate={(patch) => {
+                            const nextEntry = { ...draftEntry, ...patch };
+
+                            if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                              onAddEntry(row.bucketKey, nextEntry);
+                              setDraftEntry(row.bucketKey);
+                            } else {
+                              setDraftEntry(row.bucketKey, nextEntry);
+                            }
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  ) : (
+                    situationalEntries.map((entry) => (
+                      <ModifierDisplayEntryRow
+                        bucketLabel={row.label}
+                        entry={buildSituationalModifierDisplayEntry(entry)}
+                        key={`Situational:${entry.id}`}
+                      />
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       {pendingEntries.length > 0 ? (
         <div
           style={{
@@ -1194,6 +1261,19 @@ export function PlayerCombatModifierPanel({
           ))}
         </div>
       ) : null}
+      {activeSpecialEffectCount > 0 ? (
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.3rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.9rem" }}>Active special effects</strong>
+          <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>{activeSpecialEffectCount}</span>
+        </div>
+      ) : null}
       {observationRelationships.some((relationship) => relationship.bestBonus > 0) ? (
         <div
           style={{
@@ -1212,8 +1292,8 @@ export function PlayerCombatModifierPanel({
                   alignItems: "center",
                   display: "grid",
                   fontSize: "0.84rem",
-                  gridTemplateColumns: "1fr auto",
                   gap: "0.5rem",
+                  gridTemplateColumns: "1fr auto",
                 }}
               >
                 <span>
@@ -1681,7 +1761,14 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
   return (
     <div style={compactStatsRowStyle}>
-      <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+        <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+        {stats.provisional ? (
+          <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
+            Provisional
+          </span>
+        ) : null}
+      </div>
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>
@@ -1724,7 +1811,14 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
 export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStatsTableProps) {
   return (
     <div style={compactStatsRowStyle}>
-      <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+        <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+        {stats.provisional ? (
+          <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
+            Provisional
+          </span>
+        ) : null}
+      </div>
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>

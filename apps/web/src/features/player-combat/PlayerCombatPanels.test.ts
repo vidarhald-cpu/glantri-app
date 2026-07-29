@@ -569,6 +569,77 @@ describe("PlayerCombatPanels", () => {
     expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
   });
 
+  it("includes target-aware contributions exactly once in category totals and rows", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [{ id: "base-db", scope: "until", value: -1 }],
+          situationInitiative: [],
+          situationObSkill: [{ id: "base-ob", scope: "until", value: 2 }],
+        },
+      },
+      liveModifiers: {
+        dbRaw: 2,
+        generalFatigueRaw: 0,
+        initiativeRaw: 0,
+        modifierNoteLabels: [],
+        obSkillRaw: 5,
+        opponentLabel: "Target B",
+        opponentSpecificContributions: [
+          {
+            applicability: {
+              opponentParticipantId: "participant-b",
+              participantId: "participant-a",
+            },
+            bucket: "skill_ob",
+            editPolicy: "source_only",
+            id: "observe:a:b:modifier:skill_ob",
+            label: "Observe Opponent",
+            lifetime: { kind: "encounter", status: "active" },
+            ownerParticipantId: "participant-a",
+            readOnly: true,
+            schemaVersion: 1,
+            sourceId: "observe:a:b",
+            sourceKind: "system_derived",
+            value: 3,
+          },
+          {
+            applicability: {
+              opponentParticipantId: "participant-b",
+              participantId: "participant-a",
+            },
+            bucket: "db_parry",
+            editPolicy: "source_only",
+            id: "observe:a:b:modifier:db_parry",
+            label: "Observe Opponent",
+            lifetime: { kind: "encounter", status: "active" },
+            ownerParticipantId: "participant-a",
+            readOnly: true,
+            schemaVersion: 1,
+            sourceId: "observe:a:b",
+            sourceKind: "system_derived",
+            value: 3,
+          },
+        ],
+      },
+      ownerParticipantId: "participant-a",
+    });
+    const skillOb = rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const dbParry = rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(skillOb?.total).toBe(5);
+    expect(skillOb?.derivedEntries).toEqual([
+      expect.objectContaining({
+        id: "observe:a:b:modifier:skill_ob",
+        sourceLabel: "Observe Opponent · Target B",
+        value: 3,
+      }),
+    ]);
+    expect(dbParry?.total).toBe(2);
+    expect(dbParry?.derivedEntries).toHaveLength(1);
+  });
+
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
     const source = readSource();
 

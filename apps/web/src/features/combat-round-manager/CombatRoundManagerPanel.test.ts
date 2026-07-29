@@ -598,6 +598,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
     expect(source).toContain("buildGmCombatAttackModifierRequest({");
     expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
+    expect(source).toContain("buildTargetAwareEncounterLiveCombatModifierSummary");
+    expect(source).toContain("resolveEncounterLiveCombatModifierContext");
+    expect(source).toContain("requestAttackStats");
     expect(source).toContain(
       "attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint",
     );

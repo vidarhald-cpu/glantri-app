@@ -1,16 +1,22 @@
 import type {
+  CombatCalculationContext,
   CombatEffect,
   CombatEffectsState,
+  CombatModifierContribution,
+  CombatObservationRelationship,
   CombatRoundStep,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
 import {
+  buildCombatObservationModifierContributions,
+  buildLiveCombatModifierContributionProjection,
+  createCombatParticipantPairKey,
   getCombatEffectEffectiveStatus,
-  getMergedCombatDbParryModifierTotal,
-  getMergedCombatDbFlatAdjustmentTotal,
   getMergedCombatInitiativeModifierTotal,
-  getMergedCombatSkillObModifierTotal,
+  isCombatModifierContributionActive,
+  normalizeScenarioCombatModifierEntry,
+  resolveCombatModifierContributions,
 } from "@glantri/domain";
 import {
   calculateWorkbookPercentageAdjustmentTrace,
@@ -32,8 +38,94 @@ export interface EncounterLiveCombatModifierSummary {
   dbRaw: number;
   generalFatigueRaw: number;
   initiativeRaw: number;
+  legacyGeneralEffectEntries?: readonly {
+    id: string;
+    label: string;
+    value: number;
+  }[];
   modifierNoteLabels: string[];
   obSkillRaw: number;
+  opponentLabel?: string;
+  opponentParticipantId?: string;
+  opponentSpecificContributions?: readonly CombatModifierContribution[];
+  provisional?: boolean;
+  specialEffectCount?: number;
+  specialEffectIds?: readonly string[];
+}
+
+/**
+ * Complete presentation context for one live participant/opponent calculation.
+ *
+ * Source modifier rows, effects, and observation relationships remain canonical.
+ * This context only supplies the same identities used by the domain applicability
+ * resolver so the live panel and mini-tables can present the applicable subset.
+ */
+export interface EncounterLiveCombatModifierContext {
+  actionId?: string;
+  encounterId?: string;
+  opponentCombatantId?: string;
+  opponentLabel?: string;
+  opponentParticipantId?: string;
+  opportunityId?: string;
+  ownerCombatantId?: string;
+  ownerParticipantId?: string;
+  pairKey?: string;
+  phaseKey?: EncounterCombatPhaseKey;
+  proposalId?: string;
+  provisional?: boolean;
+  relationships?: readonly CombatObservationRelationship[];
+  rollType?: string;
+  roundNumber?: number;
+  step?: CombatRoundStep;
+}
+
+export interface EncounterLiveCombatModifierParticipantIdentity {
+  characterId?: string;
+  id: string;
+  label?: string;
+  scenarioParticipantId?: string;
+}
+
+/**
+ * Resolves the encounter-combatant and scenario-participant aliases once so every
+ * live presentation consumer uses the same ordered actor -> opponent identity.
+ */
+export function resolveEncounterLiveCombatModifierContext(input: {
+  actionId?: string;
+  encounterId?: string;
+  ownerCombatantId?: string;
+  ownerParticipantId?: string;
+  participants: readonly EncounterLiveCombatModifierParticipantIdentity[];
+  phaseKey?: EncounterCombatPhaseKey;
+  provisional?: boolean;
+  relationships?: readonly CombatObservationRelationship[];
+  roundNumber?: number;
+  step?: CombatRoundStep;
+  targetParticipantId?: string;
+}): EncounterLiveCombatModifierContext {
+  const opponent = input.targetParticipantId
+    ? input.participants.find(
+        (participant) =>
+          participant.id === input.targetParticipantId ||
+          participant.scenarioParticipantId === input.targetParticipantId ||
+          participant.characterId === input.targetParticipantId,
+      )
+    : undefined;
+
+  return {
+    actionId: input.actionId,
+    encounterId: input.encounterId,
+    opponentCombatantId: opponent?.id,
+    opponentLabel: opponent?.label,
+    opponentParticipantId: opponent?.scenarioParticipantId ?? opponent?.id,
+    ownerCombatantId: input.ownerCombatantId,
+    ownerParticipantId: input.ownerParticipantId,
+    phaseKey: input.phaseKey,
+    provisional: input.provisional,
+    relationships: input.relationships,
+    roundNumber: input.roundNumber,
+    step: input.step,
+  };
 }
 
 export type EncounterCombatPhaseKey = "phase1" | "phase2";
@@ -74,14 +166,26 @@ function contributesToModifier(effect: CombatEffect): boolean {
   );
 }
 
+const NON_OPERATIONAL_SPECIAL_EFFECT_TYPES = new Set<CombatEffect["type"]>([
+  "physical_damage",
+  "general_damage",
+  "bleed",
+  "internal_bleed",
+  "healing",
+]);
+
 export function sumEncounterCombatEffectModifiers(
   combatEffects?: CombatEffectsState,
   currentInitiativeGroupId?: string,
+  currentRound?: number,
 ): EncounterCombatEffectModifierSums {
   const activeEffects =
     combatEffects?.effects.filter(
       (effect) =>
-        getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active",
+        getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active" &&
+        (currentRound === undefined ||
+          effect.expiresAtRound === undefined ||
+          effect.expiresAtRound >= currentRound),
     ) ?? [];
   const fatigue = activeEffects
     .filter(
@@ -128,60 +232,206 @@ export function buildEncounterLiveCombatModifierSummary(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
   currentInitiativeGroupId?: string;
+  currentRound?: number;
+  encounterId?: string;
+  ownerParticipantId?: string;
   phaseKey?: EncounterCombatPhaseKey;
 }): EncounterLiveCombatModifierSummary {
   const effectSums = sumEncounterCombatEffectModifiers(
     input.combatEffects,
     input.currentInitiativeGroupId,
+    input.currentRound,
   );
-  const phaseAwareCombatContext = input.combatContext
-    ? {
-        ...input.combatContext,
-        modifierBuckets: {
-          general: filterCombatModifierEntriesForPhase(
-            input.combatContext.modifierBuckets.general,
-            input.phaseKey,
-          ),
-          situationDb: filterCombatModifierEntriesForPhase(
-            input.combatContext.modifierBuckets.situationDb,
-            input.phaseKey,
-          ),
-          situationInitiative: filterCombatModifierEntriesForPhase(
-            input.combatContext.modifierBuckets.situationInitiative,
-            input.phaseKey,
-          ),
-          situationObSkill: filterCombatModifierEntriesForPhase(
-            input.combatContext.modifierBuckets.situationObSkill,
-            input.phaseKey,
-          ),
-        },
-      }
-    : undefined;
+  const liveProjection = buildLiveCombatModifierContributionProjection({
+    combatContext: input.combatContext,
+    combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
+    currentRound: input.currentRound,
+    encounterId: input.encounterId,
+    ownerParticipantId: input.ownerParticipantId,
+  });
+  const projectedIds = new Set(liveProjection.contributions.map((contribution) => contribution.id));
+  const legacySourceContributions = (
+    [
+      ["general", input.combatContext?.modifierBuckets.general ?? []],
+      ["situation_initiative", input.combatContext?.modifierBuckets.situationInitiative ?? []],
+      ["situation_ob_skill", input.combatContext?.modifierBuckets.situationObSkill ?? []],
+      ["situation_db", input.combatContext?.modifierBuckets.situationDb ?? []],
+    ] as const
+  ).flatMap(([bucket, entries]) =>
+    entries.flatMap((entry) => {
+      if (entry.application === "flat_db" || projectedIds.has(entry.id)) return [];
+      const contribution = normalizeScenarioCombatModifierEntry({
+        bucket,
+        currentRound: input.currentRound,
+        entry,
+        ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+      });
+      return contribution &&
+        isCombatModifierContributionActive(contribution, {
+          encounterId: input.encounterId,
+          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+          roundNumber: input.currentRound,
+        })
+        ? [contribution]
+        : [];
+    }),
+  );
+  const phaseContributions = [...liveProjection.contributions, ...legacySourceContributions].filter(
+    (contribution) =>
+      !contribution.applicability.phase ||
+      (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
+  );
+  const sumBucket = (bucket: CombatModifierContribution["bucket"]) =>
+    phaseContributions
+      .filter((contribution) => contribution.bucket === bucket)
+      .reduce((total, contribution) => total + contribution.value, 0);
+  const dbFlatAdjustment = (input.combatContext?.modifierBuckets.situationDb ?? [])
+    .filter(
+      (entry) =>
+        entry.application === "flat_db" &&
+        (!entry.sourcePhase ||
+          (input.phaseKey !== undefined && entry.sourcePhase === input.phaseKey)),
+    )
+    .reduce((total, entry) => {
+      const contribution = normalizeScenarioCombatModifierEntry({
+        bucket: "situation_db",
+        currentRound: input.currentRound,
+        entry,
+        ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+      });
+      return contribution &&
+        isCombatModifierContributionActive(contribution, {
+          encounterId: input.encounterId,
+          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+          roundNumber: input.currentRound,
+        })
+        ? total + entry.value
+        : total;
+    }, 0);
+  const effectById = new Map(
+    (input.combatEffects?.effects ?? []).map((effect) => [effect.id, effect] as const),
+  );
+  const specialEffectIds = liveProjection.specialEffectIds.filter((effectId) => {
+    const effect = effectById.get(effectId);
+    return Boolean(effect && !NON_OPERATIONAL_SPECIAL_EFFECT_TYPES.has(effect.type));
+  });
+  const legacyGeneralEffectEntries = (input.combatEffects?.effects ?? [])
+    .filter(
+      (effect) =>
+        effect.combatModifierBucket === undefined &&
+        contributesToModifier(effect) &&
+        (effect.effectGroup === "general" || effect.effectGroup === "fatigue") &&
+        getCombatEffectEffectiveStatus(effect, {
+          currentInitiativeGroupId: input.currentInitiativeGroupId,
+        }) === "active" &&
+        (input.currentRound === undefined ||
+          effect.expiresAtRound === undefined ||
+          effect.expiresAtRound >= input.currentRound),
+    )
+    .map((effect) => ({
+      id: effect.id,
+      label: effect.description?.trim() || effect.type.replaceAll("_", " "),
+      value: getEffectMagnitude(effect),
+    }))
+    .filter((entry) => entry.value !== 0);
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw:
-      getMergedCombatDbParryModifierTotal({
-        combatContext: phaseAwareCombatContext,
-      }) + effectSums.combatWideGeneral,
-    dbFlatAdjustment: getMergedCombatDbFlatAdjustmentTotal({
-      combatContext: phaseAwareCombatContext,
-    }),
+    dbRaw: sumBucket("db_parry") + effectSums.combatWideGeneral,
+    dbFlatAdjustment,
     generalFatigueRaw: effectSums.generalFatigue,
-    initiativeRaw:
-      getMergedCombatInitiativeModifierTotal({
-        combatContext: phaseAwareCombatContext,
-      }) + effectSums.combatWideGeneral,
-    modifierNoteLabels: [
-      "Gen/Fatigue",
-      "Initiative",
-      "OB/Skill",
-      "DB/Parry",
-      "Enc",
-      "Equipment",
-    ],
-    obSkillRaw: getMergedCombatSkillObModifierTotal({
-      combatContext: phaseAwareCombatContext,
-    }),
+    initiativeRaw: sumBucket("initiative") + effectSums.combatWideGeneral,
+    modifierNoteLabels: ["Gen/Fatigue", "Initiative", "OB/Skill", "DB/Parry", "Enc", "Equipment"],
+    legacyGeneralEffectEntries,
+    obSkillRaw: sumBucket("skill_ob") + effectSums.combatWideGeneral,
+    opponentSpecificContributions: [],
+    provisional: false,
+    specialEffectCount: specialEffectIds.length,
+    specialEffectIds,
+  };
+}
+
+function buildObservationCalculationContext(
+  context: EncounterLiveCombatModifierContext,
+): CombatCalculationContext | undefined {
+  if (!context.ownerParticipantId || !context.opponentParticipantId) return undefined;
+
+  return {
+    actionId: context.actionId,
+    encounterId: context.encounterId,
+    opponentParticipantId: context.opponentParticipantId,
+    opportunityId: context.opportunityId,
+    ownerParticipantId: context.ownerParticipantId,
+    pairKey:
+      context.pairKey ??
+      createCombatParticipantPairKey(context.ownerParticipantId, context.opponentParticipantId),
+    phase: context.phaseKey,
+    proposalId: context.proposalId,
+    rollType: context.rollType,
+    roundNumber: context.roundNumber,
+    step: context.step,
+  };
+}
+
+/**
+ * Adds only opponent-specific canonical contributions to an already phase-aware
+ * live summary. Ordinary round modifiers are already represented in the loadout
+ * model and must not be applied a second time.
+ */
+export function buildTargetAwareEncounterLiveCombatModifierSummary(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  combatEffects?: CombatEffectsState;
+  context: EncounterLiveCombatModifierContext;
+  currentInitiativeGroupId?: string;
+}): EncounterLiveCombatModifierSummary {
+  const base = buildEncounterLiveCombatModifierSummary({
+    combatContext: input.combatContext,
+    combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
+    currentRound: input.context.roundNumber,
+    encounterId: input.context.encounterId,
+    ownerParticipantId: input.context.ownerParticipantId,
+    phaseKey: input.context.phaseKey,
+  });
+  const calculationContext = buildObservationCalculationContext(input.context);
+  if (
+    !calculationContext ||
+    !input.context.ownerCombatantId ||
+    !input.context.opponentCombatantId
+  ) {
+    return {
+      ...base,
+      provisional: input.context.provisional === true,
+    };
+  }
+
+  const opponentSpecificContributions = buildCombatObservationModifierContributions({
+    encounterId: input.context.encounterId,
+    observerCombatantId: input.context.ownerCombatantId,
+    observerParticipantId: calculationContext.ownerParticipantId,
+    opponentCombatantId: input.context.opponentCombatantId,
+    opponentParticipantId: calculationContext.opponentParticipantId!,
+    relationships: input.context.relationships ?? [],
+  });
+  const skillOb = resolveCombatModifierContributions({
+    bucket: "skill_ob",
+    context: calculationContext,
+    contributions: opponentSpecificContributions,
+  });
+  const dbParry = resolveCombatModifierContributions({
+    bucket: "db_parry",
+    context: calculationContext,
+    contributions: opponentSpecificContributions,
+  });
+
+  return {
+    ...base,
+    dbRaw: base.dbRaw + dbParry.total,
+    obSkillRaw: base.obSkillRaw + skillOb.total,
+    opponentLabel: input.context.opponentLabel,
+    opponentParticipantId: input.context.opponentParticipantId,
+    opponentSpecificContributions: [...skillOb.rows, ...dbParry.rows],
+    provisional: input.context.provisional === true,
   };
 }
 

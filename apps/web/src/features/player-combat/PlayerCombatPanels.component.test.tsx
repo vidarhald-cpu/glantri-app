@@ -150,9 +150,7 @@ describe("PlayerCombatObservationProgress", () => {
 
     expect(screen.getByText("Observation progress")).toBeInTheDocument();
     expect(screen.getByText("Gladiator: 2 / 3")).toBeInTheDocument();
-    expect(
-      screen.getByText("Orc captain: 4 / 6 · best +1% · attempts 1"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Orc captain: 4 / 6 · best +1% · attempts 1")).toBeInTheDocument();
     expect(screen.queryByText("Observation", { exact: true })).not.toBeInTheDocument();
   });
 });
@@ -320,6 +318,35 @@ describe("PlayerCombatModifierPanel", () => {
     expect(screen.getByText("Observe Opponent · Orc captain")).toBeInTheDocument();
     expect(screen.getByText("+3%")).toBeInTheDocument();
     expect(screen.queryByText("Observe Opponent · Gladiator")).not.toBeInTheDocument();
+  });
+
+  it("suppresses empty summary categories but retains them during explicit review", () => {
+    const rows = [
+      {
+        bucketKey: "situation_initiative" as const,
+        entries: [],
+        label: "Initiative",
+        total: 0,
+      },
+    ];
+    const { rerender } = render(<PlayerCombatModifierPanel readOnly rows={rows} />);
+
+    expect(screen.queryByText("Initiative")).not.toBeInTheDocument();
+
+    rerender(<PlayerCombatModifierPanel readOnly rows={rows} showEmptyCategories />);
+
+    expect(screen.getByText("Initiative")).toBeInTheDocument();
+    expect(screen.getByText("+0")).toBeInTheDocument();
+  });
+
+  it("shows concise provisional and active-special-effect indicators", () => {
+    render(
+      <PlayerCombatModifierPanel activeSpecialEffectCount={2} provisional readOnly rows={[]} />,
+    );
+
+    expect(screen.getByText("Provisional")).toBeInTheDocument();
+    expect(screen.getByText("Active special effects")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
   it("keeps editable modifier details on a full-width row", () => {

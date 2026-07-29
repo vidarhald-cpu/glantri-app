@@ -65,9 +65,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("phaseAttackSources: declarationAttackSelection.phaseAttackSources");
     expect(source).toContain("renderedDeclarationAttackSelection.phaseContexts[phaseKey]");
     expect(source).toContain("emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}");
-    expect(source).toContain(
-      "selectedAttackModeId={phaseModel.phaseContext.attackModeId}",
-    );
+    expect(source).toContain("selectedAttackModeId={phaseModel.phaseContext.attackModeId}");
     expect(source).not.toContain("itemId: phaseCombatLoadoutSummaries");
     expect(source).toContain("visibleAtStep: currentCombatStep");
     expect(source).toContain("buildPlayerCombatDefenseStats");
@@ -77,7 +75,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("encounterRevision: combatHistory?.sourceUpdatedAt");
     expect(source).toContain("presentation={currentActionPresentation}");
     expect(source).toContain("onDeclareAction={invokePlayerCurrentAction}");
-    expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("buildTargetAwareEncounterLiveCombatModifierSummary");
+    expect(source).toContain("resolveEncounterLiveCombatModifierContext");
     expect(source).toContain("projectCombatActionGeneratedModifiers");
     expect(source).toContain("projectedCombatContextDraft");
     expect(source).toContain("combatContext: projectedCombatContextDraft");
@@ -299,9 +298,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     const slowContextStart = source.indexOf("async function loadSlowContext()");
     const slowContextEnd = source.indexOf("useEffect(() => {", slowContextStart + 20);
     const slowContext = source.slice(slowContextStart, slowContextEnd);
-    const brawlingStart = source.indexOf(
-      "async function rollCurrentOffensiveParryBrawling",
-    );
+    const brawlingStart = source.indexOf("async function rollCurrentOffensiveParryBrawling");
     const brawlingEnd = source.indexOf(
       "async function rollAttackerPrivilegedCombatDie",
       brawlingStart,

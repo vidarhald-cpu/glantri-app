@@ -11,7 +11,9 @@ import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
   buildEncounterInitiativeModifierCalculation,
+  buildTargetAwareEncounterLiveCombatModifierSummary,
   filterCombatModifierEntriesForPhase,
+  resolveEncounterLiveCombatModifierContext,
   sumEncounterCombatEffectModifiers,
 } from "./liveCombatModifiers";
 
@@ -33,6 +35,138 @@ function effect(overrides: Partial<CombatEffectsState["effects"][number]>) {
 }
 
 describe("live combat modifiers", () => {
+  it("projects an ordered Observe Opponent relationship into both target-aware live buckets", () => {
+    const context = resolveEncounterLiveCombatModifierContext({
+      actionId: "attack",
+      encounterId: "encounter-1",
+      ownerCombatantId: "combatant-a",
+      ownerParticipantId: "participant-a",
+      participants: [
+        {
+          id: "combatant-b",
+          label: "Target B",
+          scenarioParticipantId: "participant-b",
+        },
+      ],
+      phaseKey: "phase1",
+      relationships: [
+        {
+          bestBonus: 3,
+          completedAttempts: 1,
+          id: "observe:a:b",
+          observerParticipantId: "combatant-a",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "combatant-b",
+        },
+      ],
+      roundNumber: 4,
+      targetParticipantId: "combatant-b",
+    });
+    const summary = buildTargetAwareEncounterLiveCombatModifierSummary({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [{ id: "db", scope: "until", value: -1 }],
+          situationInitiative: [],
+          situationObSkill: [{ id: "ob", scope: "until", value: 2 }],
+        },
+      },
+      context,
+    });
+
+    expect(summary).toMatchObject({
+      dbRaw: 2,
+      obSkillRaw: 5,
+      opponentLabel: "Target B",
+      opponentParticipantId: "participant-b",
+    });
+    expect(summary.opponentSpecificContributions).toEqual([
+      expect.objectContaining({
+        bucket: "skill_ob",
+        id: "observe:a:b:modifier:skill_ob",
+        value: 3,
+      }),
+      expect.objectContaining({
+        bucket: "db_parry",
+        id: "observe:a:b:modifier:db_parry",
+        value: 3,
+      }),
+    ]);
+  });
+
+  it("does not apply Observe Opponent to an unrelated target or reverse the relationship", () => {
+    const relationships = [
+      {
+        bestBonus: 3,
+        completedAttempts: 1,
+        id: "observe:a:b",
+        observerParticipantId: "combatant-a",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "combatant-b",
+      },
+      {
+        bestBonus: 1,
+        completedAttempts: 1,
+        id: "observe:b:a",
+        observerParticipantId: "combatant-b",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "combatant-a",
+      },
+    ];
+    const unrelated = buildTargetAwareEncounterLiveCombatModifierSummary({
+      context: resolveEncounterLiveCombatModifierContext({
+        ownerCombatantId: "combatant-a",
+        ownerParticipantId: "participant-a",
+        participants: [{ id: "combatant-c", scenarioParticipantId: "participant-c" }],
+        relationships,
+        targetParticipantId: "combatant-c",
+      }),
+    });
+    const reverse = buildTargetAwareEncounterLiveCombatModifierSummary({
+      context: resolveEncounterLiveCombatModifierContext({
+        ownerCombatantId: "combatant-b",
+        ownerParticipantId: "participant-b",
+        participants: [{ id: "combatant-a", scenarioParticipantId: "participant-a" }],
+        relationships,
+        targetParticipantId: "combatant-a",
+      }),
+    });
+
+    expect(unrelated.obSkillRaw).toBe(0);
+    expect(unrelated.dbRaw).toBe(0);
+    expect(unrelated.opponentSpecificContributions).toEqual([]);
+    expect(reverse.obSkillRaw).toBe(1);
+    expect(reverse.dbRaw).toBe(1);
+  });
+
+  it("uses the same raw target-aware total in live percentage adjustment", () => {
+    const summary = buildTargetAwareEncounterLiveCombatModifierSummary({
+      context: {
+        opponentCombatantId: "combatant-b",
+        opponentParticipantId: "participant-b",
+        ownerCombatantId: "combatant-a",
+        ownerParticipantId: "participant-a",
+        relationships: [
+          {
+            bestBonus: 3,
+            completedAttempts: 1,
+            id: "observe:a:b",
+            observerParticipantId: "combatant-a",
+            roundsTowardNextAttempt: 0,
+            targetParticipantId: "combatant-b",
+          },
+        ],
+      },
+    });
+    const displayed = applyLiveRawModifierToCombatValue({
+      baseValue: 20,
+      rawModifier: summary.obSkillRaw,
+    });
+
+    expect(summary.obSkillRaw).toBe(3);
+    expect(displayed).toBe(20 + lookupWorkbookPercentageAdjustment(20, summary.obSkillRaw)!);
+  });
+
   it("sums active general and fatigue effects into General/Fatigue", () => {
     const sums = sumEncounterCombatEffectModifiers({
       effects: [
@@ -69,6 +203,54 @@ describe("live combat modifiers", () => {
     expect(summary.generalFatigueRaw).toBe(0);
     expect(summary.obSkillRaw).toBe(0);
     expect(summary.dbRaw).toBe(0);
+  });
+
+  it("removes round-expired contributions and reports only operational special effects", () => {
+    const summary = buildEncounterLiveCombatModifierSummary({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              expiresAtRound: 3,
+              id: "expired-db",
+              scope: "until",
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: {
+        effects: [
+          effect({
+            expiresAtRound: 3,
+            id: "expired-fatigue",
+            modifierValue: -2,
+            type: "fatigue",
+          }),
+          effect({
+            id: "choice-effect",
+            modifierValue: undefined,
+            type: "special",
+          }),
+          effect({
+            id: "damage-effect",
+            modifierValue: undefined,
+            type: "physical_damage",
+          }),
+        ],
+        events: [],
+      },
+      currentRound: 4,
+      ownerParticipantId: "participant-1",
+    });
+
+    expect(summary.dbRaw).toBe(0);
+    expect(summary.generalFatigueRaw).toBe(0);
+    expect(summary.specialEffectIds).toEqual(["choice-effect"]);
+    expect(summary.specialEffectCount).toBe(1);
   });
 
   it("keeps committed phase-one combat action effects live for phase-two modifiers", () => {
@@ -259,7 +441,7 @@ describe("live combat modifiers", () => {
     ]);
   });
 
-  it("applies only explicitly combat-wide general effects to initiative and DB/Parry", () => {
+  it("applies only explicitly combat-wide general effects to initiative, Skill/OB, and DB/Parry", () => {
     const summary = buildEncounterLiveCombatModifierSummary({
       combatEffects: {
         effects: [
@@ -282,7 +464,7 @@ describe("live combat modifiers", () => {
     expect(summary.generalFatigueRaw).toBe(-9);
     expect(summary.initiativeRaw).toBe(-2);
     expect(summary.dbRaw).toBe(-2);
-    expect(summary.obSkillRaw).toBe(0);
+    expect(summary.obSkillRaw).toBe(-2);
   });
 
   it("sums imported, generated, manual, and legacy Skill/OB rows exactly once by phase", () => {
@@ -447,10 +629,12 @@ describe("live combat modifiers", () => {
       dbRaw: -1,
       obSkillRaw: 2,
     });
-    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).dbRaw)
-      .toBe(-11);
-    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw)
-      .toBe(-13);
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).dbRaw,
+    ).toBe(-11);
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw,
+    ).toBe(-13);
     expect(
       buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).obSkillRaw,
     ).toBe(1);
@@ -559,16 +743,18 @@ describe("live combat modifiers", () => {
       dbRaw: 0,
       obSkillRaw: 0,
     });
-    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }))
-      .toMatchObject({
-        dbRaw: -6,
-        obSkillRaw: -1,
-      });
-    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }))
-      .toMatchObject({
-        dbRaw: -8,
-        obSkillRaw: -1,
-      });
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }),
+    ).toMatchObject({
+      dbRaw: -6,
+      obSkillRaw: -1,
+    });
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }),
+    ).toMatchObject({
+      dbRaw: -8,
+      obSkillRaw: -1,
+    });
   });
 
   it("applies only canonical initiative-bucket rows through the workbook table", () => {

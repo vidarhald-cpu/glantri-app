@@ -170,6 +170,8 @@ import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/c
 import {
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
+  buildTargetAwareEncounterLiveCombatModifierSummary,
+  resolveEncounterLiveCombatModifierContext,
 } from "@/lib/campaigns/liveCombatModifiers";
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
 import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
@@ -2147,17 +2149,43 @@ export default function ScenarioPlayerCombatPageContent({
   const currentInitiativeValue = combatHistory?.progression?.executionOrder?.currentInitiativeValue;
   const liveCombatModifiers = useMemo(
     () =>
-      buildEncounterLiveCombatModifierSummary({
+      buildTargetAwareEncounterLiveCombatModifierSummary({
         combatContext: sanitizePlayerCombatModifierContext(projectedCombatContextDraft),
         combatEffects: selectedParticipant?.state.combatEffects,
+        context: resolveEncounterLiveCombatModifierContext({
+          actionId: selectedActionId || undefined,
+          encounterId: scenarioId,
+          ownerCombatantId: selectedRoundParticipant?.participantId,
+          ownerParticipantId: selectedParticipant?.id,
+          participants: encounterSession?.participants ?? [],
+          phaseKey: currentModifierPhase,
+          provisional: combatDeclarationDraftDirty,
+          relationships: combatRoundState?.observationRelationships,
+          roundNumber: combatRoundState?.roundNumber,
+          step: currentCombatStep,
+          targetParticipantId: currentModifierPhase
+            ? (secondaryActionContext?.targetParticipantId ??
+              phaseCombatContextDrafts[currentModifierPhase].targetParticipantId)
+            : undefined,
+        }),
         currentInitiativeGroupId,
-        phaseKey: currentModifierPhase,
       }),
     [
+      combatDeclarationDraftDirty,
+      combatRoundState?.observationRelationships,
+      combatRoundState?.roundNumber,
       currentInitiativeGroupId,
+      currentCombatStep,
       currentModifierPhase,
+      encounterSession?.participants,
+      phaseCombatContextDrafts,
       projectedCombatContextDraft,
+      scenarioId,
+      selectedActionId,
       selectedParticipant?.state.combatEffects,
+      selectedParticipant?.id,
+      selectedRoundParticipant?.participantId,
+      secondaryActionContext?.targetParticipantId,
     ],
   );
   const modifierRows = useMemo(
@@ -2898,7 +2926,9 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    const phaseAttackStats = phaseCombatLoadoutSummaries[attackPhase].attackStats;
+    const phaseAttackStats =
+      phaseCombatLoadoutSummaries[attackPhase].requestAttackStats ??
+      phaseCombatLoadoutSummaries[attackPhase].attackStats;
     const targetIdentity = resolveCanonicalCombatTargetIdentity({
       encounterParticipants: encounterSession?.participants ?? [],
       fallbackParticipantIds: targetOptions.map((option) => option.id),
@@ -3405,10 +3435,34 @@ export default function ScenarioPlayerCombatPageContent({
   }, [encounterSession?.participants, phaseCombatContextDrafts, selectedActionId, targetOptions]);
   const phaseCombatLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
-      const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
+      const basePhaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
         combatContext: projectedCombatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
+        currentInitiativeGroupId,
+        currentRound: combatRoundState?.roundNumber,
+        encounterId: scenarioId,
+        ownerParticipantId: selectedParticipant?.id,
         phaseKey,
+      });
+      const phaseLiveCombatModifiers = buildTargetAwareEncounterLiveCombatModifierSummary({
+        combatContext: projectedCombatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+        context: resolveEncounterLiveCombatModifierContext({
+          actionId: selectedActionId || undefined,
+          encounterId: scenarioId,
+          ownerCombatantId: selectedRoundParticipant?.participantId,
+          ownerParticipantId: selectedParticipant?.id,
+          participants: encounterSession?.participants ?? [],
+          phaseKey,
+          provisional: combatDeclarationDraftDirty,
+          relationships: combatRoundState?.observationRelationships,
+          roundNumber: combatRoundState?.roundNumber,
+          step: currentCombatStep,
+          targetParticipantId:
+            secondaryActionContext?.targetParticipantId ??
+            phaseCombatContextDrafts[phaseKey].targetParticipantId,
+        }),
+        currentInitiativeGroupId,
       });
       const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
         characterContext:
@@ -3423,6 +3477,22 @@ export default function ScenarioPlayerCombatPageContent({
         characterId: controlledEquipmentCharacterId,
         combatAllocationInputs,
         liveCombatModifiers: phaseLiveCombatModifiers,
+        state: controlledEquipmentState,
+        throwingWeaponItemId: null,
+      });
+      const requestPhaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && controlledBuild
+            ? {
+                content,
+                record: {
+                  build: controlledBuild,
+                },
+              }
+            : null,
+        characterId: controlledEquipmentCharacterId,
+        combatAllocationInputs,
+        liveCombatModifiers: basePhaseLiveCombatModifiers,
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       });
@@ -3461,15 +3531,32 @@ export default function ScenarioPlayerCombatPageContent({
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
         secondaryActionId: selectedSecondaryActionId,
       });
+      const requestSummary = buildPlayerCombatLoadoutSummary({
+        actionId: selectedActionId,
+        allowUnarmedFallback:
+          controlledEquipmentStatus.kind === "ready" ||
+          controlledEquipmentStatus.kind === "unarmed",
+        loadoutModel: requestPhaseLoadoutModel,
+        phaseKey,
+        selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
+        secondaryActionId: selectedSecondaryActionId,
+      });
 
       return {
         ...liveSummary,
+        attackStats: liveSummary.attackStats
+          ? {
+              ...liveSummary.attackStats,
+              provisional: combatDeclarationDraftDirty,
+            }
+          : null,
         baseDefenseStats: buildPlayerCombatDefenseStats({
           mainHandParryItemLabel: baseSummary.mainHandParryItemLabel,
           offHandParryItemLabel: baseSummary.offHandParryItemLabel,
           phaseContext: phaseCombatContextDrafts[phaseKey],
           reference: baseSummary.reference,
         }),
+        requestAttackStats: requestSummary.attackStats,
       };
     };
 
@@ -3479,14 +3566,24 @@ export default function ScenarioPlayerCombatPageContent({
     };
   }, [
     combatAllocationInputs,
+    combatDeclarationDraftDirty,
+    combatRoundState?.observationRelationships,
+    combatRoundState?.roundNumber,
     content,
     controlledBuild,
     controlledEquipmentState,
+    currentCombatStep,
+    currentInitiativeGroupId,
     displayedParticipant?.characterId,
+    encounterSession?.participants,
     phaseCombatContextDrafts,
     projectedCombatContextDraft,
+    scenarioId,
     selectedActionId,
+    selectedParticipant?.id,
     selectedParticipant?.state.combatEffects,
+    selectedRoundParticipant?.participantId,
+    secondaryActionContext?.targetParticipantId,
     selectedSecondaryActionId,
   ]);
   const renderedDeclarationAttackSelection = useMemo(
@@ -4137,12 +4234,20 @@ export default function ScenarioPlayerCombatPageContent({
               const phaseModel = buildPlayerCombatPhasePanelModel({
                 actionId: selectedActionId,
                 attackStats: phaseLoadoutSummary.attackStats,
-                defenseStats: buildPlayerCombatDefenseStats({
-                  mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                  offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                  phaseContext: phaseCombatContext,
-                  reference: phaseLoadoutSummary.reference,
-                }),
+                defenseStats: (() => {
+                  const stats = buildPlayerCombatDefenseStats({
+                    mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                    offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                    phaseContext: phaseCombatContext,
+                    reference: phaseLoadoutSummary.reference,
+                  });
+                  return stats
+                    ? {
+                        ...stats,
+                        provisional: combatDeclarationDraftDirty,
+                      }
+                    : null;
+                })(),
                 phaseCard,
                 phaseContext: phaseCombatContext,
                 phaseKey,
@@ -4450,6 +4555,7 @@ export default function ScenarioPlayerCombatPageContent({
 
           <div style={playerCombatPanelRowStyle}>
             <PlayerCombatModifierPanel
+              activeSpecialEffectCount={liveCombatModifiers.specialEffectCount ?? 0}
               controlsDisabled={declarationControlsDisabled}
               pendingActivationLabel={
                 currentInitiativeValue !== undefined
@@ -4457,20 +4563,13 @@ export default function ScenarioPlayerCombatPageContent({
                   : undefined
               }
               pendingEntries={pendingModifierEntries}
+              provisional={liveCombatModifiers.provisional}
               readOnly
               rows={modifierRows}
-              observationRelationships={
-                combatRoundState?.observationRelationships.filter(
-                  (relationship) =>
-                    relationship.observerParticipantId === selectedRoundParticipant?.participantId,
-                ) ?? []
+              showEmptyCategories={
+                currentCombatStep === "review_action_modifiers" ||
+                currentCombatStep === "review_phase_2_modifiers"
               }
-              observationTargetLabels={Object.fromEntries(
-                (combatRoundState?.participants ?? []).map((participant) => [
-                  participant.participantId,
-                  participant.label,
-                ]),
-              )}
             />
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {showInitiativeContextPanel ? (
