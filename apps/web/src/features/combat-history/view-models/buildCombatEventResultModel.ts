@@ -2,15 +2,16 @@ import type { CombatResultEnvelope, ProjectedCombatHistoryEvent } from "@glantri
 
 import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
 
-import { formatSignedCombatModifier } from "./formatCombatModifier";
+import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
 import {
-  buildCombatRollCalculationPresentation,
-  formatCombatRollCalculationLines,
-  formatObservationContestDifference,
-  formatObservationCalculationLines,
+  buildCombatCalculationPresentationRows,
+  type CombatCalculationPresentation,
 } from "./combatCalculationPresentation";
+import { formatObservationContestDifference } from "./formatObservationContestDifference";
 
 export interface CombatEventResultItemModel {
+  calculations: readonly CombatCalculationPresentation[];
+  /** Compatibility rows derived from `calculations`; no renderer consumes arbitrary fact bags. */
   calculationRows: CombatEventResultFactRow[];
   completenessLabel?: string;
   envelope?: CombatResultEnvelope;
@@ -68,46 +69,6 @@ function humanize(key: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
-function formatValue(value: unknown, identityById: ReadonlyMap<string, string>): string {
-  if (Array.isArray(value))
-    return value.map((entry) => formatValue(entry, identityById)).join(", ");
-  if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => `${humanize(key)} ${formatValue(nested, identityById)}`)
-      .join(" · ");
-  }
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value === undefined || value === null || value === "") return "—";
-  return typeof value === "string"
-    ? (identityById.get(value) ?? (value.includes("_") ? humanize(value) : value))
-    : String(value);
-}
-
-function isMeaningfulCalculationValue(value: unknown): boolean {
-  if (value === undefined || value === null || value === "" || value === false) return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
-  return true;
-}
-
-function calculationFactRows(
-  eventId: string,
-  facts: Record<string, unknown> | undefined,
-  identityById: ReadonlyMap<string, string>,
-): CombatEventResultFactRow[] {
-  if (!facts) return [];
-  return Object.entries(facts).flatMap(([fieldKey, value], index) =>
-    isMeaningfulCalculationValue(value)
-      ? [
-          {
-            key: `${eventId}:calculation:${fieldKey}:${index}`,
-            text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
-          },
-        ]
-      : [],
-  );
-}
-
 function identity(event: ProjectedCombatHistoryEvent, role: string): string | undefined {
   return event.identities.find((candidate) => candidate.role === role)?.displayName;
 }
@@ -119,185 +80,6 @@ function attackOutcome(event: ProjectedCombatHistoryEvent): string {
   if (grazing === true) return "Grazing hit";
   const hit = involved?.hit ?? event.facts.publicOutcome.hit;
   return hit === true ? "Hit" : "Miss";
-}
-
-function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
-  const calculation = event.facts.privateCalculation;
-  if (!calculation) return [];
-  const ob = calculation.ob;
-  const roll = calculation.rollTotal;
-  const db = calculation.defenderDb;
-  const total = calculation.lookupTotal;
-  if (
-    typeof ob === "number" &&
-    typeof roll === "number" &&
-    typeof db === "number" &&
-    typeof total === "number"
-  ) {
-    const opponentSpecificRows = Array.isArray(calculation.opponentSpecificObModifierRows)
-      ? calculation.opponentSpecificObModifierRows.flatMap((row, index) => {
-          if (
-            !row ||
-            typeof row !== "object" ||
-            typeof row.label !== "string" ||
-            typeof row.value !== "number"
-          ) {
-            return [];
-          }
-          return [
-            {
-              key: `${event.id}:calculation:attack:opponent-specific:${index}`,
-              text: `${row.label}: ${formatSignedCombatModifier(row.value)}%`,
-            },
-          ];
-        })
-      : [];
-    const baseOb =
-      typeof calculation.obBeforeOpponentSpecificModifier === "number"
-        ? [
-            {
-              key: `${event.id}:calculation:attack:base-ob`,
-              text: `OB before opponent modifier: ${calculation.obBeforeOpponentSpecificModifier}`,
-            },
-          ]
-        : [];
-    return [
-      ...baseOb,
-      ...opponentSpecificRows,
-      {
-        key: `${event.id}:calculation:attack-total`,
-        text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}`,
-      },
-    ];
-  }
-
-  return [
-    ["ob", "OB"],
-    ["rollTotal", "Roll"],
-    ["defenderDb", "DB"],
-    ["lookupTotal", "Total"],
-  ].flatMap(([field, label]) => {
-    const value = calculation[field];
-    return typeof value === "number"
-      ? [{ key: `${event.id}:calculation:attack:${field}`, text: `${label}: ${value}` }]
-      : [];
-  });
-}
-
-export function buildConciseDodgeCalculationRows(input: {
-  calculation?: Record<string, unknown>;
-  detailRows?: readonly string[];
-  eventId: string;
-  outcome?: string;
-}): CombatEventResultFactRow[] {
-  const calculation = input.calculation;
-  if (!calculation) return [];
-  const skill = calculation.dodgeSkillTotal;
-  const die = calculation.rollD20;
-  const rollTotal = calculation.rollTotal;
-  const result = calculation.finalTotal;
-  if (
-    typeof skill !== "number" ||
-    typeof die !== "number" ||
-    typeof rollTotal !== "number" ||
-    typeof result !== "number"
-  ) {
-    return calculationFactRows(input.eventId, calculation, new Map());
-  }
-  const general =
-    typeof calculation.generalFatigueModifier === "number" ? calculation.generalFatigueModifier : 0;
-  const adjustment =
-    typeof calculation.situationalAdjustment === "number" ? calculation.situationalAdjustment : 0;
-  const modifier = general + adjustment;
-  const openEnded = Array.isArray(calculation.openEndedD10s) ? calculation.openEndedD10s : [];
-  const dieText = openEnded.length ? `${die} (${openEnded.join(" + ")})` : String(die);
-  const standardOutcome = input.outcome;
-  const rows: CombatEventResultFactRow[] = [
-    { key: `${input.eventId}:calculation:skill`, text: `Skill: Dodge ${skill}` },
-    {
-      key: `${input.eventId}:calculation:modifier`,
-      text: `Modifier: ${formatSignedCombatModifier(modifier)}`,
-    },
-    { key: `${input.eventId}:calculation:die`, text: `Die roll: ${dieText}` },
-    { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
-    {
-      key: `${input.eventId}:calculation:outcome`,
-      text: `Outcome: ${standardOutcome ?? "Roll recorded"}`,
-    },
-  ];
-  for (const [index, detail] of (input.detailRows ?? []).entries()) {
-    rows.push({ key: `${input.eventId}:calculation:detail:${index}`, text: detail });
-  }
-  return rows;
-}
-
-function dodgeCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
-  const standardOutcome = factLabel(factValue(event, "standardOutcome"));
-  const situationalAdjustment = event.facts.privateCalculation?.situationalAdjustment;
-  return buildConciseDodgeCalculationRows({
-    calculation: event.facts.privateCalculation,
-    detailRows:
-      event.type === "adjust_distance_roll" && typeof situationalAdjustment === "number"
-        ? [`Maneuver adjustment: ${formatSignedCombatModifier(situationalAdjustment)}`]
-        : undefined,
-    eventId: event.id,
-    outcome: standardOutcome,
-  });
-}
-
-function offensiveParryBrawlingCalculationRows(
-  event: ProjectedCombatHistoryEvent,
-): CombatEventResultFactRow[] {
-  const calculation = buildCombatRollCalculationPresentation({
-    calculation: event.facts.privateCalculation,
-    label: identity(event, "roller") ?? "Brawling",
-  });
-  return calculation
-    ? formatCombatRollCalculationLines(calculation).map((text, index) => ({
-        key: `${event.id}:calculation:brawling:${index}`,
-        text,
-      }))
-    : [];
-}
-
-function observationCalculationRows(
-  event: ProjectedCombatHistoryEvent,
-): CombatEventResultFactRow[] {
-  const observer = formatObservationCalculationLines(event.facts.privateCalculation);
-  const observerName = identity(event, "actor") ?? identity(event, "roller");
-  const opponentName = identity(event, "target");
-  const targetCalculation =
-    event.facts.gmReview?.targetCalculation &&
-    typeof event.facts.gmReview.targetCalculation === "object"
-      ? (event.facts.gmReview.targetCalculation as Record<string, unknown>)
-      : undefined;
-  const opponent = formatObservationCalculationLines(targetCalculation);
-  return [
-    ...(observer.length
-      ? [
-          {
-            key: `${event.id}:calculation:observer-heading`,
-            text: observerName ? `Observer — ${observerName}` : "Observer calculation",
-          },
-          ...observer.map((text, index) => ({
-            key: `${event.id}:calculation:observer:${index}`,
-            text,
-          })),
-        ]
-      : []),
-    ...(opponent.length
-      ? [
-          {
-            key: `${event.id}:calculation:opponent-heading`,
-            text: opponentName ? `Opponent — ${opponentName}` : "Opponent calculation",
-          },
-          ...opponent.map((text, index) => ({
-            key: `${event.id}:calculation:opponent:${index}`,
-            text,
-          })),
-        ]
-      : []),
-  ];
 }
 
 function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
@@ -792,12 +574,6 @@ export function buildCombatEventResultModel(
       })
       .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
       .map((event) => {
-        const identityById = new Map(
-          event.identities.flatMap((entry) =>
-            entry.participantId ? [[entry.participantId, entry.displayName] as const] : [],
-          ),
-        );
-        const attack = event.type === "attack";
         const presentation = instrumentation?.resultStage
           ? measureCombatPerformanceStage(
               instrumentation.resultStage,
@@ -805,35 +581,21 @@ export function buildCombatEventResultModel(
               { eventType: event.type },
             )
           : eventPresentation(event);
-        const calculationRows = instrumentation?.calculationStage
+        const calculations = instrumentation?.calculationStage
           ? measureCombatPerformanceStage(
               instrumentation.calculationStage,
-              () =>
-                attack
-                  ? attackCalculationRows(event)
-                  : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
-                    ? dodgeCalculationRows(event)
-                    : event.type === "offensive_parry_brawling"
-                      ? offensiveParryBrawlingCalculationRows(event)
-                      : event.type === "observation"
-                        ? observationCalculationRows(event)
-                        : calculationFactRows(
-                            event.id,
-                            event.facts.privateCalculation,
-                            identityById,
-                          ),
+              () => buildCombatCalculationPresentations(event),
               { eventType: event.type },
             )
-          : attack
-            ? attackCalculationRows(event)
-            : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
-              ? dodgeCalculationRows(event)
-              : event.type === "offensive_parry_brawling"
-                ? offensiveParryBrawlingCalculationRows(event)
-                : event.type === "observation"
-                  ? observationCalculationRows(event)
-                  : calculationFactRows(event.id, event.facts.privateCalculation, identityById);
+          : buildCombatCalculationPresentations(event);
+        const calculationRows = calculations.flatMap((calculation) =>
+          buildCombatCalculationPresentationRows(calculation).map((row) => ({
+            key: row.key,
+            text: row.text,
+          })),
+        );
         return {
+          calculations,
           calculationRows,
           completenessLabel:
             event.completeness === "complete"

@@ -89,6 +89,7 @@ describe("CombatEventResultList", () => {
         model={{
           items: [
             {
+              calculations: [],
               calculationRows: [],
               id: "archived-result",
               outcomeRows: [],
@@ -161,8 +162,8 @@ describe("CombatEventResultList", () => {
     expect(screen.getAllByText("Result: Miss")).toHaveLength(2);
     expect(screen.getAllByText("Attack recorded.")).toHaveLength(2);
     const articles = screen.getAllByRole("article");
-    expect(articles[0]?.textContent).toContain("Calculation");
-    expect(articles[1]?.textContent).not.toContain("Calculation");
+    expect(articles[0]?.textContent).toContain("Attack calculation");
+    expect(articles[1]?.textContent).not.toContain("Attack calculation");
     expect(consoleError.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(
       false,
     );
@@ -185,21 +186,25 @@ describe("CombatEventResultList", () => {
     );
 
     const articles = screen.getAllByRole("article");
-    const firstToggle = within(articles[0]!).getByRole("button", { name: "Calculation" });
-    const secondToggle = within(articles[1]!).getByRole("button", { name: "Calculation" });
+    const firstToggle = within(articles[0]!).getByRole("button", {
+      name: "Attack calculation",
+    });
+    const secondToggle = within(articles[1]!).getByRole("button", {
+      name: "Attack calculation",
+    });
 
     expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
     expect(secondToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
+    expect(screen.queryByText("Combat total: -5")).toBeNull();
 
     fireEvent.click(firstToggle);
     expect(firstToggle.getAttribute("aria-expanded")).toBe("true");
     expect(secondToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getByText("OB 10 + roll 8 - DB 15 = 3")).toBeTruthy();
-    expect(screen.queryByText("OB 11 + roll 7 - DB 12 = 6")).toBeNull();
+    expect(screen.getByText("Combat total: -5")).toBeTruthy();
+    expect(screen.queryByText("Combat total: -1")).toBeNull();
 
     fireEvent.click(firstToggle);
     expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByText("OB 10 + roll 8 - DB 15 = 3")).toBeNull();
+    expect(screen.queryByText("Combat total: -5")).toBeNull();
   });
 });

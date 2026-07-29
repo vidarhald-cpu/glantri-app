@@ -773,7 +773,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("interface PlayerCombatActionResultSection");
     expect(source).toContain("sections?: readonly PlayerCombatActionResultSection[]");
     expect(source).toContain("result?.sections?.length");
-    expect(source).toContain("section.calculationLines.map");
+    expect(source).toContain("section.calculations.map");
+    expect(source).toContain("<CombatCalculationPanel");
     expect(source).toContain("<strong>{section.resultLine}</strong>");
     expect(source).toContain("fontWeight: 400");
     expect(source.indexOf("result.rankLabel")).toBeLessThan(

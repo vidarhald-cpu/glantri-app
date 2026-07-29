@@ -18,6 +18,7 @@ import {
   buildCombatEventResultModel,
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
+  type CombatCalculationPresentation,
   type CombatEventResultModel,
 } from "@/features/combat-history";
 import type {
@@ -43,7 +44,7 @@ export interface ArchivedHistoricalActionResult {
   readonly rankLabel?: string;
   readonly resultLabel?: string;
   readonly sections?: readonly {
-    readonly calculationLines: readonly string[];
+    readonly calculations: readonly CombatCalculationPresentation[];
     readonly resultLine?: string;
     readonly title: string;
   }[];

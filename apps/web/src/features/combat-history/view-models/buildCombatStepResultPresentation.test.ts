@@ -7,8 +7,19 @@ import type {
 } from "@glantri/domain";
 
 import { buildCombatStepResultPresentation } from "./buildCombatStepResultPresentation";
+import { buildCombatEventResultModel } from "./buildCombatEventResultModel";
+import {
+  buildCombatCalculationPresentationLines,
+  type CombatCalculationPresentation,
+} from "./combatCalculationPresentation";
 
 const revision = "2026-07-21T12:00:00.000Z";
+
+function calculationLines(
+  calculation: CombatCalculationPresentation | undefined,
+): readonly string[] {
+  return calculation ? buildCombatCalculationPresentationLines(calculation) : [];
+}
 
 function historyEvent(
   type: ProjectedCombatHistoryEvent["type"],
@@ -126,6 +137,37 @@ function resultEnvelope(): CombatResultEnvelope {
 }
 
 describe("buildCombatStepResultPresentation", () => {
+  it("uses semantically equivalent calculation rows for current and historical presentation", () => {
+    const sourceEvent = historyEvent("attack", 1, {
+      facts: {
+        involvedOutcome: { attackResultId: "attack-1", hit: true },
+        privateCalculation: { defenderDb: 15, lookupTotal: 6, ob: 11, rollTotal: 10 },
+        publicOutcome: { hit: true },
+      },
+      id: "history:attack-1",
+      ownerParticipantId: "scyrian",
+    });
+    const current = build({
+      events: [sourceEvent],
+      logEvents: [
+        logEvent("log:attack-1", 1, {
+          attackResultId: "attack-1",
+          category: "attack",
+          sourceEventIds: [sourceEvent.id],
+          summary: "Scyrian cavalry guy attacked The Gladiator.",
+          summaryFacts: { kind: "attack_resolved", outcome: "hit" },
+        }),
+      ],
+      participantId: "scyrian",
+      viewer: "player",
+    });
+    const historical = buildCombatEventResultModel([sourceEvent]);
+
+    expect(calculationLines(current.entries[0]?.calculations[0])).toEqual(
+      historical.items[0]?.calculationRows.map((row) => row.text),
+    );
+  });
+
   it("attaches the same canonical envelope facts to current-step presentation", () => {
     const envelope = resultEnvelope();
     const sourceEvent = historyEvent("adjust_distance_committed", 1, {
@@ -275,7 +317,9 @@ describe("buildCombatStepResultPresentation", () => {
     expect(text).not.toContain("Awaiting opponent roll");
     expect(result.entries.find((entry) => entry.id.includes("attempt"))?.state).toBe("final");
     expect(
-      result.entries.find((entry) => entry.category === "contest")?.calculations[0]?.lines,
+      calculationLines(
+        result.entries.find((entry) => entry.category === "contest")?.calculations[0],
+      ),
     ).toContain("Result: 24");
   });
 
@@ -438,11 +482,11 @@ describe("buildCombatStepResultPresentation", () => {
       summary: "Roll 38",
     });
     expect(gm.entries[0]?.summary).toBe("Observer 38 vs opponent 22");
-    expect(gm.entries[0]?.calculations.map((calculation) => calculation.title)).toEqual([
+    expect(gm.entries[0]?.calculations.map((calculation) => calculation.label)).toEqual([
       "Observer — The Gladiator",
       "Opponent — Scyrian cavalry guy",
     ]);
-    expect(observer.entries[0]?.calculations.map((calculation) => calculation.title)).toEqual([
+    expect(observer.entries[0]?.calculations.map((calculation) => calculation.label)).toEqual([
       "Observer — The Gladiator",
     ]);
     expect(observedTarget.entries).toEqual([]);
@@ -734,8 +778,7 @@ describe("buildCombatStepResultPresentation", () => {
       summary: "Succeeded.",
     });
     expect(declaration.entries[0]?.calculations[0]).toMatchObject({
-      collapsedByDefault: true,
-      title: "Combat Experience",
+      label: "Combat Experience",
       visibility: "own",
     });
     expect(modifierReview.entries).toEqual([]);
@@ -900,8 +943,8 @@ describe("buildCombatStepResultPresentation", () => {
     expect(attacker.entries[0]).toMatchObject({
       calculations: [
         {
-          collapsedByDefault: true,
-          lines: ["Die: 1d7", "Roll: 3"],
+          calculationType: "damage",
+          die: { rolledValue: 3 },
           visibility: "own",
         },
       ],
@@ -1048,27 +1091,17 @@ describe("buildCombatStepResultPresentation", () => {
           "You lost the Brawling contest. The Gladiator established continued contact. You are Unbalanced (−2%).",
       }),
     ]);
-    expect(controller.entries[0]?.calculations[0]?.lines).toEqual(
-      expect.arrayContaining([
-        "Your roll",
-        "Skill: 12",
-        "Opponent total: 22",
-        "Difference: +9 in your favor",
-        "Result: You win",
-      ]),
+    expect(calculationLines(controller.entries[0]?.calculations[0])).toEqual(
+      expect.arrayContaining(["Base skill: 12", "Skill total: 14"]),
     );
-    expect(controller.entries[0]?.calculations[0]?.lines).not.toContain("Die roll: 13");
-    expect(gm.entries[0]?.calculations).toHaveLength(1);
+    expect(calculationLines(controller.entries[0]?.calculations[0])).not.toContain("Die roll: 13");
+    expect(gm.entries[0]?.calculations).toHaveLength(2);
     expect(gm.entries[0]?.calculations[0]).toMatchObject({ visibility: "gm_full" });
-    expect(gm.entries[0]?.calculations[0]?.lines).toEqual(
-      expect.arrayContaining([
-        "The Gladiator",
-        "Skill: 12",
-        "Scyrian cavalry guy",
-        "Skill: 9",
-        "Difference: +9 in favor of The Gladiator",
-        "Result: The Gladiator wins",
-      ]),
+    expect(gm.entries[0]?.calculations.flatMap(calculationLines)).toEqual(
+      expect.arrayContaining(["Skill total: 14", "Skill total: 9"]),
+    );
+    expect(gm.entries[0]?.calculations.flatMap(calculationLines).join(" ")).not.toMatch(
+      /difference|wins|consequence/i,
     );
   });
 
@@ -1171,13 +1204,9 @@ describe("buildCombatStepResultPresentation", () => {
       summary:
         "Continued Contact was broken. Unbalanced was removed. Ordinary distance control resumes.",
     });
-    expect(gm.entries[0]?.calculations).toHaveLength(1);
-    expect(gm.entries[0]?.calculations[0]?.lines).toEqual(
-      expect.arrayContaining([
-        "Difference: 0",
-        "Result: Tie — Continued Contact broken",
-        "Consequence: Continued Contact ended; Unbalanced was removed and ordinary distance control resumes.",
-      ]),
+    expect(gm.entries[0]?.calculations).toHaveLength(2);
+    expect(gm.entries[0]?.calculations.flatMap(calculationLines).join(" ")).not.toMatch(
+      /difference|tie|consequence/i,
     );
   });
 
@@ -1285,17 +1314,18 @@ describe("buildCombatStepResultPresentation", () => {
       "Offensive Parry",
       "Offensive Parry — Brawling",
     ]);
-    expect(result.entries[0]?.calculations).toEqual([expect.objectContaining({ title: "Attack" })]);
-    expect(result.entries[1]?.calculations).toEqual([expect.objectContaining({ title: "Parry" })]);
+    expect(result.entries[0]?.calculations).toEqual([expect.objectContaining({ label: "Attack" })]);
+    expect(result.entries[1]?.calculations).toEqual([expect.objectContaining({ label: "Parry" })]);
     expect(result.entries[2]?.calculations).toEqual([
-      expect.objectContaining({ title: "Offensive Parry — Brawling" }),
+      expect.objectContaining({ calculationType: "offensive_parry_brawling" }),
+      expect.objectContaining({ calculationType: "offensive_parry_brawling" }),
     ]);
     expect(
       result.entries
         .slice(0, 2)
         .flatMap((entry) => entry.calculations)
-        .flatMap((calculation) => calculation.lines),
-    ).not.toContain("Skill: 12");
+        .flatMap(calculationLines),
+    ).not.toContain("Skill total: 12");
   });
 
   it("does not render declaration content in live results before publication", () => {

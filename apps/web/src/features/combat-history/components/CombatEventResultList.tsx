@@ -5,6 +5,7 @@ import {
   buildCombatEventResultModel,
   type CombatEventResultModel,
 } from "../view-models/buildCombatEventResultModel";
+import { CombatCalculationPanel } from "./CombatCalculationPanel";
 
 export function CombatEventResultList(input: {
   emptyMessage?: string;
@@ -22,15 +23,14 @@ export function CombatEventResultList(input: {
     () => new Set(),
   );
 
-  const toggleCalculation = (eventId: string) => {
+  const toggleCalculation = (calculationId: string) => {
     setExpandedCalculationIds((current) => {
       const next = new Set(current);
-      if (next.has(eventId)) next.delete(eventId);
-      else next.add(eventId);
+      if (next.has(calculationId)) next.delete(calculationId);
+      else next.add(calculationId);
       return next;
     });
   };
-
   return (
     <section
       aria-label={input.title ?? "Action result"}
@@ -62,48 +62,14 @@ export function CombatEventResultList(input: {
                     <strong>Combat note:</strong> {item.envelope.publicCombatNote}
                   </div>
                 ) : null}
-                {item.calculationRows.length ? (
-                  <div
-                    style={{
-                      background: "#f6f5ef",
-                      borderRadius: 6,
-                      color: "#5e5a50",
-                      display: "grid",
-                      fontSize: "0.84rem",
-                      gap: "0.12rem",
-                      padding: "0.35rem 0.45rem",
-                    }}
-                  >
-                    <button
-                      aria-controls={`${item.id}:calculation`}
-                      aria-expanded={expandedCalculationIds.has(item.id)}
-                      onClick={() => toggleCalculation(item.id)}
-                      style={{
-                        background: "transparent",
-                        border: 0,
-                        color: "inherit",
-                        cursor: "pointer",
-                        font: "inherit",
-                        fontWeight: 700,
-                        justifySelf: "start",
-                        padding: 0,
-                      }}
-                      type="button"
-                    >
-                      Calculation
-                    </button>
-                    {expandedCalculationIds.has(item.id) ? (
-                      <div
-                        id={`${item.id}:calculation`}
-                        style={{ display: "grid", gap: "0.12rem" }}
-                      >
-                        {item.calculationRows.map((row) => (
-                          <div key={row.key}>{row.text}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                {item.calculations.map((calculation) => (
+                  <CombatCalculationPanel
+                    expanded={expandedCalculationIds.has(calculation.calculationId)}
+                    key={calculation.calculationId}
+                    onToggle={() => toggleCalculation(calculation.calculationId)}
+                    presentation={calculation}
+                  />
+                ))}
                 {item.completenessLabel ? (
                   <div style={{ color: "#8a4f21", fontSize: "0.82rem", fontWeight: 700 }}>
                     {item.completenessLabel}

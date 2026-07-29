@@ -106,7 +106,9 @@ import {
 
 import {
   buildCombatStepResultPresentation,
-  buildConciseDodgeCalculationRows,
+  buildCombatCalculationPresentationLines,
+  buildCombatCalculationPresentationFromSnapshot,
+  buildDodgeCalculationPresentationFromSnapshot,
   buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatLog,
@@ -118,6 +120,7 @@ import {
   reconcileCombatLogSelection,
   resolveCombatTaskCommandContext,
   resolveCombatHistoryPanelSnapshot,
+  type CombatCalculationPresentation,
   selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
   type CombatLogEventSelection,
@@ -527,7 +530,7 @@ interface CombatDamageReviewDraft {
 }
 
 interface CombatActionResultSection {
-  calculationLines: readonly string[];
+  calculations: readonly CombatCalculationPresentation[];
   resultLine?: string;
   title: string;
 }
@@ -822,16 +825,6 @@ function formatCombatAttackResultLine(input: {
     : formatCombatAttackResultMainLine(input.result);
 }
 
-function formatCombatToHitCalculationLine(result: CombatRoundAttackRollResult): string {
-  const rollText = formatOpenEndedD20RollBreakdown({
-    dieResult: result.rollTotal,
-    openEndedD10s: result.openEndedD10s,
-    rollD20: result.rollD20,
-  });
-
-  return `OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
-}
-
 function buildRoundEndDistancePairLabel(
   proposal: CombatRoundEndDistanceProposal,
   participantLabelsById: Record<string, string>,
@@ -910,7 +903,20 @@ function buildCombatAttackResultPanel(input: {
     resultLabel: `Result: ${input.result.tableResult}`,
     sections: [
       {
-        calculationLines: [formatCombatToHitCalculationLine(input.result)],
+        calculations: [
+          buildCombatCalculationPresentationFromSnapshot({
+            calculationId: [
+              input.result.phase,
+              input.result.attackerParticipantId,
+              input.result.defenderParticipantId,
+              input.result.attackOpportunityId ?? "default",
+              "attack",
+            ].join(":"),
+            calculationType: "attack",
+            facts: { ...input.result },
+            label: "To hit",
+          }),
+        ].filter((entry): entry is CombatCalculationPresentation => Boolean(entry)),
         resultLine: `Result: ${formatCombatAttackTableResultLabel(input.result.tableResult)}`,
         title: "To hit",
       },
@@ -1118,32 +1124,6 @@ function formatCombatArmorLine(
   return `Armor: ${effectiveDamage.effectiveArmorRegionLabel.toLowerCase()}/${effectiveDamage.effectiveAttackDirection} ${effectiveDamage.effectiveArmorCoverageLabel}, damage -${effectiveDamage.effectiveArmorValue}${modifier}`;
 }
 
-function formatHitLocationTargetLabel(
-  targetLocation: CombatRoundPhaseResolutionResult["hitLocationRoll"]["targetLocation"],
-): string {
-  return targetLocation && targetLocation !== "none"
-    ? getHitLocationFullLabel(targetLocation)
-    : "None";
-}
-
-function formatCombatLocationCalculationLine(resolution: CombatRoundPhaseResolutionResult): string {
-  const locationRoll = resolution.hitLocationRoll;
-
-  if (locationRoll.status !== "rolled") {
-    return "Hit location roll required";
-  }
-
-  const targetLabel = formatHitLocationTargetLabel(locationRoll.targetLocation);
-  const rollsLabel = locationRoll.hitLocationRolls.join(", ");
-  const selectedLabel = locationRoll.selectedHitLocation
-    ? getHitLocationFullLabel(locationRoll.selectedHitLocation)
-    : "Unknown";
-
-  return locationRoll.selectionReason === "targeted_closest"
-    ? `Target: ${targetLabel} · Rolls: ${rollsLabel} -> ${selectedLabel} selected`
-    : `Roll: ${rollsLabel}`;
-}
-
 function formatCombatLocationResultLine(resolution: CombatRoundPhaseResolutionResult): string {
   const locationRoll = resolution.hitLocationRoll;
 
@@ -1152,30 +1132,6 @@ function formatCombatLocationResultLine(resolution: CombatRoundPhaseResolutionRe
   }
 
   return `Result: ${getHitLocationFullLabel(locationRoll.selectedHitLocation)}`;
-}
-
-function formatCombatCriticalCalculationLine(
-  resolution: CombatRoundPhaseResolutionResult,
-): string | undefined {
-  const criticalRoll = resolution.criticalRoll;
-  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
-    criticalRoll,
-    review: resolution.damageResult?.review,
-  });
-
-  if (criticalRoll.status === "not_required") {
-    return resolution.damageResult ? "No critical roll required" : undefined;
-  }
-
-  if (criticalRoll.status !== "rolled" || !criticalRoll.criticalDice) {
-    return "Critical roll required";
-  }
-
-  return `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
-    effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
-  } - armor crit mod ${
-    effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
-  } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
 }
 
 function formatCombatCriticalResultLine(
@@ -1231,9 +1187,7 @@ function formatCombatPhaseResolutionResultLines(input: {
   const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
   const resolvedHitLocationLine = formatCombatHitLocationLine(damageResult);
   const resolvedArmorLine = formatCombatArmorLine(damageResult);
-  const locationCalculationLine = formatCombatLocationCalculationLine(input.resolution);
   const locationResultLine = formatCombatLocationResultLine(input.resolution);
-  const criticalCalculationLine = formatCombatCriticalCalculationLine(input.resolution);
   const criticalResultLine = formatCombatCriticalResultLine(input.resolution);
   const additionalEffectsLine = damageResult?.review?.additionalEffects?.length
     ? ` · Effects: ${damageResult.review.additionalEffects
@@ -1273,36 +1227,73 @@ function formatCombatPhaseResolutionResultLines(input: {
       : proposal.status === "committed"
         ? `Result: ${proposalLine}`
         : `Result: ${formatResolutionStatusLabel(proposal.status)}`;
+  const attackCalculation = buildCombatCalculationPresentationFromSnapshot({
+    calculationId: `${input.resolution.attackResultId}:attack`,
+    calculationType: "attack",
+    facts: { ...input.attackResult },
+    label: "To hit",
+  });
+  const parryCalculation = buildCombatCalculationPresentationFromSnapshot({
+    calculationId: `${input.resolution.attackResultId}:parry`,
+    calculationType: "parry",
+    facts: { ...parry },
+    label: "Parry",
+  });
+  const locationCalculation = buildCombatCalculationPresentationFromSnapshot({
+    calculationId: `${input.resolution.attackResultId}:location`,
+    calculationType: "hit_location",
+    facts: { ...input.resolution.hitLocationRoll },
+    label: "Location",
+  });
+  const damageCalculation = damageResult
+    ? buildCombatCalculationPresentationFromSnapshot({
+        calculationId: `${input.resolution.attackResultId}:damage`,
+        calculationType: "damage_proposed",
+        facts: { ...damageResult },
+        label: "Damage",
+      })
+    : undefined;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll: input.resolution.criticalRoll,
+    review: damageResult?.review,
+  });
+  const criticalCalculation = buildCombatCalculationPresentationFromSnapshot({
+    calculationId: `${input.resolution.attackResultId}:critical`,
+    calculationType: "critical",
+    facts: {
+      ...input.resolution.criticalRoll,
+      armorCriticalModifier: effectiveCritical.armorCriticalModifier,
+      criticalTypeModifier: effectiveCritical.criticalTypeModifier,
+      finalCriticalRoll: effectiveCritical.finalCriticalRoll,
+    },
+    label: "Critical",
+  });
   const sections: CombatActionResultSection[] = [
     {
-      calculationLines: [formatCombatToHitCalculationLine(input.attackResult)],
+      calculations: attackCalculation ? [attackCalculation] : [],
       resultLine: `Result: ${formatCombatAttackTableResultLabel(input.attackResult.tableResult)}`,
       title: "To hit",
     },
     {
-      calculationLines: [resolvedParryLine ?? `Parry ${formatResolutionStatusLabel(parry.status)}`],
+      calculations: parryCalculation ? [parryCalculation] : [],
       resultLine: parryResultLine,
       title: "Parry",
     },
     {
-      calculationLines: [locationCalculationLine],
+      calculations: locationCalculation ? [locationCalculation] : [],
       resultLine: locationResultLine,
       title: "Location",
     },
     {
-      calculationLines: [
-        resolvedDamageLine ?? damageLine,
-        resolvedDamageResultLine,
-        resolvedArmorLine,
-      ].filter((line): line is string => Boolean(line)),
+      calculations: damageCalculation ? [damageCalculation] : [],
       resultLine: damageResultLine,
       title: "Damage",
     },
   ];
 
-  if (criticalCalculationLine || criticalResultLine) {
+  if (criticalCalculation || criticalResultLine) {
     sections.push({
-      calculationLines: [criticalCalculationLine].filter((line): line is string => Boolean(line)),
+      calculations: criticalCalculation ? [criticalCalculation] : [],
       resultLine: criticalResultLine,
       title: "Critical",
     });
@@ -1387,7 +1378,11 @@ function formatCombatPhaseResolutionSummary(input: {
   const lines = formatCombatPhaseResolutionResultLines(input);
 
   return lines.sections
-    .flatMap((section) => [section.title, ...section.calculationLines, section.resultLine])
+    .flatMap((section) => [
+      section.title,
+      ...section.calculations.flatMap(buildCombatCalculationPresentationLines),
+      section.resultLine,
+    ])
     .filter((line): line is string => Boolean(line))
     .join("\n");
 }
@@ -3204,9 +3199,7 @@ function CombatDamageReviewPanel(input: {
           </label>
         </div>
         <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Combat note
-          </span>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Combat note</span>
           <input
             disabled={disabled}
             onChange={(event) =>
@@ -3529,19 +3522,25 @@ function CombatRoundEndDistanceControlPanel(input: {
               input.participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
             const resultA = proposal.participantA.result;
             const resultB = proposal.participantB.result;
-            const participantASummary = resultA
-              ? buildConciseDodgeCalculationRows({
-                  calculation: resultA,
-                  eventId: `${proposal.id}:participant-a`,
-                  outcome: proposal.status === "rolled" ? proposal.outcome : undefined,
-                }).map((row) => row.text)
+            const participantACalculation = resultA
+              ? buildDodgeCalculationPresentationFromSnapshot({
+                  calculationId: `${proposal.id}:participant-a`,
+                  calculationType: "distance_control_roll",
+                  facts: resultA,
+                })
+              : undefined;
+            const participantBCalculation = resultB
+              ? buildDodgeCalculationPresentationFromSnapshot({
+                  calculationId: `${proposal.id}:participant-b`,
+                  calculationType: "distance_control_roll",
+                  facts: resultB,
+                })
+              : undefined;
+            const participantASummary = participantACalculation
+              ? buildCombatCalculationPresentationLines(participantACalculation)
               : [proposal.participantA.status === "pending" ? "pending" : "not required"];
-            const participantBSummary = resultB
-              ? buildConciseDodgeCalculationRows({
-                  calculation: resultB,
-                  eventId: `${proposal.id}:participant-b`,
-                  outcome: proposal.status === "rolled" ? proposal.outcome : undefined,
-                }).map((row) => row.text)
+            const participantBSummary = participantBCalculation
+              ? buildCombatCalculationPresentationLines(participantBCalculation)
               : [proposal.participantB.status === "pending" ? "pending" : "not required"];
 
             return (

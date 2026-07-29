@@ -25,7 +25,9 @@ import {
 } from "@glantri/domain";
 
 import {
+  CombatCalculationPanel,
   formatSignedCombatModifier,
+  type CombatCalculationPresentation,
   type CurrentActionCommandDescriptor,
   type CurrentActionPresentation,
 } from "@/features/combat-history";
@@ -252,7 +254,7 @@ interface PlayerCombatActionButtonPanelProps {
 }
 
 interface PlayerCombatActionResultSection {
-  calculationLines: readonly string[];
+  calculations: readonly CombatCalculationPresentation[];
   resultLine?: string;
   title: string;
 }
@@ -1239,16 +1241,16 @@ export function PlayerCombatObservationProgress({
       <strong style={{ fontSize: "0.88rem" }}>Observation progress</strong>
       <div style={{ display: "grid", gap: "0.55rem" }}>
         {relationships.map((relationship) => {
-          const required = relationship.completedAttempts === 0
-            ? 3
-            : relationship.completedAttempts === 1
-              ? 6
-              : 10;
+          const required =
+            relationship.completedAttempts === 0
+              ? 3
+              : relationship.completedAttempts === 1
+                ? 6
+                : 10;
           return (
             <div key={relationship.id} style={{ fontSize: "0.84rem" }}>
               <span>
-                {targetLabels[relationship.targetParticipantId] ??
-                  relationship.targetParticipantId}
+                {targetLabels[relationship.targetParticipantId] ?? relationship.targetParticipantId}
                 : {relationship.roundsTowardNextAttempt} / {required}
                 {relationship.bestBonus > 0 ? ` · best +${relationship.bestBonus}%` : ""}
                 {relationship.completedAttempts > 0
@@ -1620,10 +1622,11 @@ export function PlayerCombatActionResultPanel({
             {result.sections.map((section) => (
               <section key={section.title} style={{ display: "grid", gap: "0.16rem" }}>
                 <div>{section.title}</div>
-                {section.calculationLines.map((line) => (
-                  <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-                    {line}
-                  </div>
+                {section.calculations.map((calculation) => (
+                  <CombatCalculationPanel
+                    key={calculation.calculationId}
+                    presentation={calculation}
+                  />
                 ))}
                 {section.resultLine ? <strong>{section.resultLine}</strong> : null}
               </section>

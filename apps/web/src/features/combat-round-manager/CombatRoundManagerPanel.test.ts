@@ -435,7 +435,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundDamageSubstate");
     expect(source).toContain("rollCombatHitLocationOnServer");
     expect(source).toContain("rollCombatCriticalOnServer");
-    expect(source).toContain("formatCombatToHitCalculationLine");
+    expect(source).toContain("buildCombatCalculationPresentationFromSnapshot");
+    expect(source).not.toContain("formatCombatToHitCalculationLine");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("sourcePrefix");
     expect(source).toContain("modifiedParryBeforeRoll");
@@ -545,7 +546,8 @@ describe("CombatRoundManagerPanel", () => {
       "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
     );
     expect(source).toContain("Critical roll / effect index");
-    expect(source).toContain("} - armor crit mod ${");
+    expect(source).toContain('calculationType: "critical"');
+    expect(source).not.toContain("} - armor crit mod ${");
     expect(source).toContain(
       "totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()",
     );
@@ -570,7 +572,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('title: "Location"');
     expect(source).toContain('title: "Damage"');
     expect(source).toContain('title: "Critical"');
-    expect(source).toContain("Critical roll required");
+    expect(source).not.toContain("Critical roll required");
+    expect(source).toContain('return "Result: Pending"');
     expect(source).toContain("Result: No critical effect");
     expect(source).toContain("Result: critical roll");
     expect(source).not.toContain("inspectorPhaseResolutionLines");

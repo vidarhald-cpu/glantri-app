@@ -182,9 +182,13 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[3]?.summary).toBe("Critical E against The Gladiator.");
     expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual(["Result: Grazing hit"]);
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "OB 10 + roll 18 - DB 15 = 13",
+      "OB: 10",
+      "Defender DB: 15",
+      "Combat total: -5",
+      "Die roll: 18",
+      "Result: 13",
     ]);
-    expect(model.items[1]?.calculationRows.map((row) => row.text)).toContain("Roll D20: 8");
+    expect(model.items[1]?.calculationRows.map((row) => row.text)).toEqual([]);
   });
 
   it("shows the opponent-specific Observe Opponent contribution in attack history", () => {
@@ -211,9 +215,15 @@ describe("buildCombatEventResultModel", () => {
     ]);
 
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "OB before opponent modifier: 10",
+      "Base OB: 10",
+      "Adjusted OB: 13",
+      "Defender DB: 16",
+      "Modifiers",
       "Observe Opponent · Scyrian cavalry guy: +3%",
-      "OB 13 + roll 18 - DB 16 = 15",
+      "Total modifiers: +3%",
+      "Combat total: -3",
+      "Die roll: 18",
+      "Result: 15",
     ]);
   });
 
@@ -291,24 +301,18 @@ describe("buildCombatEventResultModel", () => {
       "Best +0%",
     ]);
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "Observer — The Gladiator",
-      "Skill: One-handed edged",
-      "Skill XP: 8",
-      "Intelligence: 14",
+      "Stat: Intelligence 14",
+      "One-handed edged XP: 8",
       "Intelligence XP: 0",
-      "Effective skill: 22",
-      "Modifiers: +0",
-      "Roll: 4",
-      "Final total: 26",
-      "Opponent — Scyrian cavalry guy",
-      "Skill: Dodge",
-      "Skill XP: 5",
-      "Intelligence: 12",
+      "Skill total: 22",
+      "Die roll: 4",
+      "Result: 26",
+      "Stat: Intelligence 12",
+      "Dodge XP: 5",
       "Intelligence XP: 1",
-      "Effective skill: 17",
-      "Modifiers: +0",
-      "Roll: 13",
-      "Final total: 37",
+      "Skill total: 17",
+      "Die roll: 13",
+      "Result: 37",
     ]);
   });
 
@@ -426,12 +430,13 @@ describe("buildCombatEventResultModel", () => {
       }),
     ]);
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "Skill: Dodge 16",
-      "Modifier: +2",
+      "Dodge total: 16",
+      "Modifiers",
+      "Maneuver adjustment: +2",
+      "Total modifiers: +2",
+      "Skill total: 18",
       "Die roll: 3",
       "Result: 21",
-      "Outcome: Roll recorded",
-      "Maneuver adjustment: +2",
     ]);
   });
 
@@ -458,13 +463,15 @@ describe("buildCombatEventResultModel", () => {
     ]);
 
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "Brawling",
-      "Skill: 15",
-      "Modifiers: +1",
-      "- Parry quality: +1",
-      "Effective skill: 16",
+      "Stat: Characteristic average 12",
+      "Brawling XP: 928",
+      "Base skill: 15",
+      "Modifiers",
+      "Parry quality: +1",
+      "Total modifiers: +1",
+      "Skill total: 16",
       "Die roll: 11",
-      "Total: 27",
+      "Result: 27",
     ]);
     expect(JSON.stringify(model)).not.toContain("Brawling Skill Xp");
     expect(JSON.stringify(model)).not.toContain("Characteristic Average");
@@ -489,7 +496,7 @@ describe("buildCombatEventResultModel", () => {
       }),
     ]);
 
-    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Modifier: +1");
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Total modifiers: +1");
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain(
       "Maneuver adjustment: +2",
     );

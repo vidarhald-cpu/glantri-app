@@ -7,14 +7,10 @@ import type {
 } from "@glantri/domain";
 
 import type { CombatPresentationSubject } from "./currentActionPresentation";
+import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
 import { buildCombatEventResultModel } from "./buildCombatEventResultModel";
-import {
-  buildCombatContestCalculationPresentation,
-  buildCombatRollCalculationPresentation,
-  formatCombatContestCalculationLines,
-  formatObservationContestDifference,
-  formatObservationCalculationLines,
-} from "./combatCalculationPresentation";
+import type { CombatCalculationPresentation } from "./combatCalculationPresentation";
+import { formatObservationContestDifference } from "./formatObservationContestDifference";
 
 export type CombatStepResultEntryCategory =
   | "declaration"
@@ -27,16 +23,6 @@ export type CombatStepResultEntryCategory =
   | "damage"
   | "condition"
   | "review";
-
-export type CombatCalculationVisibility = "gm_full" | "own" | "shared" | "observed" | "hidden";
-
-export interface CombatCalculationPresentation {
-  readonly collapsedByDefault: true;
-  readonly id: string;
-  readonly lines: readonly string[];
-  readonly title: string;
-  readonly visibility: CombatCalculationVisibility;
-}
 
 export interface CombatStepResultEntryPresentation {
   readonly actor?: CombatPresentationSubject;
@@ -244,62 +230,13 @@ function calculationsForEvents(input: {
   return buildCombatEventResultModel(visibleEvents, {
     calculationStage: "panel_active_calculation_presentation",
     resultStage: "panel_active_attack_parry_result_presentation",
-  }).items.flatMap((item) => {
-    if (item.type === "observation") {
-      const event = visibleEvents.find((candidate) => candidate.id === item.id);
-      if (!event) return [];
-      const observerLines = formatObservationCalculationLines(event.facts.privateCalculation);
-      const targetCalculation =
-        input.viewer.kind === "gm" &&
-        event.facts.gmReview?.targetCalculation &&
-        typeof event.facts.gmReview.targetCalculation === "object"
-          ? (event.facts.gmReview.targetCalculation as Record<string, unknown>)
-          : undefined;
-      const opponentLines = formatObservationCalculationLines(targetCalculation);
-      const observerLabel =
-        identityLabel(event, "actor") ??
-        event.identities.find((identity) => identity.role === "roller")?.displayName;
-      const opponentLabel = identityLabel(event, "target");
-      return [
-        ...(observerLines.length
-          ? [
-              {
-                collapsedByDefault: true as const,
-                id: `${item.id}:observer-calculation`,
-                lines: observerLines,
-                title: observerLabel ? `Observer — ${observerLabel}` : "Observer calculation",
-                visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
-              },
-            ]
-          : []),
-        ...(opponentLines.length
-          ? [
-              {
-                collapsedByDefault: true as const,
-                id: `${item.id}:opponent-calculation`,
-                lines: opponentLines,
-                title: opponentLabel ? `Opponent — ${opponentLabel}` : "Opponent calculation",
-                visibility: "gm_full" as const,
-              },
-            ]
-          : []),
-      ];
-    }
-    const lines = item.calculationRows
-      .map((row) => row.text)
-      .filter((line) => line !== "Outcome: Awaiting opponent roll");
-    return lines.length
-      ? [
-          {
-            collapsedByDefault: true as const,
-            id: `${item.id}:calculation`,
-            lines,
-            title: item.title,
-            visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
-          },
-        ]
-      : [];
-  });
+  }).items.flatMap((item) =>
+    item.calculations.map((calculation) =>
+      input.viewer.kind === "gm" && calculation.visibility !== "gm_full"
+        ? { ...calculation, visibility: "gm_full" as const }
+        : calculation,
+    ),
+  );
 }
 
 function resolvedProposalIds(input: {
@@ -635,8 +572,6 @@ function supplementalEntries(input: {
       const participantIsAffected = affected?.id === input.participantId;
       const controllerName = controller?.label ?? "The defender";
       const affectedName = affected?.label ?? "the attacker";
-      const controllerTotal = visibleOutcome(event, "controllerTotal");
-      const affectedTotal = visibleOutcome(event, "affectedTotal");
       const summary = controllerWon
         ? participantIsController
           ? `You won the Brawling contest. Continued contact was established. ${affectedName} is Unbalanced (−2%).`
@@ -648,42 +583,6 @@ function supplementalEntries(input: {
           : participantIsAffected
             ? "You resisted the attempt. No continued contact was established."
             : "Continued contact was not established.";
-      const consequence = controllerWon
-        ? `Continued contact established; ${affectedName} is Unbalanced (−2%).`
-        : "No continued contact established.";
-      const contestCalculation =
-        controller?.id &&
-        affected?.id &&
-        typeof controllerTotal === "number" &&
-        typeof affectedTotal === "number"
-          ? buildCombatContestCalculationPresentation({
-              consequence,
-              initiator: {
-                label: controllerName,
-                participantId: controller.id,
-                roll: buildCombatRollCalculationPresentation({
-                  calculation: contestEvents.find(
-                    (candidate) => candidate.ownerParticipantId === controller.id,
-                  )?.facts.privateCalculation,
-                  label: controllerName,
-                }),
-                total: controllerTotal,
-              },
-              responder: {
-                label: affectedName,
-                participantId: affected.id,
-                roll: buildCombatRollCalculationPresentation({
-                  calculation: contestEvents.find(
-                    (candidate) => candidate.ownerParticipantId === affected.id,
-                  )?.facts.privateCalculation,
-                  label: affectedName,
-                }),
-                total: affectedTotal,
-              },
-              winnerParticipantId:
-                typeof winnerParticipantId === "string" ? winnerParticipantId : undefined,
-            })
-          : undefined;
       return [
         {
           entry: {
@@ -692,21 +591,11 @@ function supplementalEntries(input: {
               typeof visibleOutcome(event, "attackResultId") === "string"
                 ? (visibleOutcome(event, "attackResultId") as string)
                 : undefined,
-            calculations: contestCalculation
-              ? [
-                  {
-                    collapsedByDefault: true,
-                    id: `${contestId}:calculation`,
-                    lines: formatCombatContestCalculationLines({
-                      presentation: contestCalculation,
-                      viewerParticipantId:
-                        input.viewer.kind === "player" ? input.participantId : undefined,
-                    }),
-                    title: "Offensive Parry — Brawling",
-                    visibility: input.viewer.kind === "gm" ? "gm_full" : "own",
-                  },
-                ]
-              : [],
+            calculations: calculationsForEvents({
+              events: contestEvents,
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
             category: "contest",
             heading: "Offensive Parry — Brawling",
             id: `current-step:${contestId}:result`,
@@ -736,50 +625,10 @@ function supplementalEntries(input: {
       );
       const controller = identitySubject(event, "actor");
       const affected = identitySubject(event, "target");
-      const winnerParticipantId = visibleOutcome(event, "winnerParticipantId");
       const maintained = visibleOutcome(event, "contactMaintained") === true;
       const outcome = visibleOutcome(event, "outcome");
       const controllerName = controller?.label ?? "The controller";
       const affectedName = affected?.label ?? "the defender";
-      const controllerTotal = visibleOutcome(event, "controllerTotal");
-      const affectedTotal = visibleOutcome(event, "affectedTotal");
-      const consequence = maintained
-        ? `${affectedName} remains Unbalanced; ${controllerName} chooses engagement distance for the next round.`
-        : `Continued Contact ended; Unbalanced was removed and ordinary distance control resumes.`;
-      const contestCalculation =
-        controller?.id &&
-        affected?.id &&
-        typeof controllerTotal === "number" &&
-        typeof affectedTotal === "number"
-          ? buildCombatContestCalculationPresentation({
-              consequence,
-              initiator: {
-                label: controllerName,
-                participantId: controller.id,
-                roll: buildCombatRollCalculationPresentation({
-                  calculation: contestEvents.find(
-                    (candidate) => candidate.ownerParticipantId === controller.id,
-                  )?.facts.privateCalculation,
-                  label: controllerName,
-                }),
-                total: controllerTotal,
-              },
-              responder: {
-                label: affectedName,
-                participantId: affected.id,
-                roll: buildCombatRollCalculationPresentation({
-                  calculation: contestEvents.find(
-                    (candidate) => candidate.ownerParticipantId === affected.id,
-                  )?.facts.privateCalculation,
-                  label: affectedName,
-                }),
-                total: affectedTotal,
-              },
-              tieResultLabel: "Tie — Continued Contact broken",
-              winnerParticipantId:
-                typeof winnerParticipantId === "string" ? winnerParticipantId : undefined,
-            })
-          : undefined;
       const participantIsController = controller?.id === input.participantId;
       const participantIsAffected = affected?.id === input.participantId;
       const summary = maintained
@@ -797,21 +646,11 @@ function supplementalEntries(input: {
         {
           entry: {
             actor: controller,
-            calculations: contestCalculation
-              ? [
-                  {
-                    collapsedByDefault: true,
-                    id: `${contestId}:calculation`,
-                    lines: formatCombatContestCalculationLines({
-                      presentation: contestCalculation,
-                      viewerParticipantId:
-                        input.viewer.kind === "player" ? input.participantId : undefined,
-                    }),
-                    title: "Continued Contact — Maintenance",
-                    visibility: input.viewer.kind === "gm" ? "gm_full" : "own",
-                  },
-                ]
-              : [],
+            calculations: calculationsForEvents({
+              events: contestEvents,
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
             category: "contest",
             heading: "Continued Contact — Maintenance",
             id: `current-step:${contestId}:result`,
@@ -912,18 +751,11 @@ function supplementalEntries(input: {
       const targetLabel = target?.label ?? "the defender";
       const calculations =
         input.viewer.kind === "gm" || actorIsViewedParticipant
-          ? [
-              {
-                collapsedByDefault: true as const,
-                id: `${event.id}:graze-damage-calculation`,
-                lines: [
-                  ...(typeof expression === "string" ? [`Die: ${expression}`] : []),
-                  `Roll: ${rawDamage}`,
-                ],
-                title: "Graze damage",
-                visibility: input.viewer.kind === "gm" ? ("gm_full" as const) : ("own" as const),
-              },
-            ]
+          ? buildCombatCalculationPresentations(event).map((calculation) =>
+              input.viewer.kind === "gm"
+                ? { ...calculation, visibility: "gm_full" as const }
+                : calculation,
+            )
           : [];
       const summary =
         input.viewer.kind === "gm"

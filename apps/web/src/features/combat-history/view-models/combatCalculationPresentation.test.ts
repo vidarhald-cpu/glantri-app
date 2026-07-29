@@ -1,215 +1,416 @@
 import { describe, expect, it } from "vitest";
 
+import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+
+import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
 import {
-  buildCombatContestCalculationPresentation,
-  buildCombatRollCalculationPresentation,
-  formatCombatContestCalculationLines,
-  formatObservationCalculationLines,
-  formatCombatRollCalculationLines,
+  buildCombatCalculationPresentationLines,
+  buildCombatCalculationPresentationRows,
 } from "./combatCalculationPresentation";
 
-describe("combat calculation presentation", () => {
-  it("formats reproducible observation facts without internal IDs or a die-type label", () => {
-    const lines = formatObservationCalculationLines({
-      appliedModifiers: [
-        { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
-        { bucket: "skill_ob", label: "Fatigue", value: -1 },
-      ],
-      effectiveSkillValue: 22,
-      finalTotal: 24,
-      intelligenceValue: 11,
-      intelligenceXp: 3,
-      openEndedD10s: [],
-      rollD20: 2,
-      rollTotal: 2,
-      skillId: "one-handed-edged",
-      skillLabel: "One-handed edged",
-      skillXp: 7,
-    });
+function event(
+  type: ProjectedCombatHistoryEvent["type"],
+  privateCalculation: Record<string, unknown>,
+  overrides: Partial<ProjectedCombatHistoryEvent> = {},
+): ProjectedCombatHistoryEvent {
+  return {
+    completeness: "complete",
+    facts: { privateCalculation, publicOutcome: {} },
+    id: `event:${type}`,
+    identities: [],
+    missingFacts: [],
+    occurredAt: null,
+    roundNumber: 1,
+    sequence: 1,
+    status: "recorded",
+    step: "phase_1_actions",
+    type,
+    ...overrides,
+  };
+}
 
-    expect(lines).toEqual([
-      "Skill: One-handed edged",
-      "Skill XP: 7",
-      "Intelligence: 11",
+function lines(source: ProjectedCombatHistoryEvent): readonly string[] {
+  const presentation = buildCombatCalculationPresentations(source)[0];
+  expect(presentation).toBeDefined();
+  return buildCombatCalculationPresentationLines(presentation!);
+}
+
+describe("shared combat calculation presentation", () => {
+  it("uses stat, skill XP, modifiers, total, pre-die, die, result order for Feint", () => {
+    const presentation = buildCombatCalculationPresentations(
+      event(
+        "feint_roll",
+        {
+          adjustment: -2,
+          characteristic: "dex",
+          characteristicValue: 17,
+          finalTotal: 28,
+          openEndedD10s: [],
+          rollD20: 6,
+          rollTotal: 6,
+          skillId: "internal-skill-id",
+          skillLabel: "Feint",
+          skillXp: 7,
+        },
+        {
+          facts: {
+            involvedOutcome: { side: "attacker" },
+            privateCalculation: {
+              adjustment: -2,
+              characteristic: "dex",
+              characteristicValue: 17,
+              finalTotal: 28,
+              openEndedD10s: [],
+              rollD20: 6,
+              rollTotal: 6,
+              skillId: "internal-skill-id",
+              skillLabel: "Feint",
+              skillXp: 7,
+            },
+            publicOutcome: {},
+          },
+        },
+      ),
+    )[0];
+
+    expect(buildCombatCalculationPresentationLines(presentation!)).toEqual([
+      "Stat: Dexterity 17",
+      "Feint XP: 7",
+      "Modifiers",
+      "Adjustment: -2",
+      "Total modifiers: -2",
+      "Skill total: 22",
+      "Die roll: 6",
+      "Result: 28",
+    ]);
+    expect(JSON.stringify(presentation)).not.toContain("internal-skill-id");
+    expect(buildCombatCalculationPresentationLines(presentation!).join(" ")).not.toMatch(
+      /winner|margin|success|consequence/i,
+    );
+
+    const defender = buildCombatCalculationPresentations(
+      event(
+        "feint_roll",
+        {
+          adjustment: 0,
+          characteristic: "int",
+          characteristicValue: 14,
+          finalTotal: 31,
+          openEndedD10s: [],
+          rollD20: 13,
+          rollTotal: 13,
+          skillLabel: "Dodge",
+          skillXp: 5,
+        },
+        {
+          facts: {
+            involvedOutcome: { side: "defender" },
+            privateCalculation: {
+              adjustment: 0,
+              characteristic: "int",
+              characteristicValue: 14,
+              finalTotal: 31,
+              openEndedD10s: [],
+              rollD20: 13,
+              rollTotal: 13,
+              skillLabel: "Dodge",
+              skillXp: 5,
+            },
+            publicOutcome: {},
+          },
+        },
+      ),
+    )[0];
+
+    expect(defender?.label).toBe("Defender");
+    expect(buildCombatCalculationPresentationLines(defender!)).toEqual([
+      "Stat: Intelligence 14",
+      "Dodge XP: 5",
+      "Skill total: 18",
+      "Die roll: 13",
+      "Result: 31",
+    ]);
+  });
+
+  it("normalizes Observe Opponent and keeps opponent calculation GM-only", () => {
+    const source = event(
+      "observation",
+      {
+        appliedModifiers: [
+          { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
+          { bucket: "skill_ob", label: "Fatigue", value: -1 },
+        ],
+        baseValue: 22,
+        effectiveSkillValue: 22,
+        finalTotal: 24,
+        intelligenceValue: 11,
+        intelligenceXp: 3,
+        percentageAdjustment: 0,
+        percentageModifierTotal: 0,
+        rollD20: 2,
+        rollTotal: 2,
+        skillId: "one-handed-edged",
+        skillLabel: "One-handed edged",
+        skillXp: 7,
+      },
+      {
+        facts: {
+          gmReview: {
+            targetCalculation: {
+              appliedModifiers: [],
+              baseValue: 17,
+              effectiveSkillValue: 17,
+              finalTotal: 30,
+              intelligenceValue: 12,
+              intelligenceXp: 1,
+              percentageAdjustment: 0,
+              percentageModifierTotal: 0,
+              rollD20: 13,
+              rollTotal: 13,
+              skillLabel: "Dodge",
+              skillXp: 5,
+            },
+          },
+          privateCalculation: {
+            appliedModifiers: [
+              { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
+              { bucket: "skill_ob", label: "Fatigue", value: -1 },
+            ],
+            baseValue: 22,
+            effectiveSkillValue: 22,
+            finalTotal: 24,
+            intelligenceValue: 11,
+            intelligenceXp: 3,
+            percentageAdjustment: 0,
+            percentageModifierTotal: 0,
+            rollD20: 2,
+            rollTotal: 2,
+            skillId: "one-handed-edged",
+            skillLabel: "One-handed edged",
+            skillXp: 7,
+          },
+          publicOutcome: {},
+        },
+      },
+    );
+    const calculations = buildCombatCalculationPresentations(source);
+
+    expect(calculations).toHaveLength(2);
+    expect(calculations[1]?.visibility).toBe("gm_full");
+    expect(buildCombatCalculationPresentationLines(calculations[0]!)).toEqual([
+      "Stat: Intelligence 11",
+      "One-handed edged XP: 7",
       "Intelligence XP: 3",
-      "Effective skill: 22",
+      "Base skill: 22",
+      "Percentage adjustment: 0",
+      "Modifiers",
       "Combat Experience: +1%",
       "Fatigue: -1%",
-      "Roll: 2",
-      "Final total: 24",
-    ]);
-    expect(lines.join(" ")).not.toContain("Skill ID");
-    expect(lines.join(" ")).not.toContain("D20");
-  });
-
-  it("shows canonical percentage modifiers and their persisted effective skill", () => {
-    const calculation = buildCombatRollCalculationPresentation({
-      calculation: {
-        brawlingBaseValue: 15,
-        brawlingSkillXp: 928,
-        characteristicAverage: 12,
-        effectiveSkillValue: 18,
-        finalTotal: 29,
-        generalModifier: 0,
-        percentageAdjustment: 3,
-        percentageModifierTotal: 2,
-        parryQualityModifier: 2,
-        rollD20: 9,
-        rollTotal: 11,
-        skillModifier: 0,
-      },
-      label: "Scyrian cavalry guy",
-    });
-
-    expect(calculation).toMatchObject({
-      effectiveSkill: 18,
-      modifierTotal: 0,
-      percentageAdjustment: 3,
-      percentageModifierTotal: 2,
-      skillValue: 15,
-      total: 29,
-    });
-    expect(formatCombatRollCalculationLines(calculation!)).toEqual([
-      "Scyrian cavalry guy",
-      "Skill: 15",
-      "Percentage modifiers: +2%",
-      "- Parry quality: +2%",
-      "Effective skill: 18",
-      "Die roll: 11",
-      "Total: 29",
+      "Total modifiers: 0%",
+      "Skill total: 22",
+      "Die roll: 2",
+      "Result: 24",
     ]);
   });
 
-  it("displays a zero modifier cleanly and omits zero-valued detail rows", () => {
-    const calculation = buildCombatRollCalculationPresentation({
-      calculation: {
-        brawlingBaseValue: 18,
-        finalTotal: 24,
-        generalModifier: 0,
-        parryQualityModifier: 0,
-        rollTotal: 6,
-        skillModifier: 0,
-      },
-      label: "The Gladiator",
-    });
-
-    expect(formatCombatRollCalculationLines(calculation!)).toEqual([
-      "The Gladiator",
-      "Skill: 18",
-      "Modifiers: +0",
-      "Effective skill: 18",
-      "Die roll: 6",
-      "Total: 24",
-    ]);
-  });
-
-  it("shows pending modifiers without including them in effective-skill arithmetic", () => {
-    const calculation = buildCombatRollCalculationPresentation({
-      calculation: {
-        brawlingBaseValue: 24,
-        finalTotal: 36,
-        generalModifier: 0,
-        parryQualityModifier: 0,
-        pendingModifiers: [
-          {
-            activationLabel: "effective after Initiative 4",
-            label: "Unbalanced",
-            value: -2,
-          },
+  it("expands attack and parry snapshots into the same arithmetic grammar", () => {
+    const attackLines = lines(
+      event("attack", {
+        defenderDb: 16,
+        lookupTotal: 15,
+        ob: 13,
+        obBeforeOpponentSpecificModifier: 10,
+        opponentSpecificObModifierRows: [
+          { label: "Observe Opponent · Scyrian cavalry guy", value: 3 },
         ],
-        rollTotal: 12,
-        skillModifier: 0,
-      },
-      label: "Tied action",
-    });
-
-    expect(calculation).toMatchObject({ effectiveSkill: 24, modifierTotal: 0, total: 36 });
-    expect(formatCombatRollCalculationLines(calculation!)).toContain(
-      "- Unbalanced: -2 — effective after Initiative 4",
+        opponentSpecificObPercentageAdjustment: 3,
+        opponentSpecificObRaw: 3,
+        rollD20: 18,
+        rollTotal: 18,
+      }),
     );
-  });
-
-  it("shows a signed contest difference, winner, and participant-safe opponent total", () => {
-    const initiatorRoll = buildCombatRollCalculationPresentation({
-      calculation: {
-        brawlingBaseValue: 15,
-        finalTotal: 27,
-        generalModifier: 0,
-        parryQualityModifier: 1,
-        rollTotal: 11,
-        skillModifier: 0,
-      },
-      label: "Scyrian cavalry guy",
-    });
-    const responderRoll = buildCombatRollCalculationPresentation({
-      calculation: {
-        brawlingBaseValue: 18,
-        finalTotal: 24,
-        generalModifier: 0,
-        parryQualityModifier: 0,
-        rollTotal: 6,
-        skillModifier: 0,
-      },
-      label: "The Gladiator",
-    });
-    const contest = buildCombatContestCalculationPresentation({
-      consequence: "Continued contact established; The Gladiator is Unbalanced (−2%).",
-      initiator: {
-        label: "Scyrian cavalry guy",
-        participantId: "scyrian",
-        roll: initiatorRoll,
-        total: 27,
-      },
-      responder: {
-        label: "The Gladiator",
-        participantId: "gladiator",
-        roll: responderRoll,
-        total: 24,
-      },
-      winnerParticipantId: "scyrian",
-    });
-
-    expect(contest.difference).toBe(3);
-    expect(formatCombatContestCalculationLines({ presentation: contest })).toEqual(
-      expect.arrayContaining([
-        "Difference: +3 in favor of Scyrian cavalry guy",
-        "Result: Scyrian cavalry guy wins",
-      ]),
-    );
-    const playerLines = formatCombatContestCalculationLines({
-      presentation: contest,
-      viewerParticipantId: "scyrian",
-    });
-    expect(playerLines).toEqual(
-      expect.arrayContaining([
-        "Your roll",
-        "Opponent total: 24",
-        "Difference: +3 in your favor",
-        "Result: You win",
-      ]),
-    );
-    expect(playerLines).not.toContain("Die roll: 6");
-  });
-
-  it("uses the strictly-higher convention and explains a tie", () => {
-    const contest = buildCombatContestCalculationPresentation({
-      initiator: {
-        label: "Scyrian cavalry guy",
-        participantId: "scyrian",
-        total: 24,
-      },
-      responder: {
-        label: "The Gladiator",
-        participantId: "gladiator",
-        total: 24,
-      },
-    });
-
-    expect(formatCombatContestCalculationLines({ presentation: contest })).toEqual([
-      "Scyrian cavalry guy total: 24",
-      "The Gladiator total: 24",
-      "Difference: 0",
-      "Result: Tie — no continued contact established",
+    expect(attackLines).toEqual([
+      "Base OB: 10",
+      "Percentage adjustment: 3",
+      "Adjusted OB: 13",
+      "Defender DB: 16",
+      "Modifiers",
+      "Observe Opponent · Scyrian cavalry guy: +3%",
+      "Total modifiers: +3%",
+      "Combat total: -3",
+      "Die roll: 18",
+      "Result: 15",
     ]);
+
+    const parryLines = lines(
+      event("parry", {
+        combinedParryScore: 12,
+        modifierAdjustment: 1,
+        modifierBreakdown: [{ label: "Observe Opponent", value: 1 }],
+        openEndedD10s: [],
+        rollD20: 11,
+        rollTotal: 11,
+        total: 24,
+      }),
+    );
+    expect(parryLines).toEqual([
+      "Base Parry: 12",
+      "Modifiers",
+      "Observe Opponent: +1",
+      "Total modifiers: +1",
+      "Combat total: 13",
+      "Die roll: 11",
+      "Result: 24",
+    ]);
+  });
+
+  it("uses the common renderer for Dodge, initiative, CE, and health snapshots", () => {
+    expect(
+      lines(
+        event("adjust_distance_roll", {
+          dodgeSkillTotal: 16,
+          finalTotal: 23,
+          generalFatigueModifier: -1,
+          openEndedD10s: [],
+          rollD20: 6,
+          rollTotal: 6,
+          situationalAdjustment: 2,
+        }),
+      ),
+    ).toEqual([
+      "Dodge total: 16",
+      "Modifiers",
+      "General/Fatigue: -1",
+      "Maneuver adjustment: +2",
+      "Total modifiers: +1",
+      "Skill total: 17",
+      "Die roll: 6",
+      "Result: 23",
+    ]);
+    expect(
+      lines(
+        event("initiative", {
+          baseInitiative: 4,
+          modifierAdjustment: 1,
+          rolls: [5],
+          rollTotal: 5,
+          total: 10,
+        }),
+      ),
+    ).toContain("Initiative total: 5");
+    expect(
+      lines(
+        event("combat_experience", {
+          finalTotal: 27,
+          openEndedD10s: [],
+          rollD20: 17,
+          rollTotal: 17,
+          skillTotal: 10,
+        }),
+      ),
+    ).toEqual(["Skill total: 10", "Die roll: 17", "Result: 27"]);
+    expect(
+      lines(
+        event("health_check", {
+          finalTotal: 31,
+          healthStat: 13,
+          openEndedD10s: [],
+          rollD20: 18,
+          rollTotal: 18,
+        }),
+      ),
+    ).toEqual(["Stat: Health 13", "Health total: 13", "Die roll: 18", "Result: 31"]);
+  });
+
+  it("uses bounded arithmetic presentations for hit location, damage, and critical snapshots", () => {
+    expect(
+      lines(
+        event("hit_location", {
+          hitLocationRolls: [17],
+          selectedHitLocationRoll: 17,
+        }),
+      ),
+    ).toEqual(["Die roll: 17"]);
+
+    expect(
+      lines(
+        event("damage_proposed", {
+          armorModifier: -2,
+          damageLookupTotal: 19,
+          damageRoll: { rolls: [6], total: 6 },
+          defenderDm: -1,
+          dmb: 4,
+          hitLookupTotal: 12,
+        }),
+      ),
+    ).toEqual([
+      "Hit lookup total: 12",
+      "Modifiers",
+      "DMB: +4",
+      "Defender DM: -1",
+      "Armor: -2",
+      "Total modifiers: +1",
+      "Damage total: 13",
+      "Die roll: 6",
+      "Result: 19",
+    ]);
+
+    expect(
+      lines(
+        event("critical", {
+          armorCriticalModifier: -2,
+          criticalDice: [8],
+          criticalDiceTotal: 8,
+          criticalTypeModifier: 3,
+          finalCriticalRoll: 9,
+        }),
+      ),
+    ).toEqual([
+      "Modifiers",
+      "Critical type: +3",
+      "Armor: -2",
+      "Total modifiers: +1",
+      "Critical modifier total: 1",
+      "Die roll: 8",
+      "Result: 9",
+    ]);
+  });
+
+  it("omits zero modifier sections and produces stable rows for the same snapshot", () => {
+    const source = event("adjust_distance_roll", {
+      dodgeSkillTotal: 16,
+      finalTotal: 22,
+      generalFatigueModifier: 0,
+      openEndedD10s: [],
+      rollD20: 6,
+      rollTotal: 6,
+      situationalAdjustment: 0,
+    });
+    const first = buildCombatCalculationPresentations(source)[0]!;
+    const second = buildCombatCalculationPresentations(source)[0]!;
+
+    expect(buildCombatCalculationPresentationLines(first)).toEqual([
+      "Dodge total: 16",
+      "Skill total: 16",
+      "Die roll: 6",
+      "Result: 22",
+    ]);
+    expect(buildCombatCalculationPresentationRows(first)).toEqual(
+      buildCombatCalculationPresentationRows(second),
+    );
+  });
+
+  it("does not expose arbitrary legacy fields or outcome prose", () => {
+    const presentation = buildCombatCalculationPresentations(
+      event("attack", {
+        internalParticipantId: "secret-id",
+        margin: 17,
+        skillId: "secret-skill",
+        success: true,
+        tableBand: "critical",
+      }),
+    );
+    expect(presentation).toEqual([]);
+    expect(JSON.stringify(presentation)).not.toMatch(/secret|margin|success|tableBand/i);
   });
 });

@@ -53,10 +53,16 @@ describe("CombatStepResultList", () => {
             {
               calculations: [
                 {
-                  collapsedByDefault: true,
-                  id: "calculation-1",
-                  lines: ["Skill: Dodge 17", "Result: 24"],
-                  title: "Dodge roll",
+                  calculationId: "calculation-1",
+                  calculationType: "dodge",
+                  completeness: "legacy_incomplete",
+                  derivedValues: [{ label: "Dodge total", value: 17 }],
+                  die: { openEndedComponents: [], rolledValue: 7 },
+                  finalResult: { label: "Result", value: 24 },
+                  label: "Dodge roll",
+                  missingFacts: ["stat", "skill.xp"],
+                  modifiers: [],
+                  preDieTotal: { label: "Skill total", value: 17 },
                   visibility: "own",
                 },
               ],
@@ -81,7 +87,7 @@ describe("CombatStepResultList", () => {
     expect(summary.closest("details")?.open).toBe(false);
     fireEvent.click(summary);
     expect(summary.closest("details")?.open).toBe(true);
-    expect(screen.getByText("Skill: Dodge 17")).toBeTruthy();
+    expect(screen.getByText("Dodge total: 17")).toBeTruthy();
   });
 
   it("renders the canonical current-step empty state", () => {

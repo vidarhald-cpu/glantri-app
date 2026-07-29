@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { CombatStepResultPresentation } from "../view-models/buildCombatStepResultPresentation";
+import { CombatCalculationPanel } from "./CombatCalculationPanel";
 
 export function CombatStepResultList(input: {
   presentation: CombatStepResultPresentation;
@@ -45,25 +46,10 @@ export function CombatStepResultList(input: {
                   <div style={{ color: "#6b6253", fontSize: "0.84rem" }}>In progress.</div>
                 ) : null}
                 {entry.calculations.map((calculation) => (
-                  <details
-                    key={calculation.id}
-                    style={{
-                      background: "#f6f5ef",
-                      borderRadius: 6,
-                      color: "#5e5a50",
-                      fontSize: "0.84rem",
-                      padding: "0.35rem 0.45rem",
-                    }}
-                  >
-                    <summary style={{ cursor: "pointer", fontWeight: 700 }}>
-                      {calculation.title} calculation
-                    </summary>
-                    <div style={{ display: "grid", gap: "0.12rem", paddingTop: "0.25rem" }}>
-                      {calculation.lines.map((line, index) => (
-                        <div key={`${calculation.id}:${index}:${line}`}>{line}</div>
-                      ))}
-                    </div>
-                  </details>
+                  <CombatCalculationPanel
+                    key={calculation.calculationId}
+                    presentation={calculation}
+                  />
                 ))}
               </article>
             </li>
