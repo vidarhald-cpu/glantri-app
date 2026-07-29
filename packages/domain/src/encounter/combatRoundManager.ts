@@ -122,6 +122,12 @@ import {
   type CanonicalCombatStepEventDraft,
 } from "./combatStepEventPersistence";
 import { combatStepEventSchema, type CombatStepEvent } from "./combatStepEventSchema";
+import {
+  buildCombatResultAdjustmentMetadata,
+  combatResultPresentationFactsSchema,
+  type CombatResultConsequence,
+  type CombatResultPresentationFacts,
+} from "./combatResultPresentation";
 import { lookupCombatCriticalModifier } from "./critical";
 import {
   buildCriticalEffectProposalFromDamageResult,
@@ -15040,6 +15046,103 @@ function applyCombatRoundOperationalActionCancellations(input: {
   });
 }
 
+function buildCombatDamageResultPresentation(input: {
+  damageResult: CombatRoundDamageResult;
+  damageResultId: string;
+  effectEventId: string;
+  effectIds: readonly string[];
+  effectiveDamage: ReturnType<typeof getCombatRoundEffectiveDamageResult>;
+}): CombatResultPresentationFacts {
+  const standardDamage = getCombatRoundEffectiveDamageResult({
+    ...input.damageResult,
+    review: undefined,
+  });
+  const standardConsequences: CombatResultConsequence[] = [
+    {
+      affectedParticipantId: input.damageResult.defenderParticipantId,
+      key: "totalDamage",
+      label: "Damage",
+      value: standardDamage.finalCommittedDamage,
+    },
+    ...(standardDamage.effectiveCriticalGrade
+      ? [
+          {
+            affectedParticipantId: input.damageResult.defenderParticipantId,
+            key: "criticalGrade",
+            label: "Critical grade",
+            value: standardDamage.effectiveCriticalGrade,
+          },
+        ]
+      : []),
+    ...(standardDamage.effectiveSelectedHitLocation
+      ? [
+          {
+            affectedParticipantId: input.damageResult.defenderParticipantId,
+            key: "hitLocation",
+            label: "Hit location",
+            value: getHitLocationFullLabel(standardDamage.effectiveSelectedHitLocation),
+          },
+        ]
+      : []),
+  ];
+  const committedConsequences: CombatResultConsequence[] = [
+    {
+      affectedParticipantId: input.damageResult.defenderParticipantId,
+      key: "totalDamage",
+      label: "Damage",
+      value: input.effectiveDamage.finalCommittedDamage,
+    },
+    ...(input.effectiveDamage.effectiveCriticalGrade
+      ? [
+          {
+            affectedParticipantId: input.damageResult.defenderParticipantId,
+            key: "criticalGrade",
+            label: "Critical grade",
+            value: input.effectiveDamage.effectiveCriticalGrade,
+          },
+        ]
+      : []),
+    ...(input.effectiveDamage.effectiveSelectedHitLocation
+      ? [
+          {
+            affectedParticipantId: input.damageResult.defenderParticipantId,
+            key: "hitLocation",
+            label: "Hit location",
+            value: getHitLocationFullLabel(input.effectiveDamage.effectiveSelectedHitLocation),
+          },
+        ]
+      : []),
+  ];
+  return combatResultPresentationFactsSchema.parse({
+    actionInstanceId: input.damageResultId,
+    adjustment: buildCombatResultAdjustmentMetadata({
+      committedConsequences,
+      standardConsequences,
+    }),
+    calculationReferences: [
+      {
+        kind: "calculation_snapshot",
+        ownerParticipantId: input.damageResult.attackerParticipantId,
+        sourceId: input.damageResult.attackResultId,
+        visibility: "involved",
+      },
+    ],
+    committedConsequences,
+    conciseOutcome: {
+      details: [
+        `${input.effectiveDamage.finalCommittedDamage} damage`,
+        ...(input.effectiveDamage.effectiveCriticalGrade
+          ? [`Critical ${input.effectiveDamage.effectiveCriticalGrade}`]
+          : []),
+      ],
+      label: "Damage committed",
+    },
+    publicCombatNote: input.damageResult.review?.notes?.trim() || undefined,
+    standardConsequences,
+    subordinateEventReferences: [input.effectEventId, ...input.effectIds],
+  });
+}
+
 function recordCombatRoundCommitPhaseDamageCommand(input: {
   attackerScenarioParticipantId?: string;
   command: {
@@ -15334,7 +15437,11 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           cancelledActions: command.facts.cancelledActions,
           computedCriticalGrade: command.facts.computedCriticalGrade,
           operationalConsequences: command.facts.operationalConsequences,
-          review: command.facts.review,
+          review: input.damageResult.review
+            ? (({ notes: _publicCombatNote, ...diagnostics }) => diagnostics)(
+                input.damageResult.review,
+              )
+            : undefined,
         },
         involvedOutcome: {
           criticalGrade: command.facts.criticalGrade,
@@ -15342,6 +15449,13 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           hitLocation: command.facts.effectiveHitLocation,
         },
         publicOutcome: { status: "committed" },
+        resultPresentation: buildCombatDamageResultPresentation({
+          damageResult: input.damageResult,
+          damageResultId,
+          effectEventId: rows.eventId,
+          effectIds: rows.effectIds,
+          effectiveDamage,
+        }),
       },
       ownerParticipantId: input.damageResult.defenderParticipantId,
       phase: input.damageResult.phase,
@@ -17447,6 +17561,65 @@ function moveCombatRoundAdjustDistanceToNextAction(input: {
   });
 }
 
+function buildAdjustDistanceCommitResultPresentation(input: {
+  committedDistance: number;
+  notes?: string;
+  outcome: "successful" | "unsuccessful" | "allowed";
+  proposal: CombatAdjustDistanceProposal;
+}): CombatResultPresentationFacts {
+  const standardConsequences: CombatResultConsequence[] = [
+    ...(input.proposal.standardOutcome
+      ? [{ key: "outcome", label: "Outcome", value: input.proposal.standardOutcome }]
+      : []),
+    ...(input.proposal.standardProposedDistance !== undefined
+      ? [
+          {
+            key: "distance",
+            label: "Distance",
+            unit: "distance",
+            value: input.proposal.standardProposedDistance,
+          },
+        ]
+      : []),
+  ];
+  const committedConsequences: CombatResultConsequence[] = [
+    { key: "outcome", label: "Outcome", value: input.outcome },
+    {
+      key: "distance",
+      label: "Distance",
+      unit: "distance",
+      value: input.committedDistance,
+    },
+  ];
+  const rolls = [input.proposal.attackerRoll, input.proposal.defenderRoll].filter(
+    (roll): roll is CombatAdjustDistanceRollResult => Boolean(roll),
+  );
+  return combatResultPresentationFactsSchema.parse({
+    actionInstanceId: input.proposal.id,
+    adjustment: buildCombatResultAdjustmentMetadata({
+      committedConsequences,
+      standardConsequences,
+    }),
+    calculationReferences: rolls.map((roll) => ({
+      kind: "calculation_snapshot",
+      ownerParticipantId: roll.participantId,
+      sourceId: roll.id,
+      visibility: "owner",
+    })),
+    committedConsequences,
+    conciseOutcome: {
+      details: [
+        `Distance ${input.proposal.currentDistance} to ${input.committedDistance}`,
+        ...(input.proposal.difference !== undefined ? [`Margin ${input.proposal.difference}`] : []),
+      ],
+      label: "Distance adjustment committed",
+    },
+    publicCombatNote: input.notes?.trim() || undefined,
+    standardConsequences,
+    subordinateEventReferences: rolls.map((roll) => roll.id),
+  });
+}
+
 export function respondCombatRoundAdjustDistance(input: {
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
   proposalId: string;
@@ -17577,6 +17750,13 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
     },
     participantId: proposal.attackerParticipantId,
     proposal,
+    resultPresentation: input.notes?.trim()
+      ? combatResultPresentationFactsSchema.parse({
+          actionInstanceId: proposal.id,
+          conciseOutcome: { label: "Maneuver adjustment confirmed" },
+          publicCombatNote: input.notes.trim(),
+        })
+      : undefined,
     state: normalized,
     type: "review_adjust_distance_roll_adjustment",
   });
@@ -17593,6 +17773,7 @@ function recordAdjustDistanceCommand(input: {
   facts: Record<string, unknown>;
   participantId: string;
   proposal: CombatAdjustDistanceProposal;
+  resultPresentation?: CombatResultPresentationFacts;
   resultState?: CombatRoundState;
   rollerPrivate?: Record<string, unknown>;
   state: CombatRoundState;
@@ -17642,6 +17823,7 @@ function recordAdjustDistanceCommand(input: {
         input.draftType === "adjust_distance_roll" ? input.participantId : undefined,
       facts: {
         involvedOutcome: input.eventOutcome,
+        resultPresentation: input.resultPresentation,
         rollerPrivate: input.rollerPrivate,
       },
       involvedParticipantIds: [
@@ -17837,6 +18019,12 @@ export function commitCombatRoundAdjustDistance(input: {
     },
     participantId: proposal.attackerParticipantId,
     proposal,
+    resultPresentation: buildAdjustDistanceCommitResultPresentation({
+      committedDistance,
+      notes: input.notes,
+      outcome: input.outcome,
+      proposal,
+    }),
     resultState: nextState,
     state: normalized,
     type: "commit_adjust_distance",
@@ -18140,6 +18328,85 @@ export function recordCombatRoundFeintRoll(input: {
     : nextState;
 }
 
+function buildFeintCommitResultPresentation(input: {
+  proposal: CombatFeintProposal;
+  review: NonNullable<CombatFeintProposal["review"]>;
+  modifierIds: readonly string[];
+}): CombatResultPresentationFacts {
+  const standardConsequences: CombatResultConsequence[] = [
+    {
+      affectedParticipantId: input.proposal.attackerParticipantId,
+      key: "attackerPhase1DbParryModifier",
+      label: "Attacker DB/Parry · Phase 1",
+      unit: "percentage_points",
+      value: input.review.proposedAttackerDbParryModifier,
+    },
+    {
+      affectedParticipantId: input.proposal.defenderParticipantId,
+      key: "defenderPhase2SkillObModifier",
+      label: "Defender Skill/OB · Phase 2",
+      unit: "percentage_points",
+      value: input.review.proposedDefenderObDbModifier,
+    },
+    {
+      affectedParticipantId: input.proposal.defenderParticipantId,
+      key: "defenderPhase2DbParryModifier",
+      label: "Defender DB/Parry · Phase 2",
+      unit: "percentage_points",
+      value: input.review.proposedDefenderObDbModifier,
+    },
+  ];
+  const committedConsequences: CombatResultConsequence[] = [
+    {
+      ...standardConsequences[0]!,
+      value: input.review.gmAttackerDbParryModifier ?? input.review.proposedAttackerDbParryModifier,
+    },
+    {
+      ...standardConsequences[1]!,
+      value:
+        input.review.gmDefenderSkillObModifier ??
+        input.review.gmDefenderObDbModifier ??
+        input.review.proposedDefenderObDbModifier,
+    },
+    {
+      ...standardConsequences[2]!,
+      value:
+        input.review.gmDefenderDbParryModifier ??
+        input.review.gmDefenderObDbModifier ??
+        input.review.proposedDefenderObDbModifier,
+    },
+  ];
+  const rolls = [input.proposal.attackerRoll, input.proposal.defenderRoll].filter(
+    (roll): roll is CombatFeintRollResult => Boolean(roll),
+  );
+  return combatResultPresentationFactsSchema.parse({
+    actionInstanceId: input.proposal.id,
+    adjustment: buildCombatResultAdjustmentMetadata({
+      committedConsequences,
+      standardConsequences,
+    }),
+    calculationReferences: rolls.map((roll) => ({
+      kind: "calculation_snapshot",
+      ownerParticipantId: roll.participantId,
+      sourceId: roll.id,
+      visibility: "owner",
+    })),
+    committedConsequences,
+    conciseOutcome: {
+      details: [
+        ...(input.proposal.difference !== undefined ? [`Margin ${input.proposal.difference}`] : []),
+        ...(input.proposal.tableResult?.band
+          ? [`Band ${input.proposal.tableResult.band.replaceAll("_", " ")}`]
+          : []),
+      ],
+      label: "Feint committed",
+    },
+    publicCombatNote: input.review.notes?.trim() || undefined,
+    standardConsequences,
+    subordinateEventReferences: [...rolls.map((roll) => roll.id), ...input.modifierIds],
+  });
+}
+
 export function commitCombatRoundFeintResult(input: {
   attackerCombatContext: ScenarioParticipantCombatContext;
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
@@ -18267,6 +18534,9 @@ export function commitCombatRoundFeintResult(input: {
     step: "A1",
     type: "commit_feint_result",
   });
+  const modifierIds = Array.isArray(command.facts.modifierIds)
+    ? command.facts.modifierIds.filter((id): id is string => typeof id === "string")
+    : [];
   return appendCombatRoundEventForCommand({
     command,
     draft: {
@@ -18278,7 +18548,6 @@ export function commitCombatRoundFeintResult(input: {
           gmDefenderDbParryModifier: committedReview.gmDefenderDbParryModifier,
           gmDefenderObDbModifier: committedReview.gmDefenderObDbModifier,
           gmDefenderSkillObModifier: committedReview.gmDefenderSkillObModifier,
-          notes: committedReview.notes,
           proposedAttackerDbParryModifier: committedReview.proposedAttackerDbParryModifier,
           proposedDefenderObDbModifier: committedReview.proposedDefenderObDbModifier,
         },
@@ -18301,6 +18570,11 @@ export function commitCombatRoundFeintResult(input: {
           proposalId: proposal.id,
           rollIds: [proposal.attackerRoll?.id, proposal.defenderRoll?.id].filter(Boolean),
         },
+        resultPresentation: buildFeintCommitResultPresentation({
+          modifierIds,
+          proposal,
+          review: committedReview,
+        }),
       },
       involvedParticipantIds: [proposal.attackerParticipantId, proposal.defenderParticipantId],
       ownerParticipantId: proposal.attackerParticipantId,

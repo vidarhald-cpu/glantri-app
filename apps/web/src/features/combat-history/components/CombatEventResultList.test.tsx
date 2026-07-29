@@ -4,7 +4,7 @@ import React from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+import type { CombatResultEnvelope, ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 import { CombatEventResultList } from "./CombatEventResultList";
 
@@ -25,6 +25,44 @@ function event(
     status: "recorded",
     step: "phase_1_actions",
     type: "attack",
+  };
+}
+
+function resultEnvelope(): CombatResultEnvelope {
+  return {
+    actionType: "feint_committed",
+    actor: {
+      displayName: "The Gladiator",
+      participantId: "gladiator",
+      role: "actor",
+      visibility: "visible",
+    },
+    affectedParticipants: [],
+    calculationReferences: [],
+    committedConsequences: [],
+    conciseOutcome: { details: [], label: "Feint committed" },
+    participants: [],
+    privateDiagnostics: [],
+    provenance: {
+      completeness: "complete",
+      occurredAt: null,
+      sourceIds: [],
+      sourceKind: "canonical",
+    },
+    publicCombatNote: "The opening draws the defender off balance.",
+    resultId: "feint-result",
+    round: 1,
+    schemaVersion: 1,
+    sequence: 1,
+    standardConsequences: [],
+    step: "phase_1_actions",
+    subordinateEventReferences: [],
+    targets: [],
+    visibility: {
+      calculationAccess: "full",
+      outcomeScope: "involved",
+      privateDiagnosticsIncluded: false,
+    },
   };
 }
 
@@ -87,6 +125,23 @@ describe("CombatEventResultList", () => {
     expect(consoleError.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(
       false,
     );
+  });
+
+  it("renders the public combat note from the canonical historical envelope", () => {
+    render(
+      <CombatEventResultList
+        events={[
+          {
+            ...event("feint-result", 1, { publicOutcome: {} }),
+            resultEnvelope: resultEnvelope(),
+            type: "feint_committed",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Combat note:")).toBeTruthy();
+    expect(screen.getByText("The opening draws the defender off balance.")).toBeTruthy();
   });
 
   it("keeps identical attack results across events in chronological order", () => {

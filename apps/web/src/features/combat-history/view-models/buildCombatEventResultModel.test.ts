@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+import type { CombatResultEnvelope, ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 import { buildCombatEventResultModel } from "./buildCombatEventResultModel";
 
@@ -25,7 +25,51 @@ function event(
   };
 }
 
+function resultEnvelope(): CombatResultEnvelope {
+  return {
+    actionType: "feint_committed",
+    affectedParticipants: [],
+    calculationReferences: [],
+    committedConsequences: [{ key: "defenderPhase2SkillObModifier", label: "Skill/OB", value: -2 }],
+    conciseOutcome: { details: ["Won by 7"], label: "Feint committed" },
+    participants: [],
+    privateDiagnostics: [],
+    provenance: {
+      completeness: "complete",
+      occurredAt: null,
+      sourceIds: [],
+      sourceKind: "canonical",
+    },
+    publicCombatNote: "The defender commits to the false opening.",
+    resultId: "feint-result",
+    round: 1,
+    schemaVersion: 1,
+    sequence: 1,
+    standardConsequences: [{ key: "defenderPhase2SkillObModifier", label: "Skill/OB", value: -2 }],
+    step: "phase_1_actions",
+    subordinateEventReferences: [],
+    targets: [],
+    visibility: {
+      calculationAccess: "none",
+      outcomeScope: "involved",
+      privateDiagnosticsIncluded: false,
+    },
+  };
+}
+
 describe("buildCombatEventResultModel", () => {
+  it("retains the canonical envelope for archived result presentation", () => {
+    const envelope = resultEnvelope();
+    const model = buildCombatEventResultModel([
+      event("feint_committed", 1, { resultEnvelope: envelope }),
+    ]);
+
+    expect(model.items[0]?.envelope).toBe(envelope);
+    expect(model.items[0]?.envelope?.publicCombatNote).toBe(
+      "The defender commits to the false opening.",
+    );
+  });
+
   it("describes bulk-skipped initiative without claiming that a die was rolled", () => {
     const model = buildCombatEventResultModel([
       event("initiative", 1, {

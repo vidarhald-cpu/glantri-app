@@ -195,6 +195,7 @@ function buildCandidate(input: {
       facts: {
         gmReview: input.event.facts?.gmReview ?? {},
         involvedOutcome: input.event.facts?.involvedOutcome ?? {},
+        resultPresentation: input.event.facts?.resultPresentation,
         publicOutcome: input.event.facts?.publicOutcome ?? {},
         rollerPrivate: input.event.facts?.rollerPrivate ?? {},
       },

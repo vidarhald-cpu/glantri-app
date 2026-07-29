@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   CombatLogEventPresentation,
   CombatLogProjection,
+  CombatResultEnvelope,
   ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
@@ -92,7 +93,64 @@ function build(input: {
   });
 }
 
+function resultEnvelope(): CombatResultEnvelope {
+  return {
+    actionType: "adjust_distance_committed",
+    affectedParticipants: [],
+    calculationReferences: [],
+    committedConsequences: [{ key: "distance", label: "Distance", value: 2 }],
+    conciseOutcome: { details: ["Distance 2"], label: "Distance committed" },
+    participants: [],
+    privateDiagnostics: [],
+    provenance: {
+      completeness: "complete",
+      occurredAt: null,
+      sourceIds: [],
+      sourceKind: "canonical",
+    },
+    publicCombatNote: "The combatants circle toward the doorway.",
+    resultId: "history:1:adjust_distance_committed",
+    round: 1,
+    schemaVersion: 1,
+    sequence: 1,
+    standardConsequences: [{ key: "distance", label: "Distance", value: 2 }],
+    step: "phase_1_actions",
+    subordinateEventReferences: [],
+    targets: [],
+    visibility: {
+      calculationAccess: "none",
+      outcomeScope: "involved",
+      privateDiagnosticsIncluded: false,
+    },
+  };
+}
+
 describe("buildCombatStepResultPresentation", () => {
+  it("attaches the same canonical envelope facts to current-step presentation", () => {
+    const envelope = resultEnvelope();
+    const sourceEvent = historyEvent("adjust_distance_committed", 1, {
+      id: envelope.resultId,
+      resultEnvelope: envelope,
+    });
+    const result = build({
+      events: [sourceEvent],
+      logEvents: [
+        logEvent("log:distance", 1, {
+          category: "contest",
+          sourceEventIds: [sourceEvent.id],
+          summary: "The combatants changed distance.",
+          summaryFacts: {
+            kind: "distance_changed",
+            nextDistance: 2,
+            previousDistance: 3,
+          },
+        }),
+      ],
+    });
+
+    expect(result.entries[0]?.resultEnvelopes).toEqual([envelope]);
+  });
+
   const attempt = logEvent("log:attempt", 0, {
     actor: { displayName: "Scyrian cavalry guy", participantId: "scyrian" },
     category: "attempt",

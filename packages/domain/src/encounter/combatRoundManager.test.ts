@@ -514,9 +514,7 @@ describe("canonical GM bulk step completion", () => {
 
     expect(result.completedParticipantIds).toEqual(["gladiator", "scyrian"]);
     expect(result.stoppedAtParticipantId).toBeUndefined();
-    expect(
-      result.state.participants.map((participant) => participant.initiatives.phase1),
-    ).toEqual([
+    expect(result.state.participants.map((participant) => participant.initiatives.phase1)).toEqual([
       expect.objectContaining({
         resolutionType: "bulk_skipped",
         rolls: [],
@@ -529,9 +527,7 @@ describe("canonical GM bulk step completion", () => {
       }),
     ]);
     expect(
-      result.state.participants.map(
-        (participant) => participant.stepStatuses.initiative_phase_1,
-      ),
+      result.state.participants.map((participant) => participant.stepStatuses.initiative_phase_1),
     ).toEqual(["skipped", "skipped"]);
     const nextTask = buildCombatProgressionProjection(result.state)
       .boundary.processes.flatMap((process) => process.stages)
@@ -10706,6 +10702,25 @@ describe("combat round manager", () => {
       }),
       type: "commit_phase_damage",
     });
+    const committedDamageEvent = committed.state.events.find(
+      (event) => event.type === "damage_committed",
+    );
+    expect(committedDamageEvent?.facts.resultPresentation).toMatchObject({
+      actionInstanceId: "3:phase1:gladiator:guard:damage",
+      committedConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "totalDamage", value: 21 }),
+        expect.objectContaining({ key: "criticalGrade", value: "f" }),
+      ]),
+      standardConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "totalDamage", value: 21 }),
+        expect.objectContaining({ key: "criticalGrade", value: "f" }),
+      ]),
+    });
+    expect(committedDamageEvent?.facts.resultPresentation?.adjustment).toBeUndefined();
+    expect(committedDamageEvent?.facts.resultPresentation?.publicCombatNote).toBeUndefined();
+    expect(
+      (committedDamageEvent?.facts.gmReview.review as Record<string, unknown> | undefined)?.notes,
+    ).toBeUndefined();
     expect(committed.combatEffects.events[0]?.description).toContain(
       "Maximum damage capped raw 23 to 21",
     );
@@ -12026,6 +12041,39 @@ describe("combat round manager", () => {
       step: "D1",
       type: "commit_phase_damage",
     });
+    const committedDamageEvent = committed.state.events.find(
+      (event) => event.type === "damage_committed",
+    );
+    expect(committedDamageEvent?.facts.resultPresentation).toMatchObject({
+      actionInstanceId: "3:phase1:gladiator:guard:damage",
+      adjustment: {
+        adjustedBy: "gm",
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            committedValue: 6,
+            consequenceKey: "totalDamage",
+            standardValue: 9,
+          }),
+          expect.objectContaining({
+            committedValue: "a",
+            consequenceKey: "criticalGrade",
+            standardValue: "b",
+          }),
+        ]),
+      },
+      committedConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "totalDamage", value: 6 }),
+        expect.objectContaining({ key: "criticalGrade", value: "a" }),
+      ]),
+      publicCombatNote: "armor adjusted manually",
+      standardConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "totalDamage", value: 9 }),
+        expect.objectContaining({ key: "criticalGrade", value: "b" }),
+      ]),
+    });
+    expect(
+      (committedDamageEvent?.facts.gmReview.review as Record<string, unknown> | undefined)?.notes,
+    ).toBeUndefined();
     expect(committed.combatEffects.events).toContainEqual(
       expect.objectContaining({
         description: expect.stringContaining("armor adjusted manually"),

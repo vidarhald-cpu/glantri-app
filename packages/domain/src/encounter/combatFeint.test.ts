@@ -73,6 +73,7 @@ function state() {
     submittedBy: "gm",
   } as const;
   return combatRoundStateSchema.parse({
+    encounterId: "encounter-1",
     currentCursor: { participantId: "attacker", roundNumber: 1, step: "A1" },
     currentStep: "phase_1_actions",
     feintProposals: [proposal()],
@@ -331,6 +332,10 @@ describe("combat feint lifecycle", () => {
           status: "committed",
         }),
       }).defenderCombatContext,
+      gmAttackerDbParryModifier: -1,
+      gmDefenderDbParryModifier: -3,
+      gmDefenderSkillObModifier: -4,
+      notes: "The defender follows the false opening.",
       proposalId: proposal().id,
       state: resolved,
     });
@@ -352,6 +357,64 @@ describe("combat feint lifecycle", () => {
     expect(getCombatRoundPhaseAttackCandidates({ phase: "phase2", state: reloaded })).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "attack-2" })]),
     );
+    const committedEvent = reloaded.events.find((event) => event.type === "feint_committed");
+    expect(committedEvent?.facts.resultPresentation).toMatchObject({
+      actionInstanceId: proposal().id,
+      adjustment: {
+        adjustedBy: "gm",
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            committedValue: -4,
+            consequenceKey: "defenderPhase2SkillObModifier",
+            standardValue: -2,
+          }),
+          expect.objectContaining({
+            committedValue: -3,
+            consequenceKey: "defenderPhase2DbParryModifier",
+            standardValue: -2,
+          }),
+          expect.objectContaining({
+            committedValue: -1,
+            consequenceKey: "attackerPhase1DbParryModifier",
+            standardValue: 0,
+          }),
+        ]),
+      },
+      committedConsequences: expect.arrayContaining([
+        expect.objectContaining({
+          key: "attackerPhase1DbParryModifier",
+          value: -1,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2SkillObModifier",
+          value: -4,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2DbParryModifier",
+          value: -3,
+        }),
+      ]),
+      conciseOutcome: {
+        details: ["Margin 7", "Band attacker edge"],
+        label: "Feint committed",
+      },
+      publicCombatNote: "The defender follows the false opening.",
+      standardConsequences: expect.arrayContaining([
+        expect.objectContaining({
+          key: "attackerPhase1DbParryModifier",
+          value: 0,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2SkillObModifier",
+          value: -2,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2DbParryModifier",
+          value: -2,
+        }),
+      ]),
+    });
+    expect(committedEvent?.facts.gmReview).not.toHaveProperty("notes");
     const undone = undoLatestCombatRoundCommand({ state: committed });
     expect(undone?.feintProposals[0]?.status).toBe("awaiting_review");
     expect(undone?.feintProposals[0]?.attackerRoll?.id).toBe("attacker-roll");

@@ -744,6 +744,130 @@ describe("combat history projection", () => {
     expect(JSON.stringify(safeCommit)).not.toContain("rejectedRows");
   });
 
+  it("projects the same public result note to GM and authorized player envelopes only", () => {
+    const committed = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: { diagnosticCode: "armor_override" },
+        involvedOutcome: { proposalId: "feint-1" },
+        publicOutcome: {},
+        resultPresentation: {
+          actionInstanceId: "feint-1",
+          calculationReferences: [],
+          committedConsequences: [
+            {
+              affectedParticipantId: "borin",
+              key: "defenderPhase2SkillObModifier",
+              label: "Defender Skill/OB · Phase 2",
+              value: -2,
+            },
+          ],
+          conciseOutcome: { details: ["Margin 7"], label: "Feint committed" },
+          privateDiagnostics: [],
+          publicCombatNote: "Borin commits to the false opening.",
+          standardConsequences: [
+            {
+              affectedParticipantId: "borin",
+              key: "defenderPhase2SkillObModifier",
+              label: "Defender Skill/OB · Phase 2",
+              value: -2,
+            },
+          ],
+          subordinateEventReferences: [],
+        },
+        rollerPrivate: {},
+      },
+      ownerParticipantId: "aria",
+      targetParticipantId: "borin",
+      type: "feint_committed",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+      },
+    });
+
+    const gm = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: { kind: "gm" },
+    });
+    const playerProjection = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const gmPlayerProjection = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const uninvolved = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["cyra"], ["aria", "borin", "cyra"]),
+    });
+
+    expect(gm?.resultEnvelope?.publicCombatNote).toBe("Borin commits to the false opening.");
+    expect(playerProjection?.resultEnvelope).toEqual(gmPlayerProjection?.resultEnvelope);
+    expect(playerProjection?.resultEnvelope?.publicCombatNote).toBe(
+      "Borin commits to the false opening.",
+    );
+    expect(playerProjection?.resultEnvelope?.privateDiagnostics).toEqual([]);
+    expect(JSON.stringify(playerProjection)).not.toContain("diagnosticCode");
+    expect(uninvolved).toBeUndefined();
+  });
+
+  it("preserves the public result envelope in immutable archived history", () => {
+    const committed = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: { diagnosticCode: "do-not-project" },
+        involvedOutcome: { difference: 7 },
+        publicOutcome: {},
+        resultPresentation: {
+          calculationReferences: [],
+          committedConsequences: [],
+          conciseOutcome: { details: ["Margin 7"], label: "Feint committed" },
+          privateDiagnostics: [],
+          publicCombatNote: "Borin commits to the false opening.",
+          standardConsequences: [],
+          subordinateEventReferences: [],
+        },
+        rollerPrivate: {},
+      },
+      ownerParticipantId: "aria",
+      targetParticipantId: "borin",
+      type: "feint_committed",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+      },
+    });
+    const state = combatRoundStateSchema.parse({
+      encounterId: "encounter-1",
+      roundNumber: 2,
+      rounds: [{ events: [committed], roundNumber: 1 }],
+    });
+    const projection = projectCombatHistory({
+      participants,
+      source: historySource(state, "revision-after-archive"),
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projection.archivedRounds[0]?.events[0]?.resultEnvelope?.publicCombatNote).toBe(
+      "Borin commits to the false opening.",
+    );
+    expect(JSON.stringify(projection.archivedRounds[0])).not.toContain("diagnosticCode");
+  });
+
   it("keeps distance rolls private to the roller and omits hidden or uninvolved pairs", () => {
     const roll = event({
       distanceProposalId: "distance-1",

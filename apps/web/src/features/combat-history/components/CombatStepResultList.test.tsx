@@ -4,7 +4,41 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import type { CombatResultEnvelope } from "@glantri/domain";
+
 import { CombatStepResultList } from "./CombatStepResultList";
+
+function resultEnvelope(): CombatResultEnvelope {
+  return {
+    actionType: "adjust_distance_committed",
+    affectedParticipants: [],
+    calculationReferences: [],
+    committedConsequences: [],
+    conciseOutcome: { details: [], label: "Distance committed" },
+    participants: [],
+    privateDiagnostics: [],
+    provenance: {
+      completeness: "complete",
+      occurredAt: null,
+      sourceIds: [],
+      sourceKind: "canonical",
+    },
+    publicCombatNote: "The combatants circle toward the doorway.",
+    resultId: "distance-result",
+    round: 1,
+    schemaVersion: 1,
+    sequence: 1,
+    standardConsequences: [],
+    step: "phase_1_actions",
+    subordinateEventReferences: [],
+    targets: [],
+    visibility: {
+      calculationAccess: "none",
+      outcomeScope: "involved",
+      privateDiagnosticsIncluded: false,
+    },
+  };
+}
 
 describe("CombatStepResultList", () => {
   it("renders accumulated outcomes with calculations collapsed by default", () => {
@@ -69,5 +103,36 @@ describe("CombatStepResultList", () => {
     expect(
       screen.getByText("No results recorded for this character in the current step."),
     ).toBeTruthy();
+  });
+
+  it("renders the public combat note from the canonical current result envelope", () => {
+    render(
+      <CombatStepResultList
+        presentation={{
+          boundary: "phase1_resolution",
+          emptyState: "No results recorded for this character in the current step.",
+          encounterId: "encounter-1",
+          encounterRevision: "revision-1",
+          entries: [
+            {
+              calculations: [],
+              category: "contest",
+              heading: "Distance committed",
+              id: "entry-1",
+              resultEnvelopes: [resultEnvelope()],
+              sourceEventIds: ["distance-result"],
+              state: "final",
+              summary: "The combatants changed distance.",
+            },
+          ],
+          participantId: "gladiator",
+          phase: "phase1",
+          roundNumber: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Combat note:")).toBeTruthy();
+    expect(screen.getByText("The combatants circle toward the doorway.")).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import type { CombatStepEvent, CombatStepEventFacts } from "./combatStepEventSchema";
+import { projectCombatResultEnvelope, type CombatResultEnvelope } from "./combatResultEnvelope";
 import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import {
   buildCombatLogProjection,
@@ -55,6 +56,8 @@ export interface ProjectedCombatHistoryEvent {
   opportunityId?: string;
   ownerParticipantId?: string;
   phase?: CombatStepEvent["phase"];
+  /** Always present for repository projections; optional only for bounded legacy/client fixtures. */
+  resultEnvelope?: CombatResultEnvelope;
   roundNumber: number;
   sequence: number;
   status: CombatStepEvent["status"];
@@ -405,6 +408,7 @@ export function projectCombatHistoryEvent(input: {
     );
   const ownRoll =
     gm || isControlled({ participantId: input.event.rollerParticipantId, viewer: input.viewer });
+  const identities = projectEventIdentities({ event: input.event, labels, viewer: input.viewer });
 
   return {
     completeness: input.event.completeness,
@@ -421,7 +425,7 @@ export function projectCombatHistoryEvent(input: {
       publicOutcome: input.event.facts.publicOutcome,
     },
     id: input.event.id,
-    identities: projectEventIdentities({ event: input.event, labels, viewer: input.viewer }),
+    identities,
     missingFacts: input.event.missingFacts,
     occurredAt: input.event.occurredAt,
     opportunityId: input.event.opportunityId,
@@ -431,6 +435,13 @@ export function projectCombatHistoryEvent(input: {
         ? input.event.ownerParticipantId
         : undefined,
     phase: input.event.phase,
+    resultEnvelope: projectCombatResultEnvelope({
+      event: input.event,
+      identities,
+      involved,
+      ownRoll,
+      viewer: gm ? "gm" : "player",
+    }),
     roundNumber: input.event.roundNumber,
     sequence: input.event.sequence,
     status: input.event.status,
@@ -624,9 +635,7 @@ function eventsWithDerivedCombatExperience(input: {
   phaseResolutionResults:
     | CompletedCombatRound["phaseResolutionResults"]
     | CombatRoundState["phaseResolutionResults"];
-  roundEndReview:
-    | CompletedCombatRound["roundEndReview"]
-    | CombatRoundState["roundEndReview"];
+  roundEndReview: CompletedCombatRound["roundEndReview"] | CombatRoundState["roundEndReview"];
   roundNumber: number;
   stepSnapshots: CompletedCombatRound["stepSnapshots"] | CombatRoundState["stepSnapshots"];
 }): CombatStepEvent[] {

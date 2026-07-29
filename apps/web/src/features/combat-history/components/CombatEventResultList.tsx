@@ -57,6 +57,11 @@ export function CombatEventResultList(input: {
                     {row.text}
                   </div>
                 ))}
+                {item.envelope?.publicCombatNote ? (
+                  <div style={{ fontSize: "0.88rem" }}>
+                    <strong>Combat note:</strong> {item.envelope.publicCombatNote}
+                  </div>
+                ) : null}
                 {item.calculationRows.length ? (
                   <div
                     style={{

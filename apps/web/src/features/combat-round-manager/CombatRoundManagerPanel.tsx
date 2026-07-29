@@ -3204,7 +3204,9 @@ function CombatDamageReviewPanel(input: {
           </label>
         </div>
         <label style={{ display: "grid", gap: "0.2rem" }}>
-          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Notes</span>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Combat note
+          </span>
           <input
             disabled={disabled}
             onChange={(event) =>
@@ -3774,7 +3776,7 @@ const AdjustDistanceAdjustmentEditor = forwardRef<
         Typical range: -4 to +4 (guidance only)
       </span>
       <label style={compactFieldLabelStyle}>
-        <span>GM note (private, optional)</span>
+        <span>Combat note (optional)</span>
         <input
           disabled={input.saving}
           onChange={(event) => updateDraft((current) => ({ ...current, note: event.target.value }))}
@@ -5529,14 +5531,15 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const archivedAttackResolutionPresentation = archivedInspectorPresentation?.attackResolution;
   const inspectorDisplayAttackResult = inspectorIsHistorical
-    ? archivedAttackResolutionPresentation?.attackResult ?? inspectorSnapshot?.attackResult
+    ? (archivedAttackResolutionPresentation?.attackResult ?? inspectorSnapshot?.attackResult)
     : activeAttackResolutionPresentation?.attackResult;
   const inspectorResolutionAttackResult = inspectorIsHistorical
-    ? archivedAttackResolutionPresentation?.resolutionAttackResult ?? inspectorSnapshot?.attackResult
+    ? (archivedAttackResolutionPresentation?.resolutionAttackResult ??
+      inspectorSnapshot?.attackResult)
     : activeAttackResolutionPresentation?.resolutionAttackResult;
   const inspectorDisplayPhaseResolutionResult = inspectorIsHistorical
-    ? archivedAttackResolutionPresentation?.resolutionResult ??
-      inspectorSnapshot?.phaseResolutionResult
+    ? (archivedAttackResolutionPresentation?.resolutionResult ??
+      inspectorSnapshot?.phaseResolutionResult)
     : activeAttackResolutionPresentation?.resolutionResult;
   const inspectorPhaseResolutionOwnerParticipantId =
     activeAttackResolutionPresentation?.phaseResolutionOwnerParticipantId ??
@@ -5574,17 +5577,17 @@ export default function CombatRoundManagerPanel({
   });
   const inspectorParryDefenderRoundParticipant =
     !archivedAttackResolutionPresentation && inspectorResolutionAttackResult
-    ? selectedTimelineRoundState.participants.find(
-        (participant) =>
-          participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
-      )
-    : undefined;
+      ? selectedTimelineRoundState.participants.find(
+          (participant) =>
+            participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
+        )
+      : undefined;
   const inspectorParryDefenderEncounterParticipant =
     !archivedAttackResolutionPresentation && inspectorResolutionAttackResult
-    ? encounter.participants.find(
-        (participant) => participant.id === inspectorResolutionAttackResult.defenderParticipantId,
-      )
-    : undefined;
+      ? encounter.participants.find(
+          (participant) => participant.id === inspectorResolutionAttackResult.defenderParticipantId,
+        )
+      : undefined;
   const inspectorParryDefenderScenarioParticipant = inspectorParryDefenderEncounterParticipant
     ? findScenarioParticipantForEncounterParticipant({
         encounterParticipant: inspectorParryDefenderEncounterParticipant,
@@ -6354,7 +6357,7 @@ export default function CombatRoundManagerPanel({
       ) : null}
       {inspectorFeintProposal.status === "awaiting_review" ? (
         <label style={compactFieldLabelStyle}>
-          <span>GM note</span>
+          <span>Combat note</span>
           <input
             disabled={saving}
             onChange={(event) => setInspectorFeintNote(event.target.value)}
@@ -6467,7 +6470,7 @@ export default function CombatRoundManagerPanel({
             </select>
           </label>
           <label style={compactFieldLabelStyle}>
-            <span>GM note</span>
+            <span>Combat note</span>
             <input
               disabled={saving}
               onChange={(event) => setInspectorAdjustDistanceReviewNote(event.target.value)}

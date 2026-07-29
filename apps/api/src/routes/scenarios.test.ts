@@ -3413,6 +3413,18 @@ describe("scenarios route contract", () => {
         gmReview: { privateNote: "secret override" },
         involvedOutcome: { outcome: "hit" },
         publicOutcome: {},
+        resultPresentation: {
+          conciseOutcome: { label: "Attack resolved" },
+          privateDiagnostics: [
+            {
+              factKeys: ["privateNote"],
+              id: "event-attack:diagnostic",
+              label: "GM adjudication",
+              source: "gm_review",
+            },
+          ],
+          publicCombatNote: "The blow drives the defender toward the gate.",
+        },
         rollerPrivate: { rollD20: 18, total: 22 },
       },
       id: "event-attack",
@@ -3506,6 +3518,10 @@ describe("scenarios route contract", () => {
       identities: expect.arrayContaining([
         { displayName: "an unseen attacker", role: "attacker", visibility: "unseen" },
       ]),
+      resultEnvelope: {
+        privateDiagnostics: [],
+        publicCombatNote: "The blow drives the defender toward the gate.",
+      },
     });
     const serialized = JSON.stringify(response.json());
     expect(serialized).not.toContain("secret override");
@@ -6707,11 +6723,7 @@ describe("scenarios route contract", () => {
       user: mocks.adminUser,
     });
     const descriptor = {
-      ...buildBoundaryTaskPayload(
-        completedState,
-        lifecycle.encounter.updatedAt,
-        "declaration",
-      ),
+      ...buildBoundaryTaskPayload(completedState, lifecycle.encounter.updatedAt, "declaration"),
       expectedBoundary: "round_boundary" as const,
       stepSnapshots: [],
       targetBoundary: "declaration" as const,

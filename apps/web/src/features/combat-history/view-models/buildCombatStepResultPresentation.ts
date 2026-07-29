@@ -1,4 +1,5 @@
 import type {
+  CombatResultEnvelope,
   CombatLogEventPresentation,
   CombatLogProjection,
   CombatProgressionBoundaryKind,
@@ -48,6 +49,7 @@ export interface CombatStepResultEntryPresentation {
   readonly outcome?: string;
   readonly processId?: string;
   readonly proposalId?: string;
+  readonly resultEnvelopes?: readonly CombatResultEnvelope[];
   readonly sourceEventIds: readonly string[];
   readonly state: "pending" | "final";
   readonly summary: string;
@@ -1051,6 +1053,32 @@ function supplementalEntries(input: {
         },
       ];
     }
+    if (event.resultEnvelope?.publicCombatNote && !loggedSourceIds.has(event.id)) {
+      return [
+        {
+          entry: {
+            actor: identitySubject(event, "actor") ?? identitySubject(event, "attacker"),
+            calculations: calculationsForEvents({
+              events: [event],
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
+            category: "review",
+            heading: event.resultEnvelope.conciseOutcome.label,
+            id: `current-step:${event.id}`,
+            resultEnvelopes: [event.resultEnvelope],
+            sourceEventIds: [event.id],
+            state: event.status === "proposed" ? "pending" : "final",
+            summary:
+              event.resultEnvelope.conciseOutcome.details.join(" · ") ||
+              event.resultEnvelope.conciseOutcome.label,
+            target: identitySubject(event, "target") ?? identitySubject(event, "defender"),
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
     return [];
   });
 }
@@ -1141,6 +1169,13 @@ export function buildCombatStepResultPresentation(
           left.semanticOrder - right.semanticOrder ||
           left.entry.id.localeCompare(right.entry.id),
       )
-      .map(({ entry }) => entry),
+      .map(({ entry }) => {
+        const resultEnvelopes = events.flatMap((event) =>
+          entry.sourceEventIds.includes(event.id) && event.resultEnvelope
+            ? [event.resultEnvelope]
+            : [],
+        );
+        return resultEnvelopes.length ? { ...entry, resultEnvelopes } : entry;
+      }),
   };
 }

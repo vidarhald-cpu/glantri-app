@@ -1,4 +1,4 @@
-import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+import type { CombatResultEnvelope, ProjectedCombatHistoryEvent } from "@glantri/domain";
 
 import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
 
@@ -13,6 +13,7 @@ import {
 export interface CombatEventResultItemModel {
   calculationRows: CombatEventResultFactRow[];
   completenessLabel?: string;
+  envelope?: CombatResultEnvelope;
   id: string;
   outcomeRows: CombatEventResultFactRow[];
   sequence: number;
@@ -840,6 +841,7 @@ export function buildCombatEventResultModel(
               : event.completeness === "legacy_derived"
                 ? "Legacy-derived history"
                 : "Incomplete history",
+          envelope: event.resultEnvelope,
           id: event.id,
           outcomeRows: presentation.outcomeRows,
           sequence: event.sequence,

@@ -123,7 +123,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getDraft: () => draftRef.current");
     expect(source).toContain('type="number"');
     expect(source).toContain('step="1"');
-    expect(source).toContain("GM note (private, optional)");
+    expect(source).toContain("Combat note (optional)");
+    expect(source).not.toContain("GM note (private, optional)");
+    expect(source).toContain("Combat note");
     expect(source).toContain("Typical range: -4 to +4 (guidance only)");
     expect(source).toContain("proposal.id === projectedAdjustDistanceTask.identity.proposalId");
     expect(source).toContain(

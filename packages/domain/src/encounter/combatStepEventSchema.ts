@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { combatResultPresentationFactsSchema } from "./combatResultPresentation";
+
 const idSchema = z.string().min(1);
 const factRecordSchema = z.record(z.string(), z.unknown());
 
@@ -87,6 +89,7 @@ export type CombatStepEventCompleteness = z.infer<typeof combatStepEventComplete
 export const combatStepEventFactsSchema = z.object({
   gmReview: factRecordSchema.default({}),
   involvedOutcome: factRecordSchema.default({}),
+  resultPresentation: combatResultPresentationFactsSchema.optional(),
   publicOutcome: factRecordSchema.default({}),
   rollerPrivate: factRecordSchema.default({}),
 });
@@ -154,6 +157,22 @@ export const combatStepEventSourceSchema = z.object({
 });
 export type CombatStepEventSource = z.infer<typeof combatStepEventSourceSchema>;
 
+export const combatStepEventStepSchema = z.enum([
+  "select_actions",
+  "review_action_modifiers",
+  "initiative_phase_1",
+  "phase_1_actions",
+  "review_phase_2_actions",
+  "phase_1_damage",
+  "review_phase_2_modifiers",
+  "initiative_phase_2",
+  "phase_2_actions",
+  "review_phase_2_damage",
+  "phase_2_damage",
+  "round_summary",
+]);
+export type CombatStepEventStep = z.infer<typeof combatStepEventStepSchema>;
+
 export const combatStepEventSchema = z.object({
   actorParticipantId: idSchema.optional(),
   attackResultId: idSchema.optional(),
@@ -181,20 +200,7 @@ export const combatStepEventSchema = z.object({
   sequence: z.number().int().nonnegative(),
   source: combatStepEventSourceSchema,
   status: combatStepEventStatusSchema,
-  step: z.enum([
-    "select_actions",
-    "review_action_modifiers",
-    "initiative_phase_1",
-    "phase_1_actions",
-    "review_phase_2_actions",
-    "phase_1_damage",
-    "review_phase_2_modifiers",
-    "initiative_phase_2",
-    "phase_2_actions",
-    "review_phase_2_damage",
-    "phase_2_damage",
-    "round_summary",
-  ]),
+  step: combatStepEventStepSchema,
   targetParticipantId: idSchema.optional(),
   type: combatStepEventTypeSchema,
   visibility: combatStepEventVisibilitySchema,

@@ -30,6 +30,17 @@ export function CombatStepResultList(input: {
                 {entry.outcome && entry.outcome !== entry.summary ? (
                   <strong style={{ fontSize: "0.88rem" }}>{entry.outcome}</strong>
                 ) : null}
+                {[
+                  ...new Set(
+                    (entry.resultEnvelopes ?? []).flatMap((envelope) =>
+                      envelope.publicCombatNote ? [envelope.publicCombatNote] : [],
+                    ),
+                  ),
+                ].map((note) => (
+                  <div key={`${entry.id}:combat-note:${note}`} style={{ fontSize: "0.88rem" }}>
+                    <strong>Combat note:</strong> {note}
+                  </div>
+                ))}
                 {entry.state === "pending" ? (
                   <div style={{ color: "#6b6253", fontSize: "0.84rem" }}>In progress.</div>
                 ) : null}
@@ -59,9 +70,7 @@ export function CombatStepResultList(input: {
           ))}
         </ol>
       ) : (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-          {input.presentation.emptyState}
-        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.presentation.emptyState}</div>
       )}
     </section>
   );
