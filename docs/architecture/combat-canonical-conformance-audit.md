@@ -780,3 +780,9 @@ An active revision cannot replace archived inspector identity. Archive
 replacement or canonical boundary undo changes archive lineage and therefore
 rebuilds the affected immutable candidates. These presentation caches authorize
 no command and do not alter descriptor, privacy, history, or undo semantics.
+
+Combat presentation conformance is governed by the normative
+[Combat Presentation Guidelines](./combat-presentation-guidelines.md). This audit
+continues to govern canonical authority, identity, progression, privacy, and
+history-source conformance; presentation deviations should be recorded against the
+guidelines rather than normalized into action-specific exceptions.

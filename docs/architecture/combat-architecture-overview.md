@@ -536,6 +536,8 @@ No future work should weaken the invariants in this document.
 ## 18. Detailed contracts
 
 - [combat-canonical-conformance-audit.md](./combat-canonical-conformance-audit.md)
+- [combat-presentation-guidelines.md](./combat-presentation-guidelines.md) —
+  normative guidance for presenting canonical combat facts
 - [combat-presentation-contract.md](./combat-presentation-contract.md)
 - [combat-task-integration-matrix.md](./combat-task-integration-matrix.md)
 - [combat-read-models.md](./combat-read-models.md)
