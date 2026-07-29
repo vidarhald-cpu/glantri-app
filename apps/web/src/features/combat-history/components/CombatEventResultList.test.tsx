@@ -44,6 +44,29 @@ describe("CombatEventResultList", () => {
     ).toBeTruthy();
   });
 
+  it("renders a prebuilt archived result model without rebuilding from event input", () => {
+    render(
+      <CombatEventResultList
+        events={[]}
+        model={{
+          items: [
+            {
+              calculationRows: [],
+              id: "archived-result",
+              outcomeRows: [],
+              sequence: 1,
+              summary: "Archived calculation snapshot",
+              title: "Attack",
+              type: "attack",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Archived calculation snapshot")).toBeTruthy();
+  });
+
   afterEach(() => vi.restoreAllMocks());
 
   it("renders one concise attack outcome without duplicate React keys", () => {

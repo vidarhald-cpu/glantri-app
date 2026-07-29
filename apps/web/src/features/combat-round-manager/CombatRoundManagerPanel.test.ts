@@ -834,7 +834,8 @@ describe("CombatRoundManagerPanel", () => {
       /attackStats:\s*inspectorIsHistorical\s*\?\s*null\s*:\s*phaseLoadoutSummary\.attackStats/,
     );
     expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
-    expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows ?? []");
+    expect(source).toContain("archivedInspectorPresentation?.modifierRows ??");
+    expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows");
     expect(source).toContain("const recordedModifierRows = buildRecordedCombatModifierRows({");
     expect(source).toContain(
       "Phase filtering belongs to calculation totals, not historical visibility.",

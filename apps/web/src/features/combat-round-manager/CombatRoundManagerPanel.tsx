@@ -4015,7 +4015,7 @@ export default function CombatRoundManagerPanel({
     () =>
       scenarioParticipants.map(
         (participant) => scenarioParticipantOverrides[participant.id] ?? participant,
-    ),
+      ),
     [scenarioParticipantOverrides, scenarioParticipants],
   );
   const descriptorRevision = getCombatRoundDescriptorRevision({
@@ -4044,8 +4044,8 @@ export default function CombatRoundManagerPanel({
     },
   );
   const presentationParticipantRows = activePresentation.displayParticipants.map((participant) => ({
-      label: participant.label,
-      participantId: participant.participantId,
+    label: participant.label,
+    participantId: participant.participantId,
   }));
   const archivedPresentationIdentity = buildArchivedCombatPresentationIdentity({
     participantRows: presentationParticipantRows,
@@ -4057,6 +4057,7 @@ export default function CombatRoundManagerPanel({
     () => {
       archivedPresentationRebuilt = true;
       return buildArchivedCombatPresentation({
+        buildHistoricalActionResult: buildHistoricalCombatActionResult,
         identity: archivedPresentationIdentity,
         participantRows: presentationParticipantRows,
         resolveStepStatus: getParticipantDeclarationStatus,
@@ -4166,18 +4167,18 @@ export default function CombatRoundManagerPanel({
     () =>
       combatPresentation.active.inspectorPresentation.resolve({
         build: () =>
-      measureCombatPerformanceStage("panel_distance_table_presentation", () =>
-      buildCombatDistanceTableRows({
-        encounter,
-        resolvedEquipmentStateByScenarioParticipantId: Object.fromEntries(
+          measureCombatPerformanceStage("panel_distance_table_presentation", () =>
+            buildCombatDistanceTableRows({
+              encounter,
+              resolvedEquipmentStateByScenarioParticipantId: Object.fromEntries(
                 Object.entries(resolvedCharacterStateByParticipantId).map(
                   ([participantId, state]) => [participantId, state.equipmentState],
                 ),
-        ),
-        roundState,
-        scenarioParticipants: effectiveScenarioParticipants,
-      }),
-      ),
+              ),
+              roundState,
+              scenarioParticipants: effectiveScenarioParticipants,
+            }),
+          ),
         dependencies: [
           effectiveScenarioParticipants,
           encounter,
@@ -4242,6 +4243,18 @@ export default function CombatRoundManagerPanel({
     liveInspectorContext?.taskId,
     roundState.roundNumber,
   ]);
+  const archivedInspectorPresentation = !selectedRoundIsActive
+    ? measureCombatPerformanceStage(
+        "panel_archived_inspector_presentation_lookup",
+        () =>
+          combatPresentation.archived.inspectorPresentation.get({
+            participantId: renderedInspectionSelection.participantId,
+            roundNumber: selectedRoundNumber,
+            step: renderedInspectionSelection.step,
+          }),
+        { archivedInspectorReused: true },
+      )
+    : undefined;
   const activeInspectorCore = selectedRoundIsActive
     ? combatPresentation.active.inspectorPresentation.resolve({
         build: () =>
@@ -4268,33 +4281,36 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspector =
     activeInspectorCore?.inspector ??
+    archivedInspectorPresentation?.inspector ??
     measureCombatPerformanceStage("panel_build_combat_round_inspector", () =>
-    buildCombatRoundInspector({
-    participantId: renderedInspectionSelection.participantId,
-    state: selectedTimelineRoundState,
-    step: renderedInspectionSelection.step,
-    }),
-  );
+      buildCombatRoundInspector({
+        participantId: renderedInspectionSelection.participantId,
+        state: selectedTimelineRoundState,
+        step: renderedInspectionSelection.step,
+      }),
+    );
   const gmCurrentStepResultPresentation = useMemo(
     () =>
-      activeInspectorCore?.currentStepResults ??
-      measureCombatPerformanceStage("panel_current_event_result_selection", () =>
-      inspector.participant
-        ? buildCombatStepResultPresentation({
-            boundary: combatProgressionPresentation.boundary.kind,
-            combatLog: combatLogProjection,
-            encounterId: encounter.id,
-            encounterRevision: descriptorRevision ?? combatLogProjection.sourceRevision,
-            events: projectGmCombatEvents({
-              events: roundState.events,
-              participants: roundState.participants,
-            }),
-            participantId: inspector.participant.participantId,
-            roundNumber: roundState.roundNumber,
-            viewer: { kind: "gm" },
-          })
-        : undefined,
-      ),
+      !selectedRoundIsActive
+        ? undefined
+        : (activeInspectorCore?.currentStepResults ??
+          measureCombatPerformanceStage("panel_current_event_result_selection", () =>
+            inspector.participant
+              ? buildCombatStepResultPresentation({
+                  boundary: combatProgressionPresentation.boundary.kind,
+                  combatLog: combatLogProjection,
+                  encounterId: encounter.id,
+                  encounterRevision: descriptorRevision ?? combatLogProjection.sourceRevision,
+                  events: projectGmCombatEvents({
+                    events: roundState.events,
+                    participants: roundState.participants,
+                  }),
+                  participantId: inspector.participant.participantId,
+                  roundNumber: roundState.roundNumber,
+                  viewer: { kind: "gm" },
+                })
+              : undefined,
+          )),
     [
       activeInspectorCore,
       combatLogProjection,
@@ -4305,6 +4321,7 @@ export default function CombatRoundManagerPanel({
       roundState.events,
       roundState.participants,
       roundState.roundNumber,
+      selectedRoundIsActive,
     ],
   );
   const inspectorSelectionIsCurrentProgression =
@@ -4539,18 +4556,21 @@ export default function CombatRoundManagerPanel({
             ],
             key: `declaration-draft:${inspector.participant?.participantId ?? "none"}`,
           })
-      : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration, {
-          encounterId: encounter.id,
-          roundNumber: selectedRoundNumber,
-        });
+        : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration, {
+            encounterId: encounter.id,
+            roundNumber: selectedRoundNumber,
+          });
   const historicalSnapshotResolutionStartedAt = combatPerformanceNow();
-  const inspectorSnapshot = getCombatRoundStepSnapshot({
-    participantId: inspector.participant?.participantId,
-    roundNumber: selectedRoundNumber,
-    state: selectedTimelineRoundState,
-    step: inspector.step,
-  });
-  const inspectorHistoricalStepOutcome = deriveCombatHistoryStepOutcome(inspectorSnapshot);
+  const inspectorSnapshot =
+    archivedInspectorPresentation?.snapshot ??
+    getCombatRoundStepSnapshot({
+      participantId: inspector.participant?.participantId,
+      roundNumber: selectedRoundNumber,
+      state: selectedTimelineRoundState,
+      step: inspector.step,
+    });
+  const inspectorHistoricalStepOutcome =
+    archivedInspectorPresentation?.stepOutcome ?? deriveCombatHistoryStepOutcome(inspectorSnapshot);
   const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
@@ -4563,30 +4583,32 @@ export default function CombatRoundManagerPanel({
       selectedStep: inspector.step,
       snapshots: selectedTimelineRoundState.stepSnapshots,
     });
-  const inspectorContextBaseSnapshot = inspectorIsHistorical
-    ? resolveInspectorContextSnapshot()
-    : undefined;
-  const inspectorPanelSnapshot = inspectorContextBaseSnapshot
-    ? {
-        ...inspectorContextBaseSnapshot,
-        ...inspectorSnapshot,
-        declarationSummary: resolveInspectorContextSnapshot((snapshot) =>
-          Boolean(snapshot.declarationSummary),
-        )?.declarationSummary,
-        modifierSummary: resolveInspectorContextSnapshot((snapshot) =>
-          Boolean(snapshot.modifierSummary),
-        )?.modifierSummary,
-        phasePanels: {
-          phase1: resolveInspectorContextSnapshot((snapshot) =>
-            Boolean(snapshot.phasePanels?.phase1),
-          )?.phasePanels?.phase1,
-          phase2: resolveInspectorContextSnapshot((snapshot) =>
-            Boolean(snapshot.phasePanels?.phase2),
-          )?.phasePanels?.phase2,
-        },
-        step: inspector.step,
-      }
-    : undefined;
+  const inspectorContextBaseSnapshot =
+    archivedInspectorPresentation?.panelSnapshot ??
+    (inspectorIsHistorical ? resolveInspectorContextSnapshot() : undefined);
+  const inspectorPanelSnapshot = archivedInspectorPresentation?.panelSnapshot
+    ? archivedInspectorPresentation.panelSnapshot
+    : inspectorContextBaseSnapshot
+      ? {
+          ...inspectorContextBaseSnapshot,
+          ...inspectorSnapshot,
+          declarationSummary: resolveInspectorContextSnapshot((snapshot) =>
+            Boolean(snapshot.declarationSummary),
+          )?.declarationSummary,
+          modifierSummary: resolveInspectorContextSnapshot((snapshot) =>
+            Boolean(snapshot.modifierSummary),
+          )?.modifierSummary,
+          phasePanels: {
+            phase1: resolveInspectorContextSnapshot((snapshot) =>
+              Boolean(snapshot.phasePanels?.phase1),
+            )?.phasePanels?.phase1,
+            phase2: resolveInspectorContextSnapshot((snapshot) =>
+              Boolean(snapshot.phasePanels?.phase2),
+            )?.phasePanels?.phase2,
+          },
+          step: inspector.step,
+        }
+      : undefined;
   const inspectorSourceMode: CombatInspectorSourceMode = inspectorIsHistorical
     ? "history"
     : "current";
@@ -4648,13 +4670,13 @@ export default function CombatRoundManagerPanel({
   const inspectorEquipmentState = useMemo(() => {
     const build = () =>
       measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
-      resolveScenarioCombatEquipmentState({
-      resolvedEquipmentState:
-        resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
-          ?.equipmentState,
-      scenarioEquipmentState: selectedScenarioParticipant?.snapshot.equipmentState,
-      }),
-    );
+        resolveScenarioCombatEquipmentState({
+          resolvedEquipmentState:
+            resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
+              ?.equipmentState,
+          scenarioEquipmentState: selectedScenarioParticipant?.snapshot.equipmentState,
+        }),
+      );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
@@ -4709,23 +4731,23 @@ export default function CombatRoundManagerPanel({
   const inspectorGeneratedCombatContext = useMemo(() => {
     const build = () =>
       measureCombatPerformanceStage("panel_active_modifier_presentation", () => {
-    if (inspectorHasLocalModifierEdits) {
-      return inspectorDraft.combatContext;
-    }
+        if (inspectorHasLocalModifierEdits) {
+          return inspectorDraft.combatContext;
+        }
 
-    return projectCombatActionGeneratedModifiers({
-      actionId: inspectorDraft.actionId || undefined,
-      combatContext: inspectorDraft.combatContext,
-      dodgeSkillValue: inspectorDodgeSkillValue,
-      encounterParticipant: selectedEncounterParticipant,
-      movementIntent: inspectorDraft.movementIntent,
-      phaseContexts: inspectorDraft.phaseContexts,
-      resolvedEquipmentState: inspectorEquipmentState ?? undefined,
-      roundState: selectedTimelineRoundState,
-      scenarioParticipant: selectedScenarioParticipant,
-      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
-    });
-    });
+        return projectCombatActionGeneratedModifiers({
+          actionId: inspectorDraft.actionId || undefined,
+          combatContext: inspectorDraft.combatContext,
+          dodgeSkillValue: inspectorDodgeSkillValue,
+          encounterParticipant: selectedEncounterParticipant,
+          movementIntent: inspectorDraft.movementIntent,
+          phaseContexts: inspectorDraft.phaseContexts,
+          resolvedEquipmentState: inspectorEquipmentState ?? undefined,
+          roundState: selectedTimelineRoundState,
+          scenarioParticipant: selectedScenarioParticipant,
+          secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+        });
+      });
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
@@ -4766,22 +4788,22 @@ export default function CombatRoundManagerPanel({
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId;
     const build = () =>
       measureCombatPerformanceStage("panel_active_modifier_presentation", () =>
-      buildEncounterLiveCombatModifierSummary({
-        combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
-        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        buildEncounterLiveCombatModifierSummary({
+          combatContext: sanitizePlayerCombatModifierContext(inspectorGeneratedCombatContext),
+          combatEffects: selectedScenarioParticipant?.state.combatEffects,
           currentInitiativeGroupId,
-        phaseKey: inspectorModifierPhase,
-      }),
+          phaseKey: inspectorModifierPhase,
+        }),
       );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
           dependencies: [
             currentInitiativeGroupId,
-      inspectorGeneratedCombatContext,
-      inspectorModifierPhase,
+            inspectorGeneratedCombatContext,
+            inspectorModifierPhase,
             selectedScenarioParticipant?.state.combatEffects,
-    ],
+          ],
           key: `live-modifiers:${inspector.participant?.participantId ?? "none"}:${inspectorModifierPhase ?? "none"}`,
         })
       : build();
@@ -4799,33 +4821,33 @@ export default function CombatRoundManagerPanel({
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId;
     const build = () =>
       measureCombatPerformanceStage("panel_active_modifier_presentation", () =>
-      buildPlayerCombatModifierRows({
-        combatContext: inspectorGeneratedCombatContext,
-        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        buildPlayerCombatModifierRows({
+          combatContext: inspectorGeneratedCombatContext,
+          combatEffects: selectedScenarioParticipant?.state.combatEffects,
           currentInitiativeGroupId,
-        currentRound: selectedRoundNumber,
-        encounterId: encounter.id,
-        liveModifiers: inspectorLiveModifiers,
-        ownerParticipantId: selectedScenarioParticipant?.id,
-        phaseKey: inspectorModifierPhase,
-        visibleAtStep: inspector.step,
-      }),
+          currentRound: selectedRoundNumber,
+          encounterId: encounter.id,
+          liveModifiers: inspectorLiveModifiers,
+          ownerParticipantId: selectedScenarioParticipant?.id,
+          phaseKey: inspectorModifierPhase,
+          visibleAtStep: inspector.step,
+        }),
       );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
           dependencies: [
-      inspectorGeneratedCombatContext,
+            inspectorGeneratedCombatContext,
             currentInitiativeGroupId,
-      inspectorLiveModifiers,
-      inspectorModifierPhase,
-      inspector.step,
-      inspectorDraft.actionId,
-      selectedScenarioParticipant?.state.combatEffects,
+            inspectorLiveModifiers,
+            inspectorModifierPhase,
+            inspector.step,
+            inspectorDraft.actionId,
+            selectedScenarioParticipant?.state.combatEffects,
             selectedRoundNumber,
             encounter.id,
             selectedScenarioParticipant?.id,
-    ],
+          ],
           key: `modifier-rows:${inspector.participant?.participantId ?? "none"}:${inspector.step}`,
         })
       : build();
@@ -4850,27 +4872,27 @@ export default function CombatRoundManagerPanel({
     const build = () =>
       measureCombatPerformanceStage(
         "panel_active_modifier_presentation",
-    () =>
-      buildLiveCombatModifierContributionProjection({
-        combatContext: inspectorGeneratedCombatContext,
-        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        () =>
+          buildLiveCombatModifierContributionProjection({
+            combatContext: inspectorGeneratedCombatContext,
+            combatEffects: selectedScenarioParticipant?.state.combatEffects,
             currentInitiativeGroupId,
-        currentRound: selectedRoundNumber,
-        encounterId: encounter.id,
-        ownerParticipantId: selectedScenarioParticipant?.id,
-      }).pendingModifierEntries,
+            currentRound: selectedRoundNumber,
+            encounterId: encounter.id,
+            ownerParticipantId: selectedScenarioParticipant?.id,
+          }).pendingModifierEntries,
       );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
           dependencies: [
             currentInitiativeGroupId,
-      encounter.id,
-      inspectorGeneratedCombatContext,
-      selectedRoundNumber,
-      selectedScenarioParticipant?.id,
-      selectedScenarioParticipant?.state.combatEffects,
-    ],
+            encounter.id,
+            inspectorGeneratedCombatContext,
+            selectedRoundNumber,
+            selectedScenarioParticipant?.id,
+            selectedScenarioParticipant?.state.combatEffects,
+          ],
           key: `pending-modifiers:${inspector.participant?.participantId ?? "none"}`,
         })
       : build();
@@ -4888,7 +4910,9 @@ export default function CombatRoundManagerPanel({
   const historicalModifierPresentationStartedAt = combatPerformanceNow();
   const inspectorDisplayModifierRows: readonly PlayerCombatModifierBucketView[] =
     inspectorIsHistorical
-      ? (inspectorPanelSnapshot?.modifierSummary?.rows ?? [])
+      ? (archivedInspectorPresentation?.modifierRows ??
+        inspectorPanelSnapshot?.modifierSummary?.rows ??
+        [])
       : inspectorModifierRows;
   recordCombatPerformanceStage(
     "panel_historical_modifier_presentation",
@@ -5020,7 +5044,7 @@ export default function CombatRoundManagerPanel({
       selectedScenarioParticipant?.snapshot.build;
     const build = () => {
       const result = characterBuildSchema.safeParse(sourceBuild);
-    return result.success ? result.data : null;
+      return result.success ? result.data : null;
     };
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
@@ -5039,13 +5063,13 @@ export default function CombatRoundManagerPanel({
   const inspectorSheetSummary = useMemo(() => {
     const build = () =>
       measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
-      content && inspectorBuild
-        ? buildCharacterSheetSummary({
-            build: inspectorBuild,
-            content,
-          })
-        : undefined,
-  );
+        content && inspectorBuild
+          ? buildCharacterSheetSummary({
+              build: inspectorBuild,
+              content,
+            })
+          : undefined,
+      );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
@@ -5171,39 +5195,43 @@ export default function CombatRoundManagerPanel({
     (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
     Boolean(inspectorSnapshot);
   const inspectorLoadoutModel = useMemo(() => {
+    if (archivedInspectorPresentation) {
+      return null;
+    }
     const build = () =>
       measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
-      buildEquipmentLoadoutModuleModel({
-        characterContext:
-          content && inspectorBuild
-            ? {
-                content,
-                record: {
-                  build: inspectorBuild,
-                },
-              }
-            : null,
-        characterId: inspectorEquipmentCharacterId,
-        liveCombatModifiers: inspectorLiveModifiers,
-        state: inspectorEquipmentState,
-        throwingWeaponItemId: null,
-      }),
+        buildEquipmentLoadoutModuleModel({
+          characterContext:
+            content && inspectorBuild
+              ? {
+                  content,
+                  record: {
+                    build: inspectorBuild,
+                  },
+                }
+              : null,
+          characterId: inspectorEquipmentCharacterId,
+          liveCombatModifiers: inspectorLiveModifiers,
+          state: inspectorEquipmentState,
+          throwingWeaponItemId: null,
+        }),
       );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
           dependencies: [
-      content,
-      inspectorBuild,
-      inspectorEquipmentState,
-      inspectorLiveModifiers,
-      inspectorEquipmentCharacterId,
-    ],
+            content,
+            inspectorBuild,
+            inspectorEquipmentState,
+            inspectorLiveModifiers,
+            inspectorEquipmentCharacterId,
+          ],
           key: `loadout-model:${inspector.participant?.participantId ?? "none"}`,
         })
       : build();
   }, [
     combatPresentation.active.inspectorPresentation,
+    archivedInspectorPresentation,
     content,
     inspector.participant?.participantId,
     inspectorBuild,
@@ -5213,17 +5241,20 @@ export default function CombatRoundManagerPanel({
     selectedRoundIsActive,
   ]);
   const inspectorLoadoutSummary = useMemo(() => {
+    if (archivedInspectorPresentation) {
+      return archivedInspectorPresentation.phaseLoadouts.phase1;
+    }
     const build = () =>
       measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
-      buildPlayerCombatLoadoutSummary({
-        actionId: inspectorDraft.actionId,
-        allowUnarmedFallback:
+        buildPlayerCombatLoadoutSummary({
+          actionId: inspectorDraft.actionId,
+          allowUnarmedFallback:
             inspectorEquipmentStatus.kind === "ready" ||
             inspectorEquipmentStatus.kind === "unarmed",
-        loadoutModel: inspectorLoadoutModel,
-        secondaryActionId: inspectorDraft.secondaryActionId,
-      }),
-  );
+          loadoutModel: inspectorLoadoutModel!,
+          secondaryActionId: inspectorDraft.secondaryActionId,
+        }),
+      );
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
@@ -5238,6 +5269,7 @@ export default function CombatRoundManagerPanel({
       : build();
   }, [
     combatPresentation.active.inspectorPresentation,
+    archivedInspectorPresentation,
     inspector.participant?.participantId,
     inspectorDraft.actionId,
     inspectorDraft.secondaryActionId,
@@ -5299,47 +5331,50 @@ export default function CombatRoundManagerPanel({
     return resolution.ok ? resolution.phaseContexts : inspectorDisplayDraft.phaseContexts;
   }, [encounter.participants, inspectorDisplayDraft.actionId, inspectorDisplayDraft.phaseContexts]);
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
+    if (archivedInspectorPresentation) {
+      return archivedInspectorPresentation.phaseLoadouts;
+    }
     const build = () =>
       measureCombatPerformanceStage("panel_phase_summary_presentation", () => {
-    const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
-      const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
-        combatContext: inspectorGeneratedCombatContext,
-        combatEffects: selectedScenarioParticipant?.state.combatEffects,
-        phaseKey,
-      });
-      const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
-        characterContext:
-          content && inspectorBuild
-            ? {
-                content,
-                record: {
-                  build: inspectorBuild,
-                },
-              }
-            : null,
-        characterId: inspectorEquipmentCharacterId,
-        liveCombatModifiers: phaseLiveModifiers,
-        state: inspectorEquipmentState,
-        throwingWeaponItemId: null,
-      });
+        const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
+          const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
+            combatContext: inspectorGeneratedCombatContext,
+            combatEffects: selectedScenarioParticipant?.state.combatEffects,
+            phaseKey,
+          });
+          const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+            characterContext:
+              content && inspectorBuild
+                ? {
+                    content,
+                    record: {
+                      build: inspectorBuild,
+                    },
+                  }
+                : null,
+            characterId: inspectorEquipmentCharacterId,
+            liveCombatModifiers: phaseLiveModifiers,
+            state: inspectorEquipmentState,
+            throwingWeaponItemId: null,
+          });
 
-      return buildPlayerCombatLoadoutSummary({
-        actionId: inspectorDraft.actionId,
-        allowUnarmedFallback:
-            inspectorEquipmentStatus.kind === "ready" ||
-            inspectorEquipmentStatus.kind === "unarmed",
-        loadoutModel: phaseLoadoutModel,
-        phaseKey,
-        selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
-        secondaryActionId: inspectorDraft.secondaryActionId,
-      });
-    };
+          return buildPlayerCombatLoadoutSummary({
+            actionId: inspectorDraft.actionId,
+            allowUnarmedFallback:
+              inspectorEquipmentStatus.kind === "ready" ||
+              inspectorEquipmentStatus.kind === "unarmed",
+            loadoutModel: phaseLoadoutModel,
+            phaseKey,
+            selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
+            secondaryActionId: inspectorDraft.secondaryActionId,
+          });
+        };
 
-    return {
-      phase1: buildPhaseSummary("phase1"),
-      phase2: buildPhaseSummary("phase2"),
-    };
-    });
+        return {
+          phase1: buildPhaseSummary("phase1"),
+          phase2: buildPhaseSummary("phase2"),
+        };
+      });
     return selectedRoundIsActive
       ? combatPresentation.active.inspectorPresentation.resolve({
           build,
@@ -5360,6 +5395,7 @@ export default function CombatRoundManagerPanel({
       : build();
   }, [
     combatPresentation.active.inspectorPresentation,
+    archivedInspectorPresentation,
     content,
     inspectorBuild,
     inspector.participant?.participantId,
@@ -5491,28 +5527,33 @@ export default function CombatRoundManagerPanel({
           key: `attack-resolution:${inspector.participant?.participantId ?? "none"}:${inspector.step}`,
         })
       : undefined;
+  const archivedAttackResolutionPresentation = archivedInspectorPresentation?.attackResolution;
   const inspectorDisplayAttackResult = inspectorIsHistorical
-    ? inspectorSnapshot?.attackResult
+    ? archivedAttackResolutionPresentation?.attackResult ?? inspectorSnapshot?.attackResult
     : activeAttackResolutionPresentation?.attackResult;
   const inspectorResolutionAttackResult = inspectorIsHistorical
-    ? inspectorSnapshot?.attackResult
+    ? archivedAttackResolutionPresentation?.resolutionAttackResult ?? inspectorSnapshot?.attackResult
     : activeAttackResolutionPresentation?.resolutionAttackResult;
   const inspectorDisplayPhaseResolutionResult = inspectorIsHistorical
-    ? inspectorSnapshot?.phaseResolutionResult
+    ? archivedAttackResolutionPresentation?.resolutionResult ??
+      inspectorSnapshot?.phaseResolutionResult
     : activeAttackResolutionPresentation?.resolutionResult;
   const inspectorPhaseResolutionOwnerParticipantId =
     activeAttackResolutionPresentation?.phaseResolutionOwnerParticipantId ??
+    archivedAttackResolutionPresentation?.phaseResolutionOwnerParticipantId ??
     inspectorResolutionAttackResult?.attackerParticipantId ??
     inspector.participant?.participantId;
-  const inspectorPhaseResolutionOwnerStatus = !inspectorIsHistorical
-    ? activeAttackResolutionPresentation?.phaseResolutionOwnerStatus
-    : inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
-      ? getCombatRoundPhaseResolutionStatus({
-          participantId: inspectorPhaseResolutionOwnerParticipantId,
-          phase: inspectorCurrentResolutionPhase,
-          state: selectedTimelineRoundState,
-        })
-      : undefined;
+  const inspectorPhaseResolutionOwnerStatus = archivedAttackResolutionPresentation
+    ? archivedAttackResolutionPresentation.phaseResolutionOwnerStatus
+    : !inspectorIsHistorical
+      ? activeAttackResolutionPresentation?.phaseResolutionOwnerStatus
+      : inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
+        ? getCombatRoundPhaseResolutionStatus({
+            participantId: inspectorPhaseResolutionOwnerParticipantId,
+            phase: inspectorCurrentResolutionPhase,
+            state: selectedTimelineRoundState,
+          })
+        : undefined;
   const inspectorPhaseResolutionOwnerHasAttack =
     inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
       ? combatRoundParticipantHasPhaseAttack({
@@ -5531,13 +5572,15 @@ export default function CombatRoundManagerPanel({
     result: inspectorResolutionAttackResult,
     roundNumber: selectedTimelineRoundState.roundNumber,
   });
-  const inspectorParryDefenderRoundParticipant = inspectorResolutionAttackResult
+  const inspectorParryDefenderRoundParticipant =
+    !archivedAttackResolutionPresentation && inspectorResolutionAttackResult
     ? selectedTimelineRoundState.participants.find(
         (participant) =>
           participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
       )
     : undefined;
-  const inspectorParryDefenderEncounterParticipant = inspectorResolutionAttackResult
+  const inspectorParryDefenderEncounterParticipant =
+    !archivedAttackResolutionPresentation && inspectorResolutionAttackResult
     ? encounter.participants.find(
         (participant) => participant.id === inspectorResolutionAttackResult.defenderParticipantId,
       )
@@ -5566,43 +5609,57 @@ export default function CombatRoundManagerPanel({
             key: `parry-defender-phase-summary:${inspectorParryDefenderScenarioParticipant.id}:${inspectorResolutionPhase}`,
           })
         : buildScenarioParticipantPhaseSummary({
-          declaration: inspectorParryDefenderRoundParticipant?.declaration,
-          phaseKey: inspectorResolutionPhase,
-          scenarioParticipant: inspectorParryDefenderScenarioParticipant,
-        })
+            declaration: inspectorParryDefenderRoundParticipant?.declaration,
+            phaseKey: inspectorResolutionPhase,
+            scenarioParticipant: inspectorParryDefenderScenarioParticipant,
+          })
       : undefined;
-  const inspectorParrySelection = getCombatParrySourceSelection({
-    selection: inspectorParrySelectionKey
-      ? parrySourceSelections[inspectorParrySelectionKey]
-      : undefined,
-    sources: inspectorParryDefenderPhaseSummary?.parrySources,
-  });
-  const inspectorParryBase = getSelectedCombatParryBase({
-    selection: inspectorParrySelection,
-    sources: inspectorParryDefenderPhaseSummary?.parrySources,
-  });
-  const inspectorParryExtraRawModifiers = buildCombatAttackResultParryModifiers(
-    inspectorResolutionAttackResult,
-  );
+  const inspectorParrySources =
+    archivedAttackResolutionPresentation?.parry.sources ??
+    inspectorParryDefenderPhaseSummary?.parrySources;
+  const inspectorParrySelection = archivedAttackResolutionPresentation
+    ? archivedAttackResolutionPresentation.parry.selection
+    : getCombatParrySourceSelection({
+        selection: inspectorParrySelectionKey
+          ? parrySourceSelections[inspectorParrySelectionKey]
+          : undefined,
+        sources: inspectorParrySources,
+      });
+  const inspectorParryBase = archivedAttackResolutionPresentation
+    ? archivedAttackResolutionPresentation.parry.base
+    : getSelectedCombatParryBase({
+        selection: inspectorParrySelection,
+        sources: inspectorParrySources,
+      });
+  const inspectorParryExtraRawModifiers = archivedAttackResolutionPresentation
+    ? []
+    : buildCombatAttackResultParryModifiers(inspectorResolutionAttackResult);
   const inspectorParryModifierCalculation =
-    inspectorParryBase !== undefined
+    !archivedAttackResolutionPresentation && inspectorParryBase !== undefined
       ? buildEncounterDbParryModifierCalculation({
           baseValue: inspectorParryBase,
           extraRawModifiers: inspectorParryExtraRawModifiers,
           liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
         })
       : null;
-  const inspectorParryModifierAdjustment = inspectorParryModifierCalculation
-    ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
-    : 0;
-  const inspectorParryModifierBreakdown = inspectorParryModifierCalculation?.rawModifiers ?? [];
-  recordCombatPerformanceStage(
-    inspectorIsHistorical
-      ? "panel_historical_attack_parry_result_presentation"
-      : "panel_active_attack_parry_result_presentation",
-    combatPerformanceNow() - attackParryResultPresentationStartedAt,
-    { source: "inspector_resolution" },
-  );
+  const inspectorParryModifierAdjustment = archivedAttackResolutionPresentation
+    ? archivedAttackResolutionPresentation.parry.modifierAdjustment
+    : inspectorParryModifierCalculation
+      ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
+      : 0;
+  const inspectorParryModifierBreakdown =
+    archivedAttackResolutionPresentation?.parry.modifierBreakdown ??
+    inspectorParryModifierCalculation?.rawModifiers ??
+    [];
+  if (!archivedAttackResolutionPresentation) {
+    recordCombatPerformanceStage(
+      inspectorIsHistorical
+        ? "panel_historical_attack_parry_result_presentation"
+        : "panel_active_attack_parry_result_presentation",
+      combatPerformanceNow() - attackParryResultPresentationStartedAt,
+      { source: "inspector_resolution" },
+    );
+  }
   const inspectorSelectedAttackAlreadyRolled = Boolean(
     inspectorAttackPhase && inspectorDisplayAttackResult,
   );
@@ -6465,20 +6522,21 @@ export default function CombatRoundManagerPanel({
     inspectorCombatExperienceIsCombatStart;
   const inspectorCanonicalActionResultEvents =
     activeInspectorCore?.canonicalActionResultEvents ??
+    archivedInspectorPresentation?.canonicalActionResultEvents ??
     measureCombatPerformanceStage(
-    "panel_current_event_result_selection",
-    () =>
-      projectGmCombatEvents({
-    events: selectCombatEventsForTrackerCell({
-      events: selectedTimelineRoundState.events,
-      participantId: inspector.participant?.participantId,
-      retainLatestWhenEmpty: false,
-      step: inspector.step,
-    }),
-    participants: selectedTimelineRoundState.participants,
-      }),
-    { historical: inspectorIsHistorical },
-  );
+      "panel_current_event_result_selection",
+      () =>
+        projectGmCombatEvents({
+          events: selectCombatEventsForTrackerCell({
+            events: selectedTimelineRoundState.events,
+            participantId: inspector.participant?.participantId,
+            retainLatestWhenEmpty: false,
+            step: inspector.step,
+          }),
+          participants: selectedTimelineRoundState.participants,
+        }),
+      { historical: inspectorIsHistorical },
+    );
   const inspectorHasCanonicalActionResult = inspectorCanonicalActionResultEvents.length > 0;
   const inspectorShowsLegacyResultFallback = Boolean(
     inspectorIsHistorical &&
@@ -6489,26 +6547,28 @@ export default function CombatRoundManagerPanel({
       inspectorSnapshot.initiativeResult ||
       inspectorSnapshot.actionResultSummary),
   );
-  const inspectorHistoricalActionResult = measureCombatPerformanceStage(
-    "panel_historical_attack_parry_result_presentation",
-    () =>
-      inspectorIsHistorical
-    ? inspectorHistoricalStepOutcome
-      ? { interpretedResult: inspectorHistoricalStepOutcome.message }
-      : buildHistoricalCombatActionResult({
-          participantId: inspector.participant?.participantId,
-          snapshot: inspectorSnapshot,
-        })
-        : undefined,
-  );
+  const inspectorHistoricalActionResult = archivedInspectorPresentation
+    ? archivedInspectorPresentation.historicalActionResult
+    : measureCombatPerformanceStage("panel_historical_attack_parry_result_presentation", () =>
+        inspectorIsHistorical
+          ? inspectorHistoricalStepOutcome
+            ? { interpretedResult: inspectorHistoricalStepOutcome.message }
+            : buildHistoricalCombatActionResult({
+                participantId: inspector.participant?.participantId,
+                snapshot: inspectorSnapshot,
+              })
+          : undefined,
+      );
   const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
-  const inspectorHistoricalStatusLabel = inspectorHistoricalStepOutcome
-    ? inspectorHistoricalStepOutcome.category === "not_required"
-      ? "Not required"
-      : inspectorHistoricalStepOutcome.category === "not_applicable"
-        ? "Not applicable"
-        : "Skipped"
-    : undefined;
+  const inspectorHistoricalStatusLabel =
+    archivedInspectorPresentation?.historicalStatusLabel ??
+    (inspectorHistoricalStepOutcome
+      ? inspectorHistoricalStepOutcome.category === "not_required"
+        ? "Not required"
+        : inspectorHistoricalStepOutcome.category === "not_applicable"
+          ? "Not applicable"
+          : "Skipped"
+      : undefined);
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
@@ -6579,10 +6639,10 @@ export default function CombatRoundManagerPanel({
         key: `initiative-calculation:${inspector.participant?.participantId ?? "none"}:${inspectorModifierPhase ?? "none"}`,
       })
     : buildEncounterInitiativeModifierCalculation({
-    baseInitiative: inspectorLoadoutSummary.passiveInitiative,
-    combatContext: inspectorGeneratedCombatContext,
-    phaseKey: inspectorModifierPhase,
-  });
+        baseInitiative: inspectorLoadoutSummary.passiveInitiative,
+        combatContext: inspectorGeneratedCombatContext,
+        phaseKey: inspectorModifierPhase,
+      });
   useEffect(() => {
     const encounterChanged = encounterScopeRef.current !== encounter.id;
 
@@ -9806,29 +9866,21 @@ export default function CombatRoundManagerPanel({
         })
       }
     >
-    <section style={panelStyle}>
-      <div
-        style={{
-          alignItems: "start",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1rem",
-          justifyContent: "space-between",
-        }}
-      >
-        <div>
-          <h2 style={{ margin: 0 }}>Combat Round Manager</h2>
-        </div>
-        <section
-          aria-label="Step controller"
+      <section style={panelStyle}>
+        <div
           style={{
-            alignItems: "center",
+            alignItems: "start",
             display: "flex",
             flexWrap: "wrap",
-            gap: "0.5rem",
+            gap: "1rem",
+            justifyContent: "space-between",
           }}
         >
-          <div
+          <div>
+            <h2 style={{ margin: 0 }}>Combat Round Manager</h2>
+          </div>
+          <section
+            aria-label="Step controller"
             style={{
               alignItems: "center",
               display: "flex",
@@ -9836,1175 +9888,1191 @@ export default function CombatRoundManagerPanel({
               gap: "0.5rem",
             }}
           >
-            <button
-              disabled={saving || !currentTaskSelection}
-              onClick={selectCurrentTask}
-              title="Return to the current unresolved combat step"
-              type="button"
-            >
-              Current task
-            </button>
-            <button
-              disabled={saving || !clearCurrentStepAvailable}
-              onClick={() => void clearCurrentStep()}
-              type="button"
-            >
-              Clear current step
-            </button>
-          </div>
-        </section>
-      </div>
-
-      {saveError ? (
-        <div
-          style={{
-            background: "#fdf0ea",
-            border: "1px solid #e4b9a7",
-            borderRadius: 10,
-            color: "#8b3a1a",
-            padding: "0.75rem",
-          }}
-        >
-          {saveError}
-        </div>
-      ) : null}
-
-      {inspectorEquipmentDiagnostic && selectedScenarioParticipant ? (
-        <div
-          role="alert"
-          style={{
-            background: "#fff8e7",
-            border: "1px solid #d9c79b",
-            borderRadius: 8,
-            padding: "0.75rem",
-          }}
-        >
-          {inspectorEquipmentDiagnostic}
-        </div>
-      ) : null}
-
-      <CombatLog
-        events={combatLogProjection.events}
-        onSelect={handleCombatLogSelection}
-        selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}
-        selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}
-      />
-
-      <CombatTracker
-        model={trackerModel}
-        onInspect={(cell) => selectInspector(cell.participantId, cell.step, cell.roundNumber)}
-        onKeyDown={handleTimelineKeyDown}
-        registerCell={(cellKey, node, currentTask) => {
-          timelineCellRefs.current[cellKey] = node;
-          if (currentTask) {
-            activeCurrentCellRef.current = node;
-          }
-        }}
-        tableRef={tableContainerRef}
-      />
-      <section
-        aria-label="Combat round inspector"
-        style={{
-          border: "1px solid #e3e1dc",
-          borderRadius: 10,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "0.75rem",
-        }}
-      >
-        {inspector.participant ? (
-          <>
             <div
               style={{
                 alignItems: "center",
                 display: "flex",
                 flexWrap: "wrap",
-                gap: "0.75rem",
-                justifyContent: "space-between",
+                gap: "0.5rem",
               }}
             >
-              <div>
-                <h3 style={{ margin: 0 }}>
-                  Combat inspector — {inspector.participant.label} · Round {selectedRoundNumber} ·{" "}
-                  {COMBAT_ROUND_STEP_LABELS[inspector.step]}
-                </h3>
-                <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} ·{" "}
-                  {inspectorIsHistorical && inspectorHistoricalStatusLabel
-                    ? inspectorHistoricalStatusLabel
-                    : formatStepStatus(inspector.status)}
-                  {inspectorSnapshot ? " · Committed" : ""}
+              <button
+                disabled={saving || !currentTaskSelection}
+                onClick={selectCurrentTask}
+                title="Return to the current unresolved combat step"
+                type="button"
+              >
+                Current task
+              </button>
+              <button
+                disabled={saving || !clearCurrentStepAvailable}
+                onClick={() => void clearCurrentStep()}
+                type="button"
+              >
+                Clear current step
+              </button>
+            </div>
+          </section>
+        </div>
+
+        {saveError ? (
+          <div
+            style={{
+              background: "#fdf0ea",
+              border: "1px solid #e4b9a7",
+              borderRadius: 10,
+              color: "#8b3a1a",
+              padding: "0.75rem",
+            }}
+          >
+            {saveError}
+          </div>
+        ) : null}
+
+        {inspectorEquipmentDiagnostic && selectedScenarioParticipant ? (
+          <div
+            role="alert"
+            style={{
+              background: "#fff8e7",
+              border: "1px solid #d9c79b",
+              borderRadius: 8,
+              padding: "0.75rem",
+            }}
+          >
+            {inspectorEquipmentDiagnostic}
+          </div>
+        ) : null}
+
+        <CombatLog
+          events={combatLogProjection.events}
+          onSelect={handleCombatLogSelection}
+          selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}
+          selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}
+        />
+
+        <CombatTracker
+          model={trackerModel}
+          onInspect={(cell) => selectInspector(cell.participantId, cell.step, cell.roundNumber)}
+          onKeyDown={handleTimelineKeyDown}
+          registerCell={(cellKey, node, currentTask) => {
+            timelineCellRefs.current[cellKey] = node;
+            if (currentTask) {
+              activeCurrentCellRef.current = node;
+            }
+          }}
+          tableRef={tableContainerRef}
+        />
+        <section
+          aria-label="Combat round inspector"
+          style={{
+            border: "1px solid #e3e1dc",
+            borderRadius: 10,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "0.75rem",
+          }}
+        >
+          {inspector.participant ? (
+            <>
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.75rem",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <h3 style={{ margin: 0 }}>
+                    Combat inspector — {inspector.participant.label} · Round {selectedRoundNumber} ·{" "}
+                    {COMBAT_ROUND_STEP_LABELS[inspector.step]}
+                  </h3>
+                  <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+                    {COMBAT_ROUND_STEP_LABELS[inspector.step]} ·{" "}
+                    {inspectorIsHistorical && inspectorHistoricalStatusLabel
+                      ? inspectorHistoricalStatusLabel
+                      : formatStepStatus(inspector.status)}
+                    {inspectorSnapshot ? " · Committed" : ""}
+                  </div>
+                </div>
+                <div style={inspectorNavStyle}>
+                  <button onClick={() => moveSelection({ participantOffset: -1 })} type="button">
+                    Previous participant
+                  </button>
+                  <button onClick={() => moveSelection({ participantOffset: 1 })} type="button">
+                    Next participant
+                  </button>
+                  <button onClick={() => moveSelection({ stepOffset: -1 })} type="button">
+                    Previous step
+                  </button>
+                  <button onClick={() => moveSelection({ stepOffset: 1 })} type="button">
+                    Next step
+                  </button>
                 </div>
               </div>
-              <div style={inspectorNavStyle}>
-                <button onClick={() => moveSelection({ participantOffset: -1 })} type="button">
-                  Previous participant
-                </button>
-                <button onClick={() => moveSelection({ participantOffset: 1 })} type="button">
-                  Next participant
-                </button>
-                <button onClick={() => moveSelection({ stepOffset: -1 })} type="button">
-                  Previous step
-                </button>
-                <button onClick={() => moveSelection({ stepOffset: 1 })} type="button">
-                  Next step
-                </button>
-              </div>
-            </div>
 
-            {selectedScenarioParticipant ? (
-              <>
-                <div style={playerCombatTopPanelRowStyle}>
-                  {inspectorIsHistorical && !inspectorHistoricalSelectorFactsComplete ? (
-                    <section style={playerCombatPanelCardStyle}>
-                      <strong>Action selector · History</strong>
-                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                        No information available for this panel.
-                      </div>
-                    </section>
-                  ) : (
-                    <PlayerCombatActionSelectorPanel
-                      actionId={inspectorDisplayDraft.actionId}
-                      actionOptions={inspectorHistoricalActionOptions}
-                      additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
-                      controlsDisabled={
-                        saving ||
-                        !selectedRoundIsActive ||
-                        inspectorIsHistorical ||
-                        inspectorCombatExperienceRequired
-                      }
-                      declarationRecorded={Boolean(inspector.participant?.declaration)}
-                      distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
-                      movementId={inspectorDisplayDraft.movementId}
-                      movementIntent={inspectorDisplayDraft.movementIntent}
-                      onActionChange={(actionId) =>
-                        updateInspectorDraft({
-                          actionId,
-                          ...(actionId === "feint_attack"
-                            ? { feintMethod: "movement", feintSkillId: "dodge" }
-                            : {}),
-                        })
-                      }
-                      onAdditionalActionNotesChange={(additionalActionNotes) =>
-                        updateInspectorDraft({ additionalActionNotes })
-                      }
-                      onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
-                      onMovementIntentChange={(movementIntent) =>
-                        updateInspectorDraft({ movementIntent })
-                      }
-                      onSecondaryActionChange={(secondaryActionId) =>
-                        updateInspectorDraft({
-                          secondaryActionId,
-                          ...(secondaryActionId === "observe_opponent"
-                            ? {}
-                            : { secondaryActionContext: undefined }),
-                        })
-                      }
-                      roundNumber={selectedRoundNumber}
-                      secondaryActionId={inspectorDisplayDraft.secondaryActionId}
-                      sourceLabel={inspectorSourceLabel}
-                    />
-                  )}
-                  {inspectorPhaseCards.map((phaseCard, index) => {
-                    const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
-                    const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey];
-                    const phaseCombatContext = inspectorIsHistorical
-                      ? (historicalPhasePanel?.phaseContext ??
-                        createUnrecordedHistoricalPhaseContext())
-                      : (inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey] ??
-                        inspectorNormalizedFeintPhaseContexts[phaseKey] ??
-                        inspectorDisplayDraft.phaseContexts[phaseKey]);
-                    const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
-                    const phaseTargetIdentity = !inspectorIsHistorical
-                      ? resolveCanonicalCombatTargetIdentity({
-                          encounterParticipants: encounter.participants,
-                          targetParticipantId: phaseCombatContext.targetParticipantId,
-                        })
-                      : undefined;
-                    const phaseTargetScenarioParticipant = !inspectorIsHistorical
-                      ? effectiveScenarioParticipants.find(
-                          (participant) =>
-                            participant.id === phaseTargetIdentity?.scenarioParticipantId,
-                        )
-                      : undefined;
-                    const phaseTargetEncounterParticipant =
-                      !inspectorIsHistorical && phaseTargetIdentity
-                        ? encounter.participants.find(
+              {selectedScenarioParticipant ? (
+                <>
+                  <div style={playerCombatTopPanelRowStyle}>
+                    {inspectorIsHistorical && !inspectorHistoricalSelectorFactsComplete ? (
+                      <section style={playerCombatPanelCardStyle}>
+                        <strong>Action selector · History</strong>
+                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          No information available for this panel.
+                        </div>
+                      </section>
+                    ) : (
+                      <PlayerCombatActionSelectorPanel
+                        actionId={inspectorDisplayDraft.actionId}
+                        actionOptions={inspectorHistoricalActionOptions}
+                        additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
+                        controlsDisabled={
+                          saving ||
+                          !selectedRoundIsActive ||
+                          inspectorIsHistorical ||
+                          inspectorCombatExperienceRequired
+                        }
+                        declarationRecorded={Boolean(inspector.participant?.declaration)}
+                        distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
+                        movementId={inspectorDisplayDraft.movementId}
+                        movementIntent={inspectorDisplayDraft.movementIntent}
+                        onActionChange={(actionId) =>
+                          updateInspectorDraft({
+                            actionId,
+                            ...(actionId === "feint_attack"
+                              ? { feintMethod: "movement", feintSkillId: "dodge" }
+                              : {}),
+                          })
+                        }
+                        onAdditionalActionNotesChange={(additionalActionNotes) =>
+                          updateInspectorDraft({ additionalActionNotes })
+                        }
+                        onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
+                        onMovementIntentChange={(movementIntent) =>
+                          updateInspectorDraft({ movementIntent })
+                        }
+                        onSecondaryActionChange={(secondaryActionId) =>
+                          updateInspectorDraft({
+                            secondaryActionId,
+                            ...(secondaryActionId === "observe_opponent"
+                              ? {}
+                              : { secondaryActionContext: undefined }),
+                          })
+                        }
+                        roundNumber={selectedRoundNumber}
+                        secondaryActionId={inspectorDisplayDraft.secondaryActionId}
+                        sourceLabel={inspectorSourceLabel}
+                      />
+                    )}
+                    {inspectorPhaseCards.map((phaseCard, index) => {
+                      const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
+                      const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey];
+                      const archivedPhaseProjection =
+                        archivedInspectorPresentation?.phasePanels[phaseKey];
+                      const phaseCombatContext = inspectorIsHistorical
+                        ? (historicalPhasePanel?.phaseContext ??
+                          createUnrecordedHistoricalPhaseContext())
+                        : (inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey] ??
+                          inspectorNormalizedFeintPhaseContexts[phaseKey] ??
+                          inspectorDisplayDraft.phaseContexts[phaseKey]);
+                      const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                      const phaseTargetIdentity = !inspectorIsHistorical
+                        ? resolveCanonicalCombatTargetIdentity({
+                            encounterParticipants: encounter.participants,
+                            targetParticipantId: phaseCombatContext.targetParticipantId,
+                          })
+                        : undefined;
+                      const phaseTargetScenarioParticipant = !inspectorIsHistorical
+                        ? effectiveScenarioParticipants.find(
                             (participant) =>
-                              participant.id === phaseTargetIdentity.encounterParticipantId,
+                              participant.id === phaseTargetIdentity?.scenarioParticipantId,
                           )
                         : undefined;
-                    const phaseDistanceRow = !inspectorIsHistorical
-                      ? getCombatDistanceTableRowForParticipants({
-                          participantAId: inspector.participant?.participantId,
-                          participantAAliases: getCombatDistanceParticipantAliases(
-                            inspector.participant,
-                          ),
-                          participantBId: phaseTargetEncounterParticipant?.id,
-                          participantBAliases: [
+                      const phaseTargetEncounterParticipant =
+                        !inspectorIsHistorical && phaseTargetIdentity
+                          ? encounter.participants.find(
+                              (participant) =>
+                                participant.id === phaseTargetIdentity.encounterParticipantId,
+                            )
+                          : undefined;
+                      const phaseDistanceRow = !inspectorIsHistorical
+                        ? getCombatDistanceTableRowForParticipants({
+                            participantAId: inspector.participant?.participantId,
+                            participantAAliases: getCombatDistanceParticipantAliases(
+                              inspector.participant,
+                            ),
+                            participantBId: phaseTargetEncounterParticipant?.id,
+                            participantBAliases: [
                               ...getCombatDistanceParticipantAliases(
                                 phaseTargetEncounterParticipant,
                               ),
                               ...getCombatDistanceParticipantAliases(
                                 phaseTargetScenarioParticipant,
                               ),
-                          ],
-                          rows: combatDistanceRows,
-                        })
-                      : undefined;
-                    const phaseSourceLabel = getCombatInspectorSourceLabel(
-                      inspectorIsHistorical ? "history" : "current",
-                    );
-                    const phaseDistanceLabel = inspectorIsHistorical
-                      ? historicalPhasePanel?.distanceLabel
-                      : phaseTargetEncounterParticipant
-                        ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
-                        : undefined;
-                    const buildPhaseProjection = () => {
-                      const phaseProjectionStartedAt = combatPerformanceNow();
-                      const phaseDefenseStats = !inspectorIsHistorical
-                        ? buildPlayerCombatDefenseStats({
-                            mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                            offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                            phaseContext: phaseCombatContext,
-                            reference: phaseLoadoutSummary.reference,
+                            ],
+                            rows: combatDistanceRows,
                           })
-                        : null;
-                      const selectedResolutionContext =
-                        !inspectorIsHistorical &&
-                        phaseKey === inspectorResolutionPhase &&
-                        inspector.participant?.participantId ===
-                          inspectorResolutionAttackResult?.defenderParticipantId &&
-                        (inspectorResolutionStepKind === "parry" ||
-                          inspectorResolutionStepKind === "damage") &&
-                        inspectorDisplayPhaseResolutionResult
-                          ? {
-                              attackResultId: inspectorDisplayPhaseResolutionResult.attackResultId,
-                              parryBase: inspectorParryBase,
-                              parryModifierCalculation: inspectorParryModifierCalculation,
-                              parryResolution:
-                                inspectorDisplayPhaseResolutionResult.parryResolution,
-                              parrySourceLabel: formatSelectedCombatParrySourceName({
-                                selection: inspectorParrySelection,
-                                sources: inspectorParryDefenderPhaseSummary?.parrySources,
-                              }),
-                            }
-                          : undefined;
-                      const projection = buildCombatRoundPhasePanelProjection({
-                        actionId: inspectorDisplayDraft.actionId,
-                        attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats,
-                        liveModifiers: inspectorIsHistorical
-                          ? undefined
-                          : phaseKey === inspectorResolutionPhase
-                            ? inspectorParryDefenderPhaseSummary?.liveModifiers
-                            : buildEncounterLiveCombatModifierSummary({
-                                combatContext: inspectorGeneratedCombatContext,
-                                combatEffects: selectedScenarioParticipant?.state.combatEffects,
-                                phaseKey,
-                              }),
-                        participantId: inspector.participant?.participantId,
-                        phaseCard,
-                        phaseContext: phaseCombatContext,
-                        phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats,
-                        phaseKey,
-                        secondaryActionId: inspectorDisplayDraft.secondaryActionId,
-                        selectedResolutionContext,
-                        selectedStep: inspector.step,
-                        snapshotAttackStats: historicalPhasePanel?.attackSummary,
-                        snapshotDefenseStats: historicalPhasePanel?.defenseSummary,
-                      });
-                      recordCombatPerformanceStage(
-                        "panel_phase_summary_presentation",
-                        combatPerformanceNow() - phaseProjectionStartedAt,
-                        { historical: inspectorIsHistorical, phaseKey },
+                        : undefined;
+                      const phaseSourceLabel = getCombatInspectorSourceLabel(
+                        inspectorIsHistorical ? "history" : "current",
                       );
-                      return projection;
-                    };
-                    const phaseProjection = !inspectorIsHistorical
-                      ? combatPresentation.active.inspectorPresentation.resolve({
-                          build: buildPhaseProjection,
-                          dependencies: [
-                            inspectorDisplayDraft.actionId,
-                            phaseLoadoutSummary,
-                            inspectorGeneratedCombatContext,
-                            selectedScenarioParticipant?.state.combatEffects,
-                            inspector.participant?.participantId,
-                            phaseCard,
-                            phaseCombatContext,
-                            phaseKey,
-                            inspectorDisplayDraft.secondaryActionId,
-                            inspectorResolutionPhase,
-                            inspectorResolutionAttackResult,
-                            inspectorResolutionStepKind,
-                            inspectorDisplayPhaseResolutionResult,
-                            inspectorParryBase,
-                            inspectorParryModifierCalculation,
-                            inspectorParrySelection,
-                            inspectorParryDefenderPhaseSummary?.parrySources,
-                            inspector.step,
-                          ],
-                          key: `phase-panel:${inspector.participant?.participantId ?? "none"}:${inspector.step}:${phaseKey}`,
-                        })
-                      : buildPhaseProjection();
-                    const phaseModel = phaseProjection.phaseModel;
+                      const phaseDistanceLabel = inspectorIsHistorical
+                        ? historicalPhasePanel?.distanceLabel
+                        : phaseTargetEncounterParticipant
+                          ? `Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`
+                          : undefined;
+                      const buildPhaseProjection = () => {
+                        const phaseProjectionStartedAt = combatPerformanceNow();
+                        const phaseDefenseStats = !inspectorIsHistorical
+                          ? buildPlayerCombatDefenseStats({
+                              mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                              offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                              phaseContext: phaseCombatContext,
+                              reference: phaseLoadoutSummary.reference,
+                            })
+                          : null;
+                        const selectedResolutionContext =
+                          !inspectorIsHistorical &&
+                          phaseKey === inspectorResolutionPhase &&
+                          inspector.participant?.participantId ===
+                            inspectorResolutionAttackResult?.defenderParticipantId &&
+                          (inspectorResolutionStepKind === "parry" ||
+                            inspectorResolutionStepKind === "damage") &&
+                          inspectorDisplayPhaseResolutionResult
+                            ? {
+                                attackResultId:
+                                  inspectorDisplayPhaseResolutionResult.attackResultId,
+                                parryBase: inspectorParryBase,
+                                parryModifierCalculation: inspectorParryModifierCalculation,
+                                parryResolution:
+                                  inspectorDisplayPhaseResolutionResult.parryResolution,
+                                parrySourceLabel: formatSelectedCombatParrySourceName({
+                                  selection: inspectorParrySelection,
+                                  sources: inspectorParrySources,
+                                }),
+                              }
+                            : undefined;
+                        const projection = buildCombatRoundPhasePanelProjection({
+                          actionId: inspectorDisplayDraft.actionId,
+                          attackStats: inspectorIsHistorical
+                            ? null
+                            : phaseLoadoutSummary.attackStats,
+                          liveModifiers: inspectorIsHistorical
+                            ? undefined
+                            : phaseKey === inspectorResolutionPhase
+                              ? inspectorParryDefenderPhaseSummary?.liveModifiers
+                              : buildEncounterLiveCombatModifierSummary({
+                                  combatContext: inspectorGeneratedCombatContext,
+                                  combatEffects: selectedScenarioParticipant?.state.combatEffects,
+                                  phaseKey,
+                                }),
+                          participantId: inspector.participant?.participantId,
+                          phaseCard,
+                          phaseContext: phaseCombatContext,
+                          phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats,
+                          phaseKey,
+                          secondaryActionId: inspectorDisplayDraft.secondaryActionId,
+                          selectedResolutionContext,
+                          selectedStep: inspector.step,
+                          snapshotAttackStats: historicalPhasePanel?.attackSummary,
+                          snapshotDefenseStats: historicalPhasePanel?.defenseSummary,
+                        });
+                        recordCombatPerformanceStage(
+                          "panel_phase_summary_presentation",
+                          combatPerformanceNow() - phaseProjectionStartedAt,
+                          { historical: inspectorIsHistorical, phaseKey },
+                        );
+                        return projection;
+                      };
+                      const phaseProjection = archivedPhaseProjection
+                        ? archivedPhaseProjection
+                        : !inspectorIsHistorical
+                          ? combatPresentation.active.inspectorPresentation.resolve({
+                              build: buildPhaseProjection,
+                              dependencies: [
+                                inspectorDisplayDraft.actionId,
+                                phaseLoadoutSummary,
+                                inspectorGeneratedCombatContext,
+                                selectedScenarioParticipant?.state.combatEffects,
+                                inspector.participant?.participantId,
+                                phaseCard,
+                                phaseCombatContext,
+                                phaseKey,
+                                inspectorDisplayDraft.secondaryActionId,
+                                inspectorResolutionPhase,
+                                inspectorResolutionAttackResult,
+                                inspectorResolutionStepKind,
+                                inspectorDisplayPhaseResolutionResult,
+                                inspectorParryBase,
+                                inspectorParryModifierCalculation,
+                                inspectorParrySelection,
+                                inspectorParrySources,
+                                inspector.step,
+                              ],
+                              key: `phase-panel:${inspector.participant?.participantId ?? "none"}:${inspector.step}:${phaseKey}`,
+                            })
+                          : buildPhaseProjection();
+                      const phaseModel = phaseProjection.phaseModel;
 
-                    /*
-                     * The phase projection is intentionally context-aware:
-                     * normal rows use phase-aware stats, while selected P/D
-                     * rows can replay the specific incoming attack's parry
-                     * context without leaking it into later actor views.
-                     */
+                      /*
+                       * The phase projection is intentionally context-aware:
+                       * normal rows use phase-aware stats, while selected P/D
+                       * rows can replay the specific incoming attack's parry
+                       * context without leaking it into later actor views.
+                       */
 
-                    return (
-                      <PlayerCombatPhasePanel
-                        key={phaseModel.phaseCard.phaseLabel}
-                        phaseCard={phaseCard}
-                        sourceLabel={phaseSourceLabel}
-                      >
-                        {inspectorIsHistorical && !historicalPhasePanel ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            No information available for this panel.
-                          </div>
-                        ) : inspectorDisplayDraft.actionId === "offensive_parry" &&
-                          phaseKey === "phase1" ? (
-                          <div style={{ display: "grid", gap: "0.65rem" }}>
-                            <PlayerCombatOpponentSelector
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              onSelectedOpponentChange={(selectedOpponentId) =>
-                                updateInspectorDraft({
-                                  combatContext: {
-                                    ...inspectorDisplayDraft.combatContext,
-                                    selectedOpponentId: selectedOpponentId || undefined,
-                                  },
-                                })
-                              }
-                              opponentOptions={inspectorTargetOptions}
-                              readOnly={inspectorIsHistorical}
-                              selectedOpponentId={
-                                inspectorDisplayDraft.combatContext.selectedOpponentId
-                              }
-                            />
-                          </div>
-                        ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
-                          phaseKey === "phase1" ? (
-                          <div style={{ display: "grid", gap: "0.65rem" }}>
-                            <PlayerCombatOpponentSelector
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              label="Opponent"
-                              onSelectedOpponentChange={(targetParticipantId) =>
-                                updateInspectorDraft({
-                                  secondaryActionContext: targetParticipantId
-                                    ? { action: "observe_opponent", targetParticipantId }
-                                    : undefined,
-                                })
-                              }
-                              opponentOptions={inspectorTargetOptions}
-                              readOnly={inspectorIsHistorical}
-                              selectedOpponentId={
-                                inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
-                              }
-                            />
-                            <PlayerCombatObservationProgress
-                              relationships={selectedTimelineRoundState.observationRelationships.filter(
-                                (relationship) =>
-                                  relationship.observerParticipantId ===
-                                  selectedEncounterParticipant?.id,
-                              )}
-                              targetLabels={Object.fromEntries(
-                                selectedTimelineRoundState.participants.map((participant) => [
-                                  participant.participantId,
-                                  participant.label,
-                                ]),
-                              )}
-                            />
-                          </div>
-                        ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
-                          phaseKey === "phase1" ? (
-                          <div style={{ display: "grid", gap: "0.65rem" }}>
-                            <PlayerCombatAttackTargetSelector
-                              combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              distanceLabel={phaseDistanceLabel}
-                              onCombatContextChange={(combatContext) =>
-                                updateInspectorDraft({
-                                  phaseContexts: {
-                                    phase1: combatContext,
-                                    phase2: {
-                                      ...inspectorDraft.phaseContexts.phase2,
-                                      targetParticipantId: combatContext.targetParticipantId,
-                                    },
-                                  },
-                                })
-                              }
-                              targetOptions={inspectorTargetOptions}
-                            />
-                            <label style={compactFieldLabelStyle}>
-                              <strong>Requested distance</strong>
-                              <select
-                                disabled={saving || inspectorIsHistorical}
-                                onChange={(event) => {
-                                  const targetParticipantId =
-                                    phaseModel.phaseContext.targetParticipantId;
-                                  if (!targetParticipantId) return;
-                                  updateInspectorDraft({
-                                    movementIntent: {
-                                      ...inspectorDraft.movementIntent,
-                                      distancePreferences: [
-                                        ...inspectorDraft.movementIntent.distancePreferences.filter(
-                                          (entry) =>
-                                            entry.targetParticipantId !== targetParticipantId,
-                                        ),
-                                        {
-                                          desiredDistance: Number(event.target.value) as
-                                            | 0
-                                            | 1
-                                            | 2
-                                            | 3
-                                            | 4
-                                            | 5
-                                            | 6
-                                            | 7
-                                            | 8,
-                                          source: "gm_proxy",
-                                          targetParticipantId,
-                                        },
-                                      ],
-                                    },
-                                  });
-                                }}
-                                value={
-                                  inspectorDraft.movementIntent.distancePreferences.find(
-                                    (entry) =>
-                                      entry.targetParticipantId ===
-                                      phaseModel.phaseContext.targetParticipantId,
-                                  )?.desiredDistance ??
-                                  inspectorDistancePreferenceOptions.find(
-                                    (option) =>
-                                      option.id === phaseModel.phaseContext.targetParticipantId,
-                                  )?.defaultDistance ??
-                                  2
-                                }
-                              >
-                                {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
-                                  <option key={distance} value={distance}>
-                                    {distance}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <div>Skill: Dodge</div>
-                            <div>The defender may oppose or allow the maneuver.</div>
-                          </div>
-                        ) : inspectorDisplayDraft.actionId === "feint_attack" &&
-                          phaseKey === "phase1" ? (
-                          <div style={{ display: "grid", gap: "0.65rem" }}>
-                            <PlayerCombatAttackTargetSelector
-                              combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              distanceLabel={phaseDistanceLabel}
-                              onCombatContextChange={(combatContext) =>
-                                updateInspectorDraft({
-                                  phaseContexts: {
-                                    phase1: combatContext,
-                                    phase2: {
-                                      ...inspectorDraft.phaseContexts.phase2,
-                                      targetParticipantId: combatContext.targetParticipantId,
-                                    },
-                                  },
-                                })
-                              }
-                              targetOptions={inspectorTargetOptions}
-                            />
-                            <label style={compactFieldLabelStyle}>
-                              <strong>Feint method</strong>
-                              <select
-                                disabled={saving || inspectorIsHistorical}
-                                onChange={(event) => {
-                                  const method =
-                                    event.target.value === "weapon" ? "weapon" : "movement";
-                                  updateInspectorDraft({
-                                    feintMethod: method,
-                                    feintSkillId: "dodge",
-                                  });
-                                }}
-                                value={inspectorDisplayDraft.feintMethod}
-                              >
-                                <option value="movement">Movement</option>
-                                <option value="weapon">Weapon</option>
-                              </select>
-                            </label>
-                            <div>
-                              <strong>Skill:</strong>{" "}
-                              {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
+                      return (
+                        <PlayerCombatPhasePanel
+                          key={phaseModel.phaseCard.phaseLabel}
+                          phaseCard={phaseCard}
+                          sourceLabel={phaseSourceLabel}
+                        >
+                          {inspectorIsHistorical && !historicalPhasePanel ? (
+                            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                              No information available for this panel.
                             </div>
-                            <div>Characteristic: Dexterity</div>
-                            <div>Defender: highest close-combat skill · Intelligence</div>
-                            {inspectorDisplayDraft.feintMethod === "weapon" &&
-                            phaseModel.attackStats ? (
-                              <>
-                                <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                                <PlayerCombatAttackModeSelector
-                                  controlsDisabled={saving || inspectorIsHistorical}
-                                  emptyState={
-                                    inspectorIsHistorical
-                                      ? undefined
-                                      : phaseLoadoutSummary.attackModeUnavailableMessage
-                                  }
-                                  onChange={(attackModeId) =>
-                                    updateInspectorDraft({
-                                      phaseContexts: {
-                                        ...inspectorDraft.phaseContexts,
-                                        phase1: {
-                                          ...inspectorDraft.phaseContexts.phase1,
-                                          attackModeId,
-                                        },
+                          ) : inspectorDisplayDraft.actionId === "offensive_parry" &&
+                            phaseKey === "phase1" ? (
+                            <div style={{ display: "grid", gap: "0.65rem" }}>
+                              <PlayerCombatOpponentSelector
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                onSelectedOpponentChange={(selectedOpponentId) =>
+                                  updateInspectorDraft({
+                                    combatContext: {
+                                      ...inspectorDisplayDraft.combatContext,
+                                      selectedOpponentId: selectedOpponentId || undefined,
+                                    },
+                                  })
+                                }
+                                opponentOptions={inspectorTargetOptions}
+                                readOnly={inspectorIsHistorical}
+                                selectedOpponentId={
+                                  inspectorDisplayDraft.combatContext.selectedOpponentId
+                                }
+                              />
+                            </div>
+                          ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
+                            phaseKey === "phase1" ? (
+                            <div style={{ display: "grid", gap: "0.65rem" }}>
+                              <PlayerCombatOpponentSelector
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                label="Opponent"
+                                onSelectedOpponentChange={(targetParticipantId) =>
+                                  updateInspectorDraft({
+                                    secondaryActionContext: targetParticipantId
+                                      ? { action: "observe_opponent", targetParticipantId }
+                                      : undefined,
+                                  })
+                                }
+                                opponentOptions={inspectorTargetOptions}
+                                readOnly={inspectorIsHistorical}
+                                selectedOpponentId={
+                                  inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
+                                }
+                              />
+                              <PlayerCombatObservationProgress
+                                relationships={selectedTimelineRoundState.observationRelationships.filter(
+                                  (relationship) =>
+                                    relationship.observerParticipantId ===
+                                    selectedEncounterParticipant?.id,
+                                )}
+                                targetLabels={Object.fromEntries(
+                                  selectedTimelineRoundState.participants.map((participant) => [
+                                    participant.participantId,
+                                    participant.label,
+                                  ]),
+                                )}
+                              />
+                            </div>
+                          ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
+                            phaseKey === "phase1" ? (
+                            <div style={{ display: "grid", gap: "0.65rem" }}>
+                              <PlayerCombatAttackTargetSelector
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                distanceLabel={phaseDistanceLabel}
+                                onCombatContextChange={(combatContext) =>
+                                  updateInspectorDraft({
+                                    phaseContexts: {
+                                      phase1: combatContext,
+                                      phase2: {
+                                        ...inspectorDraft.phaseContexts.phase2,
+                                        targetParticipantId: combatContext.targetParticipantId,
                                       },
-                                    })
+                                    },
+                                  })
+                                }
+                                targetOptions={inspectorTargetOptions}
+                              />
+                              <label style={compactFieldLabelStyle}>
+                                <strong>Requested distance</strong>
+                                <select
+                                  disabled={saving || inspectorIsHistorical}
+                                  onChange={(event) => {
+                                    const targetParticipantId =
+                                      phaseModel.phaseContext.targetParticipantId;
+                                    if (!targetParticipantId) return;
+                                    updateInspectorDraft({
+                                      movementIntent: {
+                                        ...inspectorDraft.movementIntent,
+                                        distancePreferences: [
+                                          ...inspectorDraft.movementIntent.distancePreferences.filter(
+                                            (entry) =>
+                                              entry.targetParticipantId !== targetParticipantId,
+                                          ),
+                                          {
+                                            desiredDistance: Number(event.target.value) as
+                                              | 0
+                                              | 1
+                                              | 2
+                                              | 3
+                                              | 4
+                                              | 5
+                                              | 6
+                                              | 7
+                                              | 8,
+                                            source: "gm_proxy",
+                                            targetParticipantId,
+                                          },
+                                        ],
+                                      },
+                                    });
+                                  }}
+                                  value={
+                                    inspectorDraft.movementIntent.distancePreferences.find(
+                                      (entry) =>
+                                        entry.targetParticipantId ===
+                                        phaseModel.phaseContext.targetParticipantId,
+                                    )?.desiredDistance ??
+                                    inspectorDistancePreferenceOptions.find(
+                                      (option) =>
+                                        option.id === phaseModel.phaseContext.targetParticipantId,
+                                    )?.defaultDistance ??
+                                    2
                                   }
-                                  options={phaseLoadoutSummary.attackModeOptions}
-                                  selectedAttackModeId={phaseModel.phaseContext.attackModeId}
-                                />
-                              </>
-                            ) : null}
-                          </div>
-                        ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
-                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                        ) : null}
-                        {(!inspectorIsHistorical || historicalPhasePanel) &&
-                        phaseModel.showAttackLocationSelector &&
-                        !(
-                            inspectorDisplayDraft.actionId === "feint_attack" &&
-                            phaseKey === "phase1"
-                        ) ? (
-                          <>
-                            <PlayerCombatAttackTargetSelector
-                              combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              distanceLabel={phaseDistanceLabel}
-                              onCombatContextChange={(combatContext) =>
-                                updateInspectorDraft({
-                                  phaseContexts:
-                                    (inspectorDisplayDraft.actionId === "feint_attack" ||
-                                      inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                    phaseKey === "phase2"
-                                      ? {
+                                >
+                                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                                    <option key={distance} value={distance}>
+                                      {distance}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <div>Skill: Dodge</div>
+                              <div>The defender may oppose or allow the maneuver.</div>
+                            </div>
+                          ) : inspectorDisplayDraft.actionId === "feint_attack" &&
+                            phaseKey === "phase1" ? (
+                            <div style={{ display: "grid", gap: "0.65rem" }}>
+                              <PlayerCombatAttackTargetSelector
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                distanceLabel={phaseDistanceLabel}
+                                onCombatContextChange={(combatContext) =>
+                                  updateInspectorDraft({
+                                    phaseContexts: {
+                                      phase1: combatContext,
+                                      phase2: {
+                                        ...inspectorDraft.phaseContexts.phase2,
+                                        targetParticipantId: combatContext.targetParticipantId,
+                                      },
+                                    },
+                                  })
+                                }
+                                targetOptions={inspectorTargetOptions}
+                              />
+                              <label style={compactFieldLabelStyle}>
+                                <strong>Feint method</strong>
+                                <select
+                                  disabled={saving || inspectorIsHistorical}
+                                  onChange={(event) => {
+                                    const method =
+                                      event.target.value === "weapon" ? "weapon" : "movement";
+                                    updateInspectorDraft({
+                                      feintMethod: method,
+                                      feintSkillId: "dodge",
+                                    });
+                                  }}
+                                  value={inspectorDisplayDraft.feintMethod}
+                                >
+                                  <option value="movement">Movement</option>
+                                  <option value="weapon">Weapon</option>
+                                </select>
+                              </label>
+                              <div>
+                                <strong>Skill:</strong>{" "}
+                                {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
+                              </div>
+                              <div>Characteristic: Dexterity</div>
+                              <div>Defender: highest close-combat skill · Intelligence</div>
+                              {inspectorDisplayDraft.feintMethod === "weapon" &&
+                              phaseModel.attackStats ? (
+                                <>
+                                  <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                                  <PlayerCombatAttackModeSelector
+                                    controlsDisabled={saving || inspectorIsHistorical}
+                                    emptyState={
+                                      inspectorIsHistorical
+                                        ? undefined
+                                        : phaseLoadoutSummary.attackModeUnavailableMessage
+                                    }
+                                    onChange={(attackModeId) =>
+                                      updateInspectorDraft({
+                                        phaseContexts: {
+                                          ...inspectorDraft.phaseContexts,
                                           phase1: {
                                             ...inspectorDraft.phaseContexts.phase1,
+                                            attackModeId,
+                                          },
+                                        },
+                                      })
+                                    }
+                                    options={phaseLoadoutSummary.attackModeOptions}
+                                    selectedAttackModeId={phaseModel.phaseContext.attackModeId}
+                                  />
+                                </>
+                              ) : null}
+                            </div>
+                          ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
+                            <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                          ) : null}
+                          {(!inspectorIsHistorical || historicalPhasePanel) &&
+                          phaseModel.showAttackLocationSelector &&
+                          !(
+                            inspectorDisplayDraft.actionId === "feint_attack" &&
+                            phaseKey === "phase1"
+                          ) ? (
+                            <>
+                              <PlayerCombatAttackTargetSelector
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                distanceLabel={phaseDistanceLabel}
+                                onCombatContextChange={(combatContext) =>
+                                  updateInspectorDraft({
+                                    phaseContexts:
+                                      (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                        inspectorDisplayDraft.actionId === "adjust_range_attack") &&
+                                      phaseKey === "phase2"
+                                        ? {
+                                            phase1: {
+                                              ...inspectorDraft.phaseContexts.phase1,
                                               targetParticipantId:
                                                 combatContext.targetParticipantId,
+                                            },
+                                            phase2: combatContext,
+                                          }
+                                        : {
+                                            ...inspectorDraft.phaseContexts,
+                                            [phaseKey]: combatContext,
                                           },
-                                          phase2: combatContext,
-                                        }
-                                      : {
-                                          ...inspectorDraft.phaseContexts,
-                                          [phaseKey]: combatContext,
-                                        },
-                                })
-                              }
-                              readOnly={
-                                (inspectorDisplayDraft.actionId === "feint_attack" ||
-                                  inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                phaseKey === "phase2"
-                              }
-                              targetOptions={
-                                historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
-                              }
-                            />
-                            <PlayerCombatAttackLocationSelector
-                              combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              onCombatContextChange={(combatContext) =>
-                                updateInspectorDraft({
-                                  phaseContexts: {
-                                    ...inspectorDraft.phaseContexts,
-                                    [phaseKey]: combatContext,
-                                  },
-                                })
-                              }
-                            />
-                            <PlayerCombatAttackModeSelector
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              emptyState={
-                                inspectorIsHistorical
-                                  ? undefined
-                                  : phaseLoadoutSummary.attackModeUnavailableMessage
-                              }
-                              onChange={(attackModeId) =>
-                                updateInspectorDraft({
-                                  phaseContexts: {
-                                    ...inspectorDraft.phaseContexts,
-                                    [phaseKey]: {
-                                      ...inspectorDraft.phaseContexts[phaseKey],
-                                      attackModeId,
-                                    },
-                                  },
-                                })
-                              }
-                              options={
-                                inspectorIsHistorical
-                                  ? phaseCombatContext.attackModeId
-                                    ? [
-                                        {
-                                          id: phaseCombatContext.attackModeId,
-                                          label:
-                                            historicalPhasePanel?.attackModeLabel ??
-                                            phaseCombatContext.attackModeId,
-                                        },
-                                      ]
-                                    : []
-                                  : phaseLoadoutSummary.attackModeOptions
-                              }
-                              selectedAttackModeId={
-                                inspectorIsHistorical
-                                  ? phaseCombatContext.attackModeId
-                                  : phaseModel.phaseContext.attackModeId
-                              }
-                            />
-                          </>
-                        ) : null}
-                        {(!inspectorIsHistorical || historicalPhasePanel) &&
-                        phaseModel.showDefenseContext ? (
-                          <>
-                            {phaseModel.defenseStats ? (
-                              <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
-                            ) : (
-                              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                                Defense information unavailable.
-                              </div>
-                            )}
-                            <PlayerCombatParryContextPanel
-                              combatContext={phaseModel.phaseContext}
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              mainHandItemLabel={
-                                historicalPhasePanel?.mainHandParryItemLabel ??
-                                phaseLoadoutSummary.mainHandParryItemLabel
-                              }
-                              offHandItemLabel={
-                                historicalPhasePanel?.offHandParryItemLabel ??
-                                phaseLoadoutSummary.offHandParryItemLabel
-                              }
-                              onCombatContextChange={(combatContext) =>
-                                updateInspectorDraft({
-                                  phaseContexts: {
-                                    ...inspectorDraft.phaseContexts,
-                                    [phaseKey]: combatContext,
-                                  },
-                                })
-                              }
-                            />
-                          </>
-                        ) : null}
-                      </PlayerCombatPhasePanel>
-                    );
-                  })}
-                </div>
-
-                <div style={playerCombatPanelRowStyle}>
-                  {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? (
-                    <section style={playerCombatPanelCardStyle}>
-                      <strong>Combat modifiers · History</strong>
-                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                        No information available for this panel.
-                      </div>
-                    </section>
-                  ) : (
-                    <PlayerCombatModifierPanel
-                      controlsDisabled={saving}
-                      onAddEntry={(bucketKey, entry) =>
-                        updateInspectorModifierBucket(bucketKey, (current) => [
-                          ...current,
-                          entry ?? createModifierEntryDraft(),
-                        ])
-                      }
-                      onRemoveEntry={(bucketKey, entryId) =>
-                        updateInspectorModifierBucket(bucketKey, (current) =>
-                          current.filter((entry) => entry.id !== entryId),
-                        )
-                      }
-                      onUpdateEntry={(bucketKey, entryId, patch) =>
-                        updateInspectorModifierBucket(bucketKey, (current) =>
-                          current.map((entry) =>
-                            entry.id === entryId
-                              ? {
-                                  ...entry,
-                                  ...patch,
+                                  })
                                 }
-                              : entry,
-                          ),
-                        )
-                      }
-                      readOnly={inspectorIsHistorical}
-                      pendingActivationLabel={
-                        combatProgressionProjection.executionOrder?.currentInitiativeValue !==
-                        undefined
-                          ? `Effective after Initiative ${combatProgressionProjection.executionOrder.currentInitiativeValue} finishes`
-                          : undefined
-                      }
+                                readOnly={
+                                  (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                    inspectorDisplayDraft.actionId === "adjust_range_attack") &&
+                                  phaseKey === "phase2"
+                                }
+                                targetOptions={
+                                  historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
+                                }
+                              />
+                              <PlayerCombatAttackLocationSelector
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                onCombatContextChange={(combatContext) =>
+                                  updateInspectorDraft({
+                                    phaseContexts: {
+                                      ...inspectorDraft.phaseContexts,
+                                      [phaseKey]: combatContext,
+                                    },
+                                  })
+                                }
+                              />
+                              <PlayerCombatAttackModeSelector
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                emptyState={
+                                  inspectorIsHistorical
+                                    ? undefined
+                                    : phaseLoadoutSummary.attackModeUnavailableMessage
+                                }
+                                onChange={(attackModeId) =>
+                                  updateInspectorDraft({
+                                    phaseContexts: {
+                                      ...inspectorDraft.phaseContexts,
+                                      [phaseKey]: {
+                                        ...inspectorDraft.phaseContexts[phaseKey],
+                                        attackModeId,
+                                      },
+                                    },
+                                  })
+                                }
+                                options={
+                                  inspectorIsHistorical
+                                    ? phaseCombatContext.attackModeId
+                                      ? [
+                                          {
+                                            id: phaseCombatContext.attackModeId,
+                                            label:
+                                              historicalPhasePanel?.attackModeLabel ??
+                                              phaseCombatContext.attackModeId,
+                                          },
+                                        ]
+                                      : []
+                                    : phaseLoadoutSummary.attackModeOptions
+                                }
+                                selectedAttackModeId={
+                                  inspectorIsHistorical
+                                    ? phaseCombatContext.attackModeId
+                                    : phaseModel.phaseContext.attackModeId
+                                }
+                              />
+                            </>
+                          ) : null}
+                          {(!inspectorIsHistorical || historicalPhasePanel) &&
+                          phaseModel.showDefenseContext ? (
+                            <>
+                              {phaseModel.defenseStats ? (
+                                <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                              ) : (
+                                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                  Defense information unavailable.
+                                </div>
+                              )}
+                              <PlayerCombatParryContextPanel
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
+                                mainHandItemLabel={
+                                  historicalPhasePanel?.mainHandParryItemLabel ??
+                                  phaseLoadoutSummary.mainHandParryItemLabel
+                                }
+                                offHandItemLabel={
+                                  historicalPhasePanel?.offHandParryItemLabel ??
+                                  phaseLoadoutSummary.offHandParryItemLabel
+                                }
+                                onCombatContextChange={(combatContext) =>
+                                  updateInspectorDraft({
+                                    phaseContexts: {
+                                      ...inspectorDraft.phaseContexts,
+                                      [phaseKey]: combatContext,
+                                    },
+                                  })
+                                }
+                              />
+                            </>
+                          ) : null}
+                        </PlayerCombatPhasePanel>
+                      );
+                    })}
+                  </div>
+
+                  <div style={playerCombatPanelRowStyle}>
+                    {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? (
+                      <section style={playerCombatPanelCardStyle}>
+                        <strong>Combat modifiers · History</strong>
+                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          No information available for this panel.
+                        </div>
+                      </section>
+                    ) : (
+                      <PlayerCombatModifierPanel
+                        controlsDisabled={saving}
+                        onAddEntry={(bucketKey, entry) =>
+                          updateInspectorModifierBucket(bucketKey, (current) => [
+                            ...current,
+                            entry ?? createModifierEntryDraft(),
+                          ])
+                        }
+                        onRemoveEntry={(bucketKey, entryId) =>
+                          updateInspectorModifierBucket(bucketKey, (current) =>
+                            current.filter((entry) => entry.id !== entryId),
+                          )
+                        }
+                        onUpdateEntry={(bucketKey, entryId, patch) =>
+                          updateInspectorModifierBucket(bucketKey, (current) =>
+                            current.map((entry) =>
+                              entry.id === entryId
+                                ? {
+                                    ...entry,
+                                    ...patch,
+                                  }
+                                : entry,
+                            ),
+                          )
+                        }
+                        readOnly={inspectorIsHistorical}
+                        pendingActivationLabel={
+                          combatProgressionProjection.executionOrder?.currentInitiativeValue !==
+                          undefined
+                            ? `Effective after Initiative ${combatProgressionProjection.executionOrder.currentInitiativeValue} finishes`
+                            : undefined
+                        }
                         pendingEntries={
                           inspectorIsHistorical ? [] : inspectorPendingModifierEntries
                         }
-                      rows={inspectorDisplayModifierRows}
-                      sourceLabel={inspectorModifierSourceLabel}
-                      observationRelationships={selectedTimelineRoundState.observationRelationships.filter(
-                        (relationship) =>
-                          relationship.observerParticipantId === selectedEncounterParticipant?.id,
-                      )}
-                      observationTargetLabels={Object.fromEntries(
-                        selectedTimelineRoundState.participants.map((participant) => [
-                          participant.participantId,
-                          participant.label,
-                        ]),
-                      )}
-                    />
-                  )}
-                  <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {showInspectorInitiativeContextPanel ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Initiative</strong>
-                        <div
-                          style={{
-                            color: "#5e5a50",
-                            display: "grid",
-                            fontSize: "0.85rem",
-                            gap: "0.2rem",
-                          }}
-                        >
+                        rows={inspectorDisplayModifierRows}
+                        sourceLabel={inspectorModifierSourceLabel}
+                        observationRelationships={selectedTimelineRoundState.observationRelationships.filter(
+                          (relationship) =>
+                            relationship.observerParticipantId === selectedEncounterParticipant?.id,
+                        )}
+                        observationTargetLabels={Object.fromEntries(
+                          selectedTimelineRoundState.participants.map((participant) => [
+                            participant.participantId,
+                            participant.label,
+                          ]),
+                        )}
+                      />
+                    )}
+                    <div style={{ display: "grid", gap: "0.75rem" }}>
+                      {showInspectorInitiativeContextPanel ? (
+                        <section style={playerCombatPanelCardStyle}>
+                          <strong>Initiative</strong>
+                          <div
+                            style={{
+                              color: "#5e5a50",
+                              display: "grid",
+                              fontSize: "0.85rem",
+                              gap: "0.2rem",
+                            }}
+                          >
                             <div>
                               Base initiative {inspectorInitiativeCalculation.baseInitiative}
                             </div>
-                          <div>
-                            Initiative modifiers{" "}
-                            {inspectorInitiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
-                            {inspectorInitiativeCalculation.rawModifierTotal}
+                            <div>
+                              Initiative modifiers{" "}
+                              {inspectorInitiativeCalculation.rawModifierTotal >= 0 ? "+" : ""}
+                              {inspectorInitiativeCalculation.rawModifierTotal}
+                            </div>
+                            <div>
+                              Effective before roll{" "}
+                              {inspectorInitiativeCalculation.modifiedInitiative}
+                              {inspectorInitiativeCalculation.modifierAdjustment !== 0
+                                ? ` (${inspectorInitiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${inspectorInitiativeCalculation.modifierAdjustment})`
+                                : ""}
+                            </div>
+                            {inspectorInitiativeRollCounts ? (
+                              <div>
+                                Pending rolls: {inspectorInitiativeRollCounts.pending} of{" "}
+                                {inspectorInitiativeRollCounts.total}
+                              </div>
+                            ) : null}
+                            {inspectorDisplayInitiative ? (
+                              <div style={{ color: "#3f5f46" }}>
+                                {inspectorDisplayInitiativeResolutionType === "bulk_skipped"
+                                  ? "Initiative bulk skipped by GM · effective 0."
+                                  : inspectorDisplayInitiativeResolutionType === "gm_skipped"
+                                    ? "Initiative skipped by GM · effective 0."
+                                    : `Rolled initiative ${inspectorDisplayInitiative.total}.`}
+                              </div>
+                            ) : null}
                           </div>
-                          <div>
-                            Effective before roll{" "}
-                            {inspectorInitiativeCalculation.modifiedInitiative}
-                            {inspectorInitiativeCalculation.modifierAdjustment !== 0
-                              ? ` (${inspectorInitiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${inspectorInitiativeCalculation.modifierAdjustment})`
+                        </section>
+                      ) : null}
+                      {showInspectorPhaseCombatExperienceContextPanel ? (
+                        <section style={playerCombatPanelCardStyle}>
+                          <strong>Phase Combat Experience</strong>
+                          <div
+                            style={{
+                              color: "#5e5a50",
+                              display: "grid",
+                              fontSize: "0.85rem",
+                              gap: "0.2rem",
+                            }}
+                          >
+                            {inspectorPhaseInitiativeChoice ? (
+                              <div>Phase choice submitted. Waiting for GM commit.</div>
+                            ) : (
+                              <>
+                                <div>
+                                  {inspectorPhaseCombatExperienceRollRequired
+                                    ? "CE roll required — attacked while attacking."
+                                    : "No CE roll required — back-out available."}
+                                </div>
+                                <div>Effective CE {inspectorCombatExperienceSkillTotal}</div>
+                                {inspectorPhaseCombatExperienceThreats.length > 0 ? (
+                                  <div>
+                                    Incoming attacker(s):{" "}
+                                    {inspectorPhaseCombatExperienceThreats
+                                      .map((threat) => {
+                                        const attacker = roundState.participants.find(
+                                          (participant) =>
+                                            participant.participantId ===
+                                            threat.attackerParticipantId,
+                                        );
+
+                                        return attacker?.label ?? threat.attackerParticipantId;
+                                      })
+                                      .join(", ")}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
+                        </section>
+                      ) : null}
+                      {showInspectorModifierReviewContextPanel ? (
+                        <section style={playerCombatPanelCardStyle}>
+                          <strong>Modifier review</strong>
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            Review generated and manual modifiers before advancing.
+                          </div>
+                        </section>
+                      ) : null}
+                      {showInspectorCombatStartExperienceContextPanel ? (
+                        <section style={playerCombatPanelCardStyle}>
+                          <strong>Combat Experience</strong>
+                          <div>{formatCombatExperienceStatus(inspectorCombatExperienceResult)}</div>
+                          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+                            Skill total {inspectorCombatExperienceSkillTotal}
+                          </div>
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            {inspectorCombatExperienceWindowOpen
+                              ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
+                              : "Waiting for GM to start CE."}
+                            {combatExperienceRollRecorded
+                              ? " Difficulty locked after the first CE result."
                               : ""}
                           </div>
-                          {inspectorInitiativeRollCounts ? (
-                            <div>
-                              Pending rolls: {inspectorInitiativeRollCounts.pending} of{" "}
-                              {inspectorInitiativeRollCounts.total}
+                          {inspectorCombatExperienceSkillLookup.warning ? (
+                            <div style={{ color: "#8a4f21", fontSize: "0.85rem" }}>
+                              {inspectorCombatExperienceSkillLookup.warning}
                             </div>
                           ) : null}
-                          {inspectorDisplayInitiative ? (
-                            <div style={{ color: "#3f5f46" }}>
-                              {inspectorDisplayInitiativeResolutionType === "bulk_skipped"
-                                ? "Initiative bulk skipped by GM · effective 0."
-                                : inspectorDisplayInitiativeResolutionType === "gm_skipped"
-                                  ? "Initiative skipped by GM · effective 0."
-                                  : `Rolled initiative ${inspectorDisplayInitiative.total}.`}
-                            </div>
-                          ) : null}
-                        </div>
-                      </section>
-                    ) : null}
-                    {showInspectorPhaseCombatExperienceContextPanel ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Phase Combat Experience</strong>
-                        <div
-                          style={{
-                            color: "#5e5a50",
-                            display: "grid",
-                            fontSize: "0.85rem",
-                            gap: "0.2rem",
-                          }}
-                        >
-                          {inspectorPhaseInitiativeChoice ? (
-                            <div>Phase choice submitted. Waiting for GM commit.</div>
-                          ) : (
-                            <>
-                              <div>
-                                {inspectorPhaseCombatExperienceRollRequired
-                                  ? "CE roll required — attacked while attacking."
-                                  : "No CE roll required — back-out available."}
-                              </div>
-                              <div>Effective CE {inspectorCombatExperienceSkillTotal}</div>
-                              {inspectorPhaseCombatExperienceThreats.length > 0 ? (
-                                <div>
-                                  Incoming attacker(s):{" "}
-                                  {inspectorPhaseCombatExperienceThreats
-                                    .map((threat) => {
-                                      const attacker = roundState.participants.find(
-                                        (participant) =>
-                                          participant.participantId ===
-                                          threat.attackerParticipantId,
-                                      );
-
-                                      return attacker?.label ?? threat.attackerParticipantId;
-                                    })
-                                    .join(", ")}
-                                </div>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                      </section>
-                    ) : null}
-                    {showInspectorModifierReviewContextPanel ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Modifier review</strong>
-                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                          Review generated and manual modifiers before advancing.
-                        </div>
-                      </section>
-                    ) : null}
-                    {showInspectorCombatStartExperienceContextPanel ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Combat Experience</strong>
-                        <div>{formatCombatExperienceStatus(inspectorCombatExperienceResult)}</div>
-                        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-                          Skill total {inspectorCombatExperienceSkillTotal}
-                        </div>
-                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                          {inspectorCombatExperienceWindowOpen
-                            ? `Open at difficulty ${activeCombatExperienceDifficulty}.`
-                            : "Waiting for GM to start CE."}
-                          {combatExperienceRollRecorded
-                            ? " Difficulty locked after the first CE result."
-                            : ""}
-                        </div>
-                        {inspectorCombatExperienceSkillLookup.warning ? (
-                          <div style={{ color: "#8a4f21", fontSize: "0.85rem" }}>
-                            {inspectorCombatExperienceSkillLookup.warning}
-                          </div>
-                        ) : null}
-                      </section>
-                    ) : null}
-                    {inspectorResolutionStepKind === "parry" &&
-                    inspectorResolutionAttackResult?.hit &&
-                    inspectorDisplayPhaseResolutionResult &&
-                    inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
-                      "not_applicable" ? (
-                      <CombatParryResolutionPanel
-                        attackResult={inspectorResolutionAttackResult}
-                        controlsDisabled={
-                          saving ||
-                          inspectorIsInspectionOnly ||
-                          Boolean(inspectorSnapshot) ||
-                          inspectorDisplayPhaseResolutionResult.parryResolution.status ===
-                            "resolved"
-                        }
-                        modifierAdjustment={inspectorParryModifierAdjustment}
-                        modifierBreakdown={inspectorParryModifierBreakdown}
-                        onSelectionChange={(selection) => {
-                          if (!inspectorParrySelectionKey) {
-                            return;
-                          }
-
-                          setParrySourceSelections((current) => ({
-                            ...current,
-                            [inspectorParrySelectionKey]: selection,
-                          }));
-                        }}
-                        parryBase={inspectorParryBase}
-                        resolution={inspectorDisplayPhaseResolutionResult.parryResolution}
-                        selection={inspectorParrySelection}
-                        sources={inspectorParryDefenderPhaseSummary?.parrySources}
-                      />
-                    ) : null}
-                    {inspectorDamageProposalReady && displayedDamageResolution?.damageResult ? (
-                      <CombatDamageReviewPanel
-                        attackerLabel={inspectorDamageAttackerLabel}
-                        commitReadiness={inspectorDamageReviewCommitReadiness}
-                        controlsDisabled={
-                          saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
-                        }
-                        damageResult={displayedDamageResolution.damageResult}
-                        defenderLabel={inspectorDamageDefenderLabel}
-                        draft={inspectorDamageReviewDraft}
-                        onDraftChange={(draft) => {
-                          if (!inspectorDamageReviewKey) {
-                            return;
-                          }
-
-                          setDamageReviewDrafts((current) => ({
-                            ...current,
-                            [inspectorDamageReviewKey]: draft,
-                          }));
-                        }}
-                        onSaveReview={() => void saveInspectorDamageReview()}
-                        saving={saving}
-                      />
-                    ) : null}
-                    {inspector.step === "round_summary" ? (
-                      <>
-                        {inspectorRoundEndDistanceControlComplete ? (
-                          <CombatRoundEndParticipantReviewPanel
-                            controlsDisabled={saving || inspectorIsInspectionOnly}
-                            difficultyDrafts={roundEndHealthDifficultyDrafts}
-                            onDifficultyDraftChange={(healthRollId, value) =>
-                              setRoundEndHealthDifficultyDrafts((current) => ({
-                                ...current,
-                                [healthRollId]: value,
-                              }))
-                            }
-                            observationPending={
-                              inspectorRoundEndTask?.kind === "observation_roll" &&
-                              inspectorRoundEndTask.owner?.kind === "combatant" &&
-                              inspectorRoundEndTask.owner.participantId ===
-                                inspector.participant?.participantId
-                            }
-                            participantLabel={inspector.participant?.label}
-                            review={inspectorRoundEndReview}
-                          />
-                        ) : null}
-                        <CombatRoundEndDistanceControlPanel
-                          participantLabelsById={roundParticipantLabelsById}
-                          roundReview={selectedTimelineRoundState.roundEndReview}
-                        />
-                      </>
-                    ) : null}
-                    <PlayerCombatActionButtonPanel
-                      disabled={inspectorEffectiveActionButtonDisabled}
-                      onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
-                        invokeGmCurrentAction(descriptor);
-                      }}
-                      preActionControls={
-                        inspectorSelectionIsCurrentProgression
-                          ? inspectorPreActionControls
-                          : undefined
-                      }
-                      presentation={
-                        inspector.participant?.declaration
-                          ? labelCurrentActionAsDeclarationEdit({
-                              participantId: inspector.participant.participantId,
-                              presentation: inspectorWorkflowPresentation,
-                            })
-                          : inspectorWorkflowPresentation
-                      }
-                      saving={saving}
-                      statusText={
-                        projectedBoundaryTransitionAction
-                          ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
-                              projectedBoundaryTransitionAction.targetBoundary,
-                            )}.`
-                          : inspectorIsHistorical
-                            ? `Historical step: ${
-                                inspectorHistoricalStepOutcome?.message ??
-                                `${getPlayerCombatStepLabel(inspector.step)}.`
-                              }`
-                            : `Current step: ${getPlayerCombatStepLabel(
-                                inspector.step,
-                              )}.${inspectorStatusSuffix}`
-                      }
-                      validationMessage={inspectorActionValidationMessage}
-                    />
-                  </div>
-                  {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
-                    <CombatEventResultList
-                      events={inspectorCanonicalActionResultEvents}
-                      title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
-                    />
-                  ) : inspectorIsHistorical && inspectorHistoricalActionResult ? (
-                    <div style={{ display: "grid", gap: "0.3rem" }}>
-                      {inspectorShowsLegacyResultFallback ? (
-                        <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
-                          Some historical result details are unavailable.
-                        </div>
+                        </section>
                       ) : null}
-                      <PlayerCombatActionResultPanel
-                        result={inspectorHistoricalActionResult}
-                        title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
+                      {inspectorResolutionStepKind === "parry" &&
+                      inspectorResolutionAttackResult?.hit &&
+                      inspectorDisplayPhaseResolutionResult &&
+                      inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
+                        "not_applicable" ? (
+                        <CombatParryResolutionPanel
+                          attackResult={inspectorResolutionAttackResult}
+                          controlsDisabled={
+                            saving ||
+                            inspectorIsInspectionOnly ||
+                            Boolean(inspectorSnapshot) ||
+                            inspectorDisplayPhaseResolutionResult.parryResolution.status ===
+                              "resolved"
+                          }
+                          modifierAdjustment={inspectorParryModifierAdjustment}
+                          modifierBreakdown={inspectorParryModifierBreakdown}
+                          onSelectionChange={(selection) => {
+                            if (!inspectorParrySelectionKey) {
+                              return;
+                            }
+
+                            setParrySourceSelections((current) => ({
+                              ...current,
+                              [inspectorParrySelectionKey]: selection,
+                            }));
+                          }}
+                          parryBase={inspectorParryBase}
+                          resolution={inspectorDisplayPhaseResolutionResult.parryResolution}
+                          selection={inspectorParrySelection}
+                          sources={inspectorParrySources}
+                        />
+                      ) : null}
+                      {inspectorDamageProposalReady && displayedDamageResolution?.damageResult ? (
+                        <CombatDamageReviewPanel
+                          attackerLabel={inspectorDamageAttackerLabel}
+                          commitReadiness={inspectorDamageReviewCommitReadiness}
+                          controlsDisabled={
+                            saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
+                          }
+                          damageResult={displayedDamageResolution.damageResult}
+                          defenderLabel={inspectorDamageDefenderLabel}
+                          draft={inspectorDamageReviewDraft}
+                          onDraftChange={(draft) => {
+                            if (!inspectorDamageReviewKey) {
+                              return;
+                            }
+
+                            setDamageReviewDrafts((current) => ({
+                              ...current,
+                              [inspectorDamageReviewKey]: draft,
+                            }));
+                          }}
+                          onSaveReview={() => void saveInspectorDamageReview()}
+                          saving={saving}
+                        />
+                      ) : null}
+                      {inspector.step === "round_summary" ? (
+                        <>
+                          {inspectorRoundEndDistanceControlComplete ? (
+                            <CombatRoundEndParticipantReviewPanel
+                              controlsDisabled={saving || inspectorIsInspectionOnly}
+                              difficultyDrafts={roundEndHealthDifficultyDrafts}
+                              onDifficultyDraftChange={(healthRollId, value) =>
+                                setRoundEndHealthDifficultyDrafts((current) => ({
+                                  ...current,
+                                  [healthRollId]: value,
+                                }))
+                              }
+                              observationPending={
+                                inspectorRoundEndTask?.kind === "observation_roll" &&
+                                inspectorRoundEndTask.owner?.kind === "combatant" &&
+                                inspectorRoundEndTask.owner.participantId ===
+                                  inspector.participant?.participantId
+                              }
+                              participantLabel={inspector.participant?.label}
+                              review={inspectorRoundEndReview}
+                            />
+                          ) : null}
+                          <CombatRoundEndDistanceControlPanel
+                            participantLabelsById={roundParticipantLabelsById}
+                            roundReview={selectedTimelineRoundState.roundEndReview}
+                          />
+                        </>
+                      ) : null}
+                      <PlayerCombatActionButtonPanel
+                        disabled={inspectorEffectiveActionButtonDisabled}
+                        onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                          invokeGmCurrentAction(descriptor);
+                        }}
+                        preActionControls={
+                          inspectorSelectionIsCurrentProgression
+                            ? inspectorPreActionControls
+                            : undefined
+                        }
+                        presentation={
+                          inspector.participant?.declaration
+                            ? labelCurrentActionAsDeclarationEdit({
+                                participantId: inspector.participant.participantId,
+                                presentation: inspectorWorkflowPresentation,
+                              })
+                            : inspectorWorkflowPresentation
+                        }
+                        saving={saving}
+                        statusText={
+                          projectedBoundaryTransitionAction
+                            ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                                projectedBoundaryTransitionAction.targetBoundary,
+                              )}.`
+                            : inspectorIsHistorical
+                              ? `Historical step: ${
+                                  inspectorHistoricalStepOutcome?.message ??
+                                  `${getPlayerCombatStepLabel(inspector.step)}.`
+                                }`
+                              : `Current step: ${getPlayerCombatStepLabel(
+                                  inspector.step,
+                                )}.${inspectorStatusSuffix}`
+                        }
+                        validationMessage={inspectorActionValidationMessage}
                       />
                     </div>
-                  ) : inspectorIsHistorical ? (
-                    <PlayerCombatActionResultPanel result={null} title="Historical result" />
-                  ) : gmCurrentStepResultPresentation ? (
-                    <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
-                  ) : (
-                    <PlayerCombatActionResultPanel result={null} />
-                  )}
-                </div>
-              </>
-            ) : (
-              <div>No scenario participant state is available for this inspector row.</div>
-            )}
-          </>
-        ) : (
-          <div>Select a participant step to inspect combat details.</div>
-        )}
-      </section>
+                    {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
+                      <CombatEventResultList
+                        events={inspectorCanonicalActionResultEvents}
+                        model={archivedInspectorPresentation?.canonicalActionResultModel}
+                        title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
+                      />
+                    ) : inspectorIsHistorical && inspectorHistoricalActionResult ? (
+                      <div style={{ display: "grid", gap: "0.3rem" }}>
+                        {inspectorShowsLegacyResultFallback ? (
+                          <div style={{ color: "#8a4f21", fontSize: "0.8rem", fontWeight: 700 }}>
+                            Some historical result details are unavailable.
+                          </div>
+                        ) : null}
+                        <PlayerCombatActionResultPanel
+                          result={inspectorHistoricalActionResult}
+                          title={`Historical result — Round ${selectedTimelineRoundState.roundNumber} · ${getPlayerCombatStepLabel(inspector.step)}`}
+                        />
+                      </div>
+                    ) : inspectorIsHistorical ? (
+                      <PlayerCombatActionResultPanel result={null} title="Historical result" />
+                    ) : gmCurrentStepResultPresentation ? (
+                      <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
+                    ) : (
+                      <PlayerCombatActionResultPanel result={null} />
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div>No scenario participant state is available for this inspector row.</div>
+              )}
+            </>
+          ) : (
+            <div>Select a participant step to inspect combat details.</div>
+          )}
+        </section>
 
-      <section
-        aria-label="Distance matrix"
-        style={{
-          border: "1px solid #e3e1dc",
-          borderRadius: 8,
-          display: "grid",
-          gap: "0.35rem",
-          padding: "0.65rem 0.75rem",
-        }}
-      >
-        <div
+        <section
+          aria-label="Distance matrix"
           style={{
-            alignItems: "center",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.75rem",
-            justifyContent: "space-between",
+            border: "1px solid #e3e1dc",
+            borderRadius: 8,
+            display: "grid",
+            gap: "0.35rem",
+            padding: "0.65rem 0.75rem",
           }}
         >
-          <strong>Round-level distance matrix</strong>
-          <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            {dirtyCombatDistanceRows.length === 0
-              ? "No unsaved distance changes."
-              : `${dirtyCombatDistanceRows.length} unsaved distance ${
-                  dirtyCombatDistanceRows.length === 1 ? "change" : "changes"
-                }.`}
-          </span>
-        </div>
-        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-          Pair distances shared by the round; not part of the current action command.
-        </div>
-        {displayParticipants.length > 1 ? (
-          <>
-            <div style={{ overflowX: "auto" }}>
-              <table
-                className="distanceMatrix"
-                style={{
-                  borderCollapse: "collapse",
-                  fontSize: "0.82rem",
-                  tableLayout: "fixed",
-                  width: "max-content",
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th
-                      className="distanceMatrixCornerCell"
-                      style={{
-                        ...distanceMatrixRowHeaderStyle,
-                        border: 0,
-                        height: distanceMatrixColumnHeaderStyle.height,
-                      }}
-                    />
-                    {displayParticipants.map((participant) => (
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              justifyContent: "space-between",
+            }}
+          >
+            <strong>Round-level distance matrix</strong>
+            <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+              {dirtyCombatDistanceRows.length === 0
+                ? "No unsaved distance changes."
+                : `${dirtyCombatDistanceRows.length} unsaved distance ${
+                    dirtyCombatDistanceRows.length === 1 ? "change" : "changes"
+                  }.`}
+            </span>
+          </div>
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            Pair distances shared by the round; not part of the current action command.
+          </div>
+          {displayParticipants.length > 1 ? (
+            <>
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  className="distanceMatrix"
+                  style={{
+                    borderCollapse: "collapse",
+                    fontSize: "0.82rem",
+                    tableLayout: "fixed",
+                    width: "max-content",
+                  }}
+                >
+                  <thead>
+                    <tr>
                       <th
-                        className="distanceMatrixHeaderCell"
-                        key={`distance-column:${participant.participantId}`}
-                        style={distanceMatrixColumnHeaderStyle}
-                        title={participant.label}
-                      >
-                        <span
-                          className="distanceMatrixHeaderLabel"
-                          style={distanceMatrixColumnHeaderTextStyle}
+                        className="distanceMatrixCornerCell"
+                        style={{
+                          ...distanceMatrixRowHeaderStyle,
+                          border: 0,
+                          height: distanceMatrixColumnHeaderStyle.height,
+                        }}
+                      />
+                      {displayParticipants.map((participant) => (
+                        <th
+                          className="distanceMatrixHeaderCell"
+                          key={`distance-column:${participant.participantId}`}
+                          style={distanceMatrixColumnHeaderStyle}
+                          title={participant.label}
                         >
-                          {participant.label}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayParticipants.map((rowParticipant, rowIndex) => (
-                    <tr key={`distance-row:${rowParticipant.participantId}`}>
-                      <th
-                        className="distanceMatrixRowLabel"
-                        style={distanceMatrixRowHeaderStyle}
-                        title={rowParticipant.label}
-                      >
-                        {rowParticipant.label}
-                      </th>
-                      {displayParticipants.map((columnParticipant, columnIndex) => {
-                        if (rowParticipant.participantId === columnParticipant.participantId) {
+                          <span
+                            className="distanceMatrixHeaderLabel"
+                            style={distanceMatrixColumnHeaderTextStyle}
+                          >
+                            {participant.label}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayParticipants.map((rowParticipant, rowIndex) => (
+                      <tr key={`distance-row:${rowParticipant.participantId}`}>
+                        <th
+                          className="distanceMatrixRowLabel"
+                          style={distanceMatrixRowHeaderStyle}
+                          title={rowParticipant.label}
+                        >
+                          {rowParticipant.label}
+                        </th>
+                        {displayParticipants.map((columnParticipant, columnIndex) => {
+                          if (rowParticipant.participantId === columnParticipant.participantId) {
+                            return (
+                              <td
+                                className="distanceMatrixCell distanceMatrixNumericCell distanceMatrixDiagonalCell"
+                                key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
+                                style={{
+                                  ...distanceMatrixCellStyle,
+                                  color: "#8c8578",
+                                }}
+                              >
+                                —
+                              </td>
+                            );
+                          }
+
+                          const distanceRow = getCombatDistanceTableRowForParticipants({
+                            participantAId: rowParticipant.participantId,
+                            participantBId: columnParticipant.participantId,
+                            rows: combatDistanceRows,
+                          });
+                          const draftValue = distanceRow
+                            ? (distanceDrafts[distanceRow.edge.pairKey] ??
+                              String(distanceRow.edge.distance))
+                            : "";
+                          const editable = rowIndex < columnIndex && Boolean(distanceRow);
+                          const title = distanceRow
+                            ? [
+                                `Source: ${formatCombatDistanceSource(distanceRow.edge.source)}`,
+                                `Preferred: ${distanceRow.preferredDistanceLabel}`,
+                                distanceRow.edge.notes ? `Notes: ${distanceRow.edge.notes}` : "",
+                              ]
+                                .filter(Boolean)
+                                .join(". ")
+                            : "Distance unavailable.";
+
                           return (
                             <td
-                              className="distanceMatrixCell distanceMatrixNumericCell distanceMatrixDiagonalCell"
+                              className="distanceMatrixCell distanceMatrixNumericCell"
                               key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
-                              style={{
-                                ...distanceMatrixCellStyle,
-                                color: "#8c8578",
-                              }}
+                              style={distanceMatrixCellStyle}
+                              title={title}
                             >
-                              —
+                              {editable && distanceRow ? (
+                                <input
+                                  aria-label={`Distance between ${rowParticipant.label} and ${columnParticipant.label}`}
+                                  disabled={saving || !selectedRoundIsActive}
+                                  max={8}
+                                  min={0}
+                                  onChange={(event) =>
+                                    setDistanceDrafts((current) => ({
+                                      ...current,
+                                      [distanceRow.edge.pairKey]: event.target.value,
+                                    }))
+                                  }
+                                  style={distanceMatrixInputStyle}
+                                  type="number"
+                                  value={draftValue}
+                                />
+                              ) : (
+                                <span>{draftValue || "—"}</span>
+                              )}
                             </td>
                           );
-                        }
-
-                        const distanceRow = getCombatDistanceTableRowForParticipants({
-                          participantAId: rowParticipant.participantId,
-                          participantBId: columnParticipant.participantId,
-                          rows: combatDistanceRows,
-                        });
-                        const draftValue = distanceRow
-                          ? (distanceDrafts[distanceRow.edge.pairKey] ??
-                            String(distanceRow.edge.distance))
-                          : "";
-                        const editable = rowIndex < columnIndex && Boolean(distanceRow);
-                        const title = distanceRow
-                          ? [
-                              `Source: ${formatCombatDistanceSource(distanceRow.edge.source)}`,
-                              `Preferred: ${distanceRow.preferredDistanceLabel}`,
-                              distanceRow.edge.notes ? `Notes: ${distanceRow.edge.notes}` : "",
-                            ]
-                              .filter(Boolean)
-                              .join(". ")
-                          : "Distance unavailable.";
-
-                        return (
-                          <td
-                            className="distanceMatrixCell distanceMatrixNumericCell"
-                            key={`distance-cell:${rowParticipant.participantId}:${columnParticipant.participantId}`}
-                            style={distanceMatrixCellStyle}
-                            title={title}
-                          >
-                            {editable && distanceRow ? (
-                              <input
-                                aria-label={`Distance between ${rowParticipant.label} and ${columnParticipant.label}`}
-                                disabled={saving || !selectedRoundIsActive}
-                                max={8}
-                                min={0}
-                                onChange={(event) =>
-                                  setDistanceDrafts((current) => ({
-                                    ...current,
-                                    [distanceRow.edge.pairKey]: event.target.value,
-                                  }))
-                                }
-                                style={distanceMatrixInputStyle}
-                                type="number"
-                                value={draftValue}
-                              />
-                            ) : (
-                              <span>{draftValue || "—"}</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-              <button
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                <button
                   disabled={
                     saving || !selectedRoundIsActive || dirtyCombatDistanceRows.length === 0
                   }
-                onClick={() => void saveCombatDistanceChanges()}
-                type="button"
-              >
-                Save distance changes
-              </button>
-              <button
-                disabled={saving || dirtyCombatDistanceRows.length === 0}
-                onClick={() => setDistanceDrafts({})}
-                type="button"
-              >
-                Reset changes
-              </button>
+                  onClick={() => void saveCombatDistanceChanges()}
+                  type="button"
+                >
+                  Save distance changes
+                </button>
+                <button
+                  disabled={saving || dirtyCombatDistanceRows.length === 0}
+                  onClick={() => setDistanceDrafts({})}
+                  type="button"
+                >
+                  Reset changes
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+              Add at least two active participants to review pairwise distance.
             </div>
-          </>
-        ) : (
-          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-            Add at least two active participants to review pairwise distance.
-          </div>
-        )}
+          )}
+        </section>
       </section>
-    </section>
     </Profiler>
   );
 }

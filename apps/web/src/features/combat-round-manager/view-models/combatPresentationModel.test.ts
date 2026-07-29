@@ -91,6 +91,25 @@ describe("combat presentation model layers", () => {
     expect(buildArchive).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the archived inspector owner stable across active revision changes", () => {
+    const cache = createCombatPresentationLayerCache();
+    const inspectorPresentation = { entries: new Map(), get: vi.fn() };
+    const first = cache.resolveArchived("archive-1", () => ({
+      ...archived("archive-1"),
+      inspectorPresentation,
+    }));
+
+    cache.resolveActive("revision-1", () => active("revision-1"));
+    cache.resolveActive("revision-2", () => active("revision-2"));
+    const same = cache.resolveArchived("archive-1", () => ({
+      ...archived("unexpected"),
+      inspectorPresentation: { entries: new Map(), get: vi.fn() },
+    }));
+
+    expect(same).toBe(first);
+    expect(same.inspectorPresentation).toBe(inspectorPresentation);
+  });
+
   it("rebuilds active presentation only when active revision identity changes", () => {
     const cache = createCombatPresentationLayerCache();
     const buildFirst = vi.fn(() => active("revision-1"));

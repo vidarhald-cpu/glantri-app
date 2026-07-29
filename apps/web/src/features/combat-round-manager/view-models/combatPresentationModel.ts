@@ -36,6 +36,11 @@ import {
   type ActiveInspectorPresentationStore,
 } from "./activeInspectorPresentation";
 import {
+  buildArchivedInspectorPresentationIndex,
+  type ArchivedHistoricalActionResultBuilder,
+  type ArchivedInspectorPresentationIndex,
+} from "./archivedInspectorPresentation";
+import {
   buildCombatRoundLiveInspectorContext,
   getCombatRoundLiveInspectorSelection,
   getCombatRoundManagerDisplayParticipantIds,
@@ -47,6 +52,7 @@ type CombatRoundParticipant = CombatRoundState["participants"][number];
 
 export interface ArchivedCombatPresentation {
   readonly identity: string;
+  readonly inspectorPresentation: ArchivedInspectorPresentationIndex;
   readonly roundNumbers: readonly number[];
   readonly roundStates: readonly CombatRoundState[];
   readonly tracker: CombatTrackerModel;
@@ -418,6 +424,7 @@ function buildTrackerCellFactsForRound(input: {
 }
 
 export function buildArchivedCombatPresentation(input: {
+  buildHistoricalActionResult: ArchivedHistoricalActionResultBuilder;
   identity: string;
   participantRows: readonly CombatPresentationParticipantRow[];
   resolveStepStatus: ResolveStepStatus;
@@ -438,6 +445,10 @@ export function buildArchivedCombatPresentation(input: {
 
   return {
     identity: input.identity,
+    inspectorPresentation: buildArchivedInspectorPresentationIndex({
+      buildHistoricalActionResult: input.buildHistoricalActionResult,
+      roundStates: archivedRoundStates,
+    }),
     roundNumbers: archivedRoundStates.map((state) => state.roundNumber),
     roundStates: archivedRoundStates,
     tracker: buildCombatTrackerModel({

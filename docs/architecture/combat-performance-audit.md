@@ -762,16 +762,16 @@ Slice 1 baseline. The first post-change trace retained ten panel executions and
 measured 603.4 ms of non-tracker work, a conservative 26.3% reduction. A
 controlled trace taken immediately after revision polling measured:
 
-| Stage | Slice 1 | Slice 2A | Change |
-| --- | ---: | ---: | ---: |
-| Click to settled | 1,472.0 ms | 962.1 ms | -34.6% |
-| Total panel work | 1,147.2 ms | 680.0 ms | -40.7% |
-| Tracker work | 328.6 ms | 301.7 ms | -8.2% |
-| Non-tracker panel work | 818.6 ms | 378.3 ms | -53.8% |
-| React commits | 5 / 65.9 ms | 3 / 40.1 ms | -40.0% / -39.2% |
-| API total | 347.75 ms | 334.50 ms | -3.8% |
-| Network | 350.5 ms | 337.0 ms | -3.9% |
-| Mutation response | 71,023 bytes | 71,035 bytes | effectively flat |
+| Stage                  |      Slice 1 |     Slice 2A |           Change |
+| ---------------------- | -----------: | -----------: | ---------------: |
+| Click to settled       |   1,472.0 ms |     962.1 ms |           -34.6% |
+| Total panel work       |   1,147.2 ms |     680.0 ms |           -40.7% |
+| Tracker work           |     328.6 ms |     301.7 ms |            -8.2% |
+| Non-tracker panel work |     818.6 ms |     378.3 ms |           -53.8% |
+| React commits          |  5 / 65.9 ms |  3 / 40.1 ms |  -40.0% / -39.2% |
+| API total              |    347.75 ms |    334.50 ms |            -3.8% |
+| Network                |     350.5 ms |     337.0 ms |            -3.9% |
+| Mutation response      | 71,023 bytes | 71,035 bytes | effectively flat |
 
 The controlled capture recorded one active-presentation rebuild, five reuses,
 39 active-inspector submodel rebuilds, 35 submodel reuses, no archived
@@ -779,3 +779,46 @@ presentation rebuild, one request, and no follow-up request. The response and
 server path are unchanged; the measured reduction comes from presentation
 identity reuse. Compatibility `EncounterSession` reads, tracker construction,
 historical inspector ownership, and response contracts remain untouched.
+
+## Combat Presentation Model — Slice 2B
+
+Completed-round inspector presentation is owned by Archived Presentation. For
+each immutable archived round, participant, and tracker step, the archive
+builder records one keyed candidate containing the inspector core, exact and
+contextual snapshots, snapshot modifier rows, phase summaries, GM-visible
+exact-step event ledger, attack/parry/result presentation, and snapshotted
+calculation sections. Selection, inspector visibility, pending controls, local
+errors, workflow state, and active revisions perform only keyed lookup and do
+not participate in archive identity.
+
+This is deliberately eager at archive-identity construction and stable
+thereafter. It may shift a small amount of work to initial or archive-boundary
+construction, but archived-cell navigation no longer invokes historical
+builders. Boundary undo or archive replacement changes immutable lineage and
+replaces the candidates; ordinary active revisions retain them. Tracker
+ownership, compatibility reads, hydration requests, APIs, and Active
+Presentation remain unchanged.
+
+The authenticated three-participant, four-archive Round 4 A2 inspection capture
+(`92ed208d-754a-49de-b7ac-20b82065bddd`) measured:
+
+| Stage | Slice 2B baseline | Slice 2B |
+| --- | ---: | ---: |
+| Click to settled | 712.4 ms | 131.8 ms |
+| Total panel work | 96.7 ms | 61.6 ms |
+| Tracker work | 0.2 ms | 0.3 ms |
+| Non-tracker panel work | 96.5 ms | 61.3 ms |
+| React commits | 2 / 25.3 ms | 2 / 25.8 ms |
+| Archive inspector lookup | not owned | 0.0 ms / 4 executions |
+| Historical snapshot resolution | 1.9 ms | 0.1 ms |
+| Historical modifiers | approximately 0 ms | 0.0 ms |
+| Historical attack/parry/results | 6.6 ms | 0 render-time executions |
+| Historical calculations | 0.4 ms | 0 render-time executions |
+
+Archived Presentation rebuilt zero times and was reused four times during the
+selection. The remaining two character/equipment hydration requests transferred
+11,609 and 285,541 bytes; they are intentionally outside this presentation
+ownership slice. The current-command comparison remains the accepted Slice 2A
+`roll_adjust_distance` capture (962.1 ms click-to-settled, 680.0 ms panel,
+301.7 ms tracker, one active rebuild/five reuses, no archive rebuild, and no
+follow-up requests); Slice 2B does not change its active path.

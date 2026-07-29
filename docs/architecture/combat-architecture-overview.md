@@ -405,8 +405,12 @@ GM Combat presentation is partitioned by ownership identity:
 
 1. **Archived Presentation** owns normalized completed-round facts, historical
    tracker cells, declarations, calculations, modifiers, and result-ledger
-   references. Its identity is immutable archive lineage plus its participant
-   roster, so an active revision, selection change, or pending control cannot
+   references. It also owns a keyed immutable inspector candidate for every
+   completed-round participant and step, including the contextual snapshot,
+   phase summaries, equipment/loadout snapshots, modifiers, exact-step events,
+   attack/parry/result facts, and calculation sections. Its identity is
+   immutable archive lineage plus its participant roster, so an active
+   revision, selection change, inspector toggle, or pending control cannot
    rebuild it.
 2. **Active Presentation** owns the current round, GM progression projection,
    current task/action, current tracker cells, combat log, and revision-owned

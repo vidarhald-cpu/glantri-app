@@ -765,3 +765,18 @@ is consequential. The command carries versioned compact inverse facts for only t
 initiative results, and navigation.
 Undo removes the one bulk command and restores the exact pre-command task without a recursive state
 snapshot. Manual review and roll commands remain unchanged.
+
+## 19. Combat presentation ownership
+
+GM Combat composes Archived Presentation, Active Presentation, Selection
+Overlay, and Pending Overlay without creating a second canonical combat model.
+Active inspector candidates are keyed to accepted active revision dependencies.
+Completed-round inspector candidates are built solely from immutable archived
+round participants, snapshots, modifiers, events, results, and calculations.
+Historical selection performs an identity lookup and cannot consult current
+participant equipment, modifiers, or calculation inputs.
+
+An active revision cannot replace archived inspector identity. Archive
+replacement or canonical boundary undo changes archive lineage and therefore
+rebuilds the affected immutable candidates. These presentation caches authorize
+no command and do not alter descriptor, privacy, history, or undo semantics.

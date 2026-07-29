@@ -1,17 +1,23 @@
 import React from "react";
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
-import { buildCombatEventResultModel } from "../view-models/buildCombatEventResultModel";
+import {
+  buildCombatEventResultModel,
+  type CombatEventResultModel,
+} from "../view-models/buildCombatEventResultModel";
 
 export function CombatEventResultList(input: {
   emptyMessage?: string;
   events: readonly ProjectedCombatHistoryEvent[];
+  model?: CombatEventResultModel;
   title?: string;
 }) {
-  const model = buildCombatEventResultModel(input.events, {
-    calculationStage: "panel_historical_calculation_presentation",
-    resultStage: "panel_historical_attack_parry_result_presentation",
-  });
+  const model =
+    input.model ??
+    buildCombatEventResultModel(input.events, {
+      calculationStage: "panel_historical_calculation_presentation",
+      resultStage: "panel_historical_attack_parry_result_presentation",
+    });
   const [expandedCalculationIds, setExpandedCalculationIds] = React.useState<Set<string>>(
     () => new Set(),
   );
