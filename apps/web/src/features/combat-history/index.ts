@@ -1,5 +1,6 @@
 export * from "./components/CombatEventResultList";
 export * from "./components/CombatCalculationPanel";
+export * from "./components/CombatResultLedger";
 export * from "./components/CombatStepResultList";
 export * from "./components/CombatLog";
 export * from "./components/CombatTracker";
@@ -16,6 +17,7 @@ export * from "./view-models/combatViewRevision";
 export * from "./view-models/combatLogSelection";
 export * from "./view-models/combatTrackerTaskPresentation";
 export * from "./view-models/combatCalculationPresentation";
+export * from "./view-models/combatResultLedgerPresentation";
 export * from "./view-models/buildCombatCalculationPresentations";
 export * from "./view-models/currentActionPresentation";
 export * from "./view-models/resolveCombatHistoryPanelSnapshot";

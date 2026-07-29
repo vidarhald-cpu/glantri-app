@@ -113,6 +113,59 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function factString(event: CombatStepEvent, key: string): string | undefined {
+  return (
+    nonEmptyString(event.facts.involvedOutcome[key]) ??
+    nonEmptyString(event.facts.publicOutcome[key])
+  );
+}
+
+/**
+ * Resolves an action/process identity only from explicit canonical event metadata.
+ *
+ * This is intentionally type-scoped. A shared actor, target, label, step, or adjacent sequence
+ * is never sufficient to group two results.
+ */
+function canonicalActionInstanceId(event: CombatStepEvent): string | undefined {
+  switch (event.type) {
+    case "feint_feasibility":
+    case "feint_impossible":
+    case "feint_roll":
+    case "feint_result":
+    case "feint_committed":
+    case "adjust_distance_response":
+    case "adjust_distance_adjustment":
+    case "adjust_distance_roll":
+    case "adjust_distance_result":
+    case "adjust_distance_committed":
+      return factString(event, "proposalId");
+    case "observation":
+      return factString(event, "observationAttemptId");
+    case "offensive_parry_brawling":
+    case "continued_contact_maintenance":
+      return factString(event, "contestId");
+    case "hit_location":
+    case "critical":
+    case "damage_proposed":
+    case "damage_committed":
+      return (
+        event.damageResultId ??
+        (event.attackResultId ? `${event.attackResultId}:damage` : undefined)
+      );
+    case "attack":
+    case "parry":
+      return event.attackResultId ?? event.opportunityId;
+    default:
+      return (
+        event.opportunityId ??
+        event.attackResultId ??
+        event.parryResultId ??
+        event.damageResultId ??
+        event.distanceProposalId
+      );
+  }
+}
+
 /**
  * Older accepted Feint and damage-review events stored player-intended commentary inside these
  * two known GM review shapes. No other GM review field is treated as public.
@@ -202,14 +255,7 @@ export function projectCombatResultEnvelope(input: {
             : []),
         ]
       : [];
-  const actionInstanceId =
-    presentation?.actionInstanceId ??
-    input.event.opportunityId ??
-    input.event.attackResultId ??
-    input.event.parryResultId ??
-    input.event.damageResultId ??
-    input.event.distanceProposalId ??
-    (input.viewer === "gm" ? input.event.commandId : undefined);
+  const actionInstanceId = presentation?.actionInstanceId ?? canonicalActionInstanceId(input.event);
   const standardConsequences = safeConsequences(
     presentation?.standardConsequences ?? [],
     visibleParticipantIds,

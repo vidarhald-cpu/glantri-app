@@ -169,6 +169,39 @@ describe("CombatEventResultList", () => {
     );
   });
 
+  it("numbers one canonical action group instead of its event fragments", () => {
+    const groupedEnvelope = (resultId: string, sequence: number): CombatResultEnvelope => ({
+      ...resultEnvelope(),
+      actionInstanceId: "attack-1",
+      actionType: sequence === 1 ? "attack" : "parry",
+      publicCombatNote: undefined,
+      resultId,
+      sequence,
+    });
+    render(
+      <CombatEventResultList
+        events={[
+          {
+            ...event("attack-1", 1, { publicOutcome: { hit: true } }),
+            resultEnvelope: groupedEnvelope("attack-1", 1),
+          },
+          {
+            ...event("parry-1", 2, {
+              involvedOutcome: { success: false },
+              publicOutcome: { success: false },
+            }),
+            resultEnvelope: groupedEnvelope("parry-1", 2),
+            type: "parry",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getByText("Attack recorded.")).toBeTruthy();
+    expect(screen.getByText("Defender attempted to parry.")).toBeTruthy();
+  });
+
   it("keeps each event calculation independently collapsed by default", () => {
     render(
       <CombatEventResultList

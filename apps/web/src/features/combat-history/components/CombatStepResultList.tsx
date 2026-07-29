@@ -1,12 +1,58 @@
 import React from "react";
 
 import type { CombatStepResultPresentation } from "../view-models/buildCombatStepResultPresentation";
-import { CombatCalculationPanel } from "./CombatCalculationPanel";
+import {
+  buildCombatResultGroups,
+  type CombatResultLedgerFragmentInput,
+} from "../view-models/combatResultLedgerPresentation";
+import { CombatResultLedger } from "./CombatResultLedger";
 
 export function CombatStepResultList(input: {
   presentation: CombatStepResultPresentation;
   title?: string;
 }) {
+  const groups =
+    input.presentation.groups ??
+    buildCombatResultGroups(
+      input.presentation.entries.map(
+        (entry, sequence): CombatResultLedgerFragmentInput => ({
+          actionInstanceId:
+            entry.resultEnvelopes?.find((envelope) => envelope.actionInstanceId)
+              ?.actionInstanceId ??
+            entry.proposalId ??
+            entry.opportunityId,
+          processId: entry.processId,
+          result: {
+            actor: entry.actor
+              ? {
+                  hidden: entry.actor.hidden,
+                  id: entry.actor.id,
+                  label: entry.actor.label,
+                }
+              : undefined,
+            calculations: entry.calculations,
+            heading: entry.heading,
+            id: entry.id,
+            outcomeRows:
+              entry.outcome && entry.outcome !== entry.summary
+                ? [{ key: `${entry.id}:outcome`, text: entry.outcome }]
+                : [],
+            resultEnvelopes: entry.resultEnvelopes ?? [],
+            sequence,
+            sourceEventIds: entry.sourceEventIds,
+            state: entry.state,
+            summary: entry.summary,
+            target: entry.target
+              ? {
+                  hidden: entry.target.hidden,
+                  id: entry.target.id,
+                  label: entry.target.label,
+                }
+              : undefined,
+          },
+        }),
+      ),
+    );
   return (
     <section
       aria-label={input.title ?? "Current step results"}
@@ -21,40 +67,8 @@ export function CombatStepResultList(input: {
       }}
     >
       <strong>{input.title ?? "Current step results"}</strong>
-      {input.presentation.entries.length ? (
-        <ol style={{ display: "grid", gap: "0.65rem", margin: 0, paddingLeft: "1.4rem" }}>
-          {input.presentation.entries.map((entry) => (
-            <li key={entry.id} style={{ paddingLeft: "0.15rem" }}>
-              <article style={{ display: "grid", gap: "0.2rem" }}>
-                <strong style={{ fontSize: "0.9rem" }}>{entry.heading}</strong>
-                <div>{entry.summary}</div>
-                {entry.outcome && entry.outcome !== entry.summary ? (
-                  <strong style={{ fontSize: "0.88rem" }}>{entry.outcome}</strong>
-                ) : null}
-                {[
-                  ...new Set(
-                    (entry.resultEnvelopes ?? []).flatMap((envelope) =>
-                      envelope.publicCombatNote ? [envelope.publicCombatNote] : [],
-                    ),
-                  ),
-                ].map((note) => (
-                  <div key={`${entry.id}:combat-note:${note}`} style={{ fontSize: "0.88rem" }}>
-                    <strong>Combat note:</strong> {note}
-                  </div>
-                ))}
-                {entry.state === "pending" ? (
-                  <div style={{ color: "#6b6253", fontSize: "0.84rem" }}>In progress.</div>
-                ) : null}
-                {entry.calculations.map((calculation) => (
-                  <CombatCalculationPanel
-                    key={calculation.calculationId}
-                    presentation={calculation}
-                  />
-                ))}
-              </article>
-            </li>
-          ))}
-        </ol>
+      {groups.length ? (
+        <CombatResultLedger calculationExpansion="native" groups={groups} />
       ) : (
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.presentation.emptyState}</div>
       )}

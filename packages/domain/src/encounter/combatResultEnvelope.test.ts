@@ -156,6 +156,122 @@ describe("combat result envelope", () => {
     expect(serialized).not.toContain('"source":"gm_review"');
   });
 
+  it("projects the same explicit process identity for GM and player event fragments", () => {
+    const roll = combatStepEventSchema.parse({
+      ...event(),
+      facts: {
+        gmReview: {},
+        involvedOutcome: { proposalId: "feint-1", side: "attacker" },
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      type: "feint_roll",
+    });
+    const gm = projectCombatResultEnvelope({
+      event: roll,
+      identities,
+      involved: true,
+      ownRoll: true,
+      viewer: "gm",
+    });
+    const player = projectCombatResultEnvelope({
+      event: roll,
+      identities,
+      involved: true,
+      ownRoll: true,
+      viewer: "player",
+    });
+
+    expect(gm.actionInstanceId).toBe("feint-1");
+    expect(player.actionInstanceId).toBe("feint-1");
+  });
+
+  it("does not treat a shared command as proof that round-end processes are one result", () => {
+    const observationStatus = combatStepEventSchema.parse({
+      ...event(),
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          observationStatus: "progress",
+          relationshipId: "observation:attacker:defender",
+        },
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      step: "round_summary",
+      type: "observation",
+    });
+    const participantReview = combatStepEventSchema.parse({
+      ...event(),
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      step: "round_summary",
+      type: "participant_su_review",
+    });
+
+    expect(
+      projectCombatResultEnvelope({
+        event: observationStatus,
+        identities,
+        involved: true,
+        ownRoll: true,
+        viewer: "gm",
+      }).actionInstanceId,
+    ).toBeUndefined();
+    expect(
+      projectCombatResultEnvelope({
+        event: participantReview,
+        identities,
+        involved: true,
+        ownRoll: true,
+        viewer: "gm",
+      }).actionInstanceId,
+    ).toBeUndefined();
+  });
+
+  it("uses the attack result as the shared attack/parry process identity", () => {
+    const attack = combatStepEventSchema.parse({
+      ...event(),
+      attackResultId: "attack-result-1",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      opportunityId: "opportunity-1",
+      type: "attack",
+    });
+    const parry = combatStepEventSchema.parse({
+      ...event(),
+      attackResultId: "attack-result-1",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      parryResultId: "attack-result-1:parry",
+      type: "parry",
+    });
+
+    const project = (source: typeof attack) =>
+      projectCombatResultEnvelope({
+        event: source,
+        identities,
+        involved: true,
+        ownRoll: true,
+        viewer: "gm",
+      }).actionInstanceId;
+
+    expect(project(attack)).toBe("attack-result-1");
+    expect(project(parry)).toBe("attack-result-1");
+  });
+
   it("omits consequences tied to a participant identity hidden from the viewer", () => {
     const envelope = projectCombatResultEnvelope({
       event: event(),

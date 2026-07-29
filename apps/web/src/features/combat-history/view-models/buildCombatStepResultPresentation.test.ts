@@ -307,6 +307,52 @@ describe("buildCombatStepResultPresentation", () => {
     expect(result.entries.at(-1)?.summary).toContain("attack missed");
   });
 
+  it("groups the Adjust Distance lifecycle without merging a later attack", () => {
+    const result = build({
+      events: [responseEvent, attackerRoll, defenderRoll, committed, attackEvent],
+      logEvents: [attempt, response, contest, attack],
+    });
+
+    expect(result.groups).toHaveLength(2);
+    expect(result.groups?.[0]).toMatchObject({
+      actionInstanceId: "proposal-1",
+      heading: "Adjust Distance",
+    });
+    expect(result.groups?.[0]?.subordinateResults.map((entry) => entry.id)).toEqual([
+      expect.stringContaining("attempt"),
+      expect.stringContaining("response"),
+      expect.stringContaining("contest"),
+      expect.stringContaining("unchanged-distance"),
+    ]);
+    expect(result.groups?.[1]?.subordinateResults).toHaveLength(1);
+    expect(result.groups?.[1]?.subordinateResults[0]?.heading).toBe("Attack");
+  });
+
+  it("uses the same action group identity for current and archived Adjust Distance results", () => {
+    const current = build({
+      events: [responseEvent, attackerRoll, defenderRoll, committed],
+      logEvents: [attempt, response, contest],
+    });
+    const withEnvelope = (event: ProjectedCombatHistoryEvent): ProjectedCombatHistoryEvent => ({
+      ...event,
+      resultEnvelope: {
+        ...resultEnvelope(),
+        actionInstanceId: "proposal-1",
+        actionType: event.type,
+        publicCombatNote: undefined,
+        resultId: event.id,
+        sequence: event.sequence,
+      },
+    });
+    const historical = buildCombatEventResultModel(
+      [responseEvent, attackerRoll, defenderRoll, committed].map(withEnvelope),
+    );
+
+    expect(current.groups?.[0]?.groupId).toBe("combat-result-group:action:proposal-1");
+    expect(historical.groups?.[0]?.groupId).toBe(current.groups?.[0]?.groupId);
+    expect(historical.groups?.[0]?.subordinateResults).toHaveLength(4);
+  });
+
   it("never infers an unresolved opponent roll after the contest is resolved", () => {
     const result = build({
       events: [responseEvent, attackerRoll, defenderRoll, committed],

@@ -97,7 +97,7 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[0]?.summary).not.toContain("rolled");
   });
 
-  it("orders attack, parry, location, critical, and damage without collapsing the chain", () => {
+  it("orders attack, parry, location, critical, and damage fragments canonically", () => {
     const model = buildCombatEventResultModel([
       event("damage_committed", 5),
       event("parry", 2, {
@@ -189,6 +189,37 @@ describe("buildCombatEventResultModel", () => {
       "Result: 13",
     ]);
     expect(model.items[1]?.calculationRows.map((row) => row.text)).toEqual([]);
+  });
+
+  it("groups archived Feint fragments by the canonical action instance", () => {
+    const feintEnvelope = (type: CombatResultEnvelope["actionType"], sequence: number) => ({
+      ...resultEnvelope(),
+      actionInstanceId: "feint-1",
+      actionType: type,
+      publicCombatNote: type === "feint_committed" ? "Commit to the opening." : undefined,
+      resultId: `feint:${sequence}`,
+      sequence,
+    });
+    const model = buildCombatEventResultModel([
+      event("feint_roll", 1, { resultEnvelope: feintEnvelope("feint_roll", 1) }),
+      event("feint_result", 2, { resultEnvelope: feintEnvelope("feint_result", 2) }),
+      event("feint_committed", 3, {
+        resultEnvelope: feintEnvelope("feint_committed", 3),
+      }),
+    ]);
+
+    expect(model.items).toHaveLength(3);
+    expect(model.groups).toHaveLength(1);
+    expect(model.groups?.[0]).toMatchObject({
+      groupId: "combat-result-group:action:feint-1",
+      heading: "Feint",
+      publicCombatNotes: ["Commit to the opening."],
+    });
+    expect(model.groups?.[0]?.subordinateResults.map((result) => result.id)).toEqual([
+      "1:feint_roll",
+      "2:feint_result",
+      "3:feint_committed",
+    ]);
   });
 
   it("shows the opponent-specific Observe Opponent contribution in attack history", () => {

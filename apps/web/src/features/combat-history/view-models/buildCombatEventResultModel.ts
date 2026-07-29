@@ -7,6 +7,11 @@ import {
   buildCombatCalculationPresentationRows,
   type CombatCalculationPresentation,
 } from "./combatCalculationPresentation";
+import {
+  buildCombatResultGroups,
+  type CombatResultGroupPresentation,
+  type CombatResultLedgerFragmentInput,
+} from "./combatResultLedgerPresentation";
 import { formatObservationContestDifference } from "./formatObservationContestDifference";
 
 export interface CombatEventResultItemModel {
@@ -29,6 +34,9 @@ export interface CombatEventResultFactRow {
 }
 
 export interface CombatEventResultModel {
+  /** Atomic top-level ledger entries. Built with the immutable archived presentation. */
+  groups?: readonly CombatResultGroupPresentation[];
+  /** Compatibility access to the canonical event fragments contained by `groups`. */
   items: CombatEventResultItemModel[];
 }
 
@@ -552,65 +560,102 @@ export function buildCombatEventResultModel(
       return resolved ? [attemptId] : [];
     }),
   );
+  const items = [...events]
+    .filter((event) => {
+      if (event.type === "participant_su_review" && event.status === "proposed") return false;
+      const attemptId = factValue(event, "observationAttemptId");
+      if (
+        event.type === "observation" &&
+        typeof attemptId === "string" &&
+        factValue(event, "difference") !== undefined &&
+        canonicalResolvedObservationEventByAttemptId.get(attemptId) !== event.id
+      ) {
+        return false;
+      }
+      return !(
+        event.type === "observation" &&
+        factValue(event, "observationStatus") === "period_complete" &&
+        typeof attemptId === "string" &&
+        resolvedObservationAttemptIds.has(attemptId)
+      );
+    })
+    .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
+    .map((event) => {
+      const presentation = instrumentation?.resultStage
+        ? measureCombatPerformanceStage(
+            instrumentation.resultStage,
+            () => eventPresentation(event),
+            { eventType: event.type },
+          )
+        : eventPresentation(event);
+      const calculations = instrumentation?.calculationStage
+        ? measureCombatPerformanceStage(
+            instrumentation.calculationStage,
+            () => buildCombatCalculationPresentations(event),
+            { eventType: event.type },
+          )
+        : buildCombatCalculationPresentations(event);
+      const calculationRows = calculations.flatMap((calculation) =>
+        buildCombatCalculationPresentationRows(calculation).map((row) => ({
+          key: row.key,
+          text: row.text,
+        })),
+      );
+      return {
+        calculations,
+        calculationRows,
+        completenessLabel:
+          event.completeness === "complete"
+            ? undefined
+            : event.completeness === "legacy_derived"
+              ? "Legacy-derived history"
+              : "Incomplete history",
+        envelope: event.resultEnvelope,
+        id: event.id,
+        outcomeRows: presentation.outcomeRows,
+        sequence: event.sequence,
+        summary: presentation.summary,
+        title: EVENT_TITLES[event.type],
+        type: event.type,
+      };
+    });
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const fragments: CombatResultLedgerFragmentInput[] = items.map((item) => {
+    const event = eventById.get(item.id);
+    const actor = item.envelope?.actor;
+    const target = item.envelope?.targets[0];
+    return {
+      actionInstanceId: item.envelope?.actionInstanceId,
+      result: {
+        actor: actor
+          ? {
+              hidden: actor.visibility === "unseen",
+              id: actor.participantId,
+              label: actor.displayName,
+            }
+          : undefined,
+        calculations: item.calculations,
+        completenessLabel: item.completenessLabel,
+        heading: item.title,
+        id: item.id,
+        outcomeRows: item.outcomeRows,
+        resultEnvelopes: item.envelope ? [item.envelope] : [],
+        sequence: item.sequence,
+        sourceEventIds: [item.id],
+        state: event?.status === "proposed" ? "pending" : "final",
+        summary: item.summary,
+        target: target
+          ? {
+              hidden: target.visibility === "unseen",
+              id: target.participantId,
+              label: target.displayName,
+            }
+          : undefined,
+      },
+    };
+  });
   return {
-    items: [...events]
-      .filter((event) => {
-        if (event.type === "participant_su_review" && event.status === "proposed") return false;
-        const attemptId = factValue(event, "observationAttemptId");
-        if (
-          event.type === "observation" &&
-          typeof attemptId === "string" &&
-          factValue(event, "difference") !== undefined &&
-          canonicalResolvedObservationEventByAttemptId.get(attemptId) !== event.id
-        ) {
-          return false;
-        }
-        return !(
-          event.type === "observation" &&
-          factValue(event, "observationStatus") === "period_complete" &&
-          typeof attemptId === "string" &&
-          resolvedObservationAttemptIds.has(attemptId)
-        );
-      })
-      .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
-      .map((event) => {
-        const presentation = instrumentation?.resultStage
-          ? measureCombatPerformanceStage(
-              instrumentation.resultStage,
-              () => eventPresentation(event),
-              { eventType: event.type },
-            )
-          : eventPresentation(event);
-        const calculations = instrumentation?.calculationStage
-          ? measureCombatPerformanceStage(
-              instrumentation.calculationStage,
-              () => buildCombatCalculationPresentations(event),
-              { eventType: event.type },
-            )
-          : buildCombatCalculationPresentations(event);
-        const calculationRows = calculations.flatMap((calculation) =>
-          buildCombatCalculationPresentationRows(calculation).map((row) => ({
-            key: row.key,
-            text: row.text,
-          })),
-        );
-        return {
-          calculations,
-          calculationRows,
-          completenessLabel:
-            event.completeness === "complete"
-              ? undefined
-              : event.completeness === "legacy_derived"
-                ? "Legacy-derived history"
-                : "Incomplete history",
-          envelope: event.resultEnvelope,
-          id: event.id,
-          outcomeRows: presentation.outcomeRows,
-          sequence: event.sequence,
-          summary: presentation.summary,
-          title: EVENT_TITLES[event.type],
-          type: event.type,
-        };
-      }),
+    groups: buildCombatResultGroups(fragments),
+    items,
   };
 }

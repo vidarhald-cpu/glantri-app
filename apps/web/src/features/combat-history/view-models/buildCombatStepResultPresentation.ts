@@ -10,6 +10,11 @@ import type { CombatPresentationSubject } from "./currentActionPresentation";
 import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
 import { buildCombatEventResultModel } from "./buildCombatEventResultModel";
 import type { CombatCalculationPresentation } from "./combatCalculationPresentation";
+import {
+  buildCombatResultGroups,
+  type CombatResultGroupPresentation,
+  type CombatResultLedgerFragmentInput,
+} from "./combatResultLedgerPresentation";
 import { formatObservationContestDifference } from "./formatObservationContestDifference";
 
 export type CombatStepResultEntryCategory =
@@ -48,6 +53,8 @@ export interface CombatStepResultPresentation {
   readonly encounterId: string;
   readonly encounterRevision: string;
   readonly entries: readonly CombatStepResultEntryPresentation[];
+  /** Atomic top-level result ledger entries over the compatibility `entries` fragments. */
+  readonly groups?: readonly CombatResultGroupPresentation[];
   readonly participantId: string;
   readonly phase?: "phase1" | "phase2" | "round_end";
   readonly roundNumber: number;
@@ -263,6 +270,62 @@ interface OrderedEntry {
   readonly entry: CombatStepResultEntryPresentation;
   readonly order: number;
   readonly semanticOrder: number;
+}
+
+function groupActionInstanceId(entry: CombatStepResultEntryPresentation): string | undefined {
+  const envelopeIdentity = entry.resultEnvelopes?.find(
+    (envelope) => envelope.actionInstanceId,
+  )?.actionInstanceId;
+  if (envelopeIdentity) return envelopeIdentity;
+  if (entry.attackResultId && (entry.category === "critical" || entry.category === "damage")) {
+    return `${entry.attackResultId}:damage`;
+  }
+  if (entry.attackResultId && (entry.category === "attack" || entry.category === "defense")) {
+    return entry.attackResultId;
+  }
+  return entry.proposalId ?? entry.opportunityId;
+}
+
+function ledgerFragment(input: {
+  entry: CombatStepResultEntryPresentation;
+  sequence: number;
+  sortOrder: number;
+}): CombatResultLedgerFragmentInput {
+  const actor = input.entry.actor;
+  const target = input.entry.target;
+  return {
+    actionInstanceId: groupActionInstanceId(input.entry),
+    processId: input.entry.processId,
+    sortOrder: input.sortOrder,
+    result: {
+      actor: actor
+        ? {
+            hidden: actor.hidden,
+            id: actor.id,
+            label: actor.label,
+          }
+        : undefined,
+      calculations: input.entry.calculations,
+      heading: input.entry.heading,
+      id: input.entry.id,
+      outcomeRows:
+        input.entry.outcome && input.entry.outcome !== input.entry.summary
+          ? [{ key: `${input.entry.id}:outcome`, text: input.entry.outcome }]
+          : [],
+      resultEnvelopes: input.entry.resultEnvelopes ?? [],
+      sequence: input.sequence,
+      sourceEventIds: input.entry.sourceEventIds,
+      state: input.entry.state,
+      summary: input.entry.summary,
+      target: target
+        ? {
+            hidden: target.hidden,
+            id: target.id,
+            label: target.label,
+          }
+        : undefined,
+    },
+  };
 }
 
 function logEntry(input: {
@@ -936,7 +999,7 @@ export function buildCombatStepResultPresentation(
     input.combatLog.encounterId !== input.encounterId ||
     input.combatLog.sourceRevision !== input.encounterRevision
   ) {
-    return { ...base, entries: [] };
+    return { ...base, entries: [], groups: [] };
   }
 
   const events = input.events.filter((event) => event.roundNumber === input.roundNumber);
@@ -992,22 +1055,32 @@ export function buildCombatStepResultPresentation(
     }),
   );
 
+  const orderedEntries = ordered
+    .sort(
+      (left, right) =>
+        left.order - right.order ||
+        left.semanticOrder - right.semanticOrder ||
+        left.entry.id.localeCompare(right.entry.id),
+    )
+    .map(({ entry, order }) => {
+      const resultEnvelopes = events.flatMap((event) =>
+        entry.sourceEventIds.includes(event.id) && event.resultEnvelope
+          ? [event.resultEnvelope]
+          : [],
+      );
+      return {
+        entry: resultEnvelopes.length ? { ...entry, resultEnvelopes } : entry,
+        sequence: order,
+      };
+    });
+  const entries = orderedEntries.map(({ entry }) => entry);
   return {
     ...base,
-    entries: ordered
-      .sort(
-        (left, right) =>
-          left.order - right.order ||
-          left.semanticOrder - right.semanticOrder ||
-          left.entry.id.localeCompare(right.entry.id),
-      )
-      .map(({ entry }) => {
-        const resultEnvelopes = events.flatMap((event) =>
-          entry.sourceEventIds.includes(event.id) && event.resultEnvelope
-            ? [event.resultEnvelope]
-            : [],
-        );
-        return resultEnvelopes.length ? { ...entry, resultEnvelopes } : entry;
-      }),
+    entries,
+    groups: buildCombatResultGroups(
+      orderedEntries.map(({ entry, sequence }, sortOrder) =>
+        ledgerFragment({ entry, sequence, sortOrder }),
+      ),
+    ),
   };
 }

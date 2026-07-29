@@ -5,7 +5,11 @@ import {
   buildCombatEventResultModel,
   type CombatEventResultModel,
 } from "../view-models/buildCombatEventResultModel";
-import { CombatCalculationPanel } from "./CombatCalculationPanel";
+import {
+  buildCombatResultGroups,
+  type CombatResultLedgerFragmentInput,
+} from "../view-models/combatResultLedgerPresentation";
+import { CombatResultLedger } from "./CombatResultLedger";
 
 export function CombatEventResultList(input: {
   emptyMessage?: string;
@@ -19,18 +23,27 @@ export function CombatEventResultList(input: {
       calculationStage: "panel_historical_calculation_presentation",
       resultStage: "panel_historical_attack_parry_result_presentation",
     });
-  const [expandedCalculationIds, setExpandedCalculationIds] = React.useState<Set<string>>(
-    () => new Set(),
-  );
-
-  const toggleCalculation = (calculationId: string) => {
-    setExpandedCalculationIds((current) => {
-      const next = new Set(current);
-      if (next.has(calculationId)) next.delete(calculationId);
-      else next.add(calculationId);
-      return next;
-    });
-  };
+  const groups =
+    model.groups ??
+    buildCombatResultGroups(
+      model.items.map(
+        (item): CombatResultLedgerFragmentInput => ({
+          actionInstanceId: item.envelope?.actionInstanceId,
+          result: {
+            calculations: item.calculations,
+            completenessLabel: item.completenessLabel,
+            heading: item.title,
+            id: item.id,
+            outcomeRows: item.outcomeRows,
+            resultEnvelopes: item.envelope ? [item.envelope] : [],
+            sequence: item.sequence,
+            sourceEventIds: [item.id],
+            state: "final",
+            summary: item.summary,
+          },
+        }),
+      ),
+    );
   return (
     <section
       aria-label={input.title ?? "Action result"}
@@ -45,40 +58,8 @@ export function CombatEventResultList(input: {
       }}
     >
       <strong>{input.title ?? "Action result"}</strong>
-      {model.items.length ? (
-        <ol style={{ display: "grid", gap: "0.55rem", margin: 0, paddingLeft: "1.4rem" }}>
-          {model.items.map((item) => (
-            <li key={item.id} style={{ paddingLeft: "0.15rem" }}>
-              <article style={{ display: "grid", gap: "0.2rem" }}>
-                <strong style={{ fontSize: "0.9rem" }}>{item.title}</strong>
-                <div>{item.summary}</div>
-                {item.outcomeRows.map((row) => (
-                  <div key={row.key} style={{ fontSize: "0.88rem" }}>
-                    {row.text}
-                  </div>
-                ))}
-                {item.envelope?.publicCombatNote ? (
-                  <div style={{ fontSize: "0.88rem" }}>
-                    <strong>Combat note:</strong> {item.envelope.publicCombatNote}
-                  </div>
-                ) : null}
-                {item.calculations.map((calculation) => (
-                  <CombatCalculationPanel
-                    expanded={expandedCalculationIds.has(calculation.calculationId)}
-                    key={calculation.calculationId}
-                    onToggle={() => toggleCalculation(calculation.calculationId)}
-                    presentation={calculation}
-                  />
-                ))}
-                {item.completenessLabel ? (
-                  <div style={{ color: "#8a4f21", fontSize: "0.82rem", fontWeight: 700 }}>
-                    {item.completenessLabel}
-                  </div>
-                ) : null}
-              </article>
-            </li>
-          ))}
-        </ol>
+      {groups.length ? (
+        <CombatResultLedger groups={groups} />
       ) : (
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
           {input.emptyMessage ?? "No recorded result for this step."}
