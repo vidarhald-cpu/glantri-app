@@ -372,6 +372,10 @@ action-specific exceptions without a canonical reason. A canonical reason means 
 real difference in authoritative facts, privacy, or action structure—not an
 implementation shortcut or existing UI inconsistency.
 
+The implementation baseline, evidence, and approved remediation sequence are recorded
+in the
+[Combat Presentation Conformance Audit](./combat-presentation-conformance-audit.md).
+
 This document does not authorize commands or alter player-safe projection. The
 descriptor-driven progression, canonical revision, server-side visibility, and
 snapshot rules in the wider combat architecture continue to govern the facts that

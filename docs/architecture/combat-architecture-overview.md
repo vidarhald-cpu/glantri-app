@@ -538,6 +538,8 @@ No future work should weaken the invariants in this document.
 - [combat-canonical-conformance-audit.md](./combat-canonical-conformance-audit.md)
 - [combat-presentation-guidelines.md](./combat-presentation-guidelines.md) —
   normative guidance for presenting canonical combat facts
+- [combat-presentation-conformance-audit.md](./combat-presentation-conformance-audit.md) —
+  audited implementation baseline and approved normalization sequence
 - [combat-presentation-contract.md](./combat-presentation-contract.md)
 - [combat-task-integration-matrix.md](./combat-task-integration-matrix.md)
 - [combat-read-models.md](./combat-read-models.md)
