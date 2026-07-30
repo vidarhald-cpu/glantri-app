@@ -42,6 +42,7 @@ export interface CombatEventResultModel {
 
 const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   attack: "Attack",
+  action_skipped: "Skipped",
   combat_experience: "Combat Experience",
   continued_contact_maintenance: "Continued Contact — Maintenance",
   critical: "Critical",
@@ -54,10 +55,13 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   health_check: "Health check",
   hit_location: "Hit location",
   initiative: "Initiative",
+  modifier_review: "Modifier review",
   parry: "Parry",
   offensive_parry_brawling: "Offensive Parry — Brawling",
   observation: "Observe Opponent",
   participant_su_review: "Participant SU review",
+  effect_review: "Damage/effects review",
+  round_boundary: "Round boundary",
   feint_feasibility: "Feint ruling",
   feint_roll: "Feint roll",
   feint_result: "Opposed result",
@@ -327,14 +331,26 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     case "distance_control_result": {
       const result = factLabel(factValue(event, "resultLabel", "outcome"));
       const distance = factLabel(factValue(event, "proposedDistance"));
+      const winnerParticipantId = factValue(event, "winnerParticipantId");
+      const winner =
+        typeof winnerParticipantId === "string"
+          ? event.identities.find((candidate) => candidate.participantId === winnerParticipantId)
+              ?.displayName
+          : undefined;
+      const safeResult = result && /participant[_ ]?[ab]/i.test(result) ? undefined : result;
       return {
         outcomeRows: [
-          ...resultRow(event, result ? `Result: ${result}` : undefined),
+          ...resultRow(
+            event,
+            winner ? `Winner: ${winner}` : safeResult ? `Result: ${safeResult}` : undefined,
+          ),
           ...(distance
             ? [{ key: `${event.id}:outcome:distance`, text: `Proposed distance: ${distance}` }]
             : []),
         ],
-        summary: "Distance-control pair result resolved.",
+        summary: winner
+          ? `${winner} won the distance-control contest.`
+          : "The distance-control contest was resolved.",
       };
     }
     case "distance_control_applied": {
@@ -365,8 +381,108 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         summary: `${roller ?? "Participant"} made a health check.`,
       };
     }
-    case "participant_su_review":
-      return { outcomeRows: [], summary: `${actor ?? "Participant"} completed SU review.` };
+    case "participant_su_review": {
+      const changeSummaries = factValue(event, "changeSummaries");
+      return {
+        outcomeRows: Array.isArray(changeSummaries)
+          ? changeSummaries.length
+            ? changeSummaries.flatMap((change, index) =>
+                typeof change === "string"
+                  ? [{ key: `${event.id}:outcome:change:${index}`, text: change }]
+                  : [],
+              )
+            : resultRow(event, "No changes")
+          : factValue(event, "changed") === false
+            ? resultRow(event, "No changes")
+            : [],
+        summary: `${actor ?? "Participant"} completed SU review.`,
+      };
+    }
+    case "modifier_review": {
+      const changes = factValue(event, "changes");
+      const changeRows = Array.isArray(changes)
+        ? changes.flatMap((candidate, index) => {
+            if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+            const change = candidate as Record<string, unknown>;
+            const changeType =
+              change.changeType === "added" ||
+              change.changeType === "changed" ||
+              change.changeType === "removed"
+                ? change.changeType
+                : undefined;
+            const category = typeof change.category === "string" ? change.category : "Modifier";
+            const value = typeof change.value === "number" ? change.value : undefined;
+            const previousValue =
+              typeof change.previousValue === "number" ? change.previousValue : undefined;
+            if (!changeType) return [];
+            const signed = (candidateValue: number) =>
+              `${candidateValue >= 0 ? "+" : ""}${candidateValue}`;
+            const detail =
+              changeType === "removed"
+                ? "removed"
+                : changeType === "changed" && previousValue !== undefined && value !== undefined
+                  ? `${signed(previousValue)} → ${signed(value)}`
+                  : value !== undefined
+                    ? signed(value)
+                    : changeType;
+            return [
+              {
+                key: `${event.id}:outcome:change:${index}`,
+                text: `${category}: ${detail}`,
+              },
+            ];
+          })
+        : [];
+      const acceptedModifiers = factValue(event, "acceptedModifiers");
+      const rows = Array.isArray(acceptedModifiers)
+        ? acceptedModifiers.flatMap((candidate, index) => {
+            if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+            const modifier = candidate as Record<string, unknown>;
+            const category = typeof modifier.category === "string" ? modifier.category : "Modifier";
+            const total = typeof modifier.total === "number" ? modifier.total : undefined;
+            return total === undefined
+              ? []
+              : [
+                  {
+                    key: `${event.id}:outcome:modifier:${index}`,
+                    text: `${category}: ${total >= 0 ? "+" : ""}${total}`,
+                  },
+                ];
+          })
+        : [];
+      return {
+        outcomeRows: changeRows.length
+          ? changeRows
+          : factValue(event, "changed") === false
+            ? resultRow(event, "No changes")
+            : rows.length
+              ? rows
+              : resultRow(event, factLabel(factValue(event, "resultLabel"))),
+        summary: `${actor ?? "Participant"} completed modifier review.`,
+      };
+    }
+    case "action_skipped": {
+      const reason = factLabel(factValue(event, "reason"));
+      return {
+        outcomeRows: resultRow(event, reason ? `Reason: ${reason}` : "No action"),
+        summary: `${actor ?? "Participant"} was skipped.`,
+      };
+    }
+    case "effect_review":
+      return {
+        outcomeRows: resultRow(event, "Review completed"),
+        summary: `${actor ?? defender ?? "Participant"} completed damage/effects review.`,
+      };
+    case "round_boundary": {
+      const resolutionType = factValue(event, "resolutionType");
+      return {
+        outcomeRows: [],
+        summary:
+          resolutionType === "round_completed"
+            ? `Round ${event.roundNumber} completed.`
+            : "Combat boundary advanced.",
+      };
+    }
     case "initiative": {
       const total = factLabel(factValue(event, "total"));
       const resolutionType = factValue(event, "resolutionType");
@@ -389,9 +505,30 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "declaration": {
       const action = factLabel(factValue(event, "actionLabel"));
+      const secondary = factLabel(factValue(event, "secondaryActionLabel"));
+      const movement = factLabel(factValue(event, "movementLabel"));
+      const submittedBy = factValue(event, "submittedBy");
+      const target = identity(event, "target");
       return {
-        outcomeRows: resultRow(event, action ? `Action: ${action}` : undefined),
-        summary: `${attacker ?? "Participant"} declared an action.`,
+        outcomeRows: [
+          ...resultRow(event, action ? `Action: ${action}` : undefined),
+          ...(secondary
+            ? [{ key: `${event.id}:outcome:secondary`, text: `Secondary action: ${secondary}` }]
+            : []),
+          ...(movement
+            ? [{ key: `${event.id}:outcome:movement`, text: `Movement: ${movement}` }]
+            : []),
+          ...(target ? [{ key: `${event.id}:outcome:target`, text: `Target: ${target}` }] : []),
+          ...(submittedBy === "gm" || submittedBy === "player"
+            ? [
+                {
+                  key: `${event.id}:outcome:submitted-by`,
+                  text: `Declared by: ${submittedBy === "gm" ? "GM" : "Player"}`,
+                },
+              ]
+            : []),
+        ],
+        summary: `${actor ?? attacker ?? "Participant"} declared an action.`,
       };
     }
     case "feint_feasibility":

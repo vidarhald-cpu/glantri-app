@@ -1737,6 +1737,9 @@ export default function ScenarioPlayerCombatPageContent({
       task.owner.participantId === selectedRoundParticipant?.participantId &&
       task.contributesToProgression,
   );
+  const currentCombatStep = selectedProgressionTasks[0]
+    ? getCombatRoundStepForCursorStep(selectedProgressionTasks[0].trackerFacet.step)
+    : (combatRoundState?.currentStep ?? "select_actions");
   const currentActionPresentation = useMemo(
     () =>
       buildCurrentActionPresentation({
@@ -1773,6 +1776,7 @@ export default function ScenarioPlayerCombatPageContent({
             events: combatHistory.activeRound.events,
             participantId: selectedRoundParticipant.participantId,
             roundNumber: combatHistory.activeRound.roundNumber,
+            step: currentCombatStep,
             viewer: { kind: "player" },
           })
         : undefined,
@@ -1781,6 +1785,7 @@ export default function ScenarioPlayerCombatPageContent({
       combatHistory?.activeRound.roundNumber,
       combatHistory?.progression,
       combatHistory?.sourceUpdatedAt,
+      currentCombatStep,
       encounterId,
       playerCombatLog,
       selectedRoundParticipant,
@@ -2076,9 +2081,6 @@ export default function ScenarioPlayerCombatPageContent({
     status: controlledEquipmentStatus,
   });
 
-  const currentCombatStep = selectedProgressionTasks[0]
-    ? getCombatRoundStepForCursorStep(selectedProgressionTasks[0].trackerFacet.step)
-    : (combatRoundState?.currentStep ?? "select_actions");
   const currentStepIsModifierReview =
     currentCombatStep === "review_action_modifiers" ||
     currentCombatStep === "review_phase_2_modifiers";

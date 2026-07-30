@@ -8,6 +8,7 @@ import {
   getCombatRoundParticipantAttackResults,
   getCombatRoundDamageResultId,
   getCombatRoundEndDistanceProposalLifecycle,
+  getPreviousCombatRoundStep,
   type CombatRoundCommand,
   type CombatRoundCommandType,
   type CombatRoundEndReview,
@@ -17,6 +18,7 @@ import {
   type CombatRoundStep,
   type CombatRoundStepSnapshot,
 } from "./combatRoundManager";
+import { getCombatDeclarationActionLabel } from "./combatDeclarationValidation";
 import {
   combatStepEventSchema,
   type CombatStepEvent,
@@ -83,6 +85,45 @@ function stringArrayFact(record: Record<string, unknown>, key: string): string[]
 
 function unique(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function humanizeIdentifier(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function declarationTargetParticipantId(
+  declaration: CombatRoundParticipantState["declaration"],
+): string | undefined {
+  if (!declaration) return undefined;
+  return (
+    declaration.secondaryActionContext?.targetParticipantId ??
+    declaration.adjustDistance?.targetParticipantId ??
+    declaration.feint?.targetParticipantId ??
+    declaration.phaseContexts?.phase1?.targetParticipantId ??
+    declaration.phaseContexts?.phase2?.targetParticipantId ??
+    declaration.combatContext?.targetParticipantId ??
+    declaration.combatContext?.selectedOpponentId
+  );
+}
+
+function declarationMovementLabel(
+  declaration: NonNullable<CombatRoundParticipantState["declaration"]>,
+): string | undefined {
+  if (declaration.movementIntent?.mode === "hold_position") return "Hold position";
+  if (declaration.movementIntent?.mode === "set_distance_preferences") {
+    return "Set distance preferences";
+  }
+  return declaration.movementId ? humanizeIdentifier(declaration.movementId) : undefined;
+}
+
+function declarationSecondaryActionLabel(
+  declaration: NonNullable<CombatRoundParticipantState["declaration"]>,
+): string | undefined {
+  const action = declaration.secondaryActionContext?.action ?? declaration.secondaryActionId;
+  return action ? getCombatDeclarationActionLabel(action) : undefined;
 }
 
 function phaseStep(
@@ -389,11 +430,22 @@ function declarationCandidate(input: {
 }): LegacyEventCandidate | undefined {
   const declaration = input.participant.declaration;
   if (!declaration) return undefined;
-  const command = findCommand({
-    commands: input.commands,
-    participantId: input.participant.participantId,
-    type: "declare_action",
-  });
+  const command = [...input.commands]
+    .reverse()
+    .find(
+      ({ value }) =>
+        value.type === "declare_action" && value.participantId === input.participant.participantId,
+    );
+
+  const targetParticipantId = declarationTargetParticipantId(declaration);
+  const actionLabel = getCombatDeclarationActionLabel(declaration.actionId);
+  const movementLabel = declarationMovementLabel(declaration);
+  const secondaryActionLabel = declarationSecondaryActionLabel(declaration);
+  const detailRows = [
+    `Action: ${actionLabel}`,
+    ...(secondaryActionLabel ? [`Secondary action: ${secondaryActionLabel}`] : []),
+    ...(movementLabel ? [`Movement: ${movementLabel}`] : []),
+  ];
 
   return buildCandidate({
     command: command?.value,
@@ -405,11 +457,30 @@ function declarationCandidate(input: {
       facts: {
         involvedOutcome: {
           actionId: declaration.actionId,
+          actionLabel,
+          additionalActionNotes: declaration.additionalActionNotes,
           movementId: declaration.movementId,
           movementIntent: declaration.movementIntent,
+          movementLabel,
           phaseContexts: declaration.phaseContexts,
           secondaryActionContext: declaration.secondaryActionContext,
           secondaryActionId: declaration.secondaryActionId,
+          secondaryActionLabel,
+          submittedBy: declaration.submittedBy,
+          targetParticipantId,
+        },
+        resultPresentation: {
+          actionInstanceId: command?.value.id ?? declaration.id,
+          calculationReferences: [],
+          committedConsequences: [],
+          conciseOutcome: {
+            details: detailRows,
+            label: `${actionLabel} declared`,
+          },
+          privateDiagnostics: [],
+          publicCombatNote: declaration.additionalActionNotes?.trim() || undefined,
+          standardConsequences: [],
+          subordinateEventReferences: [],
         },
       },
       involvedParticipantIds: [input.participant.participantId],
@@ -420,6 +491,7 @@ function declarationCandidate(input: {
       sourceKind: command ? "legacy_command" : "legacy_result",
       status: "recorded",
       step: "select_actions",
+      targetParticipantId,
       type: "declaration",
     },
     roundNumber: input.roundNumber,
@@ -1002,6 +1074,26 @@ function roundEndParticipantCandidates(input: {
           participantId: review.participantId,
           type: "commit_round_end_participant_review",
         });
+        const changeSummaries = [
+          ...review.proposedDamage
+            .filter((proposal) => proposal.accepted)
+            .map((proposal) => `${proposal.label}: ${proposal.amount} damage`),
+          ...review.proposedEffects
+            .filter((proposal) => proposal.accepted)
+            .map((proposal) =>
+              [
+                proposal.label,
+                proposal.nextDuration
+                  ? `duration ${proposal.nextDuration}`
+                  : proposal.nextExpiresAtRound
+                    ? `expires round ${proposal.nextExpiresAtRound}`
+                    : "updated",
+              ].join(": "),
+            ),
+          ...review.proposedRemovals
+            .filter((proposal) => proposal.accepted)
+            .map((proposal) => `${proposal.label}: expired`),
+        ];
         candidates.push(
           buildCandidate({
             command: command?.value,
@@ -1017,6 +1109,22 @@ function roundEndParticipantCandidates(input: {
                   warnings: review.warnings,
                 },
                 involvedOutcome: { status: review.status },
+                resultPresentation: {
+                  actionInstanceId: command?.value.id,
+                  calculationReferences: [],
+                  committedConsequences: [],
+                  conciseOutcome: {
+                    details: changeSummaries.length ? changeSummaries : ["No changes"],
+                    label: "Round-end review",
+                  },
+                  privateDiagnostics: [],
+                  standardConsequences: [],
+                  subordinateEventReferences: [],
+                },
+                publicOutcome: {
+                  changeSummaries,
+                  changed: changeSummaries.length > 0,
+                },
               },
               involvedParticipantIds: [review.participantId],
               occurredAt: review.committedAt ?? command?.value.createdAt ?? null,
@@ -1040,6 +1148,400 @@ function roundEndParticipantCandidates(input: {
       return candidates;
     },
   );
+}
+
+function modifierSnapshotFacts(
+  snapshots: Array<{ sourceIndex: number; value: CombatRoundStepSnapshot }>,
+  participantId: string,
+  step: CombatRoundStep,
+): Array<{
+  category: string;
+  entries: Array<{
+    durationRounds?: number;
+    id: string;
+    notes?: string;
+    scope: string;
+    value: number;
+  }>;
+  total: number;
+}> {
+  const snapshot = [...snapshots]
+    .reverse()
+    .find(({ value }) => value.participantId === participantId && value.step === step)?.value;
+  return (snapshot?.modifierSummary?.rows ?? []).flatMap((row) => {
+    const entries = row.entries
+      .filter((entry) => entry.value !== 0)
+      .map((entry) => ({
+        durationRounds: entry.durationRounds,
+        id: entry.id,
+        notes: entry.notes,
+        scope: entry.scope,
+        value: entry.value,
+      }));
+    return entries.length || row.total !== 0
+      ? [{ category: row.label, entries, total: row.total }]
+      : [];
+  });
+}
+
+function modifierSnapshotChangeFacts(input: {
+  participantId: string;
+  snapshots: Array<{ sourceIndex: number; value: CombatRoundStepSnapshot }>;
+  step: "review_action_modifiers" | "review_phase_2_modifiers";
+}): Array<{
+  category: string;
+  changeType: "added" | "changed" | "removed";
+  durationRounds?: number;
+  id: string;
+  notes?: string;
+  previousValue?: number;
+  scope: string;
+  value: number;
+}> {
+  const current = modifierSnapshotFacts(input.snapshots, input.participantId, input.step);
+  const previousStep = getPreviousCombatRoundStep(input.step);
+  const previous = previousStep
+    ? modifierSnapshotFacts(input.snapshots, input.participantId, previousStep)
+    : [];
+  const flatten = (
+    rows: ReturnType<typeof modifierSnapshotFacts>,
+  ): Map<
+    string,
+    {
+      category: string;
+      durationRounds?: number;
+      id: string;
+      notes?: string;
+      scope: string;
+      value: number;
+    }
+  > =>
+    new Map(
+      rows.flatMap((row) =>
+        row.entries.map((entry) => [
+          entry.id,
+          {
+            category: row.category,
+            ...entry,
+          },
+        ]),
+      ),
+    );
+  const currentEntries = flatten(current);
+  const previousEntries = flatten(previous);
+  return [
+    ...[...currentEntries.values()].flatMap((entry) => {
+      const prior = previousEntries.get(entry.id);
+      if (
+        prior &&
+        prior.category === entry.category &&
+        prior.durationRounds === entry.durationRounds &&
+        prior.notes === entry.notes &&
+        prior.scope === entry.scope &&
+        prior.value === entry.value
+      ) {
+        return [];
+      }
+      return [
+        {
+          ...entry,
+          changeType: prior ? ("changed" as const) : ("added" as const),
+          previousValue: prior?.value,
+        },
+      ];
+    }),
+    ...[...previousEntries.values()].flatMap((entry) =>
+      currentEntries.has(entry.id)
+        ? []
+        : [{ ...entry, changeType: "removed" as const, previousValue: entry.value, value: 0 }],
+    ),
+  ].sort(
+    (left, right) => left.category.localeCompare(right.category) || left.id.localeCompare(right.id),
+  );
+}
+
+function workflowCommandCandidates(input: {
+  commands: Array<{ sourceIndex: number; value: CombatRoundCommand }>;
+  encounterId: string;
+  roundNumber: number;
+  snapshots: Array<{ sourceIndex: number; value: CombatRoundStepSnapshot }>;
+}): LegacyEventCandidate[] {
+  return input.commands.flatMap(({ sourceIndex, value: command }): LegacyEventCandidate[] => {
+    const make = (event: Parameters<typeof buildCandidate>[0]["event"], sourceRank: number) =>
+      buildCandidate({
+        command,
+        commandIndex: sourceIndex,
+        encounterId: input.encounterId,
+        event,
+        roundNumber: input.roundNumber,
+        sourceIndex,
+        sourceRank,
+        sourceToken: command.id,
+      });
+
+    if (command.type === "review_modifiers_phase1" || command.type === "review_modifiers_phase2") {
+      const step =
+        command.type === "review_modifiers_phase1"
+          ? "review_action_modifiers"
+          : "review_phase_2_modifiers";
+      const acceptedModifiers = modifierSnapshotFacts(input.snapshots, command.participantId, step);
+      const snapshotAvailable = input.snapshots.some(
+        ({ value }) => value.participantId === command.participantId && value.step === step,
+      );
+      const changes = modifierSnapshotChangeFacts({
+        participantId: command.participantId,
+        snapshots: input.snapshots,
+        step,
+      });
+      return [
+        make(
+          {
+            actorParticipantId: command.participantId,
+            facts: {
+              involvedOutcome: {
+                acceptedModifiers,
+                changed: snapshotAvailable ? changes.length > 0 : undefined,
+                changes,
+                resultLabel: snapshotAvailable
+                  ? changes.length
+                    ? "Changes accepted"
+                    : "No changes"
+                  : "Modifier state accepted",
+                resolutionType: "accepted",
+              },
+              resultPresentation: {
+                actionInstanceId: command.id,
+                calculationReferences: [],
+                committedConsequences: [],
+                conciseOutcome: {
+                  details: [
+                    snapshotAvailable
+                      ? changes.length
+                        ? "Changes accepted"
+                        : "No changes"
+                      : "Modifier state accepted",
+                  ],
+                  label: "Modifier review",
+                },
+                privateDiagnostics: [],
+                standardConsequences: [],
+                subordinateEventReferences: [],
+              },
+            },
+            involvedParticipantIds: [command.participantId],
+            occurredAt: command.createdAt,
+            ownerParticipantId: command.participantId,
+            outcomeScope: "involved",
+            sourceIds: [command.id],
+            sourceKind: "legacy_command",
+            status: "committed",
+            step,
+            type: "modifier_review",
+          },
+          2,
+        ),
+      ];
+    }
+
+    if (command.type === "complete_remaining_step") {
+      const completedParticipantIds = stringArrayFact(command.facts, "completedParticipantIds");
+      const step = stringFact(command.facts, "step");
+      if (step !== "review_action_modifiers" && step !== "review_phase_2_modifiers") {
+        return [];
+      }
+      return completedParticipantIds.map((participantId, participantIndex) => {
+        const acceptedModifiers = modifierSnapshotFacts(input.snapshots, participantId, step);
+        return buildCandidate({
+          command,
+          commandIndex: sourceIndex,
+          encounterId: input.encounterId,
+          event: {
+            actorParticipantId: participantId,
+            facts: {
+              involvedOutcome: {
+                acceptedModifiers,
+                changed: false,
+                resolutionType: "accepted_unchanged",
+                source: "gm_bulk_completion",
+              },
+              resultPresentation: {
+                actionInstanceId: `${command.id}:${participantId}`,
+                calculationReferences: [],
+                committedConsequences: [],
+                conciseOutcome: {
+                  details: ["No changes"],
+                  label: "Modifier review",
+                },
+                privateDiagnostics: [],
+                standardConsequences: [],
+                subordinateEventReferences: [],
+              },
+            },
+            involvedParticipantIds: [participantId],
+            occurredAt: command.createdAt,
+            ownerParticipantId: participantId,
+            outcomeScope: "involved",
+            sourceIds: [command.id],
+            sourceKind: "legacy_command",
+            status: "committed",
+            step,
+            type: "modifier_review",
+          },
+          roundNumber: input.roundNumber,
+          sourceIndex: sourceIndex * 100 + participantIndex,
+          sourceRank: 2,
+          sourceToken: `${command.id}:${participantId}`,
+        });
+      });
+    }
+
+    if (
+      command.type === "skip_phase_action" ||
+      command.type === "back_out_phase_attack" ||
+      (command.type === "submit_phase_initiative_choice" &&
+        stringFact(command.facts, "choice") === "back_out") ||
+      (command.type === "decide_double_attack_phase2" &&
+        stringFact(command.facts, "decision") === "cancel")
+    ) {
+      const step = command.phase === "phase2" ? "phase_2_actions" : "phase_1_actions";
+      const reason =
+        command.type === "decide_double_attack_phase2"
+          ? "Double Attack phase 2 cancelled"
+          : command.type === "back_out_phase_attack" ||
+              command.type === "submit_phase_initiative_choice"
+            ? "Attack backed out"
+            : stringFact(command.facts, "reason");
+      return [
+        make(
+          {
+            actorParticipantId: command.participantId,
+            facts: {
+              involvedOutcome: {
+                reason,
+                resolutionType: "skipped",
+              },
+              resultPresentation: {
+                actionInstanceId: command.id,
+                calculationReferences: [],
+                committedConsequences: [],
+                conciseOutcome: { details: ["No action"], label: "Skipped" },
+                privateDiagnostics: [],
+                standardConsequences: [],
+                subordinateEventReferences: [],
+              },
+            },
+            involvedParticipantIds: [command.participantId],
+            occurredAt: command.createdAt,
+            ownerParticipantId: command.participantId,
+            outcomeScope: "involved",
+            phase: command.phase,
+            sourceIds: [command.id],
+            sourceKind: "legacy_command",
+            status: "skipped",
+            step,
+            type: "action_skipped",
+          },
+          5,
+        ),
+      ];
+    }
+
+    if (
+      command.type === "complete_damage_review_phase1" ||
+      command.type === "complete_damage_review_phase2"
+    ) {
+      const step =
+        command.type === "complete_damage_review_phase1" ? "phase_1_damage" : "phase_2_damage";
+      return [
+        make(
+          {
+            actorParticipantId: command.participantId,
+            attackResultId: stringFact(command.facts, "attackResultId"),
+            attackerParticipantId: stringFact(command.facts, "attackerParticipantId"),
+            defenderParticipantId:
+              stringFact(command.facts, "defenderParticipantId") ?? command.participantId,
+            facts: {
+              involvedOutcome: {
+                resolutionType: "review_completed",
+                status: stringFact(command.facts, "status"),
+              },
+              resultPresentation: {
+                actionInstanceId: command.id,
+                calculationReferences: [],
+                committedConsequences: [],
+                conciseOutcome: {
+                  details: ["Review completed"],
+                  label: "Damage/effects review",
+                },
+                privateDiagnostics: [],
+                standardConsequences: [],
+                subordinateEventReferences: [],
+              },
+            },
+            involvedParticipantIds: unique([
+              command.participantId,
+              stringFact(command.facts, "attackerParticipantId"),
+              stringFact(command.facts, "defenderParticipantId"),
+            ]),
+            occurredAt: command.createdAt,
+            ownerParticipantId: command.participantId,
+            outcomeScope: "involved",
+            phase: command.phase,
+            sourceIds: [command.id],
+            sourceKind: "legacy_command",
+            status: "committed",
+            step,
+            type: "effect_review",
+          },
+          9,
+        ),
+      ];
+    }
+
+    if (command.type === "complete_round" || command.type === "advance_combat_boundary") {
+      return [
+        make(
+          {
+            actorParticipantId: command.participantId,
+            facts: {
+              involvedOutcome: {
+                resolutionType:
+                  command.type === "complete_round" ? "round_completed" : "boundary_advanced",
+              },
+              resultPresentation: {
+                actionInstanceId: command.id,
+                calculationReferences: [],
+                committedConsequences: [],
+                conciseOutcome: {
+                  details: [
+                    command.type === "complete_round"
+                      ? `Round ${command.roundNumber} completed`
+                      : "Combat boundary advanced",
+                  ],
+                  label: "Round boundary",
+                },
+                privateDiagnostics: [],
+                standardConsequences: [],
+                subordinateEventReferences: [],
+              },
+            },
+            involvedParticipantIds: [command.participantId],
+            occurredAt: command.createdAt,
+            ownerParticipantId: command.participantId,
+            outcomeScope: "public",
+            sourceIds: [command.id],
+            sourceKind: "legacy_command",
+            status: "committed",
+            step: "round_summary",
+            type: "round_boundary",
+          },
+          14,
+        ),
+      ];
+    }
+
+    return [];
+  });
 }
 
 function snapshotFallbackCandidates(input: {
@@ -1390,6 +1892,12 @@ export function deriveLegacyCombatStepEvents(
       encounterId: input.encounterId,
       roundEndReview: parsed.roundEndReview,
       roundNumber: input.roundNumber,
+    }),
+    ...workflowCommandCandidates({
+      commands: parsed.commands,
+      encounterId: input.encounterId,
+      roundNumber: input.roundNumber,
+      snapshots: parsed.snapshots,
     }),
   );
   candidates.push(

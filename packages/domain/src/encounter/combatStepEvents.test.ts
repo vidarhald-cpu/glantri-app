@@ -5,6 +5,7 @@ import {
   combatRoundEndReviewSchema,
   combatRoundParticipantStateSchema,
   combatRoundPhaseResolutionResultSchema,
+  combatRoundStepSnapshotSchema,
   combatStepEventSchema,
   combatStepEventStatusSchema,
   combatStepEventTypeSchema,
@@ -23,7 +24,7 @@ function command(input: {
   id: string;
   participantId: string;
   phase?: "phase1" | "phase2";
-  step?: "DE" | "i1" | "A1" | "P1" | "D1" | "SU";
+  step?: "DE" | "M2" | "i1" | "A1" | "P1" | "D1" | "SU";
   type: CombatRoundCommand["type"];
 }): CombatRoundCommand {
   const step = input.step ?? "DE";
@@ -401,10 +402,12 @@ describe("deriveLegacyCombatStepEvents", () => {
   });
 
   it("uses command order and stable source indexes when timestamps tie", () => {
-    const tiedCommands = attackCommands().slice(0, 3).map((entry) => ({
-      ...entry,
-      createdAt: "2026-01-01T00:00:00.000Z",
-    }));
+    const tiedCommands = attackCommands()
+      .slice(0, 3)
+      .map((entry) => ({
+        ...entry,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }));
     const tiedParticipants = participants();
     tiedParticipants[0] = combatRoundParticipantStateSchema.parse({
       ...tiedParticipants[0],
@@ -541,6 +544,266 @@ describe("deriveLegacyCombatStepEvents", () => {
       visibility: {
         involvedParticipantIds: [ATTACKER_ID, DEFENDER_ID],
       },
+    });
+  });
+
+  it("publishes the selected declaration facts and public note without unselected options", () => {
+    const declaredParticipant = combatRoundParticipantStateSchema.parse({
+      declaration: {
+        actionId: "parry",
+        additionalActionNotes: "Hold the doorway.",
+        movementIntent: { distancePreferences: [], mode: "hold_position" },
+        roundNumber: 1,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: DEFENDER_ID,
+        },
+        secondaryActionId: "observe_opponent",
+        submittedAt: "2026-01-01T00:01:00.000Z",
+        submittedBy: "gm",
+      },
+      label: "Observer",
+      participantId: ATTACKER_ID,
+    });
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          id: "declaration-command",
+          participantId: ATTACKER_ID,
+          type: "declare_action",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      participants: [declaredParticipant],
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      facts: {
+        involvedOutcome: {
+          actionId: "parry",
+          actionLabel: "Parry",
+          additionalActionNotes: "Hold the doorway.",
+          movementLabel: "Hold position",
+          secondaryActionLabel: "Observe Opponent",
+          submittedBy: "gm",
+          targetParticipantId: DEFENDER_ID,
+        },
+        resultPresentation: {
+          publicCombatNote: "Hold the doorway.",
+        },
+      },
+      targetParticipantId: DEFENDER_ID,
+      type: "declaration",
+    });
+    expect(events[0]?.facts.involvedOutcome).not.toHaveProperty("attackModeId");
+  });
+
+  it("publishes accepted reviews, skips, effect review, and round boundary as bounded results", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          id: "modifier-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: { reason: "gm_skip" },
+          id: "action-skip",
+          participantId: ATTACKER_ID,
+          phase: "phase1",
+          step: "A1",
+          type: "skip_phase_action",
+        }),
+        command({
+          createdAt: "2026-01-01T00:03:00.000Z",
+          facts: { choice: "back_out" },
+          id: "choice-back-out",
+          participantId: DEFENDER_ID,
+          phase: "phase1",
+          step: "A1",
+          type: "submit_phase_initiative_choice",
+        }),
+        command({
+          createdAt: "2026-01-01T00:03:30.000Z",
+          facts: { decision: "cancel" },
+          id: "double-attack-cancel",
+          participantId: ATTACKER_ID,
+          phase: "phase2",
+          step: "M2",
+          type: "decide_double_attack_phase2",
+        }),
+        command({
+          createdAt: "2026-01-01T00:04:00.000Z",
+          facts: {
+            attackResultId: ATTACK_RESULT_ID,
+            attackerParticipantId: ATTACKER_ID,
+            defenderParticipantId: DEFENDER_ID,
+          },
+          id: "effect-review",
+          participantId: DEFENDER_ID,
+          phase: "phase1",
+          step: "D1",
+          type: "complete_damage_review_phase1",
+        }),
+        command({
+          createdAt: "2026-01-01T00:05:00.000Z",
+          id: "round-complete",
+          participantId: ATTACKER_ID,
+          step: "SU",
+          type: "complete_round",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "modifier_review",
+      "action_skipped",
+      "action_skipped",
+      "action_skipped",
+      "effect_review",
+      "round_boundary",
+    ]);
+    expect(events[0]?.facts.involvedOutcome).toMatchObject({
+      acceptedModifiers: [],
+      resultLabel: "Modifier state accepted",
+    });
+    expect(events[1]).toMatchObject({ status: "skipped", step: "phase_1_actions" });
+    expect(events[2]?.facts.involvedOutcome).toMatchObject({
+      reason: "Attack backed out",
+      resolutionType: "skipped",
+    });
+    expect(events[3]).toMatchObject({
+      status: "skipped",
+      step: "phase_2_actions",
+    });
+    expect(events[3]?.facts.involvedOutcome).toMatchObject({
+      reason: "Double Attack phase 2 cancelled",
+    });
+    expect(events[4]).toMatchObject({
+      attackResultId: ATTACK_RESULT_ID,
+      ownerParticipantId: DEFENDER_ID,
+      step: "phase_1_damage",
+    });
+    expect(events[5]?.facts.involvedOutcome).toMatchObject({
+      resolutionType: "round_completed",
+    });
+  });
+
+  it("records only accepted modifier-review changes against the preceding snapshot", () => {
+    const snapshots = [
+      combatRoundStepSnapshotSchema.parse({
+        committedAt: "2026-01-01T00:00:30.000Z",
+        id: "declaration-snapshot",
+        modifierSummary: {
+          dbRaw: -1,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          obSkillRaw: 0,
+          rows: [
+            {
+              bucketKey: "situation_db",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "prior-db",
+                  notes: "Old stance",
+                  scope: "until",
+                  value: -1,
+                },
+              ],
+              label: "DB/Parry",
+              total: -1,
+            },
+          ],
+        },
+        participantId: ATTACKER_ID,
+        participantLabel: "Observer",
+        roundNumber: 1,
+        step: "select_actions",
+      }),
+      combatRoundStepSnapshotSchema.parse({
+        committedAt: "2026-01-01T00:01:30.000Z",
+        id: "review-snapshot",
+        modifierSummary: {
+          dbRaw: -2,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          obSkillRaw: 2,
+          rows: [
+            {
+              bucketKey: "situation_db",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "prior-db",
+                  notes: "Old stance",
+                  scope: "until",
+                  value: -2,
+                },
+              ],
+              label: "DB/Parry",
+              total: -2,
+            },
+            {
+              bucketKey: "situation_ob_skill",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "new-ob",
+                  notes: "Tactical edge",
+                  scope: "until",
+                  value: 2,
+                },
+              ],
+              label: "Skill/OB",
+              total: 2,
+            },
+          ],
+        },
+        participantId: ATTACKER_ID,
+        participantLabel: "Observer",
+        roundNumber: 1,
+        step: "review_action_modifiers",
+      }),
+    ];
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:30.000Z",
+          id: "modifier-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+      stepSnapshots: snapshots,
+    });
+
+    expect(events[0]?.facts.involvedOutcome).toMatchObject({
+      changed: true,
+      changes: [
+        {
+          category: "DB/Parry",
+          changeType: "changed",
+          id: "prior-db",
+          previousValue: -1,
+          value: -2,
+        },
+        {
+          category: "Skill/OB",
+          changeType: "added",
+          id: "new-ob",
+          value: 2,
+        },
+      ],
     });
   });
 

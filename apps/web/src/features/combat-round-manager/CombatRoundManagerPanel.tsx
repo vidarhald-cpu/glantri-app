@@ -4318,6 +4318,7 @@ export default function CombatRoundManagerPanel({
                   }),
                   participantId: inspector.participant.participantId,
                   roundNumber: roundState.roundNumber,
+                  step: inspector.step,
                   viewer: { kind: "gm" },
                 })
               : undefined,

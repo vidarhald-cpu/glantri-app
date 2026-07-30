@@ -90,6 +90,7 @@ function build(input: {
   events?: readonly ProjectedCombatHistoryEvent[];
   logEvents?: readonly CombatLogEventPresentation[];
   participantId?: string;
+  step?: ProjectedCombatHistoryEvent["step"];
   viewer?: "gm" | "player";
 }) {
   return buildCombatStepResultPresentation({
@@ -100,6 +101,17 @@ function build(input: {
     events: input.events ?? [],
     participantId: input.participantId ?? "gladiator",
     roundNumber: 1,
+    step:
+      input.step ??
+      (input.boundary === "declaration"
+        ? "select_actions"
+        : input.boundary === "phase2_modifier_review"
+          ? "review_phase_2_actions"
+          : input.boundary === "phase2_resolution"
+            ? "phase_2_actions"
+            : input.boundary === "round_end"
+              ? "round_summary"
+              : "phase_1_actions"),
     viewer: { kind: input.viewer ?? "player" },
   });
 }
@@ -641,6 +653,7 @@ describe("buildCombatStepResultPresentation", () => {
       events: [attackEvent],
       participantId: "gladiator",
       roundNumber: 1,
+      step: "phase_1_actions",
       viewer: { kind: "player" },
     });
 
@@ -770,6 +783,142 @@ describe("buildCombatStepResultPresentation", () => {
     expect(laterPhase.entries).toEqual([]);
   });
 
+  it("keeps both named distance-control calculations with the committed process result", () => {
+    const processId = "distance-proposal-1";
+    const envelope = (input: {
+      actionType: CombatResultEnvelope["actionType"];
+      id: string;
+      sequence: number;
+    }): CombatResultEnvelope => ({
+      ...resultEnvelope(),
+      actionInstanceId: processId,
+      actionType: input.actionType,
+      publicCombatNote: undefined,
+      resultId: input.id,
+      sequence: input.sequence,
+      step: "round_summary",
+    });
+    const gladiatorRoll = historyEvent("distance_control_roll", 1, {
+      facts: {
+        involvedOutcome: { currentDistance: 3 },
+        privateCalculation: {
+          dodgeSkillTotal: 17,
+          finalTotal: 23,
+          generalFatigueModifier: 0,
+          openEndedD10s: [],
+          rollD20: 6,
+          rollTotal: 6,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      resultEnvelope: envelope({
+        actionType: "distance_control_roll",
+        id: "distance-roll-gladiator",
+        sequence: 1,
+      }),
+      step: "round_summary",
+    });
+    const scyrianRoll = historyEvent("distance_control_roll", 2, {
+      facts: {
+        involvedOutcome: { currentDistance: 3 },
+        privateCalculation: {
+          dodgeSkillTotal: 16,
+          finalTotal: 30,
+          generalFatigueModifier: 0,
+          openEndedD10s: [],
+          rollD20: 14,
+          rollTotal: 14,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "scyrian",
+      resultEnvelope: envelope({
+        actionType: "distance_control_roll",
+        id: "distance-roll-scyrian",
+        sequence: 2,
+      }),
+      step: "round_summary",
+    });
+    const resolved = historyEvent("distance_control_result", 3, {
+      facts: {
+        involvedOutcome: {
+          outcome: "participant_b_wins",
+          proposedDistance: 4,
+          winnerParticipantId: "scyrian",
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      resultEnvelope: envelope({
+        actionType: "distance_control_result",
+        id: "distance-result",
+        sequence: 3,
+      }),
+      step: "round_summary",
+    });
+
+    const result = build({
+      boundary: "round_end",
+      events: [gladiatorRoll, scyrianRoll, resolved],
+      step: "round_summary",
+      viewer: "gm",
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      calculations: [
+        { actor: { label: "The Gladiator" } },
+        { actor: { label: "Scyrian cavalry guy" } },
+      ],
+      heading: "Distance control",
+      outcome: "Proposed distance: 4",
+      summary: "Scyrian cavalry guy won the distance-control contest.",
+    });
+    expect(JSON.stringify(result)).not.toMatch(/participant[_ ]?[ab]/i);
+  });
+
   it("shows a rolled Combat Experience result immediately and clears it after declaration", () => {
     const combatExperience = historyEvent("combat_experience", 1, {
       facts: {
@@ -892,6 +1041,50 @@ describe("buildCombatStepResultPresentation", () => {
     });
     expect(phase2.entries[0]?.calculations).toHaveLength(1);
     expect(phase1.entries).toEqual([]);
+  });
+
+  it("publishes initiative only in the exact initiative step", () => {
+    const initiative = historyEvent("initiative", 2, {
+      facts: {
+        involvedOutcome: { resolutionType: "rolled", total: 12 },
+        privateCalculation: {
+          baseInitiative: 3,
+          modifierAdjustment: 1,
+          rollTotal: 8,
+          total: 12,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      step: "initiative_phase_1",
+    });
+
+    const initiativeResult = build({
+      events: [initiative],
+      participantId: "gladiator",
+      step: "initiative_phase_1",
+    });
+    const attackResult = build({
+      events: [initiative],
+      participantId: "gladiator",
+      step: "phase_1_actions",
+    });
+
+    expect(initiativeResult.entries).toHaveLength(1);
+    expect(initiativeResult.entries[0]).toMatchObject({
+      heading: "Initiative",
+      summary: "The Gladiator rolled initiative.",
+    });
+    expect(initiativeResult.entries[0]?.calculations).toHaveLength(1);
+    expect(attackResult.entries).toEqual([]);
   });
 
   it("shows an involved opponent the phase CE outcome without the roller calculation", () => {
@@ -1374,7 +1567,7 @@ describe("buildCombatStepResultPresentation", () => {
     ).not.toContain("Skill total: 12");
   });
 
-  it("does not render declaration content in live results before publication", () => {
+  it("renders an accepted declaration as a durable result", () => {
     const ownDeclaration = logEvent("log:own-declaration", 1, {
       actor: { displayName: "The Gladiator", participantId: "gladiator" },
       category: "declaration",
@@ -1387,7 +1580,61 @@ describe("buildCombatStepResultPresentation", () => {
       },
     });
 
-    expect(build({ boundary: "declaration", logEvents: [ownDeclaration] }).entries).toEqual([]);
+    expect(build({ boundary: "declaration", logEvents: [ownDeclaration] }).entries).toMatchObject([
+      {
+        category: "declaration",
+        heading: "Declaration",
+        summary: "you declared Single Attack against Scyrian cavalry guy.",
+      },
+    ]);
+  });
+
+  it("keeps a typed declaration envelope attached to its atomic current-step group", () => {
+    const declaration = historyEvent("declaration", 1, {
+      facts: {
+        involvedOutcome: {
+          actionLabel: "Single Attack",
+          submittedBy: "gm",
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "actor",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      phase: undefined,
+      resultEnvelope: {
+        ...resultEnvelope(),
+        actionInstanceId: "declaration-command",
+        actionType: "declaration",
+        conciseOutcome: {
+          details: ["Action: Single Attack"],
+          label: "Single Attack declared",
+        },
+        publicCombatNote: undefined,
+        step: "select_actions",
+      },
+      step: "select_actions",
+    });
+
+    const presentation = build({
+      boundary: "declaration",
+      events: [declaration],
+      participantId: "gladiator",
+    });
+
+    expect(presentation.entries[0]?.resultEnvelopes).toHaveLength(1);
+    expect(presentation.groups).toEqual([
+      expect.objectContaining({
+        actionInstanceId: "declaration-command",
+        heading: "Declaration",
+      }),
+    ]);
   });
 
   it("preserves safe hidden-identity wording without exposing a participant id", () => {

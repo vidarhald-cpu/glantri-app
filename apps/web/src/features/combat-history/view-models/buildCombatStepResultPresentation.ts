@@ -3,6 +3,7 @@ import type {
   CombatLogEventPresentation,
   CombatLogProjection,
   CombatProgressionBoundaryKind,
+  CombatRoundStep,
   ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
@@ -68,6 +69,7 @@ export interface BuildCombatStepResultPresentationInput {
   readonly events: readonly ProjectedCombatHistoryEvent[];
   readonly participantId: string;
   readonly roundNumber: number;
+  readonly step: CombatRoundStep;
   readonly viewer: { readonly kind: "gm" | "player" };
 }
 
@@ -94,20 +96,15 @@ function phaseForBoundary(
   return undefined;
 }
 
-function eventBelongsToBoundary(
+function legacyLogEventBelongsToBoundary(
   event: CombatLogEventPresentation,
   boundary: CombatProgressionBoundaryKind,
 ): boolean {
   if (event.category === "round") return false;
-  // Declaration details are published through the Combat Log after DE closes. The live result
-  // panel is reserved for declaration prerequisites such as Combat Experience while DE is open.
-  if (boundary === "declaration") return false;
+  if (boundary === "declaration") return event.category === "declaration";
   if (boundary === "phase1_resolution") return event.phase === "phase1";
   if (boundary === "phase2_resolution") return event.phase === "phase2";
-  if (boundary === "round_end" || boundary === "round_boundary") {
-    return event.phase === "round_end";
-  }
-  return false;
+  return (boundary === "round_end" || boundary === "round_boundary") && event.phase === "round_end";
 }
 
 function eventInvolvesParticipant(input: {
@@ -925,17 +922,33 @@ function supplementalEntries(input: {
           ? event.identities.find((identity) => identity.participantId === winnerId)?.displayName
           : undefined;
       const outcome = visibleOutcome(event, "outcome");
+      const processId = event.resultEnvelope?.actionInstanceId;
+      const processEvents = processId
+        ? input.events.filter(
+            (candidate) => candidate.resultEnvelope?.actionInstanceId === processId,
+          )
+        : [event];
       return [
         {
           entry: {
             actor: identitySubject(event, "actor"),
-            // Projected history currently omits the pair/proposal identity from these roll
-            // records. Do not guess and accidentally attach another pair's calculation.
-            calculations: [],
+            calculations: calculationsForEvents({
+              events: processEvents.filter(
+                (candidate) => candidate.type === "distance_control_roll",
+              ),
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
             category: "contest",
             heading: "Distance control",
             id: `current-step:${event.id}`,
-            outcome: typeof outcome === "string" ? outcome.replaceAll("_", " ") : undefined,
+            outcome:
+              typeof visibleOutcome(event, "proposedDistance") === "number"
+                ? `Proposed distance: ${visibleOutcome(event, "proposedDistance")}`
+                : typeof outcome === "string" && !outcome.includes("participant_")
+                  ? outcome.replaceAll("_", " ")
+                  : undefined,
+            processId,
             sourceEventIds: [event.id],
             state: "final",
             summary: winner
@@ -974,6 +987,46 @@ function supplementalEntries(input: {
         },
       ];
     }
+
+    if (
+      (event.type === "declaration" ||
+        event.type === "modifier_review" ||
+        event.type === "initiative" ||
+        event.type === "action_skipped" ||
+        event.type === "effect_review" ||
+        event.type === "participant_su_review" ||
+        event.type === "health_check" ||
+        event.type === "round_boundary") &&
+      !loggedSourceIds.has(event.id)
+    ) {
+      const item = buildCombatEventResultModel([event], {
+        calculationStage: "panel_active_calculation_presentation",
+        resultStage: "panel_active_attack_parry_result_presentation",
+      }).items[0];
+      if (!item) return [];
+      return [
+        {
+          entry: {
+            actor:
+              identitySubject(event, "actor") ??
+              identitySubject(event, "roller") ??
+              identitySubject(event, "attacker"),
+            calculations: item.calculations,
+            category: event.type === "declaration" ? "declaration" : "review",
+            heading: item.title,
+            id: `current-step:${event.id}`,
+            outcome: item.outcomeRows.map((row) => row.text).join(" · ") || undefined,
+            resultEnvelopes: event.resultEnvelope ? [event.resultEnvelope] : undefined,
+            sourceEventIds: [event.id],
+            state: event.status === "proposed" ? "pending" : "final",
+            summary: item.summary,
+            target: identitySubject(event, "target") ?? identitySubject(event, "defender"),
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
     return [];
   });
 }
@@ -1003,10 +1056,16 @@ export function buildCombatStepResultPresentation(
   }
 
   const events = input.events.filter((event) => event.roundNumber === input.roundNumber);
-  const logEvents = input.combatLog.events.filter(
-    (event) =>
-      event.roundNumber === input.roundNumber && eventBelongsToBoundary(event, input.boundary),
-  );
+  const exactStepEvents = events.filter((event) => event.step === input.step);
+  const exactStepEventIds = new Set(exactStepEvents.map((event) => event.id));
+  const allEventIds = new Set(events.map((event) => event.id));
+  const logEvents = input.combatLog.events.filter((event) => {
+    if (event.roundNumber !== input.roundNumber || event.category === "round") return false;
+    const sourceIsProjected = event.sourceEventIds.some((eventId) => allEventIds.has(eventId));
+    return sourceIsProjected
+      ? event.sourceEventIds.some((eventId) => exactStepEventIds.has(eventId))
+      : legacyLogEventBelongsToBoundary(event, input.boundary);
+  });
   const resolved = resolvedProposalIds({ events, logEvents });
   const ordered = logEvents.flatMap((event) => {
     const sourceEvents = calculationEventsForLogEvent({ event, events });
@@ -1029,22 +1088,10 @@ export function buildCombatStepResultPresentation(
     return entry ? [entry] : [];
   });
 
-  const boundaryEventSteps = new Set(
-    input.boundary === "phase1_resolution"
-      ? ["phase_1_actions", "review_phase_2_actions", "phase_1_damage"]
-      : input.boundary === "phase2_resolution"
-        ? ["phase_2_actions", "review_phase_2_damage", "phase_2_damage"]
-        : input.boundary === "round_end" || input.boundary === "round_boundary"
-          ? ["round_summary"]
-          : input.boundary === "declaration"
-            ? ["select_actions"]
-            : [],
-  );
-  const relevantSupplementEvents = events.filter(
+  const relevantSupplementEvents = exactStepEvents.filter(
     (event) =>
-      boundaryEventSteps.has(event.step) &&
-      (event.ownerParticipantId === input.participantId ||
-        event.identities.some((identity) => identity.participantId === input.participantId)),
+      event.ownerParticipantId === input.participantId ||
+      event.identities.some((identity) => identity.participantId === input.participantId),
   );
   ordered.push(
     ...supplementalEntries({

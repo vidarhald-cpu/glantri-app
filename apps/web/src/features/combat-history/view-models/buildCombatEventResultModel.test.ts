@@ -97,6 +97,120 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[0]?.summary).not.toContain("rolled");
   });
 
+  it("presents declaration, review, and skip results with only accepted facts", () => {
+    const model = buildCombatEventResultModel([
+      event("declaration", 1, {
+        facts: {
+          involvedOutcome: {
+            actionLabel: "Parry",
+            movementLabel: "Hold position",
+            secondaryActionLabel: "Observe Opponent",
+            submittedBy: "gm",
+          },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "Scyrian cavalry guy",
+            participantId: "scyrian",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+        step: "select_actions",
+      }),
+      event("modifier_review", 2, {
+        facts: {
+          involvedOutcome: {
+            acceptedModifiers: [],
+            changed: true,
+            changes: [
+              {
+                category: "DB/Parry",
+                changeType: "changed",
+                id: "parry",
+                previousValue: -1,
+                value: -2,
+              },
+            ],
+          },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+        step: "review_action_modifiers",
+      }),
+      event("action_skipped", 3, {
+        facts: { involvedOutcome: { reason: "GM skip" }, publicOutcome: {} },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+        status: "skipped",
+      }),
+    ]);
+
+    expect(model.items[0]).toMatchObject({
+      outcomeRows: [
+        { text: "Action: Parry" },
+        { text: "Secondary action: Observe Opponent" },
+        { text: "Movement: Hold position" },
+        { text: "Target: Scyrian cavalry guy" },
+        { text: "Declared by: GM" },
+      ],
+      summary: "The Gladiator declared an action.",
+    });
+    expect(model.items[1]?.outcomeRows).toEqual([
+      expect.objectContaining({ text: "DB/Parry: -1 → -2" }),
+    ]);
+    expect(model.items[2]).toMatchObject({
+      outcomeRows: [{ text: "Reason: GM skip" }],
+      summary: "The Gladiator was skipped.",
+    });
+    expect(JSON.stringify(model.items[0])).not.toContain("Attack mode");
+  });
+
+  it("presents an accepted no-change modifier review explicitly", () => {
+    const model = buildCombatEventResultModel([
+      event("modifier_review", 1, {
+        facts: {
+          involvedOutcome: { acceptedModifiers: [], changed: false, changes: [] },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+        step: "review_action_modifiers",
+      }),
+    ]);
+
+    expect(model.items[0]).toMatchObject({
+      outcomeRows: [{ text: "No changes" }],
+      summary: "The Gladiator completed modifier review.",
+    });
+  });
+
   it("identifies an SU review by its canonical actor rather than an unrelated attacker", () => {
     const model = buildCombatEventResultModel([
       event("participant_su_review", 1, {

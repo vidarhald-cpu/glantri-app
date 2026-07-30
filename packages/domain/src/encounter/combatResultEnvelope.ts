@@ -196,7 +196,11 @@ export function projectCombatResultEnvelope(input: {
   ownRoll: boolean;
   viewer: "gm" | "player";
 }): CombatResultEnvelope {
-  const presentation = input.event.facts.resultPresentation;
+  const involvedPresentationRestricted =
+    input.event.visibility.outcomeScope === "involved" && !input.involved;
+  const presentation = involvedPresentationRestricted
+    ? undefined
+    : input.event.facts.resultPresentation;
   const visibleParticipantIds = new Set(
     input.identities.flatMap((identity) =>
       identity.participantId ? [identity.participantId] : [],
@@ -291,7 +295,9 @@ export function projectCombatResultEnvelope(input: {
       sourceIds: input.viewer === "gm" ? input.event.source.sourceIds : [],
       sourceKind: input.event.source.kind,
     },
-    publicCombatNote: presentation?.publicCombatNote ?? legacyPublicCombatNote(input.event),
+    publicCombatNote:
+      presentation?.publicCombatNote ??
+      (involvedPresentationRestricted ? undefined : legacyPublicCombatNote(input.event)),
     resultId: input.event.id,
     round: input.event.roundNumber,
     schemaVersion: 1,

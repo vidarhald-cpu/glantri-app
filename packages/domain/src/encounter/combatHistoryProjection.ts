@@ -409,7 +409,17 @@ export function projectCombatHistoryEvent(input: {
     );
   const ownRoll =
     gm || isControlled({ participantId: input.event.rollerParticipantId, viewer: input.viewer });
-  const identities = projectEventIdentities({ event: input.event, labels, viewer: input.viewer });
+  const identities = projectEventIdentities({
+    event: input.event,
+    labels,
+    viewer: input.viewer,
+  }).filter(
+    (identity) =>
+      input.event.type !== "declaration" ||
+      gm ||
+      involved ||
+      (identity.role !== "target" && identity.role !== "defender"),
+  );
 
   return {
     completeness: input.event.completeness,
@@ -680,7 +690,17 @@ function projectRound(input: {
   };
 }
 
-function eventsWithDerivedCombatExperience(input: {
+const RESULT_COMPLETENESS_DERIVED_EVENT_TYPES = new Set<CombatStepEvent["type"]>([
+  "action_skipped",
+  "combat_experience",
+  "declaration",
+  "effect_review",
+  "initiative",
+  "modifier_review",
+  "round_boundary",
+]);
+
+function eventsWithDerivedResultCoverage(input: {
   commands: CompletedCombatRound["commands"] | CombatRoundState["commands"];
   encounterId: string;
   events: readonly CombatStepEvent[];
@@ -695,6 +715,7 @@ function eventsWithDerivedCombatExperience(input: {
   const existingCommandIds = new Set(
     input.events.flatMap((event) => (event.commandId ? [event.commandId] : [])),
   );
+  const existingEventIds = new Set(input.events.map((event) => event.id));
   const derived = deriveLegacyCombatStepEvents({
     commands: input.commands,
     encounterId: input.encounterId,
@@ -705,10 +726,13 @@ function eventsWithDerivedCombatExperience(input: {
     stepSnapshots: input.stepSnapshots,
   }).filter(
     (event) =>
-      event.type === "combat_experience" &&
+      RESULT_COMPLETENESS_DERIVED_EVENT_TYPES.has(event.type) &&
+      !existingEventIds.has(event.id) &&
       (!event.commandId || !existingCommandIds.has(event.commandId)),
   );
-  return [...input.events, ...derived];
+  return [...input.events, ...derived].sort(
+    (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+  );
 }
 
 export function projectCombatHistory(input: {
@@ -735,7 +759,7 @@ export function projectCombatHistory(input: {
   );
   const archivedRounds = state.rounds.map((round: CompletedCombatRound) =>
     projectRound({
-      events: eventsWithDerivedCombatExperience({
+      events: eventsWithDerivedResultCoverage({
         commands: round.commands,
         encounterId: round.encounterId ?? state.encounterId ?? "combat-history",
         events: round.events,
@@ -757,7 +781,7 @@ export function projectCombatHistory(input: {
 
   return {
     activeRound: projectRound({
-      events: eventsWithDerivedCombatExperience({
+      events: eventsWithDerivedResultCoverage({
         commands: state.commands,
         encounterId: state.encounterId ?? "combat-history",
         events: state.events,

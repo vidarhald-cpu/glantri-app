@@ -464,6 +464,89 @@ describe("combat history projection", () => {
     expect(projection.combatLog?.events.some((event) => event.category !== "round")).toBe(false);
   });
 
+  it("reconstructs an accepted declaration result with its public note for current and history", () => {
+    const declarationCommand = combatRoundCommandSchema.parse({
+      afterCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
+      beforeCursor: { participantId: "aria", roundNumber: 1, step: "DE" },
+      createdAt: "2026-01-01T00:01:00.000Z",
+      facts: { status: "submitted" },
+      id: "declaration-command",
+      participantId: "aria",
+      roundNumber: 1,
+      step: "DE",
+      type: "declare_action",
+    });
+    const round = {
+      commands: [declarationCommand],
+      participants: [
+        {
+          declaration: {
+            actionId: "parry",
+            additionalActionNotes: "Guard the bridge.",
+            movementIntent: { distancePreferences: [], mode: "hold_position" as const },
+            roundNumber: 1,
+            secondaryActionContext: {
+              action: "observe_opponent" as const,
+              targetParticipantId: "borin",
+            },
+            secondaryActionId: "observe_opponent",
+            submittedAt: "2026-01-01T00:01:00.000Z",
+            submittedBy: "player" as const,
+          },
+          label: "Aria",
+          participantId: "aria",
+        },
+      ],
+      roundNumber: 1,
+    };
+    const state = combatRoundStateSchema.parse({
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 2,
+      rounds: [round],
+    });
+    const projection = projectCombatHistory({
+      participants,
+      source: historySource(state, "revision-declaration"),
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projection.archivedRounds[0]?.events).toContainEqual(
+      expect.objectContaining({
+        facts: expect.objectContaining({
+          involvedOutcome: expect.objectContaining({
+            actionLabel: "Parry",
+            movementLabel: "Hold position",
+          }),
+        }),
+        resultEnvelope: expect.objectContaining({
+          publicCombatNote: "Guard the bridge.",
+        }),
+        step: "select_actions",
+        type: "declaration",
+      }),
+    );
+
+    const targetProjection = projectCombatHistory({
+      participants,
+      source: historySource(state, "revision-declaration"),
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+    const targetEvent = targetProjection.archivedRounds[0]?.events.find(
+      (candidate) => candidate.type === "declaration",
+    );
+    expect(targetEvent?.facts.involvedOutcome).toBeUndefined();
+    expect(targetEvent?.resultEnvelope).toMatchObject({
+      conciseOutcome: { details: [], label: "Declaration" },
+      publicCombatNote: undefined,
+    });
+    expect(targetEvent?.identities).not.toContainEqual(
+      expect.objectContaining({ participantId: "borin", role: "target" }),
+    );
+  });
+
   it("delivers player-safe live progression from the same state revision", () => {
     const state = combatRoundStateSchema.parse({
       currentCursor: { participantId: "aria", roundNumber: 1, step: "DE" },

@@ -204,6 +204,7 @@ export function buildActiveInspectorCorePresentation(input: {
             events: input.gmEvents,
             participantId: inspector.participant.participantId,
             roundNumber: input.roundState.roundNumber,
+            step: input.step,
             viewer: { kind: "gm" },
           })
         : undefined,
