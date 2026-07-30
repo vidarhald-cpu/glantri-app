@@ -1051,13 +1051,21 @@ function snapshotFallbackCandidates(input: {
   return input.snapshots.flatMap(({ sourceIndex, value: snapshot }) => {
     const key = `${snapshot.participantId}:${snapshot.step}`;
     if (input.existingTypesByOwnerStep.has(key) || !snapshot.actionResultSummary) return [];
-    const type: CombatStepEventType = snapshot.initiativeResult
-      ? "initiative"
-      : snapshot.attackResult
-        ? "attack"
-        : snapshot.phaseResolutionResult?.damageProposal.status === "committed"
-          ? "damage_committed"
-          : "participant_su_review";
+    const type: CombatStepEventType | undefined =
+      snapshot.step === "initiative_phase_1" || snapshot.step === "initiative_phase_2"
+        ? snapshot.initiativeResult
+          ? "initiative"
+          : undefined
+        : snapshot.step === "phase_1_actions" || snapshot.step === "phase_2_actions"
+          ? "attack"
+          : snapshot.step === "phase_1_damage" || snapshot.step === "phase_2_damage"
+            ? snapshot.phaseResolutionResult?.damageProposal.status === "committed"
+              ? "damage_committed"
+              : "damage_proposed"
+            : snapshot.step === "round_summary"
+              ? "participant_su_review"
+              : undefined;
+    if (!type) return [];
 
     return [
       buildCandidate({

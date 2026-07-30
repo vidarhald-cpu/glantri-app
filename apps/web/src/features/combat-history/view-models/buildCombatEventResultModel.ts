@@ -119,6 +119,7 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
   outcomeRows: CombatEventResultFactRow[];
   summary: string;
 } {
+  const actor = identity(event, "actor");
   const attacker = identity(event, "attacker") ?? identity(event, "actor");
   const defender = identity(event, "defender") ?? identity(event, "target");
   const roller = identity(event, "roller") ?? identity(event, "actor");
@@ -365,7 +366,7 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       };
     }
     case "participant_su_review":
-      return { outcomeRows: [], summary: `${attacker ?? "Participant"} completed SU review.` };
+      return { outcomeRows: [], summary: `${actor ?? "Participant"} completed SU review.` };
     case "initiative": {
       const total = factLabel(factValue(event, "total"));
       const resolutionType = factValue(event, "resolutionType");

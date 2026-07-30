@@ -97,6 +97,30 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[0]?.summary).not.toContain("rolled");
   });
 
+  it("identifies an SU review by its canonical actor rather than an unrelated attacker", () => {
+    const model = buildCombatEventResultModel([
+      event("participant_su_review", 1, {
+        identities: [
+          {
+            displayName: "Reviewed participant",
+            participantId: "reviewed",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "Earlier attacker",
+            participantId: "attacker",
+            role: "attacker",
+            visibility: "visible",
+          },
+        ],
+        step: "round_summary",
+      }),
+    ]);
+
+    expect(model.items[0]?.summary).toBe("Reviewed participant completed SU review.");
+  });
+
   it("orders attack, parry, location, critical, and damage fragments canonically", () => {
     const model = buildCombatEventResultModel([
       event("damage_committed", 5),

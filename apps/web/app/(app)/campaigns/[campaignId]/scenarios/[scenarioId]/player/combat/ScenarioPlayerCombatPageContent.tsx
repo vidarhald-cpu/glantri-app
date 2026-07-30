@@ -52,6 +52,7 @@ import {
 
 import {
   buildCurrentActionPresentation,
+  buildHistoricalObservationRelationships,
   buildCombatStepResultPresentation,
   buildProjectedCombatTrackerModel,
   CombatLog,
@@ -1617,6 +1618,14 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined,
     [combatHistory, historyInspection],
   );
+  const inspectedHistoryPreviousRound = useMemo(() => {
+    if (!historyInspection || !combatHistory) return undefined;
+    const rounds = [...combatHistory.archivedRounds, combatHistory.activeRound];
+    const inspectedIndex = rounds.findIndex(
+      (round) => round.roundNumber === historyInspection.roundNumber,
+    );
+    return inspectedIndex > 0 ? rounds[inspectedIndex - 1] : undefined;
+  }, [combatHistory, historyInspection]);
   const inspectedHistorySnapshot = useMemo(
     () =>
       historyInspection && inspectedHistoryRound
@@ -1638,6 +1647,18 @@ export default function ScenarioPlayerCombatPageContent({
           })
         : [],
     [combatHistory, historyInspection],
+  );
+  const inspectedHistoryObservationRelationships = useMemo(
+    () =>
+      historyInspection && inspectedHistoryRound
+        ? buildHistoricalObservationRelationships({
+            baselineRelationships: inspectedHistoryPreviousRound?.observationRelationships,
+            events: inspectedHistoryRound.events,
+            observerParticipantId: historyInspection.participantId,
+            selectedStep: historyInspection.step,
+          }).relationships
+        : [],
+    [historyInspection, inspectedHistoryPreviousRound, inspectedHistoryRound],
   );
   const roundParticipantLabelsById = useMemo(
     () =>
@@ -4158,7 +4179,7 @@ export default function ScenarioPlayerCombatPageContent({
       {historyInspection ? (
         <PlayerCombatHistoryInspector
           events={inspectedHistoryEvents}
-          observationRelationships={inspectedHistoryRound?.observationRelationships}
+          observationRelationships={inspectedHistoryObservationRelationships}
           observationTargetLabels={Object.fromEntries(
             (combatHistory?.rows ?? []).map((participant) => [
               participant.participantId,

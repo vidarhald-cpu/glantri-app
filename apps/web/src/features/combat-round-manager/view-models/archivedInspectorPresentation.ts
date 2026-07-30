@@ -37,6 +37,10 @@ import {
   buildActiveAttackResolutionPresentation,
   projectGmCombatEvents,
 } from "./activeInspectorPresentation";
+import {
+  buildHistoricalInspectionContext,
+  type HistoricalInspectionContext,
+} from "./historicalInspectionContext";
 
 export interface ArchivedHistoricalActionResult {
   readonly detailLines?: readonly string[];
@@ -53,6 +57,7 @@ export interface ArchivedHistoricalActionResult {
 export type ArchivedHistoricalActionResultBuilder = (input: {
   participantId?: string;
   snapshot?: CombatRoundStepSnapshot;
+  step?: CombatRoundStep;
 }) => ArchivedHistoricalActionResult;
 
 export interface ArchivedAttackResolutionPresentation {
@@ -86,6 +91,7 @@ export interface ArchivedInspectorPresentation {
   readonly canonicalActionResultModel: CombatEventResultModel;
   readonly historicalActionResult?: ArchivedHistoricalActionResult;
   readonly historicalStatusLabel?: string;
+  readonly historicalContext: HistoricalInspectionContext;
   readonly inspector: ReturnType<typeof buildCombatRoundInspector>;
   readonly modifierRows: readonly PlayerCombatModifierBucketView[];
   readonly phaseLoadouts: Readonly<Record<"phase1" | "phase2", PlayerCombatLoadoutSummary>>;
@@ -142,12 +148,46 @@ function resolvePanelSnapshot(input: {
     state: input.roundState,
     step: input.step,
   });
+  const recordedDeclaration = input.roundState.events.find(
+    (event) =>
+      event.type === "declaration" &&
+      event.ownerParticipantId === input.participantId &&
+      event.step === "select_actions",
+  );
+  const declarationOutcome = recordedDeclaration?.facts.involvedOutcome;
+  const archivedDeclaration = input.roundState.participants.find(
+    (participant) => participant.participantId === input.participantId,
+  )?.declaration;
+  const declarationFromEvent =
+    declarationOutcome && typeof declarationOutcome.actionId === "string"
+      ? {
+          actionId: declarationOutcome.actionId,
+          additionalActionNotes: archivedDeclaration?.additionalActionNotes,
+          movementId:
+            typeof declarationOutcome.movementId === "string"
+              ? declarationOutcome.movementId
+              : archivedDeclaration?.movementId,
+          movementIntent: archivedDeclaration?.movementIntent,
+          movementPreferenceTargets: input.roundState.participants
+            .filter((participant) => participant.participantId !== input.participantId)
+            .map((participant) => ({
+              displayName: participant.label,
+              id: participant.participantId,
+            })),
+          secondaryActionContext: archivedDeclaration?.secondaryActionContext,
+          secondaryActionId:
+            typeof declarationOutcome.secondaryActionId === "string"
+              ? declarationOutcome.secondaryActionId
+              : archivedDeclaration?.secondaryActionId,
+        }
+      : undefined;
 
   return {
     ...base,
     ...exact,
-    declarationSummary: resolve((snapshot) => Boolean(snapshot.declarationSummary))
-      ?.declarationSummary,
+    declarationSummary:
+      resolve((snapshot) => Boolean(snapshot.declarationSummary))?.declarationSummary ??
+      declarationFromEvent,
     modifierSummary: resolve((snapshot) => Boolean(snapshot.modifierSummary))?.modifierSummary,
     phasePanels: {
       phase1: resolve((snapshot) => Boolean(snapshot.phasePanels?.phase1))?.phasePanels?.phase1,
@@ -306,7 +346,8 @@ export function buildArchivedInspectorPresentationIndex(input: {
 }): ArchivedInspectorPresentationIndex {
   const entries = new Map<string, ArchivedInspectorPresentation>();
 
-  for (const roundState of input.roundStates) {
+  for (const [roundIndex, roundState] of input.roundStates.entries()) {
+    const previousRoundState = input.roundStates[roundIndex - 1];
     const gmEvents = projectGmCombatEvents({
       events: roundState.events,
       participants: roundState.participants,
@@ -347,6 +388,13 @@ export function buildArchivedInspectorPresentationIndex(input: {
           { archivedPresentationBuild: true },
         );
         const stepOutcome = deriveCombatHistoryStepOutcome(snapshot);
+        const historicalContext = buildHistoricalInspectionContext({
+          participantId: participant.participantId,
+          previousRoundState,
+          roundState,
+          snapshot,
+          step,
+        });
         const selectedEvents = selectCombatEventsForTrackerCell({
           events: roundState.events,
           participantId: participant.participantId,
@@ -390,6 +438,7 @@ export function buildArchivedInspectorPresentationIndex(input: {
               : input.buildHistoricalActionResult({
                   participantId: participant.participantId,
                   snapshot,
+                  step,
                 }),
           { archivedPresentationBuild: true },
         );
@@ -422,6 +471,7 @@ export function buildArchivedInspectorPresentationIndex(input: {
           canonicalActionResultEvents,
           canonicalActionResultModel,
           historicalActionResult,
+          historicalContext,
           historicalStatusLabel: getHistoricalStatusLabel(stepOutcome),
           inspector,
           modifierRows: panelSnapshot?.modifierSummary?.rows ?? [],

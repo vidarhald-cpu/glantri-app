@@ -7,13 +7,13 @@ import type {
 } from "@glantri/domain";
 
 import {
-  PlayerCombatActionSelectorPanel,
-  PlayerCombatActionButtonPanel,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
+  PlayerCombatHistoricalActionSelectorPanel,
+  PlayerCombatHistoricalContextPanel,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatParryContextPanel,
@@ -25,14 +25,24 @@ import {
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
   createEmptyPlayerEncounterCombatContext,
-  type PlayerEncounterActionId,
-  type PlayerEncounterMovementId,
+  PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
+  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
 } from "@/lib/campaigns/playerEncounter";
 
 import { CombatEventResultList } from "./CombatEventResultList";
 
 const noop = () => undefined;
 const historicalDataMissingMessage = "No information available for this panel.";
+
+function historicalActionLabel(actionId?: string): string | undefined {
+  if (!actionId) return undefined;
+  return (
+    [...PLAYER_ENCOUNTER_ACTION_OPTIONS, ...PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS].find(
+      (option) => option.value === actionId,
+    )?.label ?? actionId
+  );
+}
 
 function MissingHistoricalPanel(input: { title: string }) {
   return (
@@ -73,13 +83,14 @@ function HistoricalPhasePanel(input: {
             controlsDisabled
             distanceLabel={input.panel.distanceLabel}
             onCombatContextChange={noop}
-            readOnly={input.actionId === "feint_attack" && input.phaseLabel === "Phase 2"}
+            readOnly
             targetOptions={targets}
           />
           <PlayerCombatAttackLocationSelector
             combatContext={context}
             controlsDisabled
             onCombatContextChange={noop}
+            readOnly
           />
           <PlayerCombatAttackModeSelector
             controlsDisabled
@@ -95,6 +106,7 @@ function HistoricalPhasePanel(input: {
                 : []
             }
             selectedAttackModeId={context.attackModeId}
+            readOnly
           />
         </>
       ) : null}
@@ -120,6 +132,7 @@ function HistoricalPhasePanel(input: {
           mainHandItemLabel={input.panel.mainHandParryItemLabel}
           offHandItemLabel={input.panel.offHandParryItemLabel}
           onCombatContextChange={noop}
+          readOnly
         />
       </>
     </PlayerCombatPhasePanel>
@@ -134,22 +147,6 @@ export function PlayerCombatHistoryInspector(input: {
 }) {
   const selector = input.snapshot?.panels.actionSelector;
   const selectorRecorded = Boolean(selector && Object.keys(selector).length > 0);
-  const actionOptions = selector
-    ? [
-        selector.actionId
-          ? {
-              label: selector.actionLabel ?? selector.actionId,
-              value: selector.actionId as PlayerEncounterActionId,
-            }
-          : undefined,
-        selector.secondaryActionId && selector.secondaryActionId !== selector.actionId
-          ? {
-              label: selector.secondaryActionLabel ?? selector.secondaryActionId,
-              value: selector.secondaryActionId as PlayerEncounterActionId,
-            }
-          : undefined,
-      ].filter((option): option is NonNullable<typeof option> => Boolean(option))
-    : [];
   const distancePreferenceOptions: PlayerCombatDistancePreferenceOption[] = (
     selector?.movementPreferenceTargets ?? []
   ).map((target) => ({
@@ -171,22 +168,29 @@ export function PlayerCombatHistoryInspector(input: {
     >
       <div style={playerCombatTopPanelRowStyle}>
         {selectorRecorded && selector ? (
-          <PlayerCombatActionSelectorPanel
-            actionId={(selector.actionId ?? "") as PlayerEncounterActionId | ""}
-            actionOptions={actionOptions}
+          <PlayerCombatHistoricalActionSelectorPanel
+            actionLabel={
+              selector.actionLabel ??
+              historicalActionLabel(selector.actionId)
+            }
             additionalActionNotes={selector.additionalActionNotes ?? ""}
-            controlsDisabled
-            distancePreferenceOptions={distancePreferenceOptions}
-            movementId={(selector.movementId ?? "") as PlayerEncounterMovementId | ""}
-            movementIntent={selector.movementIntent}
-            onActionChange={noop}
-            onAdditionalActionNotesChange={noop}
-            onMovementChange={noop}
-            onMovementIntentChange={noop}
-            onSecondaryActionChange={noop}
+            declarationRecorded
+            distancePreferences={distancePreferenceOptions.map((preference) => ({
+              desiredDistance: preference.defaultDistance,
+              displayName: preference.displayName,
+            }))}
+            movementLabel={
+              selector.movementLabel ??
+              PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.find(
+                (option) => option.value === selector.movementId,
+              )?.label ??
+              selector.movementId
+            }
             roundNumber={input.snapshot?.roundNumber}
-            secondaryActionId={(selector.secondaryActionId ?? "") as PlayerEncounterActionId | ""}
-            sourceLabel="History"
+            secondaryActionLabel={
+              selector.secondaryActionLabel ??
+              historicalActionLabel(selector.secondaryActionId)
+            }
           />
         ) : (
           <MissingHistoricalPanel title="Action selector" />
@@ -221,9 +225,9 @@ export function PlayerCombatHistoryInspector(input: {
         ) : (
           <MissingHistoricalPanel title="Combat modifiers" />
         )}
-        <PlayerCombatActionButtonPanel
-          disabled
-          statusText="No historical action control recorded."
+        <PlayerCombatHistoricalContextPanel
+          roundNumber={input.snapshot?.roundNumber}
+          stepLabel={input.snapshot?.step.replaceAll("_", " ")}
         />
         <CombatEventResultList
           emptyMessage={input.snapshot?.stepOutcome?.message ?? historicalDataMissingMessage}

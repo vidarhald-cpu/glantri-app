@@ -188,6 +188,19 @@ interface PlayerCombatActionSelectorPanelProps {
   sourceLabel?: string;
 }
 
+export interface PlayerCombatHistoricalActionSelectorPanelProps {
+  actionLabel?: string;
+  additionalActionNotes?: string;
+  declarationRecorded?: boolean;
+  distancePreferences?: readonly {
+    desiredDistance?: CombatDistance;
+    displayName: string;
+  }[];
+  movementLabel?: string;
+  roundNumber?: number;
+  secondaryActionLabel?: string;
+}
+
 interface PlayerCombatOpponentSelectorProps {
   controlsDisabled?: boolean;
   emptyLabel?: string;
@@ -218,12 +231,14 @@ interface PlayerCombatParryContextPanelProps {
   mainHandItemLabel?: string;
   offHandItemLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackLocationSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackModeSelectorProps {
@@ -232,6 +247,7 @@ interface PlayerCombatAttackModeSelectorProps {
   onChange: (attackModeId: string) => void;
   options: readonly { id: string; label: string }[];
   selectedAttackModeId?: string;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackTargetSelectorProps {
@@ -1545,6 +1561,73 @@ export function PlayerCombatActionSelectorPanel({
   );
 }
 
+export function PlayerCombatHistoricalActionSelectorPanel({
+  actionLabel,
+  additionalActionNotes,
+  declarationRecorded = false,
+  distancePreferences = [],
+  movementLabel,
+  roundNumber,
+  secondaryActionLabel,
+}: PlayerCombatHistoricalActionSelectorPanelProps) {
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <PanelTitleWithSource
+        label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
+        sourceLabel="History"
+      />
+      {declarationRecorded ? (
+        <div style={{ color: "#3f5f46", fontSize: "0.88rem", fontWeight: 650 }}>
+          Action declared.
+        </div>
+      ) : null}
+      <HistoricalField label="Action" value={actionLabel} />
+      <HistoricalField label="Secondary action" value={secondaryActionLabel ?? "None"} />
+      <HistoricalField label="Movement" value={movementLabel} />
+      {distancePreferences.map((preference) => (
+        <HistoricalField
+          key={preference.displayName}
+          label={preference.displayName}
+          value={
+            preference.desiredDistance === undefined
+              ? "No preference"
+              : `Distance ${preference.desiredDistance}`
+          }
+        />
+      ))}
+      <HistoricalField label="Description" value={additionalActionNotes || "None"} />
+    </section>
+  );
+}
+
+function HistoricalField(input: { label: string; value?: string }) {
+  return (
+    <div style={{ display: "grid", gap: "0.15rem" }}>
+      <strong style={{ fontSize: "0.88rem" }}>{input.label}</strong>
+      <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+        {input.value || "No recorded information"}
+      </span>
+    </div>
+  );
+}
+
+export function PlayerCombatHistoricalContextPanel(input: {
+  context?: string;
+  roundNumber?: number;
+  stepLabel?: string;
+}) {
+  return (
+    <section aria-label="Historical context" style={playerCombatPanelCardStyle}>
+      <strong>Historical context</strong>
+      {input.roundNumber ? <div>Round {input.roundNumber}</div> : null}
+      {input.stepLabel ? <div>{input.stepLabel}</div> : null}
+      {input.context ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{input.context}</div>
+      ) : null}
+    </section>
+  );
+}
+
 export function PlayerCombatActionButtonPanel({
   disabled = false,
   onDeclareAction,
@@ -1871,12 +1954,13 @@ export function PlayerCombatOpponentSelector({
   const selectedOpponent = opponentOptions.find((option) => option.id === selectedOpponentId);
 
   if (readOnly) {
+    const opponentLabel = selectedOpponentId
+      ? (selectedOpponent?.displayName ?? "Opponent unavailable")
+      : "No opponent";
     return (
       <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
         <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{label}</span>
-        <span style={compactPhaseTargetSelectStyle}>
-          {selectedOpponent?.displayName ?? "Opponent unavailable"}
-        </span>
+        <span style={compactPhaseTargetSelectStyle}>{opponentLabel}</span>
       </div>
     );
   }
@@ -1922,12 +2006,13 @@ export function PlayerCombatAttackTargetSelector({
   );
 
   if (readOnly) {
+    const targetLabel = combatContext.targetParticipantId
+      ? (selectedTarget?.displayName ?? "Target unavailable")
+      : "No target";
     return (
       <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
         <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
-        <span style={compactPhaseTargetSelectStyle}>
-          {selectedTarget?.displayName ?? "Target unavailable"}
-        </span>
+        <span style={compactPhaseTargetSelectStyle}>{targetLabel}</span>
         {distanceLabel ? (
           <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
             {distanceLabel}
@@ -1974,7 +2059,21 @@ export function PlayerCombatAttackLocationSelector({
   combatContext,
   controlsDisabled = false,
   onCombatContextChange,
+  readOnly = false,
 }: PlayerCombatAttackLocationSelectorProps) {
+  if (readOnly) {
+    return (
+      <HistoricalField
+        label="Attack location"
+        value={
+          combatContext.targetLocation && combatContext.targetLocation !== "none"
+            ? getHitLocationFullLabel(combatContext.targetLocation)
+            : "No target"
+        }
+      />
+    );
+  }
+
   return (
     <div
       style={{
@@ -2022,6 +2121,7 @@ export function PlayerCombatAttackModeSelector({
   onChange,
   options,
   selectedAttackModeId,
+  readOnly = false,
 }: PlayerCombatAttackModeSelectorProps) {
   if (options.length === 0) {
     return emptyState ? (
@@ -2038,6 +2138,15 @@ export function PlayerCombatAttackModeSelector({
         <span>{emptyState}</span>
       </div>
     ) : null;
+  }
+
+  if (readOnly) {
+    return (
+      <HistoricalField
+        label="Attack mode"
+        value={options.find((option) => option.id === selectedAttackModeId)?.label}
+      />
+    );
   }
 
   return (
@@ -2133,6 +2242,7 @@ export function PlayerCombatParryContextPanel({
   combatContext,
   controlsDisabled = false,
   onCombatContextChange,
+  readOnly = false,
 }: PlayerCombatParryContextPanelProps) {
   return (
     <div
@@ -2150,28 +2260,51 @@ export function PlayerCombatParryContextPanel({
           gap: "0.3rem",
         }}
       >
-        <ParryDirectionSelector
-          controlsDisabled={controlsDisabled}
-          direction={combatContext.mainHandParryDirection}
-          itemLabel="Main hand"
-          onChange={(mainHandParryDirection) =>
-            onCombatContextChange({
-              ...combatContext,
-              mainHandParryDirection,
-            })
-          }
-        />
-        <ParryDirectionSelector
-          controlsDisabled={controlsDisabled}
-          direction={combatContext.offHandParryDirection}
-          itemLabel="Off hand"
-          onChange={(offHandParryDirection) =>
-            onCombatContextChange({
-              ...combatContext,
-              offHandParryDirection,
-            })
-          }
-        />
+        {readOnly ? (
+          <>
+            <HistoricalField
+              label="Main hand"
+              value={
+                combatContext.mainHandParryDirection
+                  ? getPlayerEncounterParryDirectionLabel(combatContext.mainHandParryDirection)
+                  : "No recorded information"
+              }
+            />
+            <HistoricalField
+              label="Off hand"
+              value={
+                combatContext.offHandParryDirection
+                  ? getPlayerEncounterParryDirectionLabel(combatContext.offHandParryDirection)
+                  : "No recorded information"
+              }
+            />
+          </>
+        ) : (
+          <>
+            <ParryDirectionSelector
+              controlsDisabled={controlsDisabled}
+              direction={combatContext.mainHandParryDirection}
+              itemLabel="Main hand"
+              onChange={(mainHandParryDirection) =>
+                onCombatContextChange({
+                  ...combatContext,
+                  mainHandParryDirection,
+                })
+              }
+            />
+            <ParryDirectionSelector
+              controlsDisabled={controlsDisabled}
+              direction={combatContext.offHandParryDirection}
+              itemLabel="Off hand"
+              onChange={(offHandParryDirection) =>
+                onCombatContextChange({
+                  ...combatContext,
+                  offHandParryDirection,
+                })
+              }
+            />
+          </>
+        )}
       </div>
     </div>
   );

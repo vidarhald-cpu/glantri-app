@@ -19,6 +19,7 @@ export * from "./view-models/combatTrackerTaskPresentation";
 export * from "./view-models/combatCalculationPresentation";
 export * from "./view-models/combatResultLedgerPresentation";
 export * from "./view-models/buildCombatCalculationPresentations";
+export * from "./view-models/buildHistoricalObservationRelationships";
 export * from "./view-models/currentActionPresentation";
 export * from "./view-models/resolveCombatHistoryPanelSnapshot";
 export * from "./view-models/formatCombatModifier";

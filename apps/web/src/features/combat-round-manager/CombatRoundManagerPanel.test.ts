@@ -388,8 +388,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Modifiers declared");
     expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).toContain('" Initiative rolled."');
-    expect(source).toContain("Historical step:");
-    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain("PlayerCombatHistoricalContextPanel");
+    expect(source).toContain("context={inspectorHistoricalStatusLabel}");
     expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
@@ -1086,8 +1086,7 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("getBoundaryTransitionButtonLabel(");
     expect(source).toContain("projectedBoundaryTransitionAction.targetBoundary");
-    expect(source).toContain("Historical step:");
-    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain("context={inspectorHistoricalStatusLabel}");
     expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("inspector.step,");
     expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");

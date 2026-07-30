@@ -66,6 +66,105 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("does not project a carried initiative result as an attack-step result", () => {
+    const state = combatRoundStateSchema.parse({
+      participants: [{ label: "Aria", participantId: "aria" }],
+      roundNumber: 1,
+      stepSnapshots: [
+        {
+          actionResultStatus: "recorded",
+          actionResultSummary: "Aria attacked.",
+          committedAt: "2026-01-01T00:00:00.000Z",
+          id: "attack-snapshot",
+          initiativeResult: {
+            baseInitiative: 3,
+            modifierAdjustment: 0,
+            rollTotal: 6,
+            rolls: [6],
+            total: 9,
+          },
+          participantId: "aria",
+          participantLabel: "Aria",
+          roundNumber: 1,
+          step: "phase_1_actions",
+        },
+      ],
+    });
+    const projection = projectCombatHistory({
+      participants,
+      source: historySource(state),
+      viewer: { kind: "gm" },
+    });
+
+    expect(
+      projection.activeRound.snapshots[0]?.panels.actionResult.initiativeResult,
+    ).toBeUndefined();
+  });
+
+  it("projects a missing selector summary from the archived declaration facts", () => {
+    const state = combatRoundStateSchema.parse({
+      events: [
+        event({
+          facts: {
+            gmReview: {},
+            involvedOutcome: {
+              actionId: "single_attack",
+              movementId: "maintain_distance",
+            },
+            publicOutcome: {},
+            rollerPrivate: {},
+          },
+          id: "declaration-aria",
+          ownerParticipantId: "aria",
+          sequence: 1,
+          step: "select_actions",
+          type: "declaration",
+          visibility: {
+            identityRefs: [{ participantId: "aria", role: "actor" }],
+            involvedParticipantIds: ["aria"],
+            outcomeScope: "involved",
+          },
+        }),
+      ],
+      participants: [
+        {
+          declaration: {
+            actionId: "single_attack",
+            additionalActionNotes: "Hold the line",
+            movementId: "maintain_distance",
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "Aria",
+          participantId: "aria",
+        },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 1,
+      stepSnapshots: [
+        {
+          committedAt: "2026-01-01T00:03:00.000Z",
+          id: "snapshot-without-selector",
+          participantId: "aria",
+          participantLabel: "Aria",
+          roundNumber: 1,
+          step: "review_action_modifiers",
+        },
+      ],
+    });
+    const projection = projectCombatHistory({
+      participants,
+      source: historySource(state),
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    expect(projection.activeRound.snapshots[0]?.panels.actionSelector).toMatchObject({
+      actionId: "single_attack",
+      additionalActionNotes: "Hold the line",
+      movementId: "maintain_distance",
+    });
+  });
+
   it("projects revision-correct archived observation relationships without current-state fallback", () => {
     const state = combatRoundStateSchema.parse({
       observationRelationships: [

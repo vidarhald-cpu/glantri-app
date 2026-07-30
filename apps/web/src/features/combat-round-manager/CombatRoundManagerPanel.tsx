@@ -195,6 +195,8 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  PlayerCombatHistoricalActionSelectorPanel,
+  PlayerCombatHistoricalContextPanel,
   type PlayerCombatDistancePreferenceOption,
   type PlayerCombatAttackStatsView,
   PlayerCombatAttackLocationSelector,
@@ -268,6 +270,7 @@ import {
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { buildAdjustDistanceReviewPresentation } from "./adjustDistanceReviewPresentation";
+import { resolveHistoricalFeintSkillLabel } from "./view-models/historicalFeintPresentation";
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 import {
@@ -1321,6 +1324,7 @@ function formatCombatPhaseResolutionResultLines(input: {
 function buildHistoricalCombatActionResult(input: {
   participantId?: string;
   snapshot?: CombatRoundStepSnapshot;
+  step?: CombatRoundStep;
 }) {
   const snapshot = input.snapshot;
 
@@ -1351,7 +1355,10 @@ function buildHistoricalCombatActionResult(input: {
     });
   }
 
-  if (snapshot.initiativeResult) {
+  if (
+    snapshot.initiativeResult &&
+    (input.step === "initiative_phase_1" || input.step === "initiative_phase_2")
+  ) {
     return {
       interpretedResult: formatCombatInitiativeFormula(snapshot.initiativeResult),
       rankLabel: formatSnapshotInitiativeRankLabel(snapshot.initiativeRank),
@@ -4631,17 +4638,7 @@ export default function CombatRoundManagerPanel({
   );
   const inspectorHistoricalDeclarationSummary = inspectorPanelSnapshot?.declarationSummary;
   const inspectorHistoricalSelectorFactsComplete = Boolean(
-    inspectorHistoricalDeclarationSummary?.movementLabel &&
-    (!inspectorHistoricalDeclarationSummary.actionId ||
-      inspectorHistoricalDeclarationSummary.actionLabel) &&
-    (!inspectorHistoricalDeclarationSummary.secondaryActionId ||
-      inspectorHistoricalDeclarationSummary.secondaryActionLabel) &&
-    (inspectorHistoricalDeclarationSummary.movementIntent?.distancePreferences ?? []).every(
-      (preference) =>
-        inspectorHistoricalDeclarationSummary.movementPreferenceTargets?.some(
-          (target) => target.id === preference.targetParticipantId,
-        ),
-    ),
+    inspectorHistoricalDeclarationSummary,
   );
   const inspectorHistoricalActionOptions =
     inspectorHistoricalSelectorFactsComplete && inspectorHistoricalDeclarationSummary
@@ -5541,7 +5538,18 @@ export default function CombatRoundManagerPanel({
     ],
   );
   const inspectorResolvedFeintSkill =
-    inspectorDraft.feintMethod === "movement"
+    inspectorIsHistorical
+      ? inspectorDisplayDraft.feintSkillId
+        ? {
+            id: inspectorDisplayDraft.feintSkillId,
+            label: resolveHistoricalFeintSkillLabel({
+              skillId: inspectorDisplayDraft.feintSkillId,
+              skills: content?.skills ?? [],
+              specializations: content?.specializations ?? [],
+            }),
+          }
+        : undefined
+      : inspectorDraft.feintMethod === "movement"
       ? { id: "dodge", label: "Dodge" }
       : resolveCombatFeintWeaponSkill({
           equipmentState: inspectorEquipmentState,
@@ -6624,12 +6632,16 @@ export default function CombatRoundManagerPanel({
     inspectorPhaseInitiativeChoice,
   );
   const showInspectorInitiativeContextPanel =
-    !showInspectorPhaseCombatExperienceContextPanel && inspectorCurrentStepIsInitiative;
+    !inspectorIsHistorical &&
+    !showInspectorPhaseCombatExperienceContextPanel &&
+    inspectorCurrentStepIsInitiative;
   const showInspectorModifierReviewContextPanel =
+    !inspectorIsHistorical &&
     !showInspectorInitiativeContextPanel &&
     !showInspectorPhaseCombatExperienceContextPanel &&
     (inspector.step === "review_action_modifiers" || inspector.step === "review_phase_2_modifiers");
   const showInspectorCombatStartExperienceContextPanel =
+    !inspectorIsHistorical &&
     !showInspectorInitiativeContextPanel &&
     !showInspectorPhaseCombatExperienceContextPanel &&
     !showInspectorModifierReviewContextPanel &&
@@ -6659,7 +6671,9 @@ export default function CombatRoundManagerPanel({
     inspectorSnapshot &&
     (inspectorSnapshot.actionResultStatus === "recorded" ||
       inspectorSnapshot.attackResult ||
-      inspectorSnapshot.initiativeResult ||
+      ((inspector.step === "initiative_phase_1" ||
+        inspector.step === "initiative_phase_2") &&
+        inspectorSnapshot.initiativeResult) ||
       inspectorSnapshot.actionResultSummary),
   );
   const inspectorHistoricalActionResult = archivedInspectorPresentation
@@ -6671,6 +6685,7 @@ export default function CombatRoundManagerPanel({
             : buildHistoricalCombatActionResult({
                 participantId: inspector.participant?.participantId,
                 snapshot: inspectorSnapshot,
+                step: inspector.step,
               })
           : undefined,
       );
@@ -10165,6 +10180,38 @@ export default function CombatRoundManagerPanel({
                           No information available for this panel.
                         </div>
                       </section>
+                    ) : inspectorIsHistorical ? (
+                      <PlayerCombatHistoricalActionSelectorPanel
+                        actionLabel={
+                          inspectorHistoricalDeclarationSummary?.actionLabel ??
+                          (inspectorDisplayDraft.actionId
+                            ? getPlayerEncounterActionLabel(inspectorDisplayDraft.actionId)
+                            : undefined)
+                        }
+                        additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
+                        declarationRecorded
+                        distancePreferences={inspectorDisplayDistancePreferenceOptions.map(
+                          (preference) => ({
+                            desiredDistance: preference.defaultDistance,
+                            displayName: preference.displayName,
+                          }),
+                        )}
+                        movementLabel={
+                          inspectorHistoricalDeclarationSummary?.movementLabel ??
+                          (inspectorDisplayDraft.movementId
+                            ? getPlayerEncounterMovementLabel(inspectorDisplayDraft.movementId)
+                            : undefined)
+                        }
+                        roundNumber={selectedRoundNumber}
+                        secondaryActionLabel={
+                          inspectorHistoricalDeclarationSummary?.secondaryActionLabel ??
+                          (inspectorDisplayDraft.secondaryActionId
+                            ? getPlayerEncounterActionLabel(
+                                inspectorDisplayDraft.secondaryActionId,
+                              )
+                            : undefined)
+                        }
+                      />
                     ) : (
                       <PlayerCombatActionSelectorPanel
                         actionId={inspectorDisplayDraft.actionId}
@@ -10423,11 +10470,16 @@ export default function CombatRoundManagerPanel({
                                 }
                               />
                               <PlayerCombatObservationProgress
-                                relationships={selectedTimelineRoundState.observationRelationships.filter(
-                                  (relationship) =>
-                                    relationship.observerParticipantId ===
-                                    selectedEncounterParticipant?.id,
-                                )}
+                                relationships={
+                                  inspectorIsHistorical
+                                    ? archivedInspectorPresentation?.historicalContext
+                                        .observationRelationships ?? []
+                                    : selectedTimelineRoundState.observationRelationships.filter(
+                                        (relationship) =>
+                                          relationship.observerParticipantId ===
+                                          selectedEncounterParticipant?.id,
+                                      )
+                                }
                                 targetLabels={Object.fromEntries(
                                   selectedTimelineRoundState.participants.map((participant) => [
                                     participant.participantId,
@@ -10454,12 +10506,22 @@ export default function CombatRoundManagerPanel({
                                     },
                                   })
                                 }
+                                readOnly={inspectorIsHistorical}
                                 targetOptions={inspectorTargetOptions}
                               />
                               <label style={compactFieldLabelStyle}>
                                 <strong>Requested distance</strong>
+                                {inspectorIsHistorical ? (
+                                  <span style={{ color: "#5e5a50" }}>
+                                    {inspectorDisplayDraft.movementIntent.distancePreferences.find(
+                                      (entry) =>
+                                        entry.targetParticipantId ===
+                                        phaseModel.phaseContext.targetParticipantId,
+                                    )?.desiredDistance ?? "No recorded information"}
+                                  </span>
+                                ) : (
                                 <select
-                                  disabled={saving || inspectorIsHistorical}
+                                  disabled={saving}
                                   onChange={(event) => {
                                     const targetParticipantId =
                                       phaseModel.phaseContext.targetParticipantId;
@@ -10509,6 +10571,7 @@ export default function CombatRoundManagerPanel({
                                     </option>
                                   ))}
                                 </select>
+                                )}
                               </label>
                               <div>Skill: Dodge</div>
                               <div>The defender may oppose or allow the maneuver.</div>
@@ -10531,25 +10594,34 @@ export default function CombatRoundManagerPanel({
                                     },
                                   })
                                 }
+                                readOnly={inspectorIsHistorical}
                                 targetOptions={inspectorTargetOptions}
                               />
                               <label style={compactFieldLabelStyle}>
                                 <strong>Feint method</strong>
-                                <select
-                                  disabled={saving || inspectorIsHistorical}
-                                  onChange={(event) => {
-                                    const method =
-                                      event.target.value === "weapon" ? "weapon" : "movement";
-                                    updateInspectorDraft({
-                                      feintMethod: method,
-                                      feintSkillId: "dodge",
-                                    });
-                                  }}
-                                  value={inspectorDisplayDraft.feintMethod}
-                                >
-                                  <option value="movement">Movement</option>
-                                  <option value="weapon">Weapon</option>
-                                </select>
+                                {inspectorIsHistorical ? (
+                                  <span style={{ color: "#5e5a50" }}>
+                                    {inspectorDisplayDraft.feintMethod === "weapon"
+                                      ? "Weapon"
+                                      : "Movement"}
+                                  </span>
+                                ) : (
+                                  <select
+                                    disabled={saving}
+                                    onChange={(event) => {
+                                      const method =
+                                        event.target.value === "weapon" ? "weapon" : "movement";
+                                      updateInspectorDraft({
+                                        feintMethod: method,
+                                        feintSkillId: "dodge",
+                                      });
+                                    }}
+                                    value={inspectorDisplayDraft.feintMethod}
+                                  >
+                                    <option value="movement">Movement</option>
+                                    <option value="weapon">Weapon</option>
+                                  </select>
+                                )}
                               </label>
                               <div>
                                 <strong>Skill:</strong>{" "}
@@ -10581,6 +10653,7 @@ export default function CombatRoundManagerPanel({
                                     }
                                     options={phaseLoadoutSummary.attackModeOptions}
                                     selectedAttackModeId={phaseModel.phaseContext.attackModeId}
+                                    readOnly={inspectorIsHistorical}
                                   />
                                 </>
                               ) : null}
@@ -10620,17 +10693,18 @@ export default function CombatRoundManagerPanel({
                                   })
                                 }
                                 readOnly={
-                                  (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                  inspectorIsHistorical ||
+                                  ((inspectorDisplayDraft.actionId === "feint_attack" ||
                                     inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                  phaseKey === "phase2"
+                                    phaseKey === "phase2")
                                 }
                                 targetOptions={
                                   historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
                                 }
                               />
-                              <PlayerCombatAttackLocationSelector
-                                combatContext={phaseModel.phaseContext}
-                                controlsDisabled={saving || inspectorIsHistorical}
+                                <PlayerCombatAttackLocationSelector
+                                  combatContext={phaseModel.phaseContext}
+                                  controlsDisabled={saving || inspectorIsHistorical}
                                 onCombatContextChange={(combatContext) =>
                                   updateInspectorDraft({
                                     phaseContexts: {
@@ -10639,6 +10713,7 @@ export default function CombatRoundManagerPanel({
                                     },
                                   })
                                 }
+                                readOnly={inspectorIsHistorical}
                               />
                               <PlayerCombatAttackModeSelector
                                 controlsDisabled={saving || inspectorIsHistorical}
@@ -10677,6 +10752,7 @@ export default function CombatRoundManagerPanel({
                                     ? phaseCombatContext.attackModeId
                                     : phaseModel.phaseContext.attackModeId
                                 }
+                                readOnly={inspectorIsHistorical}
                               />
                             </>
                           ) : null}
@@ -10709,6 +10785,7 @@ export default function CombatRoundManagerPanel({
                                     },
                                   })
                                 }
+                                readOnly={inspectorIsHistorical}
                               />
                             </>
                           ) : null}
@@ -10893,7 +10970,8 @@ export default function CombatRoundManagerPanel({
                           ) : null}
                         </section>
                       ) : null}
-                      {inspectorResolutionStepKind === "parry" &&
+                      {!inspectorIsHistorical &&
+                      inspectorResolutionStepKind === "parry" &&
                       inspectorResolutionAttackResult?.hit &&
                       inspectorDisplayPhaseResolutionResult &&
                       inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
@@ -10925,7 +11003,9 @@ export default function CombatRoundManagerPanel({
                           sources={inspectorParrySources}
                         />
                       ) : null}
-                      {inspectorDamageProposalReady && displayedDamageResolution?.damageResult ? (
+                      {!inspectorIsHistorical &&
+                      inspectorDamageProposalReady &&
+                      displayedDamageResolution?.damageResult ? (
                         <CombatDamageReviewPanel
                           attackerLabel={inspectorDamageAttackerLabel}
                           commitReadiness={inspectorDamageReviewCommitReadiness}
@@ -10949,7 +11029,7 @@ export default function CombatRoundManagerPanel({
                           saving={saving}
                         />
                       ) : null}
-                      {inspector.step === "round_summary" ? (
+                      {!inspectorIsHistorical && inspector.step === "round_summary" ? (
                         <>
                           {inspectorRoundEndDistanceControlComplete ? (
                             <CombatRoundEndParticipantReviewPanel
@@ -10977,6 +11057,13 @@ export default function CombatRoundManagerPanel({
                           />
                         </>
                       ) : null}
+                      {inspectorIsHistorical ? (
+                        <PlayerCombatHistoricalContextPanel
+                          context={inspectorHistoricalStatusLabel}
+                          roundNumber={selectedRoundNumber}
+                          stepLabel={getPlayerCombatStepLabel(inspector.step)}
+                        />
+                      ) : (
                       <PlayerCombatActionButtonPanel
                         disabled={inspectorEffectiveActionButtonDisabled}
                         onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
@@ -11001,17 +11088,13 @@ export default function CombatRoundManagerPanel({
                             ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
                                 projectedBoundaryTransitionAction.targetBoundary,
                               )}.`
-                            : inspectorIsHistorical
-                              ? `Historical step: ${
-                                  inspectorHistoricalStepOutcome?.message ??
-                                  `${getPlayerCombatStepLabel(inspector.step)}.`
-                                }`
-                              : `Current step: ${getPlayerCombatStepLabel(
+                            : `Current step: ${getPlayerCombatStepLabel(
                                   inspector.step,
                                 )}.${inspectorStatusSuffix}`
                         }
                         validationMessage={inspectorActionValidationMessage}
                       />
+                      )}
                     </div>
                     {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
                       <CombatEventResultList

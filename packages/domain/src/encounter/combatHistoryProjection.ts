@@ -7,6 +7,7 @@ import {
   type CombatLogProjection,
 } from "./combatLogProjection";
 import type {
+  CombatRoundParticipantState,
   CombatRoundStepSnapshot,
   CombatRoundState,
   CompletedCombatRound,
@@ -451,7 +452,9 @@ export function projectCombatHistoryEvent(input: {
 }
 
 function projectSnapshot(input: {
+  declarationEvents: readonly CombatStepEvent[];
   labels: ReadonlyMap<string, string>;
+  roundParticipants: readonly CombatRoundParticipantState[];
   snapshot: CombatRoundStepSnapshot;
   viewer: CombatHistoryViewer;
 }): ProjectedCombatHistorySnapshot | undefined {
@@ -533,6 +536,42 @@ function projectSnapshot(input: {
           rolledByUserId: undefined,
         }
       : undefined;
+  const declarationEvent = input.declarationEvents.find(
+    (event) =>
+      event.type === "declaration" &&
+      event.ownerParticipantId === input.snapshot.participantId &&
+      event.step === "select_actions",
+  );
+  const declarationOutcome = declarationEvent?.facts.involvedOutcome;
+  const archivedDeclaration = input.roundParticipants.find(
+    (participant) => participant.participantId === input.snapshot.participantId,
+  )?.declaration;
+  const declarationSummary =
+    input.snapshot.declarationSummary ??
+    (declarationOutcome && typeof declarationOutcome.actionId === "string"
+      ? {
+          actionId: declarationOutcome.actionId,
+          additionalActionNotes: archivedDeclaration?.additionalActionNotes,
+          movementId:
+            typeof declarationOutcome.movementId === "string"
+              ? declarationOutcome.movementId
+              : archivedDeclaration?.movementId,
+          movementIntent: archivedDeclaration?.movementIntent,
+          movementPreferenceTargets: input.roundParticipants
+            .filter(
+              (participant) => participant.participantId !== input.snapshot.participantId,
+            )
+            .map((participant) => ({
+              displayName: participant.label,
+              id: participant.participantId,
+            })),
+          secondaryActionContext: archivedDeclaration?.secondaryActionContext,
+          secondaryActionId:
+            typeof declarationOutcome.secondaryActionId === "string"
+              ? declarationOutcome.secondaryActionId
+              : archivedDeclaration?.secondaryActionId,
+        }
+      : undefined);
 
   return {
     completeness: incomplete ? "incomplete" : "complete",
@@ -543,20 +582,25 @@ function projectSnapshot(input: {
     panels: {
       actionResult: {
         attackResult: safeAttackResult,
-        initiativeResult: ownsSnapshot ? input.snapshot.initiativeResult : undefined,
+        initiativeResult:
+          ownsSnapshot &&
+          (input.snapshot.step === "initiative_phase_1" ||
+            input.snapshot.step === "initiative_phase_2")
+            ? input.snapshot.initiativeResult
+            : undefined,
         status: input.snapshot.actionResultStatus,
       },
       actionSelector: ownsSnapshot
         ? {
-            actionId: input.snapshot.declarationSummary?.actionId,
-            actionLabel: input.snapshot.declarationSummary?.actionLabel,
-            additionalActionNotes: input.snapshot.declarationSummary?.additionalActionNotes,
-            movementId: input.snapshot.declarationSummary?.movementId,
-            movementIntent: input.snapshot.declarationSummary?.movementIntent
+            actionId: declarationSummary?.actionId,
+            actionLabel: declarationSummary?.actionLabel,
+            additionalActionNotes: declarationSummary?.additionalActionNotes,
+            movementId: declarationSummary?.movementId,
+            movementIntent: declarationSummary?.movementIntent
               ? {
-                  ...input.snapshot.declarationSummary.movementIntent,
+                  ...declarationSummary.movementIntent,
                   distancePreferences:
-                    input.snapshot.declarationSummary.movementIntent.distancePreferences.filter(
+                    declarationSummary.movementIntent.distancePreferences.filter(
                       (preference) =>
                         isVisible({
                           participantId: preference.targetParticipantId,
@@ -565,20 +609,20 @@ function projectSnapshot(input: {
                     ),
                 }
               : undefined,
-            movementLabel: input.snapshot.declarationSummary?.movementLabel,
+            movementLabel: declarationSummary?.movementLabel,
             movementPreferenceTargets: targetOptions(
-              input.snapshot.declarationSummary?.movementPreferenceTargets,
+              declarationSummary?.movementPreferenceTargets,
             ),
-            secondaryActionId: input.snapshot.declarationSummary?.secondaryActionId,
-            secondaryActionLabel: input.snapshot.declarationSummary?.secondaryActionLabel,
+            secondaryActionId: declarationSummary?.secondaryActionId,
+            secondaryActionLabel: declarationSummary?.secondaryActionLabel,
             secondaryActionTargetParticipantId:
-              input.snapshot.declarationSummary?.secondaryActionContext?.targetParticipantId &&
+              declarationSummary?.secondaryActionContext?.targetParticipantId &&
               isVisible({
                 participantId:
-                  input.snapshot.declarationSummary.secondaryActionContext.targetParticipantId,
+                  declarationSummary.secondaryActionContext.targetParticipantId,
                 viewer: input.viewer,
               })
-                ? input.snapshot.declarationSummary.secondaryActionContext.targetParticipantId
+                ? declarationSummary.secondaryActionContext.targetParticipantId
                 : undefined,
           }
         : {},
@@ -599,6 +643,7 @@ function projectRound(input: {
   labels: ReadonlyMap<string, string>;
   observationRelationships: readonly CombatObservationRelationship[];
   participants: readonly CombatHistoryParticipantInput[];
+  roundParticipants: readonly CombatRoundParticipantState[];
   roundNumber: number;
   snapshots: readonly CombatRoundStepSnapshot[];
   viewer: CombatHistoryViewer;
@@ -622,7 +667,15 @@ function projectRound(input: {
           }),
     roundNumber: input.roundNumber,
     snapshots: input.snapshots
-      .map((snapshot) => projectSnapshot({ labels: input.labels, snapshot, viewer: input.viewer }))
+      .map((snapshot) =>
+        projectSnapshot({
+          declarationEvents: input.events,
+          labels: input.labels,
+          roundParticipants: input.roundParticipants,
+          snapshot,
+          viewer: input.viewer,
+        }),
+      )
       .filter((snapshot): snapshot is ProjectedCombatHistorySnapshot => Boolean(snapshot)),
   };
 }
@@ -695,6 +748,7 @@ export function projectCombatHistory(input: {
       labels,
       observationRelationships: round.observationRelationships,
       participants: visibleParticipants,
+      roundParticipants: round.participants,
       roundNumber: round.roundNumber,
       snapshots: round.stepSnapshots,
       viewer: input.viewer,
@@ -716,6 +770,7 @@ export function projectCombatHistory(input: {
       labels,
       observationRelationships: state.observationRelationships,
       participants: visibleParticipants,
+      roundParticipants: state.participants,
       roundNumber: state.roundNumber,
       snapshots: state.stepSnapshots,
       viewer: input.viewer,

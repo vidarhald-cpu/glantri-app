@@ -662,6 +662,36 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(JSON.stringify(events)).not.toContain("Display name must not be copied");
   });
 
+  it("classifies legacy snapshot fallback by its exact step rather than carried initiative", () => {
+    const events = deriveLegacyCombatStepEvents({
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+      stepSnapshots: [
+        {
+          actionResultStatus: "recorded",
+          actionResultSummary: "Legacy attack summary",
+          committedAt: "2026-01-01T00:08:00.000Z",
+          id: "legacy-attack-snapshot",
+          initiativeResult: {
+            baseInitiative: 3,
+            modifierAdjustment: 0,
+            rollTotal: 6,
+            rolls: [6],
+            total: 9,
+          },
+          participantId: ATTACKER_ID,
+          participantLabel: "Attacker",
+          roundNumber: 1,
+          step: "phase_1_actions",
+        },
+      ],
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("attack");
+    expect(events[0]?.step).toBe("phase_1_actions");
+  });
+
   it("derives distance rolls before result/apply and preserves health/SU ownership", () => {
     const roundEndReview = combatRoundEndReviewSchema.parse({
       participantReviews: {

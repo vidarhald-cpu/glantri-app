@@ -84,29 +84,27 @@ function snapshot(): ProjectedCombatHistorySnapshot {
 }
 
 describe("PlayerCombatHistoryInspector", () => {
-  it("reuses the normal read-only selector, phase, modifier, action, and result panels", () => {
+  it("preserves panel placement while rendering historical values without form controls", () => {
     const { container } = render(
       <PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />,
     );
 
-    expect((screen.getByLabelText("Action") as HTMLSelectElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Movement") as HTMLSelectElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Description") as HTMLInputElement).value).toBe(
-      "Hold the bridge",
-    );
+    expect(screen.getByText("Single attack")).toBeTruthy();
+    expect(screen.getByText("Maintain distance to opponent")).toBeTruthy();
+    expect(screen.getByText("Hold the bridge")).toBeTruthy();
     expect(screen.getByText("Long sword")).toBeTruthy();
-    expect((screen.getByLabelText("Attack mode") as HTMLSelectElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Attack mode") as HTMLSelectElement).value).toBe(
-      "mode-thrust",
-    );
+    expect(screen.getByText("Thrust")).toBeTruthy();
     expect(screen.getAllByText("Sword / shield")).toHaveLength(2);
     expect(screen.getByText("General/Fatigue")).toBeTruthy();
-    expect(screen.getByText("Current action")).toBeTruthy();
+    expect(screen.getByText("Historical context")).toBeTruthy();
     expect(screen.getByLabelText(/Historical result/)).toBeTruthy();
     expect(container.textContent).not.toContain("Bucket Key");
     expect(container.textContent).not.toContain("Source Rule");
     expect(container.textContent).not.toContain("internal-rule-key");
     expect(container.textContent).not.toContain("another-internal-rule-key");
+    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector("button")).toBeNull();
   });
 
   it("uses the live compact modifier grid for historical headings and two-line rows", () => {
@@ -133,11 +131,11 @@ describe("PlayerCombatHistoryInspector", () => {
     }
   });
 
-  it("renders a disabled historical Current action panel in the normal bottom-row position", () => {
+  it("renders read-only historical context in the normal action-area position", () => {
     render(<PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />);
 
     const modifierPanel = screen.getByText("Combat modifiers").closest("section");
-    const currentActionPanel = screen.getByText("Current action").closest("section");
+    const currentActionPanel = screen.getByText("Historical context").closest("section");
     const actionResultPanel = screen.getByLabelText(/Historical result/);
     expect(modifierPanel?.parentElement).toBe(currentActionPanel?.parentElement);
     expect(currentActionPanel?.parentElement).toBe(actionResultPanel.parentElement);
@@ -147,8 +145,8 @@ describe("PlayerCombatHistoryInspector", () => {
       actionResultPanel,
     ]);
 
-    expect(screen.queryByRole("button", { name: "Historical inspection" })).toBeNull();
-    expect(screen.getByText("No historical action control recorded.")).toBeTruthy();
+    expect(screen.queryByText("Current action")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("shows explicit panel messages instead of generic projected-data summaries", () => {
@@ -186,7 +184,7 @@ describe("PlayerCombatHistoryInspector", () => {
       <PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />,
     );
 
-    expect(container.textContent).toContain("Visible opponent");
+    expect(container.textContent).toContain("No target");
     expect(container.textContent).not.toContain("Hidden opponent");
   });
 
@@ -220,6 +218,6 @@ describe("PlayerCombatHistoryInspector", () => {
     expect(screen.getByText("Observation progress")).toBeTruthy();
     expect(screen.getByText("Visible opponent: 4 / 6 · best +1% · attempts 1")).toBeTruthy();
     expect(screen.getByText("Observe Opponent · Visible opponent")).toBeTruthy();
-    expect(screen.getAllByText("Current action")).toHaveLength(1);
+    expect(screen.getAllByText("Historical context")).toHaveLength(1);
   });
 });

@@ -1,4 +1,8 @@
-import { combatRoundStateSchema, type CombatRoundStepSnapshot } from "@glantri/domain";
+import {
+  combatRoundStateSchema,
+  combatStepEventSchema,
+  type CombatRoundStepSnapshot,
+} from "@glantri/domain";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
@@ -144,5 +148,74 @@ describe("archived inspector presentation ownership", () => {
     expect(candidate?.inspector.participant?.label).toBe("Archived participant");
     expect(candidate?.panelSnapshot?.phasePanels?.phase1?.attackSummary?.ob).toBe("17");
     expect(candidate?.canonicalActionResultEvents).toEqual([]);
+  });
+
+  it("recovers a missing historical selector from the archived declaration event and round", () => {
+    const declarationEvent = combatStepEventSchema.parse({
+      actorParticipantId: "participant-1",
+      completeness: "complete",
+      encounterId: "encounter-1",
+      facts: {
+        involvedOutcome: {
+          actionId: "single_attack",
+          movementId: "maintain_distance",
+        },
+      },
+      id: "declaration-1",
+      occurredAt: "2026-07-28T09:00:00.000Z",
+      ownerParticipantId: "participant-1",
+      roundNumber: 1,
+      schemaVersion: 1,
+      sequence: 1,
+      source: { kind: "canonical", sourceIds: [] },
+      status: "recorded",
+      step: "select_actions",
+      type: "declaration",
+      visibility: {
+        identityRefs: [{ participantId: "participant-1", role: "actor" }],
+        involvedParticipantIds: ["participant-1"],
+        outcomeScope: "involved",
+      },
+    });
+    const round = combatRoundStateSchema.parse({
+      currentStep: "round_summary",
+      events: [declarationEvent],
+      participants: [
+        {
+          declaration: {
+            actionId: "single_attack",
+            additionalActionNotes: "Hold the line",
+            movementId: "maintain_distance",
+            roundNumber: 1,
+            submittedBy: "gm",
+          },
+          label: "Archived participant",
+          participantId: "participant-1",
+        },
+      ],
+      roundNumber: 1,
+      stepSnapshots: [
+        snapshot({
+          declarationSummary: undefined,
+          id: "snapshot-without-declaration",
+          step: "review_action_modifiers",
+        }),
+      ],
+    });
+
+    const candidate = buildArchivedInspectorPresentationIndex({
+      buildHistoricalActionResult: () => ({ interpretedResult: "Archived result" }),
+      roundStates: [round],
+    }).get({
+      participantId: "participant-1",
+      roundNumber: 1,
+      step: "review_action_modifiers",
+    });
+
+    expect(candidate?.panelSnapshot?.declarationSummary).toMatchObject({
+      actionId: "single_attack",
+      additionalActionNotes: "Hold the line",
+      movementId: "maintain_distance",
+    });
   });
 });
