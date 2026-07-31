@@ -22,8 +22,79 @@ export const combatAdjustDistanceStatusSchema = z.enum([
 ]);
 export type CombatAdjustDistanceStatus = z.infer<typeof combatAdjustDistanceStatusSchema>;
 
+export const combatAdjustDistanceResultTableRowIdSchema = z.enum([
+  "defender_allows",
+  "initiator_wins",
+  "tie_or_opponent_wins",
+]);
+export type CombatAdjustDistanceResultTableRowId = z.infer<
+  typeof combatAdjustDistanceResultTableRowIdSchema
+>;
+
+export interface CombatAdjustDistanceResultTableRow {
+  readonly distanceResult: "current" | "requested";
+  readonly id: CombatAdjustDistanceResultTableRowId;
+  readonly outcome: "successful" | "unsuccessful" | "allowed";
+  readonly result: string;
+  readonly rollCondition: string;
+}
+
+/**
+ * Canonical Adjust Distance result table. The resolver, review UI, and committed
+ * result presentation consume this same structured source.
+ */
+export const COMBAT_ADJUST_DISTANCE_RESULT_TABLE = Object.freeze([
+  Object.freeze({
+    distanceResult: "requested",
+    id: "defender_allows",
+    outcome: "allowed",
+    result: "Requested distance",
+    rollCondition: "Opponent allows",
+  }),
+  Object.freeze({
+    distanceResult: "requested",
+    id: "initiator_wins",
+    outcome: "successful",
+    result: "Requested distance",
+    rollCondition: "Initiator margin 1 or more",
+  }),
+  Object.freeze({
+    distanceResult: "current",
+    id: "tie_or_opponent_wins",
+    outcome: "unsuccessful",
+    result: "Current distance",
+    rollCondition: "Tie or opponent wins",
+  }),
+] satisfies readonly CombatAdjustDistanceResultTableRow[]);
+
+export function getCombatAdjustDistanceResultTableRowIdForOutcome(
+  outcome: "successful" | "unsuccessful" | "allowed",
+): CombatAdjustDistanceResultTableRowId {
+  return outcome === "allowed"
+    ? "defender_allows"
+    : outcome === "successful"
+      ? "initiator_wins"
+      : "tie_or_opponent_wins";
+}
+
+export const combatAdjustDistanceAppliedModifierSchema = z.object({
+  bucket: z.enum(["general_fatigue", "skill_ob"]),
+  id: idSchema,
+  label: z.string().min(1),
+  sourceId: idSchema.optional(),
+  value: z.number().int(),
+});
+export type CombatAdjustDistanceAppliedModifier = z.infer<
+  typeof combatAdjustDistanceAppliedModifierSchema
+>;
+
 export const combatAdjustDistanceRollResultSchema = z.object({
+  appliedModifiers: z.array(combatAdjustDistanceAppliedModifierSchema).optional(),
+  dodgeSkillLabel: z.string().min(1).optional(),
+  dodgeSkillXp: z.number().int().optional(),
   dodgeSkillTotal: z.number().int(),
+  dodgeStatLabel: z.string().min(1).optional(),
+  dodgeStatValue: z.number().int().optional(),
   finalTotal: z.number().int(),
   generalFatigueModifier: z.number().int().default(0),
   id: idSchema,
@@ -36,6 +107,8 @@ export const combatAdjustDistanceRollResultSchema = z.object({
   // The GM's adjustment is a signed, deliberate roll input.  The rules suggest
   // a small range, but the application must not police the GM's judgment.
   situationalAdjustment: z.number().int().default(0),
+  totalModifiers: z.number().int().optional(),
+  preDieTotal: z.number().int().optional(),
 });
 export type CombatAdjustDistanceRollResult = z.infer<
   typeof combatAdjustDistanceRollResultSchema
@@ -76,6 +149,7 @@ export const combatAdjustDistanceProposalSchema = z.object({
   roundNumber: z.number().int().positive(),
   standardOutcome: z.enum(["successful", "unsuccessful", "allowed"]).optional(),
   standardProposedDistance: combatDistanceSchema.optional(),
+  standardTableRowId: combatAdjustDistanceResultTableRowIdSchema.optional(),
   status: combatAdjustDistanceStatusSchema.default("awaiting_action_turn"),
 });
 export type CombatAdjustDistanceProposal = z.infer<typeof combatAdjustDistanceProposalSchema>;
@@ -109,17 +183,26 @@ export function resolveCombatAdjustDistanceStandardProposal(input: {
   difference?: number;
   outcome: "successful" | "unsuccessful" | "allowed";
   proposedDistance: z.infer<typeof combatDistanceSchema>;
+  tableRowId: CombatAdjustDistanceResultTableRowId;
 } {
   const currentDistance = combatDistanceSchema.parse(input.currentDistance);
   const requestedDistance = combatDistanceSchema.parse(input.requestedDistance);
   if (input.defenderAllowed) {
-    return { outcome: "allowed", proposedDistance: requestedDistance };
+    const row = COMBAT_ADJUST_DISTANCE_RESULT_TABLE[0];
+    return { outcome: row.outcome, proposedDistance: requestedDistance, tableRowId: row.id };
   }
   if (input.attackerTotal === undefined || input.defenderTotal === undefined) {
     throw new RangeError("Both Dodge rolls are required to resolve the distance adjustment.");
   }
   const difference = input.attackerTotal - input.defenderTotal;
-  return difference > 0
-    ? { difference, outcome: "successful", proposedDistance: requestedDistance }
-    : { difference, outcome: "unsuccessful", proposedDistance: currentDistance };
+  const row =
+    difference > 0
+      ? COMBAT_ADJUST_DISTANCE_RESULT_TABLE[1]
+      : COMBAT_ADJUST_DISTANCE_RESULT_TABLE[2];
+  return {
+    difference,
+    outcome: row.outcome,
+    proposedDistance: row.distanceResult === "requested" ? requestedDistance : currentDistance,
+    tableRowId: row.id,
+  };
 }

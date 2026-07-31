@@ -398,7 +398,11 @@ function getScenarioParticipantFeintSkillInput(participant: ScenarioParticipant)
 }
 
 function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipant): {
+  dodgeSkillLabel?: string;
+  dodgeSkillXp?: number;
   dodgeSkillTotal?: number;
+  dodgeStatLabel?: string;
+  dodgeStatValue?: number;
   healthStat?: number;
 } {
   const build = characterBuildSchema.safeParse(participant.snapshot.build);
@@ -408,11 +412,19 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
     build: build.data,
     content: defaultCanonicalContent,
   });
+  const dodge = sheet.draftView.skills.find((skill) => skill.skillId === "dodge");
 
   return {
+    dodgeSkillLabel: dodge?.name ?? "Dodge",
+    dodgeSkillXp: dodge?.effectiveSkillNumber ?? 0,
     dodgeSkillTotal:
       typeof sheet.combat.dodge === "number" && Number.isFinite(sheet.combat.dodge)
         ? Math.round(sheet.combat.dodge)
+        : undefined,
+    dodgeStatLabel: "Dexterity",
+    dodgeStatValue:
+      typeof sheet.adjustedStats.dex === "number" && Number.isFinite(sheet.adjustedStats.dex)
+        ? Math.round(sheet.adjustedStats.dex)
         : undefined,
     healthStat: build.data.profile.rolledStats.health,
   };
@@ -466,7 +478,11 @@ function buildRoundEndParticipantInputs(input: {
           {
             combatEffects: scenarioParticipant.state.combatEffects,
             distanceControl: {
+              dodgeSkillLabel: sheetFacts.dodgeSkillLabel,
+              dodgeSkillXp: sheetFacts.dodgeSkillXp,
               dodgeSkillTotal: sheetFacts.dodgeSkillTotal,
+              dodgeStatLabel: sheetFacts.dodgeStatLabel,
+              dodgeStatValue: sheetFacts.dodgeStatValue,
               ...(hasAuthoritativeModifierSource
                 ? {
                     modifierContributions: modifierProjection.contributions,
@@ -5280,9 +5296,28 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         )?.total ?? 0;
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
+      const opponentLabel = opponentScenarioParticipant?.snapshot.displayName;
+      const appliedModifiers = dodgeResolution.rows
+        .filter((entry) => entry.value !== 0)
+        .map((entry) => ({
+          bucket: entry.bucket,
+          id: entry.id,
+          label:
+            entry.label === "Observe Opponent" && opponentLabel
+              ? `Observe Opponent · ${opponentLabel}`
+              : entry.label,
+          sourceId: entry.sourceId,
+          value: entry.value,
+        }));
+      const preDieTotal = profile.dodgeSkillTotal + dodgeResolution.total;
       const result = combatAdjustDistanceRollResultSchema.parse({
+        appliedModifiers,
+        dodgeSkillLabel: profile.dodgeSkillLabel ?? "Dodge",
+        dodgeSkillXp: profile.dodgeSkillXp ?? 0,
         dodgeSkillTotal: profile.dodgeSkillTotal,
-        finalTotal: roll.dieResult + profile.dodgeSkillTotal + dodgeResolution.total,
+        dodgeStatLabel: profile.dodgeStatLabel ?? "Dexterity",
+        dodgeStatValue: profile.dodgeStatValue,
+        finalTotal: roll.dieResult + preDieTotal,
         generalFatigueModifier,
         id: `${proposal.id}:roll:${side}`,
         openEndedD10s: roll.openEndedD10s,
@@ -5292,6 +5327,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rolledAt: createdAt,
         rolledByUserId: user.id,
         situationalAdjustment: adjustment,
+        totalModifiers: dodgeResolution.total,
+        preDieTotal,
       });
       const nextRoundState = recordCombatRoundAdjustDistanceRoll({
         command: { createdAt, createdByUserId: user.id },

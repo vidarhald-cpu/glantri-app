@@ -137,6 +137,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildAdjustDistanceReviewPresentation({");
     expect(source).toContain("inspectorAdjustDistanceReview.proposedDistance");
     expect(source).toContain("inspectorAdjustDistanceReview?.legalDistances.map");
+    expect(source).toContain("inspectorAdjustDistanceReview.tableRows.map");
+    expect(source).toContain("inspectorAdjustDistanceReview.applicableTableRowId");
+    expect(source).toContain("Initiator calculation");
+    expect(source).toContain("Opponent calculation");
   });
 
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {

@@ -147,6 +147,7 @@ describe("Adjust Distance-Attack lifecycle", () => {
         difference: 2,
         standardOutcome: "successful",
         standardProposedDistance: 2,
+        standardTableRowId: "initiator_wins",
         status: "awaiting_review",
       }),
     );
@@ -173,6 +174,7 @@ describe("Adjust Distance-Attack lifecycle", () => {
       ]),
       publicCombatNote: "Presses the advantage.",
       standardConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "table_row", value: "Initiator margin 1 or more" }),
         expect.objectContaining({ key: "distance", value: 2 }),
         expect.objectContaining({ key: "outcome", value: "successful" }),
       ]),

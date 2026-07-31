@@ -16661,6 +16661,24 @@ describe("scenarios route contract", () => {
       ],
       currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
       currentStep: "phase_1_actions",
+      observationRelationships: [
+        {
+          bestBonus: 1,
+          completedAttempts: 1,
+          id: "observation:encounter-participant-1:encounter-participant-2",
+          observerParticipantId: "encounter-participant-1",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "encounter-participant-2",
+        },
+        {
+          bestBonus: 2,
+          completedAttempts: 1,
+          id: "observation:encounter-participant-2:encounter-participant-1",
+          observerParticipantId: "encounter-participant-2",
+          roundsTowardNextAttempt: 0,
+          targetParticipantId: "encounter-participant-1",
+        },
+      ],
       phaseResolutionCursor: {
         participantId: "encounter-participant-1",
         phase: "phase1",
@@ -16775,8 +16793,32 @@ describe("scenarios route contract", () => {
     expect(attackerSecond.statusCode, JSON.stringify(attackerSecond.json())).toBe(200);
     expect(committed.statusCode, JSON.stringify(committed.json())).toBe(200);
     expect(mutable.encounter.combatRoundState?.adjustDistanceProposals[0]).toMatchObject({
+      attackerRoll: {
+        appliedModifiers: expect.arrayContaining([
+          expect.objectContaining({
+            bucket: "skill_ob",
+            label: "Observe Opponent · City guard",
+            value: 1,
+          }),
+          expect.objectContaining({ label: "GM maneuver adjustment", value: 1 }),
+        ]),
+        dodgeSkillLabel: "Dodge",
+        preDieTotal: expect.any(Number),
+        totalModifiers: 2,
+      },
       attackerRollRecorded: true,
+      defenderRoll: {
+        appliedModifiers: [
+          expect.objectContaining({
+            bucket: "skill_ob",
+            label: "Observe Opponent · The Gladiator",
+            value: 2,
+          }),
+        ],
+        totalModifiers: 2,
+      },
       defenderRollRecorded: true,
+      standardTableRowId: "tie_or_opponent_wins",
       status: "committed",
     });
     expect(mutable.encounter.combatRoundState?.currentStep).toBe("phase_1_actions");

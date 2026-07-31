@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ScenarioCombatModifierEntry } from "../campaign/scenario";
+import { buildCombatObservationModifierContributions } from "./combatObservation";
 import {
   createCombatParticipantPairKey,
   doesCombatModifierContributionApply,
@@ -535,6 +536,77 @@ describe("combat Dodge modifier resolution", () => {
 
     expect(resolution.total).toBe(5);
     expect(resolution.rows.map((row) => row.id)).toEqual(["dodge", "pair"]);
+  });
+
+  it("applies only the observer's Skill/OB contribution once against the observed opponent", () => {
+    const relationships = [
+      {
+        bestBonus: 1,
+        completedAttempts: 1,
+        id: "observation:attacker:defender",
+        observerParticipantId: "attacker-combatant",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "defender-combatant",
+      },
+      {
+        bestBonus: 2,
+        completedAttempts: 1,
+        id: "observation:defender:attacker",
+        observerParticipantId: "defender-combatant",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "attacker-combatant",
+      },
+    ];
+    const attackerRows = buildCombatObservationModifierContributions({
+      observerCombatantId: "attacker-combatant",
+      observerParticipantId: "attacker",
+      opponentCombatantId: "defender-combatant",
+      opponentParticipantId: "defender",
+      relationships,
+    });
+    const defenderRows = buildCombatObservationModifierContributions({
+      observerCombatantId: "defender-combatant",
+      observerParticipantId: "defender",
+      opponentCombatantId: "attacker-combatant",
+      opponentParticipantId: "attacker",
+      relationships,
+    });
+
+    const attackerResolution = resolveCombatDodgeModifiers({
+      context: context({
+        ownerParticipantId: "attacker",
+        opponentParticipantId: "defender",
+        rollType: "adjust_distance_dodge",
+        skillId: "dodge",
+      }),
+      contributions: attackerRows,
+    });
+    const unrelatedResolution = resolveCombatDodgeModifiers({
+      context: context({
+        ownerParticipantId: "attacker",
+        opponentParticipantId: "other",
+        rollType: "adjust_distance_dodge",
+        skillId: "dodge",
+      }),
+      contributions: attackerRows,
+    });
+    const defenderResolution = resolveCombatDodgeModifiers({
+      context: context({
+        ownerParticipantId: "defender",
+        opponentParticipantId: "attacker",
+        rollType: "adjust_distance_dodge",
+        skillId: "dodge",
+      }),
+      contributions: defenderRows,
+    });
+
+    expect(attackerRows.map((row) => row.bucket)).toEqual(["skill_ob", "db_parry"]);
+    expect(attackerResolution.total).toBe(1);
+    expect(attackerResolution.rows).toHaveLength(1);
+    expect(attackerResolution.rows[0]).toMatchObject({ bucket: "skill_ob", value: 1 });
+    expect(unrelatedResolution.total).toBe(0);
+    expect(defenderResolution.total).toBe(2);
+    expect(defenderResolution.rows).toHaveLength(1);
   });
 
   it("normalizes a deterministic proposal-scoped roll adjustment", () => {

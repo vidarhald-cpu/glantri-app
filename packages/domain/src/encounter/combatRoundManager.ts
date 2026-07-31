@@ -49,9 +49,11 @@ import {
 } from "./combatActionModifiers";
 import {
   buildCombatAdjustDistanceProposalId,
+  COMBAT_ADJUST_DISTANCE_RESULT_TABLE,
   combatAdjustDistanceProposalSchema,
   combatAdjustDistanceRollResultSchema,
   combatAdjustDistanceStatusSchema,
+  getCombatAdjustDistanceResultTableRowIdForOutcome,
   getCombatAdjustDistanceDirection,
   resolveCombatAdjustDistanceStandardProposal,
   type CombatAdjustDistanceProposal,
@@ -17567,7 +17569,24 @@ function buildAdjustDistanceCommitResultPresentation(input: {
   outcome: "successful" | "unsuccessful" | "allowed";
   proposal: CombatAdjustDistanceProposal;
 }): CombatResultPresentationFacts {
+  const standardTableRowId =
+    input.proposal.standardTableRowId ??
+    (input.proposal.standardOutcome
+      ? getCombatAdjustDistanceResultTableRowIdForOutcome(input.proposal.standardOutcome)
+      : undefined);
+  const standardTableRow = COMBAT_ADJUST_DISTANCE_RESULT_TABLE.find(
+    (row) => row.id === standardTableRowId,
+  );
   const standardConsequences: CombatResultConsequence[] = [
+    ...(standardTableRow
+      ? [
+          {
+            key: "table_row",
+            label: "Table row",
+            value: standardTableRow.rollCondition,
+          },
+        ]
+      : []),
     ...(input.proposal.standardOutcome
       ? [{ key: "outcome", label: "Outcome", value: input.proposal.standardOutcome }]
       : []),
@@ -17646,6 +17665,7 @@ export function respondCombatRoundAdjustDistance(input: {
     defenderResponse: input.response,
     standardOutcome: standard?.outcome,
     standardProposedDistance: standard?.proposedDistance,
+    standardTableRowId: standard?.tableRowId,
     status: input.response === "allow" ? "awaiting_review" : "awaiting_gm_adjustment",
   });
   const beforeCursor = normalized.currentCursor ?? {
@@ -17900,6 +17920,7 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
     difference: standard?.difference,
     standardOutcome: standard?.outcome,
     standardProposedDistance: standard?.proposedDistance,
+    standardTableRowId: standard?.tableRowId,
     status: standard ? "awaiting_review" : "awaiting_rolls",
   });
   const withRoll = recordAdjustDistanceCommand({
@@ -17917,17 +17938,25 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
       side,
       standardOutcome: standard?.outcome,
       standardProposedDistance: standard?.proposedDistance,
+      standardTableRowId: standard?.tableRowId,
     },
     participantId: expectedParticipantId,
     proposal,
     rollerPrivate: {
+      appliedModifiers: input.result.appliedModifiers,
+      dodgeSkillLabel: input.result.dodgeSkillLabel,
+      dodgeSkillXp: input.result.dodgeSkillXp,
       dodgeSkillTotal: input.result.dodgeSkillTotal,
+      dodgeStatLabel: input.result.dodgeStatLabel,
+      dodgeStatValue: input.result.dodgeStatValue,
       finalTotal: input.result.finalTotal,
       generalFatigueModifier: input.result.generalFatigueModifier,
       openEndedD10s: input.result.openEndedD10s,
       rollD20: input.result.rollD20,
       rollTotal: input.result.rollTotal,
       situationalAdjustment: input.result.situationalAdjustment,
+      totalModifiers: input.result.totalModifiers,
+      preDieTotal: input.result.preDieTotal,
     },
     state: normalized,
     type: "roll_adjust_distance",
@@ -17946,6 +17975,7 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
           outcome: standard.outcome,
           proposalId: proposal.id,
           proposedDistance: standard.proposedDistance,
+          tableRowId: standard.tableRowId,
         },
       },
       involvedParticipantIds: [proposal.attackerParticipantId, proposal.defenderParticipantId],

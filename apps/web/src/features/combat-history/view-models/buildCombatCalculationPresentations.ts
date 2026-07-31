@@ -89,7 +89,7 @@ function modifiersFromRows(input: {
         const parsed =
           label && value !== undefined
             ? modifier({
-                id: `${input.idPrefix}:${index}`,
+                id: text(row?.id) ?? `${input.idPrefix}:${index}`,
                 label,
                 unit: input.unit,
                 value,
@@ -454,38 +454,63 @@ export function buildDodgeCalculationPresentationFromSnapshot(input: {
   const roll = die(facts);
   if (finalResult === undefined || !roll) return undefined;
   const calculationId = input.calculationId;
-  const modifiers = [
-    modifier({
-      id: `${calculationId}:general-fatigue`,
-      label: "General/Fatigue",
-      value: number(facts.generalFatigueModifier),
-    }),
-    modifier({
-      id: `${calculationId}:situational`,
-      label: "Maneuver adjustment",
-      value: number(facts.situationalAdjustment),
-    }),
-  ].filter((entry): entry is CombatCalculationModifier => Boolean(entry));
+  const recordedModifiers = modifiersFromRows({
+    idPrefix: `${calculationId}:modifier`,
+    rows: facts.appliedModifiers,
+    unit: "percent",
+  });
+  const modifiers = recordedModifiers.length
+    ? recordedModifiers
+    : [
+        modifier({
+          id: `${calculationId}:general-fatigue`,
+          label: "General/Fatigue",
+          unit: "percent",
+          value: number(facts.generalFatigueModifier),
+        }),
+        modifier({
+          id: `${calculationId}:situational`,
+          label: "GM maneuver adjustment",
+          unit: "percent",
+          value: number(facts.situationalAdjustment),
+        }),
+      ].filter((entry): entry is CombatCalculationModifier => Boolean(entry));
   const normalized = withRecordedModifierTotal({
     calculationId,
     modifiers,
-    unit: "points",
+    recordedTotal: number(facts.totalModifiers),
+    unit: "percent",
   });
+  const skillLabel = text(facts.dodgeSkillLabel);
+  const skillXp = number(facts.dodgeSkillXp);
+  const statLabel = text(facts.dodgeStatLabel);
+  const statValue = number(facts.dodgeStatValue);
+  const preDieTotal = number(facts.preDieTotal) ?? finalResult - roll.rolledValue;
   return calculation({
     actor: input.actor,
     calculationId,
     calculationType: input.calculationType,
-    completeness: "legacy_incomplete",
+    completeness:
+      skillLabel && skillXp !== undefined && statLabel && statValue !== undefined
+        ? "complete"
+        : "legacy_incomplete",
+    contributingStat:
+      statLabel && statValue !== undefined ? { label: statLabel, value: statValue } : undefined,
     derivedValues:
       number(facts.dodgeSkillTotal) === undefined
         ? []
-        : [{ label: "Dodge total", value: number(facts.dodgeSkillTotal)! }],
+        : [{ label: "Dodge base", value: number(facts.dodgeSkillTotal)! }],
     die: roll,
     finalResult: { label: "Result", value: finalResult },
     label: input.label ?? "Dodge",
-    missingFacts: ["stat", "skill.xp"],
+    missingFacts: [
+      ...(statLabel && statValue !== undefined ? [] : ["stat"]),
+      ...(skillLabel && skillXp !== undefined ? [] : ["skill.xp"]),
+    ],
     modifiers: normalized.modifiers,
-    preDieTotal: { label: "Skill total", value: finalResult - roll.rolledValue },
+    preDieTotal: { label: "Skill total", value: preDieTotal },
+    skill:
+      skillLabel && skillXp !== undefined ? { label: skillLabel, xp: skillXp } : undefined,
     target: input.target,
     totalModifiers: normalized.totalModifiers,
     visibility: input.visibility ?? "own",

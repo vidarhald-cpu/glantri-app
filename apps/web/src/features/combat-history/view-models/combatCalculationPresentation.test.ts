@@ -278,11 +278,11 @@ describe("shared combat calculation presentation", () => {
         }),
       ),
     ).toEqual([
-      "Dodge total: 16",
+      "Dodge base: 16",
       "Modifiers",
-      "General/Fatigue: -1",
-      "Maneuver adjustment: +2",
-      "Total modifiers: +1",
+      "General/Fatigue: -1%",
+      "GM maneuver adjustment: +2%",
+      "Total modifiers: +1%",
       "Skill total: 17",
       "Die roll: 6",
       "Result: 23",
@@ -390,7 +390,7 @@ describe("shared combat calculation presentation", () => {
     const second = buildCombatCalculationPresentations(source)[0]!;
 
     expect(buildCombatCalculationPresentationLines(first)).toEqual([
-      "Dodge total: 16",
+      "Dodge base: 16",
       "Skill total: 16",
       "Die roll: 6",
       "Result: 22",
@@ -398,6 +398,59 @@ describe("shared combat calculation presentation", () => {
     expect(buildCombatCalculationPresentationRows(first)).toEqual(
       buildCombatCalculationPresentationRows(second),
     );
+  });
+
+  it("renders a complete Adjust Distance snapshot with every applied modifier once", () => {
+    const presentation = buildCombatCalculationPresentations(
+      event("adjust_distance_roll", {
+        appliedModifiers: [
+          {
+            bucket: "general_fatigue",
+            id: "fatigue",
+            label: "Fatigue",
+            value: -1,
+          },
+          {
+            bucket: "skill_ob",
+            id: "observation",
+            label: "Observe Opponent · City guard",
+            value: 1,
+          },
+          {
+            bucket: "general_fatigue",
+            id: "gm-adjustment",
+            label: "GM maneuver adjustment",
+            value: 2,
+          },
+        ],
+        dodgeSkillLabel: "Dodge",
+        dodgeSkillXp: 7,
+        dodgeSkillTotal: 16,
+        dodgeStatLabel: "Dexterity",
+        dodgeStatValue: 14,
+        finalTotal: 24,
+        openEndedD10s: [],
+        preDieTotal: 18,
+        rollD20: 6,
+        rollTotal: 6,
+        totalModifiers: 2,
+      }),
+    )[0]!;
+
+    expect(buildCombatCalculationPresentationLines(presentation)).toEqual([
+      "Stat: Dexterity 14",
+      "Dodge XP: 7",
+      "Dodge base: 16",
+      "Modifiers",
+      "Fatigue: -1%",
+      "Observe Opponent · City guard: +1%",
+      "GM maneuver adjustment: +2%",
+      "Total modifiers: +2%",
+      "Skill total: 18",
+      "Die roll: 6",
+      "Result: 24",
+    ]);
+    expect(presentation.completeness).toBe("complete");
   });
 
   it("does not expose arbitrary legacy fields or outcome prose", () => {

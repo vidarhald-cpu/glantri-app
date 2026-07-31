@@ -5945,6 +5945,34 @@ export default function CombatRoundManagerPanel({
     participantLabelsById: roundParticipantLabelsById,
     proposal: inspectorAdjustDistanceProposal,
   });
+  const inspectorAdjustDistanceAttackerCalculation = inspectorAdjustDistanceProposal?.attackerRoll
+    ? buildDodgeCalculationPresentationFromSnapshot({
+        actor: {
+          label:
+            roundParticipantLabelsById[inspectorAdjustDistanceProposal.attackerParticipantId] ??
+            inspectorAdjustDistanceProposal.attackerParticipantId,
+          participantId: inspectorAdjustDistanceProposal.attackerParticipantId,
+        },
+        calculationId: inspectorAdjustDistanceProposal.attackerRoll.id,
+        calculationType: "adjust_distance_roll",
+        facts: inspectorAdjustDistanceProposal.attackerRoll,
+        label: "Initiator calculation",
+      })
+    : undefined;
+  const inspectorAdjustDistanceDefenderCalculation = inspectorAdjustDistanceProposal?.defenderRoll
+    ? buildDodgeCalculationPresentationFromSnapshot({
+        actor: {
+          label:
+            roundParticipantLabelsById[inspectorAdjustDistanceProposal.defenderParticipantId] ??
+            inspectorAdjustDistanceProposal.defenderParticipantId,
+          participantId: inspectorAdjustDistanceProposal.defenderParticipantId,
+        },
+        calculationId: inspectorAdjustDistanceProposal.defenderRoll.id,
+        calculationType: "adjust_distance_roll",
+        facts: inspectorAdjustDistanceProposal.defenderRoll,
+        label: "Opponent calculation",
+      })
+    : undefined;
   useEffect(() => {
     if (!inspectorAdjustDistanceProposal) return;
     setInspectorAdjustDistanceCommittedDistance(
@@ -6547,6 +6575,30 @@ export default function CombatRoundManagerPanel({
                 <strong>Proposed result:</strong> distance{" "}
                 {inspectorAdjustDistanceReview.proposedDistance}
               </div>
+              <table style={{ borderCollapse: "collapse", fontSize: "0.82rem", width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Contest result</th>
+                    <th style={{ textAlign: "left" }}>Standard outcome</th>
+                    <th style={{ textAlign: "left" }}>Distance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inspectorAdjustDistanceReview.tableRows.map((row) => {
+                    const selected = row.id === inspectorAdjustDistanceReview.applicableTableRowId;
+                    return (
+                      <tr
+                        key={row.id}
+                        style={selected ? { background: "#f3ead2", fontWeight: 700 } : undefined}
+                      >
+                        <td>{row.rollCondition}</td>
+                        <td>{row.outcome}</td>
+                        <td>{row.result}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : null}
           {inspectorAdjustDistanceProposal.defenderResponse === "oppose" ? (
@@ -6558,6 +6610,21 @@ export default function CombatRoundManagerPanel({
           <div>
             Standard proposal: distance {inspectorAdjustDistanceProposal.standardProposedDistance}
           </div>
+          {[
+            inspectorAdjustDistanceAttackerCalculation,
+            inspectorAdjustDistanceDefenderCalculation,
+          ].map((calculation) =>
+            calculation ? (
+              <details key={calculation.calculationId} open>
+                <summary style={{ fontWeight: 700 }}>{calculation.label}</summary>
+                <div style={{ display: "grid", gap: "0.15rem", paddingTop: "0.25rem" }}>
+                  {buildCombatCalculationPresentationLines(calculation).map((line, index) => (
+                    <div key={`${calculation.calculationId}:line:${index}`}>{line}</div>
+                  ))}
+                </div>
+              </details>
+            ) : null,
+          )}
           <label style={compactFieldLabelStyle}>
             <span>Accepted outcome</span>
             <select

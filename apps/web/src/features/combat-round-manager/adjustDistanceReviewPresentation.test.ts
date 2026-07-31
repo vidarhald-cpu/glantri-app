@@ -23,6 +23,7 @@ function proposal(
     roundNumber: 1,
     standardOutcome: "successful",
     standardProposedDistance: 2,
+    standardTableRowId: "initiator_wins",
     status: "awaiting_review",
     ...overrides,
   };
@@ -37,6 +38,7 @@ describe("Adjust Distance review presentation", () => {
       }),
     ).toEqual({
       actor: { id: "rider", label: "Scyrian Cavalry" },
+      applicableTableRowId: "initiator_wins",
       currentDistance: 3,
       legalDistances: [0, 1, 2, 3, 4, 5, 6, 7, 8],
       loser: { id: "guard", label: "The Gladiator" },
@@ -44,6 +46,11 @@ describe("Adjust Distance review presentation", () => {
       proposedDistance: 2,
       requestedDistance: 2,
       target: { id: "guard", label: "The Gladiator" },
+      tableRows: [
+        expect.objectContaining({ id: "defender_allows" }),
+        expect.objectContaining({ id: "initiator_wins" }),
+        expect.objectContaining({ id: "tie_or_opponent_wins" }),
+      ],
       winner: { id: "rider", label: "Scyrian Cavalry" },
     });
   });
@@ -55,6 +62,7 @@ describe("Adjust Distance review presentation", () => {
         proposal: proposal({
           standardOutcome: "unsuccessful",
           standardProposedDistance: 3,
+          standardTableRowId: "tie_or_opponent_wins",
         }),
       }),
     ).toMatchObject({
@@ -69,6 +77,7 @@ describe("Adjust Distance review presentation", () => {
         proposal: proposal({
           defenderResponse: "allow",
           standardOutcome: "allowed",
+          standardTableRowId: "defender_allows",
         }),
       }),
     ).toMatchObject({

@@ -599,10 +599,10 @@ describe("buildCombatEventResultModel", () => {
       }),
     ]);
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toEqual([
-      "Dodge total: 16",
+      "Dodge base: 16",
       "Modifiers",
-      "Maneuver adjustment: +2",
-      "Total modifiers: +2",
+      "GM maneuver adjustment: +2%",
+      "Total modifiers: +2%",
       "Skill total: 18",
       "Die roll: 3",
       "Result: 21",
@@ -665,9 +665,11 @@ describe("buildCombatEventResultModel", () => {
       }),
     ]);
 
-    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain("Total modifiers: +1");
     expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain(
-      "Maneuver adjustment: +2",
+      "Total modifiers: +1%",
+    );
+    expect(model.items[0]?.calculationRows.map((row) => row.text)).toContain(
+      "GM maneuver adjustment: +2%",
     );
   });
 
