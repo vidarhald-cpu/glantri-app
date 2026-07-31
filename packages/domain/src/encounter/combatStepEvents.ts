@@ -907,6 +907,7 @@ function distanceCandidates(input: {
                 openEndedD10s: side.result.openEndedD10s,
                 rollD20: side.result.rollD20,
                 rollTotal: side.result.rollTotal,
+                skillContestCalculation: side.result.skillContestCalculation,
               },
             },
             involvedParticipantIds: [proposal.participantAId, proposal.participantBId],

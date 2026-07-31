@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { combatDistanceSchema } from "./combatDistance";
+import { combatSkillContestCalculationSchema } from "./combatSkillContest";
 
 const idSchema = z.string().min(1);
 
@@ -107,6 +108,7 @@ export const combatAdjustDistanceRollResultSchema = z.object({
   // The GM's adjustment is a signed, deliberate roll input.  The rules suggest
   // a small range, but the application must not police the GM's judgment.
   situationalAdjustment: z.number().int().default(0),
+  skillContestCalculation: combatSkillContestCalculationSchema.optional(),
   totalModifiers: z.number().int().optional(),
   preDieTotal: z.number().int().optional(),
 });

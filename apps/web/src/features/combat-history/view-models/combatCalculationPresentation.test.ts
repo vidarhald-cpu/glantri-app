@@ -322,6 +322,76 @@ describe("shared combat calculation presentation", () => {
     ).toEqual(["Stat: Health 13", "Health total: 13", "Die roll: 18", "Result: 31"]);
   });
 
+  it("keeps legacy DB-derived Adjust Distance snapshots explicitly incomplete", () => {
+    const [presentation] = buildCombatCalculationPresentations(
+      event("adjust_distance_roll", {
+        dodgeSkillLabel: "Dodge",
+        dodgeSkillTotal: 16,
+        dodgeSkillXp: 6,
+        dodgeStatLabel: "Dexterity",
+        dodgeStatValue: 10,
+        finalTotal: 23,
+        openEndedD10s: [],
+        rollD20: 6,
+        rollTotal: 6,
+      }),
+    );
+
+    expect(presentation?.completeness).toBe("legacy_incomplete");
+    expect(buildCombatCalculationPresentationLines(presentation!)).toContain("Dodge base: 16");
+  });
+
+  it("renders canonical Skill Contest percentage and derived point facts distinctly", () => {
+    expect(
+      lines(
+        event("adjust_distance_roll", {
+          finalTotal: 30,
+          openEndedD10s: [],
+          rollD20: 6,
+          rollTotal: 6,
+          skillContestCalculation: {
+            baseSkill: 22,
+            calculationId: "adjust-distance:resister",
+            completeness: "partial",
+            contestType: "adjust_distance_attack",
+            derivedIntegerAdjustment: 2,
+            finalResult: 30,
+            governingStat: { id: "dex", label: "Dexterity", value: 16 },
+            missingContributionPoints: ["movement_mm", "encumbrance"],
+            openEndedDie: { openEndedD10s: [], rollD20: 6, rollTotal: 6 },
+            opponentParticipantId: "initiator",
+            participantId: "resister",
+            percentageContributions: [
+              {
+                category: "relationship",
+                id: "observation:resister:initiator",
+                label: "Observe Opponent",
+                unit: "percentage",
+                value: 1,
+              },
+            ],
+            preDieTotal: 24,
+            role: "resisting_opponent",
+            skill: { id: "dodge", label: "Dodge", totalXp: 6 },
+            totalPercentageAdjustment: 1,
+            visibility: "roller_and_gm",
+          },
+        }),
+      ),
+    ).toEqual([
+      "Stat: Dexterity 16",
+      "Dodge XP: 6",
+      "Base skill: 22",
+      "Modifiers",
+      "Observe Opponent: +1%",
+      "Total modifiers: +1%",
+      "Derived adjustment: +2",
+      "Skill total: 24",
+      "Die roll: 6",
+      "Result: 30",
+    ]);
+  });
+
   it("uses bounded arithmetic presentations for hit location, damage, and critical snapshots", () => {
     expect(
       lines(
@@ -403,52 +473,67 @@ describe("shared combat calculation presentation", () => {
   it("renders a complete Adjust Distance snapshot with every applied modifier once", () => {
     const presentation = buildCombatCalculationPresentations(
       event("adjust_distance_roll", {
-        appliedModifiers: [
-          {
-            bucket: "general_fatigue",
-            id: "fatigue",
-            label: "Fatigue",
-            value: -1,
-          },
-          {
-            bucket: "skill_ob",
-            id: "observation",
-            label: "Observe Opponent · City guard",
-            value: 1,
-          },
-          {
-            bucket: "general_fatigue",
-            id: "gm-adjustment",
-            label: "GM maneuver adjustment",
-            value: 2,
-          },
-        ],
-        dodgeSkillLabel: "Dodge",
-        dodgeSkillXp: 7,
-        dodgeSkillTotal: 16,
-        dodgeStatLabel: "Dexterity",
-        dodgeStatValue: 14,
-        finalTotal: 24,
+        finalTotal: 30,
         openEndedD10s: [],
-        preDieTotal: 18,
         rollD20: 6,
         rollTotal: 6,
-        totalModifiers: 2,
+        skillContestCalculation: {
+          baseSkill: 22,
+          calculationId: "adjust-distance:resister",
+          completeness: "complete",
+          contestType: "adjust_distance_attack",
+          derivedIntegerAdjustment: 2,
+          finalResult: 30,
+          governingStat: { id: "dex", label: "Dexterity", value: 16 },
+          missingContributionPoints: [],
+          openEndedDie: { openEndedD10s: [], rollD20: 6, rollTotal: 6 },
+          opponentParticipantId: "initiator",
+          participantId: "resister",
+          percentageContributions: [
+            {
+              category: "general_fatigue",
+              id: "fatigue",
+              label: "Fatigue",
+              unit: "percentage",
+              value: -1,
+            },
+            {
+              category: "relationship",
+              id: "observation",
+              label: "Observe Opponent · City guard",
+              unit: "percentage",
+              value: 1,
+            },
+            {
+              category: "gm_adjustment",
+              id: "gm-adjustment",
+              label: "GM maneuver adjustment",
+              unit: "percentage",
+              value: 1,
+            },
+          ],
+          preDieTotal: 24,
+          role: "resisting_opponent",
+          skill: { id: "dodge", label: "Dodge", totalXp: 6 },
+          totalPercentageAdjustment: 1,
+          visibility: "roller_and_gm",
+        },
       }),
     )[0]!;
 
     expect(buildCombatCalculationPresentationLines(presentation)).toEqual([
-      "Stat: Dexterity 14",
-      "Dodge XP: 7",
-      "Dodge base: 16",
+      "Stat: Dexterity 16",
+      "Dodge XP: 6",
+      "Base skill: 22",
       "Modifiers",
       "Fatigue: -1%",
       "Observe Opponent · City guard: +1%",
-      "GM maneuver adjustment: +2%",
-      "Total modifiers: +2%",
-      "Skill total: 18",
+      "GM maneuver adjustment: +1%",
+      "Total modifiers: +1%",
+      "Derived adjustment: +2",
+      "Skill total: 24",
       "Die roll: 6",
-      "Result: 24",
+      "Result: 30",
     ]);
     expect(presentation.completeness).toBe("complete");
   });

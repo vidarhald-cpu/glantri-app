@@ -1,7 +1,7 @@
 import { formatSignedCombatModifier } from "./formatCombatModifier";
 
 export type CombatCalculationVisibility = "gm_full" | "own" | "shared";
-export type CombatCalculationCompleteness = "complete" | "legacy_incomplete";
+export type CombatCalculationCompleteness = "complete" | "partial" | "legacy_incomplete";
 export type CombatCalculationUnit = "points" | "percent";
 export type CombatCalculationType =
   | "adjust_distance_roll"
@@ -69,6 +69,8 @@ export interface CombatCalculationPresentation {
   readonly label: string;
   readonly missingFacts: readonly string[];
   readonly modifiers: readonly CombatCalculationModifier[];
+  /** Workbook-derived integer point adjustment produced by the raw percentage total. */
+  readonly modifierAdjustment?: CombatCalculationLabeledValue;
   readonly preDieTotal?: CombatCalculationLabeledValue;
   readonly skill?: {
     readonly label: string;
@@ -87,6 +89,7 @@ export interface CombatCalculationPresentationRow {
     | "modifier_heading"
     | "modifier"
     | "modifier_total"
+    | "modifier_adjustment"
     | "pre_die_total"
     | "die"
     | "result";
@@ -165,6 +168,15 @@ export function buildCombatCalculationPresentationRows(
         )}`,
       });
     }
+  }
+  if (presentation.modifierAdjustment) {
+    rows.push({
+      key: `${presentation.calculationId}:modifier-adjustment`,
+      kind: "modifier_adjustment",
+      text: `${presentation.modifierAdjustment.label}: ${formatSignedCombatModifier(
+        presentation.modifierAdjustment.value,
+      )}`,
+    });
   }
   if (presentation.preDieTotal) {
     rows.push({

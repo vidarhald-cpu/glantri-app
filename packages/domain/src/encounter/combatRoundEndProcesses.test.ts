@@ -8,6 +8,7 @@ import {
   combatRoundStateSchema,
   rollCombatRoundEndDistanceControl,
   undoLatestCombatRoundCommand,
+  type CombatRoundEndDistanceRollResult,
   type CombatRoundState,
 } from "./combatRoundManager";
 import {
@@ -100,6 +101,49 @@ function pendingDistance() {
   };
 }
 
+function distanceRollResult(input: {
+  baseSkill: number;
+  dieResult: number;
+  opponentParticipantId: string;
+  participantId: string;
+  rolledAt: string;
+}): CombatRoundEndDistanceRollResult {
+  return {
+    dodgeSkillTotal: input.baseSkill,
+    finalTotal: input.baseSkill + input.dieResult,
+    generalFatigueModifier: 0,
+    openEndedD10s: [],
+    rolledAt: input.rolledAt,
+    rolledAtRound: 3,
+    rolledBy: "gm_proxy",
+    rollD20: input.dieResult,
+    rollTotal: input.dieResult,
+    skillContestCalculation: {
+      baseSkill: input.baseSkill,
+      calculationId: `round-end-distance:${input.participantId}`,
+      completeness: "partial",
+      contestType: "round_end_adjust_distance",
+      derivedIntegerAdjustment: 0,
+      finalResult: input.baseSkill + input.dieResult,
+      governingStat: { id: "dex", label: "Dexterity", value: input.baseSkill },
+      missingContributionPoints: ["movement_mm", "encumbrance"],
+      openEndedDie: {
+        openEndedD10s: [],
+        rollD20: input.dieResult,
+        rollTotal: input.dieResult,
+      },
+      opponentParticipantId: input.opponentParticipantId,
+      participantId: input.participantId,
+      percentageContributions: [],
+      preDieTotal: input.baseSkill,
+      role: "contestant",
+      skill: { id: "dodge", label: "Dodge", totalXp: 0 },
+      totalPercentageAdjustment: 0,
+      visibility: "roller_and_gm",
+    },
+  };
+}
+
 describe("combat round-end process plans", () => {
   it("builds an immutable deterministic prepare process without mutating state", () => {
     const source = state();
@@ -149,9 +193,9 @@ describe("combat round-end process plans", () => {
     );
     expect(first.activeParticipantId).toBe("guard");
     expect(
-      first.processes.find((process) => process.kind === "participant_review")?.stages.map(
-        (entry) => [entry.key, entry.state],
-      ),
+      first.processes
+        .find((process) => process.kind === "participant_review")
+        ?.stages.map((entry) => [entry.key, entry.state]),
     ).toEqual([
       ["guard", "active"],
       ["hero", "pending"],
@@ -348,7 +392,13 @@ describe("combat round-end process plans", () => {
       command: { createdAt: "2026-07-19T10:00:00.000Z" },
       distanceProposalId: "distance:hero:guard",
       participantId: "hero",
-      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      result: distanceRollResult({
+        baseSkill: 0,
+        dieResult: 10,
+        opponentParticipantId: "guard",
+        participantId: "hero",
+        rolledAt: "2026-07-19T10:00:00.000Z",
+      }),
       state: source,
     }).state;
     expect(buildCombatRoundEndProcessPlan(rolled).processes[0]?.stages[0]?.tasks).toHaveLength(1);

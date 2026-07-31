@@ -105,6 +105,7 @@ import {
   resolveCombatDodgeModifiers,
   type CombatModifierContribution,
 } from "./combatModifierContributions";
+import { combatSkillContestCalculationSchema } from "./combatSkillContest";
 import {
   buildCombatObservationRelationshipId,
   combatObservationAttemptSchema,
@@ -589,6 +590,7 @@ export const combatRoundEndDistanceRollResultSchema = z.object({
   rolledByUserId: idSchema.optional(),
   rollD20: z.number().int().min(1).max(20),
   rollTotal: z.number().int(),
+  skillContestCalculation: combatSkillContestCalculationSchema.optional(),
 });
 export type CombatRoundEndDistanceRollResult = z.infer<
   typeof combatRoundEndDistanceRollResultSchema
@@ -14320,36 +14322,6 @@ export function rollCombatRoundEndHealthCheck(input: {
   };
 }
 
-function buildCombatRoundEndDistanceRollResult(input: {
-  command: {
-    createdAt: string;
-    createdByUserId?: string;
-  };
-  rolledAtRound: number;
-  rolledBy: "player" | "gm_proxy";
-  roll: OpenEndedD20Roll;
-  side: CombatRoundEndDistanceControlSide;
-  modifierTotal?: number;
-}): CombatRoundEndDistanceRollResult {
-  const finalTotal =
-    input.roll.dieResult +
-    input.side.dodgeSkillTotal +
-    (input.modifierTotal ?? input.side.generalFatigueModifier);
-
-  return combatRoundEndDistanceRollResultSchema.parse({
-    dodgeSkillTotal: input.side.dodgeSkillTotal,
-    finalTotal,
-    generalFatigueModifier: input.side.generalFatigueModifier,
-    openEndedD10s: input.roll.openEndedD10s,
-    rolledAt: input.command.createdAt,
-    rolledAtRound: input.rolledAtRound,
-    rolledBy: input.rolledBy,
-    rolledByUserId: input.command.createdByUserId,
-    rollD20: input.roll.rollD20,
-    rollTotal: input.roll.dieResult,
-  });
-}
-
 function getCombatRoundEndDistanceControlOutcome(
   proposal: CombatRoundEndDistanceProposal,
 ): Pick<
@@ -14411,10 +14383,7 @@ export function rollCombatRoundEndDistanceControl(input: {
   };
   distanceProposalId?: string;
   participantId: string;
-  participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
-  roll?: OpenEndedD20Roll;
-  rolledBy?: "player" | "gm_proxy";
-  rng?: () => number;
+  result: CombatRoundEndDistanceRollResult;
   state: CombatRoundState;
 }): {
   command: CombatRoundCommand;
@@ -14455,26 +14424,13 @@ export function rollCombatRoundEndDistanceControl(input: {
     throw new RangeError("Distance control roll is not pending for this participant.");
   }
 
-  const opponentParticipantId =
-    sideKey === "participantA" ? distanceProposal.participantBId : distanceProposal.participantAId;
-  const participantInput = input.participantInputs?.[input.participantId];
-  const opponentInput = input.participantInputs?.[opponentParticipantId];
-  const canonicalModifierResolution = resolveRoundEndDistanceDodgeModifier({
-    encounterId: participantInput?.modifierEncounterId ?? opponentInput?.modifierEncounterId,
-    pairKey: distanceProposal.pairKey,
-    roundNumber: normalized.roundNumber,
-    participantInput,
-    opponentInput,
-  });
-  const participantRoll = input.roll ?? rollOpenEndedD20(input.rng);
-  const participantResult = buildCombatRoundEndDistanceRollResult({
-    command: input.command,
-    roll: participantRoll,
-    rolledAtRound: normalized.roundNumber,
-    rolledBy: input.rolledBy ?? "gm_proxy",
-    side,
-    modifierTotal: canonicalModifierResolution?.total,
-  });
+  const participantResult = combatRoundEndDistanceRollResultSchema.parse(input.result);
+  if (
+    participantResult.rolledAtRound !== normalized.roundNumber ||
+    participantResult.skillContestCalculation?.participantId !== input.participantId
+  ) {
+    throw new RangeError("Distance control calculation does not match the current participant.");
+  }
   const proposalWithRoll = combatRoundEndDistanceProposalSchema.parse({
     ...distanceProposal,
     [sideKey]: {
@@ -14561,6 +14517,7 @@ export function rollCombatRoundEndDistanceControl(input: {
           openEndedD10s: participantResult.openEndedD10s,
           rollD20: participantResult.rollD20,
           rollTotal: participantResult.rollTotal,
+          skillContestCalculation: participantResult.skillContestCalculation,
         },
       },
       involvedParticipantIds: [distanceProposal.participantAId, distanceProposal.participantBId],
@@ -17954,6 +17911,7 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
       openEndedD10s: input.result.openEndedD10s,
       rollD20: input.result.rollD20,
       rollTotal: input.result.rollTotal,
+      skillContestCalculation: input.result.skillContestCalculation,
       situationalAdjustment: input.result.situationalAdjustment,
       totalModifiers: input.result.totalModifiers,
       preDieTotal: input.result.preDieTotal,

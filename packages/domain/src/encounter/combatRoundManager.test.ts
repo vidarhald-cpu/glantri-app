@@ -128,6 +128,7 @@ import {
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
   undoLatestCombatRoundCommand,
+  type CombatRoundEndDistanceRollResult,
 } from "./combatRoundManager";
 import { combatStepEventSchema } from "./combatStepEventSchema";
 import {
@@ -193,6 +194,55 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...input,
   });
+}
+
+function roundEndDistanceRollResult(input: {
+  baseSkill: number;
+  dieResult: number;
+  finalTotal?: number;
+  generalFatigueModifier?: number;
+  opponentParticipantId: string;
+  participantId: string;
+  percentageAdjustment?: number;
+  rolledAt: string;
+  rolledBy: "gm_proxy" | "player";
+}): CombatRoundEndDistanceRollResult {
+  const finalTotal = input.finalTotal ?? input.baseSkill + input.dieResult;
+  const derivedIntegerAdjustment = finalTotal - input.baseSkill - input.dieResult;
+  return {
+    dodgeSkillTotal: input.baseSkill,
+    finalTotal,
+    generalFatigueModifier: input.generalFatigueModifier ?? 0,
+    openEndedD10s: [],
+    rolledAt: input.rolledAt,
+    rolledAtRound: 3,
+    rolledBy: input.rolledBy,
+    rollD20: input.dieResult,
+    rollTotal: input.dieResult,
+    skillContestCalculation: {
+      baseSkill: input.baseSkill,
+      calculationId: `round-end-distance:${input.participantId}:${input.rolledAt}`,
+      completeness: "partial",
+      contestType: "round_end_adjust_distance",
+      derivedIntegerAdjustment,
+      finalResult: finalTotal,
+      governingStat: { id: "dex", label: "Dexterity", value: input.baseSkill },
+      missingContributionPoints: ["movement_mm", "encumbrance"],
+      openEndedDie: {
+        openEndedD10s: [],
+        rollD20: input.dieResult,
+        rollTotal: input.dieResult,
+      },
+      opponentParticipantId: input.opponentParticipantId,
+      participantId: input.participantId,
+      percentageContributions: [],
+      preDieTotal: input.baseSkill + derivedIntegerAdjustment,
+      role: "contestant",
+      skill: { id: "dodge", label: "Dodge", totalXp: 0 },
+      totalPercentageAdjustment: input.percentageAdjustment ?? 0,
+      visibility: "roller_and_gm",
+    },
+  };
 }
 
 function stepSnapshot(
@@ -403,9 +453,17 @@ describe("canonical Dodge resolution in round-end distance control", () => {
       command: { createdAt: "2026-01-01T00:11:00.000Z" },
       distanceProposalId: proposal?.id,
       participantId: "gladiator",
-      participantInputs,
-      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
-      rolledBy: "player",
+      result: roundEndDistanceRollResult({
+        baseSkill: 8,
+        dieResult: 10,
+        finalTotal: 20,
+        generalFatigueModifier: -1,
+        opponentParticipantId: "guard",
+        participantId: "gladiator",
+        percentageAdjustment: 2,
+        rolledAt: "2026-01-01T00:11:00.000Z",
+        rolledBy: "player",
+      }),
       state: reviewed,
     });
 
@@ -13493,12 +13551,14 @@ describe("combat round manager", () => {
       },
       distanceProposalId: proposal?.id,
       participantId: "gladiator",
-      roll: {
+      result: roundEndDistanceRollResult({
+        baseSkill: 7,
         dieResult: 10,
-        openEndedD10s: [],
-        rollD20: 10,
-      },
-      rolledBy: "player",
+        opponentParticipantId: "guard",
+        participantId: "gladiator",
+        rolledAt: "2026-01-01T00:11:00.000Z",
+        rolledBy: "player",
+      }),
       state: reviewed,
     });
     const afterFirstRoll = gladiatorRolled.state.roundEndReview?.proposedDistances[0];
@@ -13560,12 +13620,14 @@ describe("combat round manager", () => {
       },
       distanceProposalId: proposal?.id,
       participantId: "guard",
-      roll: {
+      result: roundEndDistanceRollResult({
+        baseSkill: 4,
         dieResult: 12,
-        openEndedD10s: [],
-        rollD20: 12,
-      },
-      rolledBy: "gm_proxy",
+        opponentParticipantId: "gladiator",
+        participantId: "guard",
+        rolledAt: "2026-01-01T00:11:30.000Z",
+        rolledBy: "gm_proxy",
+      }),
       state: gladiatorRolled.state,
     });
     const rolledProposal = rolled.state.roundEndReview?.proposedDistances[0];

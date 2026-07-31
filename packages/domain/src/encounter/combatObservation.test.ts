@@ -5,6 +5,7 @@ import {
   authorizeCombatProgressionTask,
   buildCombatRoundCommandEnvelope,
   buildCombatObservationModifierContributions,
+  buildCombatObservationSkillContestContribution,
   buildCombatProgressionProjection,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
@@ -860,6 +861,64 @@ describe("Observe Opponent", () => {
         contributions,
       }).total,
     ).toBe(0);
+  });
+
+  it("applies Observe to a resisting Skill Contest role only", () => {
+    const relationships = [
+      {
+        bestBonus: 1,
+        completedAttempts: 1,
+        id: "observation:a:b",
+        observerParticipantId: "a",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "b",
+      },
+      {
+        bestBonus: 3,
+        completedAttempts: 1,
+        id: "observation:b:a",
+        observerParticipantId: "b",
+        roundsTowardNextAttempt: 0,
+        targetParticipantId: "a",
+      },
+    ];
+
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "adjust_distance_attack",
+        observerCombatantId: "a",
+        opponentCombatantId: "b",
+        relationships,
+        role: "initiator",
+      }),
+    ).toBeUndefined();
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "adjust_distance_attack",
+        observerCombatantId: "a",
+        opponentCombatantId: "b",
+        relationships,
+        role: "resisting_opponent",
+      }),
+    ).toMatchObject({ category: "relationship", value: 1 });
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "adjust_distance_attack",
+        observerCombatantId: "a",
+        opponentCombatantId: "c",
+        relationships,
+        role: "resisting_opponent",
+      }),
+    ).toBeUndefined();
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "adjust_distance_attack",
+        observerCombatantId: "b",
+        opponentCombatantId: "a",
+        relationships,
+        role: "resisting_opponent",
+      }),
+    ).toMatchObject({ value: 3 });
   });
 
   it("restores exact prior relationships from compact boundary undo facts", () => {

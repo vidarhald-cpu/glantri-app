@@ -1,4 +1,7 @@
-import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+import {
+  combatSkillContestCalculationSchema,
+  type ProjectedCombatHistoryEvent,
+} from "@glantri/domain";
 
 import type {
   CombatCalculationDie,
@@ -450,6 +453,48 @@ export function buildDodgeCalculationPresentationFromSnapshot(input: {
   visibility?: CombatCalculationVisibility;
 }): CombatCalculationPresentation | undefined {
   const { facts } = input;
+  const skillContest = combatSkillContestCalculationSchema.safeParse(facts.skillContestCalculation);
+  if (skillContest.success) {
+    const snapshot = skillContest.data;
+    return calculation({
+      actor: input.actor,
+      calculationId: snapshot.calculationId,
+      calculationType: input.calculationType,
+      completeness: snapshot.completeness,
+      contributingStat: {
+        label: snapshot.governingStat.label,
+        value: snapshot.governingStat.value,
+      },
+      derivedValues: [{ label: "Base skill", value: snapshot.baseSkill }],
+      die: {
+        initialRoll: snapshot.openEndedDie.rollD20,
+        openEndedComponents: snapshot.openEndedDie.openEndedD10s,
+        rolledValue: snapshot.openEndedDie.rollTotal,
+      },
+      finalResult: { label: "Result", value: snapshot.finalResult },
+      label: input.label ?? snapshot.skill.label,
+      missingFacts: snapshot.missingContributionPoints,
+      modifierAdjustment: {
+        label: "Derived adjustment",
+        value: snapshot.derivedIntegerAdjustment,
+      },
+      modifiers: snapshot.percentageContributions.map((contribution) => ({
+        id: contribution.id,
+        label: contribution.label,
+        provenance: contribution.provenance,
+        unit: "percent" as const,
+        value: contribution.value,
+      })),
+      preDieTotal: { label: "Skill total", value: snapshot.preDieTotal },
+      skill: { label: snapshot.skill.label, xp: snapshot.skill.totalXp },
+      target: input.target,
+      totalModifiers: {
+        unit: "percent",
+        value: snapshot.totalPercentageAdjustment,
+      },
+      visibility: input.visibility ?? "own",
+    });
+  }
   const finalResult = number(facts.finalTotal);
   const roll = die(facts);
   if (finalResult === undefined || !roll) return undefined;
@@ -490,10 +535,10 @@ export function buildDodgeCalculationPresentationFromSnapshot(input: {
     actor: input.actor,
     calculationId,
     calculationType: input.calculationType,
-    completeness:
-      skillLabel && skillXp !== undefined && statLabel && statValue !== undefined
-        ? "complete"
-        : "legacy_incomplete",
+    // Snapshots without the typed Skill Contest contract may use the retired
+    // DB-derived Adjust Distance arithmetic. Keep them readable, but never
+    // certify them as source-conformant Dodge calculations.
+    completeness: "legacy_incomplete",
     contributingStat:
       statLabel && statValue !== undefined ? { label: statLabel, value: statValue } : undefined,
     derivedValues:
@@ -509,8 +554,7 @@ export function buildDodgeCalculationPresentationFromSnapshot(input: {
     ],
     modifiers: normalized.modifiers,
     preDieTotal: { label: "Skill total", value: preDieTotal },
-    skill:
-      skillLabel && skillXp !== undefined ? { label: skillLabel, xp: skillXp } : undefined,
+    skill: skillLabel && skillXp !== undefined ? { label: skillLabel, xp: skillXp } : undefined,
     target: input.target,
     totalModifiers: normalized.totalModifiers,
     visibility: input.visibility ?? "own",

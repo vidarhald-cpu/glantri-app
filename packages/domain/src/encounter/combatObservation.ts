@@ -5,6 +5,11 @@ import type {
   CombatModifierContribution,
   CombatModifierContributionBucket,
 } from "./combatModifierContributions";
+import type {
+  CombatSkillContestPercentageContribution,
+  CombatSkillContestRole,
+  CombatSkillContestType,
+} from "./combatSkillContest";
 
 const idSchema = z.string().min(1);
 
@@ -233,6 +238,44 @@ export function buildCombatObservationModifierContributions(input: {
   });
 
   return [makeContribution("skill_ob"), makeContribution("db_parry")];
+}
+
+/**
+ * Resolves the single relationship contribution permitted in a Skill Contest.
+ * Weapon Resolution's Skill/OB and DB/Parry rows must never both flow into one
+ * skill roll.
+ */
+export function buildCombatObservationSkillContestContribution(input: {
+  contestType: CombatSkillContestType;
+  observerCombatantId: string;
+  opponentCombatantId: string;
+  relationships: readonly CombatObservationRelationship[];
+  role: CombatSkillContestRole;
+}): CombatSkillContestPercentageContribution | undefined {
+  if (
+    input.role !== "resisting_opponent" ||
+    !["adjust_distance_attack", "round_end_adjust_distance"].includes(input.contestType)
+  ) {
+    return undefined;
+  }
+
+  const relationship = input.relationships.find(
+    (entry) =>
+      entry.observerParticipantId === input.observerCombatantId &&
+      entry.targetParticipantId === input.opponentCombatantId &&
+      entry.bestBonus > 0,
+  );
+  if (!relationship) return undefined;
+
+  return {
+    category: "relationship",
+    id: `${relationship.id}:skill-contest:defensive-maneuver`,
+    label: "Observe Opponent",
+    provenance: "Ordered observer-to-target relationship",
+    sourceId: relationship.id,
+    unit: "percentage",
+    value: relationship.bestBonus,
+  };
 }
 
 /** Player-safe read model: observer-owned status and own contest facts; target calculation stays GM-only. */

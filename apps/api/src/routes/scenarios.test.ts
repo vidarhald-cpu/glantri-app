@@ -1863,11 +1863,19 @@ function makeDistanceControlReviewFixture(): {
       currentRound: reviewed.roundNumber,
     },
     participants: [
-      makeCombatScenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+        },
+      }),
       makeCombatScenarioParticipant({
         controlledByUserId: "other-player",
         id: "participant-2",
         snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
           displayName: "Scyrian cavalry guy",
         },
       }),
@@ -2104,6 +2112,50 @@ function rollDistanceControlFixtureBothSides(input: {
   encounter: EncounterSession;
   proposalId: string;
 }): CombatRoundState {
+  const result = (rollInput: {
+    baseSkill: number;
+    dieResult: number;
+    opponentParticipantId: string;
+    participantId: string;
+    rolledAt: string;
+    rolledBy: "gm_proxy" | "player";
+  }) => ({
+    dodgeSkillTotal: rollInput.baseSkill,
+    finalTotal: rollInput.baseSkill + rollInput.dieResult,
+    generalFatigueModifier: 0,
+    openEndedD10s: [],
+    rolledAt: rollInput.rolledAt,
+    rolledAtRound: 1,
+    rolledBy: rollInput.rolledBy,
+    rollD20: rollInput.dieResult,
+    rollTotal: rollInput.dieResult,
+    skillContestCalculation: {
+      baseSkill: rollInput.baseSkill,
+      calculationId: `round-end-distance:${rollInput.participantId}`,
+      completeness: "partial" as const,
+      contestType: "round_end_adjust_distance" as const,
+      derivedIntegerAdjustment: 0,
+      finalResult: rollInput.baseSkill + rollInput.dieResult,
+      governingStat: { id: "dex", label: "Dexterity", value: rollInput.baseSkill },
+      missingContributionPoints: ["movement_mm", "encumbrance"] as (
+        | "encumbrance"
+        | "movement_mm"
+      )[],
+      openEndedDie: {
+        openEndedD10s: [],
+        rollD20: rollInput.dieResult,
+        rollTotal: rollInput.dieResult,
+      },
+      opponentParticipantId: rollInput.opponentParticipantId,
+      participantId: rollInput.participantId,
+      percentageContributions: [],
+      preDieTotal: rollInput.baseSkill,
+      role: "contestant" as const,
+      skill: { id: "dodge", label: "Dodge", totalXp: 0 },
+      totalPercentageAdjustment: 0,
+      visibility: "roller_and_gm" as const,
+    },
+  });
   const firstRoll = rollCombatRoundEndDistanceControl({
     command: {
       createdAt: "2026-01-01T00:11:00.000Z",
@@ -2111,12 +2163,14 @@ function rollDistanceControlFixtureBothSides(input: {
     },
     distanceProposalId: input.proposalId,
     participantId: "encounter-participant-1",
-    roll: {
+    result: result({
+      baseSkill: 7,
       dieResult: 10,
-      openEndedD10s: [],
-      rollD20: 10,
-    },
-    rolledBy: "player",
+      opponentParticipantId: "encounter-participant-2",
+      participantId: "encounter-participant-1",
+      rolledAt: "2026-01-01T00:11:00.000Z",
+      rolledBy: "player",
+    }),
     state:
       input.encounter.combatRoundState ??
       initializeCombatRoundState({ encounter: input.encounter }),
@@ -2128,12 +2182,14 @@ function rollDistanceControlFixtureBothSides(input: {
     },
     distanceProposalId: input.proposalId,
     participantId: "encounter-participant-2",
-    roll: {
+    result: result({
+      baseSkill: 4,
       dieResult: 12,
-      openEndedD10s: [],
-      rollD20: 12,
-    },
-    rolledBy: "gm_proxy",
+      opponentParticipantId: "encounter-participant-1",
+      participantId: "encounter-participant-2",
+      rolledAt: "2026-01-01T00:11:30.000Z",
+      rolledBy: "gm_proxy",
+    }),
     state: firstRoll.state,
   });
 
@@ -6278,9 +6334,14 @@ describe("scenarios route contract", () => {
     });
     expect(proposal.participantA).toMatchObject({
       result: expect.objectContaining({
-        finalTotal: 12,
+        finalTotal: 23,
         rolledBy: "player",
         rolledByUserId: "player-1",
+        skillContestCalculation: expect.objectContaining({
+          baseSkill: 18,
+          governingStat: expect.objectContaining({ value: 10 }),
+          skill: expect.objectContaining({ totalXp: 8 }),
+        }),
       }),
       status: "rolled",
     });
@@ -6293,7 +6354,7 @@ describe("scenarios route contract", () => {
     expect(responseProposal.participantA).toMatchObject({
       desiredDistance: 3,
       result: expect.objectContaining({
-        finalTotal: 12,
+        finalTotal: 23,
         rolledBy: "player",
       }),
       status: "rolled",
@@ -16795,16 +16856,15 @@ describe("scenarios route contract", () => {
     expect(mutable.encounter.combatRoundState?.adjustDistanceProposals[0]).toMatchObject({
       attackerRoll: {
         appliedModifiers: expect.arrayContaining([
-          expect.objectContaining({
-            bucket: "skill_ob",
-            label: "Observe Opponent · City guard",
-            value: 1,
-          }),
           expect.objectContaining({ label: "GM maneuver adjustment", value: 1 }),
         ]),
         dodgeSkillLabel: "Dodge",
         preDieTotal: expect.any(Number),
-        totalModifiers: 2,
+        skillContestCalculation: expect.objectContaining({
+          role: "initiator",
+          totalPercentageAdjustment: 1,
+        }),
+        totalModifiers: 1,
       },
       attackerRollRecorded: true,
       defenderRoll: {
@@ -16815,6 +16875,13 @@ describe("scenarios route contract", () => {
             value: 2,
           }),
         ],
+        skillContestCalculation: expect.objectContaining({
+          percentageContributions: [
+            expect.objectContaining({ category: "relationship", value: 2 }),
+          ],
+          role: "resisting_opponent",
+          totalPercentageAdjustment: 2,
+        }),
         totalModifiers: 2,
       },
       defenderRollRecorded: true,

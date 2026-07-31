@@ -26,6 +26,7 @@ import {
   buildEncounterSessionSummaryFromMetadataView,
   buildCombatRoundCommandEnvelope,
   buildCombatObservationModifierContributions,
+  buildCombatObservationSkillContestContribution,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   buildCombatRoundAttackRollResult,
@@ -106,6 +107,7 @@ import {
   recordCombatRoundAdjustDistanceRoll,
   commitCombatRoundAdjustDistance,
   combatAdjustDistanceRollResultSchema,
+  combatRoundEndDistanceRollResultSchema,
   recordCombatRoundFeintRoll,
   commitCombatRoundFeintResult,
   recordCombatRoundHitLocationRoll,
@@ -127,7 +129,6 @@ import {
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantForViewer,
   resolveEncounterParticipantMembership,
-  normalizeCombatRollAdjustment,
   resolveCombatDodgeModifiers,
   resolveCanonicalCombatAttackModifierFacts,
   resolveCanonicalCombatParryModifierFacts,
@@ -176,6 +177,7 @@ import type {
   CombatRoundCommand,
   CombatRoundEndDistanceControlSide,
   CombatRoundEndDistanceProposal,
+  CombatRoundEndDistanceRollResult,
   CombatRoundPhase,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
@@ -188,6 +190,8 @@ import type {
   CombatRoundPhaseContexts,
   CombatCalculationContext,
   CombatModifierContribution,
+  CombatSkillContestRole,
+  CombatSkillContestType,
   CombatProgressionProjection,
   EncounterParticipantReadSource,
   EncounterSession,
@@ -209,6 +213,7 @@ import {
   resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
   resolveParticipantSkillRollProfile,
+  resolveCombatSkillContest,
   resolveCombatObservationSkillProfile,
 } from "@glantri/rules-engine";
 
@@ -408,24 +413,24 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
   const build = characterBuildSchema.safeParse(participant.snapshot.build);
   if (!build.success) return {};
 
-  const sheet = buildCharacterSheetSummary({
-    build: build.data,
-    content: defaultCanonicalContent,
-  });
-  const dodge = sheet.draftView.skills.find((skill) => skill.skillId === "dodge");
+  const dodgeSkill = defaultCanonicalContent.skills.find((skill) => skill.id === "dodge");
+  const dodgeProfile = dodgeSkill
+    ? resolveParticipantSkillRollProfile({
+        ...getScenarioParticipantFeintSkillInput(participant),
+        linkedStatsOverride: ["dex"],
+        preferAdjustedStats: true,
+        skill: dodgeSkill,
+      })
+    : undefined;
 
   return {
-    dodgeSkillLabel: dodge?.name ?? "Dodge",
-    dodgeSkillXp: dodge?.effectiveSkillNumber ?? 0,
-    dodgeSkillTotal:
-      typeof sheet.combat.dodge === "number" && Number.isFinite(sheet.combat.dodge)
-        ? Math.round(sheet.combat.dodge)
-        : undefined,
+    dodgeSkillLabel: dodgeProfile?.skillName ?? "Dodge",
+    dodgeSkillXp: dodgeProfile?.totalXP,
+    dodgeSkillTotal: dodgeProfile
+      ? dodgeProfile.avgStats + dodgeProfile.totalXP + dodgeProfile.unknownSkillPenalty
+      : undefined,
     dodgeStatLabel: "Dexterity",
-    dodgeStatValue:
-      typeof sheet.adjustedStats.dex === "number" && Number.isFinite(sheet.adjustedStats.dex)
-        ? Math.round(sheet.adjustedStats.dex)
-        : undefined,
+    dodgeStatValue: dodgeProfile?.avgStats,
     healthStat: build.data.profile.rolledStats.health,
   };
 }
@@ -515,6 +520,190 @@ function buildRoundEndDistanceControlInputs(input: {
       participantInput.distanceControl,
     ]),
   );
+}
+
+function resolveAdjustDistanceSkillContestCalculation(input: {
+  calculationId: string;
+  contestType: CombatSkillContestType;
+  encounterId: string;
+  gmAdjustment?: number;
+  modifierContributions?: readonly CombatModifierContribution[];
+  opponentCombatantId: string;
+  opponentLabel?: string;
+  opponentScenarioParticipantId?: string;
+  participant: ScenarioParticipant;
+  participantCombatantId: string;
+  proposalId: string;
+  role: CombatSkillContestRole;
+  roll: ReturnType<typeof rollOpenEndedD20>;
+  roundNumber: number;
+  roundState: CombatRoundState;
+  step: "phase_1_actions" | "round_summary";
+}) {
+  const dodgeSkill = defaultCanonicalContent.skills.find((skill) => skill.id === "dodge");
+  if (!dodgeSkill) {
+    throw new RangeError("Dodge skill is unavailable.");
+  }
+  const profile = resolveParticipantSkillRollProfile({
+    ...getScenarioParticipantFeintSkillInput(input.participant),
+    linkedStatsOverride: ["dex"],
+    preferAdjustedStats: true,
+    skill: dodgeSkill,
+  });
+  const context: CombatCalculationContext = {
+    actionId: "adjust_range_attack",
+    encounterId: input.encounterId,
+    ownerParticipantId: input.participant.id,
+    opponentParticipantId: input.opponentScenarioParticipantId,
+    pairKey: input.opponentScenarioParticipantId
+      ? createCombatParticipantPairKey(input.participant.id, input.opponentScenarioParticipantId)
+      : undefined,
+    proposalId: input.proposalId,
+    rollType:
+      input.contestType === "adjust_distance_attack"
+        ? "adjust_distance_dodge"
+        : "round_end_distance_dodge",
+    roundNumber: input.roundNumber,
+    skillId: "dodge",
+    step: input.step,
+    ...(input.step === "phase_1_actions" ? { phase: "phase1" as const } : {}),
+  };
+  const observationRelationshipIds = new Set(
+    input.roundState.observationRelationships.map((relationship) => relationship.id),
+  );
+  const modifierResolution = resolveCombatDodgeModifiers({
+    context,
+    // Weapon Resolution publishes Observe as Skill/OB and DB/Parry rows. A
+    // Skill Contest selects its one role-aware relationship contribution below
+    // instead of inheriting either weapon bucket generically.
+    contributions: (input.modifierContributions ?? []).filter(
+      (contribution) => !observationRelationshipIds.has(contribution.sourceId ?? ""),
+    ),
+  });
+  const observation = buildCombatObservationSkillContestContribution({
+    contestType: input.contestType,
+    observerCombatantId: input.participantCombatantId,
+    opponentCombatantId: input.opponentCombatantId,
+    relationships: input.roundState.observationRelationships,
+    role: input.role,
+  });
+  const percentageContributions = [
+    ...modifierResolution.rows
+      .filter((row) => row.value !== 0)
+      .map((row) => ({
+        category: row.bucket === "skill_ob" ? ("skill_ob" as const) : ("general_fatigue" as const),
+        id: row.id,
+        label: row.label,
+        provenance: row.sourceKind,
+        sourceId: row.sourceId,
+        unit: "percentage" as const,
+        value: row.value,
+      })),
+    ...(observation
+      ? [
+          {
+            ...observation,
+            label: input.opponentLabel
+              ? `${observation.label} · ${input.opponentLabel}`
+              : observation.label,
+          },
+        ]
+      : []),
+    ...(input.gmAdjustment
+      ? [
+          {
+            category: "gm_adjustment" as const,
+            id: `${input.proposalId}:${input.participantCombatantId}:gm-adjustment`,
+            label: "GM maneuver adjustment",
+            provenance: "Accepted Adjust Distance review",
+            sourceId: input.proposalId,
+            unit: "percentage" as const,
+            value: input.gmAdjustment,
+          },
+        ]
+      : []),
+  ];
+
+  return resolveCombatSkillContest({
+    baseSkillAdjustment: profile.unknownSkillPenalty,
+    calculationId: input.calculationId,
+    contestType: input.contestType,
+    governingStat: {
+      id: "dex",
+      label: "Dexterity",
+      value: profile.avgStats,
+    },
+    // Encounter persistence currently has no server-owned movement/MM or
+    // encumbrance projection. Keep those rule inputs explicit rather than
+    // reconstructing them from client equipment presentation.
+    missingContributionPoints: ["movement_mm", "encumbrance"],
+    opponentParticipantId: input.opponentCombatantId,
+    participantId: input.participantCombatantId,
+    percentageContributions,
+    role: input.role,
+    roll: input.roll,
+    skill: {
+      id: profile.skillId,
+      label: profile.skillName,
+      totalXp: profile.totalXP,
+    },
+  });
+}
+
+function buildRoundEndDistanceRollResult(input: {
+  calculation: ReturnType<typeof resolveAdjustDistanceSkillContestCalculation>;
+  createdAt: string;
+  createdByUserId?: string;
+  rolledAtRound: number;
+  rolledBy: "player" | "gm_proxy";
+}): CombatRoundEndDistanceRollResult {
+  const generalFatigueModifier = input.calculation.percentageContributions
+    .filter((contribution) => contribution.category === "general_fatigue")
+    .reduce((total, contribution) => total + contribution.value, 0);
+  return combatRoundEndDistanceRollResultSchema.parse({
+    dodgeSkillTotal: input.calculation.baseSkill,
+    finalTotal: input.calculation.finalResult,
+    generalFatigueModifier,
+    openEndedD10s: input.calculation.openEndedDie.openEndedD10s,
+    rolledAt: input.createdAt,
+    rolledAtRound: input.rolledAtRound,
+    rolledBy: input.rolledBy,
+    rolledByUserId: input.createdByUserId,
+    rollD20: input.calculation.openEndedDie.rollD20,
+    rollTotal: input.calculation.openEndedDie.rollTotal,
+    skillContestCalculation: input.calculation,
+  });
+}
+
+function getRoundEndAdjustDistanceRole(input: {
+  participantId: string;
+  proposal: CombatRoundEndDistanceProposal;
+}): CombatSkillContestRole {
+  const ownSide =
+    input.proposal.participantAId === input.participantId
+      ? input.proposal.participantA
+      : input.proposal.participantBId === input.participantId
+        ? input.proposal.participantB
+        : undefined;
+  const opponentSide =
+    input.proposal.participantAId === input.participantId
+      ? input.proposal.participantB
+      : input.proposal.participantBId === input.participantId
+        ? input.proposal.participantA
+        : undefined;
+  if (!ownSide || !opponentSide) {
+    throw new RangeError("Participant is not part of the distance-control proposal.");
+  }
+  if (ownSide.desiredDistance !== undefined && opponentSide.desiredDistance === undefined) {
+    return "initiator";
+  }
+  if (ownSide.desiredDistance === undefined && opponentSide.desiredDistance !== undefined) {
+    return "resisting_opponent";
+  }
+  // When both participants declare different distances the archived process does
+  // not identify one canonical initiator. Treat both as contestants rather than
+  // inventing directional Observe applicability.
+  return "contestant";
 }
 
 function parseRollFields(
@@ -5199,12 +5388,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .code(409)
           .send({ error: "Distance-adjustment rolls are not currently available." });
-      const profile = buildRoundEndParticipantInputs({
+      const distanceControlInput = buildRoundEndParticipantInputs({
         encounter,
         roundState,
         scenarioParticipants,
       })[encounterParticipant.id]?.distanceControl;
-      if (!profile || profile.dodgeSkillTotal === undefined)
+      if (!distanceControlInput)
         return reply.code(409).send({ error: "Dodge profile is unavailable." });
       const adjustment =
         proposal.gmRollAdjustment?.participantId === encounterParticipant.id
@@ -5222,102 +5411,46 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
           )
         : undefined;
-      const pairKey = opponentScenarioParticipant
-        ? createCombatParticipantPairKey(scenarioParticipant.id, opponentScenarioParticipant.id)
-        : undefined;
-      const dodgeContext: CombatCalculationContext = {
-        actionId: "adjust_range_attack",
-        encounterId,
-        opportunityId: proposal.phase1OpportunityId,
-        ownerParticipantId: scenarioParticipant.id,
-        opponentParticipantId: opponentScenarioParticipant?.id,
-        pairKey,
-        phase: "phase1",
-        proposalId: proposal.id,
-        rollType: "adjust_distance_dodge",
-        roundNumber: roundState.roundNumber,
-        skillId: "dodge",
-        step: "phase_1_actions",
-      };
-      const rollAdjustment =
-        proposal.gmRollAdjustment?.participantId === encounterParticipant.id
-          ? normalizeCombatRollAdjustment({
-              actionId: "adjust_range_attack",
-              encounterId,
-              opportunityId: proposal.phase1OpportunityId,
-              opponentParticipantId: opponentScenarioParticipant?.id,
-              ownerParticipantId: scenarioParticipant.id,
-              pairKey,
-              phase: "phase1",
-              proposalId: proposal.id,
-              rollType: "adjust_distance_dodge",
-              roundNumber: roundState.roundNumber,
-              step: "phase_1_actions",
-              value: adjustment,
-              notes: proposal.gmRollAdjustment?.notes,
-            })
-          : undefined;
-      const baseDodgeResolution = resolveCombatDodgeModifiers({
-        context: dodgeContext,
-        contributions: [
-          ...(profile.modifierContributions ?? []),
-          ...(opponentScenarioParticipant
-            ? buildCombatObservationModifierContributions({
-                encounterId,
-                observerCombatantId: encounterParticipant.id,
-                observerParticipantId: scenarioParticipant.id,
-                opponentCombatantId: opponentEncounterParticipantId,
-                opponentParticipantId: opponentScenarioParticipant.id,
-                relationships: roundState.observationRelationships,
-              })
-            : []),
-        ],
-      });
-      const dodgeResolution = resolveCombatDodgeModifiers({
-        context: dodgeContext,
-        contributions: [
-          ...(profile.modifierContributions ?? []),
-          ...(opponentScenarioParticipant
-            ? buildCombatObservationModifierContributions({
-                encounterId,
-                observerCombatantId: encounterParticipant.id,
-                observerParticipantId: scenarioParticipant.id,
-                opponentCombatantId: opponentEncounterParticipantId,
-                opponentParticipantId: opponentScenarioParticipant.id,
-                relationships: roundState.observationRelationships,
-              })
-            : []),
-        ],
-        rollAdjustments: rollAdjustment ? [rollAdjustment] : [],
-      });
-      const generalFatigueModifier =
-        baseDodgeResolution.bucketResolutions.find(
-          (resolution) => resolution.bucket === "general_fatigue",
-        )?.total ?? 0;
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
-      const opponentLabel = opponentScenarioParticipant?.snapshot.displayName;
-      const appliedModifiers = dodgeResolution.rows
-        .filter((entry) => entry.value !== 0)
-        .map((entry) => ({
-          bucket: entry.bucket,
-          id: entry.id,
-          label:
-            entry.label === "Observe Opponent" && opponentLabel
-              ? `Observe Opponent · ${opponentLabel}`
-              : entry.label,
-          sourceId: entry.sourceId,
-          value: entry.value,
-        }));
-      const preDieTotal = profile.dodgeSkillTotal + dodgeResolution.total;
+      const skillContestCalculation = resolveAdjustDistanceSkillContestCalculation({
+        calculationId: `${proposal.id}:roll:${side}`,
+        contestType: "adjust_distance_attack",
+        encounterId,
+        gmAdjustment: adjustment,
+        modifierContributions: distanceControlInput.modifierContributions,
+        opponentCombatantId: opponentEncounterParticipantId,
+        opponentLabel: opponentScenarioParticipant?.snapshot.displayName,
+        opponentScenarioParticipantId: opponentScenarioParticipant?.id,
+        participant: scenarioParticipant,
+        participantCombatantId: encounterParticipant.id,
+        proposalId: proposal.id,
+        role: side === "attacker" ? "initiator" : "resisting_opponent",
+        roll,
+        roundNumber: roundState.roundNumber,
+        roundState,
+        step: "phase_1_actions",
+      });
+      const generalFatigueModifier = skillContestCalculation.percentageContributions
+        .filter((contribution) => contribution.category === "general_fatigue")
+        .reduce((total, contribution) => total + contribution.value, 0);
       const result = combatAdjustDistanceRollResultSchema.parse({
-        appliedModifiers,
-        dodgeSkillLabel: profile.dodgeSkillLabel ?? "Dodge",
-        dodgeSkillXp: profile.dodgeSkillXp ?? 0,
-        dodgeSkillTotal: profile.dodgeSkillTotal,
-        dodgeStatLabel: profile.dodgeStatLabel ?? "Dexterity",
-        dodgeStatValue: profile.dodgeStatValue,
-        finalTotal: roll.dieResult + preDieTotal,
+        appliedModifiers: skillContestCalculation.percentageContributions.map((contribution) => ({
+          bucket:
+            contribution.category === "skill_ob" || contribution.category === "relationship"
+              ? "skill_ob"
+              : "general_fatigue",
+          id: contribution.id,
+          label: contribution.label,
+          sourceId: contribution.sourceId,
+          value: contribution.value,
+        })),
+        dodgeSkillLabel: skillContestCalculation.skill.label,
+        dodgeSkillXp: skillContestCalculation.skill.totalXp,
+        dodgeSkillTotal: skillContestCalculation.baseSkill,
+        dodgeStatLabel: skillContestCalculation.governingStat.label,
+        dodgeStatValue: skillContestCalculation.governingStat.value,
+        finalTotal: skillContestCalculation.finalResult,
         generalFatigueModifier,
         id: `${proposal.id}:roll:${side}`,
         openEndedD10s: roll.openEndedD10s,
@@ -5327,8 +5460,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rolledAt: createdAt,
         rolledByUserId: user.id,
         situationalAdjustment: adjustment,
-        totalModifiers: dodgeResolution.total,
-        preDieTotal,
+        skillContestCalculation,
+        totalModifiers: skillContestCalculation.totalPercentageAdjustment,
+        preDieTotal: skillContestCalculation.preDieTotal,
       });
       const nextRoundState = recordCombatRoundAdjustDistanceRoll({
         command: { createdAt, createdByUserId: user.id },
@@ -7283,6 +7417,54 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
+        const proposal = roundState.roundEndReview?.proposedDistances.find(
+          (candidate) => candidate.id === body.distanceProposalId,
+        );
+        if (!proposal) {
+          return reply.code(409).send({ error: "Distance-control proposal is unavailable." });
+        }
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const opponentEncounterParticipant = membership.participants.find(
+          (participant) => participant.id === body.opponentParticipantId,
+        );
+        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) =>
+                participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        if (!opponentEncounterParticipant || !opponentScenarioParticipant) {
+          return reply.code(409).send({ error: "Distance-control opponent is unavailable." });
+        }
+        const distanceInputs = buildRoundEndDistanceControlInputs({
+          encounter,
+          roundState,
+          scenarioParticipants,
+        });
+        const roll = rollOpenEndedD20();
+        const skillContestCalculation = resolveAdjustDistanceSkillContestCalculation({
+          calculationId: `${proposal.id}:roll:${encounterParticipant.id}`,
+          contestType: "round_end_adjust_distance",
+          encounterId,
+          modifierContributions: distanceInputs[encounterParticipant.id]?.modifierContributions,
+          opponentCombatantId: opponentEncounterParticipant.id,
+          opponentLabel: opponentScenarioParticipant.snapshot.displayName,
+          opponentScenarioParticipantId: opponentScenarioParticipant.id,
+          participant: scenarioParticipant,
+          participantCombatantId: encounterParticipant.id,
+          proposalId: proposal.id,
+          role: getRoundEndAdjustDistanceRole({
+            participantId: encounterParticipant.id,
+            proposal,
+          }),
+          roll,
+          roundNumber: roundState.roundNumber,
+          roundState,
+          step: "round_summary",
+        });
         const rolled = rollCombatRoundEndDistanceControl({
           command: {
             createdAt: submittedAt,
@@ -7290,12 +7472,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
           distanceProposalId: body.distanceProposalId,
           participantId: encounterParticipant.id,
-          participantInputs: buildRoundEndDistanceControlInputs({
-            encounter,
-            roundState,
-            scenarioParticipants,
+          result: buildRoundEndDistanceRollResult({
+            calculation: skillContestCalculation,
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+            rolledAtRound: roundState.roundNumber,
+            rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
           }),
-          rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
           state: roundState,
         });
         const savedEncounter = await encounterService.updateCombatEncounter({
@@ -7403,6 +7586,63 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
+        const proposal = roundState.roundEndReview?.proposedDistances.find(
+          (candidate) => candidate.id === proposalId,
+        );
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: "gm",
+          encounter,
+          requestedParticipantId: participantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        const scenarioParticipant = participantResolution?.scenarioParticipant;
+        const encounterParticipant = participantResolution?.encounterParticipant;
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const opponentEncounterParticipant = membership.participants.find(
+          (participant) => participant.id === opponentParticipantId,
+        );
+        const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) =>
+                participant.id === opponentEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        if (
+          !proposal ||
+          !scenarioParticipant ||
+          !encounterParticipant ||
+          !opponentEncounterParticipant ||
+          !opponentScenarioParticipant
+        ) {
+          return reply.code(409).send({ error: "Distance-control calculation is unavailable." });
+        }
+        const distanceInputs = buildRoundEndDistanceControlInputs({
+          encounter,
+          roundState,
+          scenarioParticipants,
+        });
+        const roll = rollOpenEndedD20();
+        const skillContestCalculation = resolveAdjustDistanceSkillContestCalculation({
+          calculationId: `${proposal.id}:roll:${participantId}`,
+          contestType: "round_end_adjust_distance",
+          encounterId,
+          modifierContributions: distanceInputs[participantId]?.modifierContributions,
+          opponentCombatantId: opponentEncounterParticipant.id,
+          opponentLabel: opponentScenarioParticipant.snapshot.displayName,
+          opponentScenarioParticipantId: opponentScenarioParticipant.id,
+          participant: scenarioParticipant,
+          participantCombatantId: encounterParticipant.id,
+          proposalId: proposal.id,
+          role: getRoundEndAdjustDistanceRole({ participantId, proposal }),
+          roll,
+          roundNumber: roundState.roundNumber,
+          roundState,
+          step: "round_summary",
+        });
         const rolled = rollCombatRoundEndDistanceControl({
           command: {
             createdAt: submittedAt,
@@ -7410,12 +7650,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
           distanceProposalId: proposalId,
           participantId,
-          participantInputs: buildRoundEndDistanceControlInputs({
-            encounter,
-            roundState,
-            scenarioParticipants,
+          result: buildRoundEndDistanceRollResult({
+            calculation: skillContestCalculation,
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+            rolledAtRound: roundState.roundNumber,
+            rolledBy: "gm_proxy",
           }),
-          rolledBy: "gm_proxy",
           state: roundState,
         });
         const savedEncounter = await encounterService.updateCombatEncounter({

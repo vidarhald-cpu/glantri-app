@@ -129,6 +129,31 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("targetModifierProjection.contributions");
   });
 
+  it("resolves both Adjust Distance lifecycles through the canonical Skill Contest path", () => {
+    const resolverStart = source.indexOf(
+      "function resolveAdjustDistanceSkillContestCalculation(input:",
+    );
+    const resolverEnd = source.indexOf(
+      "function buildRoundEndDistanceRollResult(input:",
+      resolverStart,
+    );
+    const resolverSource = source.slice(resolverStart, resolverEnd);
+
+    expect(resolverStart).toBeGreaterThanOrEqual(0);
+    expect(resolverEnd).toBeGreaterThan(resolverStart);
+    expect(resolverSource).toContain("resolveParticipantSkillRollProfile({");
+    expect(resolverSource).toContain('linkedStatsOverride: ["dex"]');
+    expect(resolverSource).toContain("resolveCombatSkillContest({");
+    expect(resolverSource).toContain("buildCombatObservationSkillContestContribution({");
+    expect(resolverSource).not.toContain("sheet.combat.dodge");
+    expect(resolverSource).not.toContain("calculateDB");
+    expect(resolverSource).not.toContain("shield");
+
+    expect(source.match(/resolveAdjustDistanceSkillContestCalculation\(\{/g)?.length).toBe(3);
+    expect(source).toContain('contestType: "adjust_distance_attack"');
+    expect(source).toContain('contestType: "round_end_adjust_distance"');
+  });
+
   it("authorizes complete_round before applying observation boundary progress", () => {
     const advanceSource = readFileSync(
       resolve(
