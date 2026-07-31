@@ -1053,6 +1053,23 @@ describe("combat history projection", () => {
   it("keeps distance rolls private to the roller and omits hidden or uninvolved pairs", () => {
     const roll = event({
       distanceProposalId: "distance-1",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: {},
+        rollerPrivate: {
+          movementBurden: {
+            carriedItems: [
+              {
+                effectiveEncumbrance: 4,
+                itemId: "private-carried-item",
+                templateId: "private-equipment-template",
+              },
+            ],
+            finalMovementModifier: 2,
+          },
+        },
+      },
       rollerParticipantId: "aria",
       type: "distance_control_roll",
       visibility: {
@@ -1066,20 +1083,21 @@ describe("combat history projection", () => {
       },
     });
 
-    expect(
-      projectCombatHistoryEvent({
-        event: roll,
-        participants,
-        viewer: player(["aria"], ["aria", "borin"]),
-      })?.facts.privateCalculation,
-    ).toBeDefined();
-    expect(
-      projectCombatHistoryEvent({
-        event: roll,
-        participants,
-        viewer: player(["borin"], ["aria", "borin"]),
-      })?.facts.privateCalculation,
-    ).toBeUndefined();
+    const rollerProjection = projectCombatHistoryEvent({
+      event: roll,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const opponentProjection = projectCombatHistoryEvent({
+      event: roll,
+      participants,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+    expect(rollerProjection?.facts.privateCalculation).toBeDefined();
+    expect(JSON.stringify(rollerProjection)).toContain("private-carried-item");
+    expect(opponentProjection?.facts.privateCalculation).toBeUndefined();
+    expect(JSON.stringify(opponentProjection)).not.toContain("private-carried-item");
+    expect(JSON.stringify(opponentProjection)).not.toContain("private-equipment-template");
     expect(
       projectCombatHistoryEvent({
         event: roll,

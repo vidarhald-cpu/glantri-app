@@ -4,4 +4,5 @@ export * from "./combatSessionState";
 export * from "./composeDefenseValues";
 export * from "./deriveCombatValues";
 export * from "./resolveCombatSkillContest";
+export * from "./resolveCombatMovementBurden";
 export * from "./workbookCombatMath";

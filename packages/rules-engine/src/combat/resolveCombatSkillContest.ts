@@ -6,6 +6,7 @@ import {
   type CombatSkillContestPercentageContribution,
   type CombatSkillContestRole,
   type CombatSkillContestType,
+  type CombatMovementBurdenSnapshot,
   type OpenEndedD20Roll,
 } from "@glantri/domain";
 
@@ -21,6 +22,7 @@ export interface ResolveCombatSkillContestInput {
     value: number;
   };
   missingContributionPoints?: readonly CombatSkillContestModifierCategory[];
+  movementBurden?: CombatMovementBurdenSnapshot;
   opponentParticipantId?: string;
   participantId: string;
   percentageContributions?: readonly CombatSkillContestPercentageContribution[];
@@ -76,6 +78,7 @@ export function resolveCombatSkillContest(
     finalResult: preDieTotal + input.roll.dieResult,
     governingStat: input.governingStat,
     missingContributionPoints,
+    movementBurden: input.movementBurden,
     openEndedDie: {
       openEndedD10s: input.roll.openEndedD10s,
       rollD20: input.roll.rollD20,

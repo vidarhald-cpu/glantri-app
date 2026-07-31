@@ -1290,6 +1290,65 @@ function makeServerWeaponEquipmentState(input: {
   };
 }
 
+function makeMovementBurdenEquipmentState(input: {
+  characterId: string;
+  load?: number;
+}) {
+  const locationId = `location-${input.characterId}-person`;
+  const templateId = `template-${input.characterId}-load`;
+  const itemId = `item-${input.characterId}-load`;
+  return {
+    activeLoadoutByCharacterId: {
+      [input.characterId]: {
+        activeAmmoItemIds: [],
+        characterId: input.characterId,
+        id: `loadout-${input.characterId}`,
+        isActive: true,
+        name: "Combat",
+        quickAccessItemIds: [],
+      },
+    },
+    itemsById: {
+      [itemId]: {
+        category: "gear",
+        characterId: input.characterId,
+        conditionState: "intact",
+        id: itemId,
+        isStackable: false,
+        material: "steel",
+        quality: "standard",
+        quantity: 1,
+        specificityType: "generic",
+        storageAssignment: { carryMode: "on_person", locationId },
+        templateId,
+      },
+    },
+    locationsById: {
+      [locationId]: {
+        availabilityClass: "with_you",
+        characterId: input.characterId,
+        id: locationId,
+        isAccessibleInEncounter: true,
+        isMobile: true,
+        name: "On person",
+        type: "person_system",
+      },
+    },
+    templatesById: {
+      [templateId]: {
+        baseEncumbrance: input.load ?? 10,
+        baseValue: null,
+        category: "gear",
+        defaultMaterial: "steel",
+        id: templateId,
+        name: "Combat load",
+        specificityTypeDefault: "generic",
+        tags: [],
+      },
+    },
+  };
+}
+
 function makeCombatScenarioParticipantWithWeapon(
   overrides: Record<string, unknown> & { weaponName?: string; weaponRange?: string } = {},
 ) {
@@ -1869,6 +1928,7 @@ function makeDistanceControlReviewFixture(): {
         snapshot: {
           build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
           displayName: "The Gladiator",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
         },
       }),
       makeCombatScenarioParticipant({
@@ -1877,6 +1937,7 @@ function makeDistanceControlReviewFixture(): {
         snapshot: {
           build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
           displayName: "Scyrian cavalry guy",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
         },
       }),
     ],
@@ -6396,13 +6457,20 @@ describe("scenarios route contract", () => {
     });
     expect(proposal.participantA).toMatchObject({
       result: expect.objectContaining({
-        finalTotal: 23,
+        finalTotal: 21,
         rolledBy: "player",
         rolledByUserId: "player-1",
         skillContestCalculation: expect.objectContaining({
           baseSkill: 18,
           governingStat: expect.objectContaining({ value: 10 }),
           skill: expect.objectContaining({ totalXp: 8 }),
+          movementBurden: expect.objectContaining({
+            completeness: "complete",
+            finalMovementModifier: 1,
+          }),
+          percentageContributions: [
+            expect.objectContaining({ category: "movement_mm", value: -1 }),
+          ],
         }),
       }),
       status: "rolled",
@@ -6416,7 +6484,7 @@ describe("scenarios route contract", () => {
     expect(responseProposal.participantA).toMatchObject({
       desiredDistance: 3,
       result: expect.objectContaining({
-        finalTotal: 23,
+        finalTotal: 21,
         rolledBy: "player",
       }),
       status: "rolled",
@@ -6502,10 +6570,22 @@ describe("scenarios route contract", () => {
     expect(proposal.participantA.result).toMatchObject({
       rolledBy: "gm_proxy",
       rolledByUserId: "gm-1",
+      skillContestCalculation: expect.objectContaining({
+        movementBurden: expect.objectContaining({ finalMovementModifier: 1 }),
+        percentageContributions: [
+          expect.objectContaining({ category: "movement_mm", value: -1 }),
+        ],
+      }),
     });
     expect(proposal.participantB.result).toMatchObject({
       rolledBy: "gm_proxy",
       rolledByUserId: "gm-1",
+      skillContestCalculation: expect.objectContaining({
+        movementBurden: expect.objectContaining({ finalMovementModifier: 1 }),
+        percentageContributions: [
+          expect.objectContaining({ category: "movement_mm", value: -1 }),
+        ],
+      }),
     });
   });
 
@@ -16850,6 +16930,7 @@ describe("scenarios route contract", () => {
         snapshot: {
           build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
           displayName: "The Gladiator",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
         },
       }),
       makeCombatScenarioParticipant({
@@ -16859,6 +16940,7 @@ describe("scenarios route contract", () => {
         snapshot: {
           build: makeDodgeCharacterBuild("character-2", "City guard"),
           displayName: "City guard",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
         },
       }),
     ];
@@ -16892,6 +16974,7 @@ describe("scenarios route contract", () => {
     const attackerSecond = await app.inject({
       method: "POST",
       payload: {
+        movementModifier: 99,
         proposalId: "distance-proposal",
         scenarioParticipantId: "participant-1",
       },
@@ -16923,28 +17006,38 @@ describe("scenarios route contract", () => {
         dodgeSkillLabel: "Dodge",
         preDieTotal: expect.any(Number),
         skillContestCalculation: expect.objectContaining({
+          movementBurden: expect.objectContaining({
+            completeness: "complete",
+            finalMovementModifier: 1,
+          }),
           role: "initiator",
-          totalPercentageAdjustment: 1,
+          totalPercentageAdjustment: 0,
+          percentageContributions: expect.arrayContaining([
+            expect.objectContaining({ category: "movement_mm", value: -1 }),
+          ]),
         }),
-        totalModifiers: 1,
+        totalModifiers: 0,
       },
       attackerRollRecorded: true,
       defenderRoll: {
-        appliedModifiers: [
+        appliedModifiers: expect.arrayContaining([
           expect.objectContaining({
             bucket: "skill_ob",
             label: "Observe Opponent · The Gladiator",
             value: 2,
           }),
-        ],
+          expect.objectContaining({ label: "Movement Modifier", value: -1 }),
+        ]),
         skillContestCalculation: expect.objectContaining({
-          percentageContributions: [
+          movementBurden: expect.objectContaining({ finalMovementModifier: 1 }),
+          percentageContributions: expect.arrayContaining([
             expect.objectContaining({ category: "relationship", value: 2 }),
-          ],
+            expect.objectContaining({ category: "movement_mm", value: -1 }),
+          ]),
           role: "resisting_opponent",
-          totalPercentageAdjustment: 2,
+          totalPercentageAdjustment: 1,
         }),
-        totalModifiers: 2,
+        totalModifiers: 1,
       },
       defenderRollRecorded: true,
       standardTableRowId: "tie_or_opponent_wins",

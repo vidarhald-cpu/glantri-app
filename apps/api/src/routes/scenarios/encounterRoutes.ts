@@ -50,6 +50,10 @@ import {
   canRepeatWeaponAttackInRound,
   canPlayerSubmitCombatDeclaration,
   characterBuildSchema,
+  AnyEquipmentTemplateSchema,
+  CharacterLoadoutSchema,
+  EquipmentItemSchema,
+  StorageLocationSchema,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   combatRoundPhaseSchema,
@@ -204,6 +208,7 @@ import type {
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
+  buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
   isCombatFeintResistanceSkill,
@@ -215,6 +220,8 @@ import {
   resolveRoleplaySkillRollModifiers,
   resolveParticipantSkillRollProfile,
   resolveCombatSkillContest,
+  resolveCombatMovementBurden,
+  getCombatMovementModifierApplicability,
   resolveCombatObservationSkillProfile,
 } from "@glantri/rules-engine";
 
@@ -551,6 +558,8 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
     preferAdjustedStats: true,
     skill: dodgeSkill,
   });
+  const movementBurden = resolveScenarioParticipantMovementBurden(input.participant);
+  const movementApplicability = getCombatMovementModifierApplicability(input.contestType);
   const context: CombatCalculationContext = {
     actionId: "adjust_range_attack",
     encounterId: input.encounterId,
@@ -610,6 +619,21 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
           },
         ]
       : []),
+    ...(movementApplicability === "required" &&
+    movementBurden.completeness === "complete" &&
+    movementBurden.finalMovementModifier !== undefined
+      ? [
+          {
+            category: "movement_mm" as const,
+            id: `${input.proposalId}:${input.participantCombatantId}:movement-mm`,
+            label: "Movement Modifier",
+            provenance: movementBurden.sourceSnapshotId,
+            sourceId: movementBurden.sourceSnapshotId,
+            unit: "percentage" as const,
+            value: -movementBurden.finalMovementModifier,
+          },
+        ]
+      : []),
     ...(input.gmAdjustment
       ? [
           {
@@ -634,10 +658,11 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
       label: "Dexterity",
       value: profile.avgStats,
     },
-    // Encounter persistence currently has no server-owned movement/MM or
-    // encumbrance projection. Keep those rule inputs explicit rather than
-    // reconstructing them from client equipment presentation.
-    missingContributionPoints: ["movement_mm", "encumbrance"],
+    missingContributionPoints:
+      movementApplicability === "required" && movementBurden.completeness !== "complete"
+        ? ["movement_mm"]
+        : [],
+    movementBurden,
     opponentParticipantId: input.opponentCombatantId,
     participantId: input.participantCombatantId,
     percentageContributions,
@@ -1802,6 +1827,95 @@ function getEquipmentTemplatesById(
   const flatTemplatesByIdValue = equipmentState?.["templatesById"];
 
   return isRecord(flatTemplatesByIdValue) ? flatTemplatesByIdValue : undefined;
+}
+
+function resolveScenarioParticipantMovementBurden(participant: ScenarioParticipant) {
+  const build = characterBuildSchema.safeParse(participant.snapshot.build);
+  const characterInputs = build.success
+    ? buildCombatStateCharacterInputs(
+        buildCharacterSheetSummary({
+          build: build.data,
+          content: defaultCanonicalContent,
+        }),
+      )
+    : undefined;
+  const equipmentState = getSnapshotEquipmentState(participant);
+  const itemsValue = equipmentState?.["itemsById"];
+  const locationsValue = equipmentState?.["locationsById"];
+  const loadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
+  const itemsById = isRecord(itemsValue) ? itemsValue : undefined;
+  const locationsById = isRecord(locationsValue) ? locationsValue : undefined;
+  const loadoutsByCharacterId = isRecord(loadoutsValue) ? loadoutsValue : undefined;
+  const characterId =
+    participant.characterId ??
+    (loadoutsByCharacterId
+      ? Object.keys(loadoutsByCharacterId).find((key) => key.trim().length > 0)
+      : undefined);
+  const parsedItems = itemsById
+    ? Object.values(itemsById).flatMap((value) => {
+        const parsed = EquipmentItemSchema.safeParse(value);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : [];
+  const itemsAreComplete = itemsById
+    ? parsedItems.length === Object.keys(itemsById).length
+    : false;
+  const parsedLocations = locationsById
+    ? Object.fromEntries(
+        Object.entries(locationsById).flatMap(([id, value]) => {
+          const parsed = StorageLocationSchema.safeParse(value);
+          return parsed.success ? [[id, parsed.data] as const] : [];
+        }),
+      )
+    : {};
+  const locationsAreComplete = locationsById
+    ? Object.keys(parsedLocations).length === Object.keys(locationsById).length
+    : false;
+  const snapshotTemplates = getEquipmentTemplatesById(equipmentState);
+  const parsedSnapshotTemplates = snapshotTemplates
+    ? Object.fromEntries(
+        Object.entries(snapshotTemplates).flatMap(([id, value]) => {
+          const parsed = AnyEquipmentTemplateSchema.safeParse(value);
+          return parsed.success ? [[id, parsed.data] as const] : [];
+        }),
+      )
+    : {};
+  const loadoutValue = characterId ? loadoutsByCharacterId?.[characterId] : undefined;
+  const parsedLoadout = CharacterLoadoutSchema.safeParse(loadoutValue);
+  const loadoutIsComplete = loadoutValue === undefined || parsedLoadout.success;
+
+  return resolveCombatMovementBurden({
+    characterId,
+    characteristics: characterInputs
+      ? {
+          constitution: characterInputs.constitution,
+          size: characterInputs.size,
+          strength: characterInputs.strength,
+        }
+      : undefined,
+    equipmentLoadoutRevision: participant.updatedAt,
+    equipmentState:
+      equipmentState &&
+      itemsById &&
+      locationsById &&
+      itemsAreComplete &&
+      locationsAreComplete &&
+      loadoutIsComplete
+        ? {
+            activeLoadout: parsedLoadout.success ? parsedLoadout.data : undefined,
+            items: parsedItems,
+            locationsById: parsedLocations,
+            templatesById: {
+              ...equipmentTemplatesById,
+              ...parsedSnapshotTemplates,
+            },
+          }
+        : undefined,
+    participantId: participant.id,
+    sourceSnapshotId: `scenario-participant:${participant.id}:snapshot:${
+      participant.snapshot.sourceUpdatedAt ?? participant.updatedAt ?? "unversioned"
+    }`,
+  });
 }
 
 function isWeaponTemplateLike(template: unknown): template is WeaponTemplate {

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { combatMovementBurdenSnapshotSchema } from "./combatMovementBurden";
+
 const idSchema = z.string().min(1);
 
 export const combatSkillContestTypeSchema = z.enum([
@@ -54,6 +56,7 @@ export const combatSkillContestCalculationSchema = z.object({
     value: z.number().int(),
   }),
   missingContributionPoints: z.array(combatSkillContestModifierCategorySchema).default([]),
+  movementBurden: combatMovementBurdenSnapshotSchema.optional(),
   openEndedDie: z.object({
     openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
     rollD20: z.number().int().min(1).max(20),
