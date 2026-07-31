@@ -25,9 +25,8 @@ import {
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
   createEmptyPlayerEncounterCombatContext,
-  PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  getPlayerEncounterActionLabel,
   PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
-  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
 } from "@/lib/campaigns/playerEncounter";
 
 import { CombatEventResultList } from "./CombatEventResultList";
@@ -37,11 +36,7 @@ const historicalDataMissingMessage = "No information available for this panel.";
 
 function historicalActionLabel(actionId?: string): string | undefined {
   if (!actionId) return undefined;
-  return (
-    [...PLAYER_ENCOUNTER_ACTION_OPTIONS, ...PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS].find(
-      (option) => option.value === actionId,
-    )?.label ?? actionId
-  );
+  return getPlayerEncounterActionLabel(actionId);
 }
 
 function MissingHistoricalPanel(input: { title: string }) {

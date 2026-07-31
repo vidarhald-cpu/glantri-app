@@ -684,6 +684,45 @@ describe("canonical attack opportunity lineage", () => {
     },
   };
 
+  it("ignores persisted generic attack opportunities owned by an unsupported legacy declaration", () => {
+    const legacyOpportunity = buildCombatRoundDeclaredAttackOpportunities({
+      actionId: "attack_parry",
+      participantId: "hero",
+      phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+      roundNumber: 1,
+      sources: {
+        phase1: {
+          attackModeId: "mode-1",
+          sourceKind: "unarmed",
+          weaponSourceSlot: "virtual",
+          weaponTemplateId: "virtual-weapon-template-punch",
+        },
+      },
+    })[0]!;
+    const state = combatRoundStateSchema.parse({
+      currentStep: "phase_1_actions",
+      participants: [
+        {
+          declaration: {
+            actionId: "counterattack",
+            attackOpportunities: [legacyOpportunity],
+            phaseContexts: { phase1: { ...emptyContext, targetParticipantId: "guard" } },
+            roundNumber: 1,
+            submittedBy: "gm",
+          },
+          label: "Hero",
+          participantId: "hero",
+          stepStatuses: { select_actions: "gmEdited" },
+        },
+        { label: "Guard", participantId: "guard" },
+      ],
+      roundNumber: 1,
+    });
+
+    expect(getCombatRoundPhaseAttackCandidates({ phase: "phase1", state })).toEqual([]);
+    expect(getFirstCombatRoundDeclarationRequiredParticipantId(state)).toBe("hero");
+  });
+
   it("creates stable, distinct Double Attack identities with explicit sources and indices", () => {
     const input = {
       actionId: "double_attack",

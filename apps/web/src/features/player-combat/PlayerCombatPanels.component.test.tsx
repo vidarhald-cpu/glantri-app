@@ -32,6 +32,11 @@ describe("PlayerCombatActionSelectorPanel", () => {
 
     expect(screen.getByRole("option", { name: "Choose action" })).toBeInTheDocument();
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
+    expect(
+      Array.from(
+        (screen.getByRole("combobox", { name: "Secondary action" }) as HTMLSelectElement).options,
+      ).map((option) => option.text),
+    ).toEqual(["Open"]);
   });
 
   it("offers Observe Opponent as an explicit Parry secondary action", () => {
@@ -87,6 +92,44 @@ describe("PlayerCombatActionSelectorPanel", () => {
     );
 
     expect(screen.queryByRole("combobox", { name: "Opponent to counter" })).not.toBeInTheDocument();
+  });
+
+  it("hides unsupported actions for new declarations and preserves a selected legacy value", () => {
+    const { rerender } = render(
+      <PlayerCombatActionSelectorPanel
+        actionId=""
+        additionalActionNotes=""
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    const primary = screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement;
+    expect(Array.from(primary.options).map((option) => option.value)).not.toContain(
+      "counterattack",
+    );
+    expect(Array.from(primary.options).map((option) => option.value)).not.toContain("disarm");
+
+    rerender(
+      <PlayerCombatActionSelectorPanel
+        actionId="counterattack"
+        additionalActionNotes=""
+        controlsDisabled
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: "Counterattack · Unavailable" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Action" })).toHaveValue("counterattack");
   });
 
   it("renders the shared canonical Offensive Parry opponent selector for the Phase 1 panel", () => {

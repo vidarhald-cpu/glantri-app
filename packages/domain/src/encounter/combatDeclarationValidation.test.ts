@@ -30,6 +30,43 @@ describe("combat declaration target validation", () => {
     expect(getCombatDeclarationActionLabel("attack_parry")).toBe("Single attack");
     expect(getCombatDeclarationActionLabel("parry_attack")).toBe("Reactive attack");
     expect(getCombatDeclarationActionLabel("parry")).toBe("Parry");
+    expect(getCombatDeclarationActionLabel("counterattack")).toBe("Counterattack");
+    expect(getCombatDeclarationActionLabel("disarm")).toBe("Disarm");
+  });
+
+  it("never routes unsupported primary or secondary actions through generic attacks", () => {
+    for (const actionId of [
+      "counterattack",
+      "disarm",
+      "parry_disarm",
+      "break_off_engagement",
+      "other",
+    ]) {
+      expect(getCombatDeclarationAttackPhases({ actionId })).toEqual([]);
+    }
+    expect(
+      getCombatDeclarationAttackPhases({
+        actionId: "parry",
+        secondaryActionId: "counterattack",
+      }),
+    ).toEqual([]);
+  });
+
+  it("marks active legacy unsupported declarations incomplete instead of substituting an attack", () => {
+    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other"]) {
+      expect(
+        validateCombatDeclarationTargets({
+          actionId,
+          phaseContexts: {
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "guard" },
+          },
+        }),
+      ).toMatchObject({
+        message: `Combat action is not yet available: ${actionId}.`,
+        missingPhases: [],
+        valid: false,
+      });
+    }
   });
 
   it("allows untargeted Parry with Observe Opponent's independent target", () => {

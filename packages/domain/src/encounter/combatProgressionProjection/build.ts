@@ -9,6 +9,10 @@ import {
 } from "../combatRoundManager";
 import { buildCombatActionProcessPlans } from "../combatActionProcesses";
 import {
+  getCombatDeclarationCapabilityStatus,
+  validateCombatDeclarationActionAvailability,
+} from "../combatDeclarationCompatibility";
+import {
   boundaryForCursorStep,
   boundaryForStep,
   deepFreeze,
@@ -115,8 +119,56 @@ export function buildCombatProgressionProjection(
     roundNumber: normalized.roundNumber,
     state: normalized,
   };
+  const unavailableDeclaration =
+    boundaryKind === "declaration"
+      ? undefined
+      : normalized.participants
+          .map((participant) => {
+            const actionId = participant.declaration?.actionId;
+            const primaryStatus = getCombatDeclarationCapabilityStatus({
+              actionId,
+              kind: "primary",
+            });
+            const primaryAvailability =
+              primaryStatus === "partial_internal_only"
+                ? { valid: true as const }
+                : validateCombatDeclarationActionAvailability({ actionId, kind: "primary" });
+            const secondaryActionId = participant.declaration?.secondaryActionId;
+            const secondaryStatus = getCombatDeclarationCapabilityStatus({
+              actionId: secondaryActionId,
+              kind: "secondary",
+            });
+            const secondaryAvailability =
+              secondaryStatus === "partial_internal_only"
+                ? { valid: true as const }
+                : validateCombatDeclarationActionAvailability({
+                    actionId: secondaryActionId,
+                    kind: "secondary",
+                  });
+            const availability = primaryAvailability.valid
+              ? secondaryAvailability
+              : primaryAvailability;
+            return availability.valid ? undefined : { availability, participant };
+          })
+          .find((entry) => entry !== undefined);
   let processes: CombatProgressionProcess[];
-  if (boundaryKind === "declaration") processes = buildDeclarationProcesses(context);
+  if (unavailableDeclaration) {
+    const blockerId = `${boundaryId}:blocker:invalid_source:unavailable-declaration:${unavailableDeclaration.participant.participantId}`;
+    context.blockers.set(blockerId, {
+      id: blockerId,
+      message: unavailableDeclaration.availability.message ?? "Combat action is not yet available.",
+      owner: identities.get(unavailableDeclaration.participant.participantId),
+      taskIds: [],
+      type: "invalid_source",
+    });
+    context.diagnostics.push({
+      code: "repair_required",
+      message: "An active legacy declaration cannot enter canonical execution.",
+      relatedIds: [blockerId, unavailableDeclaration.participant.participantId],
+      severity: "warning",
+    });
+    processes = [];
+  } else if (boundaryKind === "declaration") processes = buildDeclarationProcesses(context);
   else if (boundaryKind === "phase1_modifier_review")
     processes = [buildModifierReviewProcess(context, "phase1")];
   else if (boundaryKind === "phase2_modifier_review")

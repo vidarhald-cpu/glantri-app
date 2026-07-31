@@ -13,16 +13,6 @@ export interface CombatDeclarationTargetValidationResult {
   valid: boolean;
 }
 
-const ATTACK_ACTION_IDS = new Set([
-  "attack_parry",
-  "parry_attack",
-  "double_attack",
-  "feint_attack",
-  "adjust_range_attack",
-  "counterattack",
-  "disarm",
-]);
-
 export const COMBAT_DECLARATION_ACTION_LABELS: Record<string, string> = {
   adjust_range_attack: "Adjust Range - Attack",
   attack_parry: "Single attack",
@@ -42,10 +32,6 @@ export function getCombatDeclarationActionLabel(actionId?: string): string {
   return actionId ? (COMBAT_DECLARATION_ACTION_LABELS[actionId] ?? actionId) : "Open";
 }
 
-function isAttackAction(actionId?: string): boolean {
-  return Boolean(actionId && ATTACK_ACTION_IDS.has(actionId));
-}
-
 export function getCombatDeclarationAttackPhases(input: {
   actionId?: string;
   secondaryActionId?: string;
@@ -62,18 +48,8 @@ export function getCombatDeclarationAttackPhases(input: {
     case "adjust_range_attack":
       return ["phase2"];
     default:
-      break;
+      return [];
   }
-
-  const phases: CombatDeclarationPhaseKey[] = [];
-  if (isAttackAction(input.actionId)) {
-    phases.push("phase1");
-  }
-  if (isAttackAction(input.secondaryActionId)) {
-    phases.push("phase2");
-  }
-
-  return phases;
 }
 
 function formatMissingTargetMessage(

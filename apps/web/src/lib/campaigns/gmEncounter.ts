@@ -11,8 +11,7 @@ import {
   buildPlayerEncounterPhaseSummary,
   getPlayerEncounterActionLabel,
   getPlayerEncounterCombatModifierTotals,
-  type PlayerEncounterActionId,
-  PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  isPlayerEncounterActionId,
 } from "./playerEncounter";
 
 export interface GmEncounterParticipantRow {
@@ -36,10 +35,6 @@ export interface GmEncounterParticipantRow {
 export interface GmEncounterControlState {
   disabled: boolean;
   label: string;
-}
-
-function isPlayerEncounterActionId(value: string | undefined): value is PlayerEncounterActionId {
-  return PLAYER_ENCOUNTER_ACTION_OPTIONS.some((option) => option.value === value);
 }
 
 function findScenarioParticipantForEncounterParticipant(input: {

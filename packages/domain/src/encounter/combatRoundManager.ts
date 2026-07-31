@@ -79,6 +79,7 @@ import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
+import { isCombatDeclarationActionAvailable } from "./combatDeclarationCompatibility";
 import { movementIntentSchema, type DistancePreferenceIntent } from "./combatMovementIntent";
 import {
   combatEffectEventSchema,
@@ -6128,6 +6129,14 @@ export function getCombatRoundPhaseAttackCandidates(input: {
 
   return normalized.participants.flatMap((participant) => {
     if (!participant.declaration) {
+      return [];
+    }
+    if (
+      !isCombatDeclarationActionAvailable({
+        actionId: participant.declaration.actionId,
+        kind: "primary",
+      })
+    ) {
       return [];
     }
     const explicit = (participant.declaration.attackOpportunities ?? []).filter(

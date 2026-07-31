@@ -8,6 +8,7 @@ import {
   buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterActionLabel,
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
@@ -15,6 +16,7 @@ import {
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
   isPlayerEncounterAttackAction,
+  isPlayerEncounterActionId,
   isPlayerEncounterDefenseAction,
   mergeCombatContextWithCurrentModifierBuckets,
 } from "./playerEncounter";
@@ -80,6 +82,29 @@ describe("playerEncounter", () => {
     });
   });
 
+  it("derives executable selector options from the domain capability gate", () => {
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => option.value)).toEqual([
+      "attack_parry",
+      "parry_attack",
+      "double_attack",
+      "feint_attack",
+      "adjust_range_attack",
+      "offensive_parry",
+      "parry",
+    ]);
+    expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
+      "observe_opponent",
+    ]);
+  });
+
+  it("keeps unsupported legacy action identities and labels readable", () => {
+    expect(isPlayerEncounterActionId("counterattack")).toBe(true);
+    expect(isPlayerEncounterActionId("disarm")).toBe(true);
+    expect(isPlayerEncounterActionId("arbitrary_action")).toBe(false);
+    expect(getPlayerEncounterActionLabel("counterattack")).toBe("Counterattack");
+    expect(getPlayerEncounterActionLabel("parry_disarm")).toBe("Parry - Disarm");
+  });
+
   it("maps primary and secondary actions into round phases", () => {
     expect(
       buildPlayerEncounterPhaseSummary({
@@ -118,9 +143,12 @@ describe("playerEncounter", () => {
     expect(isPlayerEncounterAttackAction("attack_parry")).toBe(true);
     expect(isPlayerEncounterAttackAction("parry_attack")).toBe(true);
     expect(isPlayerEncounterAttackAction("observe_opponent")).toBe(false);
+    expect(isPlayerEncounterAttackAction("counterattack")).toBe(false);
+    expect(isPlayerEncounterAttackAction("disarm")).toBe(false);
     expect(isPlayerEncounterDefenseAction("attack_parry")).toBe(true);
     expect(isPlayerEncounterDefenseAction("parry_attack")).toBe(true);
     expect(isPlayerEncounterDefenseAction("double_attack")).toBe(false);
+    expect(isPlayerEncounterDefenseAction("parry_disarm")).toBe(false);
   });
 
   it("returns a stable movement label fallback", () => {

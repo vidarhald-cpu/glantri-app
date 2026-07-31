@@ -220,6 +220,42 @@ describe("CombatProgressionProjection", () => {
     expect(buildCombatProgressionProjection(undone!)).toEqual(projection);
   });
 
+  it("stops an active legacy unsupported declaration before canonical execution", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        currentStep: "phase_1_actions",
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        participantOverrides: [
+          {
+            declaration: {
+              actionId: "counterattack",
+              roundNumber: 2,
+              submittedBy: "gm",
+            },
+            stepStatuses: { select_actions: "gmEdited" },
+          },
+        ],
+      }),
+    );
+
+    expect(projection.boundary.kind).toBe("phase1_resolution");
+    expect(projection.boundary.processes).toEqual([]);
+    expect(projection.blockers).toEqual([
+      expect.objectContaining({
+        message: "Combat action is not yet available: counterattack.",
+        owner: expect.objectContaining({ participantId: "hero" }),
+        type: "invalid_source",
+      }),
+    ]);
+    expect(projection.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "repair_required",
+        message: "An active legacy declaration cannot enter canonical execution.",
+      }),
+    );
+  });
+
   it.each([
     ["phase1", "A1", "phase_1_actions", "phase1_resolution", "phase2_modifier_review", "M2"],
     ["phase2", "A2", "phase_2_actions", "phase2_resolution", "round_end", "SU"],
@@ -2073,8 +2109,9 @@ describe("authorizeCombatProgressionTask", () => {
       .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .filter((task) => task.kind === "attack");
 
-    expect(tiedAttackTasks.map((task) => task.owner?.kind === "combatant" && task.owner.participantId))
-      .toEqual(["hero", "guard"]);
+    expect(
+      tiedAttackTasks.map((task) => task.owner?.kind === "combatant" && task.owner.participantId),
+    ).toEqual(["hero", "guard"]);
     expect(new Set(tiedAttackTasks.map((task) => task.identity.initiativeGroupId))).toEqual(
       new Set(["round:2:phase:phase1:initiative:4"]),
     );
@@ -2105,9 +2142,7 @@ describe("authorizeCombatProgressionTask", () => {
       })),
     });
     const sequentialTasks = buildCombatProgressionProjection(sequential)
-      .boundary.processes.flatMap((process) =>
-        process.stages.flatMap((stage) => stage.tasks),
-      )
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .filter((task) => task.kind === "attack");
     expect(sequentialTasks).toHaveLength(1);
     expect(sequentialTasks[0]?.owner).toMatchObject({ participantId: "hero" });

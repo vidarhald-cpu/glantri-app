@@ -4837,6 +4837,68 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("rejects unavailable declaration processes before generic attack routing", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+
+    for (const actionId of [
+      "counterattack",
+      "disarm",
+      "parry_disarm",
+      "break_off_engagement",
+      "other",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId,
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "encounter-target-1",
+            },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: `Combat action is not yet available: ${actionId}.`,
+      });
+    }
+
+    await app.close();
+
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported secondary actions before they can affect execution", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: "counterattack",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Combat secondary action is not yet available: counterattack.",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("keeps final DE and M1 mutation revisions authoritative through reads and immediate advances", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const baseEncounter = makeCombatEncounter({

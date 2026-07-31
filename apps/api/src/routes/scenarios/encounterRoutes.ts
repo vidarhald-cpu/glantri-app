@@ -159,6 +159,7 @@ import {
   setCombatRoundPairDistance,
   setCombatRoundSelection,
   skipCombatRoundCurrentPhaseAction,
+  validateCombatDeclarationActionAvailability,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -4250,6 +4251,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({
           error: "Participant is not assigned to this encounter.",
         });
+      }
+
+      const primaryAvailability = validateCombatDeclarationActionAvailability({
+        actionId: body.actionId,
+        kind: "primary",
+      });
+      if (!primaryAvailability.valid) {
+        return reply.code(400).send({ error: primaryAvailability.message });
+      }
+      const secondaryAvailability = validateCombatDeclarationActionAvailability({
+        actionId: body.secondaryActionId,
+        kind: "secondary",
+      });
+      if (!secondaryAvailability.valid) {
+        return reply.code(400).send({ error: secondaryAvailability.message });
       }
 
       const gmAuthorizedOperation = access.mode === "gm";

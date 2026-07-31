@@ -5,6 +5,7 @@ import React, { useState, type ReactNode } from "react";
 import {
   HIT_LOCATIONS,
   getCombatDeclarationCompatibilityRule,
+  isCombatDeclarationActionAvailable,
   type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
@@ -36,6 +37,7 @@ import {
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
+  getPlayerEncounterActionLabel,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
   type PlayerEncounterActionId,
@@ -1388,7 +1390,11 @@ export function PlayerCombatActionSelectorPanel({
     ? PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
         (allowedSecondaryActions as readonly string[]).includes(option.value),
       )
-    : PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS;
+    : [];
+  const selectedActionIsListed = actionOptions.some((option) => option.value === actionId);
+  const selectedSecondaryActionIsListed = secondaryActionOptions.some(
+    (option) => option.value === secondaryActionId,
+  );
   const effectiveMovementIntent =
     movementIntent ??
     ({
@@ -1449,6 +1455,14 @@ export function PlayerCombatActionSelectorPanel({
           value={actionId}
         >
           <option value="">Choose action</option>
+          {actionId && !selectedActionIsListed ? (
+            <option disabled value={actionId}>
+              {getPlayerEncounterActionLabel(actionId)}
+              {isCombatDeclarationActionAvailable({ actionId, kind: "primary" })
+                ? ""
+                : " · Unavailable"}
+            </option>
+          ) : null}
           {actionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -1466,6 +1480,17 @@ export function PlayerCombatActionSelectorPanel({
           value={secondaryActionId}
         >
           <option value="">{actionId === "parry" ? "None" : "Open"}</option>
+          {secondaryActionId && !selectedSecondaryActionIsListed ? (
+            <option disabled value={secondaryActionId}>
+              {getPlayerEncounterActionLabel(secondaryActionId)}
+              {isCombatDeclarationActionAvailable({
+                actionId: secondaryActionId,
+                kind: "secondary",
+              })
+                ? ""
+                : " · Unavailable"}
+            </option>
+          ) : null}
           {(actionId === "parry"
             ? secondaryActionOptions.filter((option) => option.value === "observe_opponent")
             : secondaryActionOptions
