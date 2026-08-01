@@ -20,6 +20,8 @@ import {
   type ContinuedContactMaintenanceContest,
   type OffensiveParryBrawlingRoll,
 } from "./combatOffensiveParry";
+import { projectProcessRestrictionToCanonicalModifierLifecycle } from "./combatModifierLifecycleCompatibility";
+import { transitionCanonicalCombatModifierEffect } from "./combatModifierLifecycle";
 
 import {
   scenarioCombatModifierBucketSchema,
@@ -9315,6 +9317,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
     commandId?: string;
     createdAt: string;
     createdByUserId?: string;
+    createdRevision?: string;
   };
   contestId: string;
   declarationId: string;
@@ -9388,12 +9391,38 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
     resolved.status === "resolved" &&
     resolved.winnerParticipantId === resolved.controllerParticipantId;
   const continuedContactId = buildContinuedContactId({ contestId: contest.id });
+  const lifecycleSequence = getNextCombatRoundEventSequence(normalized);
+  const lifecycleContext = {
+    createdAt: input.command.createdAt,
+    createdRevision: input.command.createdRevision,
+    createdSequence: lifecycleSequence,
+    encounterId: normalized.encounterId,
+    visibility: { audience: "involved" as const, sourceIdentity: "public" as const },
+  };
+  const continuedContactLifecycle = projectProcessRestrictionToCanonicalModifierLifecycle({
+    context: lifecycleContext,
+    duration: {
+      conditionId: continuedContactId,
+      conditionKind: "contact_ended",
+      kind: "until_condition",
+      startPhase: contest.phase,
+      startRound: contest.roundNumber,
+      startSequence: lifecycleSequence,
+    },
+    effectId: continuedContactId,
+    effectKind: "continued_contact",
+    opponentParticipantId: contest.affectedParticipantId,
+    ownerParticipantId: contest.controllerParticipantId,
+    processId: continuedContactId,
+    publicLabel: "Continued Contact",
+  }).effect;
   const nextContacts = controllerWon
     ? [
         ...normalized.continuedContacts.filter((contact) => contact.id !== continuedContactId),
         continuedContactSchema.parse({
           affectedParticipantId: contest.affectedParticipantId,
           brawlingContestResultId: contest.brawlingContestResultId,
+          canonicalLifecycle: continuedContactLifecycle,
           controllerParticipantId: contest.controllerParticipantId,
           establishedPhase: contest.phase,
           establishedRound: contest.roundNumber,
@@ -9408,6 +9437,23 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
       ]
     : normalized.continuedContacts;
   const unbalancedConditionId = buildUnbalancedConditionId({ continuedContactId });
+  const unbalancedLifecycle = projectProcessRestrictionToCanonicalModifierLifecycle({
+    context: lifecycleContext,
+    duration: {
+      conditionId: continuedContactId,
+      conditionKind: "contact_ended",
+      kind: "until_condition",
+      startPhase: contest.phase,
+      startRound: contest.roundNumber,
+      startSequence: lifecycleSequence,
+    },
+    effectId: unbalancedConditionId,
+    effectKind: "unbalanced",
+    opponentParticipantId: contest.controllerParticipantId,
+    ownerParticipantId: contest.affectedParticipantId,
+    processId: continuedContactId,
+    publicLabel: "Unbalanced",
+  }).effect;
   const nextConditions = controllerWon
     ? [
         ...normalized.unbalancedConditions.filter(
@@ -9415,6 +9461,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
         ),
         unbalancedCombatConditionSchema.parse({
           affectedParticipantId: contest.affectedParticipantId,
+          canonicalLifecycle: unbalancedLifecycle,
           establishedRound: contest.roundNumber,
           id: unbalancedConditionId,
           modifierValue: -2,
@@ -13612,6 +13659,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
     commandId?: string;
     createdAt: string;
     createdByUserId?: string;
+    createdRevision?: string;
   };
   contestId: string;
   executionGroupId: string;
@@ -13708,6 +13756,29 @@ export function recordContinuedContactMaintenanceRoll(input: {
   const maintained =
     resolved.status === "resolved" &&
     resolved.winnerParticipantId === resolved.controllerParticipantId;
+  const terminalSequence = getNextCombatRoundEventSequence(normalized);
+  const resolveProcessLifecycle = <T extends { canonicalLifecycle?: unknown; canonicalTransitions?: unknown[] }>(
+    entry: T,
+  ) => {
+    if (!input.command.createdRevision || !entry.canonicalLifecycle) return entry;
+    const transitioned = transitionCanonicalCombatModifierEffect({
+      acceptedRevision: input.command.createdRevision,
+      acceptedSequence: terminalSequence,
+      commandId: input.command.commandId,
+      effect: entry.canonicalLifecycle as Parameters<
+        typeof transitionCanonicalCombatModifierEffect
+      >[0]["effect"],
+      nextState: "resolved",
+      reason: "condition_cleared",
+      transitionId: `${resolved.resultId}:resolve:${(entry.canonicalLifecycle as { id: string }).id}`,
+      transitionType: "resolve",
+    });
+    return {
+      ...entry,
+      canonicalLifecycle: transitioned.effect,
+      canonicalTransitions: [...(entry.canonicalTransitions ?? []), transitioned.transition],
+    };
+  };
   const nextContacts =
     resolved.status !== "resolved"
       ? normalized.continuedContacts
@@ -13723,6 +13794,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
                     }
                   : {
                       ...entry,
+                      ...resolveProcessLifecycle(entry),
                       endedByMaintenanceContestResultId: resolved.resultId,
                       endedRound: normalized.roundNumber,
                       status: "ended",
@@ -13737,6 +13809,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
             ? entry
             : unbalancedCombatConditionSchema.parse({
                 ...entry,
+                ...resolveProcessLifecycle(entry),
                 endedByMaintenanceContestResultId: resolved.resultId,
                 endedRound: normalized.roundNumber,
                 status: "ended",

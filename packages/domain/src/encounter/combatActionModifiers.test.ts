@@ -22,6 +22,7 @@ import {
   isReactiveAttackGeneratedInitiativeModifier,
 } from "./combatActionModifiers";
 import { resolveCombatAttackPhaseDefensivePenalties } from "./combatAttackPhasePenalty";
+import { canonicalCombatModifierEffectSchema } from "./combatModifierLifecycle";
 
 function applyCombatActionGeneratedModifiers(
   input: Parameters<typeof applyCanonicalCombatActionGeneratedModifiers>[0],
@@ -57,6 +58,81 @@ function applyCombatActionGeneratedModifiers(
 }
 
 describe("combat action generated modifiers", () => {
+  it("attaches typed lifecycle facts to supported short-lived declaration producers", () => {
+    const lifecycleContext = {
+      createdAt: "2026-08-01T10:00:00.000Z",
+      createdRevision: "revision-20",
+      createdSequence: 50,
+      encounterId: "encounter-1",
+      ownerParticipantId: "test-participant",
+      visibility: { audience: "involved" as const, sourceIdentity: "public" as const },
+    };
+    const parry = applyCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      lifecycleContext,
+      parryModifier: { dodgeSkillValue: 17, percentageModifier: 3 },
+      sourceRoundNumber: 4,
+    }).modifierBuckets.situationDb[0];
+    const adjustDistance = applyCombatActionGeneratedModifiers({
+      actionId: "adjust_range_attack",
+      adjustDistance: { currentDistance: 4, requestedDistance: 3, roundNumber: 4 },
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      lifecycleContext,
+      sourceRoundNumber: 4,
+    }).modifierBuckets.situationDb.find(isAdjustRangeAttackGeneratedDbParryModifier);
+    const offensiveParry = applyCombatActionGeneratedModifiers({
+      actionId: "offensive_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      lifecycleContext,
+      sourceRoundNumber: 4,
+    }).modifierBuckets.situationDb[0];
+
+    expect(parry.canonicalLifecycle).toMatchObject({
+      lifecycle: { duration: { kind: "rounds", remaining: 1 }, state: "active" },
+      payload: { category: "db_parry", unit: "percentage", value: 3 },
+      sourceFamily: "declaration",
+    });
+    expect(adjustDistance?.canonicalLifecycle).toMatchObject({
+      applicability: { phase: "phase1" },
+      lifecycle: { duration: { kind: "phase", phase: "phase1" }, state: "active" },
+      payload: { category: "db_parry", unit: "percentage", value: -2 },
+    });
+    expect(offensiveParry.canonicalLifecycle).toMatchObject({
+      lifecycle: { duration: { kind: "rounds", remaining: 1 }, state: "active" },
+      payload: { category: "db_parry", unit: "percentage", value: -2 },
+      sourceFamily: "offensive_parry",
+    });
+  });
+
+  it("projects one typed attack-penalty lifecycle per opportunity", () => {
+    const context = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      lifecycleContext: {
+        createdAt: "2026-08-01T10:00:00.000Z",
+        createdRevision: "revision-20",
+        createdSequence: 50,
+        encounterId: "encounter-1",
+        ownerParticipantId: "test-participant",
+      },
+      sourceRoundNumber: 4,
+    });
+    const attackEffects = context.modifierBuckets.situationDb.flatMap((entry) =>
+      canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle).success
+        ? [canonicalCombatModifierEffectSchema.parse(entry.canonicalLifecycle)]
+        : [],
+    ).filter(
+      (effect) => effect.sourceFamily === "attack_opportunity",
+    );
+
+    expect(attackEffects).toHaveLength(2);
+    expect(new Set(attackEffects.map((effect) => effect.sourceReferences.opportunityId)).size).toBe(
+      2,
+    );
+    expect(attackEffects.every((effect) => effect.payload.kind === "numeric" && effect.payload.unit === "percentage")).toBe(true);
+  });
+
   it("creates one round-scoped Parry percentage modifier with Dodge provenance", () => {
     const context = applyCombatActionGeneratedModifiers({
       actionId: "parry",
@@ -289,6 +365,7 @@ describe("combat action generated modifiers", () => {
     expect(context.modifierBuckets.situationDb).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          application: "percentage",
           durationRounds: 1,
           generated: true,
           id: ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,

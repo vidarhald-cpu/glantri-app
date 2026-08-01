@@ -253,6 +253,7 @@ const doubleAttackPhase2DbParryModifierEntry = {
   value: -4,
 };
 const adjustRangePhase1DbParryModifierEntry = {
+  application: "percentage" as const,
   durationRounds: 1,
   generated: true,
   id: "generated:adjust-range-attack:phase1:db-parry",
@@ -12445,7 +12446,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
-  it("applies the committed Offensive Parry flat DB drawback to a stale defender snapshot", async () => {
+  it("replays a legacy Offensive Parry flat DB record without reclassifying its unit", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const defenderState = {
       ...makeCombatScenarioParticipant({ id: "participant-2" }).state,

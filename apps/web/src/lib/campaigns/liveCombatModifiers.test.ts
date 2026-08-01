@@ -313,6 +313,57 @@ describe("live combat modifiers", () => {
     ).toBe(20 - expectedAdjustment!);
   });
 
+  it("combines the Adjust Distance closer penalty with Phase 1 DB/Parry percentages once", () => {
+    const summary = buildEncounterLiveCombatModifierSummary({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              application: "percentage",
+              generated: true,
+              id: "generated:adjust-range-attack:phase1:db-parry",
+              scope: "until",
+              sourceActionId: "adjust_range_attack",
+              sourcePhase: "phase1",
+              sourceProposalId: "adjust-distance:round:4:attacker",
+              sourceRule: "adjust-range-phase1-db-parry",
+              value: -2,
+            },
+            {
+              application: "percentage",
+              id: "phase1-cover",
+              notes: "Phase 1 cover",
+              scope: "until",
+              sourcePhase: "phase1",
+              value: 1,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      phaseKey: "phase1",
+    });
+    const defense = calculateWorkbookDefensePair({
+      baseDb: 16,
+      rawModifiers: [{ label: "DB/Parry", value: summary.dbRaw }],
+    });
+
+    expect(summary).toMatchObject({ dbFlatAdjustment: 0, dbRaw: -1 });
+    expect(defense).toMatchObject({
+      db: 14,
+      fullAdjustment: 2,
+      fullModifier: -1,
+      fullTrace: {
+        baseValue: 16,
+        finalValue: 14,
+        percentageAdjustment: 2,
+        rawModifierTotal: -1,
+      },
+    });
+  });
+
   it("documents workbook live modifier results for zero, shield, and combined defense bases", () => {
     expect(lookupWorkbookPercentageAdjustment(0, 1)).toBe(1);
     expect(

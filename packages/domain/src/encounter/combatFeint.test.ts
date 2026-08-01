@@ -22,6 +22,7 @@ import {
   getMergedCombatDbParryModifierTotal,
   getMergedCombatSkillObModifierTotal,
 } from "./combatModifierProjection";
+import { canonicalCombatModifierEffectSchema } from "./combatModifierLifecycle";
 
 const createdAt = "2026-07-15T12:00:00.000Z";
 
@@ -98,6 +99,34 @@ function state() {
 }
 
 describe("combat feint modifiers", () => {
+  it("attaches separate canonical lifecycle identities to equal Feint consequence categories", () => {
+    const applied = applyCommittedCombatFeintModifiers({
+      lifecycleContext: {
+        createdAt,
+        createdRevision: "revision-20",
+        createdSequence: 20,
+        encounterId: "encounter-1",
+      },
+      proposal: proposal("committed"),
+    });
+    const skillOb = applied.defenderCombatContext.modifierBuckets.situationObSkill[0];
+    const dbParry = applied.defenderCombatContext.modifierBuckets.situationDb[0];
+
+    expect(skillOb.canonicalLifecycle).toMatchObject({
+      applicability: { phase: "phase2" },
+      payload: { category: "skill_ob", unit: "percentage", value: -2 },
+      sourceFamily: "feint",
+    });
+    expect(dbParry.canonicalLifecycle).toMatchObject({
+      applicability: { phase: "phase2" },
+      payload: { category: "db_parry", unit: "percentage", value: -2 },
+      sourceFamily: "feint",
+    });
+    expect(canonicalCombatModifierEffectSchema.parse(skillOb.canonicalLifecycle).id).not.toBe(
+      canonicalCombatModifierEffectSchema.parse(dbParry.canonicalLifecycle).id,
+    );
+  });
+
   it("creates separate phase-scoped rows and replaces only the proposal rows", () => {
     const committed = proposal("committed");
     const existing = scenarioParticipantCombatContextSchema.parse({

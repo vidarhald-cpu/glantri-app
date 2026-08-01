@@ -2,11 +2,24 @@ import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import {
+  canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierLifecycleTransitionSchema,
+} from "../encounter/combatModifierLifecycle";
 import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
+const scenarioCanonicalCombatModifierEffectSchema = z.unknown().refine(
+  (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
+  "Invalid canonical combat modifier lifecycle.",
+);
+const scenarioCanonicalCombatModifierTransitionSchema =
+  z.unknown().refine(
+    (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
+    "Invalid canonical combat modifier transition.",
+  );
 
 export const scenarioVisibilitySchema = z.enum(["hidden", "visible_to_all", "gm_only"]);
 export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
@@ -127,7 +140,10 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 ]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
+  // `flat_db` is compatibility/explicit-source-only; new combat modifiers default to percentage.
   application: z.enum(["percentage", "flat_db"]).optional(),
+  canonicalLifecycle: scenarioCanonicalCombatModifierEffectSchema.optional(),
+  canonicalTransitions: z.array(scenarioCanonicalCombatModifierTransitionSchema).optional(),
   combatWide: z.boolean().optional(),
   durationRounds: z.number().int().positive().optional(),
   excludedRollPurposes: z.array(z.string().min(1)).optional(),
@@ -728,6 +744,26 @@ export function buildScenarioPlayerVisibleParticipants(input: {
     );
 }
 
+function stripPrivateModifierLifecycleFromPlayerCombatContext(
+  combatContext: ScenarioParticipantCombatContext | undefined,
+): ScenarioParticipantCombatContext | undefined {
+  if (!combatContext) return undefined;
+  const strip = (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry => {
+    const { canonicalLifecycle: _canonicalLifecycle, canonicalTransitions: _transitions, ...safe } =
+      entry;
+    return safe;
+  };
+  return {
+    ...combatContext,
+    modifierBuckets: {
+      general: combatContext.modifierBuckets.general.map(strip),
+      situationDb: combatContext.modifierBuckets.situationDb.map(strip),
+      situationInitiative: combatContext.modifierBuckets.situationInitiative.map(strip),
+      situationObSkill: combatContext.modifierBuckets.situationObSkill.map(strip),
+    },
+  };
+}
+
 export function buildScenarioPlayerProjection(input: {
   participants: ScenarioParticipant[];
   scenario: Scenario;
@@ -758,7 +794,9 @@ export function buildScenarioPlayerProjection(input: {
       ? {
           build: controlledParticipant.snapshot.build as CharacterBuild | undefined,
           characterId: controlledParticipant.characterId,
-          combatContext: controlledParticipant.state.combat.combatContext,
+          combatContext: stripPrivateModifierLifecycleFromPlayerCombatContext(
+            controlledParticipant.state.combat.combatContext,
+          ),
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,

@@ -12,6 +12,10 @@ import {
 } from "./combatDistance";
 import type { MovementIntent } from "./combatMovementIntent";
 import type { CombatAttackPhaseDefensivePenalty } from "./combatAttackPhasePenalty";
+import {
+  attachCanonicalLifecycleToModifierBucketRow,
+  type CanonicalCombatModifierCompatibilityContext,
+} from "./combatModifierLifecycleCompatibility";
 
 export const ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE = "attack-phase-defensive-penalty";
 
@@ -642,6 +646,7 @@ export function buildReactiveAttackPhase2GeneratedInitiativeModifier(input: {
 export function buildDoubleAttackGeneratedObSkillModifiers(): ScenarioCombatModifierEntry[] {
   return [
     {
+      application: "percentage",
       durationRounds: 1,
       generated: true,
       id: DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
@@ -653,6 +658,7 @@ export function buildDoubleAttackGeneratedObSkillModifiers(): ScenarioCombatModi
       value: -1,
     },
     {
+      application: "percentage",
       durationRounds: 1,
       generated: true,
       id: DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
@@ -669,6 +675,7 @@ export function buildDoubleAttackGeneratedObSkillModifiers(): ScenarioCombatModi
 export function buildDoubleAttackGeneratedDbParryModifiers(): ScenarioCombatModifierEntry[] {
   return [
     {
+      application: "percentage",
       durationRounds: 1,
       generated: true,
       id: DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
@@ -680,6 +687,7 @@ export function buildDoubleAttackGeneratedDbParryModifiers(): ScenarioCombatModi
       value: -4,
     },
     {
+      application: "percentage",
       durationRounds: 1,
       generated: true,
       id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
@@ -792,6 +800,7 @@ export function buildAdjustRangeAttackGeneratedDbParryModifiers(input?: {
   }
   return [
     {
+      application: "percentage",
       durationRounds: 1,
       ...(input.roundNumber ? { expiresAtRound: input.roundNumber } : {}),
       generated: true,
@@ -835,6 +844,9 @@ export function applyCombatActionGeneratedModifiers(input: {
   adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
   sourceEncounterId?: string;
   sourceRoundNumber?: number;
+  lifecycleContext?: CanonicalCombatModifierCompatibilityContext & {
+    ownerParticipantId: string;
+  };
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter((entry) => {
@@ -882,12 +894,26 @@ export function applyCombatActionGeneratedModifiers(input: {
       }),
     )
     .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
-  const withSourceProvenance = (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry =>
-    scenarioCombatModifierEntrySchema.parse({
+  const withSourceProvenance = (
+    bucket: "situation_db" | "situation_initiative" | "situation_ob_skill",
+    entry: ScenarioCombatModifierEntry,
+  ): ScenarioCombatModifierEntry => {
+    const sourced = scenarioCombatModifierEntrySchema.parse({
       ...entry,
       sourceEncounterId: input.sourceEncounterId ?? entry.sourceEncounterId,
       sourceRoundNumber: input.sourceRoundNumber ?? entry.sourceRoundNumber,
     });
+    return input.lifecycleContext
+      ? scenarioCombatModifierEntrySchema.parse(
+          attachCanonicalLifecycleToModifierBucketRow({
+            bucket,
+            context: input.lifecycleContext,
+            entry: sourced,
+            ownerParticipantId: input.lifecycleContext.ownerParticipantId,
+          }),
+        )
+      : sourced;
+  };
 
   return {
     ...input.combatContext,
@@ -897,17 +923,27 @@ export function applyCombatActionGeneratedModifiers(input: {
       // product-facing bucket is now DB/Parry.
       situationDb: [
         ...situationDbWithoutGeneratedActionModifiers,
-        ...generatedAttackPhaseDefensivePenaltyModifiers.map(withSourceProvenance),
-        ...generatedDbParryModifiers.map(withSourceProvenance),
+        ...generatedAttackPhaseDefensivePenaltyModifiers.map((entry) =>
+          withSourceProvenance("situation_db", entry),
+        ),
+        ...generatedDbParryModifiers.map((entry) =>
+          withSourceProvenance("situation_db", entry),
+        ),
       ],
       situationInitiative: [
         ...situationInitiativeWithoutGeneratedActionModifiers,
-        ...(input.initiativeModifiers ?? []).map(withSourceProvenance),
+        ...(input.initiativeModifiers ?? []).map((entry) =>
+          withSourceProvenance("situation_initiative", entry),
+        ),
       ],
       situationObSkill: [
         ...situationObSkillWithoutGeneratedActionModifiers,
-        ...generatedObSkillModifiers.map(withSourceProvenance),
-        ...generatedDistanceObSkillModifiers.map(withSourceProvenance),
+        ...generatedObSkillModifiers.map((entry) =>
+          withSourceProvenance("situation_ob_skill", entry),
+        ),
+        ...generatedDistanceObSkillModifiers.map((entry) =>
+          withSourceProvenance("situation_ob_skill", entry),
+        ),
       ],
     },
   };

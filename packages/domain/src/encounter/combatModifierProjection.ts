@@ -181,10 +181,11 @@ export function isPersistentCombatModifierEntry(entry: ScenarioCombatModifierEnt
 }
 
 function buildImportedEntry(input: {
+  canonicalLifecycle?: CombatEffect["canonicalLifecycle"];
   effect: CombatEffect;
   event?: CombatEffectEvent;
 }): ScenarioCombatModifierEntry {
-  const canonical = input.effect.canonicalLifecycle;
+  const canonical = input.canonicalLifecycle ?? input.effect.canonicalLifecycle;
   const canonicalNumeric = canonical?.payload.kind === "numeric" ? canonical.payload : undefined;
   const canonicalDuration = canonical?.lifecycle.duration;
   return {
@@ -194,6 +195,8 @@ function buildImportedEntry(input: {
         : canonicalNumeric?.unit === "flat_db"
           ? "flat_db"
           : undefined,
+    canonicalLifecycle: canonical,
+    canonicalTransitions: input.effect.canonicalTransitions ?? [],
     combatWide:
       canonical?.applicability.combatWide ??
       input.effect.combatWide ??
@@ -267,7 +270,15 @@ export function projectPersistentCombatEffectModifiers(
       continue;
     }
 
+    const canonicalLifecycle =
+      effect.canonicalLifecycle?.lifecycle.state === "pending_activation"
+        ? {
+            ...effect.canonicalLifecycle,
+            lifecycle: { ...effect.canonicalLifecycle.lifecycle, state: "active" as const },
+          }
+        : effect.canonicalLifecycle;
     const entry = buildImportedEntry({
+      canonicalLifecycle,
       effect,
       event: eventsById.get(effect.sourceEventId),
     });
@@ -389,9 +400,9 @@ export function buildLiveCombatModifierContributionProjection(
     const entries = combatContext.modifierBuckets[bucketKey];
 
     for (const entry of entries) {
-      // Flat DB points are composed directly into DB after percentage adjustment. They are not
-      // percentage contributions and must never affect Parry merely because legacy storage
-      // shares the situationDb bucket.
+      // Explicit source-defined or legacy flat DB points are composed directly into DB after
+      // percentage adjustment. They must never affect Parry merely because legacy storage shares
+      // the situationDb bucket.
       if (entry.application === "flat_db") continue;
       if (seenIds.has(entry.id)) continue;
 
@@ -524,7 +535,7 @@ export function getMergedCombatDbParryModifierTotal(input: {
   }).dbParry;
 }
 
-/** Flat DB points are applied after workbook percentage adjustment and never affect Parry. */
+/** Explicit source-defined or legacy flat DB points apply after adjustment and never affect Parry. */
 export function getMergedCombatDbFlatAdjustmentTotal(input: {
   combatContext?: ScenarioParticipantCombatContext;
   phase?: "phase1" | "phase2";

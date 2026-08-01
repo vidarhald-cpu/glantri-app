@@ -7,6 +7,7 @@ import type { CombatEffect, CombatEffectEvent } from "./combatEffects";
 import {
   CANONICAL_COMBAT_MODIFIER_LIFECYCLE_SCHEMA_VERSION,
   canonicalCombatModifierEffectSchema,
+  transitionCanonicalCombatModifierEffect,
   type CanonicalCombatModifierCompleteness,
   type CanonicalCombatModifierDuration,
   type CanonicalCombatModifierEffect,
@@ -322,7 +323,14 @@ function familyForBucketRow(
 ): CanonicalCombatModifierSourceFamily {
   if (entry.sourceType === "feint" || entry.sourceRule?.startsWith("feint:")) return "feint";
   if (entry.sourceOpportunityId) return "attack_opportunity";
-  if (entry.sourceRule === "offensive_parry:declaration_penalty") return "offensive_parry";
+  if (
+    entry.sourceActionId === "offensive_parry" ||
+    entry.sourceRule?.includes("offensive-parry")
+  ) {
+    return "offensive_parry";
+  }
+  if (entry.sourceActionId === "parry") return "declaration";
+  if (entry.sourceActionId === "adjust_range_attack") return "declaration";
   if (entry.sourceType === "character_effect") return "persistent_effect";
   return entry.generated ? "system" : "manual";
 }
@@ -338,7 +346,6 @@ function durationForBucketRow(input: {
     return { duration: input.context.explicitDuration, missingFacts: [] };
   }
   if (
-    input.entry.sourceType === "feint" &&
     input.entry.sourcePhase &&
     input.entry.sourceRoundNumber !== undefined &&
     input.context.createdSequence !== undefined
@@ -351,6 +358,23 @@ function durationForBucketRow(input: {
         startPhase: input.entry.sourcePhase,
         startRound: input.entry.sourceRoundNumber,
         startSequence: input.context.createdSequence,
+      },
+      missingFacts: [],
+    };
+  }
+  if (
+    input.entry.durationRounds === 1 &&
+    input.entry.sourceRoundNumber !== undefined &&
+    input.context.createdSequence !== undefined
+  ) {
+    return {
+      duration: {
+        creationRoundCounts: true,
+        kind: "rounds",
+        remaining: 1,
+        startRound: input.entry.sourceRoundNumber,
+        startSequence: input.context.createdSequence,
+        transitionBoundary: "round_boundary",
       },
       missingFacts: [],
     };
@@ -372,6 +396,23 @@ export function adaptModifierBucketRowToCanonicalLifecycle(input: {
   entry: ScenarioCombatModifierEntry;
   ownerParticipantId: string;
 }): CanonicalCombatModifierCompatibilityResult {
+  if (input.entry.canonicalLifecycle) {
+    const parsed = canonicalCombatModifierEffectSchema.safeParse(input.entry.canonicalLifecycle);
+    if (!parsed.success) {
+      return {
+        authority: "modifier_bucket",
+        classification: "unsupported_ambiguity",
+        missingFacts: ["lifecycle"],
+      };
+    }
+    const effect = parsed.data;
+    return {
+      authority: "modifier_bucket",
+      classification: effect.provenanceCompleteness,
+      effect,
+      missingFacts: effect.missingFacts,
+    };
+  }
   const sourceFamily = familyForBucketRow(input.entry);
   const knownFeintPercentage = sourceFamily === "feint";
   const unit =
@@ -398,7 +439,7 @@ export function adaptModifierBucketRowToCanonicalLifecycle(input: {
 
   const state = input.entry.provisional
     ? "provisional"
-    : input.entry.sourcePhase && input.entry.sourceRoundNumber
+    : input.entry.generated && input.entry.sourceRoundNumber
       ? "active"
       : "pending_review";
   const effect = canonicalCombatModifierEffectSchema.parse({
@@ -448,6 +489,66 @@ export function adaptModifierBucketRowToCanonicalLifecycle(input: {
     effect,
     legacyFacts: { rawDuration: input.entry.sourceDuration, rawValue: input.entry.value },
     missingFacts,
+  };
+}
+
+/**
+ * Attaches the canonical lifecycle projection to a short-lived compatibility row. The row remains
+ * an editing/projection shape; its source proposal, declaration, or opportunity stays authoritative.
+ */
+export function attachCanonicalLifecycleToModifierBucketRow(input: {
+  bucket: LegacyCombatModifierBucket;
+  context: CanonicalCombatModifierCompatibilityContext;
+  entry: ScenarioCombatModifierEntry;
+  ownerParticipantId: string;
+}): ScenarioCombatModifierEntry {
+  const projection = adaptModifierBucketRowToCanonicalLifecycle(input);
+  return projection.effect
+    ? {
+        ...input.entry,
+        canonicalLifecycle: projection.effect,
+        canonicalTransitions: input.entry.canonicalTransitions ?? [],
+      }
+    : input.entry;
+}
+
+/** Updates an attached producer projection without changing its stable effect identity. */
+export function transitionCanonicalModifierBucketRow(input: {
+  acceptedRevision: string;
+  acceptedSequence: number;
+  commandId?: string;
+  entry: ScenarioCombatModifierEntry;
+  nextState?: CanonicalCombatModifierLifecycleState;
+  nextValue?: number;
+  reason: "opportunity_consumed" | "source_resolved";
+  transitionId: string;
+  transitionType: "consume" | "resolve" | "update";
+}): ScenarioCombatModifierEntry {
+  if (!input.entry.canonicalLifecycle) return input.entry;
+  const effect = canonicalCombatModifierEffectSchema.parse(input.entry.canonicalLifecycle);
+  const nextPayload =
+    input.nextValue !== undefined && effect.payload.kind === "numeric"
+      ? { ...effect.payload, value: input.nextValue }
+      : effect.payload;
+  const transitioned = transitionCanonicalCombatModifierEffect({
+    acceptedRevision: input.acceptedRevision,
+    acceptedSequence: input.acceptedSequence,
+    commandId: input.commandId,
+    effect,
+    nextPayload,
+    nextState: input.nextState ?? effect.lifecycle.state,
+    reason: input.reason,
+    transitionId: input.transitionId,
+    transitionType: input.transitionType,
+  });
+  return {
+    ...input.entry,
+    canonicalLifecycle: transitioned.effect,
+    canonicalTransitions: [
+      ...(input.entry.canonicalTransitions ?? []),
+      transitioned.transition,
+    ],
+    value: input.nextValue ?? input.entry.value,
   };
 }
 
@@ -628,6 +729,67 @@ export function projectProcessRestrictionToCanonicalModifierLifecycle(input: {
     schemaVersion: CANONICAL_COMBAT_MODIFIER_LIFECYCLE_SCHEMA_VERSION,
     sourceFamily,
     sourceReferences: { processId: input.processId },
+    version: 1,
+    visibility: input.context.visibility ?? defaultVisibility,
+  });
+  return {
+    authority: "process_state",
+    classification: effect.provenanceCompleteness,
+    effect,
+    missingFacts,
+  };
+}
+
+/**
+ * Numeric compatibility projection for a process-owned condition. The process retains durable
+ * ownership; this effect is the one calculation-facing projection and must share its identity.
+ */
+export function projectProcessNumericContributionToCanonicalModifierLifecycle(input: {
+  activationCutoff?: { afterInitiativeGroupId: string; kind: "initiative_group" };
+  category: "general_fatigue" | "skill_ob" | "db_parry";
+  context: CanonicalCombatModifierCompatibilityContext;
+  duration: CanonicalCombatModifierDuration;
+  effectId: string;
+  excludedRollPurposes?: readonly string[];
+  ownerParticipantId: string;
+  processId: string;
+  publicLabel: string;
+  sourceFamily: "continued_contact" | "unbalanced";
+  state?: "active" | "pending_activation";
+  unit: "percentage" | "flat_db";
+  value: number;
+}): CanonicalCombatModifierCompatibilityResult {
+  const missingFacts = uniqueMissingFacts(creationMissingFacts(input.context));
+  const effect = canonicalCombatModifierEffectSchema.parse({
+    applicability: {
+      activationCutoff: input.activationCutoff,
+      combatWide: true,
+      encounterId: input.context.encounterId,
+      processId: input.processId,
+      rollPurposes: [],
+    },
+    createdAt: input.context.createdAt,
+    createdRevision: input.context.createdRevision,
+    createdSequence: input.context.createdSequence,
+    id: input.effectId,
+    lifecycle: { duration: input.duration, state: input.state ?? "active" },
+    missingFacts,
+    ownerParticipantId: input.ownerParticipantId,
+    payload: {
+      category: input.category,
+      contributionScope: "calculation",
+      kind: "numeric",
+      rollPurposePolicy: input.excludedRollPurposes
+        ? { excluded: [...input.excludedRollPurposes], included: [] }
+        : undefined,
+      unit: input.unit,
+      value: input.value,
+    },
+    provenanceCompleteness: completenessFor({ missingFacts }),
+    publicLabel: input.publicLabel,
+    schemaVersion: CANONICAL_COMBAT_MODIFIER_LIFECYCLE_SCHEMA_VERSION,
+    sourceFamily: input.sourceFamily,
+    sourceReferences: { effectId: input.effectId, processId: input.processId },
     version: 1,
     visibility: input.context.visibility ?? defaultVisibility,
   });

@@ -10,6 +10,7 @@ import type {
   CombatSkillContestRole,
   CombatSkillContestType,
 } from "./combatSkillContest";
+import { projectObservationRelationshipToCanonicalModifierLifecycle } from "./combatModifierLifecycleCompatibility";
 
 const idSchema = z.string().min(1);
 
@@ -212,30 +213,58 @@ export function buildCombatObservationModifierContributions(input: {
   );
   if (!relationship) return [];
 
+  const lifecycleByBucket = new Map(
+    (relationship.lastAttempt
+      ? projectObservationRelationshipToCanonicalModifierLifecycle({
+          context: {
+            createdAt: relationship.lastAttempt.completedAt,
+            createdRevision: relationship.lastCompletedAttemptRevision,
+            encounterId: input.encounterId,
+            visibility: { audience: "involved", sourceIdentity: "public" },
+          },
+          observerParticipantId: input.observerParticipantId,
+          relationship,
+          targetParticipantId: input.opponentParticipantId,
+        })
+      : []
+    )
+      .flatMap((projection) => (projection.effect ? [projection.effect] : []))
+      .map((effect) => [
+        effect.payload.kind === "numeric" ? effect.payload.category : undefined,
+        effect,
+      ] as const),
+  );
+
   const makeContribution = (
     bucket: Extract<CombatModifierContributionBucket, "skill_ob" | "db_parry">,
-  ): CombatModifierContribution => ({
-    applicability: {
-      opponentParticipantId: input.opponentParticipantId,
-      participantId: input.observerParticipantId,
-    },
-    bucket,
-    editPolicy: "source_only",
-    id: `${relationship.id}:modifier:${bucket}`,
-    label: "Observe Opponent",
-    lifetime: {
-      kind: "encounter",
-      status: "active",
-    },
-    notes: `Observed opponent: ${input.opponentParticipantId}`,
-    ownerParticipantId: input.observerParticipantId,
-    readOnly: true,
-    schemaVersion: 1,
-    sourceEncounterId: input.encounterId,
-    sourceId: relationship.id,
-    sourceKind: "system_derived",
-    value: relationship.bestBonus,
-  });
+  ): CombatModifierContribution => {
+    const canonicalLifecycle = lifecycleByBucket.get(bucket);
+    return {
+      applicability: {
+        opponentParticipantId: input.opponentParticipantId,
+        participantId: input.observerParticipantId,
+      },
+      bucket,
+      canonicalLifecycle,
+      editPolicy: "source_only",
+      id: `${relationship.id}:modifier:${bucket}`,
+      label: "Observe Opponent",
+      lifetime: {
+        kind: "encounter",
+        status: "active",
+      },
+      lifecycleState: canonicalLifecycle?.lifecycle.state,
+      notes: `Observed opponent: ${input.opponentParticipantId}`,
+      ownerParticipantId: input.observerParticipantId,
+      readOnly: true,
+      schemaVersion: 1,
+      sourceEncounterId: input.encounterId,
+      sourceId: relationship.id,
+      sourceKind: "system_derived",
+      unit: "percentage",
+      value: relationship.bestBonus,
+    };
+  };
 
   return [makeContribution("skill_ob"), makeContribution("db_parry")];
 }

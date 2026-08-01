@@ -32,11 +32,10 @@ winner, so Continued Contact is not established.
 1. A participant commits an `offensive_parry` declaration and selects one prepared opponent.
    The shared GM/Player declaration form places this encounter-participant selector in Phase 1,
    alongside other Phase 1 opponent-bound maneuvers; it is not part of the general Action panel.
-2. One generated, round-bound `flat_db` modifier applies DB −2. Recommit uses the same deterministic
+2. One generated, round-bound percentage modifier applies DB/Parry −2%. Recommit uses the same deterministic
    row identity and does not stack it. The generated row is the single fact shown in declaration
-   preview, presented for GM modifier review, persisted on commit, and composed into effective DB
-   after percentage adjustment. A base combined DB of 15 therefore resolves as DB 13 for attacks
-   in that round. It is not the later Unbalanced percentage modifier.
+   preview, presented for GM modifier review, persisted on commit, and combined with other raw
+   DB/Parry percentages before one workbook adjustment. It is not the later Unbalanced modifier.
 3. Any qualifying canonical attack by that selected opponent against the declarer creates one
    proactive Offensive Parry task. The source attack does not need to hit, exceed DB, or enter an
    ordinary defensive-parry branch.

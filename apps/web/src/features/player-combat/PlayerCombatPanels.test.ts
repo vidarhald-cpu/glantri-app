@@ -486,7 +486,7 @@ describe("PlayerCombatPanels", () => {
     expect(formatCombatModifierScopeLabel(dbEntry)).toBe("P1");
   });
 
-  it("groups linked equal Feint OB and DB rows without merging their calculation buckets", () => {
+  it("keeps linked equal Feint OB and DB rows independently identifiable", () => {
     const rows = buildPlayerCombatModifierRows({
       combatContext: {
         modifierBuckets: {
@@ -519,16 +519,7 @@ describe("PlayerCombatPanels", () => {
       phaseKey: "phase2",
     });
 
-    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([
-      {
-        entryIds: [
-          "generated:feint:proposal:target:phase2:ob-skill",
-          "generated:feint:proposal:target:phase2:db-parry",
-        ],
-        resultGroupId: "proposal",
-        value: -4,
-      },
-    ]);
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
     expect(rows.find((row) => row.bucketKey === "situation_ob_skill")?.total).toBe(-4);
     expect(rows.find((row) => row.bucketKey === "situation_db")?.total).toBe(-4);
   });

@@ -706,7 +706,11 @@ describe("Offensive Parry rules", () => {
 
     const resolved = recordCombatRoundOffensiveParryBrawlingRoll({
       attackResultId: contest.attackResultId,
-      command: { commandId: "responder-roll-command", createdAt: at },
+      command: {
+        commandId: "responder-roll-command",
+        createdAt: at,
+        createdRevision: "revision-20",
+      },
       contestId: contest.id,
       declarationId: contest.declarationId,
       executionGroupId: "group",
@@ -730,6 +734,10 @@ describe("Offensive Parry rules", () => {
         affectedParticipantId: "attacker",
         controllerParticipantId: "defender",
         id: contactId,
+        canonicalLifecycle: expect.objectContaining({
+          payload: expect.objectContaining({ effectKind: "continued_contact" }),
+          sourceFamily: "continued_contact",
+        }),
       }),
     ]);
     expect(resolved.unbalancedConditions).toEqual([
@@ -737,6 +745,10 @@ describe("Offensive Parry rules", () => {
         affectedParticipantId: "attacker",
         id: buildUnbalancedConditionId({ continuedContactId: contactId }),
         modifierValue: -2,
+        canonicalLifecycle: expect.objectContaining({
+          payload: expect.objectContaining({ effectKind: "unbalanced" }),
+          sourceFamily: "unbalanced",
+        }),
       }),
     ]);
     const resolvedBrawlingTasks = buildCombatProgressionProjection(resolved)

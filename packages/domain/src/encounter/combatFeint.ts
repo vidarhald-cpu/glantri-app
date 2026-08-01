@@ -9,6 +9,10 @@ import {
 import type { SkillDefinition, SkillSpecialization } from "../content/skills";
 import { combatSkillContestCalculationSchema } from "./combatSkillContest";
 import type { CombatSkillContestCalculation } from "./combatSkillContest";
+import {
+  attachCanonicalLifecycleToModifierBucketRow,
+  type CanonicalCombatModifierCompatibilityContext,
+} from "./combatModifierLifecycleCompatibility";
 
 const idSchema = z.string().min(1);
 
@@ -221,9 +225,11 @@ function buildFeintModifier(input: {
   phase: "phase1" | "phase2";
   proposalId: string;
   value: number;
+  lifecycleContext?: CanonicalCombatModifierCompatibilityContext;
 }): ScenarioCombatModifierEntry {
   const sourceRound = input.proposalId.match(/:round:(\d+):/)?.[1];
-  return scenarioCombatModifierEntrySchema.parse({
+  const entry = scenarioCombatModifierEntrySchema.parse({
+    application: "percentage",
     durationRounds: 1,
     ...(sourceRound ? { expiresAtRound: Number(sourceRound) } : {}),
     generated: true,
@@ -242,6 +248,16 @@ function buildFeintModifier(input: {
       : {}),
     value: input.value,
   });
+  return input.lifecycleContext
+    ? scenarioCombatModifierEntrySchema.parse(
+        attachCanonicalLifecycleToModifierBucketRow({
+          bucket: input.bucket === "ob-skill" ? "situation_ob_skill" : "situation_db",
+          context: input.lifecycleContext,
+          entry,
+          ownerParticipantId: input.participantId,
+        }),
+      )
+    : entry;
 }
 
 function getCombatFeintModifierRound(entry: ScenarioCombatModifierEntry): number | undefined {
@@ -279,6 +295,7 @@ export function applyCommittedCombatFeintModifiers(input: {
   attackerCombatContext?: ScenarioParticipantCombatContext;
   defenderCombatContext?: ScenarioParticipantCombatContext;
   encounterId?: string;
+  lifecycleContext?: CanonicalCombatModifierCompatibilityContext;
   proposal: CombatFeintProposal;
 }): {
   attackerCombatContext: ScenarioParticipantCombatContext;
@@ -314,6 +331,7 @@ export function applyCommittedCombatFeintModifiers(input: {
     phase: "phase1",
     proposalId: input.proposal.id,
     value: attackerValue,
+    lifecycleContext: input.lifecycleContext,
   });
   const defenderOb = buildFeintModifier({
     bucket: "ob-skill",
@@ -322,6 +340,7 @@ export function applyCommittedCombatFeintModifiers(input: {
     phase: "phase2",
     proposalId: input.proposal.id,
     value: defenderObValue,
+    lifecycleContext: input.lifecycleContext,
   });
   const defenderDb = buildFeintModifier({
     bucket: "db-parry",
@@ -330,6 +349,7 @@ export function applyCommittedCombatFeintModifiers(input: {
     phase: "phase2",
     proposalId: input.proposal.id,
     value: defenderDbValue,
+    lifecycleContext: input.lifecycleContext,
   });
   const attackerRows = attackerValue === 0 ? [] : [attackerDb];
   const defenderObRows = defenderObValue === 0 ? [] : [defenderOb];

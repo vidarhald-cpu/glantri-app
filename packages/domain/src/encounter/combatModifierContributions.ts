@@ -2,6 +2,12 @@ import type {
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
 } from "../campaign/scenario";
+import {
+  canonicalCombatModifierEffectSchema,
+  type CanonicalCombatModifierEffect,
+  type CanonicalCombatModifierLifecycleState,
+  type CanonicalCombatModifierUnit,
+} from "./combatModifierLifecycle";
 import type { CombatRoundStep } from "./combatRoundManager";
 
 /**
@@ -96,8 +102,13 @@ export interface CombatModifierContribution {
   bucket: CombatModifierContributionBucket;
 
   value: number;
+  unit?: CanonicalCombatModifierUnit;
   label: string;
   notes?: string;
+
+  /** Immutable lifecycle facts retained from the canonical producer projection. */
+  canonicalLifecycle?: CanonicalCombatModifierEffect;
+  lifecycleState?: CanonicalCombatModifierLifecycleState;
 
   applicability: CombatModifierApplicability;
   lifetime: CombatModifierLifetime;
@@ -285,15 +296,60 @@ export function normalizeScenarioCombatModifierEntry(
 ): CombatModifierContribution | undefined {
   if (!Number.isFinite(input.entry.value)) return undefined;
 
-  const sourceKind = inferSourceKind(input.entry);
+  const canonicalLifecycle = canonicalCombatModifierEffectSchema.safeParse(
+    input.entry.canonicalLifecycle,
+  ).data;
+  if (
+    canonicalLifecycle &&
+    (canonicalLifecycle.payload.kind !== "numeric" ||
+      canonicalLifecycle.payload.category !== mapBucket(input.bucket))
+  ) {
+    return undefined;
+  }
+  const sourceKind = canonicalLifecycle
+    ? canonicalLifecycle.sourceFamily === "attack_opportunity" ||
+      canonicalLifecycle.sourceFamily === "observe_relationship"
+      ? "system_derived"
+      : canonicalLifecycle.sourceFamily === "persistent_effect"
+        ? "persistent_effect"
+        : "action_generated"
+    : inferSourceKind(input.entry);
   const readOnly = input.entry.readOnly ?? sourceKind === "persistent_effect";
-  const status: CombatModifierContributionStatus =
+  const status: CombatModifierContributionStatus = canonicalLifecycle
+    ? canonicalLifecycle.lifecycle.state === "expired"
+      ? "expired"
+      : canonicalLifecycle.lifecycle.state === "resolved" ||
+          canonicalLifecycle.lifecycle.state === "consumed" ||
+          canonicalLifecycle.lifecycle.state === "superseded"
+        ? "resolved"
+        : canonicalLifecycle.lifecycle.state === "removed" ||
+            canonicalLifecycle.lifecycle.state === "rejected"
+          ? "removed"
+          : canonicalLifecycle.lifecycle.state === "active"
+            ? "active"
+            : "pending"
+    :
     input.currentRound !== undefined &&
     input.entry.expiresAtRound !== undefined &&
     input.entry.expiresAtRound < input.currentRound
       ? "expired"
       : "active";
-  const inferredApplicability = inferApplicability(input.entry);
+  const inferredApplicability = canonicalLifecycle
+    ? {
+        actionId: canonicalLifecycle.applicability.actionId,
+        activatesAfterSequence:
+          canonicalLifecycle.applicability.activationCutoff?.kind === "sequence"
+            ? canonicalLifecycle.applicability.activationCutoff.afterSequence
+            : undefined,
+        combatWide: canonicalLifecycle.applicability.combatWide,
+        opponentParticipantId: canonicalLifecycle.applicability.opponentParticipantId,
+        opportunityId: canonicalLifecycle.applicability.opportunityId,
+        pairKey: canonicalLifecycle.applicability.pairKey,
+        phase: canonicalLifecycle.applicability.phase,
+        participantId: canonicalLifecycle.ownerParticipantId,
+        step: canonicalLifecycle.applicability.step,
+      }
+    : inferApplicability(input.entry);
   const applicability = {
     combatWide: input.entry.combatWide,
     excludedRollPurposes: input.entry.excludedRollPurposes,
@@ -312,13 +368,22 @@ export function normalizeScenarioCombatModifierEntry(
     sourceRoundNumber: input.entry.sourceRoundNumber,
     sourceProposalId: input.entry.sourceProposalId,
     bucket: mapBucket(input.bucket),
-    value: input.entry.value,
+    value:
+      canonicalLifecycle?.payload.kind === "numeric"
+        ? canonicalLifecycle.payload.value
+        : input.entry.value,
+    unit:
+      canonicalLifecycle?.payload.kind === "numeric"
+        ? canonicalLifecycle.payload.unit
+        : input.entry.application,
     label:
       input.entry.notes?.trim() ||
       input.entry.sourceRule?.trim() ||
       input.entry.sourceActionId?.trim() ||
       "Combat modifier",
     notes: input.entry.notes,
+    canonicalLifecycle,
+    lifecycleState: canonicalLifecycle?.lifecycle.state,
     applicability,
     lifetime: {
       kind: lifetimeKind,

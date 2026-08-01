@@ -609,6 +609,51 @@ describe("combat Dodge modifier resolution", () => {
     expect(defenderResolution.rows).toHaveLength(1);
   });
 
+  it("retains all Phase 2 Feint, Observe, and Parry sources when DB/Parry totals zero", () => {
+    const contributions = [
+      contribution(
+        { opponentParticipantId: "opponent", phase: "phase2" },
+        { id: "feint-skill", sourceId: "feint:result:skill", value: -2 },
+      ),
+      contribution(
+        { opponentParticipantId: "opponent", phase: "phase2" },
+        { id: "observe-skill", sourceId: "observe:relationship:skill", value: 1 },
+      ),
+      contribution(
+        { opponentParticipantId: "opponent", phase: "phase2" },
+        { bucket: "db_parry", id: "feint-db", sourceId: "feint:result:db", value: -2 },
+      ),
+      contribution(
+        { opponentParticipantId: "opponent", phase: "phase2" },
+        { bucket: "db_parry", id: "observe-db", sourceId: "observe:relationship:db", value: 1 },
+      ),
+      contribution(
+        { phase: "phase2" },
+        { bucket: "db_parry", id: "parry-db", sourceId: "parry:declaration", value: 1 },
+      ),
+    ];
+    const calculationContext = context({
+      opponentParticipantId: "opponent",
+      phase: "phase2",
+    });
+    const skill = resolveCombatModifierContributions({
+      bucket: "skill_ob",
+      context: calculationContext,
+      contributions,
+    });
+    const db = resolveCombatModifierContributions({
+      bucket: "db_parry",
+      context: calculationContext,
+      contributions,
+    });
+
+    expect(contributions.map((entry) => entry.sourceId)).toHaveLength(5);
+    expect(skill.total).toBe(-1);
+    expect(skill.rows.map((entry) => entry.id)).toEqual(["feint-skill", "observe-skill"]);
+    expect(db.total).toBe(0);
+    expect(db.rows.map((entry) => entry.id)).toEqual(["feint-db", "observe-db", "parry-db"]);
+  });
+
   it("normalizes a deterministic proposal-scoped roll adjustment", () => {
     const pairKey = createCombatParticipantPairKey("attacker", "defender");
     const adjustment = normalizeCombatRollAdjustment({

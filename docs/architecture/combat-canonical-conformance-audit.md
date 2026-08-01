@@ -590,10 +590,11 @@ contest, process, stage, task, and group. Continued Contact and Unbalanced are s
 facts.
 
 The declaration surface follows the Phase 1 opponent-binding pattern used by Feint and Adjust
-Distance. Its deterministic `flat_db` row remains one canonical fact through preview, GM review,
-participant state, snapshot provenance, and effective defender DB. Attack authorization continues
-to validate the ordinary DB/Parry contribution fingerprint, while attack resolution composes the
-flat row with the exact defender snapshot instead of trusting a stale sheet value or request.
+Distance. Its deterministic percentage row remains one canonical fact through preview, GM review,
+participant state, snapshot provenance, and effective defender DB/Parry. Attack authorization
+continues to validate the ordinary DB/Parry contribution fingerprint, while attack resolution
+combines the row through the workbook percentage path instead of trusting a stale sheet value or
+request.
 
 The Slice 1 trigger is now an active counter-technique rather than an ordinary-parry side effect.
 The declaration persists one selected encounter opponent. Each surviving canonical attack

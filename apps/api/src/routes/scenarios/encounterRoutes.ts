@@ -27,6 +27,8 @@ import {
   buildCombatRoundCommandEnvelope,
   buildCombatObservationModifierContributions,
   buildCombatObservationSkillContestContribution,
+  projectProcessNumericContributionToCanonicalModifierLifecycle,
+  transitionCanonicalCombatModifierEffect,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   buildCombatRoundAttackRollResult,
@@ -2922,6 +2924,9 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
+  lifecycleContext?: Parameters<
+    typeof applyCombatActionGeneratedModifiers
+  >[0]["lifecycleContext"];
 }): ScenarioParticipantCombatContext {
   const roundParticipantId =
     findCombatRoundParticipantByAlias({
@@ -2940,6 +2945,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
     combatContext: input.combatContext,
     sourceEncounterId: input.encounterId,
     sourceRoundNumber: input.roundState.roundNumber,
+    lifecycleContext: input.lifecycleContext,
     distanceModifiers: buildCombatActionDistanceModifierInputsForDeclaration({
       actionId: input.actionId,
       encounterParticipant: input.encounterParticipant,
@@ -5242,6 +5248,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      const submittedAt = new Date().toISOString();
+      const lifecycleSequence =
+        roundState.events.reduce(
+          (highest, event) => Math.max(highest, event.sequence),
+          -1,
+        ) + 1;
       const attackPhaseDefensivePenalties = attackOpportunities
         ? resolveCombatAttackPhaseDefensivePenalties({
             commitment: "committed",
@@ -5265,6 +5277,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState,
         scenarioParticipant,
         secondaryActionId: body.secondaryActionId,
+        lifecycleContext: {
+          createdAt: submittedAt,
+          createdRevision: encounter.updatedAt,
+          createdSequence: lifecycleSequence,
+          encounterId: encounter.id,
+          ownerParticipantId: scenarioParticipant.id,
+          visibility: { audience: "involved", sourceIdentity: "public" },
+        },
       });
 
       const targetValidation = validateCombatDeclarationTargets({
@@ -5283,7 +5303,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const submittedAt = new Date().toISOString();
       const participant = await encounterService.updateScenarioParticipantState({
         participantId: scenarioParticipant.id,
         scenarioId: encounter.scenarioId,
@@ -6218,6 +6237,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         attackerCombatContext: attacker.state.combat.combatContext,
         defenderCombatContext: defender.state.combat.combatContext,
         encounterId: encounter.id,
+        lifecycleContext: {
+          createdAt,
+          createdRevision: encounter.updatedAt,
+          createdSequence:
+            roundState.events.reduce(
+              (highest, event) => Math.max(highest, event.sequence),
+              -1,
+            ) + 1,
+          encounterId: encounter.id,
+          visibility: { audience: "involved", sourceIdentity: "public" },
+        },
         proposal: committedProposal,
       });
       const [savedAttacker, savedDefender] = await Promise.all([
@@ -7248,7 +7278,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           skillContestCalculation: calculation,
         };
         const rolled = recordContinuedContactMaintenanceRoll({
-          command: { createdAt, createdByUserId: user.id },
+          command: {
+            createdAt,
+            createdByUserId: user.id,
+            createdRevision: encounter.updatedAt,
+          },
           contestId: body.contestId,
           executionGroupId: body.executionGroupId,
           opponentParticipantId: body.opponentParticipantId,
@@ -7297,6 +7331,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               "The active Continued Contact relationship has no matching Unbalanced effect.",
             );
           }
+          const transitionSequence = Math.max(
+            0,
+            rolled.state.events.reduce(
+              (highest, event) => Math.max(highest, event.sequence),
+              -1,
+            ),
+          );
           updatedParticipant = await encounterService.updateScenarioParticipantState({
             participantId: affected.id,
             scenarioId,
@@ -7304,15 +7345,49 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ...affected.state,
               combatEffects: combatEffectsStateSchema.parse({
                 ...effects,
-                effects: effects.effects.map((effect) =>
-                  effect.id === endedCondition.id
-                    ? combatEffectSchema.parse({
-                        ...effect,
-                        status: "expired",
-                        updatedAt: createdAt,
+                effects: effects.effects.map((effect) => {
+                  if (effect.id !== endedCondition.id) return effect;
+                  const activated =
+                    effect.canonicalLifecycle?.lifecycle.state === "pending_activation"
+                      ? transitionCanonicalCombatModifierEffect({
+                          acceptedRevision: encounter.updatedAt,
+                          acceptedSequence: transitionSequence,
+                          commandId: rolled.command.id,
+                          effect: effect.canonicalLifecycle,
+                          nextState: "active",
+                          reason: "activation_cutoff_reached",
+                          transitionId: `${rolled.command.id}:activate:${effect.id}`,
+                          transitionType: "activate",
+                        })
+                      : undefined;
+                  const canonicalBeforeResolution =
+                    activated?.effect ?? effect.canonicalLifecycle;
+                  const transitioned = canonicalBeforeResolution
+                    ? transitionCanonicalCombatModifierEffect({
+                        acceptedRevision: encounter.updatedAt,
+                        acceptedSequence: transitionSequence,
+                        commandId: rolled.command.id,
+                        effect: canonicalBeforeResolution,
+                        nextState: "resolved",
+                        reason: "condition_cleared",
+                        transitionId: `${rolled.command.id}:resolve:${effect.id}`,
+                        transitionType: "resolve",
                       })
-                    : effect,
-                ),
+                    : undefined;
+                  return combatEffectSchema.parse({
+                    ...effect,
+                    canonicalLifecycle: transitioned?.effect ?? effect.canonicalLifecycle,
+                    canonicalTransitions: transitioned
+                      ? [
+                          ...(effect.canonicalTransitions ?? []),
+                          ...(activated ? [activated.transition] : []),
+                          transitioned.transition,
+                        ]
+                      : effect.canonicalTransitions,
+                    status: "expired",
+                    updatedAt: createdAt,
+                  });
+                }),
               }),
             },
           });
@@ -10148,7 +10223,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         );
         const nextRoundState = recordCombatRoundOffensiveParryBrawlingRoll({
           attackResultId: body.attackResultId,
-          command: { createdAt, createdByUserId: user.id },
+          command: {
+            createdAt,
+            createdByUserId: user.id,
+            createdRevision: encounter.updatedAt,
+          },
           contestId: body.contestId,
           declarationId: body.declarationId,
           executionGroupId: body.executionGroupId,
@@ -10183,6 +10262,60 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             throw new RangeError("The Unbalanced participant is not assigned to this encounter.");
           }
           const eventId = `${createdCondition.id}:effect-event`;
+          const activatesAfterCurrentInitiativeGroup = Boolean(
+            initiativeGroup &&
+              getCombatRoundCurrentInitiativeExecutionGroup({
+                phase: contest.phase,
+                state: nextRoundState,
+              })?.id === initiativeGroup.id,
+          );
+          const canonicalUnbalancedProjection =
+            projectProcessNumericContributionToCanonicalModifierLifecycle({
+              activationCutoff:
+                activatesAfterCurrentInitiativeGroup && initiativeGroup
+                  ? {
+                      afterInitiativeGroupId: initiativeGroup.id,
+                      kind: "initiative_group",
+                    }
+                  : undefined,
+              category: "general_fatigue",
+              context: {
+                createdAt,
+                createdRevision: encounter.updatedAt,
+                createdSequence: Math.max(
+                  0,
+                  nextRoundState.events.reduce(
+                    (highest, event) => Math.max(highest, event.sequence),
+                    -1,
+                  ),
+                ),
+                encounterId,
+                visibility: { audience: "involved", sourceIdentity: "public" },
+              },
+              duration: {
+                conditionId: createdCondition.sourceContinuedContactId,
+                conditionKind: "contact_ended",
+                kind: "until_condition",
+                startPhase: contest.phase,
+                startRound: roundState.roundNumber,
+                startSequence: Math.max(
+                  0,
+                  nextRoundState.events.reduce(
+                    (highest, event) => Math.max(highest, event.sequence),
+                    -1,
+                  ),
+                ),
+              },
+              effectId: createdCondition.id,
+              excludedRollPurposes: ["escape_continued_contact"],
+              ownerParticipantId: affectedScenarioParticipant.id,
+              processId: createdCondition.sourceContinuedContactId,
+              publicLabel: "Unbalanced",
+              sourceFamily: "unbalanced",
+              state: activatesAfterCurrentInitiativeGroup ? "pending_activation" : "active",
+              unit: "percentage",
+              value: createdCondition.modifierValue,
+            }).effect;
           const combatEffects = combatEffectsStateSchema.parse(
             affectedScenarioParticipant.state.combatEffects,
           );
@@ -10197,6 +10330,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   combatEffectSchema.parse({
                     combatModifierBucket: "general",
                     combatWide: true,
+                    canonicalLifecycle: canonicalUnbalancedProjection,
                     createdAt,
                     createdInInitiativeGroupId: initiativeGroup?.id,
                     damage: 0,
@@ -10215,11 +10349,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     sourceAttackResultId: contest.attackResultId,
                     sourceOpportunityId: contest.opportunityId,
                     status:
-                      initiativeGroup &&
-                      getCombatRoundCurrentInitiativeExecutionGroup({
-                        phase: contest.phase,
-                        state: nextRoundState,
-                      })?.id === initiativeGroup.id
+                      activatesAfterCurrentInitiativeGroup
                         ? "pending"
                         : "active",
                     targetParticipantId: affectedScenarioParticipant.id,

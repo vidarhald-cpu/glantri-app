@@ -79,30 +79,11 @@ export interface GroupedFeintModifierDisplay {
 }
 
 export function buildGroupedFeintModifierDisplays(
-  rows: readonly PlayerCombatModifierBucketView[],
+  _rows: readonly PlayerCombatModifierBucketView[],
 ): GroupedFeintModifierDisplay[] {
-  const entries = rows.flatMap((row) => row.entries);
-  const groups = new Map<string, ScenarioCombatModifierEntry[]>();
-
-  for (const entry of entries) {
-    if (
-      entry.sourceType !== "feint" ||
-      entry.resultGroupKind !== "ob_db" ||
-      !entry.resultGroupId ||
-      entry.sourcePhase !== "phase2"
-    ) {
-      continue;
-    }
-    groups.set(entry.resultGroupId, [...(groups.get(entry.resultGroupId) ?? []), entry]);
-  }
-
-  return [...groups.entries()].flatMap(([resultGroupId, groupedEntries]) => {
-    const obEntry = groupedEntries.find((entry) => entry.id.endsWith(":ob-skill"));
-    const dbEntry = groupedEntries.find((entry) => entry.id.endsWith(":db-parry"));
-    return obEntry && dbEntry && obEntry.value === dbEntry.value
-      ? [{ entryIds: [obEntry.id, dbEntry.id], resultGroupId, value: obEntry.value }]
-      : [];
-  });
+  // Equal Feint consequences remain separate canonical Skill/OB and DB/Parry effects. Collapsing
+  // them loses category provenance and can hide a non-zero row when its category total is zero.
+  return [];
 }
 
 export interface PlayerCombatPhaseCardView {

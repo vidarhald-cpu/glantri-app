@@ -7,8 +7,11 @@ import {
   adaptAttackPenaltyToCanonicalModifierLifecycle,
   adaptCombatEffectToCanonicalModifierLifecycle,
   adaptModifierBucketRowToCanonicalLifecycle,
+  attachCanonicalLifecycleToModifierBucketRow,
   projectObservationRelationshipToCanonicalModifierLifecycle,
+  projectProcessNumericContributionToCanonicalModifierLifecycle,
   projectProcessRestrictionToCanonicalModifierLifecycle,
+  transitionCanonicalModifierBucketRow,
   type CanonicalCombatModifierCompatibilityContext,
 } from "./combatModifierLifecycleCompatibility";
 import { combatObservationRelationshipSchema } from "./combatObservation";
@@ -54,7 +57,7 @@ const sourceEvent = combatEffectEventSchema.parse({
 });
 
 describe("canonical modifier lifecycle compatibility adapters", () => {
-  it("adapts explicit legacy percentage and flat-DB rows without conflating their units", () => {
+  it("preserves explicit legacy percentage and flat-DB rows without conflating their units", () => {
     const percentage = adaptModifierBucketRowToCanonicalLifecycle({
       bucket: "situation_db",
       context: completeContext,
@@ -72,7 +75,7 @@ describe("canonical modifier lifecycle compatibility adapters", () => {
       entry: scenarioCombatModifierEntrySchema.parse({
         application: "flat_db",
         id: "flat-row",
-        notes: "Cover",
+        notes: "Legacy direct DB record",
         value: 2,
       }),
       ownerParticipantId: "participant-1",
@@ -98,6 +101,52 @@ describe("canonical modifier lifecycle compatibility adapters", () => {
       missingFacts: ["unit"],
     });
     expect(adapted.effect).toBeUndefined();
+  });
+
+  it("updates a projected opportunity effect with one versioned lifecycle transition", () => {
+    const attached = attachCanonicalLifecycleToModifierBucketRow({
+      bucket: "situation_db",
+      context: {
+        ...completeContext,
+        explicitDuration: {
+          expiresAt: "phase_boundary",
+          kind: "phase",
+          phase: "phase2",
+          startPhase: "phase2",
+          startRound: 2,
+          startSequence: 40,
+        },
+      },
+      entry: scenarioCombatModifierEntrySchema.parse({
+        application: "percentage",
+        generated: true,
+        id: "attack-row",
+        sourceOpportunityId: "opportunity-1",
+        sourcePhase: "phase2",
+        sourceRoundNumber: 2,
+        value: -4,
+      }),
+      ownerParticipantId: "participant-1",
+    });
+    const softened = transitionCanonicalModifierBucketRow({
+      acceptedRevision: "revision-11",
+      acceptedSequence: 41,
+      entry: attached,
+      nextValue: -2,
+      reason: "source_resolved",
+      transitionId: "transition-1",
+      transitionType: "update",
+    });
+
+    expect(softened).toMatchObject({
+      canonicalLifecycle: {
+        id: "attack-row",
+        payload: { unit: "percentage", value: -2 },
+        version: 2,
+      },
+      value: -2,
+    });
+    expect(softened.canonicalTransitions).toHaveLength(1);
   });
 
   it("retains CE combat-wide and phase-only applicability as distinct facts", () => {
@@ -300,6 +349,39 @@ describe("canonical modifier lifecycle compatibility adapters", () => {
         payload: { effectKind: "unbalanced", kind: "restriction" },
         sourceFamily: "unbalanced",
       },
+    });
+  });
+
+  it("projects one calculation-facing Unbalanced contribution from process authority", () => {
+    const projected = projectProcessNumericContributionToCanonicalModifierLifecycle({
+      category: "general_fatigue",
+      context: completeContext,
+      duration: {
+        conditionId: "contact-1",
+        conditionKind: "contact_ended",
+        kind: "until_condition",
+        startRound: 2,
+        startSequence: 40,
+      },
+      effectId: "unbalanced-1",
+      excludedRollPurposes: ["escape_continued_contact"],
+      ownerParticipantId: "participant-1",
+      processId: "contact-1",
+      publicLabel: "Unbalanced",
+      sourceFamily: "unbalanced",
+      unit: "percentage",
+      value: -2,
+    });
+
+    expect(projected.effect).toMatchObject({
+      payload: {
+        category: "general_fatigue",
+        rollPurposePolicy: { excluded: ["escape_continued_contact"] },
+        unit: "percentage",
+        value: -2,
+      },
+      sourceFamily: "unbalanced",
+      sourceReferences: { processId: "contact-1" },
     });
   });
 });

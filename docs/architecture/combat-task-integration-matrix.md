@@ -92,8 +92,8 @@ cannot provide a live descriptor or authorize a mutation.
 Offensive Parry Slice 1 adds a proactive purpose on the ordinary `parry` task plus its post-success
 Brawling task. The selected opponent is bound at declaration, and a qualifying committed attack
 creates the task regardless of hit outcome. The shared declaration UI binds that opponent in the
-Phase 1 panel. One round-scoped `flat_db` fact supplies preview, modifier review, persisted
-calculation context, and authoritative effective DB. Player-safe projection preserves the Brawling
+Phase 1 panel. One round-scoped DB/Parry −2% fact supplies preview, modifier review, persisted
+calculation context, and authoritative effective DB/Parry. Player-safe projection preserves the Brawling
 contest identity across the two stable `parallel_all` child tasks; completion of one child leaves
 the other executable. The second roll completes the group, leaves no Brawling task projected,
 clears its tracker attention, and advances Current Action from the accepted post-mutation

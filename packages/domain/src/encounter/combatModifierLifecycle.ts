@@ -46,6 +46,8 @@ export type CanonicalCombatModifierNumericCategory = z.infer<
   typeof canonicalCombatModifierNumericCategorySchema
 >;
 
+// Combat modifiers use percentage application unless an authoritative source explicitly defines
+// direct points. `flat_db` remains for those bounded exceptions and exact legacy replay only.
 export const canonicalCombatModifierUnitSchema = z.enum([
   "percentage",
   "flat_db",

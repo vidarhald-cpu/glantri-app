@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CharacterBuild } from "../character/build";
+import { attachCanonicalLifecycleToModifierBucketRow } from "../encounter/combatModifierLifecycleCompatibility";
 import type { Scenario, ScenarioParticipant } from "./scenario";
 import { buildScenarioPlayerProjection, calculateCharacterGeneralHitpoints } from "./scenario";
 
@@ -194,6 +195,23 @@ describe("buildScenarioPlayerProjection", () => {
   });
 
   it("preserves controlled participant combat modifier buckets in the player-safe projection", () => {
+    const canonicalDbRow = attachCanonicalLifecycleToModifierBucketRow({
+      bucket: "situation_db",
+      context: {
+        createdAt: "2026-04-21T00:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 1,
+        explicitDuration: {
+          kind: "manual",
+          removableBy: "gm",
+          startRound: 1,
+          startSequence: 1,
+        },
+        explicitUnit: "percentage",
+      },
+      entry: { id: "db-1", scope: "until", value: 2 },
+      ownerParticipantId: "participant-1",
+    });
     const projection = buildScenarioPlayerProjection({
       participants: [
         createParticipant({
@@ -206,7 +224,7 @@ describe("buildScenarioPlayerProjection", () => {
               combatContext: {
                 modifierBuckets: {
                   general: [],
-                  situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+                  situationDb: [canonicalDbRow],
                   situationInitiative: [
                     {
                       durationRounds: 2,
@@ -246,6 +264,9 @@ describe("buildScenarioPlayerProjection", () => {
       situationInitiative: [{ id: "initiative-1", durationRounds: 2, value: 3 }],
       situationObSkill: [{ id: "ob-1", value: -1 }],
     });
+    expect(
+      projection.controlledParticipant?.combatContext?.modifierBuckets.situationDb[0],
+    ).not.toHaveProperty("canonicalLifecycle");
   });
 
   it("returns a safe no-assignment projection when the user controls no active scenario participant", () => {

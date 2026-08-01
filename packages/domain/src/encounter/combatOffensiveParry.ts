@@ -1,6 +1,19 @@
 import { z } from "zod";
 
+import {
+  canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierLifecycleTransitionSchema,
+} from "./combatModifierLifecycle";
+
 const idSchema = z.string().min(1);
+const processModifierEffectSchema = z.unknown().refine(
+  (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
+  "Invalid process modifier lifecycle.",
+);
+const processModifierTransitionSchema = z.unknown().refine(
+  (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
+  "Invalid process modifier transition.",
+);
 
 export const offensiveParryRollPurposeSchema = z.enum([
   "offensive_parry_brawling",
@@ -71,6 +84,8 @@ export type OffensiveParryContest = z.infer<typeof offensiveParryContestSchema>;
 export const continuedContactSchema = z.object({
   affectedParticipantId: idSchema,
   brawlingContestResultId: idSchema,
+  canonicalLifecycle: processModifierEffectSchema.optional(),
+  canonicalTransitions: z.array(processModifierTransitionSchema).optional(),
   controllerParticipantId: idSchema,
   endedByMaintenanceContestResultId: idSchema.optional(),
   endedRound: z.number().int().positive().optional(),
@@ -90,6 +105,8 @@ export type ContinuedContact = z.infer<typeof continuedContactSchema>;
 
 export const unbalancedCombatConditionSchema = z.object({
   affectedParticipantId: idSchema,
+  canonicalLifecycle: processModifierEffectSchema.optional(),
+  canonicalTransitions: z.array(processModifierTransitionSchema).optional(),
   endedByMaintenanceContestResultId: idSchema.optional(),
   endedRound: z.number().int().positive().optional(),
   establishedRound: z.number().int().positive(),
