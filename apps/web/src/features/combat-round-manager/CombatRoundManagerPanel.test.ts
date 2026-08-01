@@ -133,6 +133,23 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
   });
 
+  it("keeps post-roll acknowledgement local, exact, and separate from progression", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("createCombatPostResultHoldCandidate({");
+    expect(source).toContain("resolveCombatPostResultHold({");
+    expect(source).toContain("selectCombatPostResultHoldPresentation({");
+    expect(source).toContain('aria-label="Post-roll inspection hold"');
+    expect(source).toContain("Result recorded");
+    expect(source).toContain("Continue combat");
+    expect(source).toContain("acceptedEncounterRevisionRef.current");
+    expect(source).toContain("function selectTimelineSelection(");
+    expect(source).toContain("setPostResultHold(undefined)");
+    expect(source).toContain("setPostResultHoldRequest(undefined)");
+    expect(source).not.toContain("latestResult");
+    expect(source).not.toContain("setTimeout");
+  });
+
   it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
     const source = readPanelSource();
 
@@ -185,7 +202,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
     expect(source).toContain("onKeyDown={handleTimelineKeyDown}");
     expect(source).toContain("timelineCellRefs.current[cellKey] = node");
-    expect(source).toContain("followCurrent={!inspectorIsHistorical}");
+    expect(source).toContain("followCurrent={inspectorIsPostResultHold || !inspectorIsHistorical}");
     expect(source).toContain("positionCurrentRequest={trackerPositionRequest}");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
@@ -916,9 +933,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "commit"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_roll"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_commit"');
-    expect(source).toContain(
-      "task.id === combatPresentation.active.currentAction?.taskId",
-    );
+    expect(source).toContain("task.id === combatPresentation.active.currentAction?.taskId");
     expect(source).not.toContain(
       "task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId",
     );

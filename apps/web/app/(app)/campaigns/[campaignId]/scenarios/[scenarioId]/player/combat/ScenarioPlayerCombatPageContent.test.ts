@@ -28,8 +28,22 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(combatLog).toBeGreaterThan(activeWorkspace);
     expect(ancillaryTools).toBeGreaterThan(combatLog);
     expect(source.slice(tracker, activeWorkspace)).not.toContain("<CombatLog");
-    expect(source).toContain("followCurrent={!historyInspection}");
-    expect(source).toContain('historyInspection ? "Resume current task" : "Current task"');
+    expect(source).toContain("followCurrent={Boolean(postResultHold) || !historyInspection}");
+    expect(source).toContain('? "Continue combat"');
+    expect(source).toContain('? "Resume current task"');
+  });
+
+  it("limits post-result acknowledgement to GM proxy actions and exact result identities", () => {
+    const source = readSource();
+
+    expect(source).toContain("isGameMaster && selectedRoundParticipant");
+    expect(source).toContain("createCombatPostResultHoldCandidate({");
+    expect(source).toContain("resolveCombatPostResultHold({");
+    expect(source).toContain("selectCombatPostResultHoldPresentation({");
+    expect(source).toContain('aria-label="Post-roll inspection hold"');
+    expect(source).toContain("continueFromPostResultHold");
+    expect(source).not.toContain("latestResult");
+    expect(source).not.toContain("setTimeout");
   });
 
   it("uses the shared Feint-Attack declaration and owned-roll controls", () => {
@@ -107,9 +121,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("validateCombatDeclarationTargets");
     expect(source).toContain("targetValidation");
     expect(source).toContain("declarationTargetValidationMessage");
-    expect(source).toContain(
-      "combatExperienceValidationMessage ??\n                  declarationTargetValidationMessage ??\n                  currentAttackSourceValidationMessage",
-    );
+    expect(source).toContain("combatExperienceValidationMessage ??");
+    expect(source).toContain("declarationTargetValidationMessage ??");
+    expect(source).toContain("currentAttackSourceValidationMessage");
     expect(source).not.toContain(
       "declarationTargetValidationMessage ?? currentAttackSourceValidationMessage",
     );
@@ -230,7 +244,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('rollAttackerPrivilegedCombatDie("hitLocation", descriptor)');
     expect(source).toContain('rollAttackerPrivilegedCombatDie("critical", descriptor)');
     expect(source).toContain('case "roll_attack"');
-    expect(source).toContain("void rollPhaseAttack(descriptor);");
+    expect(source).toContain("rollPhaseAttack(descriptor)");
     expect(source).toContain("getPlayerCombatCurrentRollAction");
     expect(source).toContain("currentRollAction");
     expect(source).toContain("currentAttackPhaseContext");
@@ -465,7 +479,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
       'selectedAdjustDistanceProposal?.status === "awaiting_defender_response"',
     );
     expect(source).toContain("selectedPhaseAttackChoiceControls");
-    expect(source).toContain("? backOutPhaseAttack(descriptor)");
+    expect(source).toContain("if (selectedPhaseAttackChoiceIsBackOut)");
+    expect(source).toContain("void backOutPhaseAttack(descriptor)");
     expect(source).not.toContain("phaseInitiativeChoice: selectedPhaseInitiativeChoiceResultPanel");
     expect(source).not.toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).not.toContain("secondaryButtonLabel=");
@@ -502,7 +517,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("opponentSide.result");
     expect(source).not.toContain("combatExperienceStatusText");
     expect(source).toContain("combatExperienceValidationMessage");
-    expect(source).toContain("void rollCombatExperience(descriptor);");
+    expect(source).toContain("rollCombatExperience(descriptor)");
     expect(source).toContain("continuePhaseAttackOnServer");
     expect(source).toContain("Skill total {selectedCombatExperienceSkillTotal}");
     expect(source).toContain("Difficulty {selectedCombatExperienceDifficulty}");

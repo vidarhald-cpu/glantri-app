@@ -297,6 +297,14 @@ import {
   projectGmCombatEvents,
 } from "./view-models/activeInspectorPresentation";
 import {
+  createCombatPostResultHoldCandidate,
+  isCombatPostResultHoldSourceSelection,
+  resolveCombatPostResultHold,
+  selectCombatPostResultHoldPresentation,
+  type CombatPostResultHold,
+  type CombatPostResultHoldCandidate,
+} from "./view-models/combatPostResultHold";
+import {
   applyCombatTrackerSelectionOverlay,
   buildActiveCombatPresentation,
   buildArchivedCombatPresentation,
@@ -3906,6 +3914,11 @@ export default function CombatRoundManagerPanel({
     [],
   );
   const [inspectionSelection, setInspectionSelection] = useState(initialInspectionSelection);
+  const [postResultHold, setPostResultHold] = useState<CombatPostResultHold>();
+  const [postResultHoldRequest, setPostResultHoldRequest] = useState<{
+    readonly acceptedRevision: string;
+    readonly candidate: CombatPostResultHoldCandidate;
+  }>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   useEffect(() => {
@@ -4165,6 +4178,8 @@ export default function CombatRoundManagerPanel({
   }, [combatLogProjection]);
   const handleCombatLogSelection = useCallback(
     (selection: CombatLogEventSelection) => {
+      setPostResultHold(undefined);
+      setPostResultHoldRequest(undefined);
       setCombatLogSelection(
         selectCombatLogEvent({
           eventId: selection.combatLogEventId,
@@ -4242,6 +4257,15 @@ export default function CombatRoundManagerPanel({
       ].includes(task.kind) && task.state === "executable",
   );
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
+  const postResultNextTaskLabel = currentTaskSelection
+    ? currentTaskSelection.participantId
+      ? `${
+          displayParticipants.find(
+            (participant) => participant.participantId === currentTaskSelection.participantId,
+          )?.label ?? "Current participant"
+        } · ${COMBAT_ROUND_STEP_LABELS[currentTaskSelection.step]}`
+      : COMBAT_ROUND_STEP_LABELS[currentTaskSelection.step]
+    : "Current combat task";
   useEffect(() => {
     if (!currentTaskSelection || manualSelectionRef.current || pendingSelectionRef.current) {
       return;
@@ -4336,6 +4360,93 @@ export default function CombatRoundManagerPanel({
       selectedRoundIsActive,
     ],
   );
+  const postResultHoldSource = postResultHoldRequest?.candidate.source ?? postResultHold?.source;
+  const postResultHoldSourcePresentation =
+    postResultHoldSource && postResultHoldSource.roundNumber === roundState.roundNumber
+      ? combatPresentation.active.inspectorPresentation.resolve({
+          build: () =>
+            buildActiveInspectorCorePresentation({
+              boundary: combatProgressionPresentation.boundary.kind,
+              combatLog: combatLogProjection,
+              encounterId: encounter.id,
+              encounterRevision: roundView.encounterRevision ?? combatLogProjection.sourceRevision,
+              gmEvents: combatPresentation.active.gmEvents,
+              participantId: postResultHoldSource.participantId,
+              roundState,
+              step: postResultHoldSource.step,
+            }).currentStepResults,
+          dependencies: [
+            combatProgressionPresentation.boundary.kind,
+            combatLogProjection,
+            combatPresentation.active.gmEvents,
+            postResultHoldSource.participantId,
+            postResultHoldSource.step,
+            roundState,
+          ],
+          key: `post-result:${postResultHoldSource.participantId}:${postResultHoldSource.step}`,
+        })
+      : undefined;
+  useEffect(() => {
+    if (!postResultHoldRequest) return;
+    if (postResultHoldRequest.acceptedRevision !== roundView.encounterRevision) return;
+
+    const hold = resolveCombatPostResultHold({
+      acceptedPresentation: postResultHoldSourcePresentation,
+      acceptedRevision: postResultHoldRequest.acceptedRevision,
+      candidate: postResultHoldRequest.candidate,
+      nextSelection: currentTaskSelection,
+    });
+    setPostResultHoldRequest(undefined);
+    if (!hold) return;
+
+    setPostResultHold(hold);
+    pendingSelectionRef.current = undefined;
+    manualSelectionRef.current = {
+      participantId: hold.source.participantId,
+      step: hold.source.step,
+    };
+    setSelectedRoundNumber(hold.source.roundNumber);
+    setInspectionSelection({
+      participantId: hold.source.participantId,
+      step: hold.source.step,
+    });
+  }, [
+    currentTaskSelection?.participantId,
+    currentTaskSelection?.step,
+    postResultHoldRequest,
+    postResultHoldSourcePresentation,
+    roundView.encounterRevision,
+  ]);
+  const heldResultPresentation = postResultHold
+    ? selectCombatPostResultHoldPresentation({
+        hold: postResultHold,
+        presentation: postResultHoldSourcePresentation,
+      })
+    : undefined;
+  useEffect(() => {
+    if (!postResultHold) return;
+    if (
+      postResultHold.source.roundNumber !== roundState.roundNumber ||
+      (roundView.encounterRevision !== postResultHold.acceptedRevision && !heldResultPresentation)
+    ) {
+      setPostResultHold(undefined);
+      manualSelectionRef.current = undefined;
+      pendingSelectionRef.current = undefined;
+      setSelectedRoundNumber(roundState.roundNumber);
+      setInspectionSelection(
+        resolveCombatRoundInspectionSelection({
+          manualSelection: currentTaskSelection,
+          state: roundState,
+        }),
+      );
+    }
+  }, [
+    currentTaskSelection,
+    heldResultPresentation,
+    postResultHold,
+    roundState,
+    roundView.encounterRevision,
+  ]);
   const inspectorSelectionIsCurrentProgression =
     combatProgressionPresentation.taskVisibility === "available" &&
     (isCombatRoundInspectionSelectionLive({
@@ -4614,6 +4725,12 @@ export default function CombatRoundManagerPanel({
   const inspectorHistoricalStepOutcome =
     archivedInspectorPresentation?.stepOutcome ?? deriveCombatHistoryStepOutcome(inspectorSnapshot);
   const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
+  const inspectorIsPostResultHold = isCombatPostResultHoldSourceSelection({
+    hold: postResultHold,
+    participantId: inspector.participant?.participantId,
+    roundNumber: selectedRoundNumber,
+    step: inspector.step,
+  });
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
   ) =>
@@ -6949,6 +7066,8 @@ export default function CombatRoundManagerPanel({
 
     if (encounterChanged) {
       encounterScopeRef.current = encounter.id;
+      setPostResultHold(undefined);
+      setPostResultHoldRequest(undefined);
       manualSelectionRef.current = undefined;
       pendingSelectionRef.current = undefined;
       setSelectedRoundNumber(initialRoundState.roundNumber);
@@ -7842,6 +7961,8 @@ export default function CombatRoundManagerPanel({
   }
 
   function selectCurrentTask() {
+    setPostResultHold(undefined);
+    setPostResultHoldRequest(undefined);
     manualSelectionRef.current = undefined;
     pendingSelectionRef.current = undefined;
     setSelectedRoundNumber(roundState.roundNumber);
@@ -7858,6 +7979,8 @@ export default function CombatRoundManagerPanel({
     selection: CombatRoundTimelineSelection,
     mode: CombatRoundTimelineScrollMode = "nearest",
   ) {
+    setPostResultHold(undefined);
+    setPostResultHoldRequest(undefined);
     if (selection.roundNumber !== roundState.roundNumber) {
       beginCombatPerformanceInteraction({
         command: "inspect_archived_tracker_cell",
@@ -10059,6 +10182,40 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function invokeResultProducingGmCommand(
+    descriptor: CurrentActionCommandDescriptor,
+    operation: () => Promise<void>,
+  ) {
+    const sourceParticipantId = inspector.participant?.participantId;
+    const candidate = sourceParticipantId
+      ? createCombatPostResultHoldCandidate({
+          commandType: descriptor.commandType,
+          presentation: gmCurrentStepResultPresentation,
+          source: {
+            participantId: sourceParticipantId,
+            roundNumber: selectedRoundNumber,
+            step: inspector.step,
+          },
+          sourceTaskId: descriptor.taskId,
+        })
+      : undefined;
+    const acceptedBefore = acceptedEncounterRevisionRef.current;
+
+    await operation();
+
+    const acceptedAfter = acceptedEncounterRevisionRef.current;
+    if (
+      candidate &&
+      acceptedAfter.encounterId === acceptedBefore.encounterId &&
+      acceptedAfter.updatedAt !== acceptedBefore.updatedAt
+    ) {
+      setPostResultHoldRequest({
+        acceptedRevision: acceptedAfter.updatedAt,
+        candidate,
+      });
+    }
+  }
+
   function invokeGmCurrentAction(candidate?: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
@@ -10100,64 +10257,86 @@ export default function CombatRoundManagerPanel({
       case "review_adjust_distance_roll_adjustment":
       case "roll_adjust_distance":
       case "commit_adjust_distance":
-        void advanceInspectorAdjustDistance(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          advanceInspectorAdjustDistance(descriptor),
+        );
         return;
       case "roll_parry":
-        void rollInspectorParry(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => rollInspectorParry(descriptor));
         return;
       case "roll_offensive_parry_brawling":
-        void rollInspectorOffensiveParryBrawling(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          rollInspectorOffensiveParryBrawling(descriptor),
+        );
         return;
       case "roll_continued_contact_maintenance":
-        void rollContinuedContactMaintenance(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          rollContinuedContactMaintenance(descriptor),
+        );
         return;
       case "roll_observation":
-        void rollObservation(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => rollObservation(descriptor));
         return;
       case "roll_hit_location":
       case "roll_critical":
       case "resolve_damage":
       case "commit_phase_damage":
-        void invokeGmDownstreamCombatTask(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          invokeGmDownstreamCombatTask(descriptor),
+        );
         return;
       case "roll_feint":
-        void rollInspectorFeint(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => rollInspectorFeint(descriptor));
         return;
       case "commit_feint_result":
-        void commitInspectorFeint(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => commitInspectorFeint(descriptor));
         return;
       case "decide_double_attack_phase2":
         void decideInspectorDoubleAttackPhase2(descriptor);
         return;
       case "submit_phase_initiative_choice":
-        void (inspectorPhaseAttackChoiceIsBackOut
-          ? backOutInspectorPhaseAttack(descriptor)
-          : inspectorPhaseCombatExperienceRequirement
-            ? rollInspectorCombatExperience(descriptor)
-            : continueInspectorPhaseAttack(descriptor));
+        if (inspectorPhaseAttackChoiceIsBackOut) {
+          void backOutInspectorPhaseAttack(descriptor);
+        } else if (inspectorPhaseCombatExperienceRequirement) {
+          void invokeResultProducingGmCommand(descriptor, () =>
+            rollInspectorCombatExperience(descriptor),
+          );
+        } else {
+          void continueInspectorPhaseAttack(descriptor);
+        }
         return;
       case "set_combat_experience_difficulty":
         void saveCombatExperienceDifficultyDraft(descriptor);
         return;
       case "roll_combat_experience":
-        void rollInspectorCombatExperience(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          rollInspectorCombatExperience(descriptor),
+        );
         return;
       case "roll_round_end_distance_control":
-        void rollRoundEndDistanceControlFromPrimaryAction(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          rollRoundEndDistanceControlFromPrimaryAction(descriptor),
+        );
         return;
       case "commit_round_end_distance_control":
-        void commitRoundEndDistanceControl(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () =>
+          commitRoundEndDistanceControl(descriptor),
+        );
         return;
       case "roll_round_end_health_check":
+        void invokeResultProducingGmCommand(descriptor, () =>
+          advanceInspectorRoundEndReview(descriptor),
+        );
+        return;
       case "commit_round_end_participant_review":
         void advanceInspectorRoundEndReview(descriptor);
         return;
       case "roll_initiative_phase1":
       case "roll_initiative_phase2":
-        void rollInspectorInitiative(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => rollInspectorInitiative(descriptor));
         return;
       case "roll_attack":
-        void rollInspectorPhaseAttack(descriptor);
+        void invokeResultProducingGmCommand(descriptor, () => rollInspectorPhaseAttack(descriptor));
         return;
       case "declare_action":
       case "review_modifiers_phase1":
@@ -10227,7 +10406,11 @@ export default function CombatRoundManagerPanel({
                 title="Return to the current unresolved combat step"
                 type="button"
               >
-                {inspectorIsHistorical ? "Resume current task" : "Current task"}
+                {inspectorIsPostResultHold
+                  ? "Continue combat"
+                  : inspectorIsHistorical
+                    ? "Resume current task"
+                    : "Current task"}
               </button>
               <button
                 disabled={saving || !clearCurrentStepAvailable}
@@ -10269,7 +10452,7 @@ export default function CombatRoundManagerPanel({
         ) : null}
 
         <CombatTracker
-          followCurrent={!inspectorIsHistorical}
+          followCurrent={inspectorIsPostResultHold || !inspectorIsHistorical}
           model={trackerModel}
           onInspect={(cell) => selectInspector(cell.participantId, cell.step, cell.roundNumber)}
           onKeyDown={handleTimelineKeyDown}
@@ -11237,7 +11420,20 @@ export default function CombatRoundManagerPanel({
                           />
                         </>
                       ) : null}
-                      {inspectorIsHistorical ? (
+                      {inspectorIsPostResultHold ? (
+                        <section
+                          aria-label="Post-roll inspection hold"
+                          style={{ display: "grid", gap: "0.55rem" }}
+                        >
+                          <strong>Result recorded</strong>
+                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                            Next: {postResultNextTaskLabel}
+                          </div>
+                          <button disabled={saving} onClick={selectCurrentTask} type="button">
+                            Continue combat
+                          </button>
+                        </section>
+                      ) : inspectorIsHistorical ? (
                         <PlayerCombatHistoricalContextPanel
                           context={inspectorHistoricalStatusLabel}
                           roundNumber={selectedRoundNumber}
@@ -11273,10 +11469,15 @@ export default function CombatRoundManagerPanel({
                                 )}.${inspectorStatusSuffix}`
                         }
                         validationMessage={inspectorActionValidationMessage}
-                      />
+                        />
                       )}
                     </div>
-                    {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
+                    {inspectorIsPostResultHold && heldResultPresentation ? (
+                      <CombatStepResultList
+                        presentation={heldResultPresentation}
+                        title="Recorded result"
+                      />
+                    ) : inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
                       <CombatEventResultList
                         events={inspectorCanonicalActionResultEvents}
                         model={archivedInspectorPresentation?.canonicalActionResultModel}
@@ -11333,9 +11534,23 @@ export default function CombatRoundManagerPanel({
                   <strong>Combat situation</strong>
                   <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>Phase-wide task</div>
                 </section>
-                <PlayerCombatActionButtonPanel
-                  disabled={inspectorEffectiveActionButtonDisabled}
-                  onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                {inspectorIsPostResultHold ? (
+                  <section
+                    aria-label="Post-roll inspection hold"
+                    style={playerCombatPanelCardStyle}
+                  >
+                    <strong>Result recorded</strong>
+                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      Next: {postResultNextTaskLabel}
+                    </div>
+                    <button disabled={saving} onClick={selectCurrentTask} type="button">
+                      Continue combat
+                    </button>
+                  </section>
+                ) : (
+                  <PlayerCombatActionButtonPanel
+                    disabled={inspectorEffectiveActionButtonDisabled}
+                    onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
                     invokeGmCurrentAction(descriptor);
                   }}
                   preActionControls={
@@ -11353,10 +11568,16 @@ export default function CombatRoundManagerPanel({
                       : `Current step: ${getPlayerCombatStepLabel(
                           inspector.step,
                         )}.${inspectorStatusSuffix}`
-                  }
-                  validationMessage={inspectorActionValidationMessage}
-                />
-                {gmCurrentStepResultPresentation ? (
+                    }
+                    validationMessage={inspectorActionValidationMessage}
+                  />
+                )}
+                {inspectorIsPostResultHold && heldResultPresentation ? (
+                  <CombatStepResultList
+                    presentation={heldResultPresentation}
+                    title="Recorded result"
+                  />
+                ) : gmCurrentStepResultPresentation ? (
                   <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
                 ) : (
                   <PlayerCombatActionResultPanel result={null} />
@@ -11367,7 +11588,10 @@ export default function CombatRoundManagerPanel({
         </section>
 
         <CombatLog
-          autoFollow={combatLogSelection.mode === "automatic" && !inspectorIsHistorical}
+          autoFollow={
+            combatLogSelection.mode === "automatic" &&
+            (inspectorIsPostResultHold || !inspectorIsHistorical)
+          }
           events={combatLogProjection.events}
           onSelect={handleCombatLogSelection}
           selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}

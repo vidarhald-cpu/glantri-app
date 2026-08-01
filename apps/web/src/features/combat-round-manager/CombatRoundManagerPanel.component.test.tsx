@@ -1100,7 +1100,7 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     });
   });
 
-  it("uses the final observation response descriptor to open declarations on the first click", async () => {
+  it("holds the final observation result before resuming the authoritative boundary task", async () => {
     const { afterObservation, beforeObservation, boundaryTask, observationTask } =
       buildFinalObservationEncounter();
     const participants = [
@@ -1133,6 +1133,10 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Roll observation" }));
     await waitFor(() => expect(mocks.rollObservation).toHaveBeenCalledTimes(1));
 
+    expect(await screen.findByText("Result recorded")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Roll observation" })).not.toBeInTheDocument();
+    expect(screen.getByText(/^Next:/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Continue combat" })[0]!);
     fireEvent.click(await screen.findByRole("button", { name: "Open declarations" }));
     await waitFor(() => expect(mocks.advanceCurrentStep).toHaveBeenCalledTimes(1));
     expect(mocks.advanceCurrentStep.mock.calls[0]?.[0]).toMatchObject({
