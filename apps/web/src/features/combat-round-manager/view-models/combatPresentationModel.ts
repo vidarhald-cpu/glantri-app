@@ -518,10 +518,6 @@ export function buildActiveCombatPresentation(input: {
   );
   const currentTask =
     projectedCurrentTasks.find((task) => task.id === currentAction?.taskId) ??
-    projectedCurrentTasks.find(
-      (task) =>
-        task.trackerFacet.owner?.participantId === input.roundState.currentCursor?.participantId,
-    ) ??
     projectedCurrentTasks[0];
   const liveInspectorContext = buildCombatRoundLiveInspectorContext(currentTask);
   const currentTaskSelection = getCombatRoundLiveInspectorSelection({

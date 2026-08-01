@@ -823,7 +823,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage)",
     );
-    expect(source).toContain("Select a participant step to inspect combat details.");
+    expect(source).toContain("Phase-wide task");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
     expect(source).toContain("Previous step");
@@ -916,6 +916,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "commit"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_roll"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_commit"');
+    expect(source).toContain(
+      "task.id === combatPresentation.active.currentAction?.taskId",
+    );
+    expect(source).not.toContain(
+      "task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId",
+    );
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
     expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
     expect(source).toContain("projectedBoundaryTransitionAction");

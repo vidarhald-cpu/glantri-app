@@ -1,6 +1,7 @@
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
+  getCombatRoundStepForProgressionBoundary,
   type CombatHistoryProjection,
   type CombatProgressionPresentationProjection,
   type CombatRoundStep,
@@ -293,12 +294,11 @@ export function buildProjectedCombatTrackerModel(input: {
 }): CombatTrackerModel {
   const progressionIndex = buildCombatProgressionTrackerIndex(input.history.progression);
   const activeRoundNumber = input.history.activeRound.roundNumber;
-  const currentCells = Object.entries(progressionIndex.byCellKey).filter(
-    ([, facet]) => facet.current,
-  );
-  const currentStep = currentCells[0]?.[0].split(":").slice(2).join(":") as
-    | CombatRoundStep
-    | undefined;
+  const currentStep =
+    progressionIndex.currentStep ??
+    (input.history.progression?.taskVisibility === "available"
+      ? getCombatRoundStepForProgressionBoundary(input.history.progression.boundary.kind)
+      : undefined);
   const rounds = [...input.history.archivedRounds, input.history.activeRound].map((round) => ({
     currentStep: round.roundNumber === activeRoundNumber ? currentStep : undefined,
     roundNumber: round.roundNumber,
@@ -343,6 +343,17 @@ export function buildProjectedCombatTrackerModel(input: {
       (orderIndex.get(right.participantId) ?? Number.MAX_SAFE_INTEGER)
     );
   });
+  const currentTaskCellKey = rows
+    .map((row) =>
+      currentStep
+        ? buildCombatTrackerCellKey({
+            participantId: row.participantId,
+            roundNumber: activeRoundNumber,
+            step: currentStep,
+          })
+        : undefined,
+    )
+    .find((cellKey) => cellKey !== undefined && progressionIndex.byCellKey[cellKey]?.current);
 
   for (const row of rows) {
     for (const round of [...input.history.archivedRounds, input.history.activeRound]) {
@@ -427,7 +438,7 @@ export function buildProjectedCombatTrackerModel(input: {
 
   return {
     cells,
-    currentTaskCellKey: currentCells[0]?.[0],
+    currentTaskCellKey,
     legend: COMBAT_TRACKER_MARKER_MEANINGS,
     rounds,
     rows: rows.map((row) => ({

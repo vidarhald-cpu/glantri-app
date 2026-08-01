@@ -3,6 +3,7 @@ import {
   type CombatProgressionPresentationProjection,
   type CombatProgressionPresentationTask,
   type CombatProgressionTaskKind,
+  type CombatRoundStep,
 } from "@glantri/domain";
 
 import type { CombatTrackerLiveFacet } from "../types";
@@ -15,6 +16,7 @@ import {
 export interface CombatProgressionTrackerIndex {
   readonly byCellKey: Readonly<Record<string, CombatTrackerLiveFacet>>;
   readonly conflicted: boolean;
+  readonly currentStep?: CombatRoundStep;
   readonly currentTaskIds: readonly string[];
 }
 
@@ -41,16 +43,19 @@ export function buildCombatProgressionTrackerIndex(
     return {
       byCellKey: {},
       conflicted: progression?.taskVisibility === "conflicted",
+      currentStep: undefined,
       currentTaskIds: [],
     };
   }
 
   const tasksByCellKey = new Map<string, CombatProgressionPresentationTask[]>();
+  const currentTasks: CombatProgressionPresentationTask[] = [];
   for (const process of progression.processes) {
     for (const stage of process.stages) {
       if (stage.state !== "active") continue;
       for (const group of stage.executionGroups) {
         for (const task of group.tasks) {
+          if (task.contributesToProgression) currentTasks.push(task);
           const participantId = task.trackerFacet.owner?.participantId;
           if (!participantId) continue;
           const key = buildCombatTrackerCellKey({
@@ -104,9 +109,10 @@ export function buildCombatProgressionTrackerIndex(
   return {
     byCellKey,
     conflicted: false,
-    currentTaskIds: getCombatProgressionPresentationTasks(progression)
-      .filter((task) => task.contributesToProgression)
-      .map((task) => task.id),
+    currentStep: currentTasks[0]
+      ? getCombatRoundStepForCursorStep(currentTasks[0].trackerFacet.step)
+      : undefined,
+    currentTaskIds: currentTasks.map((task) => task.id),
   };
 }
 

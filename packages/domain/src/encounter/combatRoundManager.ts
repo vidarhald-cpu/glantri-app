@@ -24095,12 +24095,9 @@ export function buildCombatRoundInspector(input: {
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
   const step = input.step ?? normalized.selectedStep ?? normalized.currentStep;
-  const participant =
-    normalized.participants.find((entry) => entry.participantId === input.participantId) ??
-    normalized.participants.find(
-      (entry) => entry.participantId === normalized.selectedParticipantId,
-    ) ??
-    normalized.participants[0];
+  const participant = input.participantId
+    ? normalized.participants.find((entry) => entry.participantId === input.participantId)
+    : undefined;
 
   return {
     participant,

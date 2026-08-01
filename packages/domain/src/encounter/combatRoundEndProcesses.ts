@@ -173,7 +173,6 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
                   key: `round:${roundNumber}`,
                   kind: "round_end_prepare",
                   ownerRole: "gm",
-                  trackerParticipantId: normalized.currentCursor?.participantId,
                 },
               ],
             }),
@@ -346,7 +345,9 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
                   pairId: distanceCommit.pairKey,
                   proposalId: distanceCommit.id,
                   trackerParticipantId:
-                    distanceCommit.controllerParticipantId ?? distanceCommit.participantAId,
+                    distanceCommit.controlMode === "continued_contact"
+                      ? distanceCommit.controllerParticipantId
+                      : undefined,
                 },
               ]
             : [],

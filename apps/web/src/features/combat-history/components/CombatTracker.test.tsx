@@ -200,6 +200,52 @@ describe("CombatTracker", () => {
     }
   });
 
+  it("positions ownerless current work on the shared step header", () => {
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        const container = this.getAttribute("aria-label") === "Combat round timeline grid";
+        return {
+          bottom: 40,
+          height: 40,
+          left: container ? 0 : 600,
+          right: container ? 300 : 660,
+          toJSON: () => ({}),
+          top: 0,
+          width: container ? 300 : 60,
+          x: container ? 0 : 600,
+          y: 0,
+        };
+      });
+    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    const scrollWidth = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(900);
+
+    try {
+      render(
+        <CombatTracker
+          followCurrent
+          model={{ ...model, currentTaskCellKey: undefined }}
+          onInspect={vi.fn()}
+        />,
+      );
+      expect(scrollTo).toHaveBeenCalledOnce();
+    } finally {
+      rect.mockRestore();
+      clientWidth.mockRestore();
+      scrollWidth.mockRestore();
+      Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+        configurable: true,
+        value: originalScrollTo,
+      });
+    }
+  });
+
   it("does not auto-position while the viewer is inspecting history", () => {
     const originalScrollTo = HTMLElement.prototype.scrollTo;
     const scrollTo = vi.fn();

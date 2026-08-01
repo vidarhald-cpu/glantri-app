@@ -157,11 +157,13 @@ describe("combat round-end process plans", () => {
       kind: "round_end_prepare",
       ownerRole: "gm",
     });
+    expect(first.processes[0]?.stages[0]?.tasks[0]?.trackerParticipantId).toBeUndefined();
     expect(Object.isFrozen(first)).toBe(true);
     expect(JSON.stringify(source)).toBe(before);
 
     const projection = buildCombatProgressionProjection(source);
     const task = projection.boundary.processes[0]?.stages[0]?.tasks[0];
+    expect(task?.trackerFacet).toEqual({ owner: undefined, step: "SU" });
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },

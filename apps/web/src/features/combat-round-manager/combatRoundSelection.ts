@@ -20,7 +20,7 @@ export interface CombatRoundLiveInspectorContext {
 
 /**
  * Maps a canonical projected task to inspector context without fabricating ownership for
- * ownerless GM work. Phase-wide tasks remain live for every participant row in the same facet.
+ * ownerless GM work. Phase-wide tasks remain attached to their step, not a participant row.
  */
 export function buildCombatRoundLiveInspectorContext(
   task: CombatProgressionPresentationTask | undefined,
@@ -44,13 +44,7 @@ export function getCombatRoundLiveInspectorSelection(input: {
   if (context.participantId) {
     return { participantId: context.participantId, step: context.step };
   }
-  const cursorParticipantId = input.state.currentCursor?.participantId;
-  const participantId = input.state.participants.some(
-    (participant) => participant.participantId === cursorParticipantId,
-  )
-    ? cursorParticipantId
-    : input.state.participants[0]?.participantId;
-  return { participantId, step: context.step };
+  return { step: context.step };
 }
 
 /**
@@ -77,9 +71,9 @@ export function isCombatRoundInspectionSelectionLive(input: {
 }): boolean {
   if (!input.selectedRoundIsActive || !input.context || !input.selection) return false;
   if (input.selection.step !== input.context.step) return false;
-  return (
-    input.context.scope === "phase" || input.selection.participantId === input.context.participantId
-  );
+  return input.context.scope === "phase"
+    ? input.selection.participantId === undefined
+    : input.selection.participantId === input.context.participantId;
 }
 
 export function getCurrentCombatRoundTaskSelection(
@@ -224,6 +218,18 @@ export function getCombatRoundManagerInspectionSelection(input: {
           step: cursorStep,
         }
       : undefined;
+
+  if (
+    pendingSelection &&
+    pendingSelection.participantId === undefined &&
+    pendingSelection.step === input.state.currentStep
+  ) {
+    return pendingSelection;
+  }
+
+  if (manualSelection && manualSelection.participantId === undefined) {
+    return manualSelection;
+  }
 
   if (
     isValidSelection({

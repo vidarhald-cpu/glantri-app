@@ -4431,10 +4431,9 @@ export default function CombatRoundManagerPanel({
     .filter((task) => task.state === "executable" && task.trackerFacet.step === "SU");
   const inspectorRoundEndTask =
     selectedRoundIsActive && inspector.step === "round_summary"
-      ? (projectedRoundEndTasks.find(
-          (task) =>
-            task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId,
-        ) ?? projectedRoundEndTasks[0])
+      ? projectedRoundEndTasks.find(
+          (task) => task.id === combatPresentation.active.currentAction?.taskId,
+        )
       : undefined;
   const roundParticipantLabelsById = useMemo(
     () =>
@@ -5205,10 +5204,14 @@ export default function CombatRoundManagerPanel({
   const inspectorCombatExperienceDifficultyDraftChanged =
     inspectorCombatExperienceDraftDifficultyValid &&
     inspectorCombatExperienceDraftDifficultyValue !== activeCombatExperienceDifficulty;
+  const inspectorCombatExperienceDifficultyTaskActive =
+    currentActionPresentation?.primaryAction.descriptor?.commandType ===
+    "set_combat_experience_difficulty";
   const inspectorCombatExperienceDifficultyInputVisible =
-    inspectorCombatExperienceRequired &&
-    inspectorCombatExperienceIsCombatStart &&
-    (!inspectorCombatExperienceWindowOpen || !combatExperienceRollRecorded);
+    inspectorCombatExperienceDifficultyTaskActive ||
+    (inspectorCombatExperienceRequired &&
+      inspectorCombatExperienceIsCombatStart &&
+      (!inspectorCombatExperienceWindowOpen || !combatExperienceRollRecorded));
   const inspectorCombatExperienceDifficultyStartPending =
     inspectorCombatExperienceRequired &&
     inspectorCombatExperienceIsCombatStart &&
@@ -5289,7 +5292,7 @@ export default function CombatRoundManagerPanel({
   );
   const combatExperienceDifficultyControlsDisabled =
     saving ||
-    !inspectorCombatExperienceIsCombatStart ||
+    (!inspectorCombatExperienceIsCombatStart && !inspectorCombatExperienceDifficultyTaskActive) ||
     combatExperienceRollRecorded ||
     (inspectorIsInspectionOnly && inspector.step !== "select_actions") ||
     Boolean(inspectorSnapshot);
@@ -11305,7 +11308,61 @@ export default function CombatRoundManagerPanel({
               )}
             </>
           ) : (
-            <div>Select a participant step to inspect combat details.</div>
+            <>
+              <div>
+                <h3 style={{ margin: 0 }}>
+                  Combat inspector — Round {selectedRoundNumber} ·{" "}
+                  {COMBAT_ROUND_STEP_LABELS[inspector.step]}
+                </h3>
+                <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} · Phase-wide
+                </div>
+              </div>
+
+              <div style={playerCombatTopPanelRowStyle}>
+                {["Declaration", "Phase 1", "Phase 2"].map((label) => (
+                  <section key={label} style={playerCombatPanelCardStyle}>
+                    <strong>{label}</strong>
+                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>—</div>
+                  </section>
+                ))}
+              </div>
+
+              <div style={playerCombatPanelRowStyle}>
+                <section style={playerCombatPanelCardStyle}>
+                  <strong>Combat situation</strong>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>Phase-wide task</div>
+                </section>
+                <PlayerCombatActionButtonPanel
+                  disabled={inspectorEffectiveActionButtonDisabled}
+                  onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                    invokeGmCurrentAction(descriptor);
+                  }}
+                  preActionControls={
+                    inspectorSelectionIsCurrentProgression
+                      ? inspectorPreActionControls
+                      : undefined
+                  }
+                  presentation={inspectorWorkflowPresentation}
+                  saving={saving}
+                  statusText={
+                    projectedBoundaryTransitionAction
+                      ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                          projectedBoundaryTransitionAction.targetBoundary,
+                        )}.`
+                      : `Current step: ${getPlayerCombatStepLabel(
+                          inspector.step,
+                        )}.${inspectorStatusSuffix}`
+                  }
+                  validationMessage={inspectorActionValidationMessage}
+                />
+                {gmCurrentStepResultPresentation ? (
+                  <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
+                ) : (
+                  <PlayerCombatActionResultPanel result={null} />
+                )}
+              </div>
+            </>
           )}
         </section>
 

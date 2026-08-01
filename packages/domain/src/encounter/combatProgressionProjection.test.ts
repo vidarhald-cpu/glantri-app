@@ -22,6 +22,7 @@ import {
   advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
   buildCombatProgressionProjection,
+  getCombatRoundStepForProgressionBoundary,
   projectCombatProgressionPresentation,
   type CombatProgressionBoundaryKind,
 } from "./combatProgressionProjection";
@@ -174,6 +175,7 @@ describe("CombatProgressionProjection", () => {
         targetBoundary: "phase1_modifier_review",
       },
     });
+    expect(task?.trackerFacet).toEqual({ owner: undefined, step: "DE" });
     const playerView = projectCombatProgressionPresentation({
       projection,
       viewer: {
@@ -517,6 +519,23 @@ describe("CombatProgressionProjection", () => {
       state: "active",
     });
     expect(taskKinds(committed)).toContain("commit_initiative");
+    expect(
+      committed.boundary.processes[0]?.stages[2]?.tasks[0]?.trackerFacet,
+    ).toEqual({ owner: undefined, step: "i1" });
+  });
+
+  it.each([
+    ["declaration", "select_actions"],
+    ["phase1_modifier_review", "review_action_modifiers"],
+    ["phase1_initiative", "initiative_phase_1"],
+    ["phase1_resolution", "phase_1_actions"],
+    ["phase2_modifier_review", "review_phase_2_modifiers"],
+    ["phase2_initiative", "initiative_phase_2"],
+    ["phase2_resolution", "phase_2_actions"],
+    ["round_end", "round_summary"],
+    ["round_boundary", "round_summary"],
+  ] as const)("maps canonical %s conversation work to %s", (boundary, step) => {
+    expect(getCombatRoundStepForProgressionBoundary(boundary)).toBe(step);
   });
 
   it("opens phase Combat Experience only after initiative commit and resolves each gate once", () => {

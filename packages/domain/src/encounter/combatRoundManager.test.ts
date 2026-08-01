@@ -19685,6 +19685,18 @@ describe("combat round manager", () => {
     expect(inspector.status).toBe("locked");
   });
 
+  it("keeps phase-owned inspector work ownerless", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const inspector = buildCombatRoundInspector({
+      state,
+      step: "select_actions",
+    });
+
+    expect(inspector.participant).toBeUndefined();
+    expect(inspector.snapshot).toBeUndefined();
+    expect(inspector.status).toBeUndefined();
+  });
+
   it("does not alter combat effects or action log when advancing round steps", () => {
     const session = encounter({
       actionLog: [

@@ -44,7 +44,6 @@ export function buildDeclarationProcesses(
       key: "difficulty",
       kind: "combat_experience",
       owner: GM_IDENTITY,
-      trackerOwner: context.identities.get(context.state.currentCursor?.participantId ?? ""),
       trackerStep: "DE",
     });
   }
@@ -145,9 +144,6 @@ export function buildDeclarationProcesses(
                   expectedCommand: "advance_combat_boundary",
                   kind: "gm_advance_boundary",
                   owner: GM_IDENTITY,
-                  trackerOwner: context.identities.get(
-                    context.state.currentCursor?.participantId ?? "",
-                  ),
                   trackerStep: "DE",
                   transition: {
                     currentBoundary: context.boundaryKind,
@@ -353,7 +349,6 @@ export function buildInitiativeProcess(
           identity: { phase },
           kind: "commit_initiative",
           owner: GM_IDENTITY,
-          trackerOwner: context.identities.get(context.state.currentCursor?.participantId ?? ""),
           trackerStep,
         },
       ]

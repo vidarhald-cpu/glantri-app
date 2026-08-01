@@ -67,13 +67,13 @@ function liveProgression(
     state?: "executable" | "waiting";
     step?: CombatRoundCursorStep;
     targetBoundary?: CombatProgressionBoundaryKind;
-    trackerOwnerId?: string;
+    trackerOwnerId?: string | null;
   } = {},
 ): CombatProgressionPresentationProjection {
   const kind = input.kind ?? "attack";
   const ownerId = input.ownerId ?? "aria";
   const ownerLabel = input.ownerLabel ?? (ownerId === "aria" ? "Aria" : "Borin");
-  const trackerOwnerId = input.trackerOwnerId ?? ownerId;
+  const trackerOwnerId = input.trackerOwnerId === undefined ? ownerId : input.trackerOwnerId;
   const trackerOwnerLabel = trackerOwnerId === "aria" ? "Aria" : "Borin";
   const step = input.step ?? "A1";
   const task: CombatProgressionPresentationTask = {
@@ -98,11 +98,13 @@ function liveProgression(
     stageId: "stage-1",
     state: input.state ?? "executable",
     trackerFacet: {
-      owner: {
-        kind: "combatant",
-        label: trackerOwnerLabel,
-        participantId: trackerOwnerId,
-      },
+      owner: trackerOwnerId
+        ? {
+            kind: "combatant",
+            label: trackerOwnerLabel,
+            participantId: trackerOwnerId,
+          }
+        : undefined,
       step,
     },
     transition: input.targetBoundary
@@ -432,6 +434,23 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(cell.hoverText).toContain("Awaiting GM: Open Phase 1 initiative.");
   });
 
+  it("keeps ownerless phase work on the shared step without marking a participant cell", () => {
+    const projection = history([]);
+    projection.progression = liveProgression({
+      boundary: "phase1_initiative",
+      gmOwned: true,
+      kind: "commit_initiative",
+      step: "i1",
+      trackerOwnerId: null,
+    });
+
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(model.rounds).toEqual([{ currentStep: "initiative_phase_1", roundNumber: 1 }]);
+    expect(model.currentTaskCellKey).toBeUndefined();
+    expect(model.cells["1:aria:initiative_phase_1"]).toMatchObject({ current: false });
+  });
+
   it.each([
     ["combat_experience", "DE"],
     ["double_attack_decision", "M2"],
@@ -664,6 +683,22 @@ describe("buildProjectedCombatTrackerModel", () => {
 
     expect(beforeCommit.rows.map((row) => row.participantId)).toEqual(["aria", "borin"]);
     expect(afterCommit.rows.map((row) => row.participantId)).toEqual(["borin", "aria"]);
+  });
+
+  it("uses visible canonical order to choose the leading cell for simultaneous work", () => {
+    const projection = history([]);
+    projection.rows.push({ displayName: "Borin", participantId: "borin" });
+    projection.progression = {
+      ...parallelAdjustDistanceProgression(["aria", "borin"]),
+      executionOrder: { participantIds: ["borin", "aria"], phase: "phase1" },
+    };
+
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(model.rows.map((row) => row.participantId)).toEqual(["borin", "aria"]);
+    expect(model.currentTaskCellKey).toBe("1:borin:phase_1_actions");
+    expect(model.cells["1:aria:phase_1_actions"].current).toBe(true);
+    expect(model.cells["1:borin:phase_1_actions"].current).toBe(true);
   });
 
   it("maps defense ownership and execution groups from projected tasks", () => {

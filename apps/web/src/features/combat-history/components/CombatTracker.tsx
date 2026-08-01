@@ -32,17 +32,24 @@ export function CombatTracker(input: {
   tableRef?: React.Ref<HTMLDivElement>;
 }) {
   const cellRefs = useRef(new Map<string, HTMLButtonElement>());
+  const stepHeaderRefs = useRef(new Map<string, HTMLTableCellElement>());
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const cellKey = input.model.currentTaskCellKey;
-    if (!input.followCurrent || !cellKey) {
+    const currentRound = input.model.rounds.find((round) => round.currentStep !== undefined);
+    const stepHeaderKey = currentRound?.currentStep
+      ? `${currentRound.roundNumber}:${currentRound.currentStep}`
+      : undefined;
+    if (!input.followCurrent || (!cellKey && !stepHeaderKey)) {
       return;
     }
 
     scrollCombatTrackerCellIntoView({
       behavior: "auto",
-      cell: cellRefs.current.get(cellKey),
+      cell:
+        (cellKey ? cellRefs.current.get(cellKey) : undefined) ??
+        (stepHeaderKey ? stepHeaderRefs.current.get(stepHeaderKey) : undefined),
       container: containerRef.current,
       mode: "center",
       padding: 96,
@@ -130,6 +137,11 @@ export function CombatTracker(input: {
                       roundIndex > 0 && stepIndex === 0 ? "round-boundary-start" : undefined
                     }
                     key={`${round.roundNumber}-${step}`}
+                    ref={(node) => {
+                      const key = `${round.roundNumber}:${step}`;
+                      if (node) stepHeaderRefs.current.set(key, node);
+                      else stepHeaderRefs.current.delete(key);
+                    }}
                     style={{
                       ...stepCellStyle,
                       background: round.currentStep === step ? "#f6f0dd" : "#fbfaf7",

@@ -309,7 +309,7 @@ describe("combat round manager selection", () => {
     ).toBe(false);
   });
 
-  it("keeps an ownerless GM task live for any participant row in its phase facet", () => {
+  it("keeps ownerless GM work on its phase facet without borrowing a participant row", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const context = buildCombatRoundLiveInspectorContext(
       presentationTask({ id: "distance-commit", step: "A1" }),
@@ -317,16 +317,22 @@ describe("combat round manager selection", () => {
 
     expect(context).toMatchObject({ scope: "phase", step: "phase_1_actions" });
     expect(getCombatRoundLiveInspectorSelection({ context, state: existing })).toEqual({
-      participantId: "top",
       step: "phase_1_actions",
     });
     expect(
       isCombatRoundInspectionSelectionLive({
         context,
         selectedRoundIsActive: true,
-        selection: { participantId: "bottom", step: "phase_1_actions" },
+        selection: { step: "phase_1_actions" },
       }),
     ).toBe(true);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_actions" },
+      }),
+    ).toBe(false);
     expect(
       isCombatRoundInspectionSelectionLive({
         context,
@@ -334,6 +340,12 @@ describe("combat round manager selection", () => {
         selection: { participantId: "bottom", step: "phase_1_damage" },
       }),
     ).toBe(false);
+    expect(
+      getCombatRoundManagerInspectionSelection({
+        manualSelection: { step: "phase_1_actions" },
+        state: { ...existing, currentStep: "phase_1_actions" },
+      }),
+    ).toEqual({ step: "phase_1_actions" });
   });
 
   it("maps downstream participant and ownerless damage tasks to live D1 context", () => {
@@ -369,7 +381,7 @@ describe("combat round manager selection", () => {
       isCombatRoundInspectionSelectionLive({
         context: gmContext,
         selectedRoundIsActive: true,
-        selection: { participantId: "middle", step: "phase_1_damage" },
+        selection: { step: "phase_1_damage" },
       }),
     ).toBe(true);
   });

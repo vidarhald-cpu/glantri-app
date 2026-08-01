@@ -5,6 +5,7 @@ import type {
   CombatRoundCursorStep,
   CombatRoundPhase,
   CombatRoundPhaseResolutionCursor,
+  CombatRoundStep,
 } from "../combatRoundManager";
 import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
 
@@ -21,6 +22,31 @@ export const COMBAT_PROGRESSION_BOUNDARIES = [
 ] as const;
 
 export type CombatProgressionBoundaryKind = (typeof COMBAT_PROGRESSION_BOUNDARIES)[number];
+
+/** Shared visible tracker step for a boundary when its exact current task is ownerless or hidden. */
+export function getCombatRoundStepForProgressionBoundary(
+  boundary: CombatProgressionBoundaryKind,
+): CombatRoundStep {
+  switch (boundary) {
+    case "declaration":
+      return "select_actions";
+    case "phase1_modifier_review":
+      return "review_action_modifiers";
+    case "phase1_initiative":
+      return "initiative_phase_1";
+    case "phase1_resolution":
+      return "phase_1_actions";
+    case "phase2_modifier_review":
+      return "review_phase_2_modifiers";
+    case "phase2_initiative":
+      return "initiative_phase_2";
+    case "phase2_resolution":
+      return "phase_2_actions";
+    case "round_end":
+    case "round_boundary":
+      return "round_summary";
+  }
+}
 
 export type CombatProgressionProcessKind =
   | "adjust_distance"
