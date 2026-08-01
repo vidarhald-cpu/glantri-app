@@ -8,6 +8,7 @@ import {
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
   isParryGeneratedPercentageModifier,
+  resolveCombatAttackPhaseDefensivePenalties,
   type CombatActionGeneratedDistanceModifierInput,
   type CombatRoundPhaseContexts,
   type CombatRoundState,
@@ -307,8 +308,43 @@ export function projectCombatActionGeneratedModifiers(input: {
           roundState: input.roundState,
         })?.participantId ?? input.encounterParticipant.id)
       : undefined;
+  const roundParticipant =
+    input.roundState && input.encounterParticipant
+      ? findRoundParticipantByAlias({
+          id: input.encounterParticipant.id,
+          roundState: input.roundState,
+        })
+      : undefined;
+  const committedAttackPhaseDefensivePenalties =
+    roundParticipant?.declaration !== undefined &&
+    roundParticipant.declaration.actionId === input.actionId
+      ? (roundParticipant.declaration.attackPhaseDefensivePenalties ??
+        (roundParticipant.declaration.attackOpportunities
+          ? resolveCombatAttackPhaseDefensivePenalties({
+              commitment: "committed",
+              opportunities: roundParticipant.declaration.attackOpportunities,
+              participantId: roundParticipant.participantId,
+              roundNumber: input.roundState?.roundNumber ?? 1,
+            })
+          : undefined))
+      : undefined;
   const projectedContext = applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
+    attackPhaseDefensivePenalties:
+      committedAttackPhaseDefensivePenalties ??
+      resolveCombatAttackPhaseDefensivePenalties({
+        commitment: "provisional",
+        opportunities: attackPhases.map((phase) => ({
+          actionId: input.actionId,
+          id: `provisional:${input.roundState?.roundNumber ?? 1}:${roundParticipantId ?? "participant"}:${phase}`,
+          phase,
+          slot: phase === "phase1" ? "attack_1" : "attack_2",
+          status: "committed",
+          targetParticipantId: input.phaseContexts?.[phase]?.targetParticipantId,
+        })),
+        participantId: roundParticipantId ?? "provisional-participant",
+        roundNumber: input.roundState?.roundNumber ?? 1,
+      }),
     combatContext: input.combatContext,
     distanceModifiers,
     initiativeModifiers:

@@ -185,7 +185,12 @@ const attackParryDbParryModifierEntry = {
   sourceRule: "attack-parry-db-parry-phase1",
   value: -4,
 };
-const attackParryDbParryModifier = expect.objectContaining(attackParryDbParryModifierEntry);
+const attackParryDbParryModifier = expect.objectContaining({
+  generated: true,
+  sourceActionId: "attack_parry",
+  sourcePhase: "phase1",
+  value: -4,
+});
 const parryAttackDbParryModifierEntry = {
   durationRounds: 1,
   generated: true,
@@ -197,7 +202,12 @@ const parryAttackDbParryModifierEntry = {
   sourceRule: "parry-attack-db-parry-phase2",
   value: -4,
 };
-const parryAttackDbParryModifier = expect.objectContaining(parryAttackDbParryModifierEntry);
+const parryAttackDbParryModifier = expect.objectContaining({
+  generated: true,
+  sourceActionId: "parry_attack",
+  sourcePhase: "phase2",
+  value: -4,
+});
 const doubleAttackPhase1ObSkillModifierEntry = {
   durationRounds: 1,
   generated: true,
@@ -259,15 +269,29 @@ const doubleAttackPhase1ObSkillModifier = expect.objectContaining(
 const doubleAttackPhase2ObSkillModifier = expect.objectContaining(
   doubleAttackPhase2ObSkillModifierEntry,
 );
-const doubleAttackPhase1DbParryModifier = expect.objectContaining(
-  doubleAttackPhase1DbParryModifierEntry,
-);
-const doubleAttackPhase2DbParryModifier = expect.objectContaining(
-  doubleAttackPhase2DbParryModifierEntry,
-);
+const doubleAttackPhase1DbParryModifier = expect.objectContaining({
+  generated: true,
+  sourceActionId: "double_attack",
+  sourcePhase: "phase1",
+  value: -4,
+});
+const doubleAttackPhase2DbParryModifier = expect.objectContaining({
+  generated: true,
+  sourceActionId: "double_attack",
+  sourcePhase: "phase2",
+  value: -4,
+});
 const adjustRangePhase1DbParryModifier = expect.objectContaining(
   adjustRangePhase1DbParryModifierEntry,
 );
+const adjustRangePhase2AttackPenalty = expect.objectContaining({
+  application: "percentage",
+  generated: true,
+  sourceActionId: "adjust_range_attack",
+  sourcePhase: "phase2",
+  sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
+  value: -4,
+});
 
 async function buildScenarioTestApp() {
   const app = Fastify({
@@ -4859,6 +4883,7 @@ describe("scenarios route contract", () => {
     );
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "attack_parry",
+      attackPhaseDefensivePenalties: [expect.objectContaining({ penalty: -4, phase: "phase1" })],
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
           situationDb: [attackParryDbParryModifier],
@@ -9514,6 +9539,7 @@ describe("scenarios route contract", () => {
     const declaration = updatedEncounter.combatRoundState.participants[0].declaration;
     expect(declaration).toMatchObject({
       actionId: "feint_attack",
+      attackPhaseDefensivePenalties: [expect.objectContaining({ penalty: -4, phase: "phase2" })],
       attackOpportunities: [
         expect.objectContaining({
           origin: "feint_attack",
@@ -9537,6 +9563,14 @@ describe("scenarios route contract", () => {
         }),
       },
     });
+    expect(declaration.combatContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        sourceActionId: "feint_attack",
+        sourcePhase: "phase2",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
+        value: -4,
+      }),
+    ]);
     expect(updatedEncounter.combatRoundState.feintProposals).toEqual([
       expect.objectContaining({
         attackerParticipantId: "encounter-participant-1",
@@ -9845,6 +9879,7 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "parry_attack",
+      attackPhaseDefensivePenalties: [expect.objectContaining({ penalty: -4, phase: "phase2" })],
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
           situationDb: [parryAttackDbParryModifier],
@@ -9934,6 +9969,10 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "double_attack",
+      attackPhaseDefensivePenalties: [
+        expect.objectContaining({ attackIndex: 1, penalty: -4, phase: "phase1" }),
+        expect.objectContaining({ attackIndex: 2, penalty: -4, phase: "phase2" }),
+      ],
       attackOpportunities: [
         expect.objectContaining({ attackModeId: "mode-1", phase: "phase1", slot: "attack_1" }),
         expect.objectContaining({ attackModeId: "mode-1", phase: "phase2", slot: "attack_2" }),
@@ -10457,7 +10496,7 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("creates only the phase 1 DB/Parry risk when declaring a closer Adjust Distance-Attack", async () => {
+  it("keeps the closer Phase 1 risk separate from the ordinary Phase 2 attack penalty", async () => {
     setupCombatDeclarationRoute({
       encounter: { participants: makeTwoCombatEncounterParticipants() },
       participants: [{ id: "participant-1" }, { id: "participant-2" }],
@@ -10525,7 +10564,7 @@ describe("scenarios route contract", () => {
             lastDeclaredEncounterId: "encounter-1",
             combatContext: expect.objectContaining({
               modifierBuckets: expect.objectContaining({
-                situationDb: [adjustRangePhase1DbParryModifier],
+                situationDb: [adjustRangePhase2AttackPenalty, adjustRangePhase1DbParryModifier],
               }),
             }),
           }),
@@ -10537,7 +10576,7 @@ describe("scenarios route contract", () => {
       actionId: "adjust_range_attack",
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
-          situationDb: [adjustRangePhase1DbParryModifier],
+          situationDb: [adjustRangePhase2AttackPenalty, adjustRangePhase1DbParryModifier],
         }),
       }),
       phaseContexts: {

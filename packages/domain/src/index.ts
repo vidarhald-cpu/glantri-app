@@ -35,6 +35,7 @@ export * from "./encounter/combatModifierProjection";
 export * from "./encounter/combatModifierContributions";
 export * from "./encounter/combatObservation";
 export * from "./encounter/combatActionModifiers";
+export * from "./encounter/combatAttackPhasePenalty";
 export * from "./encounter/combatDeclarationValidation";
 export * from "./encounter/combatDeclarationCompatibility";
 export * from "./encounter/critical";

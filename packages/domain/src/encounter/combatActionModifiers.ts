@@ -11,6 +11,9 @@ import {
   type CombatDistance,
 } from "./combatDistance";
 import type { MovementIntent } from "./combatMovementIntent";
+import type { CombatAttackPhaseDefensivePenalty } from "./combatAttackPhasePenalty";
+
+export const ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE = "attack-phase-defensive-penalty";
 
 export const ATTACK_PARRY_DB_PARRY_MODIFIER_ID = "generated:attack-parry:phase1:db-parry";
 export const ATTACK_PARRY_DB_PARRY_SOURCE_RULE = "attack-parry-db-parry-phase1";
@@ -36,13 +39,10 @@ export const ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE = "adjust-range-attack-pha
 export const DISTANCE_OB_SKILL_SOURCE_RULE = "distance-ob-skill";
 export const REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID =
   "generated:parry-attack:phase2:initiative";
-export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE =
-  "parry-attack-phase2-initiative";
-export const OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
-  "generated:offensive-parry:round:percentage-db";
+export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE = "parry-attack-phase2-initiative";
+export const OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID = "generated:offensive-parry:round:percentage-db";
 export const OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-percentage-db";
-const LEGACY_OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
-  "generated:offensive-parry:round:flat-db";
+const LEGACY_OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID = "generated:offensive-parry:round:flat-db";
 const LEGACY_OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-flat-db";
 export const PARRY_ROUND_PERCENTAGE_MODIFIER_ID = "generated:parry:round:db-parry-percentage";
 export const PARRY_ROUND_PERCENTAGE_SOURCE_RULE = "parry-dodge-one-fifth";
@@ -149,14 +149,18 @@ export function isDistanceGeneratedObSkillModifier(entry: ScenarioCombatModifier
 export function isAttackParryGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     entry.id === ATTACK_PARRY_DB_PARRY_MODIFIER_ID ||
-    entry.sourceRule === ATTACK_PARRY_DB_PARRY_SOURCE_RULE
+    entry.sourceRule === ATTACK_PARRY_DB_PARRY_SOURCE_RULE ||
+    (entry.sourceActionId === "attack_parry" &&
+      entry.sourceRule?.startsWith(ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE) === true)
   );
 }
 
 export function isParryAttackGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     entry.id === PARRY_ATTACK_DB_PARRY_MODIFIER_ID ||
-    entry.sourceRule === PARRY_ATTACK_DB_PARRY_SOURCE_RULE
+    entry.sourceRule === PARRY_ATTACK_DB_PARRY_SOURCE_RULE ||
+    (entry.sourceActionId === "parry_attack" &&
+      entry.sourceRule?.startsWith(ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE) === true)
   );
 }
 
@@ -178,7 +182,18 @@ export function isDoubleAttackGeneratedDbParryModifier(
     entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID ||
     entry.sourceRule === DOUBLE_ATTACK_PHASE1_DB_PARRY_SOURCE_RULE ||
     entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID ||
-    entry.sourceRule === DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE
+    entry.sourceRule === DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE ||
+    (entry.sourceActionId === "double_attack" &&
+      entry.sourceRule?.startsWith(ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE) === true)
+  );
+}
+
+export function isAttackPhaseDefensivePenaltyModifier(entry: ScenarioCombatModifierEntry): boolean {
+  return (
+    entry.sourceRule?.startsWith(ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE) === true ||
+    isAttackParryGeneratedDbParryModifier(entry) ||
+    isParryAttackGeneratedDbParryModifier(entry) ||
+    isDoubleAttackGeneratedDbParryModifier(entry)
   );
 }
 
@@ -202,9 +217,7 @@ export function isReactiveAttackGeneratedInitiativeModifier(
   );
 }
 
-export function isOffensiveParryGeneratedDbModifier(
-  entry: ScenarioCombatModifierEntry,
-): boolean {
+export function isOffensiveParryGeneratedDbModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     entry.id === OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID ||
     entry.sourceRule === OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE ||
@@ -229,6 +242,60 @@ function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEnt
     isOffensiveParryGeneratedDbModifier(entry) ||
     isParryGeneratedPercentageModifier(entry)
   );
+}
+
+export function buildAttackPhaseDefensivePenaltyModifier(
+  penalty: CombatAttackPhaseDefensivePenalty,
+): ScenarioCombatModifierEntry | undefined {
+  if (penalty.penalty === 0) return undefined;
+
+  const reasonLabel =
+    penalty.reason === "double_attack_second_cancelled"
+      ? "Double Attack second attack cancelled"
+      : penalty.reason === "simultaneous_attack_backout"
+        ? "simultaneous attack backout"
+        : "committed weapon attack";
+
+  return scenarioCombatModifierEntrySchema.parse({
+    application: "percentage",
+    durationRounds: 1,
+    expiresAtRound: penalty.roundNumber,
+    generated: true,
+    id: `generated:${penalty.id}:db-parry`,
+    notes: `${reasonLabel}: DB/Parry ${penalty.penalty}% in ${penalty.phase}`,
+    provisional: penalty.commitment === "provisional",
+    scope: "until",
+    sourceActionId: penalty.sourceActionId,
+    sourceDuration: penalty.duration,
+    sourceOpportunityId: penalty.attackOpportunityId,
+    sourcePhase: penalty.phase,
+    sourceProcessId: penalty.attackProcessId,
+    sourceRoundNumber: penalty.roundNumber,
+    sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:${penalty.reason}`,
+    value: penalty.penalty,
+  });
+}
+
+export function applyAttackPhaseDefensivePenaltyModifiers(input: {
+  combatContext: ScenarioParticipantCombatContext;
+  penalties: readonly CombatAttackPhaseDefensivePenalty[];
+}): ScenarioParticipantCombatContext {
+  const generated = input.penalties
+    .map(buildAttackPhaseDefensivePenaltyModifier)
+    .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
+
+  return scenarioParticipantCombatContextSchema.parse({
+    ...input.combatContext,
+    modifierBuckets: {
+      ...input.combatContext.modifierBuckets,
+      situationDb: [
+        ...input.combatContext.modifierBuckets.situationDb.filter(
+          (entry) => !isAttackPhaseDefensivePenaltyModifier(entry),
+        ),
+        ...generated,
+      ],
+    },
+  });
 }
 
 function isCombatActionGeneratedObSkillModifier(entry: ScenarioCombatModifierEntry): boolean {
@@ -341,23 +408,30 @@ function combatActionGeneratedDbParryModifierMatchesPhase(input: {
 function isSoftenableBackOutAttackDbParryModifier(input: {
   actionId?: string;
   entry: ScenarioCombatModifierEntry;
+  opportunityId?: string;
   phase: "phase1" | "phase2";
 }): boolean {
   return Boolean(
     input.entry.generated &&
     input.entry.value === -4 &&
-    isCombatActionGeneratedDbParryModifier(input.entry) &&
+    isAttackPhaseDefensivePenaltyModifier(input.entry) &&
     combatActionGeneratedDbParryModifierMatchesPhase({
       entry: input.entry,
       phase: input.phase,
     }) &&
-    (!input.actionId || input.entry.sourceActionId === input.actionId),
+    (!input.opportunityId ||
+      !input.entry.sourceOpportunityId ||
+      input.entry.sourceOpportunityId === input.opportunityId) &&
+    (!input.actionId ||
+      !input.entry.sourceActionId ||
+      input.entry.sourceActionId === input.actionId),
   );
 }
 
 export function softenCombatActionGeneratedBackOutModifier(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
+  opportunityId?: string;
   phase: "phase1" | "phase2";
 }): {
   combatContext: ScenarioParticipantCombatContext;
@@ -371,6 +445,7 @@ export function softenCombatActionGeneratedBackOutModifier(input: {
       !isSoftenableBackOutAttackDbParryModifier({
         actionId: input.actionId,
         entry,
+        opportunityId: input.opportunityId,
         phase: input.phase,
       })
     ) {
@@ -379,6 +454,9 @@ export function softenCombatActionGeneratedBackOutModifier(input: {
 
     const nextEntry = {
       ...entry,
+      notes: `simultaneous attack backout: DB/Parry -2% in ${input.phase}`,
+      provisional: false,
+      sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:simultaneous_attack_backout`,
       value: -2,
     };
 
@@ -628,7 +706,10 @@ export function cancelDoubleAttackPhase2GeneratedModifiers(
     modifierBuckets: {
       ...combatContext.modifierBuckets,
       situationDb: combatContext.modifierBuckets.situationDb.map((entry) =>
-        entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID
+        entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID ||
+        (entry.sourceActionId === "double_attack" &&
+          entry.sourcePhase === "phase2" &&
+          isAttackPhaseDefensivePenaltyModifier(entry))
           ? {
               ...entry,
               notes: "double attack cancelled after Attack 1",
@@ -653,15 +734,39 @@ export function continueDoubleAttackPhase2GeneratedModifiers(
   const phase2Db = dbRows.find((entry) => entry.sourcePhase === "phase2");
   const phase2Ob = obRows.find((entry) => entry.sourcePhase === "phase2");
 
+  const genericPhase2Db = combatContext.modifierBuckets.situationDb.find(
+    (entry) =>
+      entry.sourceActionId === "double_attack" &&
+      entry.sourcePhase === "phase2" &&
+      isAttackPhaseDefensivePenaltyModifier(entry),
+  );
+
   return scenarioParticipantCombatContextSchema.parse({
     ...combatContext,
     modifierBuckets: {
       ...combatContext.modifierBuckets,
       situationDb: [
         ...combatContext.modifierBuckets.situationDb.filter(
-          (entry) => entry.id !== DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
+          (entry) =>
+            entry.id !== DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID &&
+            !(
+              entry.sourceActionId === "double_attack" &&
+              entry.sourcePhase === "phase2" &&
+              isAttackPhaseDefensivePenaltyModifier(entry)
+            ),
         ),
-        ...(phase2Db ? [phase2Db] : []),
+        ...(genericPhase2Db
+          ? [
+              {
+                ...genericPhase2Db,
+                notes: "committed weapon attack: DB/Parry -4% in phase2",
+                sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:ordinary_committed_attack`,
+                value: -4,
+              },
+            ]
+          : phase2Db
+            ? [phase2Db]
+            : []),
       ],
       situationObSkill: [
         ...combatContext.modifierBuckets.situationObSkill.filter(
@@ -722,6 +827,7 @@ export function expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
 
 export function applyCombatActionGeneratedModifiers(input: {
   actionId?: string;
+  attackPhaseDefensivePenalties?: readonly CombatAttackPhaseDefensivePenalty[];
   combatContext: ScenarioParticipantCombatContext;
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
   initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
@@ -731,9 +837,12 @@ export function applyCombatActionGeneratedModifiers(input: {
   sourceRoundNumber?: number;
 }): ScenarioParticipantCombatContext {
   const situationDbWithoutGeneratedActionModifiers =
-    input.combatContext.modifierBuckets.situationDb.filter(
-      (entry) => !isCombatActionGeneratedDbParryModifier(entry),
-    );
+    input.combatContext.modifierBuckets.situationDb.filter((entry) => {
+      if (isAttackPhaseDefensivePenaltyModifier(entry)) {
+        return input.attackPhaseDefensivePenalties === undefined;
+      }
+      return !isCombatActionGeneratedDbParryModifier(entry);
+    });
   const situationObSkillWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationObSkill.filter(
       (entry) => !isCombatActionGeneratedObSkillModifier(entry),
@@ -742,29 +851,27 @@ export function applyCombatActionGeneratedModifiers(input: {
     input.combatContext.modifierBuckets.situationInitiative.filter(
       (entry) => !isCombatActionGeneratedInitiativeModifier(entry),
     );
+  const generatedAttackPhaseDefensivePenaltyModifiers =
+    input.attackPhaseDefensivePenalties
+      ?.map(buildAttackPhaseDefensivePenaltyModifier)
+      .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry)) ?? [];
   const generatedDbParryModifiers =
-    input.actionId === "attack_parry"
-      ? [buildAttackParryGeneratedDbParryModifier()]
-      : input.actionId === "parry_attack"
-        ? [buildParryAttackGeneratedDbParryModifier()]
-        : input.actionId === "double_attack"
-          ? buildDoubleAttackGeneratedDbParryModifiers()
-          : input.actionId === "adjust_range_attack"
-            ? buildAdjustRangeAttackGeneratedDbParryModifiers(input.adjustDistance)
-            : input.actionId === "offensive_parry"
-              ? [
-                  buildOffensiveParryGeneratedDbModifier({
-                    roundNumber: input.sourceRoundNumber,
-                  }),
-                ]
-              : input.actionId === "parry" && input.parryModifier
-                ? [
-                    buildParryGeneratedPercentageModifier({
-                      ...input.parryModifier,
-                      roundNumber: input.sourceRoundNumber,
-                    }),
-                  ]
-                : [];
+    input.actionId === "adjust_range_attack"
+      ? buildAdjustRangeAttackGeneratedDbParryModifiers(input.adjustDistance)
+      : input.actionId === "offensive_parry"
+        ? [
+            buildOffensiveParryGeneratedDbModifier({
+              roundNumber: input.sourceRoundNumber,
+            }),
+          ]
+        : input.actionId === "parry" && input.parryModifier
+          ? [
+              buildParryGeneratedPercentageModifier({
+                ...input.parryModifier,
+                roundNumber: input.sourceRoundNumber,
+              }),
+            ]
+          : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];
   const generatedDistanceObSkillModifiers = (input.distanceModifiers ?? [])
@@ -790,6 +897,7 @@ export function applyCombatActionGeneratedModifiers(input: {
       // product-facing bucket is now DB/Parry.
       situationDb: [
         ...situationDbWithoutGeneratedActionModifiers,
+        ...generatedAttackPhaseDefensivePenaltyModifiers.map(withSourceProvenance),
         ...generatedDbParryModifiers.map(withSourceProvenance),
       ],
       situationInitiative: [

@@ -10,6 +10,7 @@ import {
   combatStepEventStatusSchema,
   combatStepEventTypeSchema,
   deriveLegacyCombatStepEvents,
+  resolveCombatAttackPhaseDefensivePenalty,
   type CombatRoundCommand,
 } from "../index";
 
@@ -602,6 +603,51 @@ describe("deriveLegacyCombatStepEvents", () => {
   });
 
   it("publishes accepted reviews, skips, effect review, and round boundary as bounded results", () => {
+    const skippedPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "skipped",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:1:participant:attacker-1:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "committed",
+      },
+      participantId: ATTACKER_ID,
+      reason: "skipped_after_commitment",
+      roundNumber: 1,
+    });
+    const backOutPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "backed_out",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:1:participant:defender-1:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "cancelled",
+      },
+      participantId: DEFENDER_ID,
+      reason: "simultaneous_attack_backout",
+      roundNumber: 1,
+      sourceException: "simultaneous_attack_backout",
+    });
+    const doubleCancelPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "cancelled",
+      opportunity: {
+        actionId: "double_attack",
+        attackIndex: 2,
+        id: "round:1:participant:attacker-1:phase2:attack_2",
+        phase: "phase2",
+        slot: "attack_2",
+        status: "cancelled",
+      },
+      participantId: ATTACKER_ID,
+      reason: "double_attack_second_cancelled",
+      roundNumber: 1,
+      sourceException: "double_attack_second_cancelled",
+    });
     const events = deriveLegacyCombatStepEvents({
       commands: [
         command({
@@ -612,7 +658,7 @@ describe("deriveLegacyCombatStepEvents", () => {
         }),
         command({
           createdAt: "2026-01-01T00:02:00.000Z",
-          facts: { reason: "gm_skip" },
+          facts: { attackPhaseDefensivePenalty: skippedPenalty, reason: "gm_skip" },
           id: "action-skip",
           participantId: ATTACKER_ID,
           phase: "phase1",
@@ -621,7 +667,7 @@ describe("deriveLegacyCombatStepEvents", () => {
         }),
         command({
           createdAt: "2026-01-01T00:03:00.000Z",
-          facts: { choice: "back_out" },
+          facts: { attackPhaseDefensivePenalty: backOutPenalty, choice: "back_out" },
           id: "choice-back-out",
           participantId: DEFENDER_ID,
           phase: "phase1",
@@ -630,7 +676,7 @@ describe("deriveLegacyCombatStepEvents", () => {
         }),
         command({
           createdAt: "2026-01-01T00:03:30.000Z",
-          facts: { decision: "cancel" },
+          facts: { attackPhaseDefensivePenalty: doubleCancelPenalty, decision: "cancel" },
           id: "double-attack-cancel",
           participantId: ATTACKER_ID,
           phase: "phase2",
@@ -675,9 +721,17 @@ describe("deriveLegacyCombatStepEvents", () => {
       resultLabel: "Modifier state accepted",
     });
     expect(events[1]).toMatchObject({ status: "skipped", step: "phase_1_actions" });
+    expect(events[1]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -4 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
+    });
     expect(events[2]?.facts.involvedOutcome).toMatchObject({
       reason: "Attack backed out",
       resolutionType: "skipped",
+    });
+    expect(events[2]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -2 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
     });
     expect(events[3]).toMatchObject({
       status: "skipped",
@@ -685,6 +739,10 @@ describe("deriveLegacyCombatStepEvents", () => {
     });
     expect(events[3]?.facts.involvedOutcome).toMatchObject({
       reason: "Double Attack phase 2 cancelled",
+    });
+    expect(events[3]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -2 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
     });
     expect(events[4]).toMatchObject({
       attackResultId: ATTACK_RESULT_ID,

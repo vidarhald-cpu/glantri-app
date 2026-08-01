@@ -41,12 +41,22 @@ import {
   type CombatArmorModifierClass,
 } from "./armorModifier";
 import {
+  applyAttackPhaseDefensivePenaltyModifiers,
   buildReactiveAttackPhase2GeneratedInitiativeModifier,
   cancelDoubleAttackPhase2GeneratedModifiers,
+  isAttackPhaseDefensivePenaltyModifier,
   isReactiveAttackGeneratedInitiativeModifier,
   restoreCombatActionGeneratedBackOutModifiers,
   softenCombatActionGeneratedBackOutModifier,
 } from "./combatActionModifiers";
+import {
+  buildCombatAttackPhasePenaltyResultConsequences,
+  combatAttackPhaseDefensivePenaltySchema,
+  replaceCombatAttackPhaseDefensivePenalty,
+  resolveCombatAttackPhaseDefensivePenalties,
+  resolveCombatAttackPhaseDefensivePenalty,
+  type CombatAttackPhaseDefensivePenalty,
+} from "./combatAttackPhasePenalty";
 import {
   buildCombatAdjustDistanceProposalId,
   COMBAT_ADJUST_DISTANCE_RESULT_TABLE,
@@ -998,6 +1008,7 @@ export const combatRoundAttackRollResultSchema = z
     attackModeId: idSchema.optional(),
     attackOpportunityId: idSchema.optional(),
     attackSlot: z.enum(["attack_1", "attack_2"]).optional(),
+    attackPhaseDefensivePenalty: combatAttackPhaseDefensivePenaltySchema.optional(),
     attackerParticipantId: idSchema,
     declarationId: idSchema.optional(),
     defenderParticipantId: idSchema,
@@ -2068,6 +2079,7 @@ export const combatRoundDeclarationSchema = z.object({
   additionalActionNotes: z.string().optional(),
   adjustDistance: combatRoundAdjustDistanceDeclarationSchema.optional(),
   attackOpportunities: z.array(combatRoundAttackOpportunitySchema).optional(),
+  attackPhaseDefensivePenalties: z.array(combatAttackPhaseDefensivePenaltySchema).optional(),
   combatContext: scenarioParticipantCombatContextSchema.optional(),
   feint: combatRoundFeintDeclarationSchema.optional(),
   movementId: z.string().min(1).optional(),
@@ -5677,6 +5689,7 @@ function sanitizeCombatRoundDeclarationTargets(input: {
 
 export function buildCombatRoundAttackRollResult(input: {
   actionId: string;
+  attackPhaseDefensivePenalty?: CombatAttackPhaseDefensivePenalty;
   attackIndex?: number;
   attackModeId?: string;
   attackOpportunityId?: string;
@@ -5717,6 +5730,7 @@ export function buildCombatRoundAttackRollResult(input: {
 
   return combatRoundAttackRollResultSchema.parse({
     actionId: input.actionId,
+    attackPhaseDefensivePenalty: input.attackPhaseDefensivePenalty,
     attackIndex: input.attackIndex,
     attackModeId: input.attackModeId,
     attackOpportunityId: input.attackOpportunityId,
@@ -7369,6 +7383,72 @@ export function skipCombatRoundCurrentPhaseAction(input: {
     status: "skipped",
     step: actionStep,
   });
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const canonicalOpportunity = getCombatRoundPhaseAttackCandidates({
+    phase: input.phase,
+    state: normalized,
+  }).find((opportunity) => opportunity.participantId === input.participantId);
+  const actualPreviousAttackPhaseDefensivePenalties =
+    participant?.declaration?.attackPhaseDefensivePenalties;
+  const previousAttackPhaseDefensivePenalties =
+    actualPreviousAttackPhaseDefensivePenalties ??
+    (canonicalOpportunity
+      ? resolveCombatAttackPhaseDefensivePenalties({
+          commitment: "committed",
+          opportunities: [canonicalOpportunity],
+          participantId: input.participantId,
+          roundNumber: normalized.roundNumber,
+        })
+      : []);
+  const skippedAttackPhaseDefensivePenalty = canonicalOpportunity
+    ? resolveCombatAttackPhaseDefensivePenalty({
+        commitment: "committed",
+        executionState: "skipped",
+        opportunity: canonicalOpportunity,
+        participantId: input.participantId,
+        reason: "skipped_after_commitment",
+        roundNumber: normalized.roundNumber,
+      })
+    : undefined;
+  const nextAttackPhaseDefensivePenalties = skippedAttackPhaseDefensivePenalty
+    ? replaceCombatAttackPhaseDefensivePenalty({
+        existing: previousAttackPhaseDefensivePenalties,
+        next: skippedAttackPhaseDefensivePenalty,
+      })
+    : previousAttackPhaseDefensivePenalties;
+  const withCanonicalSkip = skippedAttackPhaseDefensivePenalty
+    ? combatRoundStateSchema.parse({
+        ...withSkippedAction,
+        participants: withSkippedAction.participants.map((entry) =>
+          entry.participantId === input.participantId && entry.declaration
+            ? {
+                ...entry,
+                declaration: {
+                  ...entry.declaration,
+                  attackPhaseDefensivePenalties: nextAttackPhaseDefensivePenalties,
+                  combatContext: applyAttackPhaseDefensivePenaltyModifiers({
+                    combatContext: scenarioParticipantCombatContextSchema.parse(
+                      entry.declaration.combatContext ?? {},
+                    ),
+                    penalties: nextAttackPhaseDefensivePenalties,
+                  }),
+                  phaseContexts: {
+                    ...entry.declaration.phaseContexts,
+                    [input.phase]: applyAttackPhaseDefensivePenaltyModifiers({
+                      combatContext: scenarioParticipantCombatContextSchema.parse(
+                        entry.declaration.phaseContexts?.[input.phase] ?? {},
+                      ),
+                      penalties: nextAttackPhaseDefensivePenalties,
+                    }),
+                  },
+                },
+              }
+            : entry,
+        ),
+      })
+    : withSkippedAction;
   const commandType = "skip_phase_action" satisfies CombatRoundCommandType;
   const commandId =
     input.command.commandId ??
@@ -7384,7 +7464,17 @@ export function skipCombatRoundCurrentPhaseAction(input: {
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
     facts: {
+      attackPhaseDefensivePenalty: skippedAttackPhaseDefensivePenalty,
       phase: input.phase,
+      previousAttackPhaseDefensivePenalties: actualPreviousAttackPhaseDefensivePenalties ?? null,
+      previousAttackPhaseDefensiveCombatModifiers:
+        participant?.declaration?.combatContext?.modifierBuckets.situationDb.filter(
+          isAttackPhaseDefensivePenaltyModifier,
+        ) ?? [],
+      previousAttackPhaseDefensivePhaseModifiers:
+        participant?.declaration?.phaseContexts?.[input.phase]?.modifierBuckets.situationDb.filter(
+          isAttackPhaseDefensivePenaltyModifier,
+        ) ?? [],
       reason: input.reason?.trim() || "GM skipped action",
       status: "skipped",
     },
@@ -7396,9 +7486,9 @@ export function skipCombatRoundCurrentPhaseAction(input: {
     type: commandType,
   });
   const stateForAfterCursor = combatRoundStateSchema.parse({
-    ...withSkippedAction,
+    ...withCanonicalSkip,
     commands: [
-      ...withSkippedAction.commands.filter((command) => command.id !== commandId),
+      ...withCanonicalSkip.commands.filter((command) => command.id !== commandId),
       commandShell,
     ],
   });
@@ -7424,9 +7514,9 @@ export function skipCombatRoundCurrentPhaseAction(input: {
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
   return combatRoundStateSchema.parse({
-    ...withSkippedAction,
+    ...withCanonicalSkip,
     commands: [
-      ...withSkippedAction.commands.filter((existingCommand) => existingCommand.id !== commandId),
+      ...withCanonicalSkip.commands.filter((existingCommand) => existingCommand.id !== commandId),
       command,
     ],
     currentCursor: command.afterCursor,
@@ -7541,11 +7631,44 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   const currentCombatContext = scenarioParticipantCombatContextSchema.parse(
     input.combatContext ?? {},
   );
+  const canonicalOpportunity = getCombatRoundPhaseAttackCandidates({
+    phase: input.phase,
+    state: normalized,
+  }).find((opportunity) => opportunity.participantId === input.participantId);
+  const previousAttackPhaseDefensivePenalties =
+    participant.declaration?.attackPhaseDefensivePenalties ??
+    (canonicalOpportunity
+      ? resolveCombatAttackPhaseDefensivePenalties({
+          commitment: "committed",
+          opportunities: [canonicalOpportunity],
+          participantId: input.participantId,
+          roundNumber: normalized.roundNumber,
+        })
+      : []);
+  const backedOutPenalty =
+    input.choice === "back_out" && canonicalOpportunity
+      ? resolveCombatAttackPhaseDefensivePenalty({
+          commitment: "committed",
+          executionState: "backed_out",
+          opportunity: canonicalOpportunity,
+          participantId: input.participantId,
+          reason: "simultaneous_attack_backout",
+          roundNumber: normalized.roundNumber,
+          sourceException: "simultaneous_attack_backout",
+        })
+      : undefined;
+  const nextAttackPhaseDefensivePenalties = backedOutPenalty
+    ? replaceCombatAttackPhaseDefensivePenalty({
+        existing: previousAttackPhaseDefensivePenalties,
+        next: backedOutPenalty,
+      })
+    : previousAttackPhaseDefensivePenalties;
   const softenedModifierResult =
     input.choice === "back_out"
       ? softenCombatActionGeneratedBackOutModifier({
           actionId: participant.declaration?.actionId,
           combatContext: currentCombatContext,
+          opportunityId: canonicalOpportunity?.id,
           phase: input.phase,
         })
       : {
@@ -7562,6 +7685,20 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
       ...(participant.declaration?.actionId
         ? {
             attackActionId: participant.declaration.actionId,
+          }
+        : {}),
+      ...(canonicalOpportunity
+        ? {
+            attackOpportunityId: canonicalOpportunity.id,
+            previousAttackOpportunity: canonicalOpportunity,
+          }
+        : {}),
+      ...(backedOutPenalty
+        ? {
+            attackPhaseDefensivePenalty: backedOutPenalty,
+            previousAttackPhaseDefensivePenalty: previousAttackPhaseDefensivePenalties.find(
+              (penalty) => penalty.attackOpportunityId === canonicalOpportunity?.id,
+            ),
           }
         : {}),
       attackStep: getCombatRoundAttackCursorStepForPhase(input.phase),
@@ -7607,10 +7744,55 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
     step: beforeCursor.step,
     type: commandType,
   });
+  const stateWithCanonicalBackOut =
+    input.choice === "back_out" && participant.declaration && canonicalOpportunity
+      ? combatRoundStateSchema.parse({
+          ...normalized,
+          participants: normalized.participants.map((entry) =>
+            entry.participantId === input.participantId && entry.declaration
+              ? {
+                  ...entry,
+                  declaration: {
+                    ...entry.declaration,
+                    attackOpportunities: entry.declaration.attackOpportunities?.map(
+                      (opportunity) =>
+                        opportunity.id === canonicalOpportunity.id
+                          ? {
+                              ...opportunity,
+                              cancelledAt: input.command.createdAt,
+                              cancelledByUserId: input.command.createdByUserId,
+                              status: "cancelled" as const,
+                            }
+                          : opportunity,
+                    ),
+                    attackPhaseDefensivePenalties: nextAttackPhaseDefensivePenalties,
+                    combatContext: applyAttackPhaseDefensivePenaltyModifiers({
+                      combatContext: scenarioParticipantCombatContextSchema.parse(
+                        entry.declaration.combatContext ?? {},
+                      ),
+                      penalties: nextAttackPhaseDefensivePenalties,
+                    }),
+                    phaseContexts: {
+                      ...entry.declaration.phaseContexts,
+                      [input.phase]: applyAttackPhaseDefensivePenaltyModifiers({
+                        combatContext: scenarioParticipantCombatContextSchema.parse(
+                          entry.declaration.phaseContexts?.[input.phase] ?? {},
+                        ),
+                        penalties: nextAttackPhaseDefensivePenalties,
+                      }),
+                    },
+                  },
+                }
+              : entry,
+          ),
+        })
+      : normalized;
   const stateWithCommandShell = combatRoundStateSchema.parse({
-    ...normalized,
+    ...stateWithCanonicalBackOut,
     commands: [
-      ...normalized.commands.filter((existingCommand) => existingCommand.id !== commandId),
+      ...stateWithCanonicalBackOut.commands.filter(
+        (existingCommand) => existingCommand.id !== commandId,
+      ),
       commandShell,
     ],
   });
@@ -14886,8 +15068,12 @@ export function removeCombatRoundEndHealthCheckEffects(input: {
 }
 
 type CombatRoundOperationalCancelledAction = {
+  attackOpportunityId?: string;
+  attackPhaseDefensivePenalty?: CombatAttackPhaseDefensivePenalty;
   participantId: string;
   phase: CombatRoundPhase;
+  previousAttackPhaseDefensivePenalties?: CombatAttackPhaseDefensivePenalty[];
+  previousAttackPhaseDefensivePenaltiesWereAbsent?: boolean;
   previousPhaseResolutionStatus?: CombatRoundPhaseResolutionParticipantStatus;
   previousStepStatus?: CombatRoundStepStatus;
   reason: string;
@@ -14921,6 +15107,37 @@ function getCombatRoundOperationalCancelledActionsFromCommand(
   return Array.isArray(cancelledActions)
     ? cancelledActions.filter(isCombatRoundOperationalCancelledAction)
     : [];
+}
+
+function restoreCombatRoundOperationalCancelledAttackPenalty(input: {
+  actions: readonly CombatRoundOperationalCancelledAction[];
+  participant: CombatRoundParticipantState;
+}): CombatRoundParticipantState {
+  if (!input.participant.declaration || input.actions.length === 0) {
+    return input.participant;
+  }
+  const previousPenalties = z
+    .array(combatAttackPhaseDefensivePenaltySchema)
+    .safeParse(input.actions[0]?.previousAttackPhaseDefensivePenalties);
+  const previousPenaltiesWereAbsent = input.actions.some(
+    (action) => action.previousAttackPhaseDefensivePenaltiesWereAbsent === true,
+  );
+
+  if (!previousPenalties.success && !previousPenaltiesWereAbsent) {
+    return input.participant;
+  }
+
+  return combatRoundParticipantStateSchema.parse({
+    ...input.participant,
+    declaration: {
+      ...input.participant.declaration,
+      attackPhaseDefensivePenalties: previousPenaltiesWereAbsent
+        ? undefined
+        : previousPenalties.success
+          ? previousPenalties.data
+          : undefined,
+    },
+  });
 }
 
 function buildCombatRoundOperationalCancelledActions(input: {
@@ -14970,10 +15187,41 @@ function buildCombatRoundOperationalCancelledActions(input: {
       (entry) => entry.participantId === consequence.participantId,
     );
     const actionStep = getCombatRoundPhaseActionStepForPhase(consequence.phase);
+    const declaredOpportunity = participant?.declaration?.attackOpportunities?.find(
+      (opportunity) =>
+        opportunity.phase === consequence.phase && opportunity.status === "committed",
+    );
+    const actualPreviousAttackPhaseDefensivePenalties =
+      participant?.declaration?.attackPhaseDefensivePenalties;
+    const previousAttackPhaseDefensivePenalties =
+      actualPreviousAttackPhaseDefensivePenalties ??
+      (declaredOpportunity
+        ? resolveCombatAttackPhaseDefensivePenalties({
+            commitment: "committed",
+            opportunities: [declaredOpportunity],
+            participantId: consequence.participantId,
+            roundNumber: normalized.roundNumber,
+          })
+        : []);
+    const attackPhaseDefensivePenalty = declaredOpportunity
+      ? resolveCombatAttackPhaseDefensivePenalty({
+          commitment: "committed",
+          executionState: "invalidated",
+          opportunity: declaredOpportunity,
+          participantId: consequence.participantId,
+          reason: "invalid_after_commitment",
+          roundNumber: normalized.roundNumber,
+        })
+      : undefined;
 
     actions.push({
+      attackOpportunityId: declaredOpportunity?.id,
+      attackPhaseDefensivePenalty,
       participantId: consequence.participantId,
       phase: consequence.phase,
+      previousAttackPhaseDefensivePenalties,
+      previousAttackPhaseDefensivePenaltiesWereAbsent:
+        actualPreviousAttackPhaseDefensivePenalties === undefined,
       previousPhaseResolutionStatus:
         normalized.phaseResolutionStatuses[consequence.participantId]?.[consequence.phase],
       previousStepStatus: participant?.stepStatuses[actionStep],
@@ -15037,6 +15285,23 @@ function applyCombatRoundOperationalActionCancellations(input: {
 
       return {
         ...participant,
+        declaration: participant.declaration
+          ? {
+              ...participant.declaration,
+              attackPhaseDefensivePenalties: actions.reduce(
+                (penalties, action) =>
+                  action.attackPhaseDefensivePenalty
+                    ? replaceCombatAttackPhaseDefensivePenalty({
+                        existing: penalties,
+                        next: action.attackPhaseDefensivePenalty,
+                      })
+                    : penalties,
+                participant.declaration.attackPhaseDefensivePenalties ??
+                  actions[0]?.previousAttackPhaseDefensivePenalties ??
+                  [],
+              ),
+            }
+          : participant.declaration,
         stepStatuses: actions.reduce(
           (statuses, action) => ({
             ...statuses,
@@ -18719,6 +18984,14 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
           roundNumber: normalized.roundNumber,
           secondaryActionId: declaration.secondaryActionId,
         });
+  const previousAttackPhaseDefensivePenalties =
+    declaration.attackPhaseDefensivePenalties ??
+    resolveCombatAttackPhaseDefensivePenalties({
+      commitment: "committed",
+      opportunities: declarationOpportunities,
+      participantId: input.participantId,
+      roundNumber: normalized.roundNumber,
+    });
   const nextOpportunities = declarationOpportunities.map((opportunity) =>
     opportunity.phase === "phase2" && opportunity.origin === "double_attack"
       ? combatRoundAttackOpportunitySchema.parse({
@@ -18730,13 +19003,39 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
         })
       : opportunity,
   );
+  const phase2Opportunity = nextOpportunities.find(
+    (opportunity) => opportunity.phase === "phase2" && opportunity.origin === "double_attack",
+  );
+  const nextAttackPhaseDefensivePenalties = phase2Opportunity
+    ? replaceCombatAttackPhaseDefensivePenalty({
+        existing: previousAttackPhaseDefensivePenalties,
+        next: resolveCombatAttackPhaseDefensivePenalty({
+          commitment: "committed",
+          executionState: input.decision === "cancel" ? "cancelled" : "pending",
+          opportunity: phase2Opportunity,
+          participantId: input.participantId,
+          reason:
+            input.decision === "cancel"
+              ? "double_attack_second_cancelled"
+              : "ordinary_committed_attack",
+          roundNumber: normalized.roundNumber,
+          sourceException: input.decision === "cancel" ? "double_attack_second_cancelled" : "none",
+        }),
+      })
+    : previousAttackPhaseDefensivePenalties;
+  const updatePenaltyContext = (context: ScenarioParticipantCombatContext) =>
+    applyAttackPhaseDefensivePenaltyModifiers({
+      combatContext: context,
+      penalties: nextAttackPhaseDefensivePenalties,
+    });
   const nextDeclaration = combatRoundDeclarationSchema.parse({
     ...declaration,
+    attackPhaseDefensivePenalties: nextAttackPhaseDefensivePenalties,
     attackOpportunities: nextOpportunities,
-    combatContext: updateContext(declaration.combatContext),
+    combatContext: updatePenaltyContext(updateContext(declaration.combatContext)),
     phaseContexts: {
       ...declaration.phaseContexts,
-      phase2: updateContext(declaration.phaseContexts?.phase2),
+      phase2: updatePenaltyContext(updateContext(declaration.phaseContexts?.phase2)),
     },
   });
   const command = combatRoundCommandSchema.parse({
@@ -18746,6 +19045,11 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       decision: input.decision,
+      attackPhaseDefensivePenalty: phase2Opportunity
+        ? nextAttackPhaseDefensivePenalties.find(
+            (penalty) => penalty.attackOpportunityId === phase2Opportunity.id,
+          )
+        : undefined,
       opportunityId: nextOpportunities.find((entry) => entry.phase === "phase2")?.id,
       previousDeclaration: declaration,
     },
@@ -19044,6 +19348,7 @@ function recordCombatRoundAttackCommand(input: {
     facts: {
       ...(input.command.facts ?? {}),
       actionId: input.result.actionId,
+      attackPhaseDefensivePenalty: input.result.attackPhaseDefensivePenalty,
       attackIndex: input.result.attackIndex,
       attackOpportunityId: input.result.attackOpportunityId,
       attackModeId: input.result.attackModeId,
@@ -19101,6 +19406,9 @@ function recordCombatRoundAttackCommand(input: {
     result: input.result,
     roundNumber: normalized.roundNumber,
   });
+  const penaltyConsequences = input.result.attackPhaseDefensivePenalty
+    ? buildCombatAttackPhasePenaltyResultConsequences(input.result.attackPhaseDefensivePenalty)
+    : undefined;
 
   return appendCombatRoundEventForCommand({
     command,
@@ -19112,6 +19420,7 @@ function recordCombatRoundAttackCommand(input: {
       facts: {
         involvedOutcome: {
           actionId: input.result.actionId,
+          attackPhaseDefensivePenalty: input.result.attackPhaseDefensivePenalty,
           attackIndex: input.result.attackIndex,
           attackModeId: input.result.attackModeId,
           attackOpportunityId: input.result.attackOpportunityId,
@@ -19127,6 +19436,20 @@ function recordCombatRoundAttackCommand(input: {
           weaponTemplateId: input.result.weaponTemplateId,
         },
         publicOutcome: { grazing: input.result.grazing, hit: input.result.hit },
+        resultPresentation: penaltyConsequences
+          ? {
+              actionInstanceId: attackResultId,
+              calculationReferences: [],
+              committedConsequences: penaltyConsequences.committedConsequences,
+              conciseOutcome: {
+                details: [],
+                label: input.result.hit ? "Attack hit" : "Attack missed",
+              },
+              privateDiagnostics: [],
+              standardConsequences: penaltyConsequences.standardConsequences,
+              subordinateEventReferences: [],
+            }
+          : undefined,
         rollerPrivate: {
           defenderDb: input.result.defenderDb,
           lookupTotal: input.result.lookupTotal,
@@ -19198,6 +19521,9 @@ export function recordCombatRoundAttackResult(input: {
     weaponSourceSlot: input.result.weaponSourceSlot ?? opportunityIdentity?.weaponSourceSlot,
     weaponTemplateId: input.result.weaponTemplateId ?? opportunityIdentity?.weaponTemplateId,
   });
+  const previousAttackPhaseDefensivePenalties = normalized.participants.find(
+    (participant) => participant.participantId === input.participantId,
+  )?.declaration?.attackPhaseDefensivePenalties;
   const existingAttackResult = recordedResult.attackOpportunityId
     ? getCombatRoundAttackResultForOpportunity({
         opportunityId: recordedResult.attackOpportunityId,
@@ -19219,23 +19545,37 @@ export function recordCombatRoundAttackResult(input: {
 
   const withResult: CombatRoundState = {
     ...normalized,
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === input.participantId
-        ? {
-            ...participant,
-            attackResultsByOpportunity: recordedResult.attackOpportunityId
-              ? {
-                  ...(participant.attackResultsByOpportunity ?? {}),
-                  [recordedResult.attackOpportunityId]: recordedResult,
-                }
-              : participant.attackResultsByOpportunity,
-            attackResults: {
-              ...participant.attackResults,
-              [recordedResult.phase]: recordedResult,
-            },
-          }
-        : participant,
-    ),
+    participants: normalized.participants.map((participant) => {
+      if (participant.participantId !== input.participantId) return participant;
+
+      const nextAttackPhaseDefensivePenalties = recordedResult.attackPhaseDefensivePenalty
+        ? replaceCombatAttackPhaseDefensivePenalty({
+            existing: participant.declaration?.attackPhaseDefensivePenalties ?? [],
+            next: recordedResult.attackPhaseDefensivePenalty,
+          })
+        : participant.declaration?.attackPhaseDefensivePenalties;
+
+      return {
+        ...participant,
+        attackResultsByOpportunity: recordedResult.attackOpportunityId
+          ? {
+              ...(participant.attackResultsByOpportunity ?? {}),
+              [recordedResult.attackOpportunityId]: recordedResult,
+            }
+          : participant.attackResultsByOpportunity,
+        attackResults: {
+          ...participant.attackResults,
+          [recordedResult.phase]: recordedResult,
+        },
+        declaration:
+          participant.declaration && nextAttackPhaseDefensivePenalties
+            ? {
+                ...participant.declaration,
+                attackPhaseDefensivePenalties: nextAttackPhaseDefensivePenalties,
+              }
+            : participant.declaration,
+      };
+    }),
   };
 
   const withStatus = setCombatRoundParticipantStepStatus({
@@ -19253,7 +19593,13 @@ export function recordCombatRoundAttackResult(input: {
 
   return input.command
     ? recordCombatRoundAttackCommand({
-        command: input.command,
+        command: {
+          ...input.command,
+          facts: {
+            ...(input.command.facts ?? {}),
+            previousAttackPhaseDefensivePenalties: previousAttackPhaseDefensivePenalties ?? null,
+          },
+        },
         participantId: input.participantId,
         result: recordedResult,
         state: withReactiveModifiers,
@@ -20286,6 +20632,11 @@ function undoCombatRoundAttackCommandAtIndex(input: {
     state: stateForLegacyClear,
     step: getCombatRoundPhaseActionStepForPhase(phase),
   });
+  const previousAttackPhaseDefensivePenalties = z
+    .array(combatAttackPhaseDefensivePenaltySchema)
+    .safeParse(command.facts.previousAttackPhaseDefensivePenalties);
+  const previousAttackPhaseDefensivePenaltiesWereAbsent =
+    command.facts.previousAttackPhaseDefensivePenalties === null;
 
   return {
     ...cleared,
@@ -20297,6 +20648,22 @@ function undoCombatRoundAttackCommandAtIndex(input: {
       phase,
       substep: "attack",
     },
+    participants: cleared.participants.map((participant) =>
+      participant.participantId === participantId &&
+      participant.declaration &&
+      (previousAttackPhaseDefensivePenalties.success ||
+        previousAttackPhaseDefensivePenaltiesWereAbsent)
+        ? {
+            ...participant,
+            declaration: {
+              ...participant.declaration,
+              attackPhaseDefensivePenalties: previousAttackPhaseDefensivePenalties.success
+                ? previousAttackPhaseDefensivePenalties.data
+                : undefined,
+            },
+          }
+        : participant,
+    ),
     selectedParticipantId: participantId,
     selectedStep,
   };
@@ -20486,6 +20853,12 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
   const previousPhaseResolutionStatus = combatRoundPhaseResolutionParticipantStatusSchema.safeParse(
     command.facts.previousPhaseResolutionStatus,
   );
+  const previousAttackOpportunity = combatRoundAttackOpportunitySchema.safeParse(
+    command.facts.previousAttackOpportunity,
+  );
+  const previousAttackPhaseDefensivePenalty = combatAttackPhaseDefensivePenaltySchema.safeParse(
+    command.facts.previousAttackPhaseDefensivePenalty,
+  );
 
   return combatRoundStateSchema.parse({
     ...normalized,
@@ -20503,19 +20876,59 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
             },
           }
         : normalized.phaseResolutionStatuses,
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === command.participantId &&
-      phase &&
-      previousPhaseActionStepStatus.success
-        ? {
-            ...participant,
-            stepStatuses: {
+    participants: normalized.participants.map((participant) => {
+      if (participant.participantId !== command.participantId || !phase) return participant;
+      const declaration = participant.declaration;
+      const restoredPenalties =
+        declaration && previousAttackPhaseDefensivePenalty.success
+          ? replaceCombatAttackPhaseDefensivePenalty({
+              existing: declaration.attackPhaseDefensivePenalties ?? [],
+              next: previousAttackPhaseDefensivePenalty.data,
+            })
+          : declaration?.attackPhaseDefensivePenalties;
+      const restoredDeclaration =
+        declaration && previousAttackOpportunity.success
+          ? combatRoundDeclarationSchema.parse({
+              ...declaration,
+              attackOpportunities: declaration.attackOpportunities?.map((opportunity) =>
+                opportunity.id === previousAttackOpportunity.data.id
+                  ? previousAttackOpportunity.data
+                  : opportunity,
+              ),
+              attackPhaseDefensivePenalties: restoredPenalties,
+              combatContext: restoredPenalties
+                ? applyAttackPhaseDefensivePenaltyModifiers({
+                    combatContext: scenarioParticipantCombatContextSchema.parse(
+                      declaration.combatContext ?? {},
+                    ),
+                    penalties: restoredPenalties,
+                  })
+                : declaration.combatContext,
+              phaseContexts: restoredPenalties
+                ? {
+                    ...declaration.phaseContexts,
+                    [phase]: applyAttackPhaseDefensivePenaltyModifiers({
+                      combatContext: scenarioParticipantCombatContextSchema.parse(
+                        declaration.phaseContexts?.[phase] ?? {},
+                      ),
+                      penalties: restoredPenalties,
+                    }),
+                  }
+                : declaration.phaseContexts,
+            })
+          : declaration;
+
+      return {
+        ...participant,
+        declaration: restoredDeclaration,
+        stepStatuses: previousPhaseActionStepStatus.success
+          ? {
               ...participant.stepStatuses,
               [getCombatRoundPhaseActionStepForPhase(phase)]: previousPhaseActionStepStatus.data,
-            },
-          }
-        : participant,
-    ),
+            }
+          : participant.stepStatuses,
+      };
+    }),
     selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
     selectedStep,
   });
@@ -20765,6 +21178,35 @@ function undoCombatRoundPhaseActionSkipCommandAtIndex(input: {
       [phase]: undefined,
     };
   }
+  const previousAttackPhaseDefensivePenalties = z
+    .array(combatAttackPhaseDefensivePenaltySchema)
+    .safeParse(command.facts.previousAttackPhaseDefensivePenalties);
+  const previousAttackPhaseDefensivePenaltiesWereAbsent =
+    command.facts.previousAttackPhaseDefensivePenalties === null;
+  const previousAttackPhaseDefensiveCombatModifiers = z
+    .array(scenarioCombatModifierEntrySchema)
+    .safeParse(command.facts.previousAttackPhaseDefensiveCombatModifiers);
+  const previousAttackPhaseDefensivePhaseModifiers = z
+    .array(scenarioCombatModifierEntrySchema)
+    .safeParse(command.facts.previousAttackPhaseDefensivePhaseModifiers);
+  const restoreAttackPhaseDefensiveModifiers = (
+    context: ScenarioParticipantCombatContext | undefined,
+    previousModifiers: readonly ScenarioCombatModifierEntry[],
+  ) => {
+    const normalizedContext = scenarioParticipantCombatContextSchema.parse(context ?? {});
+    return scenarioParticipantCombatContextSchema.parse({
+      ...normalizedContext,
+      modifierBuckets: {
+        ...normalizedContext.modifierBuckets,
+        situationDb: [
+          ...normalizedContext.modifierBuckets.situationDb.filter(
+            (entry) => !isAttackPhaseDefensivePenaltyModifier(entry),
+          ),
+          ...previousModifiers,
+        ],
+      },
+    });
+  };
 
   return {
     ...normalized,
@@ -20777,19 +21219,46 @@ function undoCombatRoundPhaseActionSkipCommandAtIndex(input: {
       substep: nextSubstep,
     },
     phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === participantId
-        ? {
-            ...participant,
-            stepStatuses: {
-              ...participant.stepStatuses,
-              [actionStep]: "pending",
-              [parryStep]: "pending",
-              [damageStep]: "pending",
-            },
-          }
-        : participant,
-    ),
+    participants: normalized.participants.map((participant) => {
+      if (participant.participantId !== participantId) return participant;
+      const declaration =
+        participant.declaration &&
+        (previousAttackPhaseDefensivePenalties.success ||
+          previousAttackPhaseDefensivePenaltiesWereAbsent)
+          ? {
+              ...participant.declaration,
+              attackPhaseDefensivePenalties: previousAttackPhaseDefensivePenalties.success
+                ? previousAttackPhaseDefensivePenalties.data
+                : undefined,
+              combatContext: previousAttackPhaseDefensiveCombatModifiers.success
+                ? restoreAttackPhaseDefensiveModifiers(
+                    participant.declaration.combatContext,
+                    previousAttackPhaseDefensiveCombatModifiers.data,
+                  )
+                : participant.declaration.combatContext,
+              phaseContexts: previousAttackPhaseDefensivePhaseModifiers.success
+                ? {
+                    ...participant.declaration.phaseContexts,
+                    [phase]: restoreAttackPhaseDefensiveModifiers(
+                      participant.declaration.phaseContexts?.[phase],
+                      previousAttackPhaseDefensivePhaseModifiers.data,
+                    ),
+                  }
+                : participant.declaration.phaseContexts,
+            }
+          : participant.declaration;
+
+      return {
+        ...participant,
+        declaration,
+        stepStatuses: {
+          ...participant.stepStatuses,
+          [actionStep]: "pending",
+          [parryStep]: "pending",
+          [damageStep]: "pending",
+        },
+      };
+    }),
     selectedParticipantId: participantId,
     selectedStep,
     stepSnapshots: clearSnapshotsForCombatRoundStep({
@@ -21097,17 +21566,23 @@ function undoCombatRoundDamageReviewCommandAtIndex(input: {
         )
       : normalized.phaseResolutionResults,
     phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === attackResult.defenderParticipantId
+    participants: normalized.participants.map((participant) => {
+      const restoredParticipant = restoreCombatRoundOperationalCancelledAttackPenalty({
+        actions: cancelledActions.filter(
+          (action) => action.participantId === participant.participantId,
+        ),
+        participant,
+      });
+      return restoredParticipant.participantId === attackResult.defenderParticipantId
         ? {
-            ...participant,
+            ...restoredParticipant,
             stepStatuses: {
-              ...participant.stepStatuses,
+              ...restoredParticipant.stepStatuses,
               [damageStep]: "pending",
             },
           }
-        : participant,
-    ),
+        : restoredParticipant;
+    }),
     selectedParticipantId: participantId,
     selectedStep,
     stepSnapshots: clearSnapshotsForCombatRoundStep({
@@ -21380,18 +21855,22 @@ function undoCombatRoundCommittedDamageCommandAtIndex(input: {
       const cancelledForParticipant = cancelledActions.filter(
         (action) => action.participantId === participant.participantId,
       );
+      const restoredParticipant = restoreCombatRoundOperationalCancelledAttackPenalty({
+        actions: cancelledForParticipant,
+        participant,
+      });
       const withRestoredCancellations = cancelledForParticipant.reduce(
         (current, action) => ({
           ...current,
           [getCombatRoundPhaseActionStepForPhase(action.phase)]:
             action.previousStepStatus ?? "pending",
         }),
-        participant.stepStatuses,
+        restoredParticipant.stepStatuses,
       );
 
-      return participant.participantId === attackResult.defenderParticipantId
+      return restoredParticipant.participantId === attackResult.defenderParticipantId
         ? {
-            ...participant,
+            ...restoredParticipant,
             stepStatuses: {
               ...withRestoredCancellations,
               [damageStep]: "ready",
@@ -21399,10 +21878,10 @@ function undoCombatRoundCommittedDamageCommandAtIndex(input: {
           }
         : cancelledForParticipant.length > 0
           ? {
-              ...participant,
+              ...restoredParticipant,
               stepStatuses: withRestoredCancellations,
             }
-          : participant;
+          : restoredParticipant;
     }),
     selectedParticipantId: participantId,
     selectedStep,

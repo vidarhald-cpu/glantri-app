@@ -3,15 +3,11 @@ import { describe, expect, it } from "vitest";
 import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
 import {
   ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
-  ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
-  DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
-  DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE2_OB_SKILL_MODIFIER_ID,
-  PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
   PARRY_ROUND_PERCENTAGE_MODIFIER_ID,
   REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
-  applyCombatActionGeneratedModifiers,
+  applyCombatActionGeneratedModifiers as applyCanonicalCombatActionGeneratedModifiers,
   cancelDoubleAttackPhase2GeneratedModifiers,
   continueDoubleAttackPhase2GeneratedModifiers,
   buildReactiveAttackPhase2GeneratedInitiativeModifier,
@@ -25,6 +21,40 @@ import {
   isParryGeneratedPercentageModifier,
   isReactiveAttackGeneratedInitiativeModifier,
 } from "./combatActionModifiers";
+import { resolveCombatAttackPhaseDefensivePenalties } from "./combatAttackPhasePenalty";
+
+function applyCombatActionGeneratedModifiers(
+  input: Parameters<typeof applyCanonicalCombatActionGeneratedModifiers>[0],
+) {
+  const phases =
+    input.actionId === "attack_parry"
+      ? (["phase1"] as const)
+      : input.actionId === "parry_attack" ||
+          input.actionId === "feint_attack" ||
+          input.actionId === "adjust_range_attack"
+        ? (["phase2"] as const)
+        : input.actionId === "double_attack"
+          ? (["phase1", "phase2"] as const)
+          : [];
+  const participantId = "test-participant";
+  return applyCanonicalCombatActionGeneratedModifiers({
+    ...input,
+    attackPhaseDefensivePenalties:
+      input.attackPhaseDefensivePenalties ??
+      resolveCombatAttackPhaseDefensivePenalties({
+        commitment: "committed",
+        opportunities: phases.map((phase) => ({
+          actionId: input.actionId,
+          id: `test:${participantId}:${phase}`,
+          phase,
+          slot: phase === "phase1" ? "attack_1" : "attack_2",
+          status: "committed",
+        })),
+        participantId,
+        roundNumber: input.sourceRoundNumber ?? 1,
+      }),
+  });
+}
 
 describe("combat action generated modifiers", () => {
   it("creates one round-scoped Parry percentage modifier with Dodge provenance", () => {
@@ -91,8 +121,8 @@ describe("combat action generated modifiers", () => {
       expect.objectContaining({
         durationRounds: 1,
         generated: true,
-        id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
-        notes: "single attack",
+        application: "percentage",
+        sourceOpportunityId: "test:test-participant:phase1",
         sourceActionId: "attack_parry",
         sourcePhase: "phase1",
         value: -4,
@@ -142,7 +172,7 @@ describe("combat action generated modifiers", () => {
         sourceType: "character_effect",
         value: 2,
       }),
-      expect.objectContaining({ id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID }),
+      expect.objectContaining({ sourceOpportunityId: "test:test-participant:phase1" }),
     ]);
   });
 
@@ -156,11 +186,11 @@ describe("combat action generated modifiers", () => {
       expect.objectContaining({
         durationRounds: 1,
         generated: true,
-        id: PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
-        notes: "reactive attack",
+        application: "percentage",
+        sourceOpportunityId: "test:test-participant:phase2",
         sourceActionId: "parry_attack",
         sourcePhase: "phase2",
-        sourceRule: "parry-attack-db-parry-phase2",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
         value: -4,
       }),
     ]);
@@ -213,21 +243,19 @@ describe("combat action generated modifiers", () => {
       expect.objectContaining({
         durationRounds: 1,
         generated: true,
-        id: DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
-        notes: "double attack",
+        sourceOpportunityId: "test:test-participant:phase1",
         sourceActionId: "double_attack",
         sourcePhase: "phase1",
-        sourceRule: "double-attack-db-parry-phase1",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
         value: -4,
       }),
       expect.objectContaining({
         durationRounds: 1,
         generated: true,
-        id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
-        notes: "double attack",
+        sourceOpportunityId: "test:test-participant:phase2",
         sourceActionId: "double_attack",
         sourcePhase: "phase2",
-        sourceRule: "double-attack-db-parry-phase2",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
         value: -4,
       }),
     ]);
@@ -244,9 +272,7 @@ describe("combat action generated modifiers", () => {
     });
 
     expect(
-      secondSave.modifierBuckets.situationObSkill.filter(
-        isDoubleAttackGeneratedObSkillModifier,
-      ),
+      secondSave.modifierBuckets.situationObSkill.filter(isDoubleAttackGeneratedObSkillModifier),
     ).toHaveLength(2);
     expect(
       secondSave.modifierBuckets.situationDb.filter(isDoubleAttackGeneratedDbParryModifier),
@@ -260,26 +286,33 @@ describe("combat action generated modifiers", () => {
       combatContext: scenarioParticipantCombatContextSchema.parse({}),
     });
 
-    expect(context.modifierBuckets.situationDb).toEqual([
-      expect.objectContaining({
-        durationRounds: 1,
-        generated: true,
-        id: ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
-        notes: "adjust range",
-        sourceActionId: "adjust_range_attack",
-        sourcePhase: "phase1",
-        sourceRule: "adjust-range-phase1-db-parry",
-        value: -2,
-      }),
-    ]);
-    expect(context.modifierBuckets.situationDb[0]?.expiresAtRound).toBe(4);
+    expect(context.modifierBuckets.situationDb).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          durationRounds: 1,
+          generated: true,
+          id: ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
+          notes: "adjust range",
+          sourceActionId: "adjust_range_attack",
+          sourcePhase: "phase1",
+          sourceRule: "adjust-range-phase1-db-parry",
+          value: -2,
+        }),
+        expect.objectContaining({ sourcePhase: "phase2", value: -4 }),
+      ]),
+    );
+    expect(
+      context.modifierBuckets.situationDb.find(
+        (entry) => entry.id === ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
+      )?.expiresAtRound,
+    ).toBe(4);
     expect(
       applyCombatActionGeneratedModifiers({
         actionId: "adjust_range_attack",
         adjustDistance: { currentDistance: 3, requestedDistance: 4 },
         combatContext: context,
       }).modifierBuckets.situationDb,
-    ).toEqual([]);
+    ).toEqual([expect.objectContaining({ sourcePhase: "phase2", value: -4 })]);
   });
 
   it("does not duplicate Adjust Range - Attack generated modifiers when saving repeatedly", () => {
@@ -295,9 +328,7 @@ describe("combat action generated modifiers", () => {
     });
 
     expect(
-      secondSave.modifierBuckets.situationDb.filter(
-        isAdjustRangeAttackGeneratedDbParryModifier,
-      ),
+      secondSave.modifierBuckets.situationDb.filter(isAdjustRangeAttackGeneratedDbParryModifier),
     ).toHaveLength(1);
   });
 
@@ -353,14 +384,10 @@ describe("combat action generated modifiers", () => {
     });
 
     expect(
-      parryAttackContext.modifierBuckets.situationDb.filter(
-        isAttackParryGeneratedDbParryModifier,
-      ),
+      parryAttackContext.modifierBuckets.situationDb.filter(isAttackParryGeneratedDbParryModifier),
     ).toHaveLength(0);
     expect(
-      parryAttackContext.modifierBuckets.situationDb.filter(
-        isParryAttackGeneratedDbParryModifier,
-      ),
+      parryAttackContext.modifierBuckets.situationDb.filter(isParryAttackGeneratedDbParryModifier),
     ).toHaveLength(1);
     expect(parryAttackContext.modifierBuckets.situationDb).toEqual([
       expect.objectContaining({
@@ -369,7 +396,7 @@ describe("combat action generated modifiers", () => {
         value: 2,
       }),
       expect.objectContaining({
-        id: PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+        sourceOpportunityId: "test:test-participant:phase2",
         sourcePhase: "phase2",
       }),
     ]);
@@ -436,14 +463,10 @@ describe("combat action generated modifiers", () => {
       ),
     ).toHaveLength(0);
     expect(
-      attackParryContext.modifierBuckets.situationDb.filter(
-        isDoubleAttackGeneratedDbParryModifier,
-      ),
+      attackParryContext.modifierBuckets.situationDb.filter(isDoubleAttackGeneratedDbParryModifier),
     ).toHaveLength(0);
     expect(
-      attackParryContext.modifierBuckets.situationDb.filter(
-        isAttackParryGeneratedDbParryModifier,
-      ),
+      attackParryContext.modifierBuckets.situationDb.filter(isAttackParryGeneratedDbParryModifier),
     ).toHaveLength(1);
   });
 
@@ -524,7 +547,7 @@ describe("combat action generated modifiers", () => {
 
     expect(context.modifierBuckets.situationDb).toEqual([
       expect.objectContaining({
-        id: ATTACK_PARRY_DB_PARRY_MODIFIER_ID,
+        sourceOpportunityId: "test:test-participant:phase1",
         value: -4,
       }),
     ]);
@@ -758,8 +781,8 @@ describe("combat action generated modifiers", () => {
     expect(cancelled.modifierBuckets.situationDb).toEqual(
       expect.arrayContaining([
         manual,
-        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID, value: -4 }),
-        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -2 }),
+        expect.objectContaining({ sourcePhase: "phase1", value: -4 }),
+        expect.objectContaining({ sourcePhase: "phase2", value: -2 }),
       ]),
     );
 
@@ -773,7 +796,7 @@ describe("combat action generated modifiers", () => {
     expect(restored.modifierBuckets.situationDb).toEqual(
       expect.arrayContaining([
         manual,
-        expect.objectContaining({ id: DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID, value: -4 }),
+        expect.objectContaining({ sourcePhase: "phase2", value: -4 }),
       ]),
     );
   });

@@ -75,6 +75,20 @@ describe("canonical combat attack modifier validation", () => {
         ],
         situationDb: [
           {
+            application: "percentage",
+            generated: true,
+            id: "generated:attack-phase-penalty:defender:phase1",
+            notes: "committed weapon attack",
+            scope: "until",
+            sourceActionId: "adjust_range_attack",
+            sourceEncounterId: "encounter-1",
+            sourceOpportunityId: "defender-attack-opportunity",
+            sourcePhase: "phase1",
+            sourceRoundNumber: 2,
+            sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
+            value: -4,
+          },
+          {
             generated: true,
             id: "generated:adjust-range-attack:phase1:db-parry",
             notes: "adjust range",
@@ -166,6 +180,10 @@ describe("canonical combat attack modifier validation", () => {
     expect(first.defenderResolution).toMatchObject({
       rows: [
         {
+          id: "generated:attack-phase-penalty:defender:phase1",
+          value: -4,
+        },
+        {
           id: "generated:adjust-range-attack:phase1:db-parry",
           label: "adjust range",
           value: -2,
@@ -175,7 +193,7 @@ describe("canonical combat attack modifier validation", () => {
           value: -2,
         },
       ],
-      total: -4,
+      total: -8,
     });
     expect(fingerprintCombatModifierResolution(first.attackerResolution)).toMatch(/^v1:/);
     const parryFacts = resolveCanonicalCombatParryModifierFacts({
@@ -203,6 +221,10 @@ describe("canonical combat attack modifier validation", () => {
     expect(parryFacts.defenderResolution).toMatchObject({
       rows: [
         {
+          id: "generated:attack-phase-penalty:defender:phase1",
+          value: -4,
+        },
+        {
           id: "generated:adjust-range-attack:phase1:db-parry",
           value: -2,
         },
@@ -211,7 +233,7 @@ describe("canonical combat attack modifier validation", () => {
           value: -2,
         },
       ],
-      total: -4,
+      total: -8,
     });
     expect(state).toEqual(original);
   });

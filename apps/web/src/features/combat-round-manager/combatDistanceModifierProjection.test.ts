@@ -17,6 +17,10 @@ import type { EquipmentFeatureState } from "@/features/equipment/types";
 
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 
+function emptyModifierBuckets() {
+  return scenarioParticipantCombatContextSchema.parse({}).modifierBuckets;
+}
+
 const attackParryDistanceRow: ScenarioCombatModifierEntry = {
   durationRounds: 1,
   generated: true,
@@ -460,7 +464,10 @@ describe("projectCombatActionGeneratedModifiers", () => {
 
     expect(projectedContext.modifierBuckets.situationDb).toEqual([
       expect.objectContaining({
-        id: "generated:attack-parry:phase1:db-parry",
+        provisional: true,
+        sourceActionId: "attack_parry",
+        sourcePhase: "phase1",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
         value: -4,
       }),
     ]);
@@ -495,5 +502,75 @@ describe("projectCombatActionGeneratedModifiers", () => {
     });
 
     expect(projectedContext.modifierBuckets.situationObSkill).toEqual([]);
+  });
+
+  it.each([
+    ["feint_attack", "phase2"],
+    ["adjust_range_attack", "phase2"],
+  ] as const)("projects %s attack risk as provisional opportunity state", (actionId, phase) => {
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId,
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      phaseContexts: {
+        phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target" },
+        phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target" },
+      },
+    });
+
+    expect(projectedContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        application: "percentage",
+        provisional: true,
+        sourceActionId: actionId,
+        sourcePhase: phase,
+        value: -4,
+      }),
+    ]);
+  });
+
+  it("reuses committed opportunity facts without a provisional marker", () => {
+    const encounter = buildEncounter();
+    const baseRoundState = initializeCombatRoundState({ encounter });
+    const roundState = combatRoundStateSchema.parse({
+      ...baseRoundState,
+      participants: baseRoundState.participants.map((participant) =>
+        participant.participantId === "scyrian"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "attack_parry",
+                attackOpportunities: [
+                  {
+                    actionId: "attack_parry",
+                    id: "round:1:participant:scyrian:phase1:attack_1",
+                    origin: "declared",
+                    phase: "phase1",
+                    slot: "attack_1",
+                    status: "committed",
+                    targetParticipantId: "gladiator",
+                  },
+                ],
+                roundNumber: baseRoundState.roundNumber,
+                submittedBy: "gm",
+              },
+            }
+          : participant,
+      ),
+    });
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: encounter.participants[0],
+      phaseContexts,
+      roundState,
+    });
+
+    expect(projectedContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        provisional: false,
+        sourceOpportunityId: "round:1:participant:scyrian:phase1:attack_1",
+        value: -4,
+      }),
+    ]);
   });
 });

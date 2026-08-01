@@ -138,6 +138,8 @@ import {
   resolveCanonicalCombatParryModifierFacts,
   resolveCombatWideGeneralModifiers,
   resolveCombatModifierContributions,
+  resolveCombatAttackPhaseDefensivePenalties,
+  resolveCombatAttackPhaseDefensivePenalty,
   rollCombatRoundEndDistanceControl,
   rollCombatRoundEndHealthCheck,
   rollOpenEndedCombatToHitD20,
@@ -173,6 +175,7 @@ import {
 } from "./combatMutationResponse";
 import type {
   CombatAttackModifierValidationProjection,
+  CombatAttackPhaseDefensivePenalty,
   CombatParryModifierValidationProjection,
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
@@ -2911,6 +2914,7 @@ function buildDistanceModifierDetailFromExistingEntry(
 function applyGeneratedCombatActionModifiersForDeclaration(input: {
   adjustDistance?: { currentDistance: number; requestedDistance: number; roundNumber?: number };
   actionId?: string;
+  attackPhaseDefensivePenalties?: readonly CombatAttackPhaseDefensivePenalty[];
   combatContext: ScenarioParticipantCombatContext;
   encounterId: string;
   encounterParticipant: EncounterSession["participants"][number];
@@ -2933,6 +2937,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
       : undefined;
   return applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
+    attackPhaseDefensivePenalties: input.attackPhaseDefensivePenalties,
     adjustDistance: input.adjustDistance,
     combatContext: input.combatContext,
     sourceEncounterId: input.encounterId,
@@ -2997,8 +3002,19 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
     const currentContext = scenarioParticipantCombatContextSchema.parse(
       scenarioParticipant.state.combat.combatContext ?? declaration.combatContext ?? {},
     );
+    const attackPhaseDefensivePenalties =
+      declaration.attackPhaseDefensivePenalties ??
+      (declaration.attackOpportunities
+        ? resolveCombatAttackPhaseDefensivePenalties({
+            commitment: "committed",
+            opportunities: declaration.attackOpportunities,
+            participantId: roundParticipant.participantId,
+            roundNumber: input.roundState.roundNumber,
+          })
+        : undefined);
     const nextCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
       actionId: declaration.actionId,
+      attackPhaseDefensivePenalties,
       combatContext: currentContext,
       encounterId: input.encounter.id,
       encounterParticipant,
@@ -3034,6 +3050,7 @@ function recomputeRoundDeclarationCombatActionModifiers(input: {
       ...roundParticipant,
       declaration: {
         ...declaration,
+        attackPhaseDefensivePenalties,
         combatContext: nextCombatContext,
       },
     };
@@ -4680,7 +4697,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       // Generated rows are derived when the declaration is created and refreshed by domain
       // result transitions. During GM modifier review, the submitted rows are the reviewed
       // overrides and must not be regenerated back to their default values.
-      const submittedCombatContext = gmModifierReviewOperation
+      let submittedCombatContext = gmModifierReviewOperation
         ? baseSubmittedCombatContext
         : applyGeneratedCombatActionModifiersForDeclaration({
             actionId: body.actionId,
@@ -5227,6 +5244,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      const attackPhaseDefensivePenalties = attackOpportunities
+        ? resolveCombatAttackPhaseDefensivePenalties({
+            commitment: "committed",
+            opportunities: attackOpportunities,
+            participantId: encounterParticipant.id,
+            roundNumber: roundState.roundNumber,
+          })
+        : [];
+      submittedCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
+        actionId: body.actionId,
+        attackPhaseDefensivePenalties,
+        adjustDistance: declarationAdjustDistance
+          ? { ...declarationAdjustDistance, roundNumber: roundState.roundNumber }
+          : undefined,
+        combatContext: submittedCombatContext,
+        encounterId: encounter.id,
+        encounterParticipant,
+        movementIntent: submittedMovementIntent,
+        phaseContexts: declarationPhaseContexts,
+        phaseAttackSources: body.phaseAttackSources,
+        roundState,
+        scenarioParticipant,
+        secondaryActionId: body.secondaryActionId,
+      });
+
       const targetValidation = validateCombatDeclarationTargets({
         actingParticipantId: encounterParticipant.id,
         actionId: body.actionId,
@@ -5277,6 +5319,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           adjustDistance: declarationAdjustDistance,
           additionalActionNotes: body.additionalActionNotes,
           attackOpportunities,
+          attackPhaseDefensivePenalties,
           combatContext: submittedCombatContext,
           feint: declarationFeint,
           movementId: body.movementId,
@@ -9546,8 +9589,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const roll = rollOpenEndedCombatToHitD20();
+      const declaredAttackPhaseDefensivePenalty =
+        attackerRoundParticipant?.declaration?.attackPhaseDefensivePenalties?.find(
+          (penalty) => penalty.attackOpportunityId === canonicalOpportunityIdentity.opportunityId,
+        ) ??
+        (attackerRoundParticipant?.declaration
+          ? resolveCombatAttackPhaseDefensivePenalty({
+              commitment: "committed",
+              opportunity: declaredOpportunity,
+              participantId: encounterParticipant.id,
+              roundNumber: roundState.roundNumber,
+            })
+          : undefined);
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
+        attackPhaseDefensivePenalty: declaredAttackPhaseDefensivePenalty
+          ? resolveCombatAttackPhaseDefensivePenalty({
+              commitment: "committed",
+              executionState: "executed",
+              opportunity: declaredOpportunity,
+              participantId: encounterParticipant.id,
+              reason: "ordinary_committed_attack",
+              roundNumber: roundState.roundNumber,
+            })
+          : undefined,
         attackIndex: canonicalOpportunityIdentity.attackIndex,
         attackModeId: canonicalOpportunityIdentity.attackModeId,
         attackOpportunityId: canonicalOpportunityIdentity.opportunityId,

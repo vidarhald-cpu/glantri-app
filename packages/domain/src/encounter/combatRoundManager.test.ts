@@ -133,10 +133,7 @@ import {
 import { combatStepEventSchema } from "./combatStepEventSchema";
 import {
   applyCombatActionGeneratedModifiers,
-  DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
   DOUBLE_ATTACK_PHASE1_OB_SKILL_MODIFIER_ID,
-  DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
-  PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
   REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID,
 } from "./combatActionModifiers";
 import { encounterSessionSchema } from "./session";
@@ -149,6 +146,10 @@ import {
   advanceCombatProgressionBoundary,
   buildCombatProgressionProjection,
 } from "./combatProgressionProjection";
+import {
+  resolveCombatAttackPhaseDefensivePenalties,
+  resolveCombatAttackPhaseDefensivePenalty,
+} from "./combatAttackPhasePenalty";
 
 function participant(input: {
   id: string;
@@ -930,6 +931,23 @@ function testPhaseContext(targetParticipantId: string) {
     },
     targetParticipantId,
   };
+}
+
+function committedAttackPenaltiesFor(input: {
+  participantId: string;
+  state: Parameters<typeof getCombatRoundPhaseAttackCandidates>[0]["state"];
+}) {
+  const opportunities = (["phase1", "phase2"] as const).flatMap((phase) =>
+    getCombatRoundPhaseAttackCandidates({ phase, state: input.state }).filter(
+      (opportunity) => opportunity.participantId === input.participantId,
+    ),
+  );
+  return resolveCombatAttackPhaseDefensivePenalties({
+    commitment: "committed",
+    opportunities,
+    participantId: input.participantId,
+    roundNumber: input.state.roundNumber,
+  });
 }
 
 function combatEffectsWith(
@@ -3107,6 +3125,10 @@ describe("combat round manager", () => {
     });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "double_attack",
+      attackPhaseDefensivePenalties: committedAttackPenaltiesFor({
+        participantId: "gladiator",
+        state: gate,
+      }),
       combatContext: testPhaseContext("scenario-scyrian"),
     });
 
@@ -3138,7 +3160,7 @@ describe("combat round manager", () => {
         choice: "back_out",
         reason: "Backed out while attacked",
         skippedAttack: true,
-        softenedModifierIds: [DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID],
+        softenedModifierIds: [expect.stringContaining("attack-phase-penalty")],
         source: "phase_initiative_resolution",
         trigger: "phase1_attack",
       },
@@ -3183,12 +3205,12 @@ describe("combat round manager", () => {
     });
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
-        (entry) => entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
+        (entry) => entry.sourceActionId === "double_attack" && entry.sourcePhase === "phase1",
       )?.value,
     ).toBe(-2);
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
-        (entry) => entry.id === DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID,
+        (entry) => entry.sourceActionId === "double_attack" && entry.sourcePhase === "phase2",
       )?.value,
     ).toBe(-4);
     expect(
@@ -3206,6 +3228,10 @@ describe("combat round manager", () => {
     });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "double_attack",
+      attackPhaseDefensivePenalties: committedAttackPenaltiesFor({
+        participantId: "gladiator",
+        state: gate,
+      }),
       combatContext: testPhaseContext("scenario-scyrian"),
     });
     const backedOut = backOutCombatRoundPhaseAttack({
@@ -3256,7 +3282,7 @@ describe("combat round manager", () => {
     ).toBeUndefined();
     expect(
       restoredContext.modifierBuckets.situationDb.find(
-        (entry) => entry.id === DOUBLE_ATTACK_PHASE1_DB_PARRY_MODIFIER_ID,
+        (entry) => entry.sourceActionId === "double_attack" && entry.sourcePhase === "phase1",
       )?.value,
     ).toBe(-4);
   });
@@ -3841,6 +3867,10 @@ describe("combat round manager", () => {
     const advanced = commitPreparedPhaseInitiative({ phase: "phase1", state, visibility });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "attack_parry",
+      attackPhaseDefensivePenalties: committedAttackPenaltiesFor({
+        participantId: "gladiator",
+        state: advanced,
+      }),
       combatContext: testPhaseContext("guard"),
     });
     const backedOut = backOutCombatRoundPhaseAttack({
@@ -4457,6 +4487,10 @@ describe("combat round manager", () => {
     });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "parry_attack",
+      attackPhaseDefensivePenalties: committedAttackPenaltiesFor({
+        participantId: "gladiator",
+        state: gate,
+      }),
       combatContext: testPhaseContext("scenario-scyrian"),
     });
     const backedOut = backOutCombatRoundPhaseAttack({
@@ -4476,7 +4510,7 @@ describe("combat round manager", () => {
       facts: {
         attackActionId: "parry_attack",
         choice: "back_out",
-        softenedModifierIds: [PARRY_ATTACK_DB_PARRY_MODIFIER_ID],
+        softenedModifierIds: [expect.stringContaining("attack-phase-penalty")],
         trigger: "phase2_attack",
       },
       phase: "phase2",
@@ -4489,7 +4523,7 @@ describe("combat round manager", () => {
     ).toBe("skipped");
     expect(
       backedOut.combatContext.modifierBuckets.situationDb.find(
-        (entry) => entry.id === PARRY_ATTACK_DB_PARRY_MODIFIER_ID,
+        (entry) => entry.sourceActionId === "parry_attack" && entry.sourcePhase === "phase2",
       )?.value,
     ).toBe(-2);
   });
@@ -7708,8 +7742,23 @@ describe("combat round manager", () => {
       }),
       updatedAt: "2026-01-01T00:02:00.000Z",
     });
+    const attackPhaseDefensivePenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "executed",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:3:participant:gladiator:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "committed",
+        targetParticipantId: "guard",
+      },
+      participantId: "gladiator",
+      roundNumber: 3,
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackPhaseDefensivePenalty,
       attackerParticipantId: "gladiator",
       defenderDb: 10,
       defenderParticipantId: "guard",
@@ -7771,6 +7820,17 @@ describe("combat round manager", () => {
       step: "phase_1_actions",
       type: "attack",
     });
+    expect(nextState.events.at(-1)?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -4 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
+    });
+    expect(nextState.participants[0]?.declaration?.attackPhaseDefensivePenalties).toEqual([
+      expect.objectContaining({
+        attackOpportunityId: "round:3:participant:gladiator:phase1:attack_1",
+        executionState: "executed",
+        penalty: -4,
+      }),
+    ]);
   });
 
   it("records A1 miss attack commands with the next actor A1 as the explicit after cursor", () => {
@@ -9668,6 +9728,30 @@ describe("combat round manager", () => {
       ]),
     );
 
+    const afterCriticalWithCanonicalGuardAttack = combatRoundStateSchema.parse({
+      ...afterCritical,
+      participants: afterCritical.participants.map((participant) =>
+        participant.participantId === "guard" && participant.declaration
+          ? {
+              ...participant,
+              declaration: {
+                ...participant.declaration,
+                attackOpportunities: [
+                  {
+                    actionId: "parry_attack",
+                    id: "round:3:participant:guard:phase2:attack_2",
+                    origin: "declared",
+                    phase: "phase2",
+                    slot: "attack_2",
+                    status: "committed",
+                    targetParticipantId: "gladiator",
+                  },
+                ],
+              },
+            }
+          : participant,
+      ),
+    });
     const committed = commitCombatRoundPhaseDamage({
       attackerScenarioParticipantId: "scenario-gladiator",
       command: {
@@ -9679,7 +9763,7 @@ describe("combat round manager", () => {
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: afterCritical,
+      state: afterCriticalWithCanonicalGuardAttack,
     });
     const clearedCommitState = clearCombatRoundStep({
       state: committed.state,
@@ -9689,6 +9773,11 @@ describe("combat round manager", () => {
     expect(committed.command.facts).toMatchObject({
       cancelledActions: [
         expect.objectContaining({
+          attackPhaseDefensivePenalty: expect.objectContaining({
+            executionState: "invalidated",
+            penalty: -4,
+            reason: "invalid_after_commitment",
+          }),
           participantId: "guard",
           phase: "phase2",
           previousStepStatus: "pending",
@@ -9757,6 +9846,9 @@ describe("combat round manager", () => {
         ?.declaration,
     ).toMatchObject({
       actionId: "parry_attack",
+      attackPhaseDefensivePenalties: [
+        expect.objectContaining({ executionState: "invalidated", penalty: -4 }),
+      ],
     });
     expect(
       getCombatRoundParticipantPhaseStepStatus({
@@ -9765,6 +9857,10 @@ describe("combat round manager", () => {
         step: "phase_2_actions",
       }),
     ).toBe("pending");
+    expect(
+      clearedCommitState.participants.find((participant) => participant.participantId === "guard")
+        ?.declaration?.attackPhaseDefensivePenalties,
+    ).toBeUndefined();
   });
 
   it("creates one visible no-action row when only the operational consequence provides it", () => {
@@ -12963,6 +13059,12 @@ describe("combat round manager", () => {
         step: "A2",
       },
       facts: {
+        attackPhaseDefensivePenalty: expect.objectContaining({
+          executionState: "skipped",
+          penalty: -4,
+          reason: "skipped_after_commitment",
+          sourceException: "none",
+        }),
         reason: "GM skipped action",
         status: "skipped",
       },
@@ -12985,6 +13087,9 @@ describe("combat round manager", () => {
         ?.declaration,
     ).toMatchObject({
       actionId: "parry_attack",
+      attackPhaseDefensivePenalties: [
+        expect.objectContaining({ executionState: "skipped", penalty: -4 }),
+      ],
     });
     expect(cleared.currentCursor).toEqual({
       participantId: "gladiator",
@@ -12998,6 +13103,10 @@ describe("combat round manager", () => {
         step: "phase_2_actions",
       }),
     ).toBe("pending");
+    expect(
+      cleared.participants.find((participant) => participant.participantId === "gladiator")
+        ?.declaration?.attackPhaseDefensivePenalties,
+    ).toBeUndefined();
   });
 
   it("blocks starting the next round until SU review is prepared and complete", () => {
@@ -16184,8 +16293,23 @@ describe("combat round manager", () => {
       }),
       updatedAt: "2026-01-01T00:02:00.000Z",
     });
+    const attackPhaseDefensivePenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "executed",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:3:participant:gladiator:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "committed",
+        targetParticipantId: "guard",
+      },
+      participantId: "gladiator",
+      roundNumber: 3,
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackPhaseDefensivePenalty,
       attackerParticipantId: "gladiator",
       defenderDb: 10,
       defenderParticipantId: "guard",
@@ -16259,6 +16383,7 @@ describe("combat round manager", () => {
       substep: "attack",
     });
     expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.declaration?.attackPhaseDefensivePenalties).toBeUndefined();
     expect(cleared.phaseResolutionResults).toEqual([]);
     expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
     expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
@@ -19209,8 +19334,25 @@ describe("combat round manager", () => {
   });
 
   it("cancels and undoes Double Attack 2 without creating a second phase-2 scheduler", () => {
+    const basePhaseContexts = {
+      phase1: testPhaseContext("guard"),
+      phase2: testPhaseContext("guard"),
+    };
+    const attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+      actionId: "double_attack",
+      participantId: "hero",
+      phaseContexts: basePhaseContexts,
+      roundNumber: 1,
+    });
+    const attackPhaseDefensivePenalties = resolveCombatAttackPhaseDefensivePenalties({
+      commitment: "committed",
+      opportunities: attackOpportunities,
+      participantId: "hero",
+      roundNumber: 1,
+    });
     const combatContext = applyCombatActionGeneratedModifiers({
       actionId: "double_attack",
+      attackPhaseDefensivePenalties,
       combatContext: {
         modifierBuckets: {
           general: [],
@@ -19244,12 +19386,8 @@ describe("combat round manager", () => {
           },
           declaration: {
             actionId: "double_attack",
-            attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
-              actionId: "double_attack",
-              participantId: "hero",
-              phaseContexts,
-              roundNumber: 1,
-            }),
+            attackOpportunities,
+            attackPhaseDefensivePenalties,
             combatContext,
             phaseContexts,
             roundNumber: 1,

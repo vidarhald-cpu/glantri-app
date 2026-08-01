@@ -1,4 +1,8 @@
 import {
+  buildCombatAttackPhasePenaltyResultConsequences,
+  combatAttackPhaseDefensivePenaltySchema,
+} from "./combatAttackPhasePenalty";
+import {
   combatRoundCommandSchema,
   combatRoundEndReviewSchema,
   combatRoundParticipantStateSchema,
@@ -1412,6 +1416,12 @@ function workflowCommandCandidates(input: {
               command.type === "submit_phase_initiative_choice"
             ? "Attack backed out"
             : stringFact(command.facts, "reason");
+      const attackPhaseDefensivePenalty = combatAttackPhaseDefensivePenaltySchema.safeParse(
+        command.facts.attackPhaseDefensivePenalty,
+      );
+      const penaltyConsequences = attackPhaseDefensivePenalty.success
+        ? buildCombatAttackPhasePenaltyResultConsequences(attackPhaseDefensivePenalty.data)
+        : undefined;
       return [
         make(
           {
@@ -1422,12 +1432,15 @@ function workflowCommandCandidates(input: {
                 resolutionType: "skipped",
               },
               resultPresentation: {
-                actionInstanceId: command.id,
+                actionInstanceId:
+                  (attackPhaseDefensivePenalty.success
+                    ? attackPhaseDefensivePenalty.data.attackProcessId
+                    : undefined) ?? command.id,
                 calculationReferences: [],
-                committedConsequences: [],
+                committedConsequences: penaltyConsequences?.committedConsequences ?? [],
                 conciseOutcome: { details: ["No action"], label: "Skipped" },
                 privateDiagnostics: [],
-                standardConsequences: [],
+                standardConsequences: penaltyConsequences?.standardConsequences ?? [],
                 subordinateEventReferences: [],
               },
             },

@@ -145,11 +145,14 @@ export const scenarioCombatModifierEntrySchema = z.object({
   sourceDuration: z.string().optional(),
   sourceEncounterId: idSchema.optional(),
   sourceEffectId: idSchema.optional(),
+  sourceOpportunityId: idSchema.optional(),
   sourcePhase: z.enum(["phase1", "phase2"]).optional(),
+  sourceProcessId: idSchema.optional(),
   sourceProposalId: idSchema.optional(),
   sourceRoundNumber: z.number().int().positive().optional(),
   sourceRule: z.string().optional(),
   sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
+  provisional: z.boolean().optional(),
   value: z.number().default(0),
 });
 
