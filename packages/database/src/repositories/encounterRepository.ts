@@ -3,6 +3,7 @@ import {
   encounterSessionSummarySchema,
   type EncounterSession,
   type EncounterSessionSummary,
+  type ScenarioParticipantState,
 } from "@glantri/domain";
 import { Prisma } from "@prisma/client";
 
@@ -83,6 +84,12 @@ export interface EncounterRepository {
     expectedRevision: string;
     scenarioId?: string | null;
     session: EncounterSession;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
   }): Promise<EncounterSession>;
 }
 

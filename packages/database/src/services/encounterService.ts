@@ -88,6 +88,12 @@ export class EncounterService {
     expectedRevision: string;
     scenarioId?: string | null;
     session: EncounterSession;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
   }): Promise<EncounterSession> {
     try {
       return await this.encounterRepository.updateCombatEncounter(input);
@@ -100,6 +106,59 @@ export class EncounterService {
       }
       throw error;
     }
+  }
+
+  async commitCombatModifierReview(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participant: ScenarioParticipant;
+    scenarioId: string;
+    session: EncounterSession;
+    state: ScenarioParticipantState;
+  }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+    const saved = await this.commitCombatModifierReviews({
+      campaignId: input.campaignId,
+      encounterId: input.encounterId,
+      expectedEncounterRevision: input.expectedEncounterRevision,
+      participants: [{ participant: input.participant, state: input.state }],
+      scenarioId: input.scenarioId,
+      session: input.session,
+    });
+    return { encounter: saved.encounter, participant: saved.participants[0]! };
+  }
+
+  async commitCombatModifierReviews(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participants: Array<{ participant: ScenarioParticipant; state: ScenarioParticipantState }>;
+    scenarioId: string;
+    session: EncounterSession;
+  }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+    const participantStateUpdates = input.participants.map(({ participant, state }) => ({
+      expectedRevision: participant.updatedAt,
+      participantId: participant.id,
+      scenarioId: input.scenarioId,
+      state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+    }));
+    const encounter = await this.updateCombatEncounter({
+      campaignId: input.campaignId,
+      encounterId: input.encounterId,
+      expectedRevision: input.expectedEncounterRevision,
+      participantStateUpdates,
+      scenarioId: input.scenarioId,
+      session: input.session,
+    });
+    const participants = await Promise.all(
+      input.participants.map(({ participant }) =>
+        this.scenarioRepository.getScenarioParticipantById(participant.id, input.scenarioId),
+      ),
+    );
+    if (participants.some((participant) => !participant)) {
+      throw new Error("A scenario participant disappeared after modifier review commit.");
+    }
+    return { encounter, participants: participants as ScenarioParticipant[] };
   }
 
   async updateScenarioLiveState(input: {

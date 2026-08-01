@@ -1234,7 +1234,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Pending rolls: {inspectorInitiativeRollCounts.pending} of");
     expect(source).toContain("Effective CE {inspectorCombatExperienceSkillTotal}");
     expect(source).toContain("showInspectorModifierReviewContextPanel");
-    expect(source).toContain("Review generated and manual modifiers before advancing.");
+    expect(source).toContain("Current effects:");
+    expect(source).toContain("Proposed:");
+    expect(source).toContain("GM changes:");
+    expect(source).toContain("Ready to commit");
     expect(source).not.toContain("Selected choice:");
     expect(source).not.toContain(">Status:");
     expect(source).not.toContain("inspectorPhaseInitiativeChoiceStatuses");

@@ -78,6 +78,8 @@ const mocks = vi.hoisted(() => {
   };
   const updateEncounter = vi.fn();
   const encounterService = {
+    commitCombatModifierReview: vi.fn(),
+    commitCombatModifierReviews: vi.fn(),
     createEncounter: vi.fn(),
     getEncounterById: vi.fn(),
     getEncounterSummaryById: vi.fn(),
@@ -307,6 +309,9 @@ async function buildScenarioTestApp() {
         : {};
     if (body !== record) {
       (request as { body: unknown }).body = record;
+    }
+    if (request.url.endsWith("/combat-declaration")) {
+      record.expectedParticipantRevision ??= "2026-07-30T08:00:00.000Z";
     }
     // Route tests exercise browser-like requests. Older fixtures predate canonical attack-source
     // serialization, so supply the same explicit unarmed source a declaration editor would send.
@@ -1102,6 +1107,7 @@ function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) 
       displayName: "The Gladiator",
     },
     sourceType: "character",
+    updatedAt: "2026-07-30T08:00:00.000Z",
     state: {
       combat: {
         combatContext: {
@@ -1774,6 +1780,27 @@ function setupCombatDeclarationRoute(
   );
   mocks.encounterService.updateEncounter.mockImplementation(
     async (update: { session: unknown }) => update.session,
+  );
+  mocks.encounterService.commitCombatModifierReview.mockImplementation(
+    async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => {
+      const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
+      return {
+        encounter,
+        participant: { ...update.participant, state: update.state },
+      };
+    },
+  );
+  mocks.encounterService.commitCombatModifierReviews.mockImplementation(
+    async (update: {
+      participants: Array<{ participant: Record<string, unknown>; state: unknown }>;
+      session: unknown;
+    }) => ({
+      encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+      participants: update.participants.map(({ participant, state }) => ({
+        ...participant,
+        state,
+      })),
+    }),
   );
   mocks.scenarioService.getScenarioById.mockResolvedValue({
     campaignId: "campaign-1",
@@ -2550,6 +2577,24 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
 describe("scenarios route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.encounterService.commitCombatModifierReview.mockImplementation(
+      async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => ({
+        encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+        participant: { ...update.participant, state: update.state },
+      }),
+    );
+    mocks.encounterService.commitCombatModifierReviews.mockImplementation(
+      async (update: {
+        participants: Array<{ participant: Record<string, unknown>; state: unknown }>;
+        session: unknown;
+      }) => ({
+        encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+        participants: update.participants.map(({ participant, state }) => ({
+          ...participant,
+          state,
+        })),
+      }),
+    );
     mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
     mocks.combatStateReadService.getEncounterMetadataById.mockImplementation(
@@ -10732,13 +10777,25 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("allows a GM to declare combat action for another player's participant after DE", async () => {
+  it("commits an M1 review for another player's existing declaration", async () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
           currentStep: "review_action_modifiers",
           participants: [
             {
+              declaration: {
+                actionId: "attack_parry",
+                combatContext: {
+                  modifierBuckets: {
+                    ...emptyModifierBuckets(),
+                    situationDb: [attackParryDbParryModifierEntry],
+                  },
+                },
+                roundNumber: 1,
+                submittedAt: "2026-07-30T07:59:00.000Z",
+                submittedBy: "player",
+              },
               initiatives: {},
               label: "The Gladiator",
               participantId: "encounter-participant-1",
@@ -10767,10 +10824,11 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         actionId: "attack_parry",
+        additionalActionNotes: "Review accepted by the GM.",
         combatContext: {
           modifierBuckets: {
             general: [],
-            situationDb: [],
+            situationDb: [attackParryDbParryModifierEntry],
             situationInitiative: [
               {
                 durationRounds: 2,
@@ -10841,9 +10899,84 @@ describe("scenarios route contract", () => {
       },
       type: "review_modifiers_phase1",
     });
+    expect(updatedEncounter.combatRoundState.commands[0].facts.modifierReview).toMatchObject({
+      changes: [
+        expect.objectContaining({
+          kind: "added",
+          publicLabel: "Quick start",
+        }),
+      ],
+      input: expect.objectContaining({
+        participantId: "participant-1",
+        phase: "M1",
+        publicNote: "Review accepted by the GM.",
+      }),
+      reviewState: "committed",
+    });
+    expect(mocks.encounterService.commitCombatModifierReview).toHaveBeenCalledTimes(1);
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
+  });
+
+  it("rejects an M1 review when the participant modifier revision is stale", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_action_modifiers",
+          participants: [
+            {
+              declaration: {
+                actionId: "parry",
+                combatContext: { modifierBuckets: emptyModifierBuckets() },
+                roundNumber: 1,
+                submittedAt: "2026-07-30T07:59:00.000Z",
+                submittedBy: "player",
+              },
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "pending",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        expectedParticipantRevision: "stale-participant-revision",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "stale_revision",
+      error: "Participant modifier state changed while the review was open.",
+    });
+    expect(mocks.encounterService.commitCombatModifierReview).not.toHaveBeenCalled();
   });
 
   it("allows a GM to declare Reactive attack for another player's participant after DE", async () => {
@@ -15346,6 +15479,102 @@ describe("scenarios route contract", () => {
     ).toBe("pending");
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
       "submitted",
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("undoes a canonical modifier review with its exact participant state atomically", async () => {
+    const priorCombatContext = { modifierBuckets: emptyModifierBuckets() };
+    const baseEncounter = makeCombatEncounter() as EncounterSession;
+    const baseState = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter: baseEncounter }),
+      currentStep: "review_action_modifiers",
+      participants: initializeCombatRoundState({ encounter: baseEncounter }).participants.map(
+        (participant) => ({
+          ...participant,
+          declaration: {
+            actionId: "parry",
+            combatContext: priorCombatContext,
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          stepStatuses: {
+            ...participant.stepStatuses,
+            review_action_modifiers: "pending",
+            select_actions: "submitted",
+          },
+        }),
+      ),
+    });
+    const reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        commandId: "modifier-review-1",
+        createdAt: "2026-08-01T09:00:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      modifierReviewUndo: {
+        combatContext: priorCombatContext,
+        combatEffects: { effects: [], events: [] },
+      },
+      participantId: "encounter-participant-1",
+      previousDeclaration: baseState.participants[0]?.declaration,
+      state: baseState,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: { combatRoundState: reviewed },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                ...emptyModifierBuckets(),
+                general: [
+                  {
+                    application: "percentage",
+                    id: "poor-footing",
+                    notes: "Poor footing",
+                    scope: "until",
+                    value: -1,
+                  },
+                ],
+              },
+            },
+          },
+          combatEffects: { effects: [], events: [] },
+          equipment: {},
+          health: {},
+          resources: {},
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "review_action_modifiers",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.commitCombatModifierReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participants: [
+          expect.objectContaining({
+            state: expect.objectContaining({
+              combat: expect.objectContaining({ combatContext: priorCombatContext }),
+              combatEffects: { effects: [], events: [] },
+            }),
+          }),
+        ],
+      }),
     );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });

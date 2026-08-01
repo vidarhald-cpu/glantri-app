@@ -226,6 +226,7 @@ export async function submitCombatDeclarationOnServer(input: {
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  expectedParticipantRevision?: string;
   movementId?: string;
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
@@ -266,6 +267,7 @@ export async function submitCombatDeclarationOnServer(input: {
         feint: input.feint,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionContext: input.secondaryActionContext,
         secondaryActionId: input.secondaryActionId,

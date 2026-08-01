@@ -211,6 +211,53 @@ describe("buildCombatEventResultModel", () => {
     });
   });
 
+  it("renders canonical modifier-review units and duration changes without internal ids", () => {
+    const model = buildCombatEventResultModel([
+      event("modifier_review", 1, {
+        facts: {
+          involvedOutcome: {
+            changed: true,
+            changes: [
+              {
+                category: "General/Fatigue",
+                changeType: "edited",
+                duration: "1 round",
+                label: "Combat Experience",
+                previousDuration: "2 rounds",
+                previousValue: -2,
+                unit: "percentage",
+                value: -1,
+              },
+              {
+                category: "Condition",
+                changeType: "removed",
+                label: "Stunned",
+              },
+            ],
+          },
+          publicOutcome: {},
+        },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+        step: "review_action_modifiers",
+      }),
+    ]);
+
+    expect(model.items[0]?.outcomeRows).toEqual([
+      expect.objectContaining({
+        text: "Combat Experience (General/Fatigue): -2% → -1% · 2 rounds → 1 round",
+      }),
+      expect.objectContaining({ text: "Stunned (Condition): removed" }),
+    ]);
+    expect(JSON.stringify(model.items[0])).not.toContain("effectId");
+  });
+
   it("identifies an SU review by its canonical actor rather than an unrelated attacker", () => {
     const model = buildCombatEventResultModel([
       event("participant_su_review", 1, {

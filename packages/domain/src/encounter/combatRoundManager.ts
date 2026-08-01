@@ -25,6 +25,10 @@ import {
   canonicalCombatModifierEffectSchema,
   transitionCanonicalCombatModifierEffect,
 } from "./combatModifierLifecycle";
+import {
+  canonicalCombatModifierReviewTransactionSchema,
+  type CanonicalCombatModifierReviewTransaction,
+} from "./combatModifierReview";
 
 import {
   scenarioCombatModifierBucketSchema,
@@ -19825,6 +19829,9 @@ export function recordCombatRoundParticipantStepReview(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
   submittedBy: "gm" | "player";
+  modifierReview?: CanonicalCombatModifierReviewTransaction;
+  modifierReviewUndo?: Record<string, unknown>;
+  previousDeclaration?: CombatRoundDeclaration;
 }): CombatRoundState {
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
@@ -19844,6 +19851,17 @@ export function recordCombatRoundParticipantStepReview(input: {
     ? recordCombatRoundGlobalParticipantCommand({
         ...input.command,
         facts: {
+          ...(input.modifierReview
+            ? {
+                modifierReview: canonicalCombatModifierReviewTransactionSchema.parse(
+                  input.modifierReview,
+                ),
+              }
+            : {}),
+          ...(input.modifierReviewUndo ? { modifierReviewUndo: input.modifierReviewUndo } : {}),
+          ...(input.previousDeclaration
+            ? { previousDeclaration: combatRoundDeclarationSchema.parse(input.previousDeclaration) }
+            : {}),
           status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
         },
         participantId: input.participantId,
@@ -20777,6 +20795,22 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
     selectedParticipantId: command.beforeCursor.participantId ?? participantId,
     selectedStep,
   };
+  if (command.type === "review_modifiers_phase1" || command.type === "review_modifiers_phase2") {
+    const previousDeclaration = combatRoundDeclarationSchema.safeParse(
+      command.facts.previousDeclaration,
+    );
+    return previousDeclaration.success
+      ? combatRoundStateSchema.parse({
+          ...baseState,
+          participants: baseState.participants.map((participant) =>
+            participant.participantId === command.participantId
+              ? { ...participant, declaration: previousDeclaration.data }
+              : participant,
+          ),
+        })
+      : baseState;
+  }
+
   if (command.type !== "declare_action") return baseState;
 
   const previousDeclaration = combatRoundDeclarationSchema.safeParse(

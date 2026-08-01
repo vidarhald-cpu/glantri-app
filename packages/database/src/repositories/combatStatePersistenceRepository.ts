@@ -3,8 +3,10 @@ import {
   completedCombatRoundSchema,
   composeEncounterSessionFromSplitCombatPersistence,
   encounterSessionSchema,
+  scenarioParticipantStateSchema,
   splitEncounterSessionForCombatPersistence,
   type EncounterSession,
+  type ScenarioParticipantState,
 } from "@glantri/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -245,6 +247,12 @@ export interface CombatStatePersistenceRepository {
     expectedRevision: string;
     scenarioId?: string | null;
     session: EncounterSession;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
   }): Promise<EncounterSession>;
   updateEncounterPreservingSplitCombat(input: {
     campaignId?: string | null;
@@ -392,6 +400,26 @@ export function createPrismaCombatStatePersistenceRepository(
                   throw new CombatPersistenceError(
                     "malformed_split_storage",
                     "The archived round required by boundary undo was not present.",
+                  );
+                }
+              }
+
+              for (const participantStateUpdate of input.participantStateUpdates ?? []) {
+                const participantState = scenarioParticipantStateSchema.parse(
+                  participantStateUpdate.state,
+                );
+                const participantUpdate = await transaction.scenarioParticipant.updateMany({
+                  data: { stateJson: asJson(participantState) },
+                  where: {
+                    id: participantStateUpdate.participantId,
+                    scenarioId: participantStateUpdate.scenarioId,
+                    updatedAt: new Date(participantStateUpdate.expectedRevision),
+                  },
+                });
+                if (participantUpdate.count !== 1) {
+                  throw new CombatPersistenceError(
+                    "stale_revision",
+                    "Participant modifier state changed before combat review could be saved.",
                   );
                 }
               }

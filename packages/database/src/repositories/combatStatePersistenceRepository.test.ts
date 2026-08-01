@@ -52,6 +52,7 @@ function buildSession(archiveCount: number): EncounterSession {
 
 function createClientFixture(input?: {
   archiveCount?: number;
+  participantUpdateCount?: number;
   storageMode?: string;
   updateCount?: number;
 }) {
@@ -79,6 +80,9 @@ function createClientFixture(input?: {
     encounterArchivedCombatRound: {
       create: vi.fn().mockResolvedValue({}),
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    scenarioParticipant: {
+      updateMany: vi.fn().mockResolvedValue({ count: input?.participantUpdateCount ?? 1 }),
     },
   };
   return client;
@@ -132,6 +136,84 @@ describe("combatStatePersistenceRepository", () => {
     expect(client.encounterArchivedCombatRound.create).toHaveBeenCalledTimes(2);
     expect(saved.combatRoundState?.rounds).toHaveLength(2);
     expect(saved.updatedAt).toBe(revision2.toISOString());
+  });
+
+  it("commits participant modifier state in the same serializable combat transaction", async () => {
+    const client = createClientFixture();
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+    const participantState = {
+      combat: {},
+      equipment: {},
+      health: {},
+      resources: {},
+    };
+
+    await repository.updateCombatEncounter({
+      encounterId: "encounter-1",
+      expectedRevision: revision1,
+      participantStateUpdates: [
+        {
+          expectedRevision: revision1,
+          participantId: "scenario-aria",
+          scenarioId: "scenario-1",
+          state: participantState as never,
+        },
+        {
+          expectedRevision: revision1,
+          participantId: "scenario-borin",
+          scenarioId: "scenario-1",
+          state: participantState as never,
+        },
+      ],
+      scenarioId: "scenario-1",
+      session: buildSession(0),
+    });
+
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(client.scenarioParticipant.updateMany).toHaveBeenNthCalledWith(1, {
+      data: { stateJson: expect.objectContaining({ combat: expect.any(Object) }) },
+      where: {
+        id: "scenario-aria",
+        scenarioId: "scenario-1",
+        updatedAt: new Date(revision1),
+      },
+    });
+    expect(client.scenarioParticipant.updateMany).toHaveBeenNthCalledWith(2, {
+      data: { stateJson: expect.objectContaining({ combat: expect.any(Object) }) },
+      where: {
+        id: "scenario-borin",
+        scenarioId: "scenario-1",
+        updatedAt: new Date(revision1),
+      },
+    });
+  });
+
+  it("aborts the whole review transaction when participant state is stale", async () => {
+    const client = createClientFixture({ participantUpdateCount: 0 });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        participantStateUpdates: [
+          {
+            expectedRevision: revision1,
+            participantId: "scenario-aria",
+            scenarioId: "scenario-1",
+            state: {
+              combat: {},
+              equipment: {},
+              health: {},
+              resources: {},
+            } as never,
+          },
+        ],
+        scenarioId: "scenario-1",
+        session: buildSession(0),
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it("ordinary split combat writes touch metadata and active state but not archives", async () => {

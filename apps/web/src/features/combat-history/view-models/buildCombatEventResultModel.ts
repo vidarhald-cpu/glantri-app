@@ -404,31 +404,70 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         ? changes.flatMap((candidate, index) => {
             if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
             const change = candidate as Record<string, unknown>;
+            const supportedChangeTypes = new Set([
+              "added",
+              "changed",
+              "edited",
+              "replaced",
+              "removed",
+              "expired",
+              "consumed",
+              "resolved",
+              "retained",
+              "rejected_proposal",
+            ]);
             const changeType =
-              change.changeType === "added" ||
-              change.changeType === "changed" ||
-              change.changeType === "removed"
+              typeof change.changeType === "string" && supportedChangeTypes.has(change.changeType)
                 ? change.changeType
                 : undefined;
             const category = typeof change.category === "string" ? change.category : "Modifier";
+            const label = typeof change.label === "string" ? change.label : category;
             const value = typeof change.value === "number" ? change.value : undefined;
             const previousValue =
               typeof change.previousValue === "number" ? change.previousValue : undefined;
+            const duration = typeof change.duration === "string" ? change.duration : undefined;
+            const previousDuration =
+              typeof change.previousDuration === "string" ? change.previousDuration : undefined;
+            const unit = typeof change.unit === "string" ? change.unit : undefined;
             if (!changeType) return [];
-            const signed = (candidateValue: number) =>
-              `${candidateValue >= 0 ? "+" : ""}${candidateValue}`;
+            const formattedValue = (candidateValue: number) => {
+              const signed = `${candidateValue >= 0 ? "+" : ""}${candidateValue}`;
+              if (unit === "percentage") return `${signed}%`;
+              if (unit === "flat_db") return `${signed} DB`;
+              if (unit === "damage") return `${signed} damage`;
+              if (unit === "bleed_rate") return `${signed} HP/round`;
+              return signed;
+            };
+            const valueChange =
+              previousValue !== undefined && value !== undefined && previousValue !== value
+                ? `${formattedValue(previousValue)} → ${formattedValue(value)}`
+                : value !== undefined
+                  ? formattedValue(value)
+                  : undefined;
+            const durationChange =
+              previousDuration && duration && previousDuration !== duration
+                ? `${previousDuration} → ${duration}`
+                : duration;
             const detail =
               changeType === "removed"
                 ? "removed"
-                : changeType === "changed" && previousValue !== undefined && value !== undefined
-                  ? `${signed(previousValue)} → ${signed(value)}`
-                  : value !== undefined
-                    ? signed(value)
-                    : changeType;
+                : changeType === "expired"
+                  ? "expired"
+                  : changeType === "consumed"
+                    ? "consumed"
+                    : changeType === "resolved"
+                      ? "resolved"
+                      : changeType === "retained"
+                        ? "retained by GM"
+                        : changeType === "rejected_proposal"
+                          ? "automatic change rejected"
+                          : changeType === "replaced"
+                            ? "replaced"
+                            : [valueChange, durationChange].filter(Boolean).join(" · ") || changeType;
             return [
               {
                 key: `${event.id}:outcome:change:${index}`,
-                text: `${category}: ${detail}`,
+                text: `${label}${label === category ? "" : ` (${category})`}: ${detail}`,
               },
             ];
           })

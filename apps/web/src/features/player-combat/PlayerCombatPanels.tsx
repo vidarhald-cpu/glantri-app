@@ -650,6 +650,7 @@ export function sanitizePlayerCombatModifierContext(
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
+    application: "percentage",
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     notes: "",
     scope: "until",
@@ -924,6 +925,8 @@ function CombatSituationRow({ row }: { row: CombatSituationDisplayRow }) {
 
 function CombatSituationSummary(input: {
   context?: CombatSituationContext;
+  embedded?: boolean;
+  hideCalculationGroups?: boolean;
   lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   pendingActivationLabel?: string;
   pendingEntries: readonly ScenarioCombatModifierEntry[];
@@ -944,13 +947,15 @@ function CombatSituationSummary(input: {
     { id: "pending", label: "Pending / expiring", rows: model.pending },
   ].filter((group) => group.rows.length > 0);
 
-  return (
-    <section style={playerCombatPanelCardStyle}>
-      <PanelTitleWithSource label="Combat situation" sourceLabel={input.sourceLabel} />
+  const content = (
+    <>
+      {!input.embedded ? (
+        <PanelTitleWithSource label="Combat situation" sourceLabel={input.sourceLabel} />
+      ) : null}
       {model.provisional ? (
         <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
       ) : null}
-      {model.calculationGroups.length > 0 ? (
+      {!input.hideCalculationGroups && model.calculationGroups.length > 0 ? (
         <div style={{ display: "grid", gap: "0.65rem" }}>
           <strong style={{ fontSize: "0.9rem" }}>Current</strong>
           {model.calculationGroups.map((group) => (
@@ -994,7 +999,13 @@ function CombatSituationSummary(input: {
       {model.empty ? (
         <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>No active modifiers.</span>
       ) : null}
-    </section>
+    </>
+  );
+
+  return input.embedded ? (
+    <div style={{ display: "grid", gap: "0.65rem" }}>{content}</div>
+  ) : (
+    <section style={playerCombatPanelCardStyle}>{content}</section>
   );
 }
 
@@ -1207,9 +1218,18 @@ export function PlayerCombatModifierPanel({
   return (
     <section style={playerCombatPanelCardStyle}>
       <PanelTitleWithSource label="Combat situation" sourceLabel={sourceLabel} />
-      {provisional ? (
-        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
-      ) : null}
+      <CombatSituationSummary
+        context={context}
+        embedded
+        hideCalculationGroups
+        lifecycleEffects={lifecycleEffects}
+        pendingActivationLabel={pendingActivationLabel}
+        pendingEntries={pendingEntries}
+        provisional={provisional}
+        rows={rows}
+        sourceLabel={sourceLabel}
+      />
+      <strong style={{ fontSize: "0.9rem" }}>Current / GM changes / resulting</strong>
       {rows
         .filter(
           (row) =>
@@ -1377,7 +1397,7 @@ export function PlayerCombatModifierPanel({
             paddingTop: "0.55rem",
           }}
         >
-          <strong style={{ fontSize: "0.9rem" }}>Pending modifiers</strong>
+          <strong style={{ fontSize: "0.9rem" }}>Proposed</strong>
           {pendingEntries.map((entry) => (
             <div key={entry.id} style={{ fontSize: "0.82rem" }}>
               {entry.notes?.trim() || "Combat effect"} {entry.value >= 0 ? "+" : ""}

@@ -627,6 +627,7 @@ function formatCombatExperienceStatus(result?: CombatRoundCombatExperienceResult
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
+    application: "percentage",
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     notes: "",
     scope: "until",
@@ -8162,6 +8163,7 @@ export default function CombatRoundManagerPanel({
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
+        expectedParticipantRevision: taskScenarioParticipant.updatedAt,
         feint:
           inspectorDraft.actionId === "feint_attack" && feintTargetResolution?.ok
             ? {
@@ -11105,8 +11107,22 @@ export default function CombatRoundManagerPanel({
                       {showInspectorModifierReviewContextPanel ? (
                         <section style={playerCombatPanelCardStyle}>
                           <strong>Modifier review</strong>
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            Review generated and manual modifiers before advancing.
+                          <div
+                            style={{ color: "#5e5a50", display: "grid", fontSize: "0.85rem", gap: "0.2rem" }}
+                          >
+                            <span>
+                              Current effects: {inspectorDisplayModifierRows.reduce(
+                                (total, row) =>
+                                  total +
+                                  row.entries.length +
+                                  (row.characterStateEntries?.length ?? 0) +
+                                  (row.derivedEntries?.length ?? 0),
+                                0,
+                              )}
+                            </span>
+                            <span>Proposed: {inspectorPendingModifierEntries.length}</span>
+                            <span>GM changes: {inspectorHasLocalModifierEdits ? 1 : 0}</span>
+                            <strong style={{ color: "#1f1b14" }}>Ready to commit</strong>
                           </div>
                         </section>
                       ) : null}

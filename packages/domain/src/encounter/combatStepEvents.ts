@@ -24,6 +24,11 @@ import {
 } from "./combatRoundManager";
 import { getCombatDeclarationActionLabel } from "./combatDeclarationValidation";
 import {
+  canonicalCombatModifierReviewPublicResultSchema,
+  canonicalCombatModifierReviewTransactionSchema,
+  projectCanonicalCombatModifierReviewPublicResult,
+} from "./combatModifierReview";
+import {
   combatStepEventSchema,
   type CombatStepEvent,
   type CombatStepEventFacts,
@@ -1298,6 +1303,24 @@ function workflowCommandCandidates(input: {
         snapshots: input.snapshots,
         step,
       });
+      const canonicalReview = canonicalCombatModifierReviewTransactionSchema.safeParse(
+        command.facts.modifierReview,
+      );
+      const publicReview = canonicalCombatModifierReviewPublicResultSchema.safeParse(
+        command.facts.modifierReviewPublicResult,
+      );
+      const canonicalPublicReview = canonicalReview.success
+        ? projectCanonicalCombatModifierReviewPublicResult({ transaction: canonicalReview.data })
+        : undefined;
+      const acceptedReview = canonicalPublicReview ?? (publicReview.success ? publicReview.data : undefined);
+      const resultLabel = acceptedReview
+        ? acceptedReview.resultLabel
+        : snapshotAvailable
+          ? changes.length
+            ? "Changes accepted"
+            : "No changes"
+          : "Modifier state accepted";
+      const acceptedChanges = acceptedReview?.changes ?? changes;
       return [
         make(
           {
@@ -1305,13 +1328,13 @@ function workflowCommandCandidates(input: {
             facts: {
               involvedOutcome: {
                 acceptedModifiers,
-                changed: snapshotAvailable ? changes.length > 0 : undefined,
-                changes,
-                resultLabel: snapshotAvailable
-                  ? changes.length
-                    ? "Changes accepted"
-                    : "No changes"
-                  : "Modifier state accepted",
+                changed: acceptedReview
+                  ? acceptedReview.changed
+                  : snapshotAvailable
+                    ? changes.length > 0
+                    : undefined,
+                changes: acceptedChanges,
+                resultLabel,
                 resolutionType: "accepted",
               },
               resultPresentation: {
@@ -1320,11 +1343,10 @@ function workflowCommandCandidates(input: {
                 committedConsequences: [],
                 conciseOutcome: {
                   details: [
-                    snapshotAvailable
-                      ? changes.length
-                        ? "Changes accepted"
-                        : "No changes"
-                      : "Modifier state accepted",
+                    resultLabel,
+                    ...(acceptedReview?.publicNote
+                      ? [acceptedReview.publicNote]
+                      : []),
                   ],
                   label: "Modifier review",
                 },
