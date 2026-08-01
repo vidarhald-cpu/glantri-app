@@ -256,14 +256,16 @@ describe("PlayerCombatModifierPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Pending modifiers")).toBeInTheDocument();
-    expect(screen.getByText("Unbalanced -2")).toBeInTheDocument();
+    expect(screen.getByText("Pending / expiring")).toBeInTheDocument();
+    expect(screen.getByText("Unbalanced")).toBeInTheDocument();
+    expect(screen.getByText("-2%")).toBeInTheDocument();
     expect(screen.getByText("Effective after Initiative 4 finishes")).toBeInTheDocument();
   });
 
-  it("renders player modifier rows with readable source, mod, duration, and details lines", () => {
+  it("renders concise current calculation sources, scope, and reconciled total", () => {
     render(
       <PlayerCombatModifierPanel
+        context={{ phase: "phase1" }}
         readOnly
         rows={[
           {
@@ -286,14 +288,10 @@ describe("PlayerCombatModifierPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Source/scope")).toBeInTheDocument();
-    expect(screen.getByText("Mod")).toBeInTheDocument();
-    expect(screen.getByText("Dur")).toBeInTheDocument();
-    expect(screen.getByText("Details")).toBeInTheDocument();
-    expect(screen.getByText("Situational")).toBeInTheDocument();
-    expect(screen.getAllByText("-2")).toHaveLength(2);
-    expect(screen.getByText("P1")).toBeInTheDocument();
-    expect(screen.getByText("long distance")).toBeInTheDocument();
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(screen.getByText("Distance")).toBeInTheDocument();
+    expect(screen.getByText("Total -2%")).toBeInTheDocument();
+    expect(screen.getByText("Phase 1")).toBeInTheDocument();
     expect(screen.queryByText(/Broad sword preferred 2/)).not.toBeInTheDocument();
   });
 
@@ -326,44 +324,47 @@ describe("PlayerCombatModifierPanel", () => {
       />,
     );
 
-    expect(screen.getAllByText("+1%")).toHaveLength(2);
-    expect(screen.getByText("Parry 7")).toBeInTheDocument();
+    expect(screen.getByText("+1%")).toBeInTheDocument();
+    expect(screen.getByText("Total +1%")).toBeInTheDocument();
+    expect(screen.getByText("Parry")).toBeInTheDocument();
     expect(screen.queryByText(/one fifth/i)).not.toBeInTheDocument();
   });
 
-  it("shows only established pair-specific observation bonuses", () => {
+  it("shows only target-aware canonical observation contributions", () => {
     render(
       <PlayerCombatModifierPanel
-        observationRelationships={[
+        context={{
+          opponentParticipantId: "orc",
+          participantLabels: { orc: "Orc captain" },
+        }}
+        readOnly
+        rows={[
           {
-            bestBonus: 0,
-            completedAttempts: 0,
-            id: "observation:observer:gladiator",
-            observerParticipantId: "observer",
-            roundsTowardNextAttempt: 2,
-            targetParticipantId: "gladiator",
-          },
-          {
-            bestBonus: 3,
-            completedAttempts: 1,
-            id: "observation:observer:orc",
-            observerParticipantId: "observer",
-            roundsTowardNextAttempt: 0,
-            targetParticipantId: "orc",
+            bucketKey: "situation_ob_skill",
+            derivedEntries: [
+              {
+                application: "percentage",
+                id: "observe:orc:skill",
+                scopeLabel: "Against Orc captain",
+                sourceLabel: "Observe Opponent",
+                value: 3,
+              },
+            ],
+            entries: [],
+            label: "Skill/OB",
+            total: 3,
           },
         ]}
-        observationTargetLabels={{ gladiator: "Gladiator", orc: "Orc captain" }}
-        readOnly
-        rows={[]}
       />,
     );
 
-    expect(screen.getByText("Observe Opponent · Orc captain")).toBeInTheDocument();
+    expect(screen.getByText("Observe Opponent")).toBeInTheDocument();
     expect(screen.getByText("+3%")).toBeInTheDocument();
-    expect(screen.queryByText("Observe Opponent · Gladiator")).not.toBeInTheDocument();
+    expect(screen.getByText("Total +3%")).toBeInTheDocument();
+    expect(screen.getByText("Against Orc captain")).toBeInTheDocument();
   });
 
-  it("suppresses empty summary categories but retains them during explicit review", () => {
+  it("suppresses empty categories and uses an explicit empty state", () => {
     const rows = [
       {
         bucketKey: "situation_initiative" as const,
@@ -378,18 +379,15 @@ describe("PlayerCombatModifierPanel", () => {
 
     rerender(<PlayerCombatModifierPanel readOnly rows={rows} showEmptyCategories />);
 
-    expect(screen.getByText("Initiative")).toBeInTheDocument();
-    expect(screen.getByText("+0")).toBeInTheDocument();
+    expect(screen.queryByText("Initiative")).not.toBeInTheDocument();
+    expect(screen.getByText("No active modifiers.")).toBeInTheDocument();
   });
 
-  it("shows concise provisional and active-special-effect indicators", () => {
-    render(
-      <PlayerCombatModifierPanel activeSpecialEffectCount={2} provisional readOnly rows={[]} />,
-    );
+  it("shows a concise provisional empty state", () => {
+    render(<PlayerCombatModifierPanel provisional readOnly rows={[]} />);
 
     expect(screen.getByText("Provisional")).toBeInTheDocument();
-    expect(screen.getByText("Active special effects")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("No active modifiers.")).toBeInTheDocument();
   });
 
   it("keeps editable modifier details on a full-width row", () => {

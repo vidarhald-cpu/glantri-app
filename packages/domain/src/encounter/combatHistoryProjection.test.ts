@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalCombatModifierEffectSchema,
   combatRoundCommandSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
@@ -1200,10 +1201,75 @@ describe("combat history projection", () => {
   });
 
   it("sanitizes active and archived snapshots and preserves incomplete history", () => {
+    const exactModifierEffect = canonicalCombatModifierEffectSchema.parse({
+      applicability: {
+        combatWide: false,
+        opponentParticipantId: "borin",
+        phase: "phase1",
+        rollPurposes: ["weapon_defense"],
+        roundNumber: 1,
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdRevision: "revision-private-source",
+      createdSequence: 4,
+      id: "effect-feint-db",
+      lifecycle: {
+        duration: {
+          expiresAt: "phase_boundary",
+          kind: "phase",
+          phase: "phase1",
+          startPhase: "phase1",
+          startRound: 1,
+          startSequence: 4,
+        },
+        state: "active",
+      },
+      lineage: {},
+      missingFacts: [],
+      ownerParticipantId: "aria",
+      payload: {
+        category: "db_parry",
+        contributionScope: "calculation",
+        kind: "numeric",
+        unit: "percentage",
+        value: -2,
+      },
+      privateDiagnostic: { code: "private-source", referenceId: "command-private" },
+      provenanceCompleteness: "complete",
+      publicLabel: "Feint",
+      schemaVersion: 1,
+      sourceFamily: "feint",
+      sourceReferences: { commandId: "command-private", resultId: "result-private" },
+      version: 1,
+      visibility: { audience: "owner", sourceIdentity: "hidden" },
+    });
     const ownSnapshot = {
       actionResultStatus: "no_result" as const,
       committedAt: "2026-01-01T00:00:00.000Z",
       id: "snapshot-own",
+      modifierSummary: {
+        dbRaw: -2,
+        effects: [exactModifierEffect],
+        generalFatigueRaw: 0,
+        initiativeRaw: 0,
+        obSkillRaw: 0,
+        rows: [
+          {
+            bucketKey: "situation_db" as const,
+            entries: [
+              {
+                application: "percentage" as const,
+                canonicalLifecycle: exactModifierEffect,
+                id: "row-effect-feint-db",
+                scope: "until" as const,
+                value: -2,
+              },
+            ],
+            label: "DB/Parry",
+            total: -2,
+          },
+        ],
+      },
       declarationSummary: {
         actionId: "attack_parry",
         additionalActionNotes: "Hold the bridge",
@@ -1281,6 +1347,21 @@ describe("combat history projection", () => {
       mainHandParryItemLabel: "Long sword",
       phaseContext: { targetParticipantId: undefined },
     });
+    expect(projection.activeRound.snapshots[0]?.panels.modifiers).toMatchObject({
+      effects: [
+        {
+          id: "effect-feint-db",
+          payload: { category: "db_parry", unit: "percentage", value: -2 },
+          publicLabel: "Feint",
+        },
+      ],
+    });
+    expect(JSON.stringify(projection.activeRound.snapshots[0]?.panels.modifiers)).not.toContain(
+      "command-private",
+    );
+    expect(JSON.stringify(projection.activeRound.snapshots[0]?.panels.modifiers)).not.toContain(
+      "private-source",
+    );
     expect(serialized).toContain("Borin");
     expect(serialized).not.toContain("Hidden old label");
     expect(serialized).not.toContain('"hidden"');

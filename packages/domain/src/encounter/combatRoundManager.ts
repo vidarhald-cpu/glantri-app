@@ -21,7 +21,10 @@ import {
   type OffensiveParryBrawlingRoll,
 } from "./combatOffensiveParry";
 import { projectProcessRestrictionToCanonicalModifierLifecycle } from "./combatModifierLifecycleCompatibility";
-import { transitionCanonicalCombatModifierEffect } from "./combatModifierLifecycle";
+import {
+  canonicalCombatModifierEffectSchema,
+  transitionCanonicalCombatModifierEffect,
+} from "./combatModifierLifecycle";
 
 import {
   scenarioCombatModifierBucketSchema,
@@ -2210,6 +2213,7 @@ export const combatRoundStepSnapshotSchema = z.object({
       generalFatigueRaw: z.number().int().default(0),
       initiativeRaw: z.number().int().default(0),
       obSkillRaw: z.number().int().default(0),
+      effects: z.array(canonicalCombatModifierEffectSchema).optional(),
       rows: z
         .array(
           z.object({

@@ -100,6 +100,7 @@ import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
+import { collectCanonicalCombatSituationEffects } from "@/features/player-combat/combatSituationAwareness";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildCombatDeclarationAttackSelection,
@@ -2234,6 +2235,36 @@ export default function ScenarioPlayerCombatPageContent({
       selectedParticipant?.state.combatEffects,
     ],
   );
+  const modifierLifecycleEffects = useMemo(
+    () =>
+      collectCanonicalCombatSituationEffects({
+        combatEffects: selectedParticipant?.state.combatEffects?.effects,
+        continuedContacts: combatRoundState?.continuedContacts,
+        ownerParticipantIds: [
+          selectedParticipant?.id,
+          selectedRoundParticipant?.participantId,
+        ].filter((id): id is string => Boolean(id)),
+        unbalancedConditions: combatRoundState?.unbalancedConditions,
+      }),
+    [
+      combatRoundState?.continuedContacts,
+      combatRoundState?.unbalancedConditions,
+      selectedParticipant?.id,
+      selectedParticipant?.state.combatEffects?.effects,
+      selectedRoundParticipant?.participantId,
+    ],
+  );
+  const modifierOpponentId = liveCombatModifiers.opponentParticipantId;
+  const modifierSituationContext = {
+    opponentParticipantId: modifierOpponentId,
+    participantLabels:
+      modifierOpponentId && liveCombatModifiers.opponentLabel
+        ? { [modifierOpponentId]: liveCombatModifiers.opponentLabel }
+        : undefined,
+    phase: currentModifierPhase,
+    roundNumber: combatRoundState?.roundNumber,
+    step: currentCombatStep,
+  };
   const pendingModifierEntries = useMemo(
     () =>
       buildLiveCombatModifierContributionProjection({
@@ -4579,6 +4610,7 @@ export default function ScenarioPlayerCombatPageContent({
           <div style={playerCombatPanelRowStyle}>
             <PlayerCombatModifierPanel
               activeSpecialEffectCount={liveCombatModifiers.specialEffectCount ?? 0}
+              context={modifierSituationContext}
               controlsDisabled={declarationControlsDisabled}
               pendingActivationLabel={
                 currentInitiativeValue !== undefined
@@ -4587,6 +4619,7 @@ export default function ScenarioPlayerCombatPageContent({
               }
               pendingEntries={pendingModifierEntries}
               provisional={liveCombatModifiers.provisional}
+              lifecycleEffects={modifierLifecycleEffects}
               readOnly
               rows={modifierRows}
               showEmptyCategories={

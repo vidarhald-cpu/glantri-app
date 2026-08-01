@@ -57,6 +57,7 @@ import {
   canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
   characterBuildSchema,
+  canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAction,
   combatRoundParticipantHasPhaseAttack,
@@ -221,6 +222,7 @@ import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
+import { collectCanonicalCombatSituationEffects } from "@/features/player-combat/combatSituationAwareness";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import {
   canAcceptCombatRoundViewRevision,
@@ -4945,6 +4947,36 @@ export default function CombatRoundManagerPanel({
         inspectorPanelSnapshot?.modifierSummary?.rows ??
         [])
       : inspectorModifierRows;
+  const inspectorModifierLifecycleEffects = inspectorIsHistorical
+    ? (inspectorPanelSnapshot?.modifierSummary?.effects ?? [])
+    : collectCanonicalCombatSituationEffects({
+        combatEffects: selectedScenarioParticipant?.state.combatEffects?.effects,
+        continuedContacts: selectedTimelineRoundState.continuedContacts,
+        ownerParticipantIds: [
+          selectedScenarioParticipant?.id,
+          inspector.participant?.participantId,
+        ].filter((id): id is string => Boolean(id)),
+        unbalancedConditions: selectedTimelineRoundState.unbalancedConditions,
+      });
+  const inspectorHistoricalModifierPhase = inspectorPanelSnapshot?.phase;
+  const inspectorHistoricalModifierPhasePanel = inspectorHistoricalModifierPhase
+    ? inspectorPanelSnapshot?.phasePanels?.[inspectorHistoricalModifierPhase]
+    : undefined;
+  const inspectorModifierOpponentId = inspectorIsHistorical
+    ? (inspectorHistoricalModifierPhasePanel?.phaseContext.targetParticipantId ??
+      inspectorHistoricalModifierPhasePanel?.phaseContext.selectedOpponentId ??
+      inspectorPanelSnapshot?.declarationSummary?.secondaryActionContext?.targetParticipantId)
+    : inspectorLiveModifiers.opponentParticipantId;
+  const inspectorModifierContext = {
+    opponentParticipantId: inspectorModifierOpponentId,
+    participantLabels:
+      inspectorModifierOpponentId && inspectorLiveModifiers.opponentLabel
+        ? { [inspectorModifierOpponentId]: inspectorLiveModifiers.opponentLabel }
+        : undefined,
+    phase: inspectorIsHistorical ? inspectorHistoricalModifierPhase : inspectorModifierPhase,
+    roundNumber: selectedRoundNumber,
+    step: inspector.step,
+  };
   recordCombatPerformanceStage(
     "panel_historical_modifier_presentation",
     combatPerformanceNow() - historicalModifierPresentationStartedAt,
@@ -7292,6 +7324,7 @@ export default function CombatRoundManagerPanel({
         combatContext: draft.combatContext,
         combatEffects: scenarioParticipant?.state.combatEffects,
         currentRound: stateForSnapshots.roundNumber,
+        liveModifiers: phaseSummary.liveModifiers,
         step,
       });
       const modifierRows = recordedModifierRows.map((row) => ({
@@ -7300,6 +7333,32 @@ export default function CombatRoundManagerPanel({
         label: row.label,
         total: row.total,
       }));
+      const modifierOwnerIds = new Set(
+        [roundParticipant.participantId, scenarioParticipant?.id].filter((id): id is string =>
+          Boolean(id),
+        ),
+      );
+      const modifierEffects = [
+        ...collectCanonicalCombatSituationEffects({
+          combatEffects: scenarioParticipant?.state.combatEffects?.effects,
+          continuedContacts: stateForSnapshots.continuedContacts,
+          unbalancedConditions: stateForSnapshots.unbalancedConditions,
+        }),
+        ...recordedModifierRows.flatMap((row) => [
+          ...row.entries.flatMap((entry) => {
+            const effect = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
+            return effect.success ? [effect.data] : [];
+          }),
+          ...(row.derivedEntries ?? []).flatMap((entry) =>
+            entry.canonicalLifecycle && "createdAt" in entry.canonicalLifecycle
+              ? [entry.canonicalLifecycle]
+              : [],
+          ),
+        ]),
+      ].filter((effect) => modifierOwnerIds.has(effect.ownerParticipantId));
+      const uniqueModifierEffects = [
+        ...new Map(modifierEffects.map((effect) => [effect.id, effect])).values(),
+      ];
       const phaseContext = phaseSummary.phaseContext;
       const targetOptions = buildCombatParticipantCandidates({
         encounter:
@@ -7527,6 +7586,7 @@ export default function CombatRoundManagerPanel({
         modifierSummary: {
           dbFlatAdjustment: phaseSummary.liveModifiers.dbFlatAdjustment ?? 0,
           dbRaw: phaseSummary.liveModifiers.dbRaw,
+          effects: uniqueModifierEffects,
           generalFatigueRaw: phaseSummary.liveModifiers.generalFatigueRaw,
           initiativeRaw: phaseSummary.liveModifiers.initiativeRaw,
           obSkillRaw: phaseSummary.liveModifiers.obSkillRaw,
@@ -10893,7 +10953,7 @@ export default function CombatRoundManagerPanel({
                   <div style={playerCombatPanelRowStyle}>
                     {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? (
                       <section style={playerCombatPanelCardStyle}>
-                        <strong>Combat modifiers · History</strong>
+                        <strong>Combat situation · History</strong>
                         <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                           No information available for this panel.
                         </div>
@@ -10905,6 +10965,7 @@ export default function CombatRoundManagerPanel({
                             ? 0
                             : (inspectorLiveModifiers.specialEffectCount ?? 0)
                         }
+                        context={inspectorModifierContext}
                         controlsDisabled={saving}
                         onAddEntry={(bucketKey, entry) =>
                           updateInspectorModifierBucket(bucketKey, (current) => [
@@ -10929,7 +10990,11 @@ export default function CombatRoundManagerPanel({
                             ),
                           )
                         }
-                        readOnly={inspectorIsHistorical}
+                        readOnly={
+                          inspectorIsHistorical ||
+                          (inspector.step !== "review_action_modifiers" &&
+                            inspector.step !== "review_phase_2_modifiers")
+                        }
                         pendingActivationLabel={
                           combatProgressionProjection.executionOrder?.currentInitiativeValue !==
                           undefined
@@ -10940,6 +11005,7 @@ export default function CombatRoundManagerPanel({
                           inspectorIsHistorical ? [] : inspectorPendingModifierEntries
                         }
                         provisional={!inspectorIsHistorical && inspectorLiveModifiers.provisional}
+                        lifecycleEffects={inspectorModifierLifecycleEffects}
                         rows={inspectorDisplayModifierRows}
                         showEmptyCategories={
                           !inspectorIsHistorical &&

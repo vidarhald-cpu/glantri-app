@@ -26,6 +26,12 @@ import {
   buildPlayerSafeCombatObservationRelationships,
   type CombatObservationRelationship,
 } from "./combatObservation";
+import {
+  canonicalCombatModifierEffectSchema,
+  projectPlayerSafeCanonicalCombatModifierEffect,
+  type CanonicalCombatModifierEffect,
+  type PlayerSafeCanonicalCombatModifierEffect,
+} from "./combatModifierLifecycle";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -93,7 +99,7 @@ export interface ProjectedCombatHistorySnapshot {
       secondaryActionLabel?: string;
       secondaryActionTargetParticipantId?: string;
     };
-    modifiers: NonNullable<CombatRoundStepSnapshot["modifierSummary"]> | Record<string, never>;
+    modifiers: ProjectedCombatHistoryModifierSummary | Record<string, never>;
     phase1: ProjectedCombatHistoryPhasePanel;
     phase2: ProjectedCombatHistoryPhasePanel;
   };
@@ -103,6 +109,16 @@ export interface ProjectedCombatHistorySnapshot {
   step: CombatStepEvent["step"];
   stepOutcome?: CombatHistoryStepOutcome;
 }
+
+export type ProjectedCombatHistoryModifierSummary = Omit<
+  NonNullable<CombatRoundStepSnapshot["modifierSummary"]>,
+  "effects"
+> & {
+  effects?: Array<
+    | NonNullable<NonNullable<CombatRoundStepSnapshot["modifierSummary"]>["effects"]>[number]
+    | PlayerSafeCanonicalCombatModifierEffect
+  >;
+};
 
 export type CombatHistoryStepOutcomeReason =
   | "action_explicitly_skipped"
@@ -476,6 +492,47 @@ function projectSnapshot(input: {
   const ownsSnapshot =
     input.viewer.kind === "gm" ||
     input.viewer.controlledParticipantIds.has(input.snapshot.participantId);
+  const modifierSummary = input.snapshot.modifierSummary;
+  let projectedModifierEffects: ProjectedCombatHistoryModifierSummary["effects"];
+  let projectedModifierRows = modifierSummary?.rows;
+  if (input.viewer.kind === "gm") {
+    projectedModifierEffects = modifierSummary?.effects;
+  } else {
+    const playerViewer = input.viewer;
+    const projectModifierEffect = (effect: CanonicalCombatModifierEffect) =>
+      projectPlayerSafeCanonicalCombatModifierEffect({
+        effect,
+        viewer: {
+          controlledParticipantIds: playerViewer.controlledParticipantIds,
+          isGm: false,
+          visibleParticipantIds: playerViewer.visibleParticipantIds,
+        },
+      });
+    projectedModifierEffects = modifierSummary?.effects?.flatMap((effect) => {
+      const projected = projectModifierEffect(effect);
+      return projected ? [projected] : [];
+    });
+    projectedModifierRows = modifierSummary?.rows.map((row) => ({
+      ...row,
+      entries: row.entries.map((entry) => {
+        const effect = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
+        return effect.success
+          ? {
+              ...entry,
+              canonicalLifecycle: undefined,
+            }
+          : entry;
+      }),
+    }));
+  }
+  const projectedModifierSummary: ProjectedCombatHistoryModifierSummary | undefined =
+    ownsSnapshot && modifierSummary
+      ? {
+          ...modifierSummary,
+          effects: projectedModifierEffects,
+          rows: projectedModifierRows ?? modifierSummary.rows,
+        }
+      : undefined;
   const targetOptions = (options: Array<{ displayName: string; id: string }> = []) =>
     options.flatMap((target) => {
       if (!isVisible({ participantId: target.id, viewer: input.viewer })) return [];
@@ -636,7 +693,7 @@ function projectSnapshot(input: {
                 : undefined,
           }
         : {},
-      modifiers: ownsSnapshot ? (input.snapshot.modifierSummary ?? {}) : {},
+      modifiers: projectedModifierSummary ?? {},
       phase1: phasePanel("phase1"),
       phase2: phasePanel("phase2"),
     },

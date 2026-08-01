@@ -107,34 +107,22 @@ describe("PlayerCombatHistoryInspector", () => {
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("uses the live compact modifier grid for historical headings and two-line rows", () => {
+  it("uses the same concise situation grammar for historical modifiers", () => {
     render(<PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />);
 
-    const headingRow = screen.getByText("Source/scope").parentElement as HTMLElement;
-    expect(Array.from(headingRow.children).map((child) => child.textContent)).toEqual([
-      "Source/scope",
-      "Mod",
-      "Dur",
-    ]);
-    expect(headingRow.style.display).toBe("grid");
-    expect(headingRow.style.gridTemplateColumns).toBe("minmax(7rem, 1fr) 3.75rem 4.25rem");
-
-    const modifierRows = screen
-      .getAllByText("Situational")
-      .map((source) => source.parentElement as HTMLElement);
-    expect(modifierRows).toHaveLength(2);
-    for (const row of modifierRows) {
-      expect(row.style.gridTemplateColumns).toBe("minmax(7rem, 1fr) 3.75rem 4.25rem");
-      const detailsRow = row.nextElementSibling as HTMLElement;
-      expect(detailsRow.textContent).toContain("Details");
-      expect(detailsRow.style.gridTemplateColumns).toBe("4.25rem minmax(0, 1fr)");
-    }
+    expect(screen.getByText("Combat situation")).toBeTruthy();
+    expect(screen.getByText("Current")).toBeTruthy();
+    expect(screen.getByText("General/Fatigue")).toBeTruthy();
+    expect(screen.getByText("Total -2%")).toBeTruthy();
+    expect(screen.getByText("single attack")).toBeTruthy();
+    expect(screen.getByText("second modifier")).toBeTruthy();
+    expect(screen.queryByText("Source/scope")).toBeNull();
   });
 
   it("renders read-only historical context in the normal action-area position", () => {
     render(<PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />);
 
-    const modifierPanel = screen.getByText("Combat modifiers").closest("section");
+    const modifierPanel = screen.getByText("Combat situation").closest("section");
     const currentActionPanel = screen.getByText("Historical context").closest("section");
     const actionResultPanel = screen.getByLabelText(/Historical result/);
     expect(modifierPanel?.parentElement).toBe(currentActionPanel?.parentElement);
@@ -197,6 +185,47 @@ describe("PlayerCombatHistoryInspector", () => {
       secondaryActionLabel: "Observe opponent",
       secondaryActionTargetParticipantId: "visible",
     };
+    if ("rows" in observed.panels.modifiers) {
+      observed.panels.modifiers.obSkillRaw = 1;
+      observed.panels.modifiers.rows.push({
+        bucketKey: "situation_ob_skill",
+        entries: [],
+        label: "Skill/OB",
+        total: 1,
+      });
+      observed.panels.modifiers.effects = [
+        {
+          applicability: {
+            combatWide: false,
+            opponentParticipantId: "visible",
+            rollPurposes: [],
+          },
+          id: "observe:aria:visible:skill",
+          lifecycle: {
+            duration: {
+              endsWhen: "relationship_ends",
+              kind: "relationship",
+              relationshipId: "observation:aria:visible",
+              startRound: 1,
+              startSequence: 4,
+            },
+            state: "active",
+          },
+          ownerParticipantId: "aria",
+          payload: {
+            category: "skill_ob",
+            contributionScope: "calculation",
+            kind: "numeric",
+            unit: "percentage",
+            value: 1,
+          },
+          provenanceCompleteness: "complete",
+          publicLabel: "Observe Opponent",
+          schemaVersion: 1,
+          sourceFamily: "observe_relationship",
+        },
+      ];
+    }
     render(
       <PlayerCombatHistoryInspector
         events={[]}
@@ -217,7 +246,8 @@ describe("PlayerCombatHistoryInspector", () => {
 
     expect(screen.getByText("Observation progress")).toBeTruthy();
     expect(screen.getByText("Visible opponent: 4 / 6 · best +1% · attempts 1")).toBeTruthy();
-    expect(screen.getByText("Observe Opponent · Visible opponent")).toBeTruthy();
+    expect(screen.getByText("Observe Opponent")).toBeTruthy();
+    expect(screen.getByText(/Against Visible opponent/)).toBeTruthy();
     expect(screen.getAllByText("Historical context")).toHaveLength(1);
   });
 });

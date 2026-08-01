@@ -51,6 +51,12 @@ import {
   type EncounterCombatPhaseKey,
   type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  buildCombatSituationAwarenessModel,
+  type CombatSituationContext,
+  type CombatSituationDisplayRow,
+  type CombatSituationLifecycleEffect,
+} from "./combatSituationAwareness";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
@@ -65,6 +71,7 @@ export interface PlayerCombatModifierBucketView {
 
 export interface PlayerCombatModifierDisplayEntry {
   application?: ScenarioCombatModifierEntry["application"];
+  canonicalLifecycle?: CombatSituationLifecycleEffect;
   details?: string;
   id: string;
   scopeLabel: string;
@@ -116,6 +123,7 @@ export interface PlayerCombatDefenseStatsView {
 
 interface PlayerCombatModifierPanelProps {
   activeSpecialEffectCount?: number;
+  context?: CombatSituationContext;
   controlsDisabled?: boolean;
   onAddEntry?: (
     bucketKey: ScenarioCombatModifierBucket,
@@ -133,6 +141,7 @@ interface PlayerCombatModifierPanelProps {
   pendingActivationLabel?: string;
   pendingEntries?: readonly ScenarioCombatModifierEntry[];
   provisional?: boolean;
+  lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
   showEmptyCategories?: boolean;
@@ -808,6 +817,7 @@ export function buildPlayerCombatModifierRows(input: {
     const entries = derivedEntriesByBucket.get(contribution.bucket) ?? [];
     entries.push({
       application: "percentage",
+      canonicalLifecycle: contribution.canonicalLifecycle,
       id: contribution.id,
       scopeLabel: "Opponent",
       sourceLabel: `${contribution.label}${
@@ -882,6 +892,110 @@ export function buildPlayerCombatModifierRows(input: {
       total: totals.dbParry,
     },
   ];
+}
+
+function CombatSituationRow({ row }: { row: CombatSituationDisplayRow }) {
+  return (
+    <div
+      style={{
+        alignItems: "start",
+        display: "grid",
+        fontSize: "0.84rem",
+        gap: "0.15rem 0.5rem",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>{row.label}</span>
+      {row.valueLabel ? <span style={{ fontWeight: 700 }}>{row.valueLabel}</span> : null}
+      {row.scopeLabel || row.durationLabel ? (
+        <span
+          style={{
+            color: "#5e5a50",
+            fontSize: "0.78rem",
+            gridColumn: "1 / -1",
+          }}
+        >
+          {[row.scopeLabel, row.durationLabel].filter(Boolean).join(" · ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function CombatSituationSummary(input: {
+  context?: CombatSituationContext;
+  lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
+  pendingActivationLabel?: string;
+  pendingEntries: readonly ScenarioCombatModifierEntry[];
+  provisional: boolean;
+  rows: readonly PlayerCombatModifierBucketView[];
+  sourceLabel?: string;
+}) {
+  const model = buildCombatSituationAwarenessModel({
+    context: input.context,
+    lifecycleEffects: input.lifecycleEffects,
+    pendingEntries: input.pendingEntries,
+    provisional: input.provisional,
+    rows: input.rows,
+  });
+  const semanticGroups = [
+    { id: "conditions", label: "Persistent conditions", rows: model.conditions },
+    { id: "restrictions", label: "Restrictions", rows: model.restrictions },
+    { id: "pending", label: "Pending / expiring", rows: model.pending },
+  ].filter((group) => group.rows.length > 0);
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <PanelTitleWithSource label="Combat situation" sourceLabel={input.sourceLabel} />
+      {model.provisional ? (
+        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
+      ) : null}
+      {model.calculationGroups.length > 0 ? (
+        <div style={{ display: "grid", gap: "0.65rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Current</strong>
+          {model.calculationGroups.map((group) => (
+            <div key={group.id} style={{ display: "grid", gap: "0.3rem" }}>
+              <div style={compactModifierGroupHeaderStyle}>
+                <span style={{ fontSize: "0.86rem", fontWeight: 700 }}>{group.label}</span>
+                <span style={{ color: "#5e5a50", fontSize: "0.86rem" }}>
+                  Total {group.totalLabel}
+                </span>
+              </div>
+              <div style={{ display: "grid", gap: "0.35rem" }}>
+                {group.rows.map((row) => (
+                  <CombatSituationRow key={row.id} row={row} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {semanticGroups.map((group) => (
+        <div
+          key={group.id}
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.4rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.9rem" }}>{group.label}</strong>
+          {group.rows.map((row) => (
+            <CombatSituationRow key={row.id} row={row} />
+          ))}
+          {group.id === "pending" && input.pendingActivationLabel ? (
+            <span style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+              {input.pendingActivationLabel}
+            </span>
+          ) : null}
+        </div>
+      ))}
+      {model.empty ? (
+        <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>No active modifiers.</span>
+      ) : null}
+    </section>
+  );
 }
 
 function buildImportedModifierDisplayEntry(
@@ -1036,6 +1150,7 @@ function ModifierEditableEntryRow({
 
 export function PlayerCombatModifierPanel({
   activeSpecialEffectCount = 0,
+  context,
   controlsDisabled = false,
   onAddEntry,
   onRemoveEntry,
@@ -1043,6 +1158,7 @@ export function PlayerCombatModifierPanel({
   pendingActivationLabel,
   pendingEntries = [],
   provisional = false,
+  lifecycleEffects,
   readOnly = false,
   rows,
   showEmptyCategories = false,
@@ -1056,6 +1172,20 @@ export function PlayerCombatModifierPanel({
   const [draftEntries, setDraftEntries] = useState<
     Partial<Record<ScenarioCombatModifierBucket, ScenarioCombatModifierEntry>>
   >({});
+
+  if (!editable) {
+    return (
+      <CombatSituationSummary
+        context={context}
+        lifecycleEffects={lifecycleEffects}
+        pendingActivationLabel={pendingActivationLabel}
+        pendingEntries={pendingEntries}
+        provisional={provisional}
+        rows={rows}
+        sourceLabel={sourceLabel}
+      />
+    );
+  }
 
   const setDraftEntry = (
     bucketKey: ScenarioCombatModifierBucket,
@@ -1076,7 +1206,7 @@ export function PlayerCombatModifierPanel({
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
+      <PanelTitleWithSource label="Combat situation" sourceLabel={sourceLabel} />
       {provisional ? (
         <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
       ) : null}
@@ -1138,7 +1268,7 @@ export function PlayerCombatModifierPanel({
                     {totalIsPercentage ? "%" : ""}
                   </span>
                 </div>
-                {editable && !row.locked ? (
+                {!row.locked ? (
                   <button
                     disabled={controlsDisabled || Boolean(draftEntry)}
                     onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
@@ -1152,8 +1282,7 @@ export function PlayerCombatModifierPanel({
 
               {hasVisibleRows ? (
                 <div style={compactModifierMiniTableStyle}>
-                  {persistentDisplayEntries.length > 0 ||
-                  (!editable && situationalEntries.length > 0) ? (
+                  {persistentDisplayEntries.length > 0 ? (
                     <div style={compactModifierDisplayHeaderStyle}>
                       {["Source/scope", "Mod", "Dur"].map((heading) => (
                         <span
@@ -1176,7 +1305,7 @@ export function PlayerCombatModifierPanel({
                       key={`${entry.sourceLabel}:${entry.id}`}
                     />
                   ))}
-                  {editable && !row.locked ? (
+                  {!row.locked ? (
                     <>
                       {situationalEntries.length > 0 || draftEntry ? (
                         <div style={compactModifierMiniTableHeaderStyle}>

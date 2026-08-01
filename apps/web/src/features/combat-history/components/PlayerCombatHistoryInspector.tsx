@@ -155,6 +155,18 @@ export function PlayerCombatHistoryInspector(input: {
     "rows" in (input.snapshot?.panels.modifiers ?? {})
       ? input.snapshot?.panels.modifiers.rows
       : undefined;
+  const modifierEffects =
+    "effects" in (input.snapshot?.panels.modifiers ?? {})
+      ? input.snapshot?.panels.modifiers.effects
+      : undefined;
+  const historicalPhase = input.snapshot?.phase;
+  const historicalPhasePanel = historicalPhase
+    ? input.snapshot?.panels[historicalPhase]
+    : undefined;
+  const historicalOpponentId =
+    historicalPhasePanel?.phaseContext?.targetParticipantId ??
+    historicalPhasePanel?.phaseContext?.selectedOpponentId ??
+    selector?.secondaryActionTargetParticipantId;
 
   return (
     <section
@@ -210,15 +222,21 @@ export function PlayerCombatHistoryInspector(input: {
       <div style={playerCombatPanelRowStyle}>
         {modifierRows ? (
           <PlayerCombatModifierPanel
+            context={{
+              opponentParticipantId: historicalOpponentId,
+              participantLabels: input.observationTargetLabels,
+              phase: historicalPhase,
+              roundNumber: input.snapshot?.roundNumber,
+              step: input.snapshot?.step,
+            }}
             controlsDisabled
+            lifecycleEffects={modifierEffects}
             readOnly
             rows={modifierRows}
             sourceLabel="History"
-            observationRelationships={input.observationRelationships ?? []}
-            observationTargetLabels={input.observationTargetLabels ?? {}}
           />
         ) : (
-          <MissingHistoricalPanel title="Combat modifiers" />
+          <MissingHistoricalPanel title="Combat situation" />
         )}
         <PlayerCombatHistoricalContextPanel
           roundNumber={input.snapshot?.roundNumber}
