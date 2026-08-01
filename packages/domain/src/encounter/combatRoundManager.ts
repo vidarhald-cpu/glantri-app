@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep } from "./combatRoundStep";
 import {
   buildContinuedContactMaintenanceContestId,
   buildContinuedContactMaintenanceContestResultId,
@@ -116,6 +118,12 @@ import {
   resolveCombatDodgeModifiers,
   type CombatModifierContribution,
 } from "./combatModifierContributions";
+import {
+  buildCombatExperiencePersistentLifecycle,
+  buildDamagePersistentLifecycle,
+  isBoundedStunnedDamageEffect,
+  transitionPersistentCombatEffect,
+} from "./combatPersistentModifierLifecycle";
 import { combatSkillContestCalculationSchema } from "./combatSkillContest";
 import {
   buildCombatObservationRelationshipId,
@@ -173,23 +181,7 @@ const COMBAT_ROUND_INTERNAL_BLEED_HEALTH_DIFFICULTY = 26;
 export const COMBAT_EXPERIENCE_TABLE_DIFFICULTY = 21;
 export const COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY = 26;
 
-export const combatRoundStepSchema = z.enum([
-  "select_actions",
-  "review_action_modifiers",
-  "initiative_phase_1",
-  "phase_1_actions",
-  "review_phase_2_actions",
-  "phase_1_damage",
-  "review_phase_2_modifiers",
-  "initiative_phase_2",
-  "phase_2_actions",
-  "review_phase_2_damage",
-  "phase_2_damage",
-  "round_summary",
-]);
-
-export const COMBAT_ROUND_STEPS = combatRoundStepSchema.options;
-export type CombatRoundStep = z.infer<typeof combatRoundStepSchema>;
+export { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep };
 
 export const COMBAT_ROUND_STEP_ABBREVIATIONS = {
   initiative_phase_1: "i1",
@@ -2268,38 +2260,35 @@ export interface CompletedCombatRound {
   unbalancedConditions: z.infer<typeof unbalancedCombatConditionSchema>[];
 }
 
-export const completedCombatRoundSchema: z.ZodType<
-  CompletedCombatRound,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  activeParticipantId: idSchema.optional(),
-  combatExperienceDifficulty: z.number().int().positive().optional(),
-  commands: z.array(combatRoundCommandSchema).default([]),
-  continuedContacts: z.array(continuedContactSchema).default([]),
-  completedAt: z.string().datetime().optional(),
-  completedByUserId: idSchema.optional(),
-  currentCursor: combatRoundCursorSchema.optional(),
-  currentStep: combatRoundStepSchema.default("round_summary"),
-  distanceState: combatDistanceStateSchema.optional(),
-  encounterId: idSchema.optional(),
-  events: combatStepEventArraySchema.default([]),
-  feintProposals: z.array(combatFeintProposalSchema).default([]),
-  offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
-  observationAttempts: z.array(combatObservationAttemptSchema).default([]),
-  observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
-  adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
-  phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
-  phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
-  phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
-  participants: z.array(combatRoundParticipantStateSchema).default([]),
-  roundEndReview: combatRoundEndReviewSchema.optional(),
-  roundNumber: z.number().int().positive(),
-  selectedParticipantId: idSchema.optional(),
-  selectedStep: combatRoundStepSchema.optional(),
-  stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
-  unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
-});
+export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTypeDef, unknown> =
+  z.object({
+    activeParticipantId: idSchema.optional(),
+    combatExperienceDifficulty: z.number().int().positive().optional(),
+    commands: z.array(combatRoundCommandSchema).default([]),
+    continuedContacts: z.array(continuedContactSchema).default([]),
+    completedAt: z.string().datetime().optional(),
+    completedByUserId: idSchema.optional(),
+    currentCursor: combatRoundCursorSchema.optional(),
+    currentStep: combatRoundStepSchema.default("round_summary"),
+    distanceState: combatDistanceStateSchema.optional(),
+    encounterId: idSchema.optional(),
+    events: combatStepEventArraySchema.default([]),
+    feintProposals: z.array(combatFeintProposalSchema).default([]),
+    offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
+    observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+    observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
+    adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
+    phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
+    phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
+    phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
+    participants: z.array(combatRoundParticipantStateSchema).default([]),
+    roundEndReview: combatRoundEndReviewSchema.optional(),
+    roundNumber: z.number().int().positive(),
+    selectedParticipantId: idSchema.optional(),
+    selectedStep: combatRoundStepSchema.optional(),
+    stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
+    unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
+  });
 
 export interface CombatRoundState {
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
@@ -2939,6 +2928,10 @@ function appendCombatRoundEventForCommand(input: {
       events: normalized.events,
     }),
   };
+}
+
+function getNextCombatRoundEventSequence(state: CombatRoundState): number {
+  return state.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1;
 }
 
 function removeCombatRoundEventsForCommand(input: {
@@ -4850,6 +4843,7 @@ export function rollCombatRoundCombatExperience(input: {
     createdAt: string;
     createdByUserId?: string;
   };
+  createdRevision?: string;
   difficulty?: number;
   encounterId?: string;
   opportunityId?: string;
@@ -5107,6 +5101,24 @@ export function rollCombatRoundCombatExperience(input: {
           effects: [
             ...currentCombatEffects.effects,
             combatEffectSchema.parse({
+              canonicalLifecycle: buildCombatExperiencePersistentLifecycle({
+                context: {
+                  commandId,
+                  createdAt: input.command.createdAt,
+                  createdRevision: input.createdRevision,
+                  createdSequence: getNextCombatRoundEventSequence(normalized),
+                  encounterId: input.encounterId,
+                  eventId: createdCombatEffectEventId,
+                  ownerParticipantId: targetParticipantId,
+                  roundNumber: normalized.roundNumber,
+                },
+                durationRounds: result.durationRounds,
+                effectId: createdCombatEffectIds[0],
+                modifierValue: result.modifierValue,
+                phase,
+                status: "active",
+              }),
+              combatWide: phase === undefined,
               combatModifierBucket: "general",
               createdAt: input.command.createdAt,
               damage: 0,
@@ -12057,6 +12069,8 @@ function buildCombatRoundDamageCommitRows(input: {
   attackerScenarioParticipantId?: string;
   command: CombatRoundCommand;
   combatEffects?: CombatEffectsState;
+  createdRevision?: string;
+  createdSequence: number;
   criticalRoll?: CombatRoundCriticalRollResult;
   damageResult: CombatRoundDamageResult;
   defenderScenarioParticipantId: string;
@@ -12181,8 +12195,41 @@ function buildCombatRoundDamageCommitRows(input: {
       : [];
   const additionalEffects = reviewAdditionalEffects.map((effect, index) => {
     const rowShape = getCombatRoundDamageReviewEffectRowShape(effect);
+    const effectId =
+      additionalEffectIds[index] ??
+      buildCombatRoundDamageCommitEffectId({
+        ...idInput,
+        kind: `additional-${effect.id}`,
+      });
+    const status = input.effectStatus ?? (input.initiativeGroup ? "pending" : "active");
+    const canonicalLifecycle = buildDamagePersistentLifecycle({
+      combatModifierBucket: rowShape.combatModifierBucket,
+      context: {
+        commandId: input.command.id,
+        createdAt: input.command.createdAt,
+        createdRevision: input.createdRevision,
+        createdSequence: input.createdSequence,
+        encounterId: input.encounterId,
+        eventId,
+        ownerParticipantId: input.defenderScenarioParticipantId,
+        roundNumber: input.command.roundNumber,
+      },
+      durationRounds: effect.durationRounds,
+      effectId,
+      effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
+      initiativeGroupId: input.initiativeGroup?.id,
+      isStunned: isBoundedStunnedDamageEffect(effect),
+      label: effect.label,
+      modifierValue: rowShape.modifierValue,
+      notes: effect.notes,
+      phase: input.initiativeGroup?.phase,
+      rowCategory: effect.rowCategory,
+      status,
+      type: rowShape.type,
+    });
 
     return combatEffectSchema.parse({
+      canonicalLifecycle,
       combatModifierBucket: rowShape.combatModifierBucket,
       createdAt: input.command.createdAt,
       createdInInitiativeGroupId: input.initiativeGroup?.id,
@@ -12192,12 +12239,7 @@ function buildCombatRoundDamageCommitRows(input: {
       effectGroup: rowShape.effectGroup,
       effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
       generalDamage: 0,
-      id:
-        additionalEffectIds[index] ??
-        buildCombatRoundDamageCommitEffectId({
-          ...idInput,
-          kind: `additional-${effect.id}`,
-        }),
+      id: effectId,
       modifierValue: rowShape.modifierValue,
       initiativePhase: input.initiativeGroup?.phase,
       initiativeValue: input.initiativeGroup?.initiativeValue,
@@ -12205,7 +12247,7 @@ function buildCombatRoundDamageCommitRows(input: {
       sourceEventId: eventId,
       sourceAttackResultId: input.damageResult.attackResultId,
       sourceOpportunityId: input.sourceOpportunityId,
-      status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
+      status,
       targetParticipantId: input.defenderScenarioParticipantId,
       type: rowShape.type,
       updatedAt: input.command.createdAt,
@@ -13081,7 +13123,11 @@ function buildCombatRoundEndParticipantReview(input: {
       continue;
     }
 
-    const durationRounds = parseCombatRoundEffectRoundDuration(effect.duration);
+    const canonicalDuration = effect.canonicalLifecycle?.lifecycle.duration;
+    const durationRounds =
+      canonicalDuration?.kind === "rounds"
+        ? canonicalDuration.remaining
+        : parseCombatRoundEffectRoundDuration(effect.duration);
 
     if (durationRounds !== undefined) {
       if (durationRounds <= 1) {
@@ -13890,6 +13936,8 @@ function buildCombatRoundEndParticipantReviewEventId(input: {
 }
 
 function applyCombatRoundEndReviewEffects(input: {
+  acceptedRevision?: string;
+  acceptedSequence: number;
   combatEffects?: CombatEffectsState;
   command: CombatRoundCommand;
   encounterId?: string;
@@ -13924,19 +13972,30 @@ function applyCombatRoundEndReviewEffects(input: {
     let nextEffect = effect;
 
     if (durationUpdate) {
+      const currentDuration = nextEffect.canonicalLifecycle?.lifecycle.duration;
+      const nextDuration =
+        currentDuration?.kind === "rounds"
+          ? {
+              ...currentDuration,
+              remaining: Math.max(1, currentDuration.remaining - 1),
+            }
+          : undefined;
       nextEffect = combatEffectSchema.parse({
         ...nextEffect,
         duration: durationUpdate.nextDuration ?? effect.duration,
         expiresAtRound: durationUpdate.nextExpiresAtRound,
         updatedAt: input.command.createdAt,
       });
-    }
-
-    if (removal) {
-      nextEffect = combatEffectSchema.parse({
-        ...nextEffect,
-        status: "expired",
-        updatedAt: input.command.createdAt,
+      nextEffect = transitionPersistentCombatEffect({
+        acceptedRevision: input.acceptedRevision,
+        acceptedSequence: input.acceptedSequence,
+        commandId: input.command.id,
+        effect: nextEffect,
+        eventId: input.command.id,
+        nextDuration,
+        nextState: nextEffect.canonicalLifecycle?.lifecycle.state ?? "active",
+        reason: "duration_decremented",
+        transitionType: "update",
       });
     }
 
@@ -13950,6 +14009,47 @@ function applyCombatRoundEndReviewEffects(input: {
             nextEffect.bleedState?.initializedRound ?? bleedProposal.initializedRound,
         }),
         updatedAt: input.command.createdAt,
+      });
+      const canonicalPayload = nextEffect.canonicalLifecycle?.payload;
+      nextEffect = transitionPersistentCombatEffect({
+        acceptedRevision: input.acceptedRevision,
+        acceptedSequence: input.acceptedSequence,
+        commandId: input.command.id,
+        effect: nextEffect,
+        eventId: input.command.id,
+        nextPayload:
+          canonicalPayload?.kind === "numeric" && canonicalPayload.category === "bleed_rate"
+            ? {
+                ...canonicalPayload,
+                bleedState: {
+                  accumulatedTenths: bleedProposal.remainingAccumulatedTenths,
+                  initializedRound:
+                    nextEffect.bleedState?.initializedRound ?? bleedProposal.initializedRound,
+                  lastHealthCheckRound: nextEffect.bleedState?.lastHealthCheckRound,
+                },
+              }
+            : undefined,
+        nextState: nextEffect.canonicalLifecycle?.lifecycle.state ?? "active",
+        reason: "bleed_state_updated",
+        transitionType: "update",
+      });
+    }
+
+    if (removal) {
+      nextEffect = combatEffectSchema.parse({
+        ...nextEffect,
+        status: "expired",
+        updatedAt: input.command.createdAt,
+      });
+      nextEffect = transitionPersistentCombatEffect({
+        acceptedRevision: input.acceptedRevision,
+        acceptedSequence: input.acceptedSequence,
+        commandId: input.command.id,
+        effect: nextEffect,
+        eventId: input.command.id,
+        nextState: "expired",
+        reason: "natural_expiry",
+        transitionType: "expire",
       });
     }
 
@@ -14043,6 +14143,7 @@ export function commitCombatRoundEndParticipantReview(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  createdRevision?: string;
   encounterId?: string;
   participantId: string;
   scenarioId?: string;
@@ -14112,6 +14213,8 @@ export function commitCombatRoundEndParticipantReview(input: {
     type: "commit_round_end_participant_review",
   });
   const effectApplication = applyCombatRoundEndReviewEffects({
+    acceptedRevision: input.createdRevision,
+    acceptedSequence: getNextCombatRoundEventSequence(normalized),
     combatEffects: input.combatEffects,
     command: provisionalCommand,
     encounterId: input.encounterId,
@@ -14305,6 +14408,7 @@ export function rollCombatRoundEndHealthCheck(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  createdRevision?: string;
   difficulty?: number;
   healthRollId?: string;
   participantId: string;
@@ -14356,6 +14460,15 @@ export function rollCombatRoundEndHealthCheck(input: {
     rollTotal: roll.dieResult,
     success: finalTotal >= difficulty,
   });
+  const commandType = "roll_round_end_health_check" satisfies CombatRoundCommandType;
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.participantId,
+      state: normalized,
+      type: commandType,
+    });
   const sourceBleedEffect = currentCombatEffects.effects.find(
     (effect) => effect.id === healthRoll.sourceEffectId,
   );
@@ -14366,7 +14479,7 @@ export function rollCombatRoundEndHealthCheck(input: {
     result.success && previousBleedRate !== undefined
       ? Math.max(0, previousBleedRate - 1)
       : previousBleedRate;
-  const updatedBleedEffect =
+  const legacyUpdatedBleedEffect =
     sourceBleedEffect && nextBleedRate !== undefined
       ? combatEffectSchema.parse({
           ...setCombatRoundEffectBleedAmount({
@@ -14388,6 +14501,27 @@ export function rollCombatRoundEndHealthCheck(input: {
           }),
         })
       : undefined;
+  const updatedBleedEffect = legacyUpdatedBleedEffect
+    ? transitionPersistentCombatEffect({
+        acceptedRevision: input.createdRevision,
+        acceptedSequence: getNextCombatRoundEventSequence(normalized),
+        commandId,
+        effect: legacyUpdatedBleedEffect,
+        nextPayload:
+          legacyUpdatedBleedEffect.canonicalLifecycle?.payload.kind === "numeric" &&
+          legacyUpdatedBleedEffect.canonicalLifecycle.payload.category === "bleed_rate"
+            ? {
+                ...legacyUpdatedBleedEffect.canonicalLifecycle.payload,
+                bleedState: legacyUpdatedBleedEffect.bleedState,
+                value: nextBleedRate ?? previousBleedRate ?? 0,
+              }
+            : undefined,
+        nextState: (nextBleedRate ?? previousBleedRate ?? 0) <= 0 ? "expired" : "active",
+        reason: result.success ? "check_succeeded" : "bleed_state_updated",
+        transitionType:
+          result.success && (nextBleedRate ?? previousBleedRate ?? 0) <= 0 ? "expire" : "update",
+      })
+    : undefined;
   const updatedEffects: CombatRoundEndUpdatedEffectFact[] =
     sourceBleedEffect && updatedBleedEffect
       ? [
@@ -14448,7 +14582,6 @@ export function rollCombatRoundEndHealthCheck(input: {
     participantId: nextParticipantId,
     state: normalized,
   });
-  const commandType = "roll_round_end_health_check" satisfies CombatRoundCommandType;
   const command = combatRoundCommandSchema.parse({
     afterCursor,
     beforeCursor,
@@ -14475,14 +14608,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       success: result.success,
       updatedEffects,
     },
-    id:
-      input.command.commandId ??
-      buildCombatRoundCommandId({
-        createdAt: input.command.createdAt,
-        participantId: input.participantId,
-        state: normalized,
-        type: commandType,
-      }),
+    id: commandId,
     participantId: input.participantId,
     roundNumber: normalized.roundNumber,
     step: "SU",
@@ -15419,6 +15545,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  createdRevision?: string;
   criticalRoll?: CombatRoundCriticalRollResult;
   damageResult: CombatRoundDamageResult;
   defenderScenarioParticipantId: string;
@@ -15647,6 +15774,8 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     attackerScenarioParticipantId: input.attackerScenarioParticipantId,
     command,
     combatEffects: input.combatEffects,
+    createdRevision: input.createdRevision,
+    createdSequence: getNextCombatRoundEventSequence(normalized),
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
     defenderScenarioParticipantId: input.defenderScenarioParticipantId,
@@ -16030,6 +16159,7 @@ export function commitCombatRoundPhaseDamage(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  createdRevision?: string;
   defenderScenarioParticipantId: string;
   encounterId?: string;
   scenarioId?: string;
@@ -16057,6 +16187,7 @@ export function commitCombatRoundPhaseDamage(input: {
     attackerScenarioParticipantId: input.attackerScenarioParticipantId,
     command: input.command,
     combatEffects: input.combatEffects,
+    createdRevision: input.createdRevision,
     criticalRoll: readiness.resolution.criticalRoll,
     damageResult: readiness.damageResult,
     defenderScenarioParticipantId: input.defenderScenarioParticipantId,

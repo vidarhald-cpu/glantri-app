@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierLifecycleTransitionSchema,
+} from "./combatModifierLifecycle";
+
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
 
@@ -77,36 +82,58 @@ export const combatEffectEventSchema = z.object({
   targetParticipantId: idSchema,
 });
 
-export const combatEffectSchema = z.object({
-  checkRequired: z.boolean().optional(),
-  checkSkillOrStat: z.string().optional(),
-  combatWide: z.boolean().optional(),
-  combatModifierBucket: combatEffectModifierBucketSchema.optional(),
-  createdInInitiativeGroupId: idSchema.optional(),
-  createdAt: timestampSchema,
-  damage: z.number().default(0),
-  description: z.string().optional(),
-  duration: z.string().optional(),
-  excludedRollPurposes: z.array(z.string().min(1)).optional(),
-  effectGroup: combatEffectGroupSchema,
-  effectiveAfterInitiativeGroupId: idSchema.optional(),
-  expiresAtRound: z.number().int().positive().optional(),
-  generalDamage: z.number().default(0),
-  id: idSchema,
-  initiativePhase: z.enum(["phase1", "phase2"]).optional(),
-  initiativeValue: z.number().int().optional(),
-  location: z.string().optional(),
-  modifierValue: z.number().optional(),
-  bleedState: combatEffectBleedStateSchema.optional(),
-  roundNumber: z.number().int().positive().optional(),
-  sourceAttackResultId: idSchema.optional(),
-  sourceEventId: idSchema,
-  sourceOpportunityId: idSchema.optional(),
-  status: combatEffectStatusSchema.default("active"),
-  targetParticipantId: idSchema,
-  type: combatEffectTypeSchema,
-  updatedAt: timestampSchema,
-});
+export const combatEffectSchema = z
+  .object({
+    canonicalLifecycle: canonicalCombatModifierEffectSchema.optional(),
+    canonicalTransitions: z.array(canonicalCombatModifierLifecycleTransitionSchema).optional(),
+    checkRequired: z.boolean().optional(),
+    checkSkillOrStat: z.string().optional(),
+    combatWide: z.boolean().optional(),
+    combatModifierBucket: combatEffectModifierBucketSchema.optional(),
+    createdInInitiativeGroupId: idSchema.optional(),
+    createdAt: timestampSchema,
+    damage: z.number().default(0),
+    description: z.string().optional(),
+    duration: z.string().optional(),
+    excludedRollPurposes: z.array(z.string().min(1)).optional(),
+    effectGroup: combatEffectGroupSchema,
+    effectiveAfterInitiativeGroupId: idSchema.optional(),
+    expiresAtRound: z.number().int().positive().optional(),
+    generalDamage: z.number().default(0),
+    id: idSchema,
+    initiativePhase: z.enum(["phase1", "phase2"]).optional(),
+    initiativeValue: z.number().int().optional(),
+    location: z.string().optional(),
+    modifierValue: z.number().optional(),
+    bleedState: combatEffectBleedStateSchema.optional(),
+    roundNumber: z.number().int().positive().optional(),
+    sourceAttackResultId: idSchema.optional(),
+    sourceEventId: idSchema,
+    sourceOpportunityId: idSchema.optional(),
+    status: combatEffectStatusSchema.default("active"),
+    targetParticipantId: idSchema,
+    type: combatEffectTypeSchema,
+    updatedAt: timestampSchema,
+  })
+  .superRefine((effect, context) => {
+    if (effect.canonicalLifecycle && effect.canonicalLifecycle.id !== effect.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Canonical lifecycle identity must match the durable combat effect.",
+        path: ["canonicalLifecycle", "id"],
+      });
+    }
+    if (
+      effect.canonicalLifecycle &&
+      effect.canonicalLifecycle.ownerParticipantId !== effect.targetParticipantId
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Canonical lifecycle owner must match the durable combat effect target.",
+        path: ["canonicalLifecycle", "ownerParticipantId"],
+      });
+    }
+  });
 
 export const combatEffectsStateSchema = z
   .object({

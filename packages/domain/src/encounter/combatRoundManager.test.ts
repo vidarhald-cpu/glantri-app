@@ -139,8 +139,12 @@ import {
 import { encounterSessionSchema } from "./session";
 import { getDistanceBetween, makeDistancePairKey, setDistanceBetween } from "./combatDistance";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
-import type { CombatEffectsState } from "./combatEffects";
-import { mergePersistentCombatEffectModifiers } from "./combatModifierProjection";
+import { combatEffectsStateSchema, type CombatEffectsState } from "./combatEffects";
+import {
+  buildLiveCombatModifierContributionProjection,
+  mergePersistentCombatEffectModifiers,
+} from "./combatModifierProjection";
+import { buildDamagePersistentLifecycle } from "./combatPersistentModifierLifecycle";
 import type { CombatModifierContribution } from "./combatModifierContributions";
 import {
   advanceCombatProgressionBoundary,
@@ -2132,6 +2136,7 @@ describe("combat round manager", () => {
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
       },
+      createdRevision: "revision-ce-1",
       participantId: "gladiator",
       rng: () => 0.2,
       scenarioParticipantId: "scenario-gladiator",
@@ -2167,6 +2172,16 @@ describe("combat round manager", () => {
     });
     expect(rolled.combatEffects.effects).toHaveLength(1);
     expect(rolled.combatEffects.effects[0]).toMatchObject({
+      canonicalLifecycle: {
+        applicability: { combatWide: true },
+        lifecycle: {
+          duration: { creationRoundCounts: true, kind: "rounds", remaining: 4 },
+          state: "active",
+        },
+        payload: { category: "general_fatigue", unit: "percentage", value: -2 },
+        provenanceCompleteness: "complete",
+      },
+      combatWide: true,
       description: "combat exp passive",
       duration: "4 rounds",
       effectGroup: "general",
@@ -2174,6 +2189,17 @@ describe("combat round manager", () => {
       status: "active",
       targetParticipantId: "scenario-gladiator",
       type: "general_modifier",
+    });
+    const projection = buildLiveCombatModifierContributionProjection({
+      combatEffects: rolled.combatEffects,
+      currentRound: 1,
+      encounterId: "encounter-1",
+      ownerParticipantId: "scenario-gladiator",
+    });
+    expect(projection.contributions).toHaveLength(1);
+    expect(projection.contributions[0]).toMatchObject({
+      bucket: "general_fatigue",
+      value: -2,
     });
   });
 
@@ -5097,6 +5123,61 @@ describe("combat round manager", () => {
       effectId: "ce-active-1",
       kind: "duration_expire",
     });
+  });
+
+  it("persists canonical CE duration transitions through SU and reload", () => {
+    const declarationState = openCombatExperienceWindow(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+    );
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:01:00.000Z" },
+      createdRevision: "revision-ce-created",
+      encounterId: "encounter-1",
+      participantId: "gladiator",
+      rng: () => 0.2,
+      scenarioParticipantId: "scenario-gladiator",
+      skillTotal: 10,
+      state: declarationState,
+    });
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      "round_summary",
+    );
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: { combatEffects: rolled.combatEffects },
+      },
+      state: roundSummaryState,
+    });
+    const committed = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:10:00.000Z" },
+      combatEffects: rolled.combatEffects,
+      createdRevision: "revision-ce-reviewed",
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+    const reloaded = combatEffectsStateSchema.parse(
+      JSON.parse(JSON.stringify(committed.combatEffects)),
+    );
+    const effect = reloaded.effects[0];
+
+    expect(effect?.canonicalLifecycle).toMatchObject({
+      lifecycle: { duration: { kind: "rounds", remaining: 3 }, state: "active" },
+      version: 2,
+    });
+    expect(effect?.canonicalTransitions?.[0]).toMatchObject({
+      reason: "duration_decremented",
+      transitionType: "update",
+    });
+    expect(
+      buildLiveCombatModifierContributionProjection({
+        combatEffects: reloaded,
+        currentRound: 2,
+        encounterId: "encounter-1",
+        ownerParticipantId: "scenario-gladiator",
+      }).contributions,
+    ).toHaveLength(1);
   });
 
   it("does not reuse combat round state stamped for another encounter", () => {
@@ -12037,6 +12118,7 @@ describe("combat round manager", () => {
         createdByUserId: "gm-1",
       },
       combatEffects: existingCombatEffects,
+      createdRevision: "revision-damage-1",
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
@@ -12295,6 +12377,13 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
+        canonicalLifecycle: expect.objectContaining({
+          lifecycle: expect.objectContaining({
+            duration: expect.objectContaining({ kind: "rounds", remaining: 2 }),
+          }),
+          payload: expect.objectContaining({ effectKind: "stunned", kind: "restriction" }),
+          sourceFamily: "stunned",
+        }),
         combatModifierBucket: "general",
         description: "Stunned: critical stun manual. Until cleared.",
         duration: "2",
@@ -12342,6 +12431,15 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
+        canonicalLifecycle: expect.objectContaining({
+          payload: expect.objectContaining({
+            category: "bleed_rate",
+            contributionScope: "state",
+            unit: "bleed_rate",
+            value: 2,
+          }),
+          sourceFamily: "bleed",
+        }),
         description: "Bleed: 2/10 HP per round until treated.",
         effectGroup: "bleed",
         id: expectedBleedEffectId,
@@ -14631,6 +14729,24 @@ describe("combat round manager", () => {
     );
     const combatEffects = combatEffectsWith([
       {
+        canonicalLifecycle: buildDamagePersistentLifecycle({
+          context: {
+            commandId: "damage-command-health",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdRevision: "revision-bleed-created",
+            createdSequence: 2,
+            encounterId: "encounter-1",
+            eventId: "event-external-bleed",
+            ownerParticipantId: "scenario-gladiator",
+            roundNumber: 1,
+          },
+          effectId: "external-bleed",
+          isStunned: false,
+          label: "Bleed",
+          modifierValue: 3,
+          status: "active",
+          type: "bleed",
+        }),
         effectGroup: "bleed",
         id: "external-bleed",
         modifierValue: 3,
@@ -14653,6 +14769,7 @@ describe("combat round manager", () => {
         createdByUserId: "player-1",
       },
       combatEffects,
+      createdRevision: "revision-health-check",
       participantId: "gladiator",
       roll: {
         dieResult: 21,
@@ -14676,6 +14793,18 @@ describe("combat round manager", () => {
 
     expect(reducedEffect?.modifierValue).toBe(2);
     expect(reducedEffect?.bleedState?.lastHealthCheckRound).toBe(10);
+    expect(reducedEffect?.canonicalLifecycle).toMatchObject({
+      payload: {
+        bleedState: { lastHealthCheckRound: 10 },
+        unit: "bleed_rate",
+        value: 2,
+      },
+      version: 2,
+    });
+    expect(reducedEffect?.canonicalTransitions?.[0]).toMatchObject({
+      reason: "check_succeeded",
+      transitionType: "update",
+    });
     expect(
       rolled.state.roundEndReview?.participantReviews.gladiator?.proposedHealthRolls[0],
     ).toMatchObject({
@@ -14712,6 +14841,9 @@ describe("combat round manager", () => {
     expect(
       restoredEffects.effects.find((effect) => effect.id === "external-bleed")?.modifierValue,
     ).toBe(3);
+    expect(
+      restoredEffects.effects.find((effect) => effect.id === "external-bleed")?.canonicalLifecycle,
+    ).toEqual(combatEffects.effects[0]?.canonicalLifecycle);
   });
 
   it("does not reduce bleed on failed health roll", () => {
@@ -14814,6 +14946,24 @@ describe("combat round manager", () => {
     );
     const combatEffects = combatEffectsWith([
       {
+        canonicalLifecycle: buildDamagePersistentLifecycle({
+          context: {
+            commandId: "damage-command-1",
+            createdAt: "2026-01-01T00:08:00.000Z",
+            createdRevision: "revision-bleed-created",
+            createdSequence: 12,
+            encounterId: "encounter-1",
+            eventId: "bleed-event-1",
+            ownerParticipantId: "scenario-gladiator",
+            roundNumber: 3,
+          },
+          effectId: "bleed-1",
+          isStunned: false,
+          label: "Bleed",
+          modifierValue: 2,
+          status: "active",
+          type: "bleed",
+        }),
         description: "Bleeding wound",
         bleedState: {
           accumulatedTenths: 8,
@@ -14854,6 +15004,7 @@ describe("combat round manager", () => {
         createdAt: "2026-01-01T00:10:00.000Z",
       },
       combatEffects,
+      createdRevision: "revision-bleed-reviewed",
       participantId: "gladiator",
       scenarioParticipantId: "scenario-gladiator",
       state: reviewed,
@@ -14865,6 +15016,14 @@ describe("combat round manager", () => {
 
     expect(bleedEffect?.duration).toBe("1 round");
     expect(bleedEffect?.bleedState?.accumulatedTenths).toBe(0);
+    expect(bleedEffect?.canonicalLifecycle).toMatchObject({
+      payload: { bleedState: { accumulatedTenths: 0 }, unit: "bleed_rate", value: 2 },
+      version: 3,
+    });
+    expect(bleedEffect?.canonicalTransitions).toEqual([
+      expect.objectContaining({ reason: "duration_decremented", transitionType: "update" }),
+      expect.objectContaining({ reason: "bleed_state_updated", transitionType: "update" }),
+    ]);
     expect(bleedDamage).toBeDefined();
     expect(committed.state.roundEndReview?.participantReviews.gladiator?.status).toBe("complete");
     expect(committed.state.events.at(-1)).toMatchObject({
@@ -14895,6 +15054,9 @@ describe("combat round manager", () => {
       restoredEffects.effects.find((effect) => effect.id === "bleed-1")?.bleedState
         ?.accumulatedTenths,
     ).toBe(8);
+    expect(
+      restoredEffects.effects.find((effect) => effect.id === "bleed-1")?.canonicalLifecycle,
+    ).toEqual(combatEffects.effects[0]?.canonicalLifecycle);
     expect(
       restoredEffects.effects.some(
         (effect) => effect.type === "general_damage" && effect.generalDamage === 1,

@@ -1,12 +1,18 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  CampaignService,
+  CharacterService,
+  EncounterService,
+  ScenarioService,
+} from "@glantri/database";
+import {
+  attachCanonicalPersistentEffectLifecycles,
   buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
-  scenarioParticipantStateSchema
+  scenarioParticipantStateSchema,
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -19,7 +25,7 @@ import {
   parseOptionalInteger,
   parseOptionalNullableString,
   parseOptionalString,
-  parseRequiredString
+  parseRequiredString,
 } from "./parsing";
 
 const characterService = new CharacterService();
@@ -39,12 +45,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
-        { scenarioId, userId: user.id, userRoles: user.roles }
+        { scenarioId, userId: user.id, userRoles: user.roles },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
@@ -53,20 +59,19 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         access.mode === "gm"
           ? allParticipants
           : allParticipants.filter(
-              (participant) =>
-                participant.isActive && participant.controlledByUserId === user.id
+              (participant) => participant.isActive && participant.controlledByUserId === user.id,
             );
 
       if (access.mode === "player") {
         return {
-          participants: buildScenarioPlayerVisibleParticipants({ participants })
+          participants: buildScenarioPlayerVisibleParticipants({ participants }),
         };
       }
 
       return { participants };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list scenario participants."
+        error: error instanceof Error ? error.message : "Unable to list scenario participants.",
       });
     }
   });
@@ -82,24 +87,25 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
-        { scenarioId, userId: user.id, userRoles: user.roles }
+        { scenarioId, userId: user.id, userRoles: user.roles },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
-      const myParticipant = participants.find(
-        (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id
-      ) ?? null;
+      const myParticipant =
+        participants.find(
+          (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id,
+        ) ?? null;
 
       return { participant: myParticipant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to load participant."
+        error: error instanceof Error ? error.message : "Unable to load participant.",
       });
     }
   });
@@ -117,7 +123,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (!scenario) {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
@@ -125,7 +131,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (!campaign) {
         return reply.code(404).send({
-          error: "Campaign not found."
+          error: "Campaign not found.",
         });
       }
 
@@ -135,7 +141,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (isGameMaster && !user.roles.includes("admin") && campaign.gmUserId !== user.id) {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
@@ -144,7 +150,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
         if (!character) {
           return reply.code(404).send({
-            error: "Character not found."
+            error: "Character not found.",
           });
         }
       }
@@ -152,18 +158,18 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       if (!isGameMaster) {
         if (scenario.status !== "live") {
           return reply.code(403).send({
-            error: "No live scenario is currently available for this character."
+            error: "No live scenario is currently available for this character.",
           });
         }
 
         const campaignRoster = await campaignService.listCampaignRosterEntries(campaign.id);
         const characterIsInCampaignRoster = campaignRoster.some(
-          (entry) => entry.sourceType === "character" && entry.sourceId === characterId
+          (entry) => entry.sourceType === "character" && entry.sourceId === characterId,
         );
 
         if (!characterIsInCampaignRoster) {
           return reply.code(403).send({
-            error: "This character is not currently assigned to a campaign."
+            error: "This character is not currently assigned to a campaign.",
           });
         }
       }
@@ -171,7 +177,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const participant = await scenarioService.addCharacterParticipant({
         characterId,
         controlledByUserId: isGameMaster
-          ? parseOptionalNullableString(body, "controlledByUserId") ?? user.id
+          ? (parseOptionalNullableString(body, "controlledByUserId") ?? user.id)
           : user.id,
         displayOrder: parseOptionalInteger(body, "displayOrder"),
         factionId: parseOptionalNullableString(body, "factionId"),
@@ -180,17 +186,19 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
             ? "gm_added"
             : scenarioParticipantJoinSourceSchema.parse(body.joinSource),
         role: isGameMaster
-          ? body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role)
+          ? body.role == null
+            ? undefined
+            : scenarioParticipantRoleSchema.parse(body.role)
           : "player_character",
         roleTag: parseOptionalNullableString(body, "roleTag"),
         scenarioId,
-        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId"),
       });
 
       return { participant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to add character participant."
+        error: error instanceof Error ? error.message : "Unable to add character participant.",
       });
     }
   });
@@ -206,7 +214,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
-        { scenarioId, userId: user.id, userRoles: user.roles }
+        { scenarioId, userId: user.id, userRoles: user.roles },
       );
 
       if (!access || access.mode !== "gm") {
@@ -227,7 +235,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
                 kind: reusableEntityKindSchema.parse(entityPayload.kind),
                 name: parseRequiredString(entityPayload, "name"),
                 notes: parseOptionalString(entityPayload, "notes"),
-                snapshot: entityPayload.snapshot
+                snapshot: entityPayload.snapshot,
               };
             })();
 
@@ -245,13 +253,13 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         role: scenarioParticipantRoleSchema.parse(body.role),
         roleTag: parseOptionalNullableString(body, "roleTag"),
         scenarioId,
-        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId"),
       });
 
       return { participant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to add entity participant."
+        error: error instanceof Error ? error.message : "Unable to add entity participant.",
       });
     }
   });
@@ -267,10 +275,10 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const participantId = parseId(request.params, "participantId", "Participant id");
       const body = parseBodyObject(request.body, "Participant state payload");
-      const nextState = scenarioParticipantStateSchema.parse(body.state);
+      const submittedState = scenarioParticipantStateSchema.parse(body.state);
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
-        { scenarioId, userId: user.id, userRoles: user.roles }
+        { scenarioId, userId: user.id, userRoles: user.roles },
       );
 
       if (!access) {
@@ -280,7 +288,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       if (access.mode === "player") {
         const participant = await scenarioService.getScenarioParticipantById(
           participantId,
-          scenarioId
+          scenarioId,
         );
 
         if (!participant || participant.controlledByUserId !== user.id) {
@@ -291,22 +299,29 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
         if (
           JSON.stringify(currentState.combatEffects ?? { effects: [], events: [] }) !==
-          JSON.stringify(nextState.combatEffects ?? { effects: [], events: [] })
+          JSON.stringify(submittedState.combatEffects ?? { effects: [], events: [] })
         ) {
           return reply.code(403).send({ error: "Only GM users can edit combat effects." });
         }
       }
 
+      const nextState = scenarioParticipantStateSchema.parse({
+        ...submittedState,
+        combatEffects: attachCanonicalPersistentEffectLifecycles({
+          combatEffects: submittedState.combatEffects,
+        }),
+      });
+
       const participant = await encounterService.updateScenarioParticipantState({
         participantId,
         scenarioId,
-        state: nextState
+        state: nextState,
       });
 
       return { participant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to update participant state."
+        error: error instanceof Error ? error.message : "Unable to update participant state.",
       });
     }
   });
@@ -337,53 +352,48 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error:
-            error instanceof Error
-              ? error.message
-              : "Unable to refresh participant equipment.",
+            error instanceof Error ? error.message : "Unable to refresh participant equipment.",
         });
       }
     },
   );
 
-  app.put(
-    "/scenarios/:scenarioId/participants/:participantId/metadata",
-    async (request, reply) => {
-      const user = await requireAdminUser(request, reply);
+  app.put("/scenarios/:scenarioId/participants/:participantId/metadata", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
 
-      if (!user) {
-        return;
-      }
-
-      try {
-        const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-        const participantId = parseId(request.params, "participantId", "Participant id");
-        const access = await resolveScenarioWorkspaceAccess(
-          { campaignService, scenarioService },
-          { scenarioId, userId: user.id, userRoles: user.roles }
-        );
-
-        if (!access || access.mode !== "gm") {
-          return reply.code(404).send({ error: "Scenario not found." });
-        }
-
-        const body = parseBodyObject(request.body, "Participant metadata payload");
-        const participant = await scenarioService.updateScenarioParticipantMetadata({
-          controlledByUserId: parseOptionalNullableString(body, "controlledByUserId"),
-          displayOrder: parseOptionalInteger(body, "displayOrder"),
-          factionId: parseOptionalNullableString(body, "factionId"),
-          isActive: parseOptionalBoolean(body, "isActive"),
-          participantId,
-          roleTag: parseOptionalNullableString(body, "roleTag"),
-          scenarioId,
-          tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
-        });
-
-        return { participant };
-      } catch (error) {
-        return reply.code(400).send({
-          error: error instanceof Error ? error.message : "Unable to update participant metadata."
-        });
-      }
+    if (!user) {
+      return;
     }
-  );
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const participantId = parseId(request.params, "participantId", "Participant id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      const body = parseBodyObject(request.body, "Participant metadata payload");
+      const participant = await scenarioService.updateScenarioParticipantMetadata({
+        controlledByUserId: parseOptionalNullableString(body, "controlledByUserId"),
+        displayOrder: parseOptionalInteger(body, "displayOrder"),
+        factionId: parseOptionalNullableString(body, "factionId"),
+        isActive: parseOptionalBoolean(body, "isActive"),
+        participantId,
+        roleTag: parseOptionalNullableString(body, "roleTag"),
+        scenarioId,
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId"),
+      });
+
+      return { participant };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update participant metadata.",
+      });
+    }
+  });
 };

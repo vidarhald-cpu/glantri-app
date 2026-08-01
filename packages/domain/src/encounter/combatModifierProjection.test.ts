@@ -217,9 +217,9 @@ describe("persistent combat modifier projection", () => {
       ["import:character_effect:persistent-general:general", -2],
       ["generated-feint-db", -2],
     ]);
-    expect(projection.contributions.every((row) => row.ownerParticipantId === "participant-1")).toBe(
-      true,
-    );
+    expect(
+      projection.contributions.every((row) => row.ownerParticipantId === "participant-1"),
+    ).toBe(true);
     expect(projection.specialEffectIds).toEqual(["unsupported-special"]);
     expect(projection.specialEffectCount).toBe(1);
     expect(input).toEqual(before);
@@ -697,6 +697,31 @@ describe("persistent combat modifier refresh lifecycle", () => {
     );
   });
 
+  it("adapts legacy combat-start CE as combat-wide without broadening phase CE", () => {
+    const combatStart = projectPersistentCombatEffectModifiers({
+      combatEffects: effects(
+        effect({
+          combatModifierBucket: "general",
+          id: "legacy-combat-start-ce",
+          modifierValue: -2,
+        }),
+      ),
+    });
+    const phase = projectPersistentCombatEffectModifiers({
+      combatEffects: effects(
+        effect({
+          combatModifierBucket: "general",
+          id: "legacy-phase-ce",
+          initiativePhase: "phase2",
+          modifierValue: -1,
+        }),
+      ),
+    });
+
+    expect(combatStart.modifierBuckets.general[0]?.combatWide).toBe(true);
+    expect(phase.modifierBuckets.general[0]?.combatWide).toBeUndefined();
+  });
+
   it("restores imported rows when undo restores effects and removes them for creation undo", () => {
     const before = refresh({ combatEffects: effects(effect()) });
     const afterCreationUndo = refresh({
@@ -860,7 +885,13 @@ describe("persistent combat modifier refresh lifecycle", () => {
             { generated: true, id: "generated", scope: "until", sourcePhase: "phase1", value: -2 },
             { id: "manual", scope: "until", value: 1 },
             { id: "legacy", scope: "until", value: 3 },
-            { generated: true, id: "other-phase", scope: "until", sourcePhase: "phase2", value: 50 },
+            {
+              generated: true,
+              id: "other-phase",
+              scope: "until",
+              sourcePhase: "phase2",
+              value: 50,
+            },
           ],
           situationInitiative: [],
           situationObSkill: [],
@@ -890,7 +921,12 @@ describe("persistent combat modifier refresh lifecycle", () => {
       combatContext: initial.combat.combatContext,
       combatEffects: effects(
         effect({ combatModifierBucket: "db_parry", id: "defense-1", modifierValue: 4 }),
-        effect({ combatModifierBucket: "db_parry", id: "defense-2", modifierValue: -1, status: "resolved" }),
+        effect({
+          combatModifierBucket: "db_parry",
+          id: "defense-2",
+          modifierValue: -1,
+          status: "resolved",
+        }),
       ),
     });
 
@@ -906,7 +942,13 @@ describe("persistent combat modifier refresh lifecycle", () => {
     const context: ScenarioParticipantCombatContext = {
       modifierBuckets: {
         general: [
-          { id: "imported", imported: true, scope: "until", sourceType: "character_effect", value: 2 },
+          {
+            id: "imported",
+            imported: true,
+            scope: "until",
+            sourceType: "character_effect",
+            value: 2,
+          },
           { id: "manual-old", scope: "until", value: -1 },
         ],
         situationDb: [],
@@ -933,14 +975,18 @@ describe("persistent combat modifier refresh lifecycle", () => {
       roundNumber: 1,
     });
 
-    expect(normalized.modifierBuckets.general).toEqual([expect.objectContaining({ id: "imported" })]);
+    expect(normalized.modifierBuckets.general).toEqual([
+      expect.objectContaining({ id: "imported" }),
+    ]);
     expect(normalized.modifierBuckets.situationObSkill).toEqual([]);
-    expect(normalizeCombatModifierRowsForEncounter({
-      combatContext: normalized,
-      encounterId: "encounter-b",
-      initializingNewEncounter: true,
-      roundNumber: 1,
-    })).toEqual(normalized);
+    expect(
+      normalizeCombatModifierRowsForEncounter({
+        combatContext: normalized,
+        encounterId: "encounter-b",
+        initializingNewEncounter: true,
+        roundNumber: 1,
+      }),
+    ).toEqual(normalized);
   });
 
   it("repairs legacy Feint rows only when no matching current proposal exists", () => {
@@ -949,27 +995,33 @@ describe("persistent combat modifier refresh lifecycle", () => {
         general: [],
         situationDb: [],
         situationInitiative: [],
-        situationObSkill: [{
-          generated: true,
-          id: "generated:feint:proposal-a:defender:phase2:ob-skill",
-          scope: "until",
-          sourceType: "feint",
-          value: -2,
-        }],
+        situationObSkill: [
+          {
+            generated: true,
+            id: "generated:feint:proposal-a:defender:phase2:ob-skill",
+            scope: "until",
+            sourceType: "feint",
+            value: -2,
+          },
+        ],
       },
     };
 
-    expect(normalizeCombatModifierRowsForEncounter({
-      activeProposalIds: ["proposal-a"],
-      combatContext: legacy,
-      encounterId: "encounter-a",
-      roundNumber: 1,
-    }).modifierBuckets.situationObSkill).toHaveLength(1);
-    expect(normalizeCombatModifierRowsForEncounter({
-      activeProposalIds: [],
-      combatContext: legacy,
-      encounterId: "encounter-b",
-      roundNumber: 1,
-    }).modifierBuckets.situationObSkill).toEqual([]);
+    expect(
+      normalizeCombatModifierRowsForEncounter({
+        activeProposalIds: ["proposal-a"],
+        combatContext: legacy,
+        encounterId: "encounter-a",
+        roundNumber: 1,
+      }).modifierBuckets.situationObSkill,
+    ).toHaveLength(1);
+    expect(
+      normalizeCombatModifierRowsForEncounter({
+        activeProposalIds: [],
+        combatContext: legacy,
+        encounterId: "encounter-b",
+        roundNumber: 1,
+      }).modifierBuckets.situationObSkill,
+    ).toEqual([]);
   });
 });

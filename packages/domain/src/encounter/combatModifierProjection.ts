@@ -137,9 +137,7 @@ function isEffectActiveForRound(
   );
 }
 
-function getScenarioBucket(
-  effect: CombatEffect,
-): ScenarioCombatModifierBucket | undefined {
+function getScenarioBucket(effect: CombatEffect): ScenarioCombatModifierBucket | undefined {
   // Damage, bleed, and healing facts are physical/special effects. Even malformed legacy rows
   // carrying a bucket must not turn those facts into generic numeric combat modifiers.
   if (
@@ -174,15 +172,11 @@ function getImportedModifierLabel(effect: CombatEffect, event?: CombatEffectEven
   }
 
   return (
-    effect.description?.trim() ||
-    event?.description.trim() ||
-    effect.type.replaceAll("_", " ")
+    effect.description?.trim() || event?.description.trim() || effect.type.replaceAll("_", " ")
   );
 }
 
-export function isPersistentCombatModifierEntry(
-  entry: ScenarioCombatModifierEntry,
-): boolean {
+export function isPersistentCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
   return entry.sourceType === PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE;
 }
 
@@ -190,8 +184,23 @@ function buildImportedEntry(input: {
   effect: CombatEffect;
   event?: CombatEffectEvent;
 }): ScenarioCombatModifierEntry {
+  const canonical = input.effect.canonicalLifecycle;
+  const canonicalNumeric = canonical?.payload.kind === "numeric" ? canonical.payload : undefined;
+  const canonicalDuration = canonical?.lifecycle.duration;
   return {
-    combatWide: input.effect.combatWide,
+    application:
+      canonicalNumeric?.unit === "percentage"
+        ? "percentage"
+        : canonicalNumeric?.unit === "flat_db"
+          ? "flat_db"
+          : undefined,
+    combatWide:
+      canonical?.applicability.combatWide ??
+      input.effect.combatWide ??
+      (input.event?.sourceLabel === "Combat Experience" && !input.effect.initiativePhase
+        ? true
+        : undefined),
+    durationRounds: canonicalDuration?.kind === "rounds" ? canonicalDuration.remaining : undefined,
     expiresAtRound: input.effect.expiresAtRound,
     excludedRollPurposes: input.effect.excludedRollPurposes,
     generated: false,
@@ -200,10 +209,13 @@ function buildImportedEntry(input: {
     notes: getImportedModifierLabel(input.effect, input.event),
     readOnly: true,
     scope: "until",
-    sourceDuration: input.effect.duration?.trim() || undefined,
+    sourceDuration:
+      canonicalDuration?.kind === "rounds"
+        ? `${canonicalDuration.remaining} ${canonicalDuration.remaining === 1 ? "round" : "rounds"}`
+        : input.effect.duration?.trim() || undefined,
     sourceEffectId: input.effect.id,
     sourceType: PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE,
-    value: input.effect.modifierValue ?? 0,
+    value: canonicalNumeric?.value ?? input.effect.modifierValue ?? 0,
   };
 }
 

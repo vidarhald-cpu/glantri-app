@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { combatRoundStepSchema } from "./combatRoundManager";
+import { combatRoundStepSchema } from "./combatRoundStep";
 
 /**
  * Versioned target contract for durable combatEffects. During migration, modifier buckets remain
@@ -399,6 +399,7 @@ export const canonicalCombatModifierTransitionTypeSchema = z.enum([
   "supersede",
   "reject",
   "restore",
+  "update",
 ]);
 export type CanonicalCombatModifierTransitionType = z.infer<
   typeof canonicalCombatModifierTransitionTypeSchema
@@ -414,16 +415,25 @@ export const canonicalCombatModifierTransitionReasonSchema = z.enum([
   "opportunity_consumed",
   "check_succeeded",
   "condition_cleared",
+  "duration_decremented",
+  "bleed_state_updated",
   "gm_removed",
   "replaced",
   "source_resolved",
   "undo_restored",
   "legacy_compatibility",
 ]);
+export type CanonicalCombatModifierTransitionReason = z.infer<
+  typeof canonicalCombatModifierTransitionReasonSchema
+>;
 
 export const canonicalCombatModifierVersionFactSchema = z.object({
+  applicability: canonicalCombatModifierApplicabilitySchema,
   lifecycle: canonicalCombatModifierLifecycleSchema,
   lineage: canonicalCombatModifierLineageSchema,
+  payload: canonicalCombatModifierPayloadSchema,
+  publicLabel: z.string().min(1),
+  publicNote: z.string().min(1).optional(),
   version: z.number().int().positive(),
 });
 
@@ -490,6 +500,7 @@ const transitionTargetStates: Readonly<
   remove: ["removed"],
   supersede: ["superseded"],
   reject: ["rejected"],
+  update: ["active", "pending_activation", "pending_review"],
 };
 
 export function isCanonicalCombatModifierTransitionAllowed(input: {
@@ -498,6 +509,9 @@ export function isCanonicalCombatModifierTransitionAllowed(input: {
   transitionType: CanonicalCombatModifierTransitionType;
 }): boolean {
   if (input.transitionType === "restore") return true;
+  if (input.transitionType === "update") {
+    return input.from === input.to && transitionTargetStates.update?.includes(input.to) === true;
+  }
   return (
     legalNextStates[input.from].includes(input.to) &&
     (transitionTargetStates[input.transitionType]?.includes(input.to) ?? false)
@@ -506,8 +520,12 @@ export function isCanonicalCombatModifierTransitionAllowed(input: {
 
 function versionFact(effect: CanonicalCombatModifierEffect) {
   return canonicalCombatModifierVersionFactSchema.parse({
+    applicability: effect.applicability,
     lifecycle: effect.lifecycle,
     lineage: effect.lineage,
+    payload: effect.payload,
+    publicLabel: effect.publicLabel,
+    publicNote: effect.publicNote,
     version: effect.version,
   });
 }
@@ -520,6 +538,10 @@ export function transitionCanonicalCombatModifierEffect(input: {
   eventId?: string;
   gmOverride?: { reasonCode: string; userId?: string };
   nextDuration?: CanonicalCombatModifierDuration;
+  nextApplicability?: CanonicalCombatModifierApplicability;
+  nextPayload?: CanonicalCombatModifierPayload;
+  nextPublicLabel?: string;
+  nextPublicNote?: string;
   nextState: CanonicalCombatModifierLifecycleState;
   privateDiagnostic?: { code: string; referenceId?: string };
   publicNote?: string;
@@ -549,6 +571,7 @@ export function transitionCanonicalCombatModifierEffect(input: {
 
   const nextEffect = canonicalCombatModifierEffectSchema.parse({
     ...effect,
+    applicability: input.nextApplicability ?? effect.applicability,
     lifecycle: {
       duration: input.nextDuration ?? effect.lifecycle.duration,
       state: input.nextState,
@@ -557,6 +580,9 @@ export function transitionCanonicalCombatModifierEffect(input: {
       ...effect.lineage,
       ...(input.replacementEffectId ? { replacedByEffectId: input.replacementEffectId } : {}),
     },
+    payload: input.nextPayload ?? effect.payload,
+    publicLabel: input.nextPublicLabel ?? effect.publicLabel,
+    publicNote: input.nextPublicNote ?? effect.publicNote,
     version: effect.version + 1,
   });
   const transition = canonicalCombatModifierLifecycleTransitionSchema.parse({
@@ -601,8 +627,12 @@ export function restoreCanonicalCombatModifierEffectFromTransition(input: {
 
   const restoredEffect = canonicalCombatModifierEffectSchema.parse({
     ...effect,
+    applicability: sourceTransition.prior.applicability,
     lifecycle: sourceTransition.prior.lifecycle,
     lineage: sourceTransition.prior.lineage,
+    payload: sourceTransition.prior.payload,
+    publicLabel: sourceTransition.prior.publicLabel,
+    publicNote: sourceTransition.prior.publicNote,
     version: effect.version + 1,
   });
   const restoreTransition = canonicalCombatModifierLifecycleTransitionSchema.parse({
