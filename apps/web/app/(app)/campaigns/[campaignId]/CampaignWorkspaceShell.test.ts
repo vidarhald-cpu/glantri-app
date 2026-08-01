@@ -128,5 +128,6 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     );
     expect(source).toContain("if (nextHref !== currentHref) {");
     expect(source).toContain("No participant is available for player combat.");
+    expect(source.match(/<ScenarioPlayerCombatPageContent/g)).toHaveLength(2);
   });
 });

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { COMBAT_ROUND_STEP_ABBREVIATIONS, COMBAT_ROUND_STEP_LABELS } from "@glantri/domain";
 
 import type { CombatTrackerCellView, CombatTrackerModel } from "../types";
+import { scrollCombatTrackerCellIntoView } from "../view-models/combatTrackerScroll";
 
 const stepCellStyle = {
   height: "2.35rem",
@@ -22,12 +23,41 @@ const roundBoundaryStartBorder = "2px solid #c9bea4";
 /** Inspection-only tracker. It consumes a projected presentation model; GM uses
  * the full model today and a future Player tracker will use a player-safe model. */
 export function CombatTracker(input: {
+  followCurrent?: boolean;
   model: CombatTrackerModel;
   onInspect: (cell: CombatTrackerCellView) => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  positionCurrentRequest?: number;
   registerCell?: (cellKey: string, node: HTMLButtonElement | null, currentTask: boolean) => void;
   tableRef?: React.Ref<HTMLDivElement>;
 }) {
+  const cellRefs = useRef(new Map<string, HTMLButtonElement>());
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const cellKey = input.model.currentTaskCellKey;
+    if (!input.followCurrent || !cellKey) {
+      return;
+    }
+
+    scrollCombatTrackerCellIntoView({
+      behavior: "auto",
+      cell: cellRefs.current.get(cellKey),
+      container: containerRef.current,
+      mode: "center",
+      padding: 96,
+    });
+  }, [input.followCurrent, input.model.currentTaskCellKey, input.positionCurrentRequest]);
+
+  function assignTableRef(node: HTMLDivElement | null) {
+    containerRef.current = node;
+    if (typeof input.tableRef === "function") {
+      input.tableRef(node);
+    } else if (input.tableRef) {
+      (input.tableRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    }
+  }
+
   return (
     <>
       <details style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
@@ -50,7 +80,7 @@ export function CombatTracker(input: {
       <div
         aria-label="Combat round timeline grid"
         onKeyDown={input.onKeyDown}
-        ref={input.tableRef}
+        ref={assignTableRef}
         style={{ border: "1px solid #e3e1dc", borderRadius: 10, overflowX: "auto" }}
         tabIndex={0}
       >
@@ -166,13 +196,18 @@ export function CombatTracker(input: {
                           aria-label={cell.hoverText}
                           disabled={!cell.inspectable}
                           onClick={() => input.onInspect(cell)}
-                          ref={(node) =>
+                          ref={(node) => {
+                            if (node) {
+                              cellRefs.current.set(cell.cellKey, node);
+                            } else {
+                              cellRefs.current.delete(cell.cellKey);
+                            }
                             input.registerCell?.(
                               cell.cellKey,
                               node,
                               cell.cellKey === input.model.currentTaskCellKey,
-                            )
-                          }
+                            );
+                          }}
                           style={{
                             alignItems: "center",
                             background: "transparent",

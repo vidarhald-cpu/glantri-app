@@ -108,4 +108,107 @@ describe("CombatLog", () => {
       presentationTargetId: undefined,
     });
   });
+
+  it("keeps the newest live event visible while preserving result selection", () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const first = logEvent("first", 1, "First event.", "target:first");
+    const newest = logEvent("newest", 2, "Newest event.", "target:newest");
+
+    try {
+      const { rerender } = render(
+        <CombatLog
+          autoFollow
+          events={[first]}
+          onSelect={vi.fn()}
+          selectedCombatLogEventId={first.id}
+          selectedPresentationTargetId={first.presentationTargetId}
+        />,
+      );
+      expect(scrollIntoView).toHaveBeenCalledOnce();
+
+      scrollIntoView.mockClear();
+      rerender(
+        <CombatLog
+          autoFollow
+          events={[first, newest]}
+          onSelect={vi.fn()}
+          selectedCombatLogEventId={first.id}
+          selectedPresentationTargetId={first.presentationTargetId}
+        />,
+      );
+
+      expect(scrollIntoView).toHaveBeenCalledOnce();
+      expect(
+        (scrollIntoView.mock.contexts[0] as HTMLButtonElement).dataset.combatLogEventId,
+      ).toBe("newest");
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
+  });
+
+  it("does not steal the log view after manual scrolling or during historical inspection", () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const first = logEvent("first", 1, "First event.", "target:first");
+    const newest = logEvent("newest", 2, "Newest event.", "target:newest");
+
+    try {
+      const { rerender } = render(
+        <CombatLog
+          autoFollow
+          events={[first]}
+          onSelect={vi.fn()}
+          selectedCombatLogEventId={first.id}
+          selectedPresentationTargetId={first.presentationTargetId}
+        />,
+      );
+      const list = screen.getByRole("list", { name: "Recorded combat events" });
+      Object.defineProperties(list, {
+        clientHeight: { configurable: true, value: 100 },
+        scrollHeight: { configurable: true, value: 600 },
+        scrollTop: { configurable: true, value: 100, writable: true },
+      });
+      scrollIntoView.mockClear();
+      fireEvent.scroll(list);
+
+      rerender(
+        <CombatLog
+          autoFollow
+          events={[first, newest]}
+          onSelect={vi.fn()}
+          selectedCombatLogEventId={first.id}
+          selectedPresentationTargetId={first.presentationTargetId}
+        />,
+      );
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      rerender(
+        <CombatLog
+          autoFollow={false}
+          events={[first, newest]}
+          onSelect={vi.fn()}
+          selectedCombatLogEventId={first.id}
+          selectedPresentationTargetId={first.presentationTargetId}
+        />,
+      );
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
+  });
 });

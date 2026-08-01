@@ -13,6 +13,25 @@ function readSource(): string {
 }
 
 describe("ScenarioPlayerCombatPageContent", () => {
+  it("keeps Player and GM Player combat in tracker, workspace, log, ancillary order", () => {
+    const source = readSource();
+    const tracker = source.indexOf("<CombatTracker");
+    const historicalWorkspace = source.indexOf("<PlayerCombatHistoryInspector", tracker);
+    const activeWorkspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", tracker);
+    const combatLog = source.indexOf("<CombatLog", tracker);
+    const ancillaryTools = source.indexOf("<EquipmentLoadoutModule", combatLog);
+
+    expect(tracker).toBeGreaterThan(-1);
+    expect(historicalWorkspace).toBeGreaterThan(tracker);
+    expect(activeWorkspace).toBeGreaterThan(tracker);
+    expect(combatLog).toBeGreaterThan(historicalWorkspace);
+    expect(combatLog).toBeGreaterThan(activeWorkspace);
+    expect(ancillaryTools).toBeGreaterThan(combatLog);
+    expect(source.slice(tracker, activeWorkspace)).not.toContain("<CombatLog");
+    expect(source).toContain("followCurrent={!historyInspection}");
+    expect(source).toContain('historyInspection ? "Resume current task" : "Current task"');
+  });
+
   it("uses the shared Feint-Attack declaration and owned-roll controls", () => {
     const source = readSource();
 

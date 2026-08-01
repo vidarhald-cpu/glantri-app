@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { CombatLogEventPresentation } from "@glantri/domain";
 
 import type { CombatLogEventSelection } from "../view-models/combatLogSelection";
@@ -11,11 +11,32 @@ const PHASE_LABELS: Readonly<Record<NonNullable<CombatLogEventPresentation["phas
 };
 
 export function CombatLog(input: {
+  autoFollow?: boolean;
   events: readonly CombatLogEventPresentation[];
   onSelect: (selection: CombatLogEventSelection) => void;
   selectedCombatLogEventId?: string;
   selectedPresentationTargetId?: string;
 }) {
+  const eventRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [manualFollowSuspended, setManualFollowSuspended] = useState(false);
+  const newestEventId = input.events.at(-1)?.id;
+
+  useEffect(() => {
+    if (input.autoFollow) {
+      setManualFollowSuspended(false);
+    }
+  }, [input.autoFollow]);
+
+  useEffect(() => {
+    if (!input.autoFollow || manualFollowSuspended || !newestEventId) {
+      return;
+    }
+
+    eventRefs.current.get(newestEventId)?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [input.autoFollow, manualFollowSuspended, newestEventId]);
+
   return (
     <section
       aria-label="Combat Log"
@@ -32,6 +53,14 @@ export function CombatLog(input: {
       {input.events.length ? (
         <ol
           aria-label="Recorded combat events"
+          onScroll={(event) => {
+            if (!input.autoFollow) {
+              return;
+            }
+            const list = event.currentTarget;
+            const atNewest = list.scrollHeight - list.scrollTop - list.clientHeight <= 8;
+            setManualFollowSuspended(!atNewest);
+          }}
           style={{
             display: "grid",
             gap: "0.35rem",
@@ -50,6 +79,7 @@ export function CombatLog(input: {
               <li key={event.id}>
                 <button
                   aria-pressed={selected}
+                  data-combat-log-event-id={event.id}
                   data-presentation-target-id={event.presentationTargetId}
                   onClick={() =>
                     input.onSelect({
@@ -57,6 +87,13 @@ export function CombatLog(input: {
                       presentationTargetId: event.presentationTargetId,
                     })
                   }
+                  ref={(node) => {
+                    if (node) {
+                      eventRefs.current.set(event.id, node);
+                    } else {
+                      eventRefs.current.delete(event.id);
+                    }
+                  }}
                   style={{
                     background: selected ? "#efe7d3" : "transparent",
                     border: selected ? "1px solid #c9bea4" : "1px solid transparent",

@@ -3971,11 +3971,11 @@ export default function CombatRoundManagerPanel({
         }
       >
     >({});
-  const activeCurrentCellRef = useRef<HTMLButtonElement | null>(null);
   const inspectorAdjustDistanceAdjustmentDraftRef =
     useRef<AdjustDistanceAdjustmentDraftHandle | null>(null);
   const timelineCellRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [trackerPositionRequest, setTrackerPositionRequest] = useState(0);
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
@@ -7099,30 +7099,9 @@ export default function CombatRoundManagerPanel({
     });
   }
 
-  function scrollActiveCurrentCellIntoView(
-    stateForCurrentTask: CombatRoundState = roundState,
-    mode: CombatRoundTimelineScrollMode = "nearest",
-  ) {
-    const selection = getCurrentCombatRoundTaskSelection(stateForCurrentTask);
-
-    if (!selection?.participantId) {
-      return;
-    }
-
-    scrollTimelineCellIntoView(
-      {
-        participantId: selection.participantId,
-        roundNumber: stateForCurrentTask.roundNumber,
-        step: selection.step,
-      },
-      mode,
-    );
-  }
-
   function focusRoundTable(
     input: {
       scrollIntoView?: boolean;
-      scrollMode?: CombatRoundTimelineScrollMode;
       scrollToCurrent?: boolean;
       state?: CombatRoundState;
     } = {},
@@ -7134,7 +7113,7 @@ export default function CombatRoundManagerPanel({
     tableContainerRef.current?.focus({ preventScroll: true });
 
     if (input.scrollToCurrent) {
-      scrollActiveCurrentCellIntoView(input.state ?? roundState, input.scrollMode);
+      setTrackerPositionRequest((current) => current + 1);
     }
   }
 
@@ -7869,17 +7848,7 @@ export default function CombatRoundManagerPanel({
         state: roundState,
       }),
     );
-    focusRoundTable({ scrollIntoView: false });
-    if (currentTaskSelection?.participantId) {
-      scrollTimelineCellIntoView(
-        {
-          participantId: currentTaskSelection.participantId,
-          roundNumber: roundState.roundNumber,
-          step: currentTaskSelection.step,
-        },
-        "center",
-      );
-    }
+    focusRoundTable({ scrollIntoView: false, scrollToCurrent: true });
   }
 
   function selectTimelineSelection(
@@ -10255,7 +10224,7 @@ export default function CombatRoundManagerPanel({
                 title="Return to the current unresolved combat step"
                 type="button"
               >
-                Current task
+                {inspectorIsHistorical ? "Resume current task" : "Current task"}
               </button>
               <button
                 disabled={saving || !clearCurrentStepAvailable}
@@ -10296,22 +10265,14 @@ export default function CombatRoundManagerPanel({
           </div>
         ) : null}
 
-        <CombatLog
-          events={combatLogProjection.events}
-          onSelect={handleCombatLogSelection}
-          selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}
-          selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}
-        />
-
         <CombatTracker
+          followCurrent={!inspectorIsHistorical}
           model={trackerModel}
           onInspect={(cell) => selectInspector(cell.participantId, cell.step, cell.roundNumber)}
           onKeyDown={handleTimelineKeyDown}
-          registerCell={(cellKey, node, currentTask) => {
+          positionCurrentRequest={trackerPositionRequest}
+          registerCell={(cellKey, node, _currentTask) => {
             timelineCellRefs.current[cellKey] = node;
-            if (currentTask) {
-              activeCurrentCellRef.current = node;
-            }
           }}
           tableRef={tableContainerRef}
         />
@@ -11347,6 +11308,14 @@ export default function CombatRoundManagerPanel({
             <div>Select a participant step to inspect combat details.</div>
           )}
         </section>
+
+        <CombatLog
+          autoFollow={combatLogSelection.mode === "automatic" && !inspectorIsHistorical}
+          events={combatLogProjection.events}
+          onSelect={handleCombatLogSelection}
+          selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}
+          selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}
+        />
 
         <section
           aria-label="Distance matrix"

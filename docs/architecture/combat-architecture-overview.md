@@ -538,6 +538,8 @@ No future work should weaken the invariants in this document.
 - [combat-canonical-conformance-audit.md](./combat-canonical-conformance-audit.md)
 - [combat-presentation-guidelines.md](./combat-presentation-guidelines.md) —
   normative guidance for presenting canonical combat facts
+- [combat-ux-principles.md](./combat-ux-principles.md) — normative layout,
+  interaction, and shared-tabletop presentation principles
 - [combat-presentation-conformance-audit.md](./combat-presentation-conformance-audit.md) —
   audited implementation baseline and approved normalization sequence
 - [combat-presentation-contract.md](./combat-presentation-contract.md)

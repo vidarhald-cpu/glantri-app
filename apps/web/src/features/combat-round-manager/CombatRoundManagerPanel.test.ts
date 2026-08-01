@@ -81,6 +81,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('aria-label="Latest combat event"');
   });
 
+  it("keeps the GM combat composition in tracker, workspace, log, ancillary order", () => {
+    const source = readPanelSource();
+    const tracker = source.indexOf("<CombatTracker");
+    const inspector = source.indexOf('aria-label="Combat round inspector"');
+    const workspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", inspector);
+    const combatLog = source.indexOf("<CombatLog", inspector);
+    const distanceMatrix = source.indexOf('aria-label="Distance matrix"');
+
+    expect(tracker).toBeGreaterThan(-1);
+    expect(inspector).toBeGreaterThan(tracker);
+    expect(workspace).toBeGreaterThan(inspector);
+    expect(combatLog).toBeGreaterThan(workspace);
+    expect(distanceMatrix).toBeGreaterThan(combatLog);
+    expect(source.slice(tracker, inspector)).not.toContain("<CombatLog");
+  });
+
   it("keeps observation progress inside Phase 1 instead of adding a main-grid card", () => {
     const source = readPanelSource();
 
@@ -169,7 +185,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
     expect(source).toContain("onKeyDown={handleTimelineKeyDown}");
     expect(source).toContain("timelineCellRefs.current[cellKey] = node");
-    expect(source).toContain("activeCurrentCellRef.current = node");
+    expect(source).toContain("followCurrent={!inspectorIsHistorical}");
+    expect(source).toContain("positionCurrentRequest={trackerPositionRequest}");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
     expect(source).toContain("const phaseResolutionResult = snapshot");
@@ -1061,8 +1078,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("function focusRoundTable(");
-    expect(source).toContain("scrollMode?: CombatRoundTimelineScrollMode");
     expect(source).toContain("input.scrollIntoView !== false");
+    expect(source).toContain("setTrackerPositionRequest((current) => current + 1)");
     expect(source).toContain(
       "focusRoundTable({ scrollIntoView: false, scrollToCurrent: true, state: nextRoundState })",
     );

@@ -7,6 +7,8 @@
 **Scope:** Presentation of canonical combat facts; not combat rules, authorization,
 canonical progression, persistence, or calculation semantics
 
+**Related UX guidance:** [Combat UX Principles](./combat-ux-principles.md)
+
 This document defines how the Glantri combat interface presents canonical combat
 facts. It is normative for combat presentation. Where current implementation or
 older presentation guidance differs, the discrepancy must be recorded and audited;

@@ -117,4 +117,105 @@ describe("CombatTracker", () => {
     fireEvent.click(emptyCell);
     expect(onInspect).not.toHaveBeenCalled();
   });
+
+  it("positions the live current cell without resetting manual scroll on ordinary rerenders", () => {
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        return {
+          bottom: 40,
+          height: 40,
+          left: this.getAttribute("aria-label") === "Combat round timeline grid" ? 0 : 600,
+          right: this.getAttribute("aria-label") === "Combat round timeline grid" ? 300 : 660,
+          toJSON: () => ({}),
+          top: 0,
+          width: this.getAttribute("aria-label") === "Combat round timeline grid" ? 300 : 60,
+          x: this.getAttribute("aria-label") === "Combat round timeline grid" ? 0 : 600,
+          y: 0,
+        };
+      });
+    const clientWidth = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(300);
+    const scrollWidth = vi
+      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
+      .mockReturnValue(900);
+
+    try {
+      const { rerender } = render(
+        <CombatTracker followCurrent model={model} onInspect={vi.fn()} />,
+      );
+      expect(scrollTo).toHaveBeenCalledOnce();
+
+      scrollTo.mockClear();
+      rerender(
+        <CombatTracker
+          followCurrent
+          model={{ ...model, selectedCellKey: undefined }}
+          onInspect={vi.fn()}
+        />,
+      );
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      const nextRoundCell = {
+        ...model.cells["1:participant-a:select_actions"]!,
+        cellKey: "2:participant-a:select_actions",
+        hoverText: "Aldren · Round 2 · S: declaration submitted.",
+        roundNumber: 2,
+      };
+      const nextRoundModel: CombatTrackerModel = {
+        ...model,
+        cells: { [nextRoundCell.cellKey]: nextRoundCell },
+        currentTaskCellKey: nextRoundCell.cellKey,
+        rounds: [{ currentStep: "select_actions", roundNumber: 2 }],
+        selectedCellKey: nextRoundCell.cellKey,
+      };
+      rerender(<CombatTracker followCurrent model={nextRoundModel} onInspect={vi.fn()} />);
+      expect(scrollTo).toHaveBeenCalledOnce();
+
+      scrollTo.mockClear();
+      rerender(
+        <CombatTracker
+          followCurrent
+          model={nextRoundModel}
+          onInspect={vi.fn()}
+          positionCurrentRequest={1}
+        />,
+      );
+      expect(scrollTo).toHaveBeenCalledOnce();
+    } finally {
+      rect.mockRestore();
+      clientWidth.mockRestore();
+      scrollWidth.mockRestore();
+      Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+        configurable: true,
+        value: originalScrollTo,
+      });
+    }
+  });
+
+  it("does not auto-position while the viewer is inspecting history", () => {
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    try {
+      render(<CombatTracker followCurrent={false} model={model} onInspect={vi.fn()} />);
+      expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+        configurable: true,
+        value: originalScrollTo,
+      });
+    }
+  });
 });

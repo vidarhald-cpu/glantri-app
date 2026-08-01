@@ -4185,10 +4185,11 @@ export default function ScenarioPlayerCombatPageContent({
               onClick={() => setHistoryInspection(undefined)}
               type="button"
             >
-              Current task
+              {historyInspection ? "Resume current task" : "Current task"}
             </button>
           </div>
           <CombatTracker
+            followCurrent={!historyInspection}
             model={playerCombatTrackerModel}
             onInspect={(cell) =>
               setHistoryInspection({
@@ -4199,15 +4200,6 @@ export default function ScenarioPlayerCombatPageContent({
             }
           />
         </section>
-      ) : null}
-
-      {playerCombatLog ? (
-        <CombatLog
-          events={playerCombatLog.events}
-          onSelect={handleCombatLogSelection}
-          selectedCombatLogEventId={combatLogSelection?.selectedCombatLogEventId}
-          selectedPresentationTargetId={combatLogSelection?.selectedPresentationTargetId}
-        />
       ) : null}
 
       {historyInspection ? (
@@ -4877,6 +4869,16 @@ export default function ScenarioPlayerCombatPageContent({
           scenario.
         </div>
       )}
+
+      {playerCombatLog ? (
+        <CombatLog
+          autoFollow={combatLogSelection?.mode === "automatic" && !historyInspection}
+          events={playerCombatLog.events}
+          onSelect={handleCombatLogSelection}
+          selectedCombatLogEventId={combatLogSelection?.selectedCombatLogEventId}
+          selectedPresentationTargetId={combatLogSelection?.selectedPresentationTargetId}
+        />
+      ) : null}
 
       {!historyInspection ? (
         <section style={{ display: "grid", gap: "1rem" }}>
