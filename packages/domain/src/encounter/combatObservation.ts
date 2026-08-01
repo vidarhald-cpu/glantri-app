@@ -252,10 +252,12 @@ export function buildCombatObservationSkillContestContribution(input: {
   relationships: readonly CombatObservationRelationship[];
   role: CombatSkillContestRole;
 }): CombatSkillContestPercentageContribution | undefined {
-  if (
-    input.role !== "resisting_opponent" ||
-    !["adjust_distance_attack", "round_end_adjust_distance"].includes(input.contestType)
-  ) {
+  const permitsDefensiveContribution =
+    (input.role === "resisting_opponent" &&
+      ["adjust_distance_attack", "round_end_adjust_distance"].includes(input.contestType)) ||
+    (input.role === "feint_defender" &&
+      ["movement_feint", "weapon_feint"].includes(input.contestType));
+  if (!permitsDefensiveContribution) {
     return undefined;
   }
 

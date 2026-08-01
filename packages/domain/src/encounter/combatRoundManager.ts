@@ -18284,6 +18284,7 @@ export function recordCombatRoundFeintRoll(input: {
           skillId: input.result.skillId,
           skillLabel: input.result.skillLabel,
           skillXp: input.result.skillXp,
+          skillContestCalculation: input.result.skillContestCalculation,
         },
       },
       involvedParticipantIds: [proposal.attackerParticipantId, proposal.defenderParticipantId],
@@ -18412,6 +18413,7 @@ export function commitCombatRoundFeintResult(input: {
   gmDefenderDbParryModifier?: number;
   gmDefenderObDbModifier?: number;
   gmDefenderSkillObModifier?: number;
+  modifierIds?: readonly string[];
   notes?: string;
   previousAttackerCombatContext?: ScenarioParticipantCombatContext;
   previousDefenderCombatContext?: ScenarioParticipantCombatContext;
@@ -18500,11 +18502,32 @@ export function commitCombatRoundFeintResult(input: {
     createdAt: input.command.createdAt,
     createdByUserId: input.command.createdByUserId,
     facts: {
-      modifierIds: [
-        `generated:feint:${proposal.id}:${proposal.attackerParticipantId}:phase1:db-parry`,
-        `generated:feint:${proposal.id}:${proposal.defenderParticipantId}:phase2:ob-skill`,
-        `generated:feint:${proposal.id}:${proposal.defenderParticipantId}:phase2:db-parry`,
-      ],
+      modifierIds:
+        input.modifierIds ??
+        [
+          {
+            id: `generated:feint:${proposal.id}:${proposal.attackerParticipantId}:phase1:db-parry`,
+            value:
+              committedReview.gmAttackerDbParryModifier ??
+              committedReview.proposedAttackerDbParryModifier,
+          },
+          {
+            id: `generated:feint:${proposal.id}:${proposal.defenderParticipantId}:phase2:ob-skill`,
+            value:
+              committedReview.gmDefenderSkillObModifier ??
+              committedReview.gmDefenderObDbModifier ??
+              committedReview.proposedDefenderObDbModifier,
+          },
+          {
+            id: `generated:feint:${proposal.id}:${proposal.defenderParticipantId}:phase2:db-parry`,
+            value:
+              committedReview.gmDefenderDbParryModifier ??
+              committedReview.gmDefenderObDbModifier ??
+              committedReview.proposedDefenderObDbModifier,
+          },
+        ]
+          .filter((entry) => entry.value !== 0)
+          .map((entry) => entry.id),
       previousAttackerCombatContext:
         input.previousAttackerCombatContext ??
         normalized.participants.find((p) => p.participantId === proposal.attackerParticipantId)

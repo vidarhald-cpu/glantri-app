@@ -301,17 +301,76 @@ function brawlingCalculation(
   });
 }
 
+function skillContestCalculationPresentation(input: {
+  actor?: CombatCalculationSubject;
+  calculationType: CombatCalculationType;
+  facts: FactRecord;
+  label?: string;
+  target?: CombatCalculationSubject;
+  visibility?: CombatCalculationVisibility;
+}): CombatCalculationPresentation | undefined {
+  const parsed = combatSkillContestCalculationSchema.safeParse(input.facts.skillContestCalculation);
+  if (!parsed.success) return undefined;
+  const snapshot = parsed.data;
+  return calculation({
+    actor: input.actor,
+    calculationId: snapshot.calculationId,
+    calculationType: input.calculationType,
+    completeness: snapshot.completeness,
+    contributingStat: {
+      label: snapshot.governingStat.label,
+      value: snapshot.governingStat.value,
+    },
+    derivedValues: [{ label: "Base skill", value: snapshot.baseSkill }],
+    die: {
+      initialRoll: snapshot.openEndedDie.rollD20,
+      openEndedComponents: snapshot.openEndedDie.openEndedD10s,
+      rolledValue: snapshot.openEndedDie.rollTotal,
+    },
+    finalResult: { label: "Result", value: snapshot.finalResult },
+    label: input.label ?? snapshot.skill.label,
+    missingFacts: snapshot.missingContributionPoints,
+    modifierAdjustment: {
+      label: "Derived adjustment",
+      value: snapshot.derivedIntegerAdjustment,
+    },
+    modifiers: snapshot.percentageContributions.map((contribution) => ({
+      id: contribution.id,
+      label: contribution.label,
+      provenance: contribution.provenance,
+      unit: "percent" as const,
+      value: contribution.value,
+    })),
+    preDieTotal: { label: "Skill total", value: snapshot.preDieTotal },
+    skill: { label: snapshot.skill.label, xp: snapshot.skill.totalXp },
+    target: input.target,
+    totalModifiers: {
+      unit: "percent",
+      value: snapshot.totalPercentageAdjustment,
+    },
+    visibility: input.visibility ?? "own",
+  });
+}
+
 function feintCalculation(
   event: ProjectedCombatHistoryEvent,
   facts: FactRecord,
 ): CombatCalculationPresentation | undefined {
+  const side = text(event.facts.involvedOutcome?.side);
+  const canonical = skillContestCalculationPresentation({
+    actor: subject(event, "roller", side === "defender" ? "defender" : "attacker"),
+    calculationType: "feint",
+    facts,
+    label: side === "defender" ? "Defender" : "Initiator",
+    target: subject(event, "target"),
+  });
+  if (canonical) return canonical;
   const finalResult = number(facts.finalTotal);
   const roll = die(facts);
   if (finalResult === undefined || !roll) return undefined;
   const skillLabel = text(facts.skillLabel);
   const skillXp = number(facts.skillXp);
   const characteristicValue = number(facts.characteristicValue);
-  const side = text(event.facts.involvedOutcome?.side);
   const adjustment = modifier({
     id: `${event.id}:feint:adjustment`,
     label: "Adjustment",
@@ -453,48 +512,8 @@ export function buildDodgeCalculationPresentationFromSnapshot(input: {
   visibility?: CombatCalculationVisibility;
 }): CombatCalculationPresentation | undefined {
   const { facts } = input;
-  const skillContest = combatSkillContestCalculationSchema.safeParse(facts.skillContestCalculation);
-  if (skillContest.success) {
-    const snapshot = skillContest.data;
-    return calculation({
-      actor: input.actor,
-      calculationId: snapshot.calculationId,
-      calculationType: input.calculationType,
-      completeness: snapshot.completeness,
-      contributingStat: {
-        label: snapshot.governingStat.label,
-        value: snapshot.governingStat.value,
-      },
-      derivedValues: [{ label: "Base skill", value: snapshot.baseSkill }],
-      die: {
-        initialRoll: snapshot.openEndedDie.rollD20,
-        openEndedComponents: snapshot.openEndedDie.openEndedD10s,
-        rolledValue: snapshot.openEndedDie.rollTotal,
-      },
-      finalResult: { label: "Result", value: snapshot.finalResult },
-      label: input.label ?? snapshot.skill.label,
-      missingFacts: snapshot.missingContributionPoints,
-      modifierAdjustment: {
-        label: "Derived adjustment",
-        value: snapshot.derivedIntegerAdjustment,
-      },
-      modifiers: snapshot.percentageContributions.map((contribution) => ({
-        id: contribution.id,
-        label: contribution.label,
-        provenance: contribution.provenance,
-        unit: "percent" as const,
-        value: contribution.value,
-      })),
-      preDieTotal: { label: "Skill total", value: snapshot.preDieTotal },
-      skill: { label: snapshot.skill.label, xp: snapshot.skill.totalXp },
-      target: input.target,
-      totalModifiers: {
-        unit: "percent",
-        value: snapshot.totalPercentageAdjustment,
-      },
-      visibility: input.visibility ?? "own",
-    });
-  }
+  const canonical = skillContestCalculationPresentation(input);
+  if (canonical) return canonical;
   const finalResult = number(facts.finalTotal);
   const roll = die(facts);
   if (finalResult === undefined || !roll) return undefined;
@@ -895,7 +914,8 @@ export function buildCombatCalculationPresentationFromSnapshot(input: {
     | "hit_location"
     | "critical"
     | "damage_proposed"
-    | "distance_control_roll";
+    | "distance_control_roll"
+    | "feint_roll";
   facts: FactRecord;
   label?: string;
 }): CombatCalculationPresentation | undefined {

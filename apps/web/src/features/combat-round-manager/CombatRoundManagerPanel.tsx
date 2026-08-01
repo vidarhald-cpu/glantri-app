@@ -48,6 +48,7 @@ import type {
   WeaponTemplate,
 } from "@glantri/domain";
 import {
+  COMBAT_FEINT_OUTCOME_TABLE,
   COMBAT_ROUND_STEP_LABELS,
   buildCombatRoundPhaseResolutionResult,
   buildLiveCombatModifierContributionProjection,
@@ -313,14 +314,6 @@ type PhaseAttackChoiceSelection = "continue" | "back_out";
 type DoubleAttackPhase2Decision = "continue" | "cancel";
 
 type InspectorCurrentActionOutcomeSelection = "perform" | "skip" | "complete_remaining";
-
-const COMBAT_FEINT_REFERENCE_ROWS = [
-  { attackerDbParry: -4, band: "defender_strong", defenderObDb: 2, difference: "≤ -16" },
-  { attackerDbParry: -2, band: "defender_edge", defenderObDb: 0, difference: "-15 to -6" },
-  { attackerDbParry: -1, band: "balanced", defenderObDb: 0, difference: "-5 to 0" },
-  { attackerDbParry: 0, band: "attacker_edge", defenderObDb: -2, difference: "1 to 10" },
-  { attackerDbParry: 0, band: "attacker_strong", defenderObDb: -4, difference: "≥ 11" },
-] as const;
 
 type RoundEndDistanceRollOption = {
   key: string;
@@ -5933,6 +5926,28 @@ export default function CombatRoundManagerPanel({
             proposal.attackerParticipantId === projectedFeintOwnerParticipantId,
         )
       : undefined;
+  const inspectorFeintAttackerCalculation = inspectorFeintProposal?.attackerRoll
+    ? buildCombatCalculationPresentationFromSnapshot({
+        calculationId: inspectorFeintProposal.attackerRoll.id,
+        calculationType: "feint_roll",
+        facts: inspectorFeintProposal.attackerRoll,
+        label: `Initiator — ${
+          roundParticipantLabelsById[inspectorFeintProposal.attackerParticipantId] ??
+          inspectorFeintProposal.attackerParticipantId
+        }`,
+      })
+    : undefined;
+  const inspectorFeintDefenderCalculation = inspectorFeintProposal?.defenderRoll
+    ? buildCombatCalculationPresentationFromSnapshot({
+        calculationId: inspectorFeintProposal.defenderRoll.id,
+        calculationType: "feint_roll",
+        facts: inspectorFeintProposal.defenderRoll,
+        label: `Defender — ${
+          roundParticipantLabelsById[inspectorFeintProposal.defenderParticipantId] ??
+          inspectorFeintProposal.defenderParticipantId
+        }`,
+      })
+    : undefined;
   const inspectorAdjustDistanceProposal =
     selectedRoundIsActive && projectedAdjustDistanceTask?.identity.proposalId
       ? roundState.adjustDistanceProposals.find(
@@ -6442,6 +6457,19 @@ export default function CombatRoundManagerPanel({
             {inspectorFeintProposal.defenderRoll?.finalTotal} · difference{" "}
             {inspectorFeintProposal.difference}
           </div>
+          {[inspectorFeintAttackerCalculation, inspectorFeintDefenderCalculation].map(
+            (calculation) =>
+              calculation ? (
+                <details key={calculation.calculationId} open>
+                  <summary style={{ fontWeight: 700 }}>{calculation.label}</summary>
+                  <div style={{ display: "grid", gap: "0.15rem", paddingTop: "0.25rem" }}>
+                    {buildCombatCalculationPresentationLines(calculation).map((line, index) => (
+                      <div key={`${calculation.calculationId}:line:${index}`}>{line}</div>
+                    ))}
+                  </div>
+                </details>
+              ) : null,
+          )}
           {inspectorFeintProposal.tableResult ? (
             <div>Table band: {inspectorFeintProposal.tableResult.band.replaceAll("_", " ")}</div>
           ) : null}
@@ -6454,21 +6482,21 @@ export default function CombatRoundManagerPanel({
               </tr>
             </thead>
             <tbody>
-              {COMBAT_FEINT_REFERENCE_ROWS.map((row) => {
+              {COMBAT_FEINT_OUTCOME_TABLE.map((row) => {
                 const selected = inspectorFeintProposal.tableResult?.band === row.band;
                 return (
                   <tr
                     key={row.band}
                     style={selected ? { background: "#f3ead2", fontWeight: 700 } : undefined}
                   >
-                    <td>{row.difference}</td>
+                    <td>{row.differenceLabel}</td>
                     <td style={{ textAlign: "right" }}>
-                      {row.defenderObDb >= 0 ? "+" : ""}
-                      {row.defenderObDb}
+                      {row.defenderPhase2ObDbModifier >= 0 ? "+" : ""}
+                      {row.defenderPhase2ObDbModifier}%
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {row.attackerDbParry >= 0 ? "+" : ""}
-                      {row.attackerDbParry}
+                      {row.attackerPhase1DbParryModifier >= 0 ? "+" : ""}
+                      {row.attackerPhase1DbParryModifier}%
                     </td>
                   </tr>
                 );

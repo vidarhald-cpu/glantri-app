@@ -919,6 +919,24 @@ describe("Observe Opponent", () => {
         role: "resisting_opponent",
       }),
     ).toMatchObject({ value: 3 });
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "weapon_feint",
+        observerCombatantId: "b",
+        opponentCombatantId: "a",
+        relationships,
+        role: "feint_defender",
+      }),
+    ).toMatchObject({ category: "relationship", value: 3 });
+    expect(
+      buildCombatObservationSkillContestContribution({
+        contestType: "movement_feint",
+        observerCombatantId: "a",
+        opponentCombatantId: "b",
+        relationships,
+        role: "movement_feint_initiator",
+      }),
+    ).toBeUndefined();
   });
 
   it("restores exact prior relationships from compact boundary undo facts", () => {

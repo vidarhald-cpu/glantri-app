@@ -1,12 +1,97 @@
-import type { SkillDefinition } from "@glantri/domain";
+import {
+  buildCombatObservationSkillContestContribution,
+  COMBAT_FEINT_OUTCOME_TABLE,
+  type CombatObservationRelationship,
+  type CombatSkillContestCalculation,
+  type CombatSkillContestPercentageContribution,
+  type OpenEndedD20Roll,
+  type SkillDefinition,
+} from "@glantri/domain";
 
 import {
   resolveParticipantSkillRollProfile,
   type ParticipantSkillRollProfile,
   type ResolveParticipantSkillRollProfileInput,
 } from "../encounters/resolveParticipantSkillRollProfile";
+import { resolveCombatSkillContest } from "./resolveCombatSkillContest";
 
 export type CombatFeintMethod = "movement" | "weapon";
+
+export interface ResolveCombatFeintSkillContestInput {
+  calculationId: string;
+  governingStatValue: number;
+  gmAdjustment?: number;
+  method: CombatFeintMethod;
+  observationRelationships: readonly CombatObservationRelationship[];
+  opponentParticipantId: string;
+  participantId: string;
+  percentageContributions?: readonly CombatSkillContestPercentageContribution[];
+  roll: OpenEndedD20Roll;
+  side: "initiator" | "defender";
+  skill: { id: string; label: string; totalXp: number };
+  unknownSkillPenalty?: number;
+}
+
+/**
+ * Canonical Feint adapter over the shared Skill Contest resolver.
+ *
+ * Weapon-derived OB/DB/shield/Parry and Movement Modifier are deliberately absent
+ * from the contract. The only automatic relationship contribution is the defending
+ * observer's one directional defensive-maneuver contribution.
+ */
+export function resolveCombatFeintSkillContest(
+  input: ResolveCombatFeintSkillContestInput,
+): CombatSkillContestCalculation {
+  const contestType = input.method === "movement" ? "movement_feint" : "weapon_feint";
+  const role =
+    input.side === "defender"
+      ? "feint_defender"
+      : input.method === "movement"
+        ? "movement_feint_initiator"
+        : "weapon_feint_initiator";
+  const relationshipContribution = buildCombatObservationSkillContestContribution({
+    contestType,
+    observerCombatantId: input.participantId,
+    opponentCombatantId: input.opponentParticipantId,
+    relationships: input.observationRelationships,
+    role,
+  });
+  const percentageContributions = [
+    ...(input.percentageContributions ?? []),
+    ...(relationshipContribution ? [relationshipContribution] : []),
+    ...(input.gmAdjustment
+      ? [
+          {
+            category: "gm_adjustment" as const,
+            id: `${input.calculationId}:gm-adjustment`,
+            label: "GM maneuver adjustment",
+            provenance: "Accepted Feint feasibility review",
+            sourceId: input.calculationId,
+            unit: "percentage" as const,
+            value: input.gmAdjustment,
+          },
+        ]
+      : []),
+  ];
+
+  return resolveCombatSkillContest({
+    baseSkillAdjustment: input.unknownSkillPenalty,
+    calculationId: input.calculationId,
+    contestType,
+    governingStat: {
+      id: input.side === "defender" ? "int" : "dex",
+      label: input.side === "defender" ? "Intelligence" : "Dexterity",
+      value: input.governingStatValue,
+    },
+    missingContributionPoints: input.side === "initiator" ? ["withdrawal_backout"] : [],
+    opponentParticipantId: input.opponentParticipantId,
+    participantId: input.participantId,
+    percentageContributions,
+    role,
+    roll: input.roll,
+    skill: input.skill,
+  });
+}
 
 export interface CombatFeintTableResult {
   attackerPhase1DbParryModifier: number;
@@ -20,42 +105,14 @@ export function resolveCombatFeintTable(difference: number): CombatFeintTableRes
   if (!Number.isInteger(difference)) {
     throw new RangeError("Feint difference must be an integer.");
   }
-  if (difference <= -16) {
-    return {
-      attackerPhase1DbParryModifier: -4,
-      band: "defender_strong",
-      defenderObDbModifier: 2,
-      difference,
-    };
-  }
-  if (difference <= -6) {
-    return {
-      attackerPhase1DbParryModifier: -2,
-      band: "defender_edge",
-      defenderObDbModifier: 0,
-      difference,
-    };
-  }
-  if (difference <= 0) {
-    return {
-      attackerPhase1DbParryModifier: -1,
-      band: "balanced",
-      defenderObDbModifier: 0,
-      difference,
-    };
-  }
-  if (difference <= 10) {
-    return {
-      attackerPhase1DbParryModifier: 0,
-      band: "attacker_edge",
-      defenderObDbModifier: -2,
-      difference,
-    };
-  }
+  const row = COMBAT_FEINT_OUTCOME_TABLE.find(
+    (candidate) => candidate.maximumDifference === null || difference <= candidate.maximumDifference,
+  );
+  if (!row) throw new RangeError("Feint difference is outside the canonical outcome table.");
   return {
-    attackerPhase1DbParryModifier: 0,
-    band: "attacker_strong",
-    defenderObDbModifier: -4,
+    attackerPhase1DbParryModifier: row.attackerPhase1DbParryModifier,
+    band: row.band,
+    defenderObDbModifier: row.defenderPhase2ObDbModifier,
     difference,
   };
 }
@@ -99,6 +156,6 @@ export function resolveHighestCombatFeintResistanceProfile(
     )
     .sort(
       (left, right) =>
-        right.rollBaseValue - left.rollBaseValue || left.skillName.localeCompare(right.skillName),
+        right.totalXP - left.totalXP || left.skillName.localeCompare(right.skillName),
     )[0];
 }

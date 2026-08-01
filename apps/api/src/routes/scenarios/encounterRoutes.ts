@@ -197,6 +197,7 @@ import type {
   CombatModifierContribution,
   CombatSkillContestRole,
   CombatSkillContestType,
+  CombatFeintProposal,
   CombatProgressionProjection,
   EncounterParticipantReadSource,
   EncounterSession,
@@ -214,6 +215,7 @@ import {
   isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
+  resolveCombatFeintSkillContest,
   resolveCombatFeintSkillProfile,
   resolveCombatFeintTable,
   resolveHighestCombatFeintResistanceProfile,
@@ -673,6 +675,96 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
       label: profile.skillName,
       totalXp: profile.totalXP,
     },
+  });
+}
+
+function resolveFeintSkillContestCalculation(input: {
+  calculationId: string;
+  encounterId: string;
+  isAttacker: boolean;
+  modifierContributions: readonly CombatModifierContribution[];
+  opponentCombatantId: string;
+  opponentScenarioParticipantId?: string;
+  participant: ScenarioParticipant;
+  participantCombatantId: string;
+  proposal: CombatFeintProposal;
+  roll: ReturnType<typeof rollOpenEndedD20>;
+  roundState: CombatRoundState;
+  skillId: string;
+}) {
+  const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === input.skillId);
+  if (!skill) throw new RangeError("The selected feint skill is unavailable.");
+  const characteristic = input.isAttacker ? ("dex" as const) : ("int" as const);
+  const profile = resolveCombatFeintSkillProfile({
+    ...getScenarioParticipantFeintSkillInput(input.participant),
+    characteristic,
+    skill,
+  });
+  const context: CombatCalculationContext = {
+    actionId: "feint_attack",
+    encounterId: input.encounterId,
+    opportunityId: input.proposal.phase1OpportunityId,
+    ownerParticipantId: input.participant.id,
+    opponentParticipantId: input.opponentScenarioParticipantId,
+    pairKey: input.opponentScenarioParticipantId
+      ? createCombatParticipantPairKey(input.participant.id, input.opponentScenarioParticipantId)
+      : undefined,
+    phase: "phase1",
+    proposalId: input.proposal.id,
+    rollType: input.proposal.method === "movement" ? "feint_dodge" : "feint_weapon",
+    roundNumber: input.roundState.roundNumber,
+    skillId: input.skillId,
+    step: "phase_1_actions",
+  };
+  const observationRelationshipIds = new Set(
+    input.roundState.observationRelationships.map((relationship) => relationship.id),
+  );
+  const nonObservationContributions = input.modifierContributions.filter(
+    (contribution) => !observationRelationshipIds.has(contribution.sourceId ?? ""),
+  );
+  const resolvedRows = [
+    ...resolveCombatModifierContributions({
+      bucket: "general_fatigue",
+      context,
+      contributions: nonObservationContributions,
+    }).rows,
+    ...resolveCombatModifierContributions({
+      bucket: "skill_ob",
+      context,
+      contributions: nonObservationContributions,
+    }).rows,
+  ];
+  const percentageContributions = [
+    ...resolvedRows
+      .filter((row) => row.value !== 0)
+      .map((row) => ({
+        category: row.bucket === "skill_ob" ? ("skill_ob" as const) : ("general_fatigue" as const),
+        id: row.id,
+        label: row.label,
+        provenance: row.sourceKind,
+        sourceId: row.sourceId,
+        unit: "percentage" as const,
+        value: row.value,
+      })),
+  ];
+
+  return resolveCombatFeintSkillContest({
+    calculationId: input.calculationId,
+    governingStatValue: profile.avgStats,
+    gmAdjustment: input.isAttacker ? input.proposal.feasibilityAdjustment : 0,
+    method: input.proposal.method,
+    observationRelationships: input.roundState.observationRelationships,
+    opponentParticipantId: input.opponentCombatantId,
+    participantId: input.participantCombatantId,
+    percentageContributions,
+    roll: input.roll,
+    side: input.isAttacker ? "initiator" : "defender",
+    skill: {
+      id: profile.skillId,
+      label: profile.skillName,
+      totalXp: profile.totalXP,
+    },
+    unknownSkillPenalty: profile.unknownSkillPenalty,
   });
 }
 
@@ -5802,15 +5894,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(409).send({ error: "Feint rolls are not currently available." });
       }
       const skillId = isAttackerRoll ? proposal.attackerSkillId : proposal.defenderSkillId;
-      const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === skillId);
-      if (!skill)
-        return reply.code(409).send({ error: "The selected feint skill is unavailable." });
-      const profile = resolveCombatFeintSkillProfile({
-        ...getScenarioParticipantFeintSkillInput(scenarioParticipant),
-        characteristic: isAttackerRoll ? "dex" : "int",
-        skill,
-      });
-      const adjustment = 0;
       const opponentEncounterParticipantId = isAttackerRoll
         ? proposal.defenderParticipantId
         : proposal.attackerParticipantId;
@@ -5833,66 +5916,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounterId,
         ownerParticipantId: scenarioParticipant.id,
       });
-      const observationContributions = opponentScenarioParticipant
-        ? buildCombatObservationModifierContributions({
-            encounterId,
-            observerCombatantId: encounterParticipant.id,
-            observerParticipantId: scenarioParticipant.id,
-            opponentCombatantId: opponentEncounterParticipantId,
-            opponentParticipantId: opponentScenarioParticipant.id,
-            relationships: roundState.observationRelationships,
-          })
-        : [];
-      const feintCalculationContext: CombatCalculationContext = {
-        actionId: "feint_attack",
-        encounterId,
-        opportunityId: proposal.phase1OpportunityId,
-        ownerParticipantId: scenarioParticipant.id,
-        ...(opponentScenarioParticipant
-          ? {
-              opponentParticipantId: opponentScenarioParticipant.id,
-              pairKey: createCombatParticipantPairKey(
-                scenarioParticipant.id,
-                opponentScenarioParticipant.id,
-              ),
-            }
-          : {}),
-        phase: "phase1",
-        proposalId: proposal.id,
-        rollType: proposal.method === "movement" ? "feint_dodge" : "feint_weapon",
-        roundNumber: roundState.roundNumber,
-        skillId,
-        step: "phase_1_actions",
-      };
-      let canonicalCombatModifier =
-        resolveCombatWideGeneralModifiers({
-          context: feintCalculationContext,
-          contributions: [...projection.contributions, ...observationContributions],
-        }).total +
-        resolveCombatModifierContributions({
-          bucket: "skill_ob",
-          context: feintCalculationContext,
-          contributions: observationContributions,
-        }).total;
-      if (proposal.method === "movement" && skillId === "dodge") {
-        const dodgeResolution = resolveCombatDodgeModifiers({
-          context: feintCalculationContext,
-          contributions: [...projection.contributions, ...observationContributions],
-        });
-        canonicalCombatModifier = dodgeResolution.total;
-      }
       const roll = rollOpenEndedD20();
       const createdAt = new Date().toISOString();
+      const skillContestCalculation = resolveFeintSkillContestCalculation({
+        calculationId: `${proposal.id}:roll:${isAttackerRoll ? "attacker" : "defender"}`,
+        encounterId,
+        isAttacker: isAttackerRoll,
+        modifierContributions: projection.contributions,
+        opponentCombatantId: opponentEncounterParticipantId,
+        opponentScenarioParticipantId: opponentScenarioParticipant?.id,
+        participant: scenarioParticipant,
+        participantCombatantId: encounterParticipant.id,
+        proposal,
+        roll,
+        roundState,
+        skillId,
+      });
       const result = combatFeintRollResultSchema.parse({
-        adjustment,
+        adjustment: skillContestCalculation.derivedIntegerAdjustment,
         characteristic: isAttackerRoll ? "dex" : "int",
-        characteristicValue: profile.avgStats,
-        finalTotal:
-          roll.dieResult +
-          profile.rollBaseValue +
-          profile.unknownSkillPenalty +
-          adjustment +
-          canonicalCombatModifier,
+        characteristicValue: skillContestCalculation.governingStat.value,
+        finalTotal: skillContestCalculation.finalResult,
         id: `${proposal.id}:roll:${isAttackerRoll ? "attacker" : "defender"}`,
         openEndedD10s: roll.openEndedD10s,
         participantId: encounterParticipant.id,
@@ -5900,9 +5944,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rollTotal: roll.dieResult,
         rolledAt: createdAt,
         rolledByUserId: user.id,
-        skillId: profile.skillId,
-        skillLabel: profile.skillName,
-        skillXp: profile.totalXP,
+        skillContestCalculation,
+        skillId,
+        skillLabel: skillContestCalculation.skill.label,
+        skillXp: skillContestCalculation.skill.totalXp,
       });
       const difference = proposal.attackerRoll
         ? proposal.attackerRoll.finalTotal - result.finalTotal
@@ -6068,6 +6113,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         gmDefenderDbParryModifier,
         gmDefenderObDbModifier,
         gmDefenderSkillObModifier,
+        modifierIds: modifiers.modifierIds,
         notes,
         previousAttackerCombatContext: attacker.state.combat.combatContext,
         previousDefenderCombatContext: defender.state.combat.combatContext,

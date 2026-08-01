@@ -7,6 +7,8 @@ import {
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import type { SkillDefinition, SkillSpecialization } from "../content/skills";
+import { combatSkillContestCalculationSchema } from "./combatSkillContest";
+import type { CombatSkillContestCalculation } from "./combatSkillContest";
 
 const idSchema = z.string().min(1);
 
@@ -54,6 +56,52 @@ export const combatFeintStatusSchema = z.enum([
 ]);
 export type CombatFeintStatus = z.infer<typeof combatFeintStatusSchema>;
 
+export const COMBAT_FEINT_OUTCOME_TABLE = [
+  {
+    attackerPhase1DbParryModifier: -4,
+    band: "defender_strong",
+    defenderPhase2ObDbModifier: 2,
+    differenceLabel: "≤ -16",
+    maximumDifference: -16,
+  },
+  {
+    attackerPhase1DbParryModifier: -2,
+    band: "defender_edge",
+    defenderPhase2ObDbModifier: 0,
+    differenceLabel: "-15 to -6",
+    maximumDifference: -6,
+  },
+  {
+    attackerPhase1DbParryModifier: -1,
+    band: "balanced",
+    defenderPhase2ObDbModifier: 0,
+    differenceLabel: "-5 to 0",
+    maximumDifference: 0,
+  },
+  {
+    attackerPhase1DbParryModifier: 0,
+    band: "attacker_edge",
+    defenderPhase2ObDbModifier: -2,
+    differenceLabel: "1 to 10",
+    maximumDifference: 10,
+  },
+  {
+    attackerPhase1DbParryModifier: 0,
+    band: "attacker_strong",
+    defenderPhase2ObDbModifier: -4,
+    differenceLabel: "≥ 11",
+    maximumDifference: null,
+  },
+] as const;
+
+export type CombatFeintOutcomeTableRow = (typeof COMBAT_FEINT_OUTCOME_TABLE)[number];
+
+const combatFeintSkillContestCalculationSchema: z.ZodType<
+  CombatSkillContestCalculation,
+  z.ZodTypeDef,
+  z.input<typeof combatSkillContestCalculationSchema>
+> = combatSkillContestCalculationSchema;
+
 export const combatFeintRollResultSchema = z.object({
   adjustment: z.number().int().default(0),
   characteristic: z.enum(["dex", "int"]),
@@ -69,6 +117,7 @@ export const combatFeintRollResultSchema = z.object({
   skillId: idSchema,
   skillLabel: z.string().min(1),
   skillXp: z.number().int(),
+  skillContestCalculation: combatFeintSkillContestCalculationSchema.optional(),
 });
 export type CombatFeintRollResult = z.infer<typeof combatFeintRollResultSchema>;
 
@@ -282,22 +331,28 @@ export function applyCommittedCombatFeintModifiers(input: {
     proposalId: input.proposal.id,
     value: defenderDbValue,
   });
+  const attackerRows = attackerValue === 0 ? [] : [attackerDb];
+  const defenderObRows = defenderObValue === 0 ? [] : [defenderOb];
+  const defenderDbRows = defenderDbValue === 0 ? [] : [defenderDb];
   return {
     attackerCombatContext: scenarioParticipantCombatContextSchema.parse({
       ...attackerContext,
       modifierBuckets: {
         ...attackerContext.modifierBuckets,
-        situationDb: [...attackerContext.modifierBuckets.situationDb, attackerDb],
+        situationDb: [...attackerContext.modifierBuckets.situationDb, ...attackerRows],
       },
     }),
     defenderCombatContext: scenarioParticipantCombatContextSchema.parse({
       ...defenderContext,
       modifierBuckets: {
         ...defenderContext.modifierBuckets,
-        situationDb: [...defenderContext.modifierBuckets.situationDb, defenderDb],
-        situationObSkill: [...defenderContext.modifierBuckets.situationObSkill, defenderOb],
+        situationDb: [...defenderContext.modifierBuckets.situationDb, ...defenderDbRows],
+        situationObSkill: [
+          ...defenderContext.modifierBuckets.situationObSkill,
+          ...defenderObRows,
+        ],
       },
     }),
-    modifierIds: [attackerDb.id, defenderOb.id, defenderDb.id],
+    modifierIds: [...attackerRows, ...defenderObRows, ...defenderDbRows].map((entry) => entry.id),
   };
 }

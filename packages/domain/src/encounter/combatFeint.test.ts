@@ -152,6 +152,30 @@ describe("combat feint modifiers", () => {
     ).toBe(0);
   });
 
+  it("retains zero table consequences without creating zero-valued live modifiers", () => {
+    const committed = combatFeintProposalSchema.parse({
+      ...proposal("committed"),
+      review: {
+        proposedAttackerDbParryModifier: 0,
+        proposedDefenderObDbModifier: -2,
+      },
+    });
+    const applied = applyCommittedCombatFeintModifiers({ proposal: committed });
+
+    expect(applied.attackerCombatContext.modifierBuckets.situationDb).toEqual([]);
+    expect(applied.defenderCombatContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({ value: -2 }),
+    ]);
+    expect(applied.defenderCombatContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({ value: -2 }),
+    ]);
+    expect(applied.modifierIds).toHaveLength(2);
+    expect(committed.review).toEqual({
+      proposedAttackerDbParryModifier: 0,
+      proposedDefenderObDbModifier: -2,
+    });
+  });
+
   it("expires prior-round Feint rows without removing unrelated rows", () => {
     const committed = applyCommittedCombatFeintModifiers({
       attackerCombatContext: {
@@ -288,6 +312,25 @@ describe("combat feint lifecycle", () => {
         skillId: "dodge",
         skillLabel: "Dodge",
         skillXp: 3,
+        skillContestCalculation: {
+          baseSkill: 7,
+          calculationId: "attacker-roll",
+          completeness: "partial",
+          contestType: "movement_feint",
+          derivedIntegerAdjustment: 0,
+          finalResult: 17,
+          governingStat: { id: "dex", label: "Dexterity", value: 4 },
+          missingContributionPoints: ["withdrawal_backout"],
+          openEndedDie: { openEndedD10s: [], rollD20: 10, rollTotal: 10 },
+          opponentParticipantId: "defender",
+          participantId: "attacker",
+          percentageContributions: [],
+          preDieTotal: 7,
+          role: "movement_feint_initiator",
+          skill: { id: "dodge", label: "Dodge", totalXp: 3 },
+          totalPercentageAdjustment: 0,
+          visibility: "roller_and_gm",
+        },
       },
       state: feasible,
     });
@@ -354,10 +397,25 @@ describe("combat feint lifecycle", () => {
       phase2AttackOpportunityId: "attack-2",
       status: "committed",
     });
+    expect(reloaded.feintProposals[0]?.attackerRoll?.skillContestCalculation).toMatchObject({
+      baseSkill: 7,
+      finalResult: 17,
+      role: "movement_feint_initiator",
+    });
     expect(getCombatRoundPhaseAttackCandidates({ phase: "phase2", state: reloaded })).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "attack-2" })]),
     );
     const committedEvent = reloaded.events.find((event) => event.type === "feint_committed");
+    const attackerRollEvent = reloaded.events.find(
+      (event) => event.type === "feint_roll" && event.ownerParticipantId === "attacker",
+    );
+    expect(attackerRollEvent?.facts.rollerPrivate).toMatchObject({
+      skillContestCalculation: {
+        baseSkill: 7,
+        finalResult: 17,
+        role: "movement_feint_initiator",
+      },
+    });
     expect(committedEvent?.facts.resultPresentation).toMatchObject({
       actionInstanceId: proposal().id,
       adjustment: {

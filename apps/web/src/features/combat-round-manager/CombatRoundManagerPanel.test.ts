@@ -31,7 +31,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Feint method");
-    expect(source).toContain("COMBAT_FEINT_REFERENCE_ROWS");
+    expect(source).toContain("COMBAT_FEINT_OUTCOME_TABLE");
+    expect(source).not.toContain("COMBAT_FEINT_REFERENCE_ROWS");
     expect(source).toContain("Commit feint result");
     expect(source).not.toContain("reviewCombatFeintFeasibilityOnServer");
     expect(source).toContain("rollCombatFeintOnServer");

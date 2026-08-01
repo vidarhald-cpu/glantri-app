@@ -129,6 +129,16 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("targetModifierProjection.contributions");
   });
 
+  it("resolves Feint rolls through canonical Skill Contest snapshots", () => {
+    expect(source).toContain("resolveFeintSkillContestCalculation({");
+    expect(source).toContain("resolveCombatFeintSkillContest({");
+    expect(source).toContain("skillContestCalculation,");
+    expect(source).toContain("finalTotal: skillContestCalculation.finalResult");
+    expect(source).not.toContain(
+      "profile.rollBaseValue +\n          profile.unknownSkillPenalty +\n          adjustment +\n          canonicalCombatModifier",
+    );
+  });
+
   it("resolves both Adjust Distance lifecycles through the canonical Skill Contest path", () => {
     const resolverStart = source.indexOf(
       "function resolveAdjustDistanceSkillContestCalculation(input:",

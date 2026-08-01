@@ -7,6 +7,8 @@ const idSchema = z.string().min(1);
 export const combatSkillContestTypeSchema = z.enum([
   "adjust_distance_attack",
   "round_end_adjust_distance",
+  "movement_feint",
+  "weapon_feint",
 ]);
 export type CombatSkillContestType = z.infer<typeof combatSkillContestTypeSchema>;
 
@@ -14,6 +16,9 @@ export const combatSkillContestRoleSchema = z.enum([
   "initiator",
   "resisting_opponent",
   "contestant",
+  "movement_feint_initiator",
+  "weapon_feint_initiator",
+  "feint_defender",
 ]);
 export type CombatSkillContestRole = z.infer<typeof combatSkillContestRoleSchema>;
 
@@ -25,6 +30,7 @@ export const combatSkillContestModifierCategorySchema = z.enum([
   "movement_mm",
   "encumbrance",
   "gm_adjustment",
+  "withdrawal_backout",
 ]);
 export type CombatSkillContestModifierCategory = z.infer<
   typeof combatSkillContestModifierCategorySchema

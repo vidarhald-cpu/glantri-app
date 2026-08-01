@@ -132,6 +132,74 @@ describe("shared combat calculation presentation", () => {
     ]);
   });
 
+  it("renders canonical Feint snapshots through the shared percentage grammar", () => {
+    const privateCalculation = {
+      adjustment: 2,
+      characteristic: "int",
+      characteristicValue: 14,
+      finalTotal: 30,
+      openEndedD10s: [],
+      rollD20: 6,
+      rollTotal: 6,
+      skillContestCalculation: {
+        baseSkill: 22,
+        calculationId: "feint:defender",
+        completeness: "complete",
+        contestType: "weapon_feint",
+        derivedIntegerAdjustment: 2,
+        finalResult: 30,
+        governingStat: { id: "int", label: "Intelligence", value: 14 },
+        missingContributionPoints: [],
+        openEndedDie: { openEndedD10s: [], rollD20: 6, rollTotal: 6 },
+        opponentParticipantId: "attacker",
+        participantId: "defender",
+        percentageContributions: [
+          {
+            category: "relationship",
+            id: "observation:defender:attacker",
+            label: "Observe Opponent",
+            unit: "percentage",
+            value: 1,
+          },
+        ],
+        preDieTotal: 24,
+        role: "feint_defender",
+        skill: { id: "sword", label: "Sword", totalXp: 8 },
+        totalPercentageAdjustment: 1,
+        visibility: "roller_and_gm",
+      },
+      skillId: "sword",
+      skillLabel: "Sword",
+      skillXp: 8,
+    };
+    const presentation = buildCombatCalculationPresentations(
+      event(
+        "feint_roll",
+        privateCalculation,
+        {
+          facts: {
+            involvedOutcome: { side: "defender" },
+            privateCalculation,
+            publicOutcome: {},
+          },
+        },
+      ),
+    )[0];
+
+    expect(buildCombatCalculationPresentationLines(presentation!)).toEqual([
+      "Stat: Intelligence 14",
+      "Sword XP: 8",
+      "Base skill: 22",
+      "Modifiers",
+      "Observe Opponent: +1%",
+      "Total modifiers: +1%",
+      "Derived adjustment: +2",
+      "Skill total: 24",
+      "Die roll: 6",
+      "Result: 30",
+    ]);
+  });
+
   it("normalizes Observe Opponent and keeps opponent calculation GM-only", () => {
     const source = event(
       "observation",
