@@ -39,8 +39,11 @@ export const REACTIVE_ATTACK_PHASE2_INITIATIVE_MODIFIER_ID =
 export const REACTIVE_ATTACK_PHASE2_INITIATIVE_SOURCE_RULE =
   "parry-attack-phase2-initiative";
 export const OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
+  "generated:offensive-parry:round:percentage-db";
+export const OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-percentage-db";
+const LEGACY_OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID =
   "generated:offensive-parry:round:flat-db";
-export const OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-flat-db";
+const LEGACY_OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE = "offensive-parry-round-flat-db";
 export const PARRY_ROUND_PERCENTAGE_MODIFIER_ID = "generated:parry:round:db-parry-percentage";
 export const PARRY_ROUND_PERCENTAGE_SOURCE_RULE = "parry-dodge-one-fifth";
 
@@ -204,7 +207,9 @@ export function isOffensiveParryGeneratedDbModifier(
 ): boolean {
   return (
     entry.id === OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID ||
-    entry.sourceRule === OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE
+    entry.sourceRule === OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE ||
+    entry.id === LEGACY_OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID ||
+    entry.sourceRule === LEGACY_OFFENSIVE_PARRY_ROUND_DB_SOURCE_RULE
   );
 }
 
@@ -505,12 +510,12 @@ export function buildOffensiveParryGeneratedDbModifier(input?: {
   roundNumber?: number;
 }): ScenarioCombatModifierEntry {
   return scenarioCombatModifierEntrySchema.parse({
-    application: "flat_db",
+    application: "percentage",
     durationRounds: 1,
     expiresAtRound: input?.roundNumber,
     generated: true,
     id: OFFENSIVE_PARRY_ROUND_DB_MODIFIER_ID,
-    notes: "offensive parry: DB -2 for the declared round",
+    notes: "offensive parry: DB/Parry -2% for the declared round",
     scope: "until",
     sourceActionId: "offensive_parry",
     sourceRoundNumber: input?.roundNumber,

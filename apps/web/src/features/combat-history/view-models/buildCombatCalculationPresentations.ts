@@ -230,6 +230,18 @@ function brawlingCalculation(
   event: ProjectedCombatHistoryEvent,
   facts: FactRecord,
 ): CombatCalculationPresentation | undefined {
+  const actor = subject(event, "roller", "actor");
+  const canonical = skillContestCalculationPresentation({
+    actor,
+    calculationType:
+      event.type === "continued_contact_maintenance"
+        ? "continued_contact_maintenance"
+        : "offensive_parry_brawling",
+    facts,
+    label: actor?.label ?? "Brawling",
+    target: subject(event, "target"),
+  });
+  if (canonical) return canonical;
   const finalResult = number(facts.finalTotal);
   const roll = die(facts);
   if (finalResult === undefined || !roll) return undefined;

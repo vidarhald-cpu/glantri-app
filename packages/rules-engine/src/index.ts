@@ -21,6 +21,7 @@ export * from "./combat/deriveCombatValues";
 export * from "./combat/deriveParryPrimaryActionModifier";
 export * from "./combat/resolveCombatParry";
 export * from "./combat/resolveCombatFeint";
+export * from "./combat/resolveCombatOffensiveParry";
 export * from "./combat/resolveCombatObservation";
 export * from "./combat/resolveCombatSkillContest";
 export * from "./combat/resolveCombatMovementBurden";

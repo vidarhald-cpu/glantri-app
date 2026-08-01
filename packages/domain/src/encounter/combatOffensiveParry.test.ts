@@ -468,10 +468,10 @@ describe("Offensive Parry rules", () => {
     ).toBeUndefined();
   });
 
-  it("applies one round-bound flat DB drawback without changing percentage semantics", () => {
+  it("applies one round-bound percentage DB/Parry drawback", () => {
     const modifier = buildOffensiveParryGeneratedDbModifier({ roundNumber: 3 });
     expect(modifier).toMatchObject({
-      application: "flat_db",
+      application: "percentage",
       expiresAtRound: 3,
       sourceActionId: "offensive_parry",
       value: -2,
@@ -643,6 +643,37 @@ describe("Offensive Parry rules", () => {
       phase: contest.phase,
       roll: roll("defender", 30),
       rollerParticipantId: "defender",
+      skillContestCalculation: {
+        baseSkill: 23,
+        calculationId: `${contest.id}:defender:calculation`,
+        completeness: "complete",
+        contestType: "offensive_parry_brawling",
+        derivedIntegerAdjustment: -5,
+        finalResult: 30,
+        governingStat: {
+          id: "str_dex_average",
+          label: "Strength / Dexterity average",
+          value: 11,
+        },
+        missingContributionPoints: [],
+        openEndedDie: { openEndedD10s: [], rollD20: 12, rollTotal: 12 },
+        opponentParticipantId: "attacker",
+        participantId: "defender",
+        percentageContributions: [
+          {
+            category: "maneuver",
+            id: `${contest.id}:parry-quality`,
+            label: "Parry quality",
+            unit: "percentage",
+            value: 1,
+          },
+        ],
+        preDieTotal: 18,
+        role: "offensive_parry_controller",
+        skill: { id: "brawling", label: "Brawling", totalXp: 12 },
+        totalPercentageAdjustment: 1,
+        visibility: "roller_and_gm",
+      },
       state: opened,
       submittedBy: "player",
     });
@@ -650,6 +681,13 @@ describe("Offensive Parry rules", () => {
       initiatorRollRecorded: true,
       responderRollRecorded: false,
       status: "awaiting_rolls",
+    });
+    expect(afterController.events.at(-1)?.facts.rollerPrivate).toMatchObject({
+      skillContestCalculation: {
+        calculationId: `${contest.id}:defender:calculation`,
+        contestType: "offensive_parry_brawling",
+        participantId: "defender",
+      },
     });
     const remainingTasks = buildCombatProgressionProjection(afterController)
       .boundary.processes.flatMap((process) => process.stages)

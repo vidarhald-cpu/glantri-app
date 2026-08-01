@@ -9,6 +9,8 @@ export const combatSkillContestTypeSchema = z.enum([
   "round_end_adjust_distance",
   "movement_feint",
   "weapon_feint",
+  "offensive_parry_brawling",
+  "continued_contact_maintenance",
 ]);
 export type CombatSkillContestType = z.infer<typeof combatSkillContestTypeSchema>;
 
@@ -19,6 +21,10 @@ export const combatSkillContestRoleSchema = z.enum([
   "movement_feint_initiator",
   "weapon_feint_initiator",
   "feint_defender",
+  "offensive_parry_controller",
+  "offensive_parry_responder",
+  "continued_contact_controller",
+  "continued_contact_responder",
 ]);
 export type CombatSkillContestRole = z.infer<typeof combatSkillContestRoleSchema>;
 

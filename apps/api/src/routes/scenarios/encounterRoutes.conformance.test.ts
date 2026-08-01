@@ -273,13 +273,24 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId");
   });
 
-  it("uses workbook percentage composition for Offensive Parry and maintenance Brawling", () => {
-    expect(source.match(/calculateWorkbookPercentageAdjustmentTrace\(\{/g)?.length).toBeGreaterThan(
-      2,
+  it("uses the shared canonical Skill Contest resolver for Offensive Parry and maintenance", () => {
+    expect(source).toContain("resolveOffensiveParryBrawlingSkillContestCalculation({");
+    expect(source).toContain('purpose: "initial_offensive_parry"');
+    expect(source).toContain('purpose: "continued_contact_maintenance"');
+    expect(source).toContain("skillContestCalculation: calculation");
+    expect(source).toContain("effectiveSkillValue: calculation.preDieTotal");
+    expect(source).toContain("finalTotal: calculation.finalResult");
+    const helperStart = source.indexOf(
+      "function resolveOffensiveParryBrawlingSkillContestCalculation",
     );
-    expect(source).toContain("effectiveSkillValue: modifierTrace.finalValue");
-    expect(source).toContain("percentageModifierTotal: modifierTrace.rawModifierTotal");
-    expect(source).toContain("finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue");
+    const helperEnd = source.indexOf("function buildRoundEndDistanceRollResult", helperStart);
+    const helperSource = source.slice(helperStart, helperEnd);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(helperSource).toContain('bucket: "general_fatigue"');
+    expect(helperSource).not.toContain('bucket: "skill_ob"');
+    expect(helperSource).toContain("totalXp: profile.totalXP");
+    expect(helperSource).toContain("characteristicAverage: profile.avgStats");
   });
 
   it("does not duplicate the initiative commit command beside the authoritative encounter", () => {

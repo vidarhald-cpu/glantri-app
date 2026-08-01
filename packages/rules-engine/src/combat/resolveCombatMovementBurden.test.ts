@@ -249,6 +249,7 @@ describe("Movement Modifier applicability", () => {
     expect(getCombatMovementModifierApplicability("offensive_parry_brawling")).toBe(
       "not_applicable",
     );
+    expect(getCombatMovementModifierApplicability("continued_contact")).toBe("not_applicable");
     expect(getCombatMovementModifierApplicability("observe_opponent")).toBe("not_applicable");
   });
 });

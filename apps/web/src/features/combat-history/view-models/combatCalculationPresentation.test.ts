@@ -637,6 +637,104 @@ describe("shared combat calculation presentation", () => {
     expect(presentation.completeness).toBe("complete");
   });
 
+  it("renders Offensive Parry and Continued Contact through the shared Skill Contest grammar", () => {
+    const initial = buildCombatCalculationPresentations(
+      event("offensive_parry_brawling", {
+        skillContestCalculation: {
+          baseSkill: 15,
+          calculationId: "offensive-parry:controller",
+          completeness: "complete",
+          contestType: "offensive_parry_brawling",
+          derivedIntegerAdjustment: 3,
+          finalResult: 24,
+          governingStat: {
+            id: "str_dex_average",
+            label: "Strength / Dexterity average",
+            value: 10,
+          },
+          missingContributionPoints: [],
+          openEndedDie: { openEndedD10s: [], rollD20: 6, rollTotal: 6 },
+          opponentParticipantId: "responder",
+          participantId: "controller",
+          percentageContributions: [
+            {
+              category: "maneuver",
+              id: "parry-quality",
+              label: "Parry quality",
+              unit: "percentage",
+              value: 2,
+            },
+          ],
+          preDieTotal: 18,
+          role: "offensive_parry_controller",
+          skill: { id: "brawling", label: "Brawling", totalXp: 5 },
+          totalPercentageAdjustment: 2,
+          visibility: "roller_and_gm",
+        },
+      }),
+    )[0]!;
+    const maintenance = buildCombatCalculationPresentations(
+      event("continued_contact_maintenance", {
+        skillContestCalculation: {
+          baseSkill: 15,
+          calculationId: "continued-contact:responder",
+          completeness: "complete",
+          contestType: "continued_contact_maintenance",
+          derivedIntegerAdjustment: 2,
+          finalResult: 23,
+          governingStat: {
+            id: "str_dex_average",
+            label: "Strength / Dexterity average",
+            value: 10,
+          },
+          missingContributionPoints: [],
+          openEndedDie: { openEndedD10s: [], rollD20: 6, rollTotal: 6 },
+          opponentParticipantId: "controller",
+          participantId: "responder",
+          percentageContributions: [
+            {
+              category: "relationship",
+              id: "observation",
+              label: "Observe Opponent",
+              unit: "percentage",
+              value: 1,
+            },
+          ],
+          preDieTotal: 17,
+          role: "continued_contact_responder",
+          skill: { id: "brawling", label: "Brawling", totalXp: 5 },
+          totalPercentageAdjustment: 1,
+          visibility: "roller_and_gm",
+        },
+      }),
+    )[0]!;
+
+    expect(buildCombatCalculationPresentationLines(initial)).toEqual([
+      "Stat: Strength / Dexterity average 10",
+      "Brawling XP: 5",
+      "Base skill: 15",
+      "Modifiers",
+      "Parry quality: +2%",
+      "Total modifiers: +2%",
+      "Derived adjustment: +3",
+      "Skill total: 18",
+      "Die roll: 6",
+      "Result: 24",
+    ]);
+    expect(buildCombatCalculationPresentationLines(maintenance)).toEqual([
+      "Stat: Strength / Dexterity average 10",
+      "Brawling XP: 5",
+      "Base skill: 15",
+      "Modifiers",
+      "Observe Opponent: +1%",
+      "Total modifiers: +1%",
+      "Derived adjustment: +2",
+      "Skill total: 17",
+      "Die roll: 6",
+      "Result: 23",
+    ]);
+  });
+
   it("does not expose arbitrary legacy fields or outcome prose", () => {
     const presentation = buildCombatCalculationPresentations(
       event("attack", {

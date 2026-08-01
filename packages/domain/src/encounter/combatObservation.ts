@@ -256,7 +256,11 @@ export function buildCombatObservationSkillContestContribution(input: {
     (input.role === "resisting_opponent" &&
       ["adjust_distance_attack", "round_end_adjust_distance"].includes(input.contestType)) ||
     (input.role === "feint_defender" &&
-      ["movement_feint", "weapon_feint"].includes(input.contestType));
+      ["movement_feint", "weapon_feint"].includes(input.contestType)) ||
+    (input.role === "offensive_parry_responder" &&
+      input.contestType === "offensive_parry_brawling") ||
+    (input.role === "continued_contact_responder" &&
+      input.contestType === "continued_contact_maintenance");
   if (!permitsDefensiveContribution) {
     return undefined;
   }

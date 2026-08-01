@@ -2227,7 +2227,40 @@ export const combatRoundStepSnapshotSchema = z.object({
   step: combatRoundStepSchema,
 });
 
-export const completedCombatRoundSchema = z.object({
+export interface CompletedCombatRound {
+  activeParticipantId?: string;
+  adjustDistanceProposals: CombatAdjustDistanceProposal[];
+  combatExperienceDifficulty?: number;
+  commands: z.infer<typeof combatRoundCommandSchema>[];
+  completedAt?: string;
+  completedByUserId?: string;
+  continuedContacts: z.infer<typeof continuedContactSchema>[];
+  currentCursor?: z.infer<typeof combatRoundCursorSchema>;
+  currentStep: z.infer<typeof combatRoundStepSchema>;
+  distanceState?: CombatDistanceState;
+  encounterId?: string;
+  events: CombatStepEvent[];
+  feintProposals: CombatFeintProposal[];
+  observationAttempts: CombatObservationAttempt[];
+  observationRelationships: CombatObservationRelationship[];
+  offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
+  participants: z.infer<typeof combatRoundParticipantStateSchema>[];
+  phaseResolutionCursor?: z.infer<typeof combatRoundPhaseResolutionCursorSchema>;
+  phaseResolutionResults: z.infer<typeof combatRoundPhaseResolutionResultSchema>[];
+  phaseResolutionStatuses: z.infer<typeof combatRoundPhaseResolutionStatusesSchema>;
+  roundEndReview?: z.infer<typeof combatRoundEndReviewSchema>;
+  roundNumber: number;
+  selectedParticipantId?: string;
+  selectedStep?: z.infer<typeof combatRoundStepSchema>;
+  stepSnapshots: z.infer<typeof combatRoundStepSnapshotSchema>[];
+  unbalancedConditions: z.infer<typeof unbalancedCombatConditionSchema>[];
+}
+
+export const completedCombatRoundSchema: z.ZodType<
+  CompletedCombatRound,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
@@ -2255,8 +2288,6 @@ export const completedCombatRoundSchema = z.object({
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
   unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
 });
-
-export type CompletedCombatRound = z.infer<typeof completedCombatRoundSchema>;
 
 export interface CombatRoundState {
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
@@ -9100,6 +9131,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
   phase: CombatRoundPhase;
   roll: OffensiveParryBrawlingRoll;
   rollerParticipantId: string;
+  skillContestCalculation?: z.infer<typeof combatSkillContestCalculationSchema>;
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
@@ -9314,6 +9346,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
           rollD20: roll.rollD20,
           rollTotal: roll.rollTotal,
           skillModifier: roll.skillModifier,
+          skillContestCalculation: input.skillContestCalculation,
         },
       },
       involvedParticipantIds: [contest.controllerParticipantId, contest.affectedParticipantId],
@@ -13358,6 +13391,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
   participantId: string;
   participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
   roll: OffensiveParryBrawlingRoll;
+  skillContestCalculation?: z.infer<typeof combatSkillContestCalculationSchema>;
   state: CombatRoundState;
 }): {
   command: CombatRoundCommand;
@@ -13600,6 +13634,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
           rollD20: roll.rollD20,
           rollTotal: roll.rollTotal,
           skillModifier: roll.skillModifier,
+          skillContestCalculation: input.skillContestCalculation,
         },
       },
       involvedParticipantIds: [contest.controllerParticipantId, contest.affectedParticipantId],

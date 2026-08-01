@@ -321,6 +321,37 @@ describe("combat history projection", () => {
           generalModifier: 0,
           parryQualityModifier: 1,
           rollTotal: 11,
+          skillContestCalculation: {
+            baseSkill: 15,
+            calculationId: "contest-1:aria",
+            completeness: "complete",
+            contestType: "offensive_parry_brawling",
+            derivedIntegerAdjustment: 1,
+            finalResult: 27,
+            governingStat: {
+              id: "str_dex_average",
+              label: "Strength / Dexterity average",
+              value: 10,
+            },
+            missingContributionPoints: [],
+            openEndedDie: { openEndedD10s: [], rollD20: 11, rollTotal: 11 },
+            opponentParticipantId: "borin",
+            participantId: "aria",
+            percentageContributions: [
+              {
+                category: "maneuver",
+                id: "parry-quality",
+                label: "Parry quality",
+                unit: "percentage",
+                value: 1,
+              },
+            ],
+            preDieTotal: 16,
+            role: "offensive_parry_controller",
+            skill: { id: "brawling", label: "Brawling", totalXp: 5 },
+            totalPercentageAdjustment: 1,
+            visibility: "roller_and_gm",
+          },
           skillModifier: 0,
         },
       },
@@ -353,6 +384,9 @@ describe("combat history projection", () => {
     expect(controller?.facts.privateCalculation).toMatchObject({
       brawlingBaseValue: 15,
       finalTotal: 27,
+      skillContestCalculation: expect.objectContaining({
+        contestType: "offensive_parry_brawling",
+      }),
     });
     expect(affected?.facts.involvedOutcome).toMatchObject({
       affectedTotal: 24,

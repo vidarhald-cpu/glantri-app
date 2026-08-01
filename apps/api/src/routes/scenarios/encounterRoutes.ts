@@ -218,6 +218,7 @@ import {
   resolveCombatFeintSkillContest,
   resolveCombatFeintSkillProfile,
   resolveCombatFeintTable,
+  resolveCombatOffensiveParryBrawling,
   resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
   resolveParticipantSkillRollProfile,
@@ -534,7 +535,10 @@ function buildRoundEndDistanceControlInputs(input: {
 
 function resolveAdjustDistanceSkillContestCalculation(input: {
   calculationId: string;
-  contestType: CombatSkillContestType;
+  contestType: Extract<
+    CombatSkillContestType,
+    "adjust_distance_attack" | "round_end_adjust_distance"
+  >;
   encounterId: string;
   gmAdjustment?: number;
   modifierContributions?: readonly CombatModifierContribution[];
@@ -759,6 +763,94 @@ function resolveFeintSkillContestCalculation(input: {
     percentageContributions,
     roll: input.roll,
     side: input.isAttacker ? "initiator" : "defender",
+    skill: {
+      id: profile.skillId,
+      label: profile.skillName,
+      totalXp: profile.totalXP,
+    },
+    unknownSkillPenalty: profile.unknownSkillPenalty,
+  });
+}
+
+function resolveOffensiveParryBrawlingSkillContestCalculation(input: {
+  calculationId: string;
+  encounterId: string;
+  modifierContributions: readonly CombatModifierContribution[];
+  opponentCombatantId: string;
+  opponentScenarioParticipantId?: string;
+  participant: ScenarioParticipant;
+  participantCombatantId: string;
+  parryQualityModifier?: number;
+  phase?: CombatRoundPhase;
+  purpose: "initial_offensive_parry" | "continued_contact_maintenance";
+  roll: ReturnType<typeof rollOpenEndedD20>;
+  roundState: CombatRoundState;
+  side: "controller" | "responder";
+}) {
+  const brawlingSkill = defaultCanonicalContent.skills.find((skill) => skill.id === "brawling");
+  if (!brawlingSkill) {
+    throw new RangeError("Brawling skill definition is unavailable.");
+  }
+  const profile = resolveParticipantSkillRollProfile({
+    ...getScenarioParticipantFeintSkillInput(input.participant),
+    skill: brawlingSkill,
+  });
+  const context: CombatCalculationContext = {
+    actionId: "offensive_parry",
+    encounterId: input.encounterId,
+    ownerParticipantId: input.participant.id,
+    opponentParticipantId: input.opponentScenarioParticipantId,
+    pairKey: input.opponentScenarioParticipantId
+      ? createCombatParticipantPairKey(input.participant.id, input.opponentScenarioParticipantId)
+      : undefined,
+    phase: input.phase,
+    rollPurpose:
+      input.purpose === "continued_contact_maintenance" && input.side === "responder"
+        ? "escape_continued_contact"
+        : input.purpose === "initial_offensive_parry"
+          ? "offensive_parry_brawling"
+          : undefined,
+    rollType: "brawling",
+    roundNumber: input.roundState.roundNumber,
+    skillId: "brawling",
+    step:
+      input.purpose === "continued_contact_maintenance"
+        ? "round_summary"
+        : getCombatRoundParryReviewStepForPhase(input.phase ?? "phase1"),
+  };
+  const observationRelationshipIds = new Set(
+    input.roundState.observationRelationships.map((relationship) => relationship.id),
+  );
+  const nonObservationContributions = input.modifierContributions.filter(
+    (contribution) => !observationRelationshipIds.has(contribution.sourceId ?? ""),
+  );
+  const generalRows = resolveCombatModifierContributions({
+    bucket: "general_fatigue",
+    context,
+    contributions: nonObservationContributions,
+  }).rows;
+
+  return resolveCombatOffensiveParryBrawling({
+    calculationId: input.calculationId,
+    characteristicAverage: profile.avgStats,
+    observationRelationships: input.roundState.observationRelationships,
+    opponentParticipantId: input.opponentCombatantId,
+    participantId: input.participantCombatantId,
+    parryQualityModifier: input.parryQualityModifier,
+    percentageContributions: generalRows
+      .filter((row) => row.value !== 0)
+      .map((row) => ({
+        category: "general_fatigue" as const,
+        id: row.id,
+        label: row.label,
+        provenance: row.sourceKind,
+        sourceId: row.sourceId,
+        unit: "percentage" as const,
+        value: row.value,
+      })),
+    purpose: input.purpose,
+    roll: input.roll,
+    side: input.side,
     skill: {
       id: profile.skillId,
       label: profile.skillName,
@@ -7048,16 +7140,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
 
-        const brawlingSkill = defaultCanonicalContent.skills.find(
-          (skill) => skill.id === "brawling",
-        );
-        if (!brawlingSkill) {
-          return reply.code(409).send({ error: "Brawling skill definition is unavailable." });
-        }
-        const profile = resolveParticipantSkillRollProfile({
-          ...getScenarioParticipantFeintSkillInput(roller),
-          skill: brawlingSkill,
-        });
         const opponentEncounterParticipant = resolveEncounterParticipantMembership({
           encounter,
           scenarioParticipants,
@@ -7075,69 +7157,39 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounterId,
           ownerParticipantId: roller.id,
         });
-        const observationContributions = opponentScenarioParticipant
-          ? buildCombatObservationModifierContributions({
-              encounterId,
-              observerCombatantId: encounterParticipant.id,
-              observerParticipantId: roller.id,
-              opponentCombatantId: body.opponentParticipantId,
-              opponentParticipantId: opponentScenarioParticipant.id,
-              relationships: roundState.observationRelationships,
-            })
-          : [];
-        const modifierContext: CombatCalculationContext = {
-          actionId: "offensive_parry",
-          encounterId,
-          ownerParticipantId: roller.id,
-          opponentParticipantId: opponentScenarioParticipant?.id,
-          pairKey: opponentScenarioParticipant
-            ? createCombatParticipantPairKey(roller.id, opponentScenarioParticipant.id)
-            : undefined,
-          rollPurpose:
-            encounterParticipant.id === contest.affectedParticipantId
-              ? "escape_continued_contact"
-              : undefined,
-          rollType: "brawling",
-          roundNumber: roundState.roundNumber,
-          skillId: "brawling",
-          step: "round_summary",
-        };
-        const generalResolution = resolveCombatModifierContributions({
-          bucket: "general_fatigue",
-          context: modifierContext,
-          contributions: [...modifierProjection.contributions, ...observationContributions],
-        });
-        const skillResolution = resolveCombatModifierContributions({
-          bucket: "skill_ob",
-          context: modifierContext,
-          contributions: [...modifierProjection.contributions, ...observationContributions],
-        });
-        const brawlingBaseValue = profile.rollBaseValue + profile.unknownSkillPenalty;
-        const modifierTrace = calculateWorkbookPercentageAdjustmentTrace({
-          baseValue: brawlingBaseValue,
-          rawModifiers: [
-            { label: "General", value: generalResolution.total },
-            { label: "Skill", value: skillResolution.total },
-          ],
-        });
-        if (!modifierTrace) {
-          throw new RangeError("Brawling modifiers are outside the canonical workbook table.");
-        }
         const openEndedRoll = rollOpenEndedD20();
+        const calculation = resolveOffensiveParryBrawlingSkillContestCalculation({
+          calculationId: `${contest.id}:roll:${encounterParticipant.id}:calculation`,
+          encounterId,
+          modifierContributions: modifierProjection.contributions,
+          opponentCombatantId: body.opponentParticipantId,
+          opponentScenarioParticipantId: opponentScenarioParticipant?.id,
+          participant: roller,
+          participantCombatantId: encounterParticipant.id,
+          purpose: "continued_contact_maintenance",
+          roll: openEndedRoll,
+          roundState,
+          side:
+            encounterParticipant.id === contest.controllerParticipantId
+              ? "controller"
+              : "responder",
+        });
         const createdAt = new Date().toISOString();
         const roll = {
-          brawlingBaseValue,
-          brawlingSkillXp: profile.totalXP,
-          characteristicAverage: profile.avgStats,
-          effectiveSkillValue: modifierTrace.finalValue,
-          finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue,
-          generalModifier: generalResolution.total,
+          brawlingBaseValue: calculation.baseSkill,
+          brawlingSkillXp: calculation.skill.totalXp,
+          characteristicAverage: calculation.governingStat.value,
+          effectiveSkillValue: calculation.preDieTotal,
+          finalTotal: calculation.finalResult,
+          generalModifier: calculation.percentageContributions
+            .filter((contribution) => contribution.category === "general_fatigue")
+            .reduce((total, contribution) => total + contribution.value, 0),
           id: `${contest.id}:roll:${encounterParticipant.id}`,
           openEndedD10s: openEndedRoll.openEndedD10s,
           participantId: encounterParticipant.id,
           parryQualityModifier: 0,
-          percentageAdjustment: modifierTrace.percentageAdjustment,
-          percentageModifierTotal: modifierTrace.rawModifierTotal,
+          percentageAdjustment: calculation.derivedIntegerAdjustment,
+          percentageModifierTotal: calculation.totalPercentageAdjustment,
           pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
             activationLabel: "Effective from later combat work",
             label: entry.notes?.trim() || "Combat effect",
@@ -7150,7 +7202,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           rolledByUserId: user.id,
           skillId: "brawling" as const,
           skillLabel: "Brawling" as const,
-          skillModifier: skillResolution.total,
+          skillModifier: 0,
+          skillContestCalculation: calculation,
         };
         const rolled = recordContinuedContactMaintenanceRoll({
           command: { createdAt, createdByUserId: user.id },
@@ -7164,6 +7217,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             scenarioParticipants,
           }),
           roll,
+          skillContestCalculation: calculation,
           state: roundState,
         });
 
@@ -9944,16 +9998,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
 
-        const brawlingSkill = defaultCanonicalContent.skills.find(
-          (skill) => skill.id === "brawling",
-        );
-        if (!brawlingSkill) {
-          return reply.code(409).send({ error: "Brawling skill definition is unavailable." });
-        }
-        const profile = resolveParticipantSkillRollProfile({
-          ...getScenarioParticipantFeintSkillInput(roller),
-          skill: brawlingSkill,
-        });
         const opponentEncounterParticipant = resolveEncounterParticipantMembership({
           encounter,
           scenarioParticipants,
@@ -9976,73 +10020,45 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounterId,
           ownerParticipantId: roller.id,
         });
-        const observationContributions = opponentScenarioParticipant
-          ? buildCombatObservationModifierContributions({
-              encounterId,
-              observerCombatantId: encounterParticipant.id,
-              observerParticipantId: roller.id,
-              opponentCombatantId: body.opponentParticipantId,
-              opponentParticipantId: opponentScenarioParticipant.id,
-              relationships: roundState.observationRelationships,
-            })
-          : [];
-        const modifierContext: CombatCalculationContext = {
-          actionId: "offensive_parry",
-          encounterId,
-          opportunityId: contest.opportunityId,
-          ownerParticipantId: roller.id,
-          opponentParticipantId: opponentScenarioParticipant?.id,
-          pairKey: opponentScenarioParticipant
-            ? createCombatParticipantPairKey(roller.id, opponentScenarioParticipant.id)
-            : undefined,
-          phase: contest.phase,
-          rollPurpose: "offensive_parry_brawling",
-          rollType: "brawling",
-          roundNumber: roundState.roundNumber,
-          skillId: "brawling",
-          step: getCombatRoundParryReviewStepForPhase(contest.phase),
-        };
-        const generalResolution = resolveCombatModifierContributions({
-          bucket: "general_fatigue",
-          context: modifierContext,
-          contributions: [...modifierProjection.contributions, ...observationContributions],
-        });
-        const skillResolution = resolveCombatModifierContributions({
-          bucket: "skill_ob",
-          context: modifierContext,
-          contributions: [...modifierProjection.contributions, ...observationContributions],
-        });
         const parryQualityModifier =
           encounterParticipant.id === contest.controllerParticipantId
             ? contest.parryQualityModifier
             : 0;
-        const brawlingBaseValue = profile.rollBaseValue + profile.unknownSkillPenalty;
-        const modifierTrace = calculateWorkbookPercentageAdjustmentTrace({
-          baseValue: brawlingBaseValue,
-          rawModifiers: [
-            { label: "Parry quality", value: parryQualityModifier },
-            { label: "General", value: generalResolution.total },
-            { label: "Skill", value: skillResolution.total },
-          ],
-        });
-        if (!modifierTrace) {
-          throw new RangeError("Brawling modifiers are outside the canonical workbook table.");
-        }
         const openEndedRoll = rollOpenEndedD20();
+        const calculation = resolveOffensiveParryBrawlingSkillContestCalculation({
+          calculationId: `${contest.id}:roll:${encounterParticipant.id}:calculation`,
+          encounterId,
+          modifierContributions: modifierProjection.contributions,
+          opponentCombatantId: body.opponentParticipantId,
+          opponentScenarioParticipantId: opponentScenarioParticipant?.id,
+          participant: roller,
+          participantCombatantId: encounterParticipant.id,
+          parryQualityModifier,
+          phase: contest.phase,
+          purpose: "initial_offensive_parry",
+          roll: openEndedRoll,
+          roundState,
+          side:
+            encounterParticipant.id === contest.controllerParticipantId
+              ? "controller"
+              : "responder",
+        });
         const createdAt = new Date().toISOString();
         const roll = {
-          brawlingBaseValue,
-          brawlingSkillXp: profile.totalXP,
-          characteristicAverage: profile.avgStats,
-          effectiveSkillValue: modifierTrace.finalValue,
-          finalTotal: openEndedRoll.dieResult + modifierTrace.finalValue,
+          brawlingBaseValue: calculation.baseSkill,
+          brawlingSkillXp: calculation.skill.totalXp,
+          characteristicAverage: calculation.governingStat.value,
+          effectiveSkillValue: calculation.preDieTotal,
+          finalTotal: calculation.finalResult,
           id: `${contest.id}:roll:${encounterParticipant.id}`,
-          generalModifier: generalResolution.total,
+          generalModifier: calculation.percentageContributions
+            .filter((contribution) => contribution.category === "general_fatigue")
+            .reduce((total, contribution) => total + contribution.value, 0),
           openEndedD10s: openEndedRoll.openEndedD10s,
           participantId: encounterParticipant.id,
           parryQualityModifier,
-          percentageAdjustment: modifierTrace.percentageAdjustment,
-          percentageModifierTotal: modifierTrace.rawModifierTotal,
+          percentageAdjustment: calculation.derivedIntegerAdjustment,
+          percentageModifierTotal: calculation.totalPercentageAdjustment,
           pendingModifiers: modifierProjection.pendingModifierEntries.map((entry) => ({
             activationLabel: initiativeGroup
               ? `Effective after Initiative ${initiativeGroup.initiativeValue} finishes`
@@ -10057,7 +10073,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           rolledByUserId: user.id,
           skillId: "brawling" as const,
           skillLabel: "Brawling" as const,
-          skillModifier: skillResolution.total,
+          skillModifier: 0,
+          skillContestCalculation: calculation,
         };
         const previousConditionIds = new Set(
           roundState.unbalancedConditions.map((condition) => condition.id),
@@ -10074,6 +10091,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phase: body.phase,
           roll,
           rollerParticipantId: encounterParticipant.id,
+          skillContestCalculation: calculation,
           state: roundState,
           submittedBy: access.mode === "gm" ? "gm" : "player",
         });

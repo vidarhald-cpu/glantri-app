@@ -215,7 +215,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
     expect(changedContext.modifierBuckets.situationDb).toEqual([]);
   });
 
-  it("projects the Offensive Parry round DB drawback into declaration and review rows", () => {
+  it("projects the Offensive Parry round DB/Parry percentage drawback", () => {
     const roundState = buildRoundStateWithDistance(3);
     const projectedContext = projectCombatActionGeneratedModifiers({
       actionId: "offensive_parry",
@@ -234,9 +234,9 @@ describe("projectCombatActionGeneratedModifiers", () => {
     expect(dbRow).toMatchObject({
       entries: [
         expect.objectContaining({
-          application: "flat_db",
+          application: "percentage",
           expiresAtRound: roundState.roundNumber,
-          id: "generated:offensive-parry:round:flat-db",
+          id: "generated:offensive-parry:round:percentage-db",
           sourceActionId: "offensive_parry",
           sourceRoundNumber: roundState.roundNumber,
           value: -2,
