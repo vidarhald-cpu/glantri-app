@@ -108,6 +108,27 @@ function restrictionEffect(input: {
 }
 
 describe("buildCombatSituationAwarenessModel", () => {
+  it("shows SU-owned pending and expiring work without fabricating modifier values", () => {
+    const model = buildCombatSituationAwarenessModel({
+      pendingRows: [
+        {
+          durationLabel: "Expires after this review",
+          id: "ce-expiry",
+          label: "Combat Experience",
+        },
+        {
+          durationLabel: "Required",
+          id: "bleed-health",
+          label: "Health check vs external bleed",
+        },
+      ],
+      rows: [],
+    });
+
+    expect(model.pending.map((row) => row.id)).toEqual(["ce-expiry", "bleed-health"]);
+    expect(model.pending.every((row) => !("valueLabel" in row))).toBe(true);
+    expect(model.empty).toBe(false);
+  });
   it("keeps the five Feint, Observe, and Parry sources visible when DB/Parry totals zero", () => {
     const feintSkill = numericEffect({
       category: "skill_ob",

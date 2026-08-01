@@ -233,6 +233,7 @@ export function buildCombatSituationAwarenessModel(input: {
   context?: CombatSituationContext;
   lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   pendingEntries?: readonly ScenarioCombatModifierEntry[];
+  pendingRows?: readonly CombatSituationDisplayRow[];
   provisional?: boolean;
   rows: readonly CombatSituationModifierBucketInput[];
 }): CombatSituationAwarenessModel {
@@ -363,6 +364,9 @@ export function buildCombatSituationAwarenessModel(input: {
         ? formatEffectValue(lifecycle)
         : `${formatSigned(entry.value)}${entry.application !== "flat_db" ? "%" : ""}`,
     });
+  }
+  for (const row of input.pendingRows ?? []) {
+    if (!pending.some((existing) => existing.id === row.id)) pending.push(row);
   }
 
   const byLabel = (left: CombatSituationDisplayRow, right: CombatSituationDisplayRow) =>

@@ -222,7 +222,10 @@ import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
-import { collectCanonicalCombatSituationEffects } from "@/features/player-combat/combatSituationAwareness";
+import {
+  collectCanonicalCombatSituationEffects,
+  type CombatSituationDisplayRow,
+} from "@/features/player-combat/combatSituationAwareness";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import {
   canAcceptCombatRoundViewRevision,
@@ -3340,13 +3343,16 @@ function CombatRoundEndParticipantReviewPanel(input: {
   review?: RoundEndParticipantReview;
 }) {
   const review = input.review;
+  const pendingHealthRolls =
+    review?.proposedHealthRolls.filter(
+      (proposal) => proposal.accepted && proposal.status === "pending",
+    ) ?? [];
+  const pendingRequirements =
+    review?.canonicalReview?.requirements.filter((requirement) => !requirement.resolved) ?? [];
 
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Participant review</strong>
-      <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-        Participant round-end review for SU health, bleed, duration, and status.
-      </div>
       {!review ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>Preparing round-end review...</div>
       ) : (
@@ -3418,11 +3424,10 @@ function CombatRoundEndParticipantReviewPanel(input: {
               ))}
             </section>
           ) : null}
-          {review.proposedHealthRolls.length > 0 ? (
+          {pendingHealthRolls.length > 0 ? (
             <section style={{ display: "grid", gap: "0.4rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Health check review</strong>
-              {review.proposedHealthRolls.map((proposal) => {
-                const result = proposal.result;
+              <strong style={{ fontSize: "0.9rem" }}>Pending Health check</strong>
+              {pendingHealthRolls.map((proposal) => {
                 const difficultyValue =
                   input.difficultyDrafts[proposal.id] ?? String(proposal.difficulty);
 
@@ -3451,22 +3456,8 @@ function CombatRoundEndParticipantReviewPanel(input: {
                       />
                     </label>
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      Health +{proposal.healthStat}
-                      {result
-                        ? ` · rolled ${formatOpenEndedD20RollBreakdown({
-                            dieResult: result.rollTotal,
-                            openEndedD10s: result.openEndedD10s,
-                            rollD20: result.rollD20,
-                          })} = ${result.rollTotal}; final ${result.finalTotal} (${result.success ? "success" : "failure"})`
-                        : " · pending"}
+                      Health +{proposal.healthStat} · pending
                     </div>
-                    {result && proposal.previousBleedRate !== undefined ? (
-                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                        {result.success && proposal.nextBleedRate !== undefined
-                          ? `Bleed reduced ${proposal.previousBleedRate} -> ${proposal.nextBleedRate}`
-                          : `Bleed remains ${proposal.previousBleedRate}`}
-                      </div>
-                    ) : null}
                     {proposal.warnings.map((warning, warningIndex) => (
                       <div
                         key={`end-review-health-roll-warning:${proposal.id}:${warningIndex}:${warning}`}
@@ -3478,6 +3469,19 @@ function CombatRoundEndParticipantReviewPanel(input: {
                   </div>
                 );
               })}
+            </section>
+          ) : null}
+          {pendingRequirements.filter((requirement) => requirement.kind !== "health_check").length >
+          0 ? (
+            <section style={{ display: "grid", gap: "0.25rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Pending</strong>
+              {pendingRequirements
+                .filter((requirement) => requirement.kind !== "health_check")
+                .map((requirement) => (
+                  <div key={requirement.id} style={{ fontSize: "0.88rem" }}>
+                    {requirement.label}
+                  </div>
+                ))}
             </section>
           ) : null}
           {review.warnings.map((warning, index) => (
@@ -4389,6 +4393,37 @@ export default function CombatRoundManagerPanel({
           inspector.participant.participantId
         ]
       : undefined;
+  const inspectorSuPendingRows: CombatSituationDisplayRow[] =
+    !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression
+      ? []
+      : [
+        ...(inspectorRoundEndReview?.canonicalReview?.proposals ?? []).map((proposal) => {
+          const durationProposal = inspectorRoundEndReview?.proposedEffects.find(
+            (candidate) => candidate.id === proposal.id,
+          );
+          const expiryProposal = inspectorRoundEndReview?.proposedRemovals.find(
+            (candidate) => candidate.id === proposal.id,
+          );
+          return {
+            durationLabel:
+              proposal.transitionType === "expire"
+                ? "Expires after this review"
+                : durationProposal?.nextDuration,
+            id: proposal.id,
+            label:
+              durationProposal?.label.replace(/^Reduce duration:\s*/, "") ??
+              expiryProposal?.label.replace(/^Expire\s*/, "") ??
+              "Effect duration",
+          };
+        }),
+        ...(inspectorRoundEndReview?.canonicalReview?.requirements ?? [])
+          .filter((requirement) => !requirement.resolved)
+          .map((requirement) => ({
+            durationLabel: requirement.blocksReview ? "Required" : "Pending rule",
+            id: requirement.id,
+            label: requirement.label,
+          })),
+      ];
   const projectedRoundEndTasks = combatProgressionProjection.boundary.processes
     .flatMap((process) => process.stages)
     .flatMap((stage) => stage.executionGroups)
@@ -9732,6 +9767,7 @@ export default function CombatRoundManagerPanel({
           encounterId: encounter.id,
           executionGroupId: descriptor.executionGroupId!,
           expectedRevision: descriptor.expectedRevision,
+          expectedParticipantRevision: scenarioParticipant.updatedAt,
           scenarioParticipantId: scenarioParticipant.id,
           taskId: descriptor.taskId,
         });
@@ -9787,6 +9823,7 @@ export default function CombatRoundManagerPanel({
             encounterId: encounter.id,
             executionGroupId: descriptor.executionGroupId!,
             expectedRevision: descriptor.expectedRevision,
+            expectedParticipantRevision: scenarioParticipant.updatedAt,
             healthRollId: pendingHealthRoll.id,
             scenarioParticipantId: scenarioParticipant.id,
             taskId: descriptor.taskId,
@@ -11006,6 +11043,7 @@ export default function CombatRoundManagerPanel({
                         pendingEntries={
                           inspectorIsHistorical ? [] : inspectorPendingModifierEntries
                         }
+                        pendingRows={inspectorSuPendingRows}
                         provisional={!inspectorIsHistorical && inspectorLiveModifiers.provisional}
                         lifecycleEffects={inspectorModifierLifecycleEffects}
                         rows={inspectorDisplayModifierRows}

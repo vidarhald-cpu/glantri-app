@@ -29,6 +29,13 @@ import {
   canonicalCombatModifierReviewTransactionSchema,
   type CanonicalCombatModifierReviewTransaction,
 } from "./combatModifierReview";
+import {
+  CANONICAL_COMBAT_SU_REVIEW_SCHEMA_VERSION,
+  assertCanonicalCombatSuReviewEffectVersions,
+  canonicalCombatSuReviewSchema,
+  type CanonicalCombatSuLifecycleProposal,
+  type CanonicalCombatSuRequirement,
+} from "./combatSuReview";
 
 import {
   scenarioCombatModifierBucketSchema,
@@ -705,6 +712,7 @@ function normalizeCombatRoundEndDistanceProposalLifecycle(
 }
 
 export const combatRoundEndParticipantReviewSchema = z.object({
+  canonicalReview: canonicalCombatSuReviewSchema.optional(),
   committedAt: z.string().datetime().optional(),
   committedByUserId: idSchema.optional(),
   participantId: idSchema,
@@ -13160,6 +13168,7 @@ function getCombatRoundEndReviewParticipantStatus(
 }
 
 function buildCombatRoundEndParticipantReview(input: {
+  canonicalCutoff: number;
   combatEffects?: CombatEffectsState;
   healthStat?: number;
   participantId: string;
@@ -13172,6 +13181,9 @@ function buildCombatRoundEndParticipantReview(input: {
   const proposedHealthRolls: CombatRoundEndHealthRollProposal[] = [];
   const proposedRemovals: CombatRoundEndRemovalProposal[] = [];
   const warnings: string[] = [];
+  const canonicalProposals: CanonicalCombatSuLifecycleProposal[] = [];
+  const canonicalRequirements: CanonicalCombatSuRequirement[] = [];
+  const effectVersions: Record<string, number> = {};
 
   for (const effect of combatEffects.effects) {
     if (effect.status !== "active") {
@@ -13179,10 +13191,70 @@ function buildCombatRoundEndParticipantReview(input: {
     }
 
     const canonicalDuration = effect.canonicalLifecycle?.lifecycle.duration;
+    if (effect.canonicalLifecycle) {
+      effectVersions[effect.id] = effect.canonicalLifecycle.version;
+      if (
+        canonicalDuration?.kind === "rounds" &&
+        effect.canonicalLifecycle.applicability.phase === undefined
+      ) {
+        const proposalId = `round-end:${input.roundNumber}:${input.participantId}:${
+          canonicalDuration.remaining <= 1 ? "expire" : "duration"
+        }:${effect.id}`;
+        canonicalProposals.push({
+          automatic: true,
+          effectId: effect.id,
+          expectedEffectVersion: effect.canonicalLifecycle.version,
+          id: proposalId,
+          mayOverride: false,
+          nextDuration:
+            canonicalDuration.remaining > 1
+              ? { ...canonicalDuration, remaining: canonicalDuration.remaining - 1 }
+              : undefined,
+          nextState: canonicalDuration.remaining <= 1 ? "expired" : "active",
+          owner: "su",
+          priorDuration: canonicalDuration,
+          priorState: effect.canonicalLifecycle.lifecycle.state,
+          reason:
+            canonicalDuration.remaining <= 1 ? "natural_expiry" : "duration_decremented",
+          transitionType: canonicalDuration.remaining <= 1 ? "expire" : "update",
+        });
+      } else if (
+        (canonicalDuration?.kind === "until_check" ||
+          canonicalDuration?.kind === "until_condition") &&
+        effect.canonicalLifecycle.sourceFamily !== "bleed"
+      ) {
+        canonicalRequirements.push({
+          blocksReview: false,
+          completeness: "unsupported_ambiguity",
+          effectId: effect.id,
+          id: `round-end:${input.roundNumber}:${input.participantId}:requirement:${effect.id}`,
+          kind: canonicalDuration.kind === "until_check" ? "recovery_check" : "condition",
+          label: `${effect.description ?? effect.type}: pending canonical resolution`,
+          owner: "source_process",
+          resolved: false,
+        });
+      } else if (canonicalDuration?.kind === "legacy_untyped") {
+        canonicalRequirements.push({
+          blocksReview: false,
+          completeness: "legacy_incomplete",
+          effectId: effect.id,
+          id: `round-end:${input.roundNumber}:${input.participantId}:legacy:${effect.id}`,
+          kind: "legacy_incomplete",
+          label: `${effect.description ?? effect.type}: duration incomplete`,
+          owner: "source_process",
+          resolved: false,
+        });
+      }
+    }
+    // Legacy Bleed records can retain an explicit bounded round duration alongside their
+    // condition-owned Bleed lifecycle. Preserve that compatibility without general text parsing.
     const durationRounds =
-      canonicalDuration?.kind === "rounds"
+      canonicalDuration?.kind === "rounds" &&
+      effect.canonicalLifecycle?.applicability.phase === undefined
         ? canonicalDuration.remaining
-        : parseCombatRoundEffectRoundDuration(effect.duration);
+        : canonicalDuration && effect.canonicalLifecycle?.sourceFamily !== "bleed"
+          ? undefined
+          : parseCombatRoundEffectRoundDuration(effect.duration);
 
     if (durationRounds !== undefined) {
       if (durationRounds <= 1) {
@@ -13314,6 +13386,16 @@ function buildCombatRoundEndParticipantReview(input: {
           }),
         );
         warnings.push(...healthRollWarnings);
+        canonicalRequirements.push({
+          blocksReview: true,
+          completeness: "complete",
+          effectId: effect.id,
+          id: `${damageProposalId}:health`,
+          kind: "health_check",
+          label: `Health check vs ${bleedType} bleed`,
+          owner: "su",
+          resolved: false,
+        });
       }
 
       warnings.push(...cadenceWarnings);
@@ -13332,6 +13414,19 @@ function buildCombatRoundEndParticipantReview(input: {
 
   return combatRoundEndParticipantReviewSchema.parse({
     ...reviewWithoutStatus,
+    canonicalReview: {
+      canonicalCutoff: input.canonicalCutoff,
+      effectVersions,
+      participantId: input.participantId,
+      proposals: canonicalProposals,
+      requirements: canonicalRequirements,
+      reviewId: `round-end:${input.roundNumber}:${input.participantId}:review`,
+      roundNumber: input.roundNumber,
+      schemaVersion: CANONICAL_COMBAT_SU_REVIEW_SCHEMA_VERSION,
+      state: proposedHealthRolls.some((proposal) => proposal.accepted && proposal.status === "pending")
+        ? "awaiting_roll"
+        : "ready",
+    },
     status: getCombatRoundEndReviewParticipantStatus(reviewWithoutStatus),
   });
 }
@@ -13523,6 +13618,7 @@ export function prepareCombatRoundEndReview(input: {
       return [
         participant.participantId,
         buildCombatRoundEndParticipantReview({
+          canonicalCutoff: getNextCombatRoundEventSequence(normalized),
           combatEffects: participantInput?.combatEffects,
           healthStat: participantInput?.healthStat,
           participantId: participant.participantId,
@@ -14041,6 +14137,9 @@ function applyCombatRoundEndReviewEffects(input: {
   const updatedEffects: CombatRoundEndUpdatedEffectFact[] = [];
   const updatedEffectIds = new Set<string>();
   const nextEffects = currentCombatEffects.effects.map((effect) => {
+    const canonicalProposal = input.participantReview.canonicalReview?.proposals.find(
+      (proposal) => proposal.effectId === effect.id,
+    );
     const durationUpdate = input.participantReview.proposedEffects.find(
       (proposal) => proposal.accepted && proposal.effectId === effect.id,
     );
@@ -14055,7 +14154,9 @@ function applyCombatRoundEndReviewEffects(input: {
     if (durationUpdate) {
       const currentDuration = nextEffect.canonicalLifecycle?.lifecycle.duration;
       const nextDuration =
-        currentDuration?.kind === "rounds"
+        canonicalProposal?.transitionType === "update"
+          ? canonicalProposal.nextDuration
+          : currentDuration?.kind === "rounds"
           ? {
               ...currentDuration,
               remaining: Math.max(1, currentDuration.remaining - 1),
@@ -14265,6 +14366,19 @@ export function commitCombatRoundEndParticipantReview(input: {
     throw new RangeError("Round-end health rolls must be resolved before committing review.");
   }
 
+  if (participantReview.canonicalReview) {
+    assertCanonicalCombatSuReviewEffectVersions({
+      currentVersions: Object.fromEntries(
+        combatEffectsStateSchema
+          .parse(input.combatEffects)
+          .effects.flatMap((effect) =>
+            effect.canonicalLifecycle ? [[effect.id, effect.canonicalLifecycle.version]] : [],
+          ),
+      ),
+      review: participantReview.canonicalReview,
+    });
+  }
+
   const rolledHealthRolls = participantReview.proposedHealthRolls.filter(
     (proposal) => proposal.accepted && proposal.status === "rolled",
   );
@@ -14305,6 +14419,9 @@ export function commitCombatRoundEndParticipantReview(input: {
   });
   const committedReview = combatRoundEndParticipantReviewSchema.parse({
     ...participantReview,
+    canonicalReview: participantReview.canonicalReview
+      ? { ...participantReview.canonicalReview, state: "committed" }
+      : undefined,
     committedAt: input.command.createdAt,
     committedByUserId: input.command.createdByUserId,
     status: nextStatus,
@@ -14348,6 +14465,7 @@ export function commitCombatRoundEndParticipantReview(input: {
       nextStatus,
       previousReviewStatus: participantReview.status,
       scenarioParticipantId: input.scenarioParticipantId,
+      canonicalSuReview: committedReview.canonicalReview,
       updatedEffects: effectApplication.updatedEffects,
     },
   });
@@ -14415,6 +14533,15 @@ export function commitCombatRoundEndParticipantReview(input: {
               proposalId: proposal.id,
             })),
           status: nextStatus,
+        },
+        resultPresentation: {
+          actionInstanceId: committedReview.canonicalReview?.reviewId ?? command.id,
+          calculationReferences: [],
+          committedConsequences: [],
+          conciseOutcome: { details: [], label: "Round-end review" },
+          privateDiagnostics: [],
+          standardConsequences: [],
+          subordinateEventReferences: [],
         },
       },
       involvedParticipantIds: [input.participantId],
@@ -14524,6 +14651,17 @@ export function rollCombatRoundEndHealthCheck(input: {
 
   if (!healthRoll) {
     throw new RangeError("No pending round-end health roll matches this participant.");
+  }
+
+  if (participantReview.canonicalReview) {
+    assertCanonicalCombatSuReviewEffectVersions({
+      currentVersions: Object.fromEntries(
+        currentCombatEffects.effects.flatMap((effect) =>
+          effect.canonicalLifecycle ? [[effect.id, effect.canonicalLifecycle.version]] : [],
+        ),
+      ),
+      review: participantReview.canonicalReview,
+    });
   }
 
   const difficulty = input.difficulty ?? healthRoll.difficulty;
@@ -14638,12 +14776,32 @@ export function rollCombatRoundEndHealthCheck(input: {
         })
       : proposal,
   );
+  const updatedRequirements = (participantReview.canonicalReview?.requirements ?? []).map(
+    (requirement) =>
+      requirement.id === healthRoll.id ? { ...requirement, resolved: true } : requirement,
+  );
+  const hasPendingHealthRoll = updatedHealthRolls.some(
+    (proposal) => proposal.accepted && proposal.status === "pending",
+  );
   const reviewWithoutStatus = {
     ...participantReview,
     proposedHealthRolls: updatedHealthRolls,
   };
   const updatedParticipantReview = combatRoundEndParticipantReviewSchema.parse({
     ...reviewWithoutStatus,
+    canonicalReview: participantReview.canonicalReview
+      ? {
+          ...participantReview.canonicalReview,
+          effectVersions: updatedBleedEffect?.canonicalLifecycle
+            ? {
+                ...participantReview.canonicalReview.effectVersions,
+                [updatedBleedEffect.id]: updatedBleedEffect.canonicalLifecycle.version,
+              }
+            : participantReview.canonicalReview.effectVersions,
+          requirements: updatedRequirements,
+          state: hasPendingHealthRoll ? "awaiting_roll" : "ready",
+        }
+      : undefined,
     status: getCombatRoundEndReviewParticipantStatus(reviewWithoutStatus),
   });
   const nextRoundEndReview = combatRoundEndReviewSchema.parse({
@@ -14688,6 +14846,7 @@ export function rollCombatRoundEndHealthCheck(input: {
       sourceEffectId: healthRoll.sourceEffectId,
       success: result.success,
       updatedEffects,
+      canonicalSuReview: updatedParticipantReview.canonicalReview,
     },
     id: commandId,
     participantId: input.participantId,
@@ -14711,6 +14870,26 @@ export function rollCombatRoundEndHealthCheck(input: {
             nextBleedRate: result.success ? nextBleedRate : undefined,
             previousBleedRate,
             success: result.success,
+          },
+          resultPresentation: {
+            actionInstanceId:
+              updatedParticipantReview.canonicalReview?.reviewId ?? command.id,
+            calculationReferences: [
+              {
+                kind: "roller_private",
+                ownerParticipantId: input.participantId,
+                sourceId: healthRoll.id,
+                visibility: "owner",
+              },
+            ],
+            committedConsequences: [],
+            conciseOutcome: {
+              details: [result.success ? "Succeeded" : "Failed"],
+              label: "Health check",
+            },
+            privateDiagnostics: [],
+            standardConsequences: [],
+            subordinateEventReferences: [],
           },
           rollerPrivate: {
             difficulty,

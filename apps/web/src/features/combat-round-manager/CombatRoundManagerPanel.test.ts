@@ -782,8 +782,8 @@ describe("CombatRoundManagerPanel", () => {
       "Shared round-level pair review. These controls are not part of the current attack/parry",
     );
     expect(source).toContain("Participant review");
-    expect(source).toContain("Participant round-end review");
-    expect(source).toContain("Health check review");
+    expect(source).not.toContain("Participant round-end review");
+    expect(source).not.toContain("Health check review");
     expect(source).toContain("No participant-owned round-end changes proposed.");
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");
@@ -1305,5 +1305,18 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('currentActionPresentation?.taskKind === "combat_experience"');
     expect(phaseChoiceDispatch).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(phaseChoiceDispatch).toContain("rollInspectorCombatExperience(descriptor)");
+  });
+
+  it("keeps accepted SU health calculations out of unresolved review context", () => {
+    const source = readSource();
+    const panelStart = source.indexOf("function CombatRoundEndParticipantReviewPanel");
+    const panelEnd = source.indexOf("function CombatRoundEndDistanceControlPanel", panelStart);
+    const panelSource = source.slice(panelStart, panelEnd);
+
+    expect(panelSource).toContain('proposal.status === "pending"');
+    expect(panelSource).toContain("Pending Health check");
+    expect(panelSource).toContain("review?.canonicalReview?.requirements");
+    expect(panelSource).not.toContain("result.finalTotal");
+    expect(panelSource).not.toContain("Bleed reduced");
   });
 });

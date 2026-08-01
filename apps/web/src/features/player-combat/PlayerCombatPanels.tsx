@@ -140,6 +140,7 @@ interface PlayerCombatModifierPanelProps {
   readOnly?: boolean;
   pendingActivationLabel?: string;
   pendingEntries?: readonly ScenarioCombatModifierEntry[];
+  pendingRows?: readonly CombatSituationDisplayRow[];
   provisional?: boolean;
   lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   rows: readonly PlayerCombatModifierBucketView[];
@@ -930,6 +931,7 @@ function CombatSituationSummary(input: {
   lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   pendingActivationLabel?: string;
   pendingEntries: readonly ScenarioCombatModifierEntry[];
+  pendingRows?: readonly CombatSituationDisplayRow[];
   provisional: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
@@ -938,6 +940,7 @@ function CombatSituationSummary(input: {
     context: input.context,
     lifecycleEffects: input.lifecycleEffects,
     pendingEntries: input.pendingEntries,
+    pendingRows: input.pendingRows,
     provisional: input.provisional,
     rows: input.rows,
   });
@@ -1168,6 +1171,7 @@ export function PlayerCombatModifierPanel({
   onUpdateEntry,
   pendingActivationLabel,
   pendingEntries = [],
+  pendingRows = [],
   provisional = false,
   lifecycleEffects,
   readOnly = false,
@@ -1191,6 +1195,7 @@ export function PlayerCombatModifierPanel({
         lifecycleEffects={lifecycleEffects}
         pendingActivationLabel={pendingActivationLabel}
         pendingEntries={pendingEntries}
+        pendingRows={pendingRows}
         provisional={provisional}
         rows={rows}
         sourceLabel={sourceLabel}

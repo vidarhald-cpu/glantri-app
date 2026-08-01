@@ -2794,6 +2794,7 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
+        expectedParticipantRevision: selectedParticipant.updatedAt,
         healthRollId: descriptor.healthRollId,
         scenarioParticipantId: descriptor.participantId,
         taskId: descriptor.taskId,

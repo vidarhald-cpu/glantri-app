@@ -117,7 +117,7 @@ export class EncounterService {
     session: EncounterSession;
     state: ScenarioParticipantState;
   }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
-    const saved = await this.commitCombatModifierReviews({
+    const saved = await this.commitCombatParticipantStateMutations({
       campaignId: input.campaignId,
       encounterId: input.encounterId,
       expectedEncounterRevision: input.expectedEncounterRevision,
@@ -129,6 +129,41 @@ export class EncounterService {
   }
 
   async commitCombatModifierReviews(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participants: Array<{ participant: ScenarioParticipant; state: ScenarioParticipantState }>;
+    scenarioId: string;
+    session: EncounterSession;
+  }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+    return this.commitCombatParticipantStateMutations(input);
+  }
+
+  /**
+   * Serializable combat mutation for commands that update one or more participant effect states
+   * together with the encounter cursor, events, results, revision, and undo facts.
+   */
+  async commitCombatParticipantStateMutation(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participant: ScenarioParticipant;
+    scenarioId: string;
+    session: EncounterSession;
+    state: ScenarioParticipantState;
+  }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+    const saved = await this.commitCombatParticipantStateMutations({
+      campaignId: input.campaignId,
+      encounterId: input.encounterId,
+      expectedEncounterRevision: input.expectedEncounterRevision,
+      participants: [{ participant: input.participant, state: input.state }],
+      scenarioId: input.scenarioId,
+      session: input.session,
+    });
+    return { encounter: saved.encounter, participant: saved.participants[0]! };
+  }
+
+  async commitCombatParticipantStateMutations(input: {
     campaignId?: string | null;
     encounterId: string;
     expectedEncounterRevision: string;

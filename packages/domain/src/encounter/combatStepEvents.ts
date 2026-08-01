@@ -1057,6 +1057,25 @@ function roundEndParticipantCandidates(input: {
                     rollD20: healthRoll.result.rollD20,
                     rollTotal: healthRoll.result.rollTotal,
                   },
+                  resultPresentation: {
+                    actionInstanceId: review.canonicalReview?.reviewId,
+                    calculationReferences: [
+                      {
+                        kind: "roller_private",
+                        ownerParticipantId: review.participantId,
+                        sourceId: healthRoll.id,
+                        visibility: "owner",
+                      },
+                    ],
+                    committedConsequences: [],
+                    conciseOutcome: {
+                      details: [healthRoll.result.success ? "Succeeded" : "Failed"],
+                      label: "Health check",
+                    },
+                    privateDiagnostics: [],
+                    standardConsequences: [],
+                    subordinateEventReferences: [],
+                  },
                 },
                 healthRollId: healthRoll.id,
                 involvedParticipantIds: [review.participantId],
@@ -1120,7 +1139,8 @@ function roundEndParticipantCandidates(input: {
                 },
                 involvedOutcome: { status: review.status },
                 resultPresentation: {
-                  actionInstanceId: command?.value.id,
+                  actionInstanceId:
+                    review.canonicalReview?.reviewId ?? command?.value.id,
                   calculationReferences: [],
                   committedConsequences: [],
                   conciseOutcome: {

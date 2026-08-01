@@ -90,6 +90,65 @@ describe("EncounterService participant effect modifier refresh", () => {
     ]);
     expect(eventLogs.at(-1)?.payload).toEqual(updated.state);
   });
+
+  it("passes participant and encounter SU state through one combat transaction", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const state = scenarioParticipantStateSchema.parse({
+      combat: {},
+      equipment: {},
+      health: {},
+      resources: {},
+    });
+    const participant = await repository.createScenarioParticipant({
+      isActive: true,
+      joinSource: "gm_added",
+      role: "player_character",
+      scenarioId: "scenario-1",
+      snapshot: { displayName: "Ari" },
+      sourceType: "character",
+      state,
+    });
+    const session = encounterSessionSchema.parse({
+      actionLog: [],
+      createdAt: "2026-08-01T10:00:00.000Z",
+      currentRound: 2,
+      id: "encounter-1",
+      kind: "combat",
+      participants: [],
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "SU review",
+      updatedAt: "2026-08-01T10:00:00.000Z",
+    });
+    const encounterRepository = {
+      updateCombatEncounter: vi.fn().mockResolvedValue(session),
+    };
+    const service = new EncounterService(encounterRepository as never, repository);
+
+    const saved = await service.commitCombatParticipantStateMutation({
+      encounterId: session.id,
+      expectedEncounterRevision: session.updatedAt,
+      participant,
+      scenarioId: "scenario-1",
+      session,
+      state,
+    });
+
+    expect(encounterRepository.updateCombatEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: session.updatedAt,
+        participantStateUpdates: [
+          expect.objectContaining({
+            expectedRevision: participant.updatedAt,
+            participantId: participant.id,
+            scenarioId: "scenario-1",
+          }),
+        ],
+        session,
+      }),
+    );
+    expect(saved).toMatchObject({ encounter: session, participant: { id: participant.id } });
+  });
 });
 
 describe("EncounterService combat persistence errors", () => {

@@ -144,7 +144,10 @@ import {
   buildLiveCombatModifierContributionProjection,
   mergePersistentCombatEffectModifiers,
 } from "./combatModifierProjection";
-import { buildDamagePersistentLifecycle } from "./combatPersistentModifierLifecycle";
+import {
+  buildCombatExperiencePersistentLifecycle,
+  buildDamagePersistentLifecycle,
+} from "./combatPersistentModifierLifecycle";
 import type { CombatModifierContribution } from "./combatModifierContributions";
 import {
   advanceCombatProgressionBoundary,
@@ -14286,6 +14289,222 @@ describe("combat round manager", () => {
       kind: "duration_update",
       nextDuration: "1 round",
     });
+    expect(review?.canonicalReview).toMatchObject({
+      participantId: "gladiator",
+      reviewId: "round-end:3:gladiator:review",
+      state: "ready",
+    });
+  });
+
+  it("binds typed CE countdown to an exact SU lifecycle proposal", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const canonicalLifecycle = buildCombatExperiencePersistentLifecycle({
+      context: {
+        commandId: "ce-command",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 2,
+        encounterId: "encounter-1",
+        eventId: "ce-event",
+        ownerParticipantId: "scenario-gladiator",
+        roundNumber: 3,
+      },
+      durationRounds: 2,
+      effectId: "ce-effect",
+      modifierValue: -2,
+      status: "active",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: combatEffectsWith([
+            {
+              canonicalLifecycle,
+              description: "Combat Experience",
+              duration: "2 rounds",
+              effectGroup: "general",
+              id: "ce-effect",
+              modifierValue: -2,
+              type: "general_modifier",
+            },
+          ]),
+        },
+      },
+      state: roundSummaryState,
+    });
+
+    expect(
+      reviewed.roundEndReview?.participantReviews.gladiator?.canonicalReview?.proposals[0],
+    ).toMatchObject({
+      effectId: "ce-effect",
+      expectedEffectVersion: 1,
+      nextDuration: { kind: "rounds", remaining: 1 },
+      reason: "duration_decremented",
+      transitionType: "update",
+    });
+  });
+
+  it("does not decrement phase-scoped CE during SU", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const canonicalLifecycle = buildCombatExperiencePersistentLifecycle({
+      context: {
+        commandId: "phase-ce-command",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 2,
+        encounterId: "encounter-1",
+        eventId: "phase-ce-event",
+        ownerParticipantId: "scenario-gladiator",
+        roundNumber: 3,
+      },
+      durationRounds: 1,
+      effectId: "phase-ce-effect",
+      modifierValue: -1,
+      phase: "phase2",
+      status: "active",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: combatEffectsWith([
+            {
+              canonicalLifecycle,
+              description: "Phase Combat Experience",
+              duration: "1 round",
+              effectGroup: "general",
+              id: "phase-ce-effect",
+              modifierValue: -1,
+              type: "general_modifier",
+            },
+          ]),
+        },
+      },
+      state: roundSummaryState,
+    });
+    const review = reviewed.roundEndReview?.participantReviews.gladiator;
+
+    expect(review?.canonicalReview?.proposals).toEqual([]);
+    expect(review?.proposedEffects).toEqual([]);
+    expect(review?.proposedRemovals).toEqual([]);
+  });
+
+  it("expires typed round Stunned without inventing an unresolved recovery roll", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const canonicalLifecycle = buildDamagePersistentLifecycle({
+      context: {
+        commandId: "stun-command",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 2,
+        encounterId: "encounter-1",
+        eventId: "stun-event",
+        ownerParticipantId: "scenario-gladiator",
+        roundNumber: 3,
+      },
+      durationRounds: 1,
+      effectId: "stunned-effect",
+      isStunned: true,
+      label: "Stunned",
+      status: "active",
+      type: "special",
+    })!;
+    const combatEffects = combatEffectsWith([
+      {
+        canonicalLifecycle,
+        description: "Stunned",
+        duration: "1 round",
+        effectGroup: "special",
+        id: "stunned-effect",
+        type: "special",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: { gladiator: { combatEffects } },
+      state: roundSummaryState,
+    });
+    const review = reviewed.roundEndReview?.participantReviews.gladiator;
+
+    expect(review?.canonicalReview?.requirements).toEqual([]);
+    expect(review?.canonicalReview?.proposals[0]).toMatchObject({
+      effectId: "stunned-effect",
+      nextState: "expired",
+      reason: "natural_expiry",
+    });
+    const committed = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:10:00.000Z" },
+      combatEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+    expect(
+      committed.combatEffects.effects.find((effect) => effect.id === "stunned-effect"),
+    ).toMatchObject({
+      canonicalLifecycle: { lifecycle: { state: "expired" }, version: 2 },
+      status: "expired",
+    });
+  });
+
+  it("keeps unresolved Stunned condition-bound recovery as non-fabricated context", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const canonicalLifecycle = buildDamagePersistentLifecycle({
+      context: {
+        commandId: "stun-command",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 2,
+        encounterId: "encounter-1",
+        eventId: "stun-event",
+        ownerParticipantId: "scenario-gladiator",
+        roundNumber: 3,
+      },
+      effectId: "stunned-effect",
+      isStunned: true,
+      label: "Stunned",
+      status: "active",
+      type: "special",
+    })!;
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: combatEffectsWith([
+            {
+              canonicalLifecycle,
+              description: "Stunned",
+              effectGroup: "special",
+              id: "stunned-effect",
+              type: "special",
+            },
+          ]),
+        },
+      },
+      state: roundSummaryState,
+    });
+    const review = reviewed.roundEndReview?.participantReviews.gladiator;
+
+    expect(review?.canonicalReview?.proposals).toEqual([]);
+    expect(review?.canonicalReview?.requirements).toEqual([
+      expect.objectContaining({
+        blocksReview: false,
+        completeness: "unsupported_ambiguity",
+        kind: "condition",
+        resolved: false,
+      }),
+    ]);
+    expect(review?.proposedHealthRolls).toEqual([]);
+    expect(review?.status).toBe("review_ready");
   });
 
   it("keeps next-round no-action effects active through the next round", () => {
@@ -14827,6 +15046,18 @@ describe("combat round manager", () => {
       ownerParticipantId: "gladiator",
       rollerParticipantId: "gladiator",
       type: "health_check",
+    });
+    expect(rolled.state.events.at(-1)?.facts.resultPresentation).toMatchObject({
+      actionInstanceId: "round-end:10:gladiator:review",
+      conciseOutcome: { label: "Health check" },
+    });
+    expect(
+      rolled.state.roundEndReview?.participantReviews.gladiator?.canonicalReview,
+    ).toMatchObject({
+      requirements: expect.arrayContaining([
+        expect.objectContaining({ kind: "health_check", resolved: true }),
+      ]),
+      state: "ready",
     });
     expect(rolled.state.events.at(-1)?.facts.rollerPrivate).toMatchObject({
       difficulty: 21,

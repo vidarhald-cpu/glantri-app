@@ -78,6 +78,8 @@ const mocks = vi.hoisted(() => {
   };
   const updateEncounter = vi.fn();
   const encounterService = {
+    commitCombatParticipantStateMutation: vi.fn(),
+    commitCombatParticipantStateMutations: vi.fn(),
     commitCombatModifierReview: vi.fn(),
     commitCombatModifierReviews: vi.fn(),
     createEncounter: vi.fn(),
@@ -1789,6 +1791,27 @@ function setupCombatDeclarationRoute(
         participant: { ...update.participant, state: update.state },
       };
     },
+  );
+  mocks.encounterService.commitCombatParticipantStateMutation.mockImplementation(
+    async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => {
+      const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
+      return {
+        encounter,
+        participant: { ...update.participant, state: update.state },
+      };
+    },
+  );
+  mocks.encounterService.commitCombatParticipantStateMutations.mockImplementation(
+    async (update: {
+      participants: Array<{ participant: Record<string, unknown>; state: unknown }>;
+      session: unknown;
+    }) => ({
+      encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+      participants: update.participants.map(({ participant, state }) => ({
+        ...participant,
+        state,
+      })),
+    }),
   );
   mocks.encounterService.commitCombatModifierReviews.mockImplementation(
     async (update: {
@@ -6895,7 +6918,10 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "POST",
-      payload: { scenarioParticipantId: "participant-2" },
+      payload: {
+        expectedParticipantRevision: fixture.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
       url: "/encounters/encounter-1/combat-round/commit-participant-review",
     });
     await app.close();
@@ -7458,6 +7484,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        expectedParticipantRevision: fixture.participants[0]!.updatedAt,
         healthRollId: fixture.healthRollId,
         scenarioParticipantId: "participant-1",
       },
@@ -7473,7 +7500,7 @@ describe("scenarios route contract", () => {
       updatedEncounter.combatRoundState.roundEndReview.participantReviews["encounter-participant-1"]
         .proposedHealthRolls[0];
     const updatedParticipantState =
-      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+      mocks.encounterService.commitCombatParticipantStateMutation.mock.calls[0]?.[0]?.state;
 
     expect(healthRoll).toMatchObject({
       result: expect.objectContaining({
@@ -7493,6 +7520,31 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("rejects an SU Health roll when participant effect state is stale", async () => {
+    const fixture = makeHealthCheckReviewFixture();
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: "stale-participant-revision",
+        healthRollId: fixture.healthRollId,
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-health-check",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "stale_revision" });
+    expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+  });
+
   it("rejects player round-end health checks for another participant", async () => {
     const fixture = makeHealthCheckReviewFixture();
     setupCombatDeclarationRoute({
@@ -7505,6 +7557,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        expectedParticipantRevision: fixture.participants[0]!.updatedAt,
         healthRollId: fixture.healthRollId,
         scenarioParticipantId: "participant-2",
       },
@@ -7532,6 +7585,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        expectedParticipantRevision: fixture.participants[0]!.updatedAt,
         healthRollId: fixture.healthRollId,
         scenarioParticipantId: "participant-1",
       },
@@ -7574,6 +7628,7 @@ describe("scenarios route contract", () => {
     const rollResponse = await app.inject({
       method: "POST",
       payload: {
+        expectedParticipantRevision: fixture.participants[0]!.updatedAt,
         healthRollId: fixture.healthRollId,
         scenarioParticipantId: "participant-1",
       },
@@ -15564,7 +15619,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.encounterService.commitCombatModifierReviews).toHaveBeenCalledWith(
+    expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledWith(
       expect.objectContaining({
         participants: [
           expect.objectContaining({
@@ -16560,9 +16615,10 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledTimes(1);
+    expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledTimes(1);
     const updatedParticipantState =
-      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+      mocks.encounterService.commitCombatParticipantStateMutations.mock.calls[0]?.[0]
+        ?.participants[0]?.state;
 
     expect(updatedParticipantState.combatEffects.effects).toContainEqual(
       expect.objectContaining({

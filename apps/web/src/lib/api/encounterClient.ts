@@ -618,6 +618,7 @@ export async function commitRoundEndParticipantReviewOnServer(input: {
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  expectedParticipantRevision: string;
   scenarioParticipantId: string;
   taskId: string;
 }): Promise<{
@@ -645,6 +646,7 @@ export async function rollRoundEndHealthCheckOnServer(input: {
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
+  expectedParticipantRevision: string;
   healthRollId: string;
   scenarioParticipantId: string;
   taskId: string;
@@ -664,6 +666,7 @@ export async function rollRoundEndHealthCheckOnServer(input: {
         scenarioParticipantId: input.scenarioParticipantId,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         taskId: input.taskId,
       }),
       method: "POST",
