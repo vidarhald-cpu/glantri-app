@@ -196,6 +196,8 @@ export interface CombatParticipationProjectionInput {
   readonly declarationSources?: readonly CombatDeclarationParticipationSource[];
   readonly encounterRevision: string;
   readonly modifierReviews?: readonly CanonicalCombatModifierReviewInput[];
+  /** Explicit encounter-combatant mapping for durable scenario-participant review inputs. */
+  readonly modifierReviewSources?: readonly ParticipantModifierReviewSource[];
   readonly participantAuthorities: readonly CombatParticipantAuthoritySource[];
   readonly proxyAuthorities?: readonly CombatParticipationProxyAuthoritySource[];
   /** Active state only. Archived rounds are intentionally outside this projection boundary. */

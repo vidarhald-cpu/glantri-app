@@ -16,6 +16,7 @@ import {
 import { authorizeCombatProgressionTask } from "./authorization";
 import { buildCombatProgressionProjection } from "./build";
 import type { CombatProgressionAuthorizationFailureCode } from "./authorization";
+import type { CombatParticipationProjection } from "../combatParticipation";
 import type { CombatProgressionBoundaryKind, CombatProgressionExpectedCommand } from "./types";
 
 const TARGET_STEP_BY_BOUNDARY: Partial<Record<CombatProgressionBoundaryKind, CombatRoundStep>> = {
@@ -125,13 +126,16 @@ export function advanceCombatProgressionBoundary(input: {
   expectedBoundary: CombatProgressionBoundaryKind;
   expectedExecutionGroupId: string;
   expectedTaskId: string;
+  participation?: CombatParticipationProjection;
   state: CombatRoundState;
   stepSnapshots?: CombatRoundStepSnapshot[];
   targetBoundary: CombatProgressionBoundaryKind;
   visibility?: CombatRoundVisibility;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const projection = buildCombatProgressionProjection(normalized);
+  const projection = buildCombatProgressionProjection(normalized, {
+    participation: input.participation,
+  });
   const commandType =
     input.expectedBoundary === "round_boundary"
       ? ("complete_round" as const)

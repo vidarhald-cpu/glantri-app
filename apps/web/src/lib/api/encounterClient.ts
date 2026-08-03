@@ -1,6 +1,7 @@
 import {
   activeCombatMutationResponseSchema,
   applyActiveCombatMutationResponse,
+  type ActiveCombatDeterministicAdvanceDescriptor,
   encounterSessionRevisionSchema,
   encounterSessionSummarySchema,
   type EncounterSessionRevision,
@@ -62,13 +63,13 @@ async function sendCombatMutationJson<TResponse extends object>(
     body = JSON.stringify(parsedBody);
   }
   const responsePayload = await sendJson<unknown>(path, {
-      ...init,
-      body,
-      headers: {
-        ...Object.fromEntries(new Headers(init.headers).entries()),
-        [ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER]: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+    ...init,
+    body,
+    headers: {
+      ...Object.fromEntries(new Headers(init.headers).entries()),
+      [ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER]: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
       ...getCombatPerformanceRequestHeaders(),
-      },
+    },
   });
   const activeResponseStartedAt = combatPerformanceNow();
   const compact = activeCombatMutationResponseSchema.parse(responsePayload);
@@ -85,6 +86,7 @@ async function sendCombatMutationJson<TResponse extends object>(
   return {
     ...(compact.mutationPresentation ?? {}),
     commandEnvelope: compact.commandEnvelope,
+    deterministicAdvance: compact.deterministicAdvance,
     encounter: nextEncounter,
     participant: updatedParticipants?.[0],
     participants: updatedParticipants,
@@ -244,11 +246,13 @@ export async function submitCombatDeclarationOnServer(input: {
   };
 }): Promise<{
   commandEnvelope?: CombatRoundCommandEnvelope;
+  deterministicAdvance?: ActiveCombatDeterministicAdvanceDescriptor;
   encounter: EncounterSession;
   participant: ScenarioParticipant;
 }> {
   const payload = await sendCombatMutationJson<{
     commandEnvelope?: CombatRoundCommandEnvelope;
+    deterministicAdvance?: ActiveCombatDeterministicAdvanceDescriptor;
     encounter: EncounterSession;
     participant: ScenarioParticipant;
   }>(
@@ -886,6 +890,33 @@ export async function prepareCombatRoundEndReviewOnServer(input: {
 }): Promise<{ encounter: EncounterSession }> {
   return sendCombatMutationJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/prepare-round-end-review`,
+    {
+      body: JSON.stringify({
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
+        taskId: input.taskId,
+      }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
+export async function advanceDeterministicCombatOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  taskId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  executedTaskIds: string[];
+  participants: ScenarioParticipant[];
+  stopReason: string;
+}> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/advance-deterministic`,
     {
       body: JSON.stringify({
         executionGroupId: input.executionGroupId,

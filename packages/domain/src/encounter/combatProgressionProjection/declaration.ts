@@ -2,7 +2,6 @@ import {
   canPlayerRollCombatInitiative,
   canPlayerSubmitCombatDeclaration,
   getCombatRoundCombatExperienceDifficulty,
-  getFirstCombatRoundPendingModifierReviewParticipantId,
   isCombatRoundPhaseInitiativeComplete,
   isCombatStartExperienceRollRequired,
   type CombatRoundPhase,
@@ -19,6 +18,26 @@ import {
   type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess } from "./types";
+
+function isSuppressedNoWork(input: {
+  context: ProjectionBuildContext;
+  participantId: string;
+  phase: CombatRoundPhase;
+  processFamily: "initiative" | "modifier_review";
+}): boolean {
+  const fact = input.context.participation?.facts.find(
+    (candidate) =>
+      candidate.identity.processFamily === input.processFamily &&
+      candidate.identity.participantId === input.participantId &&
+      candidate.identity.phase === input.phase,
+  );
+  return Boolean(
+    fact &&
+    fact.status === "not_required" &&
+    fact.workClass === "no_work" &&
+    fact.completeness === "complete",
+  );
+}
 
 export function buildDeclarationProcesses(
   context: ProjectionBuildContext,
@@ -172,14 +191,18 @@ export function buildModifierReviewProcess(
   const expectedCommand =
     phase === "phase1" ? "review_modifiers_phase1" : "review_modifiers_phase2";
   const pending = context.state.participants.filter(
-    (participant) => !isCompleteStatus(participant.stepStatuses[step]),
+    (participant) =>
+      !isCompleteStatus(participant.stepStatuses[step]) &&
+      !isSuppressedNoWork({
+        context,
+        participantId: participant.participantId,
+        phase,
+        processFamily: "modifier_review",
+      }),
   );
   // Each modifier-review boundary owns a fresh ordered participant iteration. A compatibility
   // cursor left by declaration, action resolution, or a Double Attack decision must not seed it.
-  const activeId = getFirstCombatRoundPendingModifierReviewParticipantId({
-    phase,
-    state: context.state,
-  });
+  const activeId = pending[0]?.participantId;
   const tasks = pending.map<TaskSpec>((participant) => {
     const owner = context.identities.get(participant.participantId);
     return {
@@ -212,7 +235,15 @@ export function buildModifierReviewProcess(
       kind: "review",
       state: tasks.length > 0 ? "active" : "complete",
       strategy: "ordered_all",
-      tasks,
+      executionGroups: tasks.map((task) => ({
+        position: context.state.participants.findIndex(
+          (participant) =>
+            task.owner?.kind === "combatant" &&
+            participant.participantId === task.owner.participantId,
+        ),
+        strategy: "ordered_all" as const,
+        tasks: [task],
+      })),
     },
     {
       kind: "boundary",
@@ -316,6 +347,16 @@ export function buildInitiativeProcess(
       participant.initiatives[phase]
     )
       return [];
+    if (
+      isSuppressedNoWork({
+        context,
+        participantId: participant.participantId,
+        phase,
+        processFamily: "initiative",
+      })
+    ) {
+      return [];
+    }
     const owner = context.identities.get(participant.participantId);
     return [
       {
@@ -340,7 +381,9 @@ export function buildInitiativeProcess(
       },
     ];
   });
-  const complete = isCombatRoundPhaseInitiativeComplete({ phase, state: context.state });
+  const complete = context.participation
+    ? initiativeTasks.length === 0
+    : isCombatRoundPhaseInitiativeComplete({ phase, state: context.state });
   const commitTasks: TaskSpec[] = complete
     ? [
         {
@@ -359,7 +402,15 @@ export function buildInitiativeProcess(
       kind: "roll",
       state: complete ? "complete" : "active",
       strategy: "initiative_groups",
-      tasks: initiativeTasks,
+      executionGroups: initiativeTasks.map((task) => ({
+        position: context.state.participants.findIndex(
+          (participant) =>
+            task.owner?.kind === "combatant" &&
+            participant.participantId === task.owner.participantId,
+        ),
+        strategy: "initiative_groups" as const,
+        tasks: [task],
+      })),
     },
     {
       // Phase choices and CE are derived only after the GM commits initiative and the action

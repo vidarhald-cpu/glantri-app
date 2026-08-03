@@ -8091,6 +8091,8 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     participantId?: string;
   };
   participants?: Record<string, CombatRoundPhaseInitiativeCommitParticipantInput>;
+  /** Complete canonical no-work participants omitted from initiative without fabricating a value. */
+  nonParticipatingParticipantIds?: ReadonlySet<string>;
   phase: CombatRoundPhase;
   rng?: () => number;
   state: CombatRoundState;
@@ -8107,7 +8109,17 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     throw new RangeError("Phase initiative resolution can only be committed from initiative.");
   }
 
-  if (!isCombatRoundPhaseInitiativeComplete({ phase: input.phase, state: normalized })) {
+  const initiativeComplete = normalized.participants.every(
+    (participant) =>
+      input.nonParticipatingParticipantIds?.has(participant.participantId) ||
+      participant.initiatives[input.phase] !== undefined ||
+      ["complete", "gmEdited", "locked", "skipped", "submitted"].includes(
+        participant.stepStatuses[
+          input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2"
+        ] ?? "pending",
+      ),
+  );
+  if (!initiativeComplete) {
     throw new RangeError("Phase initiative must be complete before resolution can be committed.");
   }
 
@@ -13214,8 +13226,7 @@ function buildCombatRoundEndParticipantReview(input: {
           owner: "su",
           priorDuration: canonicalDuration,
           priorState: effect.canonicalLifecycle.lifecycle.state,
-          reason:
-            canonicalDuration.remaining <= 1 ? "natural_expiry" : "duration_decremented",
+          reason: canonicalDuration.remaining <= 1 ? "natural_expiry" : "duration_decremented",
           transitionType: canonicalDuration.remaining <= 1 ? "expire" : "update",
         });
       } else if (
@@ -13423,7 +13434,9 @@ function buildCombatRoundEndParticipantReview(input: {
       reviewId: `round-end:${input.roundNumber}:${input.participantId}:review`,
       roundNumber: input.roundNumber,
       schemaVersion: CANONICAL_COMBAT_SU_REVIEW_SCHEMA_VERSION,
-      state: proposedHealthRolls.some((proposal) => proposal.accepted && proposal.status === "pending")
+      state: proposedHealthRolls.some(
+        (proposal) => proposal.accepted && proposal.status === "pending",
+      )
         ? "awaiting_roll"
         : "ready",
     },
@@ -13861,7 +13874,9 @@ export function recordContinuedContactMaintenanceRoll(input: {
     resolved.status === "resolved" &&
     resolved.winnerParticipantId === resolved.controllerParticipantId;
   const terminalSequence = getNextCombatRoundEventSequence(normalized);
-  const resolveProcessLifecycle = <T extends { canonicalLifecycle?: unknown; canonicalTransitions?: unknown[] }>(
+  const resolveProcessLifecycle = <
+    T extends { canonicalLifecycle?: unknown; canonicalTransitions?: unknown[] },
+  >(
     entry: T,
   ) => {
     if (!input.command.createdRevision || !entry.canonicalLifecycle) return entry;
@@ -14157,11 +14172,11 @@ function applyCombatRoundEndReviewEffects(input: {
         canonicalProposal?.transitionType === "update"
           ? canonicalProposal.nextDuration
           : currentDuration?.kind === "rounds"
-          ? {
-              ...currentDuration,
-              remaining: Math.max(1, currentDuration.remaining - 1),
-            }
-          : undefined;
+            ? {
+                ...currentDuration,
+                remaining: Math.max(1, currentDuration.remaining - 1),
+              }
+            : undefined;
       nextEffect = combatEffectSchema.parse({
         ...nextEffect,
         duration: durationUpdate.nextDuration ?? effect.duration,
@@ -14326,6 +14341,8 @@ export function commitCombatRoundEndParticipantReview(input: {
   };
   combatEffects?: CombatEffectsState;
   createdRevision?: string;
+  /** Suppresses only the user-facing no-work result; the canonical command/event is retained. */
+  deterministicNoWorkCompletion?: boolean;
   encounterId?: string;
   participantId: string;
   scenarioId?: string;
@@ -14458,6 +14475,7 @@ export function commitCombatRoundEndParticipantReview(input: {
         .map((proposal) => proposal.id),
       createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
       createdCombatEffectIds: effectApplication.createdCombatEffectIds,
+      deterministicNoWorkCompletion: input.deterministicNoWorkCompletion,
       participantReviewCompletionDeferred: getPendingCombatObservationAttempts(normalized).some(
         (attempt) => attempt.observerParticipantId === input.participantId,
       ),
@@ -14534,15 +14552,17 @@ export function commitCombatRoundEndParticipantReview(input: {
             })),
           status: nextStatus,
         },
-        resultPresentation: {
-          actionInstanceId: committedReview.canonicalReview?.reviewId ?? command.id,
-          calculationReferences: [],
-          committedConsequences: [],
-          conciseOutcome: { details: [], label: "Round-end review" },
-          privateDiagnostics: [],
-          standardConsequences: [],
-          subordinateEventReferences: [],
-        },
+        resultPresentation: input.deterministicNoWorkCompletion
+          ? undefined
+          : {
+              actionInstanceId: committedReview.canonicalReview?.reviewId ?? command.id,
+              calculationReferences: [],
+              committedConsequences: [],
+              conciseOutcome: { details: [], label: "Round-end review" },
+              privateDiagnostics: [],
+              standardConsequences: [],
+              subordinateEventReferences: [],
+            },
       },
       involvedParticipantIds: [input.participantId],
       outcomeScope: "involved",
@@ -14872,8 +14892,7 @@ export function rollCombatRoundEndHealthCheck(input: {
             success: result.success,
           },
           resultPresentation: {
-            actionInstanceId:
-              updatedParticipantReview.canonicalReview?.reviewId ?? command.id,
+            actionInstanceId: updatedParticipantReview.canonicalReview?.reviewId ?? command.id,
             calculationReferences: [
               {
                 kind: "roller_private",

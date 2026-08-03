@@ -8,7 +8,9 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeTotal,
+  projectActiveCombatParticipation,
   projectCombatProgressionPresentation,
+  type ScenarioParticipant,
   type CombatProgressionPresentationProjection,
   type CombatProgressionPresentationTask,
   type CombatRoundAttackRollResult,
@@ -473,6 +475,7 @@ export function buildActiveCombatPresentation(input: {
   participantRows?: readonly CombatPresentationParticipantRow[];
   resolveStepStatus: ResolveStepStatus;
   roundState: CombatRoundState;
+  scenarioParticipants?: readonly ScenarioParticipant[];
 }): ActiveCombatPresentation {
   const activeCombatLogPresentation = measureCombatPerformanceStage(
     "panel_combat_log_presentation",
@@ -483,7 +486,16 @@ export function buildActiveCombatPresentation(input: {
         roundState: input.roundState,
       }),
   );
-  const progressionProjection = buildCombatProgressionProjection(input.roundState);
+  const participation = input.scenarioParticipants
+    ? projectActiveCombatParticipation({
+        encounterRevision: input.encounterRevision,
+        scenarioParticipants: input.scenarioParticipants,
+        state: input.roundState,
+      })
+    : undefined;
+  const progressionProjection = buildCombatProgressionProjection(input.roundState, {
+    participation,
+  });
   const progression = projectCombatProgressionPresentation({
     projection: progressionProjection,
     viewer: { kind: "gm" },

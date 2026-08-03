@@ -5128,6 +5128,26 @@ describe("combat round manager", () => {
     });
   });
 
+  it("retains a deterministic empty SU completion event without publishing a review result", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      "round_summary",
+    );
+    const reviewed = prepareCombatRoundEndReview({ state: roundSummaryState });
+    const committed = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:10:00.000Z" },
+      deterministicNoWorkCompletion: true,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+    const event = committed.state.events.at(-1);
+
+    expect(committed.command.facts.deterministicNoWorkCompletion).toBe(true);
+    expect(event).toMatchObject({ type: "participant_su_review" });
+    expect(event?.facts.resultPresentation).toBeUndefined();
+  });
+
   it("persists canonical CE duration transitions through SU and reload", () => {
     const declarationState = openCombatExperienceWindow(
       initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),

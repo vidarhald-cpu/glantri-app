@@ -174,6 +174,32 @@ describe("combat post-result inspection hold", () => {
     });
   });
 
+  it("holds an exact result while the next visible task is behind a deterministic suffix", () => {
+    const candidate = createCombatPostResultHoldCandidate({
+      commandType: "roll_observation",
+      presentation: presentation([]),
+      source: { participantId: "attacker", roundNumber: 1, step: "round_summary" },
+      sourceTaskId: "task:observation",
+    });
+    const accepted = presentation([
+      group({
+        groupId: "group:observation",
+        lastSequence: 4,
+        resultIds: ["result:observation"],
+        sourceEventIds: ["event:observation"],
+      }),
+    ]);
+
+    expect(
+      resolveCombatPostResultHold({
+        acceptedPresentation: accepted,
+        acceptedRevision: "revision-2",
+        candidate: candidate!,
+        deterministicSuffixPending: true,
+      }),
+    ).toMatchObject({ groupId: "group:observation" });
+  });
+
   it("detects a new subordinate result appended to an existing atomic group", () => {
     const original = group({
       groupId: "group:damage-chain",

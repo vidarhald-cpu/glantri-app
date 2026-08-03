@@ -8,6 +8,7 @@ import {
   type CombatRoundState,
 } from "../combatRoundManager";
 import { buildCombatActionProcessPlans } from "../combatActionProcesses";
+import type { CombatParticipationProjection } from "../combatParticipation";
 import {
   getCombatDeclarationCapabilityStatus,
   validateCombatDeclarationActionAvailability,
@@ -79,6 +80,7 @@ function committedExecutionOrder(
  */
 export function buildCombatProgressionProjection(
   state: CombatRoundState,
+  options: { readonly participation?: CombatParticipationProjection } = {},
 ): CombatProgressionProjection {
   const normalized = combatRoundStateSchema.parse(state);
   const cursor = normalized.currentCursor;
@@ -116,6 +118,7 @@ export function buildCombatProgressionProjection(
         : boundaryKind === "phase2_resolution"
           ? getCombatRoundCurrentInitiativeExecutionGroup({ phase: "phase2", state: normalized })
           : undefined,
+    participation: options.participation,
     roundNumber: normalized.roundNumber,
     state: normalized,
   };

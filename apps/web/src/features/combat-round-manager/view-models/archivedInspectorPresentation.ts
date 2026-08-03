@@ -1,5 +1,6 @@
 import {
   COMBAT_ROUND_STEPS,
+  buildCombatLogProjection,
   buildCombatRoundInspector,
   deriveCombatHistoryStepOutcome,
   getCombatRoundEventsWithDerivedResultCoverage,
@@ -17,10 +18,12 @@ import {
 
 import {
   buildCombatEventResultModel,
+  buildCombatStepResultPresentation,
   resolveCombatHistoryPanelSnapshot,
   selectCombatEventsForTrackerCell,
   type CombatCalculationPresentation,
   type CombatEventResultModel,
+  type CombatStepResultPresentation,
 } from "@/features/combat-history";
 import type {
   PlayerCombatModifierBucketView,
@@ -90,6 +93,7 @@ export interface ArchivedInspectorPresentation {
   readonly attackResolution: ArchivedAttackResolutionPresentation;
   readonly canonicalActionResultEvents: readonly ProjectedCombatHistoryEvent[];
   readonly canonicalActionResultModel: CombatEventResultModel;
+  readonly currentStepResults?: CombatStepResultPresentation;
   readonly historicalActionResult?: ArchivedHistoricalActionResult;
   readonly historicalStatusLabel?: string;
   readonly historicalContext: HistoricalInspectionContext;
@@ -363,6 +367,11 @@ export function buildArchivedInspectorPresentationIndex(input: {
       events: resultEvents,
       participants: roundState.participants,
     });
+    const combatLog = buildCombatLogProjection({
+      encounterId: roundState.encounterId ?? "combat-history",
+      sourceRevision: `round:${roundState.roundNumber}:archived`,
+      state: roundState,
+    });
     const projectedEventById = new Map(gmEvents.map((event) => [event.id, event]));
 
     for (const participant of roundState.participants) {
@@ -481,6 +490,17 @@ export function buildArchivedInspectorPresentationIndex(input: {
           attackResolution,
           canonicalActionResultEvents,
           canonicalActionResultModel,
+          currentStepResults: buildCombatStepResultPresentation({
+            boundary: "round_boundary",
+            combatLog,
+            encounterId: roundState.encounterId ?? "combat-history",
+            encounterRevision: `round:${roundState.roundNumber}:archived`,
+            events: gmEvents,
+            participantId: participant.participantId,
+            roundNumber: roundState.roundNumber,
+            step,
+            viewer: { kind: "gm" },
+          }),
           historicalActionResult,
           historicalContext,
           historicalStatusLabel: getHistoricalStatusLabel(stepOutcome),

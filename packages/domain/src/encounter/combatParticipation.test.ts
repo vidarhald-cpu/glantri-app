@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { ScenarioParticipant } from "../campaign/scenario";
+
 import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
@@ -16,6 +18,7 @@ import {
   combatParticipationStatusSchema,
   combatParticipationWorkClassSchema,
   projectCombatParticipation,
+  projectActiveCombatParticipation,
   projectParticipantProcessParticipation,
   projectPhaseInitiativeParticipation,
   projectPlayerSafeCombatParticipation,
@@ -932,5 +935,227 @@ describe("canonical combat participation", () => {
         state: full as unknown as ActiveCombatRoundState,
       }),
     ).toThrow();
+  });
+});
+
+describe("combat progression participation consumption", () => {
+  it("retains legacy modifier review when canonical lifecycle completeness is unknown", () => {
+    const active = activeState({
+      currentStep: "review_action_modifiers",
+      participants: [participant("hero", declaration("move_only"))],
+    });
+    const legacyParticipant = {
+      controlledByUserId: "player-1",
+      id: "scenario-hero",
+      state: {
+        combat: {
+          combatContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+          },
+        },
+      },
+    } as unknown as ScenarioParticipant;
+    const participation = projectActiveCombatParticipation({
+      encounterRevision: REVISION,
+      scenarioParticipants: [legacyParticipant],
+      state: active,
+    });
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const task = progression.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((candidate) => candidate.kind === "modifier_review");
+
+    expect(
+      fact(participation, {
+        family: "modifier_review",
+        participantId: "hero",
+        phase: "phase1",
+      }),
+    ).toMatchObject({ completeness: "legacy_incomplete", status: "blocked" });
+    expect(task).toBeDefined();
+  });
+
+  it("suppresses only complete empty M1 reviews and exposes the deterministic boundary", () => {
+    const active = activeState({
+      currentStep: "review_action_modifiers",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "M1" },
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { review_action_modifiers: "pending" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { review_action_modifiers: "pending" },
+        }),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(tasks.filter((task) => task.kind === "modifier_review")).toEqual([]);
+    expect(tasks).toContainEqual(
+      expect.objectContaining({
+        kind: "gm_advance_boundary",
+        participation: expect.objectContaining({
+          completeness: "complete",
+          status: "required",
+          workClass: "deterministic_transition",
+        }),
+      }),
+    );
+  });
+
+  it("retains M1 review when a canonical proposal requires work", () => {
+    const active = activeState({
+      currentStep: "review_action_modifiers",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "M1" },
+      },
+      participants: [participant("hero", declaration("move_only"))],
+    });
+    const automatic = review("hero", "M1", {
+      automaticProposals: [
+        {
+          effectId: "effect-1",
+          expectedVersion: 1,
+          id: "proposal-1",
+          mayOverride: false,
+          nextState: "expired",
+          owner: "modifier_review",
+          reason: "natural_expiry",
+          transitionType: "expire",
+        },
+      ],
+    });
+    const participation = project(active, {
+      modifierReviews: [automatic, review("hero", "M2")],
+    });
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const task = progression.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((candidate) => candidate.kind === "modifier_review");
+
+    expect(task?.participation).toMatchObject({
+      completeness: "complete",
+      status: "required",
+      workClass: "deterministic_transition",
+    });
+  });
+
+  it("suppresses initiative without an executable action and never fabricates initiative zero", () => {
+    const active = activeState({
+      currentStep: "initiative_phase_1",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "i1" },
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { initiative_phase_1: "pending" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { initiative_phase_1: "pending" },
+        }),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(tasks.filter((task) => task.kind === "roll_initiative")).toEqual([]);
+    expect(tasks).toContainEqual(
+      expect.objectContaining({ kind: "commit_initiative", state: "executable" }),
+    );
+    expect(active.participants.every((participant) => participant.initiatives.phase1 == null)).toBe(
+      true,
+    );
+  });
+
+  it("opens a sole ordinary actor directly without an initiative task", () => {
+    const active = activeState({
+      currentStep: "initiative_phase_1",
+      participants: [
+        participant("hero", declaration("attack_parry", "guard")),
+        participant("guard", declaration("parry")),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(tasks.filter((task) => task.kind === "roll_initiative")).toEqual([]);
+    expect(tasks).toContainEqual(
+      expect.objectContaining({ kind: "commit_initiative", state: "executable" }),
+    );
+  });
+
+  it("retains initiative for a sole ordered Feint maneuver", () => {
+    const active = activeState({
+      currentStep: "initiative_phase_1",
+      participants: [
+        participant(
+          "hero",
+          declaration("feint_attack", "guard", {
+            feint: {
+              attackerSkillId: "sword",
+              attackerSkillLabel: "Sword",
+              defenderSkillId: "sword",
+              defenderSkillLabel: "Sword",
+              method: "weapon",
+              targetParticipantId: "guard",
+            },
+          }),
+        ),
+        participant("guard", declaration("parry")),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const initiativeTasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) =>
+        stage.tasks.filter((task) => task.kind === "roll_initiative"),
+      ),
+    );
+
+    expect(initiativeTasks).toHaveLength(1);
+    expect(initiativeTasks[0]?.owner).toMatchObject({
+      kind: "combatant",
+      participantId: "hero",
+    });
+    expect(initiativeTasks[0]?.participation).toMatchObject({
+      completeness: "complete",
+      status: "required",
+      workClass: "player_roll",
+    });
   });
 });

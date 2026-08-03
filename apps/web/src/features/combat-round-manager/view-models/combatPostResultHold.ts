@@ -67,10 +67,12 @@ function groupFingerprint(group: CombatResultGroupPresentation): string {
 
 function sourceAdvanced(input: {
   commandType: CombatProgressionExpectedCommand;
+  deterministicSuffixPending?: boolean;
   nextSelection?: { readonly participantId?: string; readonly step: CombatRoundStep };
   source: CombatPostResultHoldSource;
 }): boolean {
   if (SAME_CELL_HOLD_COMMANDS.has(input.commandType)) return true;
+  if (input.deterministicSuffixPending) return true;
   return Boolean(
     input.nextSelection &&
     (input.nextSelection.participantId !== input.source.participantId ||
@@ -99,6 +101,7 @@ export function resolveCombatPostResultHold(input: {
   readonly acceptedPresentation?: CombatStepResultPresentation;
   readonly acceptedRevision: string;
   readonly candidate: CombatPostResultHoldCandidate;
+  readonly deterministicSuffixPending?: boolean;
   readonly nextSelection?: { readonly participantId?: string; readonly step: CombatRoundStep };
 }): CombatPostResultHold | undefined {
   const presentation = input.acceptedPresentation;
@@ -108,6 +111,7 @@ export function resolveCombatPostResultHold(input: {
     presentation.roundNumber !== input.candidate.source.roundNumber ||
     !sourceAdvanced({
       commandType: input.candidate.commandType,
+      deterministicSuffixPending: input.deterministicSuffixPending,
       nextSelection: input.nextSelection,
       source: input.candidate.source,
     })

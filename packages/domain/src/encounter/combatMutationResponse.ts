@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { scenarioParticipantSchema, type ScenarioParticipant } from "../campaign/scenario";
 import { buildCombatProgressionProjection } from "./combatProgressionProjection";
+import { getCurrentExecutableCombatTasks } from "./combatDeterministicTransitions";
 import {
   activeCombatRoundStateSchema,
   buildCombatRoundCommandEnvelope,
@@ -76,10 +77,19 @@ export const activeCombatMutationNextTaskSchema = z
   })
   .strict();
 
+export const activeCombatDeterministicAdvanceDescriptorSchema = z
+  .object({
+    executionGroupId: idSchema,
+    expectedRevision: z.string().min(1),
+    taskId: idSchema,
+  })
+  .strict();
+
 export const activeCombatMutationResponseSchema = z
   .object({
     activeCombatState: activeCombatRoundStateSchema,
     commandEnvelope: combatRoundCommandEnvelopeSchema,
+    deterministicAdvance: activeCombatDeterministicAdvanceDescriptorSchema.optional(),
     encounterId: idSchema,
     mutationPresentation: z
       .record(z.unknown())
@@ -99,6 +109,9 @@ export const activeCombatMutationResponseSchema = z
   .strict();
 
 export type ActiveCombatMutationNextTask = z.infer<typeof activeCombatMutationNextTaskSchema>;
+export type ActiveCombatDeterministicAdvanceDescriptor = z.infer<
+  typeof activeCombatDeterministicAdvanceDescriptorSchema
+>;
 export type ActiveCombatMutationResponse = z.infer<typeof activeCombatMutationResponseSchema>;
 
 type ActiveCombatMutationEncounterSource = Pick<
@@ -123,11 +136,7 @@ function findNextTask(
     ...activeCombatState,
     rounds: [],
   });
-  const task = projection.boundary.processes
-    .flatMap((process) => process.stages)
-    .flatMap((stage) => stage.executionGroups)
-    .flatMap((group) => group.tasks)
-    .find((candidate) => candidate.state === "executable");
+  const task = getCurrentExecutableCombatTasks(projection)[0];
 
   return task
     ? activeCombatMutationNextTaskSchema.parse({
@@ -145,6 +154,7 @@ function findNextTask(
 
 export function buildActiveCombatMutationResponse(input: {
   commandEnvelope?: CombatRoundCommandEnvelope;
+  deterministicAdvance?: ActiveCombatDeterministicAdvanceDescriptor;
   encounter: ActiveCombatMutationEncounterSource;
   mutationPresentation?: Record<string, unknown>;
   storageMode?: "legacy" | "split_v1";
@@ -160,6 +170,7 @@ export function buildActiveCombatMutationResponse(input: {
   return activeCombatMutationResponseSchema.parse({
     activeCombatState,
     commandEnvelope,
+    deterministicAdvance: input.deterministicAdvance,
     encounterId: input.encounter.id,
     mutationPresentation: input.mutationPresentation,
     nextTask: findNextTask(activeCombatState),

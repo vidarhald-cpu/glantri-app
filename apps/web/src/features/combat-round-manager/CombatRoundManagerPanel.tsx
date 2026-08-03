@@ -132,6 +132,7 @@ import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutMo
 import { buildGmCombatParryModifierRequest } from "./gmCombatParryRequest";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
+  advanceDeterministicCombatOnServer,
   advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
@@ -165,7 +166,6 @@ import {
   setPairDistanceOnServer,
   skipCurrentCombatPhaseActionOnServer,
   submitCombatDeclarationOnServer,
-  prepareCombatRoundEndReviewOnServer,
   loadEncounterById,
 } from "@/lib/api/encounterClient";
 import {
@@ -4000,11 +4000,15 @@ export default function CombatRoundManagerPanel({
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
-  const roundEndAutoPrepareAttemptRef = useRef<string | undefined>(undefined);
+  const deterministicAdvanceAttemptRef = useRef<string | undefined>(undefined);
+  const deterministicAdvanceBlockedRevisionRef = useRef<string | undefined>(undefined);
   const boundaryTransitionInFlightRef = useRef(false);
   const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
 
-  async function refreshCanonicalCombatAfterConflict(error: unknown): Promise<boolean> {
+  async function refreshCanonicalCombatAfterConflict(
+    error: unknown,
+    options: { suppressDeterministicAdvance?: boolean } = {},
+  ): Promise<boolean> {
     const code = getCombatMutationConflictCode(error);
     if (!code) {
       return false;
@@ -4022,6 +4026,9 @@ export default function CombatRoundManagerPanel({
     const accepted = acceptCanonicalEncounterState(refreshedEncounter, next.state);
 
     if (accepted) {
+      if (options.suppressDeterministicAdvance) {
+        deterministicAdvanceBlockedRevisionRef.current = refreshedEncounter.updatedAt;
+      }
       if (refreshedParticipants.length > 0) {
         setScenarioParticipantOverrides(
           Object.fromEntries(
@@ -4072,6 +4079,7 @@ export default function CombatRoundManagerPanel({
         encounterRevision: descriptorRevision ?? roundView.encounterRevision ?? encounter.updatedAt,
         resolveStepStatus: getParticipantDeclarationStatus,
         roundState,
+        scenarioParticipants: effectiveScenarioParticipants,
       });
     },
   );
@@ -4370,6 +4378,17 @@ export default function CombatRoundManagerPanel({
       selectedRoundIsActive,
     ],
   );
+  const projectedDeterministicTask = combatProgressionProjection.boundary.processes
+    .flatMap((process) => process.stages)
+    .flatMap((stage) => stage.executionGroups)
+    .flatMap((group) => group.tasks)
+    .find(
+      (task) =>
+        task.state === "executable" &&
+        task.participation?.status === "required" &&
+        task.participation.workClass === "deterministic_transition" &&
+        task.participation.completeness === "complete",
+    );
   const postResultHoldSource = postResultHoldRequest?.candidate.source ?? postResultHold?.source;
   const postResultHoldSourcePresentation =
     postResultHoldSource && postResultHoldSource.roundNumber === roundState.roundNumber
@@ -4397,7 +4416,13 @@ export default function CombatRoundManagerPanel({
           ],
           key: `post-result:${postResultHoldSource.participantId}:${postResultHoldSource.step}`,
         })
-      : undefined;
+      : postResultHoldSource
+        ? combatPresentation.archived.inspectorPresentation.get({
+            participantId: postResultHoldSource.participantId,
+            roundNumber: postResultHoldSource.roundNumber,
+            step: postResultHoldSource.step,
+          })?.currentStepResults
+        : undefined;
   useEffect(() => {
     if (!postResultHoldRequest) return;
     if (postResultHoldRequest.acceptedRevision !== roundView.encounterRevision) return;
@@ -4406,6 +4431,7 @@ export default function CombatRoundManagerPanel({
       acceptedPresentation: postResultHoldSourcePresentation,
       acceptedRevision: postResultHoldRequest.acceptedRevision,
       candidate: postResultHoldRequest.candidate,
+      deterministicSuffixPending: Boolean(projectedDeterministicTask),
       nextSelection: currentTaskSelection,
     });
     setPostResultHoldRequest(undefined);
@@ -4427,6 +4453,7 @@ export default function CombatRoundManagerPanel({
     currentTaskSelection?.step,
     postResultHoldRequest,
     postResultHoldSourcePresentation,
+    projectedDeterministicTask?.id,
     roundView.encounterRevision,
   ]);
   const heldResultPresentation = postResultHold
@@ -4438,8 +4465,9 @@ export default function CombatRoundManagerPanel({
   useEffect(() => {
     if (!postResultHold) return;
     if (
-      postResultHold.source.roundNumber !== roundState.roundNumber ||
-      (roundView.encounterRevision !== postResultHold.acceptedRevision && !heldResultPresentation)
+      !heldResultPresentation &&
+      (postResultHold.source.roundNumber !== roundState.roundNumber ||
+        roundView.encounterRevision !== postResultHold.acceptedRevision)
     ) {
       setPostResultHold(undefined);
       manualSelectionRef.current = undefined;
@@ -4520,33 +4548,33 @@ export default function CombatRoundManagerPanel({
     !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression
       ? []
       : [
-        ...(inspectorRoundEndReview?.canonicalReview?.proposals ?? []).map((proposal) => {
-          const durationProposal = inspectorRoundEndReview?.proposedEffects.find(
-            (candidate) => candidate.id === proposal.id,
-          );
-          const expiryProposal = inspectorRoundEndReview?.proposedRemovals.find(
-            (candidate) => candidate.id === proposal.id,
-          );
-          return {
-            durationLabel:
-              proposal.transitionType === "expire"
-                ? "Expires after this review"
-                : durationProposal?.nextDuration,
-            id: proposal.id,
-            label:
-              durationProposal?.label.replace(/^Reduce duration:\s*/, "") ??
-              expiryProposal?.label.replace(/^Expire\s*/, "") ??
-              "Effect duration",
-          };
-        }),
-        ...(inspectorRoundEndReview?.canonicalReview?.requirements ?? [])
-          .filter((requirement) => !requirement.resolved)
-          .map((requirement) => ({
-            durationLabel: requirement.blocksReview ? "Required" : "Pending rule",
-            id: requirement.id,
-            label: requirement.label,
-          })),
-      ];
+          ...(inspectorRoundEndReview?.canonicalReview?.proposals ?? []).map((proposal) => {
+            const durationProposal = inspectorRoundEndReview?.proposedEffects.find(
+              (candidate) => candidate.id === proposal.id,
+            );
+            const expiryProposal = inspectorRoundEndReview?.proposedRemovals.find(
+              (candidate) => candidate.id === proposal.id,
+            );
+            return {
+              durationLabel:
+                proposal.transitionType === "expire"
+                  ? "Expires after this review"
+                  : durationProposal?.nextDuration,
+              id: proposal.id,
+              label:
+                durationProposal?.label.replace(/^Reduce duration:\s*/, "") ??
+                expiryProposal?.label.replace(/^Expire\s*/, "") ??
+                "Effect duration",
+            };
+          }),
+          ...(inspectorRoundEndReview?.canonicalReview?.requirements ?? [])
+            .filter((requirement) => !requirement.resolved)
+            .map((requirement) => ({
+              durationLabel: requirement.blocksReview ? "Required" : "Pending rule",
+              id: requirement.id,
+              label: requirement.label,
+            })),
+        ];
   const projectedRoundEndTasks = combatProgressionProjection.boundary.processes
     .flatMap((process) => process.stages)
     .flatMap((stage) => stage.executionGroups)
@@ -4639,54 +4667,66 @@ export default function CombatRoundManagerPanel({
     ),
   );
   useEffect(() => {
-    if (saving || !selectedRoundIsActive || inspectorRoundEndTask?.kind !== "round_end_prepare") {
+    if (
+      saving ||
+      postResultHoldRequest ||
+      !selectedRoundIsActive ||
+      !projectedDeterministicTask ||
+      !descriptorRevision ||
+      deterministicAdvanceBlockedRevisionRef.current === descriptorRevision
+    ) {
       return;
     }
-    const descriptor = resolveCombatTaskCommandContext({
-      descriptor: currentActionPresentation?.primaryAction.descriptor,
-      expectedCommandTypes: ["prepare_round_end_review"],
-      presentation: currentActionPresentation,
-      requiredFields: ["executionGroupId", "expectedRevision", "taskId"],
-    });
-    if (!descriptor) return;
+    const attemptKey = `${encounter.id}:${projectedDeterministicTask.id}:${descriptorRevision}`;
+    if (deterministicAdvanceAttemptRef.current === attemptKey) return;
 
-    const attemptKey = `${encounter.id}:${descriptor.taskId}:${descriptor.expectedRevision}`;
-
-    if (roundEndAutoPrepareAttemptRef.current === attemptKey) {
-      return;
-    }
-
-    roundEndAutoPrepareAttemptRef.current = attemptKey;
+    deterministicAdvanceAttemptRef.current = attemptKey;
     setSaving(true);
-    void prepareCombatRoundEndReviewOnServer({
+    void advanceDeterministicCombatOnServer({
       currentEncounter: encounter,
       encounterId: encounter.id,
-      executionGroupId: descriptor.executionGroupId!,
-      expectedRevision: descriptor.expectedRevision,
-      taskId: descriptor.taskId,
+      executionGroupId: projectedDeterministicTask.executionGroupId,
+      expectedRevision: descriptorRevision,
+      taskId: projectedDeterministicTask.id,
     })
-      .then(({ encounter: nextEncounter }) => {
+      .then(({ encounter: nextEncounter, participants, stopReason }) => {
         const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+        if (participants.length > 0) {
+          setScenarioParticipantOverrides(
+            Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+          );
+          onScenarioParticipantsUpdated?.(participants);
+        }
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
-        setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
-        setSelectedRoundNumber(nextRoundState.roundNumber);
+        if (!postResultHold) {
+          setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+          setSelectedRoundNumber(nextRoundState.roundNumber);
+        }
         onEncounterUpdated?.(nextEncounter);
-        setSaveError(undefined);
+        setSaveError(
+          stopReason === "safety_limit"
+            ? "Deterministic combat advancement reached its safety limit."
+            : undefined,
+        );
       })
       .catch((caughtError: unknown) => {
         setSaveError(
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to prepare round-end review automatically.",
+            : "Unable to advance deterministic combat work.",
         );
       })
       .finally(() => setSaving(false));
   }, [
     acceptCanonicalEncounterState,
-    encounter.id,
-    currentActionPresentation,
-    inspectorRoundEndTask?.kind,
+    descriptorRevision,
+    encounter,
     onEncounterUpdated,
+    onScenarioParticipantsUpdated,
+    postResultHold,
+    postResultHoldRequest,
+    projectedDeterministicTask?.executionGroupId,
+    projectedDeterministicTask?.id,
     saving,
     selectedRoundIsActive,
   ]);
@@ -4797,9 +4837,7 @@ export default function CombatRoundManagerPanel({
     },
   );
   const inspectorHistoricalDeclarationSummary = inspectorPanelSnapshot?.declarationSummary;
-  const inspectorHistoricalSelectorFactsComplete = Boolean(
-    inspectorHistoricalDeclarationSummary,
-  );
+  const inspectorHistoricalSelectorFactsComplete = Boolean(inspectorHistoricalDeclarationSummary);
   const inspectorHistoricalActionOptions =
     inspectorHistoricalSelectorFactsComplete && inspectorHistoricalDeclarationSummary
       ? [
@@ -4947,16 +4985,18 @@ export default function CombatRoundManagerPanel({
   const modifierReviewDescriptor = currentActionPresentation?.primaryAction.descriptor;
   const selectedParticipantOwnsModifierReview = Boolean(
     modifierReviewDescriptor?.participantId &&
-      selectedEncounterParticipant &&
-      getCombatDistanceParticipantAliases(selectedEncounterParticipant).includes(
-        modifierReviewDescriptor.participantId,
-      ),
+    selectedEncounterParticipant &&
+    getCombatDistanceParticipantAliases(selectedEncounterParticipant).includes(
+      modifierReviewDescriptor.participantId,
+    ),
   );
   const modifierReviewInputSnapshot = getOrCreateCombatModifierReviewInputSnapshot({
     combatContext: inspectorGeneratedCombatContext,
     descriptor: selectedParticipantOwnsModifierReview ? modifierReviewDescriptor : undefined,
     expectedParticipantRevision: selectedScenarioParticipant?.updatedAt,
-    participantId: selectedParticipantOwnsModifierReview ? selectedScenarioParticipant?.id : undefined,
+    participantId: selectedParticipantOwnsModifierReview
+      ? selectedScenarioParticipant?.id
+      : undefined,
     snapshots: modifierReviewInputSnapshotsRef.current,
   });
   const inspectorLiveModifiers = useMemo(() => {
@@ -5746,19 +5786,18 @@ export default function CombatRoundManagerPanel({
       inspectorPhaseLoadoutSummaries,
     ],
   );
-  const inspectorResolvedFeintSkill =
-    inspectorIsHistorical
-      ? inspectorDisplayDraft.feintSkillId
-        ? {
-            id: inspectorDisplayDraft.feintSkillId,
-            label: resolveHistoricalFeintSkillLabel({
-              skillId: inspectorDisplayDraft.feintSkillId,
-              skills: content?.skills ?? [],
-              specializations: content?.specializations ?? [],
-            }),
-          }
-        : undefined
-      : inspectorDraft.feintMethod === "movement"
+  const inspectorResolvedFeintSkill = inspectorIsHistorical
+    ? inspectorDisplayDraft.feintSkillId
+      ? {
+          id: inspectorDisplayDraft.feintSkillId,
+          label: resolveHistoricalFeintSkillLabel({
+            skillId: inspectorDisplayDraft.feintSkillId,
+            skills: content?.skills ?? [],
+            specializations: content?.specializations ?? [],
+          }),
+        }
+      : undefined
+    : inspectorDraft.feintMethod === "movement"
       ? { id: "dodge", label: "Dodge" }
       : resolveCombatFeintWeaponSkill({
           equipmentState: inspectorEquipmentState,
@@ -7016,8 +7055,7 @@ export default function CombatRoundManagerPanel({
     inspectorSnapshot &&
     (inspectorSnapshot.actionResultStatus === "recorded" ||
       inspectorSnapshot.attackResult ||
-      ((inspector.step === "initiative_phase_1" ||
-        inspector.step === "initiative_phase_2") &&
+      ((inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2") &&
         inspectorSnapshot.initiativeResult) ||
       inspectorSnapshot.actionResultSummary),
   );
@@ -8330,11 +8368,7 @@ export default function CombatRoundManagerPanel({
       const displayedParticipantIds = displayParticipants.map(
         (participant) => participant.participantId,
       );
-      const {
-        commandEnvelope,
-        encounter: nextEncounter,
-        participant,
-      } = await submitCombatDeclarationOnServer({
+      const declarationResponse = await submitCombatDeclarationOnServer({
         currentEncounter: encounter,
         actionId: inspectorDraft.actionId || undefined,
         adjustDistance:
@@ -8389,6 +8423,33 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
+      let { commandEnvelope, deterministicAdvance, encounter: nextEncounter } = declarationResponse;
+      const { participant } = declarationResponse;
+      let updatedScenarioParticipants = [participant];
+      let deterministicAdvanceError: unknown;
+      if (deterministicAdvance) {
+        deterministicAdvanceAttemptRef.current = `${encounter.id}:${deterministicAdvance.taskId}:${deterministicAdvance.expectedRevision}`;
+        try {
+          const advanced = await advanceDeterministicCombatOnServer({
+            currentEncounter: nextEncounter,
+            encounterId: encounter.id,
+            executionGroupId: deterministicAdvance.executionGroupId,
+            expectedRevision: deterministicAdvance.expectedRevision,
+            taskId: deterministicAdvance.taskId,
+          });
+          commandEnvelope = advanced.commandEnvelope;
+          nextEncounter = advanced.encounter;
+          updatedScenarioParticipants = [
+            ...new Map(
+              [participant, ...advanced.participants].map((candidate) => [candidate.id, candidate]),
+            ).values(),
+          ];
+          deterministicAdvance = undefined;
+        } catch (caughtError) {
+          if (getCombatMutationConflictCode(caughtError)) throw caughtError;
+          deterministicAdvanceError = caughtError;
+        }
+      }
       const commandState = getCombatRoundManagerStateFromCommandEnvelope({
         commandEnvelope,
         encounter: nextEncounter,
@@ -8411,7 +8472,9 @@ export default function CombatRoundManagerPanel({
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
-        [participant.id]: participant,
+        ...Object.fromEntries(
+          updatedScenarioParticipants.map((candidate) => [candidate.id, candidate]),
+        ),
       }));
 
       if (nextSelection) {
@@ -8426,12 +8489,32 @@ export default function CombatRoundManagerPanel({
       setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
-      onScenarioParticipantsUpdated?.([participant]);
-      setSaveError(undefined);
-    } catch (caughtError) {
+      onScenarioParticipantsUpdated?.(updatedScenarioParticipants);
       setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
+        deterministicAdvanceError instanceof Error
+          ? deterministicAdvanceError.message
+          : deterministicAdvanceError
+            ? "The declaration was accepted, but deterministic combat work could not advance."
+            : undefined,
       );
+    } catch (caughtError) {
+      if (getCombatMutationConflictCode(caughtError)) {
+        try {
+          await refreshCanonicalCombatAfterConflict(caughtError, {
+            suppressDeterministicAdvance: true,
+          });
+        } catch (refreshError) {
+          setSaveError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Combat state changed and could not be refreshed.",
+          );
+        }
+      } else {
+        setSaveError(
+          caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
+        );
+      }
     } finally {
       setSaving(false);
     }
@@ -10619,9 +10702,7 @@ export default function CombatRoundManagerPanel({
                         secondaryActionLabel={
                           inspectorHistoricalDeclarationSummary?.secondaryActionLabel ??
                           (inspectorDisplayDraft.secondaryActionId
-                            ? getPlayerEncounterActionLabel(
-                                inspectorDisplayDraft.secondaryActionId,
-                              )
+                            ? getPlayerEncounterActionLabel(inspectorDisplayDraft.secondaryActionId)
                             : undefined)
                         }
                       />
@@ -10885,8 +10966,8 @@ export default function CombatRoundManagerPanel({
                               <PlayerCombatObservationProgress
                                 relationships={
                                   inspectorIsHistorical
-                                    ? archivedInspectorPresentation?.historicalContext
-                                        .observationRelationships ?? []
+                                    ? (archivedInspectorPresentation?.historicalContext
+                                        .observationRelationships ?? [])
                                     : selectedTimelineRoundState.observationRelationships.filter(
                                         (relationship) =>
                                           relationship.observerParticipantId ===
@@ -10933,57 +11014,57 @@ export default function CombatRoundManagerPanel({
                                     )?.desiredDistance ?? "No recorded information"}
                                   </span>
                                 ) : (
-                                <select
-                                  disabled={saving}
-                                  onChange={(event) => {
-                                    const targetParticipantId =
-                                      phaseModel.phaseContext.targetParticipantId;
-                                    if (!targetParticipantId) return;
-                                    updateInspectorDraft({
-                                      movementIntent: {
-                                        ...inspectorDraft.movementIntent,
-                                        distancePreferences: [
-                                          ...inspectorDraft.movementIntent.distancePreferences.filter(
-                                            (entry) =>
-                                              entry.targetParticipantId !== targetParticipantId,
-                                          ),
-                                          {
-                                            desiredDistance: Number(event.target.value) as
-                                              | 0
-                                              | 1
-                                              | 2
-                                              | 3
-                                              | 4
-                                              | 5
-                                              | 6
-                                              | 7
-                                              | 8,
-                                            source: "gm_proxy",
-                                            targetParticipantId,
-                                          },
-                                        ],
-                                      },
-                                    });
-                                  }}
-                                  value={
-                                    inspectorDraft.movementIntent.distancePreferences.find(
-                                      (entry) =>
-                                        entry.targetParticipantId ===
-                                        phaseModel.phaseContext.targetParticipantId,
-                                    )?.desiredDistance ??
-                                    inspectorDistancePreferenceOptions.find(
-                                      (option) =>
-                                        option.id === phaseModel.phaseContext.targetParticipantId,
-                                    )?.defaultDistance ??
-                                    2
-                                  }
-                                >
-                                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
-                                    <option key={distance} value={distance}>
-                                      {distance}
-                                    </option>
-                                  ))}
-                                </select>
+                                  <select
+                                    disabled={saving}
+                                    onChange={(event) => {
+                                      const targetParticipantId =
+                                        phaseModel.phaseContext.targetParticipantId;
+                                      if (!targetParticipantId) return;
+                                      updateInspectorDraft({
+                                        movementIntent: {
+                                          ...inspectorDraft.movementIntent,
+                                          distancePreferences: [
+                                            ...inspectorDraft.movementIntent.distancePreferences.filter(
+                                              (entry) =>
+                                                entry.targetParticipantId !== targetParticipantId,
+                                            ),
+                                            {
+                                              desiredDistance: Number(event.target.value) as
+                                                | 0
+                                                | 1
+                                                | 2
+                                                | 3
+                                                | 4
+                                                | 5
+                                                | 6
+                                                | 7
+                                                | 8,
+                                              source: "gm_proxy",
+                                              targetParticipantId,
+                                            },
+                                          ],
+                                        },
+                                      });
+                                    }}
+                                    value={
+                                      inspectorDraft.movementIntent.distancePreferences.find(
+                                        (entry) =>
+                                          entry.targetParticipantId ===
+                                          phaseModel.phaseContext.targetParticipantId,
+                                      )?.desiredDistance ??
+                                      inspectorDistancePreferenceOptions.find(
+                                        (option) =>
+                                          option.id === phaseModel.phaseContext.targetParticipantId,
+                                      )?.defaultDistance ??
+                                      2
+                                    }
+                                  >
+                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                                      <option key={distance} value={distance}>
+                                        {distance}
+                                      </option>
+                                    ))}
+                                  </select>
                                 )}
                               </label>
                               <div>Skill: Dodge</div>
@@ -11121,9 +11202,9 @@ export default function CombatRoundManagerPanel({
                                   historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
                                 }
                               />
-                                <PlayerCombatAttackLocationSelector
-                                  combatContext={phaseModel.phaseContext}
-                                  controlsDisabled={saving || inspectorIsHistorical}
+                              <PlayerCombatAttackLocationSelector
+                                combatContext={phaseModel.phaseContext}
+                                controlsDisabled={saving || inspectorIsHistorical}
                                 onCombatContextChange={(combatContext) =>
                                   updateInspectorDraft({
                                     phaseContexts: {
@@ -11370,10 +11451,16 @@ export default function CombatRoundManagerPanel({
                         <section style={playerCombatPanelCardStyle}>
                           <strong>Modifier review</strong>
                           <div
-                            style={{ color: "#5e5a50", display: "grid", fontSize: "0.85rem", gap: "0.2rem" }}
+                            style={{
+                              color: "#5e5a50",
+                              display: "grid",
+                              fontSize: "0.85rem",
+                              gap: "0.2rem",
+                            }}
                           >
                             <span>
-                              Current effects: {inspectorDisplayModifierRows.reduce(
+                              Current effects:{" "}
+                              {inspectorDisplayModifierRows.reduce(
                                 (total, row) =>
                                   total +
                                   row.entries.length +
@@ -11517,35 +11604,35 @@ export default function CombatRoundManagerPanel({
                           stepLabel={getPlayerCombatStepLabel(inspector.step)}
                         />
                       ) : (
-                      <PlayerCombatActionButtonPanel
-                        disabled={inspectorEffectiveActionButtonDisabled}
-                        onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
-                          invokeGmCurrentAction(descriptor);
-                        }}
-                        preActionControls={
-                          inspectorSelectionIsCurrentProgression
-                            ? inspectorPreActionControls
-                            : undefined
-                        }
-                        presentation={
-                          inspector.participant?.declaration
-                            ? labelCurrentActionAsDeclarationEdit({
-                                participantId: inspector.participant.participantId,
-                                presentation: inspectorWorkflowPresentation,
-                              })
-                            : inspectorWorkflowPresentation
-                        }
-                        saving={saving}
-                        statusText={
-                          projectedBoundaryTransitionAction
-                            ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
-                                projectedBoundaryTransitionAction.targetBoundary,
-                              )}.`
-                            : `Current step: ${getPlayerCombatStepLabel(
+                        <PlayerCombatActionButtonPanel
+                          disabled={inspectorEffectiveActionButtonDisabled}
+                          onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                            invokeGmCurrentAction(descriptor);
+                          }}
+                          preActionControls={
+                            inspectorSelectionIsCurrentProgression
+                              ? inspectorPreActionControls
+                              : undefined
+                          }
+                          presentation={
+                            inspector.participant?.declaration
+                              ? labelCurrentActionAsDeclarationEdit({
+                                  participantId: inspector.participant.participantId,
+                                  presentation: inspectorWorkflowPresentation,
+                                })
+                              : inspectorWorkflowPresentation
+                          }
+                          saving={saving}
+                          statusText={
+                            projectedBoundaryTransitionAction
+                              ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                                  projectedBoundaryTransitionAction.targetBoundary,
+                                )}.`
+                              : `Current step: ${getPlayerCombatStepLabel(
                                   inspector.step,
                                 )}.${inspectorStatusSuffix}`
-                        }
-                        validationMessage={inspectorActionValidationMessage}
+                          }
+                          validationMessage={inspectorActionValidationMessage}
                         />
                       )}
                     </div>
@@ -11628,23 +11715,23 @@ export default function CombatRoundManagerPanel({
                   <PlayerCombatActionButtonPanel
                     disabled={inspectorEffectiveActionButtonDisabled}
                     onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
-                    invokeGmCurrentAction(descriptor);
-                  }}
-                  preActionControls={
-                    inspectorSelectionIsCurrentProgression
-                      ? inspectorPreActionControls
-                      : undefined
-                  }
-                  presentation={inspectorWorkflowPresentation}
-                  saving={saving}
-                  statusText={
-                    projectedBoundaryTransitionAction
-                      ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
-                          projectedBoundaryTransitionAction.targetBoundary,
-                        )}.`
-                      : `Current step: ${getPlayerCombatStepLabel(
-                          inspector.step,
-                        )}.${inspectorStatusSuffix}`
+                      invokeGmCurrentAction(descriptor);
+                    }}
+                    preActionControls={
+                      inspectorSelectionIsCurrentProgression
+                        ? inspectorPreActionControls
+                        : undefined
+                    }
+                    presentation={inspectorWorkflowPresentation}
+                    saving={saving}
+                    statusText={
+                      projectedBoundaryTransitionAction
+                        ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                            projectedBoundaryTransitionAction.targetBoundary,
+                          )}.`
+                        : `Current step: ${getPlayerCombatStepLabel(
+                            inspector.step,
+                          )}.${inspectorStatusSuffix}`
                     }
                     validationMessage={inspectorActionValidationMessage}
                   />

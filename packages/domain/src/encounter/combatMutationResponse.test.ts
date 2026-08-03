@@ -120,6 +120,33 @@ describe("active combat mutation response", () => {
     expect(applied.combatRoundState?.rounds).toEqual(current.combatRoundState?.rounds);
   });
 
+  it("carries an exact revision-bound deterministic advance descriptor", () => {
+    const current = encounter();
+    const response = buildActiveCombatMutationResponse({
+      deterministicAdvance: {
+        executionGroupId: "round:3:declaration-boundary:group:0",
+        expectedRevision: current.updatedAt,
+        taskId: "round:3:declaration-boundary:task",
+      },
+      encounter: current,
+    });
+
+    expect(response.deterministicAdvance).toEqual({
+      executionGroupId: "round:3:declaration-boundary:group:0",
+      expectedRevision: "2026-07-26T12:00:00.000Z",
+      taskId: "round:3:declaration-boundary:task",
+    });
+    expect(() =>
+      activeCombatMutationResponseSchema.parse({
+        ...response,
+        deterministicAdvance: {
+          ...response.deterministicAdvance,
+          expectedRevision: "",
+        },
+      }),
+    ).toThrow();
+  });
+
   it("fails closed when a response is applied to another encounter", () => {
     const response = buildActiveCombatMutationResponse({ encounter: encounter() });
     const other = encounterSessionSchema.parse({

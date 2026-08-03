@@ -34,7 +34,12 @@ import {
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   buildCombatRoundAttackRollResult,
+  buildCanonicalCombatModifierReviewFromDraft,
   buildCombatProgressionProjection,
+  isCompleteDeterministicCombatTask,
+  getCurrentExecutableCombatTasks,
+  projectActiveCombatParticipation,
+  runCombatDeterministicTransitionSuffix,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
@@ -183,6 +188,7 @@ import {
   type CanonicalCombatModifierEffect,
   type CanonicalCombatModifierReviewDecision,
   type CanonicalCombatModifierReviewProposal,
+  type ActiveCombatDeterministicAdvanceDescriptor,
   type ScenarioParticipantState,
 } from "@glantri/domain";
 import {
@@ -1068,6 +1074,7 @@ function authorizeCombatTaskCommand(input: {
   >;
   encounterRevision: string;
   identity: ParsedCombatTaskCommandIdentity;
+  projection?: ReturnType<typeof buildCombatProgressionProjection>;
   roundState: CombatRoundState;
 }) {
   return measureCombatPerformanceStage("descriptor_projection_and_authorization", () => {
@@ -1083,7 +1090,7 @@ function authorizeCombatTaskCommand(input: {
       executionGroupId: input.identity.executionGroupId,
       initiativeGroupId: input.identity.initiativeGroupId,
       initiativeValue: input.identity.initiativeValue,
-      projection: buildCombatProgressionProjection(input.roundState),
+      projection: input.projection ?? buildCombatProgressionProjection(input.roundState),
       taskId: input.identity.taskId,
     });
   });
@@ -1199,9 +1206,7 @@ const MODIFIER_REVIEW_LEGACY_BUCKETS = {
   situationObSkill: "situation_ob_skill",
 } as const;
 
-function modifierReviewRows(
-  context: ScenarioParticipantCombatContext,
-): Array<{
+function modifierReviewRows(context: ScenarioParticipantCombatContext): Array<{
   bucketKey: (typeof MODIFIER_REVIEW_BUCKETS)[number][0];
   category: (typeof MODIFIER_REVIEW_BUCKETS)[number][1];
   entry: ScenarioCombatModifierEntry;
@@ -1334,10 +1339,9 @@ function buildCanonicalModifierReviewFromDraft(input: {
   scenarioParticipantId: string;
 }) {
   const inputEffects = new Map<string, CanonicalCombatModifierEffect>();
-  for (const effect of combatEffectsStateSchema.parse(input.participantState.combatEffects).effects) {
-    if (
-      effect.canonicalLifecycle?.ownerParticipantId === input.scenarioParticipantId
-    ) {
+  for (const effect of combatEffectsStateSchema.parse(input.participantState.combatEffects)
+    .effects) {
+    if (effect.canonicalLifecycle?.ownerParticipantId === input.scenarioParticipantId) {
       inputEffects.set(effect.canonicalLifecycle.id, effect.canonicalLifecycle);
     }
   }
@@ -1379,19 +1383,13 @@ function buildCanonicalModifierReviewFromDraft(input: {
     participantOwnedModifierReviewRows({
       context: input.currentContext,
       participantId: input.scenarioParticipantId,
-    }).map((row) => [
-      modifierReviewEffectId(row.entry, inputEffects),
-      row,
-    ]),
+    }).map((row) => [modifierReviewEffectId(row.entry, inputEffects), row]),
   );
   const draftRows = new Map(
     participantOwnedModifierReviewRows({
       context: input.draftContext,
       participantId: input.scenarioParticipantId,
-    }).map((row) => [
-      modifierReviewEffectId(row.entry, inputEffects),
-      row,
-    ]),
+    }).map((row) => [modifierReviewEffectId(row.entry, inputEffects), row]),
   );
   const proposals: CanonicalCombatModifierReviewProposal[] = [];
   for (const effect of inputEffects.values()) {
@@ -1449,13 +1447,18 @@ function buildCanonicalModifierReviewFromDraft(input: {
     const valueChanged =
       effect.payload.kind === "numeric" && effect.payload.value !== draft.entry.value;
     const durationChanged = current.entry.durationRounds !== draft.entry.durationRounds;
-    const labelChanged = Boolean(draft.entry.notes?.trim()) &&
-      draft.entry.notes?.trim() !== effect.publicLabel;
+    const labelChanged =
+      Boolean(draft.entry.notes?.trim()) && draft.entry.notes?.trim() !== effect.publicLabel;
     if (valueChanged || durationChanged || labelChanged) {
       if (
-        !["manual", "persistent_effect", "combat_experience", "damage", "health", "stunned"].includes(
-          effect.sourceFamily,
-        )
+        ![
+          "manual",
+          "persistent_effect",
+          "combat_experience",
+          "damage",
+          "health",
+          "stunned",
+        ].includes(effect.sourceFamily)
       ) {
         throw new RangeError(
           `${effect.publicLabel} is process-owned and cannot be edited as a manual modifier.`,
@@ -1504,7 +1507,8 @@ function buildCanonicalModifierReviewFromDraft(input: {
   const requiredRolls = [...inputEffects.values()].flatMap((effect) => {
     const duration = effect.lifecycle.duration;
     if (duration.kind !== "until_check") return [];
-    const owner = duration.check.checkKind === "gm_review" ? ("modifier_review" as const) : ("su" as const);
+    const owner =
+      duration.check.checkKind === "gm_review" ? ("modifier_review" as const) : ("su" as const);
     return [
       {
         blocksReview: owner === "modifier_review",
@@ -1664,8 +1668,7 @@ function applyCanonicalModifierReviewToParticipantState(input: {
               ? scenarioCombatModifierEntrySchema.parse({
                   ...entry,
                   application:
-                    lifecycle.payload.kind === "numeric" &&
-                    lifecycle.payload.unit === "flat_db"
+                    lifecycle.payload.kind === "numeric" && lifecycle.payload.unit === "flat_db"
                       ? "flat_db"
                       : "percentage",
                   canonicalLifecycle: lifecycle,
@@ -1687,10 +1690,16 @@ function applyCanonicalModifierReviewToParticipantState(input: {
             const lifecycle = canonicalCombatModifierEffectSchema.safeParse(
               entry.canonicalLifecycle,
             );
-            return !lifecycle.success ||
-              ["proposed", "provisional", "pending_review", "pending_activation", "active"].includes(
-                lifecycle.data.lifecycle.state,
-              );
+            return (
+              !lifecycle.success ||
+              [
+                "proposed",
+                "provisional",
+                "pending_review",
+                "pending_activation",
+                "active",
+              ].includes(lifecycle.data.lifecycle.state)
+            );
           }),
       ]),
     ),
@@ -3252,6 +3261,43 @@ function initializeMaterializedCombatRoundState(input: {
   });
 }
 
+function projectAcceptedDeterministicAdvance(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: readonly ScenarioParticipant[];
+}): ActiveCombatDeterministicAdvanceDescriptor | undefined {
+  const state = initializeMaterializedCombatRoundState({
+    encounter: input.encounter,
+    scenarioParticipants: [...input.scenarioParticipants],
+  });
+  const participation = projectActiveCombatParticipation({
+    encounterRevision: input.encounter.updatedAt,
+    scenarioParticipants: input.scenarioParticipants,
+    state,
+  });
+  const task = getCurrentExecutableCombatTasks(
+    buildCombatProgressionProjection(state, { participation }),
+  )[0];
+  return task && isCompleteDeterministicCombatTask(task)
+    ? {
+        executionGroupId: task.executionGroupId,
+        expectedRevision: input.encounter.updatedAt,
+        taskId: task.id,
+      }
+    : undefined;
+}
+
+function hasAcceptedDeterministicCommand(input: {
+  commandId: string;
+  encounter: EncounterSession;
+}): boolean {
+  const state = input.encounter.combatRoundState;
+  if (!state) return false;
+  return (
+    state.commands.some((command) => command.id === input.commandId) ||
+    state.rounds.at(-1)?.commands.some((command) => command.id === input.commandId) === true
+  );
+}
+
 async function normalizeScenarioParticipantModifierRowsForEncounter(input: {
   encounter: EncounterSession;
   initializingNewEncounter?: boolean;
@@ -3463,9 +3509,7 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
   roundState: CombatRoundState;
   scenarioParticipant: ScenarioParticipant;
   secondaryActionId?: string;
-  lifecycleContext?: Parameters<
-    typeof applyCombatActionGeneratedModifiers
-  >[0]["lifecycleContext"];
+  lifecycleContext?: Parameters<typeof applyCombatActionGeneratedModifiers>[0]["lifecycleContext"];
 }): ScenarioParticipantCombatContext {
   const roundParticipantId =
     findCombatRoundParticipantByAlias({
@@ -4834,7 +4878,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               visibleParticipantIds:
                 perspectiveScope?.visibleParticipantIds ?? playerScope.visibleParticipantIds,
             };
-      const progressionProjection = buildCombatProgressionProjection(state);
+      const progressionProjection = buildCombatProgressionProjection(state, {
+        participation: projectActiveCombatParticipation({
+          encounterRevision: historySource.revision,
+          scenarioParticipants,
+          state,
+        }),
+      });
       const currentAttackModifierValidation = buildCurrentAttackModifierValidation({
         allowedAttackerParticipantIds:
           viewer.kind === "player" ? viewer.controlledParticipantIds : undefined,
@@ -5324,7 +5374,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const progressionProjection = buildCombatProgressionProjection(roundState);
+      const progressionParticipation = projectActiveCombatParticipation({
+        encounterRevision: encounter.updatedAt,
+        scenarioParticipants,
+        state: roundState,
+      });
+      const progressionProjection = buildCombatProgressionProjection(roundState, {
+        participation: progressionParticipation,
+      });
       const commandType =
         progressionProjection.boundary.kind === "phase1_modifier_review"
           ? "review_modifiers_phase1"
@@ -5347,6 +5404,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         encounterRevision: encounter.updatedAt,
         identity: body,
+        // A descriptor issued before task-suppression deployment remains consumable once. New
+        // clients never receive suppressed review tasks; retained canonical tasks authorize from
+        // the participation-aware projection.
+        projection: progressionProjection.boundary.processes
+          .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+          .some((task) => task.id === body.taskId)
+          ? progressionProjection
+          : undefined,
         roundState,
       });
       if (!authorization.ok) {
@@ -5855,10 +5920,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const lifecycleSequence =
-        roundState.events.reduce(
-          (highest, event) => Math.max(highest, event.sequence),
-          -1,
-        ) + 1;
+        roundState.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1;
       const attackPhaseDefensivePenalties = attackOpportunities
         ? resolveCombatAttackPhaseDefensivePenalties({
             commitment: "committed",
@@ -5992,7 +6054,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter, participant };
+      const acceptedScenarioParticipants = scenarioParticipants.map((candidate) =>
+        candidate.id === participant.id ? participant : candidate,
+      );
+      const deterministicAdvance = projectAcceptedDeterministicAdvance({
+        encounter: savedEncounter,
+        scenarioParticipants: acceptedScenarioParticipants,
+      });
+
+      return { deterministicAdvance, encounter: savedEncounter, participant };
     } catch (error) {
       const persistenceErrorResponse = sendCombatWriteError(reply, error);
       if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
@@ -6855,10 +6925,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt,
           createdRevision: encounter.updatedAt,
           createdSequence:
-            roundState.events.reduce(
-              (highest, event) => Math.max(highest, event.sequence),
-              -1,
-            ) + 1,
+            roundState.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1,
           encounterId: encounter.id,
           visibility: { audience: "involved", sourceIdentity: "public" },
         },
@@ -7947,10 +8014,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           }
           const transitionSequence = Math.max(
             0,
-            rolled.state.events.reduce(
-              (highest, event) => Math.max(highest, event.sequence),
-              -1,
-            ),
+            rolled.state.events.reduce((highest, event) => Math.max(highest, event.sequence), -1),
           );
           updatedParticipant = await encounterService.updateScenarioParticipantState({
             participantId: affected.id,
@@ -7974,8 +8038,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                           transitionType: "activate",
                         })
                       : undefined;
-                  const canonicalBeforeResolution =
-                    activated?.effect ?? effect.canonicalLifecycle;
+                  const canonicalBeforeResolution = activated?.effect ?? effect.canonicalLifecycle;
                   const transitioned = canonicalBeforeResolution
                     ? transitionCanonicalCombatModifierEffect({
                         acceptedRevision: encounter.updatedAt,
@@ -9360,6 +9423,380 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         return reply.code(400).send({
           error: error instanceof Error ? error.message : "Unable to prepare round-end review.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/advance-deterministic",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        let workingEncounter = await encounterService.getEncounterById(encounterId);
+        if (!workingEncounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = workingEncounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(403).send({
+            code: "unauthorized_actor",
+            error: "Only GM users can advance deterministic combat work.",
+          });
+        }
+        const body = parseBodyObject(request.body, "Deterministic combat advancement payload");
+        const expectedRevision = parseNonEmptyString(body.expectedRevision, "expectedRevision");
+        const expectedTaskId = parseNonEmptyString(body.taskId, "taskId");
+        const expectedExecutionGroupId = parseNonEmptyString(
+          body.executionGroupId,
+          "executionGroupId",
+        );
+        if (workingEncounter.updatedAt !== expectedRevision) {
+          const commandId = `combat-deterministic-v1:${expectedRevision}:${expectedTaskId}:${expectedExecutionGroupId}`;
+          if (hasAcceptedDeterministicCommand({ commandId, encounter: workingEncounter })) {
+            const participants = await scenarioService.listScenarioParticipants(scenarioId);
+            return {
+              commandEnvelope: buildCombatRoundCommandEnvelope({
+                state: initializeMaterializedCombatRoundState({
+                  encounter: workingEncounter,
+                  scenarioParticipants: participants,
+                }),
+              }),
+              encounter: workingEncounter,
+              executedTaskIds: [],
+              participants,
+              stopReason: "already_accepted",
+            };
+          }
+          return reply.code(409).send({
+            code: "stale_revision",
+            error: "Combat state changed before deterministic work could advance.",
+          });
+        }
+
+        let workingParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const project = () => {
+          const state = initializeMaterializedCombatRoundState({
+            encounter: workingEncounter!,
+            scenarioParticipants: workingParticipants,
+          });
+          const participation = projectActiveCombatParticipation({
+            encounterRevision: workingEncounter!.updatedAt,
+            scenarioParticipants: workingParticipants,
+            state,
+          });
+          return {
+            participation,
+            progression: buildCombatProgressionProjection(state, { participation }),
+            revision: workingEncounter!.updatedAt,
+            state,
+          };
+        };
+        const initial = project();
+        const initialTask = getCurrentExecutableCombatTasks(initial.progression)[0];
+        if (
+          !initialTask ||
+          initialTask.id !== expectedTaskId ||
+          initialTask.executionGroupId !== expectedExecutionGroupId
+        ) {
+          return reply.code(409).send({
+            actualTask: initialTask
+              ? {
+                  executionGroupId: initialTask.executionGroupId,
+                  kind: initialTask.kind,
+                  taskId: initialTask.id,
+                }
+              : undefined,
+            code: "task_mismatch",
+            error: "The deterministic combat task changed before it could advance.",
+            expectedTask: {
+              executionGroupId: expectedExecutionGroupId,
+              taskId: expectedTaskId,
+            },
+            revision: workingEncounter.updatedAt,
+          });
+        }
+
+        const result = await runCombatDeterministicTransitionSuffix({
+          initial,
+          project: () => project(),
+          execute: async ({ commandId, projection, task }) => {
+            const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
+            const submittedAt = new Date(
+              Math.max(Date.now(), Number.isFinite(priorRevisionTime) ? priorRevisionTime + 1 : 0),
+            ).toISOString();
+            const state = projection.state;
+
+            if (task.kind === "round_end_prepare") {
+              const nextState = ensureCombatRoundEndReviewPrepared({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                participantInputs: buildRoundEndParticipantInputs({
+                  encounter: workingEncounter!,
+                  roundState: state,
+                  scenarioParticipants: workingParticipants,
+                }),
+                state,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                expectedRevision: workingEncounter!.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { revision: workingEncounter.updatedAt, state: nextState };
+            }
+
+            if (task.kind === "effect_review" && task.identity.participantId) {
+              const roundParticipant = state.participants.find(
+                (participant) => participant.participantId === task.identity.participantId,
+              );
+              const scenarioParticipant = roundParticipant?.scenarioParticipantId
+                ? workingParticipants.find(
+                    (participant) => participant.id === roundParticipant.scenarioParticipantId,
+                  )
+                : undefined;
+              if (!roundParticipant || !scenarioParticipant) {
+                throw new RangeError("Deterministic participant review owner is unavailable.");
+              }
+              const committed = commitCombatRoundEndParticipantReview({
+                combatEffects: scenarioParticipant.state.combatEffects,
+                createdRevision: workingEncounter!.updatedAt,
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                deterministicNoWorkCompletion:
+                  task.participation?.reason === "deterministic_boundary",
+                encounterId,
+                participantId: roundParticipant.participantId,
+                scenarioId,
+                scenarioParticipantId: scenarioParticipant.id,
+                state,
+              });
+              const saved = await encounterService.commitCombatParticipantStateMutation({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedEncounterRevision: workingEncounter!.updatedAt,
+                participant: scenarioParticipant,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: committed.state,
+                  currentRound: committed.state.roundNumber,
+                  updatedAt: submittedAt,
+                },
+                state: {
+                  ...scenarioParticipant.state,
+                  combatEffects: committed.combatEffects,
+                },
+              });
+              workingEncounter = saved.encounter;
+              workingParticipants = workingParticipants.map((participant) =>
+                participant.id === saved.participant.id ? saved.participant : participant,
+              );
+              return { revision: workingEncounter.updatedAt, state: committed.state };
+            }
+
+            if (task.kind === "modifier_review" && task.owner?.kind === "combatant") {
+              const ownerParticipantId = task.owner.participantId;
+              const roundParticipant = state.participants.find(
+                (participant) => participant.participantId === ownerParticipantId,
+              );
+              const scenarioParticipant = roundParticipant?.scenarioParticipantId
+                ? workingParticipants.find(
+                    (participant) => participant.id === roundParticipant.scenarioParticipantId,
+                  )
+                : undefined;
+              const declaration = roundParticipant?.declaration;
+              if (!roundParticipant || !scenarioParticipant || !declaration) {
+                throw new RangeError("Deterministic modifier review owner is unavailable.");
+              }
+              const currentContext = scenarioParticipantCombatContextSchema.parse(
+                declaration.combatContext ?? scenarioParticipant.state.combat.combatContext,
+              );
+              const modifierReview = buildCanonicalCombatModifierReviewFromDraft({
+                canonicalCutoff:
+                  state.events.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1,
+                commandId,
+                createdAt: submittedAt,
+                currentContext,
+                draftContext: currentContext,
+                encounterId,
+                participantState: scenarioParticipant.state,
+                phase: task.identity.phase === "phase1" ? "M1" : "M2",
+                revision: workingEncounter!.updatedAt,
+                roundNumber: state.roundNumber,
+                scenarioParticipantId: scenarioParticipant.id,
+              });
+              const nextParticipantState = applyCanonicalModifierReviewToParticipantState({
+                createdAt: submittedAt,
+                draftContext: currentContext,
+                state: scenarioParticipant.state,
+                transaction: modifierReview,
+              });
+              const reviewedDeclarationState = recordCombatRoundDeclaration({
+                declaration: {
+                  ...declaration,
+                  combatContext: currentContext,
+                  submittedAt,
+                  submittedByUserId: user.id,
+                },
+                participantId: roundParticipant.participantId,
+                state,
+                submittedBy: "gm",
+              });
+              const nextState = recordCombatRoundParticipantStepReview({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                modifierReview,
+                modifierReviewUndo: {
+                  combatContext: scenarioParticipant.state.combat.combatContext,
+                  combatEffects: scenarioParticipant.state.combatEffects,
+                },
+                participantId: roundParticipant.participantId,
+                previousDeclaration: declaration,
+                state: reviewedDeclarationState,
+                step: state.currentStep,
+                submittedBy: "gm",
+              });
+              const saved = await encounterService.commitCombatModifierReview({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedEncounterRevision: workingEncounter!.updatedAt,
+                participant: scenarioParticipant,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+                state: nextParticipantState,
+              });
+              workingEncounter = saved.encounter;
+              workingParticipants = workingParticipants.map((participant) =>
+                participant.id === saved.participant.id ? saved.participant : participant,
+              );
+              return { revision: workingEncounter.updatedAt, state: nextState };
+            }
+
+            if (task.kind === "commit_initiative" && task.identity.phase) {
+              const nonParticipatingParticipantIds = new Set(
+                projection.participation.facts.flatMap((fact) =>
+                  fact.identity.processFamily === "initiative" &&
+                  fact.identity.phase === task.identity.phase &&
+                  fact.status === "not_required" &&
+                  fact.workClass === "no_work" &&
+                  fact.completeness === "complete" &&
+                  fact.identity.participantId
+                    ? [fact.identity.participantId]
+                    : [],
+                ),
+              );
+              const committed = commitCombatRoundPhaseInitiativeResolution({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                nonParticipatingParticipantIds,
+                phase: task.identity.phase,
+                state,
+                visibility: workingEncounter!.roleplayState?.visibility,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                expectedRevision: workingEncounter!.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: committed.state,
+                  currentRound: committed.state.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { revision: workingEncounter.updatedAt, state: committed.state };
+            }
+
+            if (task.kind === "gm_advance_boundary" && task.transition) {
+              const nextState = advanceCombatProgressionBoundary({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                expectedBoundary: task.transition.currentBoundary,
+                expectedCommandType:
+                  task.expectedCommand === "complete_round"
+                    ? "complete_round"
+                    : "advance_combat_boundary",
+                expectedExecutionGroupId: task.executionGroupId,
+                expectedTaskId: task.id,
+                participation: projection.participation,
+                state,
+                targetBoundary: task.transition.targetBoundary,
+                visibility: workingEncounter!.roleplayState?.visibility,
+              });
+              if (nextState.roundNumber > state.roundNumber) {
+                const refreshed = await Promise.all(
+                  workingParticipants.map(async (participant) => {
+                    const currentContext = participant.state.combat.combatContext;
+                    const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
+                      expireCombatFeintGeneratedModifiersBeforeRound(
+                        currentContext,
+                        nextState.roundNumber,
+                      ),
+                      nextState.roundNumber,
+                    );
+                    if (JSON.stringify(nextContext) === JSON.stringify(currentContext)) {
+                      return participant;
+                    }
+                    return encounterService.updateScenarioParticipantState({
+                      participantId: participant.id,
+                      scenarioId,
+                      state: {
+                        ...participant.state,
+                        combat: { ...participant.state.combat, combatContext: nextContext },
+                      },
+                    });
+                  }),
+                );
+                workingParticipants = refreshed;
+              }
+              workingEncounter = await encounterService.updateCombatEncounter({
+                expectedRevision: workingEncounter!.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { revision: workingEncounter.updatedAt, state: nextState };
+            }
+
+            throw new RangeError(`Unsupported deterministic combat task ${task.kind}.`);
+          },
+        });
+
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: result.final.state }),
+          encounter: workingEncounter,
+          executedTaskIds: result.executedTaskIds,
+          participants: workingParticipants,
+          stopReason: result.stopReason,
+        };
+      } catch (error) {
+        const persistenceErrorResponse = sendCombatWriteError(reply, error);
+        if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
+        return reply.code(error instanceof RangeError ? 409 : 400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to advance deterministic combat work.",
         });
       }
     },
@@ -10895,10 +11332,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           const eventId = `${createdCondition.id}:effect-event`;
           const activatesAfterCurrentInitiativeGroup = Boolean(
             initiativeGroup &&
-              getCombatRoundCurrentInitiativeExecutionGroup({
-                phase: contest.phase,
-                state: nextRoundState,
-              })?.id === initiativeGroup.id,
+            getCombatRoundCurrentInitiativeExecutionGroup({
+              phase: contest.phase,
+              state: nextRoundState,
+            })?.id === initiativeGroup.id,
           );
           const canonicalUnbalancedProjection =
             projectProcessNumericContributionToCanonicalModifierLifecycle({
@@ -10979,10 +11416,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     sourceEventId: eventId,
                     sourceAttackResultId: contest.attackResultId,
                     sourceOpportunityId: contest.opportunityId,
-                    status:
-                      activatesAfterCurrentInitiativeGroup
-                        ? "pending"
-                        : "active",
+                    status: activatesAfterCurrentInitiativeGroup ? "pending" : "active",
                     targetParticipantId: affectedScenarioParticipant.id,
                     type: "general_modifier",
                     updatedAt: createdAt,

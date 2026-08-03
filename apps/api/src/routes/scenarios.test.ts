@@ -26,6 +26,7 @@ import {
   initializeCombatRoundState,
   encounterSessionSchema,
   prepareCombatRoundEndReview,
+  projectActiveCombatParticipation,
   rollCombatRoundCombatExperience,
   rollCombatRoundEndDistanceControl,
   recordCombatRoundAttackResult,
@@ -37,6 +38,7 @@ import {
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
   resolveEncounterParticipantMembership,
+  scenarioParticipantSchema,
   type CombatProgressionBoundaryKind,
   type CombatRoundState,
   type CombatEffectsState,
@@ -1389,10 +1391,7 @@ function makeServerWeaponEquipmentState(input: {
   };
 }
 
-function makeMovementBurdenEquipmentState(input: {
-  characterId: string;
-  load?: number;
-}) {
+function makeMovementBurdenEquipmentState(input: { characterId: string; load?: number }) {
   const locationId = `location-${input.characterId}-person`;
   const templateId = `template-${input.characterId}-load`;
   const itemId = `item-${input.characterId}-load`;
@@ -1910,9 +1909,9 @@ function setupCombatDeclarationRoute(
   return { encounter, participant, participants };
 }
 
-function setupMutableCombatRouteState(input: {
+function setupMutableCombatRouteState<Participant extends { id: string; state: unknown }>(input: {
   encounter: EncounterSession;
-  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  participants: Participant[];
   user?: typeof mocks.playerUser | typeof mocks.adminUser;
 }) {
   let currentEncounter = input.encounter;
@@ -1932,7 +1931,7 @@ function setupMutableCombatRouteState(input: {
       const updatedParticipant = {
         ...currentParticipants.find((participant) => participant.id === update.participantId),
         state: update.state,
-      } as ReturnType<typeof makeCombatScenarioParticipant>;
+      } as Participant;
       currentParticipants = currentParticipants.map((participant) =>
         participant.id === update.participantId ? updatedParticipant : participant,
       );
@@ -2667,7 +2666,11 @@ describe("scenarios route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.encounterService.commitCombatModifierReview.mockImplementation(
-      async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => ({
+      async (update: {
+        participant: Record<string, unknown>;
+        session: unknown;
+        state: unknown;
+      }) => ({
         encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
         participant: { ...update.participant, state: update.state },
       }),
@@ -5556,7 +5559,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(first.statusCode, JSON.stringify(first.json())).toBe(200);
-    expect(retry.statusCode).toBe(409);
+    expect(retry.statusCode, JSON.stringify(retry.json())).toBe(409);
     expect(retry.json()).toMatchObject({ error: "Declaration is closed for this round." });
   });
 
@@ -6732,9 +6735,7 @@ describe("scenarios route contract", () => {
       rolledByUserId: "gm-1",
       skillContestCalculation: expect.objectContaining({
         movementBurden: expect.objectContaining({ finalMovementModifier: 1 }),
-        percentageContributions: [
-          expect.objectContaining({ category: "movement_mm", value: -1 }),
-        ],
+        percentageContributions: [expect.objectContaining({ category: "movement_mm", value: -1 })],
       }),
     });
     expect(proposal.participantB.result).toMatchObject({
@@ -6742,9 +6743,7 @@ describe("scenarios route contract", () => {
       rolledByUserId: "gm-1",
       skillContestCalculation: expect.objectContaining({
         movementBurden: expect.objectContaining({ finalMovementModifier: 1 }),
-        percentageContributions: [
-          expect.objectContaining({ category: "movement_mm", value: -1 }),
-        ],
+        percentageContributions: [expect.objectContaining({ category: "movement_mm", value: -1 })],
       }),
     });
   });
@@ -8543,6 +8542,250 @@ describe("scenarios route contract", () => {
         }),
       }),
     );
+  });
+
+  it("binds the second declaration to the accepted revision's exact deterministic task", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const firstPhaseContexts = {
+      phase1: testCombatPhaseContext("encounter-participant-2"),
+    };
+    const firstDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+          actionId: "attack_parry",
+          participantId: "encounter-participant-1",
+          phaseContexts: firstPhaseContexts,
+          roundNumber: baseState.roundNumber,
+          sources: {
+            phase1: makeUnarmedAttackSourceRef({
+              opportunitySlot: "attack_1",
+              templateId: "virtual-weapon-template-punch",
+            }),
+          },
+        }),
+        phaseContexts: firstPhaseContexts,
+        roundNumber: baseState.roundNumber,
+      },
+      participantId: "encounter-participant-1",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const encounter = encounterSessionSchema.parse({
+      ...baseEncounter,
+      combatRoundState: firstDeclared,
+      currentRound: firstDeclared.roundNumber,
+    });
+    const participants = [
+      scenarioParticipantSchema.parse({
+        ...makeCombatScenarioParticipant(),
+        createdAt: "2026-07-30T08:00:00.000Z",
+        joinSource: "gm_added",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: { effects: [], events: [] },
+        },
+      }),
+      scenarioParticipantSchema.parse({
+        ...makeCombatScenarioParticipant({
+          controlledByUserId: undefined,
+          id: "participant-2",
+          role: "npc",
+          snapshot: { displayName: "City guard" },
+        }),
+        createdAt: "2026-07-30T08:00:00.000Z",
+        joinSource: "gm_added",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: { effects: [], events: [] },
+        },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({ encounter, participants });
+    const app = await buildScenarioTestApp();
+
+    const declaration = await app.inject({
+      headers: { "x-glantri-combat-response": "active-v1" },
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: makeCombatScenarioParticipant().state.combat.combatContext,
+        phaseContexts: {
+          phase1: testCombatPhaseContext("encounter-participant-1"),
+        },
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    const descriptor = declaration.json().deterministicAdvance;
+    const acceptedRevision = declaration.json().revision;
+    const acceptedPersistedRevision = mutable.encounter.updatedAt;
+    const advance = await app.inject({
+      method: "POST",
+      payload: descriptor,
+      url: "/encounters/encounter-1/combat-round/advance-deterministic",
+    });
+    await app.close();
+
+    expect(declaration.statusCode, JSON.stringify(declaration.json())).toBe(200);
+    expect(descriptor, JSON.stringify(declaration.json())).toEqual({
+      executionGroupId:
+        "round:1:boundary:declaration:process:declaration:stage:boundary:execution-group:0:gm_advance_boundary:gm",
+      expectedRevision: acceptedRevision,
+      taskId:
+        "round:1:boundary:declaration:process:declaration:stage:boundary:task:gm_advance_boundary:gm",
+    });
+    expect(declaration.json().nextTask).toMatchObject({
+      executionGroupId: descriptor.executionGroupId,
+      taskId: descriptor.taskId,
+    });
+    expect(acceptedPersistedRevision).toBe(acceptedRevision);
+    expect(advance.statusCode, JSON.stringify(advance.json())).toBe(200);
+    expect(advance.json().executedTaskIds[0]).toBe(descriptor.taskId);
+    expect(advance.json().stopReason).not.toBe("invalid_deterministic_task");
+  });
+
+  it("consumes a bounded deterministic suffix without skipped initiative records", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const heroDeclared = recordCombatRoundDeclaration({
+      declaration: { actionId: "move_only", roundNumber: baseState.roundNumber },
+      participantId: "encounter-participant-1",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const bothDeclared = recordCombatRoundDeclaration({
+      declaration: { actionId: "move_only", roundNumber: baseState.roundNumber },
+      participantId: "encounter-participant-2",
+      state: heroDeclared,
+      submittedBy: "gm",
+    });
+    const m1State = advanceCombatRoundStep(bothDeclared);
+    const encounter = encounterSessionSchema.parse({
+      ...baseEncounter,
+      combatRoundState: m1State,
+      currentRound: m1State.roundNumber,
+    });
+    const participants = [
+      scenarioParticipantSchema.parse({
+        ...makeCombatScenarioParticipant(),
+        createdAt: "2026-07-30T08:00:00.000Z",
+        joinSource: "gm_added",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: { effects: [], events: [] },
+        },
+      }),
+      scenarioParticipantSchema.parse({
+        ...makeCombatScenarioParticipant({
+          controlledByUserId: undefined,
+          id: "participant-2",
+          role: "npc",
+          snapshot: { displayName: "City guard" },
+        }),
+        createdAt: "2026-07-30T08:00:00.000Z",
+        joinSource: "gm_added",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: { effects: [], events: [] },
+        },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({ encounter, participants });
+    const participation = projectActiveCombatParticipation({
+      encounterRevision: encounter.updatedAt,
+      scenarioParticipants: participants,
+      state: m1State,
+    });
+    const task = buildCombatProgressionProjection(m1State, { participation })
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((candidate) => candidate.kind === "gm_advance_boundary");
+    expect(task?.participation).toMatchObject({
+      completeness: "complete",
+      status: "required",
+      workClass: "deterministic_transition",
+    });
+    const app = await buildScenarioTestApp();
+
+    const wrongTask = await app.inject({
+      method: "POST",
+      payload: {
+        executionGroupId: "round:1:replacement:group",
+        expectedRevision: encounter.updatedAt,
+        taskId: "round:1:replacement:task",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-deterministic",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        executionGroupId: task?.executionGroupId,
+        expectedRevision: encounter.updatedAt,
+        taskId: task?.id,
+      },
+      url: "/encounters/encounter-1/combat-round/advance-deterministic",
+    });
+    const commandCountAfterAcceptance = mutable.encounter.combatRoundState?.commands.length ?? 0;
+    const acceptedRevision = mutable.encounter.updatedAt;
+    const retry = await app.inject({
+      method: "POST",
+      payload: {
+        executionGroupId: task?.executionGroupId,
+        expectedRevision: encounter.updatedAt,
+        taskId: task?.id,
+      },
+      url: "/encounters/encounter-1/combat-round/advance-deterministic",
+    });
+    await app.close();
+
+    expect(wrongTask.statusCode, JSON.stringify(wrongTask.json())).toBe(409);
+    expect(wrongTask.json()).toEqual({
+      actualTask: {
+        executionGroupId: task?.executionGroupId,
+        kind: task?.kind,
+        taskId: task?.id,
+      },
+      code: "task_mismatch",
+      error: "The deterministic combat task changed before it could advance.",
+      expectedTask: {
+        executionGroupId: "round:1:replacement:group",
+        taskId: "round:1:replacement:task",
+      },
+      revision: encounter.updatedAt,
+    });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json().executedTaskIds.length).toBeGreaterThan(1);
+    expect(retry.statusCode, JSON.stringify(retry.json())).toBe(200);
+    expect(retry.json()).toMatchObject({
+      executedTaskIds: [],
+      stopReason: "already_accepted",
+    });
+    expect(mutable.encounter.updatedAt).toBe(acceptedRevision);
+    expect(mutable.encounter.combatRoundState?.commands.length).toBe(commandCountAfterAcceptance);
+    expect(mutable.encounter.combatRoundState?.currentStep).not.toBe("review_action_modifiers");
+    expect(
+      mutable.encounter.combatRoundState?.commands.some(
+        (command) =>
+          command.type === "complete_remaining_step" ||
+          command.facts.resolutionType === "bulk_skipped",
+      ),
+    ).toBe(false);
+    expect(
+      mutable.encounter.combatRoundState?.participants.every(
+        (participant) =>
+          participant.initiatives.phase1 === undefined &&
+          participant.initiatives.phase2 === undefined,
+      ),
+    ).toBe(true);
   });
 
   it("prepares round-end review from persisted state without a request payload", async () => {
@@ -11476,7 +11719,9 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const transaction = updatedEncounter.combatRoundState.commands[0].facts.modifierReview;
-    expect(transaction.input.inputEffects.map((effect: { id: string }) => effect.id).sort()).toEqual([
+    expect(
+      transaction.input.inputEffects.map((effect: { id: string }) => effect.id).sort(),
+    ).toEqual([
       "combat-experience-effect",
       "feint-initiator-owned",
       "generated:phase2-attack:db-parry",

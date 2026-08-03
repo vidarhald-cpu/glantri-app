@@ -8,6 +8,13 @@ import type {
   CombatRoundStep,
 } from "../combatRoundManager";
 import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
+import type {
+  CombatParticipationCompleteness,
+  CombatParticipationOrdering,
+  CombatParticipationReason,
+  CombatParticipationStatus,
+  CombatParticipationWorkClass,
+} from "../combatParticipation";
 
 export const COMBAT_PROGRESSION_BOUNDARIES = [
   "declaration",
@@ -265,6 +272,14 @@ export interface CombatProgressionTask {
   readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
   readonly presentationContext?: CombatProgressionTaskPresentationContext;
+  readonly participation?: {
+    readonly completeness: CombatParticipationCompleteness;
+    readonly factId: string;
+    readonly ordering: CombatParticipationOrdering;
+    readonly reason: CombatParticipationReason;
+    readonly status: CombatParticipationStatus;
+    readonly workClass: CombatParticipationWorkClass;
+  };
   readonly processId: string;
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;

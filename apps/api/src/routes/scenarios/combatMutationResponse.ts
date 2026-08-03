@@ -1,6 +1,7 @@
 import {
   activeCombatMutationResponseSchema,
   buildActiveCombatMutationResponse,
+  type ActiveCombatDeterministicAdvanceDescriptor,
   type CombatRoundCommandEnvelope,
   type EncounterSession,
   type ScenarioParticipant,
@@ -11,6 +12,7 @@ export const ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION = "active-v1";
 
 type LegacyCombatMutationPayload = Record<string, unknown> & {
   commandEnvelope?: CombatRoundCommandEnvelope;
+  deterministicAdvance?: ActiveCombatDeterministicAdvanceDescriptor;
   encounter: EncounterSession;
   participant?: ScenarioParticipant;
   participants?: ScenarioParticipant[];
@@ -47,6 +49,7 @@ export function buildRequestedCombatMutationResponse(input: {
   const {
     command: _duplicateFullCommand,
     commandEnvelope,
+    deterministicAdvance,
     encounter,
     participant,
     participants,
@@ -55,6 +58,7 @@ export function buildRequestedCombatMutationResponse(input: {
   const updatedParticipants = participants ?? (participant ? [participant] : undefined);
   const compact = buildActiveCombatMutationResponse({
     commandEnvelope,
+    deterministicAdvance,
     encounter,
     mutationPresentation:
       Object.keys(mutationPresentation).length > 0 ? mutationPresentation : undefined,

@@ -324,11 +324,15 @@ function projectDeclarations(context: ProjectionContext): void {
 
 function projectModifierReviews(context: ProjectionContext): void {
   const reviews = new Map(
-    (context.input.modifierReviews ?? []).map((review) => {
-      const normalized = canonicalCombatModifierReviewInputSchema.parse(review);
-      return [`${normalized.participantId}:${normalized.phase}`, normalized] as const;
+    (context.input.modifierReviewSources ?? []).map((source) => {
+      const normalized = canonicalCombatModifierReviewInputSchema.parse(source.review);
+      return [`${source.participantId}:${source.phase}`, normalized] as const;
     }),
   );
+  for (const review of context.input.modifierReviews ?? []) {
+    const normalized = canonicalCombatModifierReviewInputSchema.parse(review);
+    reviews.set(`${normalized.participantId}:${normalized.phase}`, normalized);
+  }
   for (const phase of ["phase1", "phase2"] as const) {
     const reviewPhase = phase === "phase1" ? "M1" : "M2";
     for (const participant of context.state.participants) {
@@ -1099,6 +1103,8 @@ function projectRoundEnd(context: ProjectionContext): void {
       pendingObservationAttempts.some(
         (attempt) => attempt.observerParticipantId === participant.participantId,
       );
+    const participantCompletionReady =
+      participantReview?.status === "review_ready" && !hasParticipantWork;
     addFact(context, {
       ordering: "participant_sequence",
       ownership: { kind: "ownerless" },
@@ -1106,12 +1112,21 @@ function projectRoundEnd(context: ProjectionContext): void {
       processFamily: "participant_completion",
       reason: complete
         ? "already_resolved"
-        : hasParticipantWork
+        : hasParticipantWork || participantCompletionReady
           ? "deterministic_boundary"
           : "no_su_work",
-      status: complete ? "already_resolved" : hasParticipantWork ? "conditional" : "not_required",
+      status: complete
+        ? "already_resolved"
+        : participantCompletionReady
+          ? "required"
+          : hasParticipantWork
+            ? "conditional"
+            : "not_required",
       step: "SU_complete",
-      workClass: complete || !hasParticipantWork ? "no_work" : "deterministic_transition",
+      workClass:
+        complete || (!hasParticipantWork && !participantCompletionReady)
+          ? "no_work"
+          : "deterministic_transition",
     });
   }
 
@@ -1128,7 +1143,39 @@ function projectRoundEnd(context: ProjectionContext): void {
 }
 
 function projectPhaseBoundaries(context: ProjectionContext): void {
+  const declarationReady = context.facts
+    .filter((fact) =>
+      ["combat_start_experience", "declaration"].includes(fact.identity.processFamily),
+    )
+    .every((fact) => ["already_resolved", "not_required"].includes(fact.status));
+  addFact(context, {
+    ordering: "ownerless_boundary",
+    ownership: { kind: "ownerless" },
+    processFamily: "boundary",
+    reason: declarationReady ? "deterministic_boundary" : "unresolved_choice",
+    status: declarationReady ? "required" : "conditional",
+    step: "declaration_boundary",
+    workClass: "deterministic_transition",
+  });
+
   for (const phase of ["phase1", "phase2"] as const) {
+    const reviewStep = phase === "phase1" ? "M1" : "M2";
+    const modifierReady = context.facts
+      .filter(
+        (fact) =>
+          fact.identity.processFamily === "modifier_review" && fact.identity.phase === phase,
+      )
+      .every((fact) => ["already_resolved", "not_required"].includes(fact.status));
+    addFact(context, {
+      ordering: "ownerless_boundary",
+      ownership: { kind: "ownerless" },
+      phase,
+      processFamily: "boundary",
+      reason: modifierReady ? "deterministic_boundary" : "modifier_review_required",
+      status: modifierReady ? "required" : "conditional",
+      step: `${reviewStep}_boundary`,
+      workClass: "deterministic_transition",
+    });
     const plans = phaseOpportunityPlans(context, phase);
     const complete = plans.every((entry) => entry.attack.completion.complete);
     addFact(context, {

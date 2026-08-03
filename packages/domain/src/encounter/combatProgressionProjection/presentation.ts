@@ -174,6 +174,14 @@ function hasRelevantConflict(
   });
 }
 
+function isInternalDeterministicTask(task: CombatProgressionTask): boolean {
+  return Boolean(
+    task.participation?.status === "required" &&
+    task.participation.workClass === "deterministic_transition" &&
+    task.participation.completeness === "complete",
+  );
+}
+
 /** Removes private authorization, blocker, diagnostic, proposal contents, and calculations. */
 export function projectCombatProgressionPresentation(input: {
   projection: CombatProgressionProjection;
@@ -183,7 +191,7 @@ export function projectCombatProgressionPresentation(input: {
     const stages = process.stages.flatMap((stage) => {
       const executionGroups = stage.executionGroups.flatMap((group) => {
         const tasks = group.tasks
-          .filter((task) => taskIsVisible(task, input.viewer))
+          .filter((task) => taskIsVisible(task, input.viewer) && !isInternalDeterministicTask(task))
           .map(presentationTask)
           .map((task) => ({
             ...task,
@@ -272,6 +280,7 @@ export function projectCombatProgressionPresentation(input: {
         group.tasks.some(
           (task) =>
             task.kind === "gm_advance_boundary" &&
+            !isInternalDeterministicTask(task) &&
             task.state === "executable" &&
             task.allowedActors.length === 1 &&
             task.allowedActors[0] === "gm",

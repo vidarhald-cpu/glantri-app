@@ -9,6 +9,7 @@ import {
   type CombatRoundStepStatus,
 } from "../combatRoundManager";
 import type { CombatActionProcessPlan } from "../combatActionProcesses";
+import type { CombatParticipationProjection } from "../combatParticipation";
 import type {
   CombatantIdentity,
   CombatProgressionBlocker,
@@ -69,6 +70,7 @@ export interface TaskSpec {
 export interface StageSpec {
   executionGroups?: readonly {
     key?: string;
+    position?: number;
     strategy?: CombatProgressionExecutionStrategy;
     tasks: readonly TaskSpec[];
   }[];
@@ -87,8 +89,79 @@ export interface ProjectionBuildContext {
   diagnostics: CombatProgressionDiagnostic[];
   identities: Map<string, CombatantIdentity>;
   initiativeGroup?: CombatRoundInitiativeExecutionGroup;
+  participation?: CombatParticipationProjection;
   roundNumber: number;
   state: CombatRoundState;
+}
+
+function taskParticipationFact(context: ProjectionBuildContext, spec: TaskSpec) {
+  const participantId =
+    spec.identity?.participantId ??
+    (spec.owner?.kind === "combatant" ? spec.owner.participantId : undefined);
+  const phase = spec.identity?.phase;
+  const target = (() => {
+    switch (spec.kind) {
+      case "modifier_review":
+        return { family: "modifier_review", participantId, phase } as const;
+      case "roll_initiative":
+        return { family: "initiative", participantId, phase } as const;
+      case "commit_initiative":
+        return {
+          family: "boundary",
+          phase,
+          step: phase === "phase1" ? "commit_i1" : "commit_i2",
+        } as const;
+      case "round_end_prepare":
+        return { family: "boundary", step: "prepare_round_end" } as const;
+      case "effect_review": {
+        const effect = context.participation?.facts.find(
+          (fact) =>
+            fact.identity.processFamily === "effect_review" &&
+            fact.identity.participantId === participantId,
+        );
+        if (effect && !(effect.status === "not_required" && effect.workClass === "no_work")) {
+          return { family: "effect_review", participantId } as const;
+        }
+        return { family: "participant_completion", participantId } as const;
+      }
+      case "gm_advance_boundary": {
+        const stepByBoundary = {
+          declaration: "declaration_boundary",
+          phase1_modifier_review: "M1_boundary",
+          phase1_resolution: "phase1_boundary",
+          phase2_modifier_review: "M2_boundary",
+          phase2_resolution: "phase2_boundary",
+          round_boundary: "round_boundary",
+          round_end: "round_boundary",
+        } as const;
+        return {
+          family: "boundary",
+          step: stepByBoundary[context.boundaryKind as keyof typeof stepByBoundary],
+        } as const;
+      }
+      default:
+        return undefined;
+    }
+  })();
+  if (!target || !context.participation) return undefined;
+  const fact = context.participation.facts.find(
+    (candidate) =>
+      candidate.identity.processFamily === target.family &&
+      (target.participantId === undefined ||
+        candidate.identity.participantId === target.participantId) &&
+      (target.phase === undefined || candidate.identity.phase === target.phase) &&
+      (!("step" in target) || target.step === undefined || candidate.identity.step === target.step),
+  );
+  return fact
+    ? {
+        completeness: fact.completeness,
+        factId: fact.id,
+        ordering: fact.ordering,
+        reason: fact.reason,
+        status: fact.status,
+        workClass: fact.workClass,
+      }
+    : undefined;
 }
 
 export function deepFreeze<T>(value: T): T {
@@ -244,6 +317,7 @@ function buildTask(
       ? context.identities.get(spec.identity.opponentParticipantId)
       : undefined,
     owner: spec.owner,
+    participation: taskParticipationFact(context, spec),
     presentationContext: spec.presentationContext,
     processId: getCombatProgressionProcessId(context, processKind, processKey),
     stageId: stageId(context, processKind, stageKind, processKey, stageKey),
@@ -333,9 +407,13 @@ export function buildProcess(
     stages: stages.map((stage) => {
       const groupSpecs =
         stage.executionGroups ??
-        (stage.tasks ?? []).map((task) => ({ strategy: stage.strategy, tasks: [task] }));
+        (stage.tasks ?? []).map((task) => ({
+          position: undefined,
+          strategy: stage.strategy,
+          tasks: [task],
+        }));
       const executionGroups = groupSpecs.map((group, position) =>
-        buildExecutionGroup(context, kind, stage, group, position, options.key),
+        buildExecutionGroup(context, kind, stage, group, group.position ?? position, options.key),
       );
       return {
         executionGroups,

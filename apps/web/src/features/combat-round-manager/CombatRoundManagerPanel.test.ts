@@ -198,7 +198,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatPendingOverlay");
     expect(source).toContain("createCombatPresentationLayerCache");
     expect(source).toContain("applyCombatTrackerSelectionOverlay");
-    expect(source).toContain("buildCombatProgressionProjection(input.roundState)");
+    expect(source).toContain("projectActiveCombatParticipation({");
+    expect(source).toContain("buildCombatProgressionProjection(input.roundState, {");
+    expect(source).toContain("participation,");
     expect(source).toContain("buildCombatProgressionTrackerIndex(progression)");
     expect(panelSource).toContain("const combatPresentation = composeCombatPresentationModel");
     expect(panelSource).toContain(
@@ -995,7 +997,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
-    expect(source).toContain("prepareCombatRoundEndReviewOnServer");
+    expect(source).toContain("advanceDeterministicCombatOnServer");
+    expect(source).toContain("projectedDeterministicTask");
     expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain("commandType: boundaryTransitionAction.commandType");
     expect(source).toContain("executionGroupId: boundaryTransitionAction.executionGroupId");
