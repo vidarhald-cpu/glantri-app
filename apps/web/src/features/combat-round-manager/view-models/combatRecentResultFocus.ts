@@ -5,30 +5,32 @@ import type {
   CombatStepResultPresentation,
 } from "@/features/combat-history";
 
-export interface CombatPostResultHoldSource {
+export interface CombatRecentResultSource {
   readonly participantId: string;
   readonly roundNumber: number;
   readonly step: CombatRoundStep;
 }
 
-export interface CombatPostResultHoldCandidate {
+export interface CombatRecentResultCandidate {
   readonly commandType: CombatProgressionExpectedCommand;
-  readonly source: CombatPostResultHoldSource;
+  readonly source: CombatRecentResultSource;
   readonly sourceGroupFingerprints: Readonly<Record<string, string>>;
   readonly sourceTaskId: string;
 }
 
-export interface CombatPostResultHold {
+export interface CombatRecentResultFocus {
   readonly acceptedRevision: string;
   readonly commandType: CombatProgressionExpectedCommand;
   readonly createdFromTaskId: string;
   readonly groupId: string;
-  readonly holdId: string;
+  readonly groupingIdentity?: string;
+  readonly groupingIdentitySource: CombatResultGroupPresentation["provenance"]["groupingIdentitySource"];
+  readonly focusId: string;
   readonly resultIds: readonly string[];
   readonly rootResultId: string;
-  readonly source: CombatPostResultHoldSource;
+  readonly source: CombatRecentResultSource;
   readonly sourceEventIds: readonly string[];
-  readonly status: "active";
+  readonly status: "focused";
 }
 
 const RESULT_PRODUCING_COMMANDS = new Set<CombatProgressionExpectedCommand>([
@@ -54,10 +56,6 @@ const RESULT_PRODUCING_COMMANDS = new Set<CombatProgressionExpectedCommand>([
   "submit_phase_initiative_choice",
 ]);
 
-const SAME_CELL_HOLD_COMMANDS = new Set<CombatProgressionExpectedCommand>([
-  "roll_round_end_health_check",
-]);
-
 function groupFingerprint(group: CombatResultGroupPresentation): string {
   return JSON.stringify({
     resultIds: group.provenance.resultIds,
@@ -65,27 +63,12 @@ function groupFingerprint(group: CombatResultGroupPresentation): string {
   });
 }
 
-function sourceAdvanced(input: {
-  commandType: CombatProgressionExpectedCommand;
-  deterministicSuffixPending?: boolean;
-  nextSelection?: { readonly participantId?: string; readonly step: CombatRoundStep };
-  source: CombatPostResultHoldSource;
-}): boolean {
-  if (SAME_CELL_HOLD_COMMANDS.has(input.commandType)) return true;
-  if (input.deterministicSuffixPending) return true;
-  return Boolean(
-    input.nextSelection &&
-    (input.nextSelection.participantId !== input.source.participantId ||
-      input.nextSelection.step !== input.source.step),
-  );
-}
-
-export function createCombatPostResultHoldCandidate(input: {
+export function createCombatRecentResultCandidate(input: {
   readonly commandType: CombatProgressionExpectedCommand;
   readonly presentation?: CombatStepResultPresentation;
-  readonly source: CombatPostResultHoldSource;
+  readonly source: CombatRecentResultSource;
   readonly sourceTaskId: string;
-}): CombatPostResultHoldCandidate | undefined {
+}): CombatRecentResultCandidate | undefined {
   if (!input.presentation || !RESULT_PRODUCING_COMMANDS.has(input.commandType)) return undefined;
   return {
     commandType: input.commandType,
@@ -97,24 +80,16 @@ export function createCombatPostResultHoldCandidate(input: {
   };
 }
 
-export function resolveCombatPostResultHold(input: {
+export function resolveCombatRecentResultFocus(input: {
   readonly acceptedPresentation?: CombatStepResultPresentation;
   readonly acceptedRevision: string;
-  readonly candidate: CombatPostResultHoldCandidate;
-  readonly deterministicSuffixPending?: boolean;
-  readonly nextSelection?: { readonly participantId?: string; readonly step: CombatRoundStep };
-}): CombatPostResultHold | undefined {
+  readonly candidate: CombatRecentResultCandidate;
+}): CombatRecentResultFocus | undefined {
   const presentation = input.acceptedPresentation;
   if (
     !presentation ||
     presentation.participantId !== input.candidate.source.participantId ||
-    presentation.roundNumber !== input.candidate.source.roundNumber ||
-    !sourceAdvanced({
-      commandType: input.candidate.commandType,
-      deterministicSuffixPending: input.deterministicSuffixPending,
-      nextSelection: input.nextSelection,
-      source: input.candidate.source,
-    })
+    presentation.roundNumber !== input.candidate.source.roundNumber
   ) {
     return undefined;
   }
@@ -133,44 +108,46 @@ export function resolveCombatPostResultHold(input: {
     commandType: input.candidate.commandType,
     createdFromTaskId: input.candidate.sourceTaskId,
     groupId: group.groupId,
-    holdId: `combat-post-result-hold:${input.acceptedRevision}:${group.groupId}`,
+    groupingIdentity: group.provenance.groupingIdentity,
+    groupingIdentitySource: group.provenance.groupingIdentitySource,
+    focusId: `combat-recent-result:${input.acceptedRevision}:${group.groupId}`,
     resultIds: [...group.provenance.resultIds],
     rootResultId: group.rootResultId,
     source: input.candidate.source,
     sourceEventIds: [...group.provenance.sourceEventIds],
-    status: "active",
+    status: "focused",
   };
 }
 
-export function selectCombatPostResultHoldPresentation(input: {
-  readonly hold: CombatPostResultHold;
+export function selectCombatRecentResultPresentation(input: {
+  readonly focus: CombatRecentResultFocus;
   readonly presentation?: CombatStepResultPresentation;
 }): CombatStepResultPresentation | undefined {
   const presentation = input.presentation;
   if (
     !presentation ||
-    presentation.participantId !== input.hold.source.participantId ||
-    presentation.roundNumber !== input.hold.source.roundNumber
+    presentation.participantId !== input.focus.source.participantId ||
+    presentation.roundNumber !== input.focus.source.roundNumber
   ) {
     return undefined;
   }
-  const group = presentation.groups?.find((candidate) => candidate.groupId === input.hold.groupId);
+  const group = presentation.groups?.find((candidate) => candidate.groupId === input.focus.groupId);
   if (!group) return undefined;
-  const resultIds = new Set(input.hold.resultIds);
-  const sourceEventIds = new Set(input.hold.sourceEventIds);
+  const resultIds = new Set(input.focus.resultIds);
+  const sourceEventIds = new Set(input.focus.sourceEventIds);
   const subordinateResults = group.subordinateResults.filter(
     (result) =>
       result.resultEnvelopes.some((envelope) => resultIds.has(envelope.resultId)) ||
       result.sourceEventIds.some((eventId) => sourceEventIds.has(eventId)),
   );
-  const heldGroup: CombatResultGroupPresentation = {
+  const focusedGroup: CombatResultGroupPresentation = {
     ...group,
     firstSequence: subordinateResults[0]?.sequence ?? group.firstSequence,
     lastSequence: subordinateResults.at(-1)?.sequence ?? group.lastSequence,
     provenance: {
       ...group.provenance,
-      resultIds: input.hold.resultIds,
-      sourceEventIds: input.hold.sourceEventIds,
+      resultIds: input.focus.resultIds,
+      sourceEventIds: input.focus.sourceEventIds,
     },
     subordinateResults,
   };
@@ -179,20 +156,6 @@ export function selectCombatPostResultHoldPresentation(input: {
     entries: presentation.entries.filter((entry) =>
       entry.sourceEventIds.some((eventId) => sourceEventIds.has(eventId)),
     ),
-    groups: [heldGroup],
+    groups: [focusedGroup],
   };
-}
-
-export function isCombatPostResultHoldSourceSelection(input: {
-  readonly hold?: CombatPostResultHold;
-  readonly participantId?: string;
-  readonly roundNumber: number;
-  readonly step: CombatRoundStep;
-}): boolean {
-  return Boolean(
-    input.hold &&
-    input.hold.source.participantId === input.participantId &&
-    input.hold.source.roundNumber === input.roundNumber &&
-    input.hold.source.step === input.step,
-  );
 }

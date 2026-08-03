@@ -1265,7 +1265,7 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     expect(mocks.advanceCurrentStep).not.toHaveBeenCalled();
   });
 
-  it("holds the final observation result while its deterministic suffix advances", async () => {
+  it("keeps the final observation result passive while its deterministic suffix advances", async () => {
     const { afterObservation, beforeObservation, boundaryTask } = buildFinalObservationEncounter();
     const participants = [
       scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
@@ -1313,13 +1313,12 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Roll observation" }));
     await waitFor(() => expect(mocks.rollObservation).toHaveBeenCalledTimes(1));
 
-    expect(await screen.findByText("Result recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Recent result")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Roll observation" })).not.toBeInTheDocument();
-    expect(screen.getByText(/^Next:/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue combat" })).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.advanceDeterministic).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Result recorded")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Continue combat" })[0]!);
-    await waitFor(() => expect(screen.queryByText("Result recorded")).not.toBeInTheDocument());
+    expect(screen.getByText("Recent result")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Declare action" })).toBeEnabled();
     expect(mocks.advanceCurrentStep).not.toHaveBeenCalled();
   });
 });

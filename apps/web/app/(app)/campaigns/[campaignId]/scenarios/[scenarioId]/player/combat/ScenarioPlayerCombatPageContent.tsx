@@ -14,7 +14,6 @@ import {
   type CombatRoundEndHealthRollProposal,
   type CombatRoundStep,
   type CombatDistance,
-  COMBAT_ROUND_STEP_LABELS,
   buildLiveCombatModifierContributionProjection,
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
@@ -124,12 +123,12 @@ import {
 } from "@/features/player-combat/playerCombatPhaseModel";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import {
-  createCombatPostResultHoldCandidate,
-  resolveCombatPostResultHold,
-  selectCombatPostResultHoldPresentation,
-  type CombatPostResultHold,
-  type CombatPostResultHoldCandidate,
-} from "@/features/combat-round-manager/view-models/combatPostResultHold";
+  createCombatRecentResultCandidate,
+  resolveCombatRecentResultFocus,
+  selectCombatRecentResultPresentation,
+  type CombatRecentResultCandidate,
+  type CombatRecentResultFocus,
+} from "@/features/combat-round-manager/view-models/combatRecentResultFocus";
 import { getCurrentCombatRoundTaskSelection } from "@/features/combat-round-manager/combatRoundSelection";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -1104,10 +1103,10 @@ export default function ScenarioPlayerCombatPageContent({
   }
   const historyCoordinator = historyCoordinatorRef.current;
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
-  const [postResultHold, setPostResultHold] = useState<CombatPostResultHold>();
-  const [postResultHoldRequest, setPostResultHoldRequest] = useState<{
+  const [recentResultFocus, setRecentResultFocus] = useState<CombatRecentResultFocus>();
+  const [recentResultRequest, setRecentResultRequest] = useState<{
     readonly acceptedRevision: string;
-    readonly candidate: CombatPostResultHoldCandidate;
+    readonly candidate: CombatRecentResultCandidate;
   }>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -1154,7 +1153,7 @@ export default function ScenarioPlayerCombatPageContent({
     useState<PhaseAttackChoiceSelection>("continue");
   const [doubleAttackPhase2Decision, setDoubleAttackPhase2Decision] =
     useState<DoubleAttackPhase2Decision>("continue");
-  const controlsDisabled = readOnlyInspection || revisionRefreshPending || Boolean(postResultHold);
+  const controlsDisabled = readOnlyInspection || revisionRefreshPending;
   const historyPerspectiveKey = isGameMaster ? selectedParticipantId : "player";
   selectedParticipantIdRef.current = selectedParticipantId;
 
@@ -1558,8 +1557,6 @@ export default function ScenarioPlayerCombatPageContent({
     setRevisionBoundHistory(undefined);
     setCombatLogSelection(undefined);
     setHistoryInspection(undefined);
-    setPostResultHold(undefined);
-    setPostResultHoldRequest(undefined);
     const acceptedEncounter = acceptedEncounterRef.current;
     if (acceptedEncounter) {
       void ensureCombatHistory(acceptedEncounter);
@@ -1624,8 +1621,8 @@ export default function ScenarioPlayerCombatPageContent({
   const handleCombatLogSelection = useCallback(
     (selection: CombatLogEventSelection) => {
       if (!playerCombatLog) return;
-      setPostResultHold(undefined);
-      setPostResultHoldRequest(undefined);
+      setRecentResultFocus(undefined);
+      setRecentResultRequest(undefined);
       setCombatLogSelection(
         selectCombatLogEvent({ eventId: selection.combatLogEventId, projection: playerCombatLog }),
       );
@@ -1817,23 +1814,23 @@ export default function ScenarioPlayerCombatPageContent({
   const canonicalTaskSelection = combatRoundState
     ? getCurrentCombatRoundTaskSelection(combatRoundState)
     : undefined;
-  const postResultHoldSource = postResultHoldRequest?.candidate.source ?? postResultHold?.source;
-  const postResultHoldSourcePresentation = useMemo(
+  const recentResultSource = recentResultRequest?.candidate.source ?? recentResultFocus?.source;
+  const recentResultSourcePresentation = useMemo(
     () =>
-      postResultHoldSource &&
+      recentResultSource &&
       playerCombatLog &&
       combatHistory?.sourceUpdatedAt &&
       combatHistory.progression &&
-      postResultHoldSource.roundNumber === combatHistory.activeRound.roundNumber
+      recentResultSource.roundNumber === combatHistory.activeRound.roundNumber
         ? buildCombatStepResultPresentation({
             boundary: combatHistory.progression.boundary.kind,
             combatLog: playerCombatLog,
             encounterId: encounterId ?? playerCombatLog.encounterId,
             encounterRevision: combatHistory.sourceUpdatedAt,
             events: combatHistory.activeRound.events,
-            participantId: postResultHoldSource.participantId,
-            roundNumber: postResultHoldSource.roundNumber,
-            step: postResultHoldSource.step,
+            participantId: recentResultSource.participantId,
+            roundNumber: recentResultSource.roundNumber,
+            step: recentResultSource.step,
             viewer: { kind: "player" },
           })
         : undefined,
@@ -1844,86 +1841,59 @@ export default function ScenarioPlayerCombatPageContent({
       combatHistory?.sourceUpdatedAt,
       encounterId,
       playerCombatLog,
-      postResultHoldSource,
+      recentResultSource,
     ],
   );
   useEffect(() => {
     if (
       !isGameMaster ||
-      !postResultHoldRequest ||
-      postResultHoldRequest.acceptedRevision !== combatHistory?.sourceUpdatedAt
+      !recentResultRequest ||
+      recentResultRequest.acceptedRevision !== combatHistory?.sourceUpdatedAt
     ) {
       return;
     }
-    const hold = resolveCombatPostResultHold({
-      acceptedPresentation: postResultHoldSourcePresentation,
-      acceptedRevision: postResultHoldRequest.acceptedRevision,
-      candidate: postResultHoldRequest.candidate,
-      nextSelection: canonicalTaskSelection,
+    const focus = resolveCombatRecentResultFocus({
+      acceptedPresentation: recentResultSourcePresentation,
+      acceptedRevision: recentResultRequest.acceptedRevision,
+      candidate: recentResultRequest.candidate,
     });
-    setPostResultHoldRequest(undefined);
-    if (!hold) return;
-    setPostResultHold(hold);
+    setRecentResultRequest(undefined);
+    if (!focus) return;
+    setRecentResultFocus(focus);
     setHistoryInspection(undefined);
-  }, [
-    canonicalTaskSelection?.participantId,
-    canonicalTaskSelection?.step,
-    combatHistory?.sourceUpdatedAt,
-    isGameMaster,
-    postResultHoldRequest,
-    postResultHoldSourcePresentation,
-  ]);
-  const heldResultPresentation = postResultHold
-    ? selectCombatPostResultHoldPresentation({
-        hold: postResultHold,
-        presentation: postResultHoldSourcePresentation,
-      })
-    : undefined;
-  useEffect(() => {
-    if (!postResultHold || !combatRoundState) return;
-    if (
-      postResultHold.source.roundNumber !== combatRoundState.roundNumber ||
-      (combatHistory?.sourceUpdatedAt !== postResultHold.acceptedRevision &&
-        !heldResultPresentation)
-    ) {
-      setPostResultHold(undefined);
-      if (canonicalTaskSelection?.participantId) {
-        const participant = combatRoundState.participants.find(
-          (candidate) => candidate.participantId === canonicalTaskSelection.participantId,
-        );
-        if (participant?.scenarioParticipantId) {
-          setSelectedParticipantId(participant.scenarioParticipantId);
-        }
+    if (canonicalTaskSelection?.participantId) {
+      const participant = combatRoundState?.participants.find(
+        (candidate) => candidate.participantId === canonicalTaskSelection.participantId,
+      );
+      if (participant?.scenarioParticipantId) {
+        setSelectedParticipantId(participant.scenarioParticipantId);
       }
     }
   }, [
     canonicalTaskSelection?.participantId,
+    canonicalTaskSelection?.step,
+    combatRoundState?.participants,
     combatHistory?.sourceUpdatedAt,
-    combatRoundState,
-    heldResultPresentation,
-    postResultHold,
+    isGameMaster,
+    recentResultRequest,
+    recentResultSourcePresentation,
   ]);
-  const postResultNextTaskLabel = canonicalTaskSelection
-    ? canonicalTaskSelection.participantId
-      ? `${
-          combatRoundState?.participants.find(
-            (participant) => participant.participantId === canonicalTaskSelection.participantId,
-          )?.label ?? "Current participant"
-        } · ${COMBAT_ROUND_STEP_LABELS[canonicalTaskSelection.step]}`
-      : COMBAT_ROUND_STEP_LABELS[canonicalTaskSelection.step]
-    : "Current combat task";
-  const continueFromPostResultHold = useCallback(() => {
-    setPostResultHold(undefined);
-    setPostResultHoldRequest(undefined);
-    setHistoryInspection(undefined);
-    if (!canonicalTaskSelection?.participantId) return;
-    const participant = combatRoundState?.participants.find(
-      (candidate) => candidate.participantId === canonicalTaskSelection.participantId,
-    );
-    if (participant?.scenarioParticipantId) {
-      setSelectedParticipantId(participant.scenarioParticipantId);
+  const recentResultPresentation = recentResultFocus
+    ? selectCombatRecentResultPresentation({
+        focus: recentResultFocus,
+        presentation: recentResultSourcePresentation,
+      })
+    : undefined;
+  useEffect(() => {
+    if (!recentResultFocus || !combatRoundState || !combatHistory) return;
+    if (
+      recentResultFocus.source.roundNumber !== combatRoundState.roundNumber ||
+      (combatHistory.sourceUpdatedAt !== recentResultFocus.acceptedRevision &&
+        !recentResultPresentation)
+    ) {
+      setRecentResultFocus(undefined);
     }
-  }, [canonicalTaskSelection?.participantId, combatRoundState?.participants]);
+  }, [combatHistory, combatRoundState, recentResultFocus, recentResultPresentation]);
   const selectedDeclarationProgressionTask = selectedProgressionTasks.find(
     (task) => task.kind === "submit_declaration",
   );
@@ -4120,7 +4090,7 @@ export default function ScenarioPlayerCombatPageContent({
   ) {
     const candidate =
       isGameMaster && selectedRoundParticipant
-        ? createCombatPostResultHoldCandidate({
+        ? createCombatRecentResultCandidate({
             commandType: descriptor.commandType,
             presentation: currentStepResultPresentation,
             source: {
@@ -4141,7 +4111,7 @@ export default function ScenarioPlayerCombatPageContent({
       acceptedBefore.id === acceptedAfter.id &&
       acceptedBefore.updatedAt !== acceptedAfter.updatedAt
     ) {
-      setPostResultHoldRequest({
+      setRecentResultRequest({
         acceptedRevision: acceptedAfter.updatedAt,
         candidate,
       });
@@ -4363,7 +4333,11 @@ export default function ScenarioPlayerCombatPageContent({
           <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
             <span>Character</span>
             <select
-              onChange={(event) => setSelectedParticipantId(event.target.value)}
+              onChange={(event) => {
+                setRecentResultFocus(undefined);
+                setRecentResultRequest(undefined);
+                setSelectedParticipantId(event.target.value);
+              }}
               value={selectedParticipantId}
             >
               {accessibleParticipants.length === 0 ? (
@@ -4393,29 +4367,23 @@ export default function ScenarioPlayerCombatPageContent({
           >
             <strong>Combat history</strong>
             <button
-              disabled={!historyInspection && !postResultHold}
+              disabled={!historyInspection}
               onClick={() => {
-                if (postResultHold) {
-                  continueFromPostResultHold();
-                } else {
-                  setHistoryInspection(undefined);
-                }
+                setRecentResultFocus(undefined);
+                setRecentResultRequest(undefined);
+                setHistoryInspection(undefined);
               }}
               type="button"
             >
-              {postResultHold
-                ? "Continue combat"
-                : historyInspection
-                  ? "Resume current task"
-                  : "Current task"}
+              {historyInspection ? "Resume current task" : "Current task"}
             </button>
           </div>
           <CombatTracker
-            followCurrent={Boolean(postResultHold) || !historyInspection}
+            followCurrent={!historyInspection}
             model={playerCombatTrackerModel}
             onInspect={(cell) => {
-              setPostResultHold(undefined);
-              setPostResultHoldRequest(undefined);
+              setRecentResultFocus(undefined);
+              setRecentResultRequest(undefined);
               setHistoryInspection({
                 participantId: cell.participantId,
                 roundNumber: cell.roundNumber,
@@ -5032,30 +5000,19 @@ export default function ScenarioPlayerCombatPageContent({
                   </div>
                 </section>
               ) : null}
-              {postResultHold ? (
-                <section aria-label="Post-roll inspection hold" style={panelStyle}>
-                  <strong>Result recorded</strong>
-                  <div style={{ color: "#4f5f57" }}>Next: {postResultNextTaskLabel}</div>
-                  <button onClick={continueFromPostResultHold} type="button">
-                    Continue combat
-                  </button>
-                </section>
-              ) : (
-                <PlayerCombatActionButtonPanel
-                  disabled={currentActionDomainValidationDisabled}
-                  onDeclareAction={invokePlayerCurrentAction}
+              <PlayerCombatActionButtonPanel
+                disabled={currentActionDomainValidationDisabled}
+                onDeclareAction={invokePlayerCurrentAction}
                 preActionControls={
                   selectedContinuedContactDistanceChoice ? (
                     <label style={{ display: "grid", gap: "0.25rem" }}>
-                        <strong>Engagement distance</strong>
-                        <select
-                          disabled={savingCombatContext}
-                          onChange={(event) =>
-                            setContinuedContactDistanceChoice(event.target.value)
-                          }
-                          value={continuedContactDistanceChoice}
-                        >
-                          <option value="">Choose distance</option>
+                      <strong>Engagement distance</strong>
+                      <select
+                        disabled={savingCombatContext}
+                        onChange={(event) => setContinuedContactDistanceChoice(event.target.value)}
+                        value={continuedContactDistanceChoice}
+                      >
+                        <option value="">Choose distance</option>
                         {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
                           <option key={distance} value={distance}>
                             Distance {distance}
@@ -5086,15 +5043,20 @@ export default function ScenarioPlayerCombatPageContent({
                 validationMessage={
                   combatExperienceValidationMessage ??
                   declarationTargetValidationMessage ??
-                    currentAttackSourceValidationMessage
-                  }
-                />
-              )}
+                  currentAttackSourceValidationMessage
+                }
+              />
             </div>
-            {postResultHold && heldResultPresentation ? (
-              <CombatStepResultList presentation={heldResultPresentation} title="Recorded result" />
-            ) : currentStepResultPresentation ? (
-              <CombatStepResultList presentation={currentStepResultPresentation} />
+            {currentStepResultPresentation ? (
+              <CombatStepResultList
+                presentation={currentStepResultPresentation}
+                recentPresentation={recentResultPresentation}
+              />
+            ) : recentResultPresentation ? (
+              <CombatStepResultList
+                presentation={recentResultPresentation}
+                title="Recent result"
+              />
             ) : null}
           </div>
         </section>
@@ -5107,10 +5069,7 @@ export default function ScenarioPlayerCombatPageContent({
 
       {playerCombatLog ? (
         <CombatLog
-          autoFollow={
-            combatLogSelection?.mode === "automatic" &&
-            (Boolean(postResultHold) || !historyInspection)
-          }
+          autoFollow={combatLogSelection?.mode === "automatic" && !historyInspection}
           events={playerCombatLog.events}
           onSelect={handleCombatLogSelection}
           selectedCombatLogEventId={combatLogSelection?.selectedCombatLogEventId}

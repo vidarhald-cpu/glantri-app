@@ -302,13 +302,12 @@ import {
 } from "./view-models/activeInspectorPresentation";
 import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
 import {
-  createCombatPostResultHoldCandidate,
-  isCombatPostResultHoldSourceSelection,
-  resolveCombatPostResultHold,
-  selectCombatPostResultHoldPresentation,
-  type CombatPostResultHold,
-  type CombatPostResultHoldCandidate,
-} from "./view-models/combatPostResultHold";
+  createCombatRecentResultCandidate,
+  resolveCombatRecentResultFocus,
+  selectCombatRecentResultPresentation,
+  type CombatRecentResultCandidate,
+  type CombatRecentResultFocus,
+} from "./view-models/combatRecentResultFocus";
 import {
   applyCombatTrackerSelectionOverlay,
   buildActiveCombatPresentation,
@@ -3919,10 +3918,10 @@ export default function CombatRoundManagerPanel({
     [],
   );
   const [inspectionSelection, setInspectionSelection] = useState(initialInspectionSelection);
-  const [postResultHold, setPostResultHold] = useState<CombatPostResultHold>();
-  const [postResultHoldRequest, setPostResultHoldRequest] = useState<{
+  const [recentResultFocus, setRecentResultFocus] = useState<CombatRecentResultFocus>();
+  const [recentResultRequest, setRecentResultRequest] = useState<{
     readonly acceptedRevision: string;
-    readonly candidate: CombatPostResultHoldCandidate;
+    readonly candidate: CombatRecentResultCandidate;
   }>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
@@ -4194,8 +4193,8 @@ export default function CombatRoundManagerPanel({
   }, [combatLogProjection]);
   const handleCombatLogSelection = useCallback(
     (selection: CombatLogEventSelection) => {
-      setPostResultHold(undefined);
-      setPostResultHoldRequest(undefined);
+      setRecentResultFocus(undefined);
+      setRecentResultRequest(undefined);
       setCombatLogSelection(
         selectCombatLogEvent({
           eventId: selection.combatLogEventId,
@@ -4273,15 +4272,6 @@ export default function CombatRoundManagerPanel({
       ].includes(task.kind) && task.state === "executable",
   );
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
-  const postResultNextTaskLabel = currentTaskSelection
-    ? currentTaskSelection.participantId
-      ? `${
-          displayParticipants.find(
-            (participant) => participant.participantId === currentTaskSelection.participantId,
-          )?.label ?? "Current participant"
-        } · ${COMBAT_ROUND_STEP_LABELS[currentTaskSelection.step]}`
-      : COMBAT_ROUND_STEP_LABELS[currentTaskSelection.step]
-    : "Current combat task";
   useEffect(() => {
     if (!currentTaskSelection || manualSelectionRef.current || pendingSelectionRef.current) {
       return;
@@ -4389,9 +4379,9 @@ export default function CombatRoundManagerPanel({
         task.participation.workClass === "deterministic_transition" &&
         task.participation.completeness === "complete",
     );
-  const postResultHoldSource = postResultHoldRequest?.candidate.source ?? postResultHold?.source;
-  const postResultHoldSourcePresentation =
-    postResultHoldSource && postResultHoldSource.roundNumber === roundState.roundNumber
+  const recentResultSource = recentResultRequest?.candidate.source ?? recentResultFocus?.source;
+  const recentResultSourcePresentation =
+    recentResultSource && recentResultSource.roundNumber === roundState.roundNumber
       ? combatPresentation.active.inspectorPresentation.resolve({
           build: () =>
             buildActiveInspectorCorePresentation({
@@ -4401,92 +4391,56 @@ export default function CombatRoundManagerPanel({
               encounterRevision: roundView.encounterRevision ?? combatLogProjection.sourceRevision,
               gmEvents: combatPresentation.active.gmEvents,
               resultEvents: combatPresentation.active.resultEvents,
-              participantId: postResultHoldSource.participantId,
+              participantId: recentResultSource.participantId,
               roundState,
-              step: postResultHoldSource.step,
+              step: recentResultSource.step,
             }).currentStepResults,
           dependencies: [
             combatProgressionPresentation.boundary.kind,
             combatLogProjection,
             combatPresentation.active.gmEvents,
             combatPresentation.active.resultEvents,
-            postResultHoldSource.participantId,
-            postResultHoldSource.step,
+            recentResultSource.participantId,
+            recentResultSource.step,
             roundState,
           ],
-          key: `post-result:${postResultHoldSource.participantId}:${postResultHoldSource.step}`,
+          key: `recent-result:${recentResultSource.participantId}:${recentResultSource.step}`,
         })
-      : postResultHoldSource
+      : recentResultSource
         ? combatPresentation.archived.inspectorPresentation.get({
-            participantId: postResultHoldSource.participantId,
-            roundNumber: postResultHoldSource.roundNumber,
-            step: postResultHoldSource.step,
+            participantId: recentResultSource.participantId,
+            roundNumber: recentResultSource.roundNumber,
+            step: recentResultSource.step,
           })?.currentStepResults
         : undefined;
   useEffect(() => {
-    if (!postResultHoldRequest) return;
-    if (postResultHoldRequest.acceptedRevision !== roundView.encounterRevision) return;
+    if (!recentResultRequest) return;
+    if (recentResultRequest.acceptedRevision !== roundView.encounterRevision) return;
 
-    const hold = resolveCombatPostResultHold({
-      acceptedPresentation: postResultHoldSourcePresentation,
-      acceptedRevision: postResultHoldRequest.acceptedRevision,
-      candidate: postResultHoldRequest.candidate,
-      deterministicSuffixPending: Boolean(projectedDeterministicTask),
-      nextSelection: currentTaskSelection,
+    const focus = resolveCombatRecentResultFocus({
+      acceptedPresentation: recentResultSourcePresentation,
+      acceptedRevision: recentResultRequest.acceptedRevision,
+      candidate: recentResultRequest.candidate,
     });
-    setPostResultHoldRequest(undefined);
-    if (!hold) return;
-
-    setPostResultHold(hold);
-    pendingSelectionRef.current = undefined;
-    manualSelectionRef.current = {
-      participantId: hold.source.participantId,
-      step: hold.source.step,
-    };
-    setSelectedRoundNumber(hold.source.roundNumber);
-    setInspectionSelection({
-      participantId: hold.source.participantId,
-      step: hold.source.step,
-    });
-  }, [
-    currentTaskSelection?.participantId,
-    currentTaskSelection?.step,
-    postResultHoldRequest,
-    postResultHoldSourcePresentation,
-    projectedDeterministicTask?.id,
-    roundView.encounterRevision,
-  ]);
-  const heldResultPresentation = postResultHold
-    ? selectCombatPostResultHoldPresentation({
-        hold: postResultHold,
-        presentation: postResultHoldSourcePresentation,
+    setRecentResultRequest(undefined);
+    if (focus) setRecentResultFocus(focus);
+  }, [recentResultRequest, recentResultSourcePresentation, roundView.encounterRevision]);
+  const recentResultPresentation = recentResultFocus
+    ? selectCombatRecentResultPresentation({
+        focus: recentResultFocus,
+        presentation: recentResultSourcePresentation,
       })
     : undefined;
   useEffect(() => {
-    if (!postResultHold) return;
+    if (!recentResultFocus) return;
     if (
-      !heldResultPresentation &&
-      (postResultHold.source.roundNumber !== roundState.roundNumber ||
-        roundView.encounterRevision !== postResultHold.acceptedRevision)
+      !recentResultPresentation &&
+      (recentResultFocus.source.roundNumber !== roundState.roundNumber ||
+        roundView.encounterRevision !== recentResultFocus.acceptedRevision)
     ) {
-      setPostResultHold(undefined);
-      manualSelectionRef.current = undefined;
-      pendingSelectionRef.current = undefined;
-      setSelectedRoundNumber(roundState.roundNumber);
-      setInspectionSelection(
-        resolveCombatRoundInspectionSelection({
-          manualSelection: currentTaskSelection,
-          state: roundState,
-        }),
-      );
+      setRecentResultFocus(undefined);
     }
-  }, [
-    currentTaskSelection,
-    heldResultPresentation,
-    postResultHold,
-    roundState,
-    roundView.encounterRevision,
-  ]);
+  }, [recentResultPresentation, recentResultFocus, roundState, roundView.encounterRevision]);
   const inspectorSelectionIsCurrentProgression =
     combatProgressionPresentation.taskVisibility === "available" &&
     (isCombatRoundInspectionSelectionLive({
@@ -4669,7 +4623,6 @@ export default function CombatRoundManagerPanel({
   useEffect(() => {
     if (
       saving ||
-      postResultHoldRequest ||
       !selectedRoundIsActive ||
       !projectedDeterministicTask ||
       !descriptorRevision ||
@@ -4698,7 +4651,7 @@ export default function CombatRoundManagerPanel({
           onScenarioParticipantsUpdated?.(participants);
         }
         acceptCanonicalEncounterState(nextEncounter, nextRoundState);
-        if (!postResultHold) {
+        if (!manualSelectionRef.current && !pendingSelectionRef.current) {
           setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
           setSelectedRoundNumber(nextRoundState.roundNumber);
         }
@@ -4723,8 +4676,6 @@ export default function CombatRoundManagerPanel({
     encounter,
     onEncounterUpdated,
     onScenarioParticipantsUpdated,
-    postResultHold,
-    postResultHoldRequest,
     projectedDeterministicTask?.executionGroupId,
     projectedDeterministicTask?.id,
     saving,
@@ -4777,12 +4728,6 @@ export default function CombatRoundManagerPanel({
   const inspectorHistoricalStepOutcome =
     archivedInspectorPresentation?.stepOutcome ?? deriveCombatHistoryStepOutcome(inspectorSnapshot);
   const inspectorIsHistorical = !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression;
-  const inspectorIsPostResultHold = isCombatPostResultHoldSourceSelection({
-    hold: postResultHold,
-    participantId: inspector.participant?.participantId,
-    roundNumber: selectedRoundNumber,
-    step: inspector.step,
-  });
   const resolveInspectorContextSnapshot = (
     isValid?: (snapshot: CombatRoundStepSnapshot) => boolean,
   ) =>
@@ -7165,8 +7110,8 @@ export default function CombatRoundManagerPanel({
 
     if (encounterChanged) {
       encounterScopeRef.current = encounter.id;
-      setPostResultHold(undefined);
-      setPostResultHoldRequest(undefined);
+      setRecentResultFocus(undefined);
+      setRecentResultRequest(undefined);
       manualSelectionRef.current = undefined;
       pendingSelectionRef.current = undefined;
       setSelectedRoundNumber(initialRoundState.roundNumber);
@@ -8061,8 +8006,8 @@ export default function CombatRoundManagerPanel({
   }
 
   function selectCurrentTask() {
-    setPostResultHold(undefined);
-    setPostResultHoldRequest(undefined);
+    setRecentResultFocus(undefined);
+    setRecentResultRequest(undefined);
     manualSelectionRef.current = undefined;
     pendingSelectionRef.current = undefined;
     setSelectedRoundNumber(roundState.roundNumber);
@@ -8079,8 +8024,8 @@ export default function CombatRoundManagerPanel({
     selection: CombatRoundTimelineSelection,
     mode: CombatRoundTimelineScrollMode = "nearest",
   ) {
-    setPostResultHold(undefined);
-    setPostResultHoldRequest(undefined);
+    setRecentResultFocus(undefined);
+    setRecentResultRequest(undefined);
     if (selection.roundNumber !== roundState.roundNumber) {
       beginCombatPerformanceInteraction({
         command: "inspect_archived_tracker_cell",
@@ -10342,7 +10287,7 @@ export default function CombatRoundManagerPanel({
   ) {
     const sourceParticipantId = inspector.participant?.participantId;
     const candidate = sourceParticipantId
-      ? createCombatPostResultHoldCandidate({
+      ? createCombatRecentResultCandidate({
           commandType: descriptor.commandType,
           presentation: gmCurrentStepResultPresentation,
           source: {
@@ -10363,7 +10308,7 @@ export default function CombatRoundManagerPanel({
       acceptedAfter.encounterId === acceptedBefore.encounterId &&
       acceptedAfter.updatedAt !== acceptedBefore.updatedAt
     ) {
-      setPostResultHoldRequest({
+      setRecentResultRequest({
         acceptedRevision: acceptedAfter.updatedAt,
         candidate,
       });
@@ -10560,11 +10505,7 @@ export default function CombatRoundManagerPanel({
                 title="Return to the current unresolved combat step"
                 type="button"
               >
-                {inspectorIsPostResultHold
-                  ? "Continue combat"
-                  : inspectorIsHistorical
-                    ? "Resume current task"
-                    : "Current task"}
+                {inspectorIsHistorical ? "Resume current task" : "Current task"}
               </button>
               <button
                 disabled={saving || !clearCurrentStepAvailable}
@@ -10606,7 +10547,7 @@ export default function CombatRoundManagerPanel({
         ) : null}
 
         <CombatTracker
-          followCurrent={inspectorIsPostResultHold || !inspectorIsHistorical}
+          followCurrent={!inspectorIsHistorical}
           model={trackerModel}
           onInspect={(cell) => selectInspector(cell.participantId, cell.step, cell.roundNumber)}
           onKeyDown={handleTimelineKeyDown}
@@ -11584,20 +11525,7 @@ export default function CombatRoundManagerPanel({
                           />
                         </>
                       ) : null}
-                      {inspectorIsPostResultHold ? (
-                        <section
-                          aria-label="Post-roll inspection hold"
-                          style={{ display: "grid", gap: "0.55rem" }}
-                        >
-                          <strong>Result recorded</strong>
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                            Next: {postResultNextTaskLabel}
-                          </div>
-                          <button disabled={saving} onClick={selectCurrentTask} type="button">
-                            Continue combat
-                          </button>
-                        </section>
-                      ) : inspectorIsHistorical ? (
+                      {inspectorIsHistorical ? (
                         <PlayerCombatHistoricalContextPanel
                           context={inspectorHistoricalStatusLabel}
                           roundNumber={selectedRoundNumber}
@@ -11636,12 +11564,7 @@ export default function CombatRoundManagerPanel({
                         />
                       )}
                     </div>
-                    {inspectorIsPostResultHold && heldResultPresentation ? (
-                      <CombatStepResultList
-                        presentation={heldResultPresentation}
-                        title="Recorded result"
-                      />
-                    ) : inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
+                    {inspectorIsHistorical && inspectorHasCanonicalActionResult ? (
                       <CombatEventResultList
                         events={inspectorCanonicalActionResultEvents}
                         model={archivedInspectorPresentation?.canonicalActionResultModel}
@@ -11662,7 +11585,15 @@ export default function CombatRoundManagerPanel({
                     ) : inspectorIsHistorical ? (
                       <PlayerCombatActionResultPanel result={null} title="Historical result" />
                     ) : gmCurrentStepResultPresentation ? (
-                      <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
+                      <CombatStepResultList
+                        presentation={gmCurrentStepResultPresentation}
+                        recentPresentation={recentResultPresentation}
+                      />
+                    ) : recentResultPresentation ? (
+                      <CombatStepResultList
+                        presentation={recentResultPresentation}
+                        title="Recent result"
+                      />
                     ) : (
                       <PlayerCombatActionResultPanel result={null} />
                     )}
@@ -11698,51 +11629,37 @@ export default function CombatRoundManagerPanel({
                   <strong>Combat situation</strong>
                   <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>Phase-wide task</div>
                 </section>
-                {inspectorIsPostResultHold ? (
-                  <section
-                    aria-label="Post-roll inspection hold"
-                    style={playerCombatPanelCardStyle}
-                  >
-                    <strong>Result recorded</strong>
-                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                      Next: {postResultNextTaskLabel}
-                    </div>
-                    <button disabled={saving} onClick={selectCurrentTask} type="button">
-                      Continue combat
-                    </button>
-                  </section>
-                ) : (
-                  <PlayerCombatActionButtonPanel
-                    disabled={inspectorEffectiveActionButtonDisabled}
-                    onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
-                      invokeGmCurrentAction(descriptor);
-                    }}
-                    preActionControls={
-                      inspectorSelectionIsCurrentProgression
-                        ? inspectorPreActionControls
-                        : undefined
-                    }
-                    presentation={inspectorWorkflowPresentation}
-                    saving={saving}
-                    statusText={
-                      projectedBoundaryTransitionAction
-                        ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
-                            projectedBoundaryTransitionAction.targetBoundary,
-                          )}.`
-                        : `Current step: ${getPlayerCombatStepLabel(
-                            inspector.step,
-                          )}.${inspectorStatusSuffix}`
-                    }
-                    validationMessage={inspectorActionValidationMessage}
-                  />
-                )}
-                {inspectorIsPostResultHold && heldResultPresentation ? (
+                <PlayerCombatActionButtonPanel
+                  disabled={inspectorEffectiveActionButtonDisabled}
+                  onDeclareAction={(descriptor?: CurrentActionCommandDescriptor) => {
+                    invokeGmCurrentAction(descriptor);
+                  }}
+                  preActionControls={
+                    inspectorSelectionIsCurrentProgression ? inspectorPreActionControls : undefined
+                  }
+                  presentation={inspectorWorkflowPresentation}
+                  saving={saving}
+                  statusText={
+                    projectedBoundaryTransitionAction
+                      ? `Current boundary complete. ${getBoundaryTransitionButtonLabel(
+                          projectedBoundaryTransitionAction.targetBoundary,
+                        )}.`
+                      : `Current step: ${getPlayerCombatStepLabel(
+                          inspector.step,
+                        )}.${inspectorStatusSuffix}`
+                  }
+                  validationMessage={inspectorActionValidationMessage}
+                />
+                {gmCurrentStepResultPresentation ? (
                   <CombatStepResultList
-                    presentation={heldResultPresentation}
-                    title="Recorded result"
+                    presentation={gmCurrentStepResultPresentation}
+                    recentPresentation={recentResultPresentation}
                   />
-                ) : gmCurrentStepResultPresentation ? (
-                  <CombatStepResultList presentation={gmCurrentStepResultPresentation} />
+                ) : recentResultPresentation ? (
+                  <CombatStepResultList
+                    presentation={recentResultPresentation}
+                    title="Recent result"
+                  />
                 ) : (
                   <PlayerCombatActionResultPanel result={null} />
                 )}
@@ -11752,10 +11669,7 @@ export default function CombatRoundManagerPanel({
         </section>
 
         <CombatLog
-          autoFollow={
-            combatLogSelection.mode === "automatic" &&
-            (inspectorIsPostResultHold || !inspectorIsHistorical)
-          }
+          autoFollow={combatLogSelection.mode === "automatic" && !inspectorIsHistorical}
           events={combatLogProjection.events}
           onSelect={handleCombatLogSelection}
           selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}

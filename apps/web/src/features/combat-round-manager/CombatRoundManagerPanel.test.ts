@@ -137,25 +137,24 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
     expect(source).toContain("buildCombatStepResultPresentation({");
-    expect(source).toContain(
-      "<CombatStepResultList presentation={gmCurrentStepResultPresentation}",
-    );
+    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
   });
 
-  it("keeps post-roll acknowledgement local, exact, and separate from progression", () => {
+  it("keeps recent-result feedback local, exact, passive, and separate from progression", () => {
     const source = readPanelSource();
 
-    expect(source).toContain("createCombatPostResultHoldCandidate({");
-    expect(source).toContain("resolveCombatPostResultHold({");
-    expect(source).toContain("selectCombatPostResultHoldPresentation({");
-    expect(source).toContain('aria-label="Post-roll inspection hold"');
-    expect(source).toContain("Result recorded");
-    expect(source).toContain("Continue combat");
+    expect(source).toContain("createCombatRecentResultCandidate({");
+    expect(source).toContain("resolveCombatRecentResultFocus({");
+    expect(source).toContain("selectCombatRecentResultPresentation({");
+    expect(source).toContain("recentPresentation={recentResultPresentation}");
     expect(source).toContain("acceptedEncounterRevisionRef.current");
     expect(source).toContain("function selectTimelineSelection(");
-    expect(source).toContain("setPostResultHold(undefined)");
-    expect(source).toContain("setPostResultHoldRequest(undefined)");
+    expect(source).toContain("setRecentResultFocus(undefined)");
+    expect(source).toContain("setRecentResultRequest(undefined)");
+    expect(source).not.toContain('aria-label="Post-roll inspection hold"');
+    expect(source).not.toContain("Continue combat");
+    expect(source).not.toContain("Result recorded");
     expect(source).not.toContain("latestResult");
     expect(source).not.toContain("setTimeout");
   });
@@ -214,7 +213,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
     expect(source).toContain("onKeyDown={handleTimelineKeyDown}");
     expect(source).toContain("timelineCellRefs.current[cellKey] = node");
-    expect(source).toContain("followCurrent={inspectorIsPostResultHold || !inspectorIsHistorical}");
+    expect(source).toContain("followCurrent={!inspectorIsHistorical}");
     expect(source).toContain("positionCurrentRequest={trackerPositionRequest}");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
@@ -691,9 +690,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("deriveCombatHistoryStepOutcome");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
     expect(source).toContain("gmCurrentStepResultPresentation");
-    expect(source).toContain(
-      "<CombatStepResultList presentation={gmCurrentStepResultPresentation}",
-    );
+    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
+    expect(source).toContain("recentPresentation={recentResultPresentation}");
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");

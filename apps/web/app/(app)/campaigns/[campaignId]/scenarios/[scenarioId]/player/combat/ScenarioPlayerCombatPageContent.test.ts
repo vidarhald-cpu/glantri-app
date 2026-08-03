@@ -28,20 +28,21 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(combatLog).toBeGreaterThan(activeWorkspace);
     expect(ancillaryTools).toBeGreaterThan(combatLog);
     expect(source.slice(tracker, activeWorkspace)).not.toContain("<CombatLog");
-    expect(source).toContain("followCurrent={Boolean(postResultHold) || !historyInspection}");
-    expect(source).toContain('? "Continue combat"');
+    expect(source).toContain("followCurrent={!historyInspection}");
+    expect(source).not.toContain('"Continue combat"');
     expect(source).toContain('? "Resume current task"');
   });
 
-  it("limits post-result acknowledgement to GM proxy actions and exact result identities", () => {
+  it("limits passive recent-result feedback to GM proxy actions and exact identities", () => {
     const source = readSource();
 
     expect(source).toContain("isGameMaster && selectedRoundParticipant");
-    expect(source).toContain("createCombatPostResultHoldCandidate({");
-    expect(source).toContain("resolveCombatPostResultHold({");
-    expect(source).toContain("selectCombatPostResultHoldPresentation({");
-    expect(source).toContain('aria-label="Post-roll inspection hold"');
-    expect(source).toContain("continueFromPostResultHold");
+    expect(source).toContain("createCombatRecentResultCandidate({");
+    expect(source).toContain("resolveCombatRecentResultFocus({");
+    expect(source).toContain("selectCombatRecentResultPresentation({");
+    expect(source).toContain("recentPresentation={recentResultPresentation}");
+    expect(source).not.toContain('aria-label="Post-roll inspection hold"');
+    expect(source).not.toContain("Continue combat");
     expect(source).not.toContain("latestResult");
     expect(source).not.toContain("setTimeout");
   });

@@ -8,6 +8,36 @@ import type { CombatResultEnvelope } from "@glantri/domain";
 
 import { CombatStepResultList } from "./CombatStepResultList";
 
+function presentation(input: {
+  participantId?: string;
+  summary?: string;
+  eventId?: string;
+}): React.ComponentProps<typeof CombatStepResultList>["presentation"] {
+  const eventId = input.eventId ?? "event-1";
+  return {
+    boundary: "phase1_resolution",
+    emptyState: "No results recorded for this character in the current step.",
+    encounterId: "encounter-1",
+    encounterRevision: "revision-1",
+    entries: input.summary
+      ? [
+          {
+            calculations: [],
+            category: "attack",
+            heading: "Combat result",
+            id: `entry:${eventId}`,
+            sourceEventIds: [eventId],
+            state: "final",
+            summary: input.summary,
+          },
+        ]
+      : [],
+    participantId: input.participantId ?? "gladiator",
+    phase: "phase1",
+    roundNumber: 1,
+  };
+}
+
 function resultEnvelope(): CombatResultEnvelope {
   return {
     actionType: "adjust_distance_committed",
@@ -140,5 +170,43 @@ describe("CombatStepResultList", () => {
 
     expect(screen.getByText("Combat note:")).toBeTruthy();
     expect(screen.getByText("The combatants circle toward the doorway.")).toBeTruthy();
+  });
+
+  it("shows an exact recent result without hiding behind the current-step empty state", () => {
+    render(
+      <CombatStepResultList
+        presentation={presentation({})}
+        recentPresentation={presentation({
+          eventId: "event:initiative",
+          summary: "The Gladiator rolled initiative 8.",
+        })}
+      />,
+    );
+
+    expect(screen.getByLabelText("Recent result")).toBeTruthy();
+    expect(screen.getByText("The Gladiator rolled initiative 8.")).toBeTruthy();
+    expect(
+      screen.queryByText("No results recorded for this character in the current step."),
+    ).toBeNull();
+  });
+
+  it("keeps a new current-step result ahead of a distinct recent result", () => {
+    render(
+      <CombatStepResultList
+        presentation={presentation({ eventId: "event:parry", summary: "Parry failed." })}
+        recentPresentation={presentation({ eventId: "event:attack", summary: "Attack hit." })}
+      />,
+    );
+
+    expect(screen.getByText("Parry failed.")).toBeTruthy();
+    expect(screen.getByLabelText("Recent result")).toHaveTextContent("Attack hit.");
+  });
+
+  it("does not duplicate a recent result already present in the current step", () => {
+    const current = presentation({ eventId: "event:attack", summary: "Attack hit." });
+    render(<CombatStepResultList presentation={current} recentPresentation={current} />);
+
+    expect(screen.getAllByText("Attack hit.")).toHaveLength(1);
+    expect(screen.queryByLabelText("Recent result")).toBeNull();
   });
 });

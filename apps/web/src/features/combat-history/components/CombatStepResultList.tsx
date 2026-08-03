@@ -7,14 +7,11 @@ import {
 } from "../view-models/combatResultLedgerPresentation";
 import { CombatResultLedger } from "./CombatResultLedger";
 
-export function CombatStepResultList(input: {
-  presentation: CombatStepResultPresentation;
-  title?: string;
-}) {
-  const groups =
-    input.presentation.groups ??
+function resolveGroups(presentation: CombatStepResultPresentation) {
+  return (
+    presentation.groups ??
     buildCombatResultGroups(
-      input.presentation.entries.map(
+      presentation.entries.map(
         (entry, sequence): CombatResultLedgerFragmentInput => ({
           actionInstanceId:
             entry.resultEnvelopes?.find((envelope) => envelope.actionInstanceId)
@@ -52,7 +49,34 @@ export function CombatStepResultList(input: {
           },
         }),
       ),
-    );
+    )
+  );
+}
+
+export function CombatStepResultList(input: {
+  presentation: CombatStepResultPresentation;
+  recentPresentation?: CombatStepResultPresentation;
+  title?: string;
+}) {
+  const groups = resolveGroups(input.presentation);
+  const recentGroups = input.recentPresentation
+    ? resolveGroups(input.recentPresentation).filter((recentGroup) => {
+        if (
+          input.presentation.participantId !== input.recentPresentation?.participantId ||
+          input.presentation.roundNumber !== input.recentPresentation.roundNumber
+        ) {
+          return true;
+        }
+        const currentGroup = groups.find((group) => group.groupId === recentGroup.groupId);
+        if (!currentGroup) return true;
+        const currentResultIds = new Set(currentGroup.provenance.resultIds);
+        const currentEventIds = new Set(currentGroup.provenance.sourceEventIds);
+        return !(
+          recentGroup.provenance.resultIds.every((resultId) => currentResultIds.has(resultId)) &&
+          recentGroup.provenance.sourceEventIds.every((eventId) => currentEventIds.has(eventId))
+        );
+      })
+    : [];
   return (
     <section
       aria-label={input.title ?? "Current step results"}
@@ -69,9 +93,24 @@ export function CombatStepResultList(input: {
       <strong>{input.title ?? "Current step results"}</strong>
       {groups.length ? (
         <CombatResultLedger calculationExpansion="native" groups={groups} />
-      ) : (
+      ) : recentGroups.length === 0 ? (
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.presentation.emptyState}</div>
-      )}
+      ) : null}
+      {recentGroups.length ? (
+        <div
+          aria-label="Recent result"
+          style={{
+            background: "#f8f4e8",
+            borderLeft: "3px solid #b8a66f",
+            display: "grid",
+            gap: "0.45rem",
+            padding: "0.55rem 0.65rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.85rem" }}>Recent result</strong>
+          <CombatResultLedger calculationExpansion="native" groups={recentGroups} />
+        </div>
+      ) : null}
     </section>
   );
 }
