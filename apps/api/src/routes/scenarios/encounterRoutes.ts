@@ -1211,6 +1211,16 @@ function modifierReviewRows(
   );
 }
 
+function participantOwnedModifierReviewRows(input: {
+  context: ScenarioParticipantCombatContext;
+  participantId: string;
+}) {
+  return modifierReviewRows(input.context).filter(({ entry }) => {
+    const lifecycle = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
+    return !lifecycle.success || lifecycle.data.ownerParticipantId === input.participantId;
+  });
+}
+
 function modifierReviewEffectId(
   entry: ScenarioCombatModifierEntry,
   knownEffectIds?: { has(value: string): boolean },
@@ -1325,11 +1335,16 @@ function buildCanonicalModifierReviewFromDraft(input: {
 }) {
   const inputEffects = new Map<string, CanonicalCombatModifierEffect>();
   for (const effect of combatEffectsStateSchema.parse(input.participantState.combatEffects).effects) {
-    if (effect.canonicalLifecycle) {
+    if (
+      effect.canonicalLifecycle?.ownerParticipantId === input.scenarioParticipantId
+    ) {
       inputEffects.set(effect.canonicalLifecycle.id, effect.canonicalLifecycle);
     }
   }
-  for (const { bucketKey, entry } of modifierReviewRows(input.currentContext)) {
+  for (const { bucketKey, entry } of participantOwnedModifierReviewRows({
+    context: input.currentContext,
+    participantId: input.scenarioParticipantId,
+  })) {
     const lifecycle = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
     const adapted = lifecycle.success
       ? lifecycle.data
@@ -1361,13 +1376,19 @@ function buildCanonicalModifierReviewFromDraft(input: {
   }
 
   const currentRows = new Map(
-    modifierReviewRows(input.currentContext).map((row) => [
+    participantOwnedModifierReviewRows({
+      context: input.currentContext,
+      participantId: input.scenarioParticipantId,
+    }).map((row) => [
       modifierReviewEffectId(row.entry, inputEffects),
       row,
     ]),
   );
   const draftRows = new Map(
-    modifierReviewRows(input.draftContext).map((row) => [
+    participantOwnedModifierReviewRows({
+      context: input.draftContext,
+      participantId: input.scenarioParticipantId,
+    }).map((row) => [
       modifierReviewEffectId(row.entry, inputEffects),
       row,
     ]),
@@ -6826,7 +6847,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const modifiers = applyCommittedCombatFeintModifiers({
         attackerCombatContext: attacker.state.combat.combatContext,
+        attackerEffectOwnerParticipantId: attacker.id,
         defenderCombatContext: defender.state.combat.combatContext,
+        defenderEffectOwnerParticipantId: defender.id,
         encounterId: encounter.id,
         lifecycleContext: {
           createdAt,

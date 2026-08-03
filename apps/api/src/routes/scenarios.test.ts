@@ -8,6 +8,7 @@ import {
   buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
+  canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
@@ -147,6 +148,71 @@ function emptyModifierBuckets() {
     situationInitiative: [],
     situationObSkill: [],
   };
+}
+
+function canonicalReviewTestEffect(input: {
+  category: "db_parry" | "general_fatigue" | "skill_ob";
+  id: string;
+  ownerParticipantId: string;
+  phase?: "phase1" | "phase2";
+  sourceFamily: "combat_experience" | "feint" | "observe_relationship";
+  value: number;
+}) {
+  return canonicalCombatModifierEffectSchema.parse({
+    applicability: {
+      combatWide: input.phase === undefined,
+      encounterId: "encounter-1",
+      phase: input.phase,
+      rollPurposes: [],
+      roundNumber: input.phase ? 1 : undefined,
+    },
+    createdAt: "2026-07-30T07:58:00.000Z",
+    createdRevision: "2026-01-01T00:00:00.000Z",
+    createdSequence: 2,
+    id: input.id,
+    lifecycle: {
+      duration: input.phase
+        ? {
+            expiresAt: "phase_boundary",
+            kind: "phase",
+            phase: input.phase,
+            startPhase: input.phase,
+            startRound: 1,
+            startSequence: 2,
+          }
+        : {
+            creationRoundCounts: true,
+            kind: "rounds",
+            remaining: 4,
+            startRound: 1,
+            startSequence: 2,
+            transitionBoundary: "round_end_review",
+          },
+      state: "active",
+    },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: input.ownerParticipantId,
+    payload: {
+      category: input.category,
+      contributionScope: "calculation",
+      kind: "numeric",
+      unit: "percentage",
+      value: input.value,
+    },
+    provenanceCompleteness: "complete",
+    publicLabel: input.sourceFamily === "combat_experience" ? "Combat Experience" : "Feint",
+    schemaVersion: 1,
+    sourceFamily: input.sourceFamily,
+    sourceReferences: {
+      ...(input.sourceFamily === "observe_relationship"
+        ? { relationshipId: "observe:participant-2:participant-1" }
+        : {}),
+      rowId: input.id,
+    },
+    version: 1,
+    visibility: { audience: "involved", sourceIdentity: "public" },
+  });
 }
 
 function combatHistorySource(encounter: EncounterSession) {
@@ -11244,6 +11310,191 @@ describe("scenarios route contract", () => {
       },
       type: "review_modifiers_phase2",
     });
+  });
+
+  it("commits a fresh M2 review from participant-owned effects without mutating contextual rows", async () => {
+    const combatExperience = canonicalReviewTestEffect({
+      category: "general_fatigue",
+      id: "combat-experience-effect",
+      ownerParticipantId: "participant-1",
+      sourceFamily: "combat_experience",
+      value: -2,
+    });
+    const foreignFeint = canonicalReviewTestEffect({
+      category: "db_parry",
+      id: "feint-attacker-legacy-owner",
+      ownerParticipantId: "encounter-participant-1",
+      phase: "phase1",
+      sourceFamily: "feint",
+      value: -4,
+    });
+    const initiatorFeint = canonicalReviewTestEffect({
+      category: "db_parry",
+      id: "feint-initiator-owned",
+      ownerParticipantId: "participant-1",
+      phase: "phase1",
+      sourceFamily: "feint",
+      value: -4,
+    });
+    const defenderFeint = canonicalReviewTestEffect({
+      category: "skill_ob",
+      id: "feint-defender-context",
+      ownerParticipantId: "participant-2",
+      phase: "phase2",
+      sourceFamily: "feint",
+      value: 2,
+    });
+    const observeContext = canonicalReviewTestEffect({
+      category: "skill_ob",
+      id: "observe-relationship-context",
+      ownerParticipantId: "participant-2",
+      phase: "phase2",
+      sourceFamily: "observe_relationship",
+      value: 3,
+    });
+    const attackPenalty = {
+      application: "percentage" as const,
+      durationRounds: 1,
+      generated: true,
+      id: "generated:phase2-attack:db-parry",
+      notes: "committed weapon attack: DB/Parry -4% in phase2",
+      scope: "until" as const,
+      sourceActionId: "feint_attack",
+      sourceOpportunityId: "phase2-opportunity",
+      sourcePhase: "phase2" as const,
+      sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
+      value: -4,
+    };
+    const contextualEntry = (lifecycle: ReturnType<typeof canonicalReviewTestEffect>) => ({
+      application: "percentage" as const,
+      canonicalLifecycle: lifecycle,
+      generated: true,
+      id: lifecycle.id,
+      notes: lifecycle.publicLabel,
+      scope: "until" as const,
+      sourcePhase: lifecycle.applicability.phase,
+      value: lifecycle.payload.kind === "numeric" ? lifecycle.payload.value : 0,
+    });
+    const reviewContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [
+          attackPenalty,
+          contextualEntry(initiatorFeint),
+          contextualEntry(foreignFeint),
+        ],
+        situationInitiative: [],
+        situationObSkill: [contextualEntry(defenderFeint), contextualEntry(observeContext)],
+      },
+    };
+    const baseParticipantState = makeCombatScenarioParticipant().state;
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_phase_2_modifiers",
+          participants: [
+            {
+              declaration: {
+                actionId: "feint_attack",
+                combatContext: reviewContext,
+                phaseContexts: {
+                  phase1: testCombatPhaseContext("encounter-participant-2"),
+                  phase2: testCombatPhaseContext("encounter-participant-2"),
+                },
+                roundNumber: 1,
+                submittedAt: "2026-07-30T07:59:00.000Z",
+                submittedBy: "gm",
+              },
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "submitted",
+                initiative_phase_2: "pending",
+                phase_1_actions: "complete",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "complete",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      participant: {
+        state: {
+          ...baseParticipantState,
+          combatEffects: {
+            effects: [
+              {
+                canonicalLifecycle: combatExperience,
+                combatWide: true,
+                combatModifierBucket: "general",
+                createdAt: "2026-07-30T07:58:00.000Z",
+                damage: 0,
+                description: "Combat Experience",
+                duration: "4 rounds",
+                effectGroup: "general",
+                generalDamage: 0,
+                id: combatExperience.id,
+                modifierValue: -2,
+                sourceEventId: "combat-experience-event",
+                status: "active",
+                targetParticipantId: "participant-1",
+                type: "general_modifier",
+                updatedAt: "2026-07-30T07:58:00.000Z",
+              },
+            ],
+            events: [],
+          },
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "feint_attack",
+        combatContext: reviewContext,
+        phaseContexts: {
+          phase1: testCombatPhaseContext("encounter-participant-2"),
+          phase2: testCombatPhaseContext("encounter-participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const transaction = updatedEncounter.combatRoundState.commands[0].facts.modifierReview;
+    expect(transaction.input.inputEffects.map((effect: { id: string }) => effect.id).sort()).toEqual([
+      "combat-experience-effect",
+      "feint-initiator-owned",
+      "generated:phase2-attack:db-parry",
+    ]);
+    expect(transaction.changes).toEqual([]);
+    expect(
+      updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
+        .situationDb,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ id: foreignFeint.id })]));
+    expect(
+      updatedEncounter.combatRoundState.participants[0].declaration.combatContext.modifierBuckets
+        .situationObSkill,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: defenderFeint.id }),
+        expect.objectContaining({ id: observeContext.id }),
+      ]),
+    );
   });
 
   it("keeps Reactive attack executable through the browser/API persisted lifecycle", async () => {

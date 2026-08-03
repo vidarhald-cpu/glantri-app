@@ -221,6 +221,7 @@ export function removeCombatFeintGeneratedModifiers(
 function buildFeintModifier(input: {
   bucket: "db-parry" | "ob-skill";
   encounterId?: string;
+  ownerParticipantId: string;
   participantId: string;
   phase: "phase1" | "phase2";
   proposalId: string;
@@ -254,7 +255,7 @@ function buildFeintModifier(input: {
           bucket: input.bucket === "ob-skill" ? "situation_ob_skill" : "situation_db",
           context: input.lifecycleContext,
           entry,
-          ownerParticipantId: input.participantId,
+          ownerParticipantId: input.ownerParticipantId,
         }),
       )
     : entry;
@@ -293,7 +294,9 @@ export function expireCombatFeintGeneratedModifiersBeforeRound(
 
 export function applyCommittedCombatFeintModifiers(input: {
   attackerCombatContext?: ScenarioParticipantCombatContext;
+  attackerEffectOwnerParticipantId?: string;
   defenderCombatContext?: ScenarioParticipantCombatContext;
+  defenderEffectOwnerParticipantId?: string;
   encounterId?: string;
   lifecycleContext?: CanonicalCombatModifierCompatibilityContext;
   proposal: CombatFeintProposal;
@@ -327,6 +330,8 @@ export function applyCommittedCombatFeintModifiers(input: {
   const attackerDb = buildFeintModifier({
     bucket: "db-parry",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.attackerEffectOwnerParticipantId ?? input.proposal.attackerParticipantId,
     participantId: input.proposal.attackerParticipantId,
     phase: "phase1",
     proposalId: input.proposal.id,
@@ -336,6 +341,8 @@ export function applyCommittedCombatFeintModifiers(input: {
   const defenderOb = buildFeintModifier({
     bucket: "ob-skill",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.defenderEffectOwnerParticipantId ?? input.proposal.defenderParticipantId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
@@ -345,6 +352,8 @@ export function applyCommittedCombatFeintModifiers(input: {
   const defenderDb = buildFeintModifier({
     bucket: "db-parry",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.defenderEffectOwnerParticipantId ?? input.proposal.defenderParticipantId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,

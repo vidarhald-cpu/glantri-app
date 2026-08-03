@@ -102,6 +102,14 @@ describe("canonical combat modifier review", () => {
     expect(getCanonicalCombatModifierReviewResultLabel(transaction)).toBe("No changes");
   });
 
+  it("rejects a deliberately injected foreign effect without rewriting its owner", () => {
+    const foreign = effect({ id: "foreign-effect", ownerParticipantId: "participant-2" });
+    expect(() => commit(review({ inputEffects: [effect(), foreign] }))).toThrowError(
+      /only contain effects owned by its participant/i,
+    );
+    expect(foreign.ownerParticipantId).toBe("participant-2");
+  });
+
   it("projects accepted changes without lifecycle identities or private provenance", () => {
     const transaction = commit(
       review({

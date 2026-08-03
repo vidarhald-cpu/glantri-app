@@ -101,6 +101,8 @@ function state() {
 describe("combat feint modifiers", () => {
   it("attaches separate canonical lifecycle identities to equal Feint consequence categories", () => {
     const applied = applyCommittedCombatFeintModifiers({
+      attackerEffectOwnerParticipantId: "scenario-attacker",
+      defenderEffectOwnerParticipantId: "scenario-defender",
       lifecycleContext: {
         createdAt,
         createdRevision: "revision-20",
@@ -114,17 +116,26 @@ describe("combat feint modifiers", () => {
 
     expect(skillOb.canonicalLifecycle).toMatchObject({
       applicability: { phase: "phase2" },
+      ownerParticipantId: "scenario-defender",
       payload: { category: "skill_ob", unit: "percentage", value: -2 },
       sourceFamily: "feint",
     });
     expect(dbParry.canonicalLifecycle).toMatchObject({
       applicability: { phase: "phase2" },
+      ownerParticipantId: "scenario-defender",
       payload: { category: "db_parry", unit: "percentage", value: -2 },
       sourceFamily: "feint",
     });
     expect(canonicalCombatModifierEffectSchema.parse(skillOb.canonicalLifecycle).id).not.toBe(
       canonicalCombatModifierEffectSchema.parse(dbParry.canonicalLifecycle).id,
     );
+    expect(
+      applied.attackerCombatContext.modifierBuckets.situationDb[0]?.canonicalLifecycle,
+    ).toMatchObject({
+      applicability: { phase: "phase1" },
+      ownerParticipantId: "scenario-attacker",
+      payload: { category: "db_parry" },
+    });
   });
 
   it("creates separate phase-scoped rows and replaces only the proposal rows", () => {
