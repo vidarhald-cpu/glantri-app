@@ -6,12 +6,14 @@ import {
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
+  getCombatRoundEventsWithDerivedResultCoverage,
   projectCombatHistoryEvent,
   type CombatLogProjection,
   type CombatProgressionBoundaryKind,
   type CombatRoundPhase,
   type CombatRoundState,
   type CombatRoundStep,
+  type CombatStepEvent,
   type ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
@@ -138,6 +140,7 @@ export function projectGmCombatEvents(input: {
 export interface ActiveCombatLogPresentation {
   readonly combatLog: CombatLogProjection;
   readonly gmEvents: readonly ProjectedCombatHistoryEvent[];
+  readonly resultEvents: readonly CombatStepEvent[];
 }
 
 export function buildActiveCombatLogPresentation(input: {
@@ -145,6 +148,16 @@ export function buildActiveCombatLogPresentation(input: {
   encounterRevision: string;
   roundState: CombatRoundState;
 }): ActiveCombatLogPresentation {
+  const resultEvents = getCombatRoundEventsWithDerivedResultCoverage({
+    commands: input.roundState.commands,
+    encounterId: input.encounterId,
+    events: input.roundState.events,
+    participants: input.roundState.participants,
+    phaseResolutionResults: input.roundState.phaseResolutionResults,
+    roundEndReview: input.roundState.roundEndReview,
+    roundNumber: input.roundState.roundNumber,
+    stepSnapshots: input.roundState.stepSnapshots,
+  });
   return {
     combatLog: buildCombatLogProjection({
       encounterId: input.encounterId,
@@ -152,9 +165,10 @@ export function buildActiveCombatLogPresentation(input: {
       state: input.roundState,
     }),
     gmEvents: projectGmCombatEvents({
-      events: input.roundState.events,
+      events: resultEvents,
       participants: input.roundState.participants,
     }),
+    resultEvents,
   };
 }
 
@@ -170,6 +184,7 @@ export function buildActiveInspectorCorePresentation(input: {
   encounterId: string;
   encounterRevision: string;
   gmEvents: readonly ProjectedCombatHistoryEvent[];
+  resultEvents: readonly CombatStepEvent[];
   participantId?: string;
   roundState: CombatRoundState;
   step: CombatRoundStep;
@@ -182,7 +197,7 @@ export function buildActiveInspectorCorePresentation(input: {
     }),
   );
   const selectedEvents = selectCombatEventsForTrackerCell({
-    events: input.roundState.events,
+    events: input.resultEvents,
     participantId: inspector.participant?.participantId,
     retainLatestWhenEmpty: false,
     step: inspector.step,

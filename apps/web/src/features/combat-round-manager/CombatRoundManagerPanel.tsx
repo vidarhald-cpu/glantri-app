@@ -219,6 +219,10 @@ import {
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
+  buildFeintSkillPreview,
+  FeintSkillPreview,
+} from "@/features/player-combat/FeintSkillPreview";
+import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
@@ -296,6 +300,7 @@ import {
   buildActiveInspectorCorePresentation,
   projectGmCombatEvents,
 } from "./view-models/activeInspectorPresentation";
+import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
 import {
   createCombatPostResultHoldCandidate,
   isCombatPostResultHoldSourceSelection,
@@ -3935,6 +3940,9 @@ export default function CombatRoundManagerPanel({
   const [inspectorModifierEditedDraftKeys, setInspectorModifierEditedDraftKeys] = useState<
     Record<string, true>
   >({});
+  const modifierReviewInputSnapshotsRef = useRef(
+    new Map<string, NonNullable<ReturnType<typeof getOrCreateCombatModifierReviewInputSnapshot>>>(),
+  );
   const [parrySourceSelections, setParrySourceSelections] = useState<
     Record<string, CombatParrySourceSelection>
   >({});
@@ -4299,6 +4307,7 @@ export default function CombatRoundManagerPanel({
             encounterId: encounter.id,
             encounterRevision: descriptorRevision ?? combatLogProjection.sourceRevision,
             gmEvents: combatPresentation.active.gmEvents,
+            resultEvents: combatPresentation.active.resultEvents,
             participantId: renderedInspectionSelection.participantId,
             roundState,
             step: renderedInspectionSelection.step,
@@ -4307,6 +4316,7 @@ export default function CombatRoundManagerPanel({
           combatProgressionPresentation.boundary.kind,
           combatLogProjection,
           combatPresentation.active.gmEvents,
+          combatPresentation.active.resultEvents,
           renderedInspectionSelection.participantId,
           renderedInspectionSelection.step,
           roundState,
@@ -4371,6 +4381,7 @@ export default function CombatRoundManagerPanel({
               encounterId: encounter.id,
               encounterRevision: roundView.encounterRevision ?? combatLogProjection.sourceRevision,
               gmEvents: combatPresentation.active.gmEvents,
+              resultEvents: combatPresentation.active.resultEvents,
               participantId: postResultHoldSource.participantId,
               roundState,
               step: postResultHoldSource.step,
@@ -4379,6 +4390,7 @@ export default function CombatRoundManagerPanel({
             combatProgressionPresentation.boundary.kind,
             combatLogProjection,
             combatPresentation.active.gmEvents,
+            combatPresentation.active.resultEvents,
             postResultHoldSource.participantId,
             postResultHoldSource.step,
             roundState,
@@ -4932,6 +4944,21 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant,
     selectedTimelineRoundState,
   ]);
+  const modifierReviewDescriptor = currentActionPresentation?.primaryAction.descriptor;
+  const selectedParticipantOwnsModifierReview = Boolean(
+    modifierReviewDescriptor?.participantId &&
+      selectedEncounterParticipant &&
+      getCombatDistanceParticipantAliases(selectedEncounterParticipant).includes(
+        modifierReviewDescriptor.participantId,
+      ),
+  );
+  const modifierReviewInputSnapshot = getOrCreateCombatModifierReviewInputSnapshot({
+    combatContext: inspectorGeneratedCombatContext,
+    descriptor: selectedParticipantOwnsModifierReview ? modifierReviewDescriptor : undefined,
+    expectedParticipantRevision: selectedScenarioParticipant?.updatedAt,
+    participantId: selectedParticipantOwnsModifierReview ? selectedScenarioParticipant?.id : undefined,
+    snapshots: modifierReviewInputSnapshotsRef.current,
+  });
   const inspectorLiveModifiers = useMemo(() => {
     const currentInitiativeGroupId =
       combatProgressionProjection.executionOrder?.currentInitiativeGroupId;
@@ -5739,6 +5766,40 @@ export default function CombatRoundManagerPanel({
           specializations: content?.specializations ?? [],
           sourceTemplateId: inspectorPhaseLoadoutSummaries.phase1.reference?.sourceTemplateId,
         });
+  const inspectorFeintSkillPreview = useMemo(
+    () =>
+      buildFeintSkillPreview({
+        build: inspectorBuild ?? undefined,
+        combatContext: inspectorGeneratedCombatContext,
+        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        content,
+        currentInitiativeGroupId:
+          combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
+        encounterId: encounter.id,
+        method: inspectorDisplayDraft.feintMethod,
+        observationRelationships: selectedTimelineRoundState.observationRelationships,
+        participantId: selectedScenarioParticipant?.id ?? "unavailable-participant",
+        roundNumber: selectedRoundNumber,
+        sheetSummary: inspectorSheetSummary,
+        skill: content?.skills.find((skill) => skill.id === inspectorResolvedFeintSkill?.id),
+        targetParticipantId: inspectorNormalizedFeintPhaseContexts.phase1?.targetParticipantId,
+      }),
+    [
+      combatProgressionProjection.executionOrder?.currentInitiativeGroupId,
+      content,
+      encounter.id,
+      inspectorBuild,
+      inspectorDisplayDraft.feintMethod,
+      inspectorGeneratedCombatContext,
+      inspectorNormalizedFeintPhaseContexts.phase1?.targetParticipantId,
+      inspectorResolvedFeintSkill?.id,
+      inspectorSheetSummary,
+      selectedRoundNumber,
+      selectedScenarioParticipant?.id,
+      selectedScenarioParticipant?.state.combatEffects,
+      selectedTimelineRoundState.observationRelationships,
+    ],
+  );
   const inspectorDistancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
     const primaryTargetId =
       inspectorDisplayDraft.phaseContexts.phase1.targetParticipantId ??
@@ -7074,6 +7135,7 @@ export default function CombatRoundManagerPanel({
       setDamageReviewDrafts({});
       setInspectorDrafts({});
       setInspectorModifierEditedDraftKeys({});
+      modifierReviewInputSnapshotsRef.current.clear();
       setParrySourceSelections({});
       setRoundEndHealthDifficultyDrafts({});
       setSaveError(undefined);
@@ -8187,6 +8249,10 @@ export default function CombatRoundManagerPanel({
     const isModifierReview =
       descriptor.commandType === "review_modifiers_phase1" ||
       descriptor.commandType === "review_modifiers_phase2";
+    if (isModifierReview && !modifierReviewInputSnapshot) {
+      setSaveError("Modifier review state changed. Reopen the current review before continuing.");
+      return;
+    }
 
     const feintTargetResolution =
       !isModifierReview && inspectorDraft.actionId === "feint_attack"
@@ -8289,11 +8355,16 @@ export default function CombatRoundManagerPanel({
               }
             : undefined,
         additionalActionNotes: inspectorDraft.additionalActionNotes,
-        combatContext: inspectorGeneratedCombatContext,
+        combatContext:
+          isModifierReview && !inspectorHasLocalModifierEdits
+            ? modifierReviewInputSnapshot!.combatContext
+            : inspectorGeneratedCombatContext,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
-        expectedParticipantRevision: taskScenarioParticipant.updatedAt,
+        expectedParticipantRevision: isModifierReview
+          ? modifierReviewInputSnapshot?.expectedParticipantRevision
+          : taskScenarioParticipant.updatedAt,
         feint:
           inspectorDraft.actionId === "feint_attack" && feintTargetResolution?.ok
             ? {
@@ -10965,11 +11036,17 @@ export default function CombatRoundManagerPanel({
                                   </select>
                                 )}
                               </label>
-                              <div>
-                                <strong>Skill:</strong>{" "}
-                                {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
-                              </div>
-                              <div>Characteristic: Dexterity</div>
+                              {inspectorIsHistorical ? (
+                                <>
+                                  <div>
+                                    <strong>Skill:</strong>{" "}
+                                    {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
+                                  </div>
+                                  <div>Characteristic: Dexterity</div>
+                                </>
+                              ) : (
+                                <FeintSkillPreview preview={inspectorFeintSkillPreview} />
+                              )}
                               <div>Defender: highest close-combat skill · Intelligence</div>
                               {inspectorDisplayDraft.feintMethod === "weapon" &&
                               phaseModel.attackStats ? (

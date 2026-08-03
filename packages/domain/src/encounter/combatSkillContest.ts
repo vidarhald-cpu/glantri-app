@@ -55,6 +55,37 @@ export type CombatSkillContestPercentageContribution = z.infer<
   typeof combatSkillContestPercentageContributionSchema
 >;
 
+export const COMBAT_SKILL_CONTEST_PREVIEW_SCHEMA_VERSION = 1 as const;
+
+export const combatSkillContestPreviewSchema = z.object({
+  baseSkill: z.number().int().optional(),
+  completeness: z.enum(["complete", "partial", "unavailable"]),
+  contestType: combatSkillContestTypeSchema,
+  derivedIntegerAdjustment: z.number().int().optional(),
+  governingStat: z
+    .object({
+      id: idSchema.optional(),
+      label: z.string().min(1),
+      value: z.number().int(),
+    })
+    .optional(),
+  missingFacts: z.array(z.string().min(1)).default([]),
+  participantId: idSchema,
+  percentageContributions: z.array(combatSkillContestPercentageContributionSchema).default([]),
+  preDieTotal: z.number().int().optional(),
+  role: combatSkillContestRoleSchema,
+  schemaVersion: z.literal(COMBAT_SKILL_CONTEST_PREVIEW_SCHEMA_VERSION),
+  skill: z
+    .object({
+      id: idSchema.optional(),
+      label: z.string().min(1),
+      totalXp: z.number().int(),
+    })
+    .optional(),
+  totalPercentageAdjustment: z.number().int().optional(),
+});
+export type CombatSkillContestPreview = z.infer<typeof combatSkillContestPreviewSchema>;
+
 export const combatSkillContestCalculationSchema = z.object({
   baseSkill: z.number().int(),
   calculationId: idSchema,

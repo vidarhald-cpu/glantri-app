@@ -51,10 +51,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
 
     expect(source).toContain('selectedActionId === "feint_attack"');
     expect(source).toContain("Feint method");
-    expect(source).toContain("Characteristic: Dexterity");
+    expect(source).toContain("<FeintSkillPreview preview={feintSkillPreview}");
     expect(source).toContain("Defender resists with their highest close-combat skill");
     expect(source).toContain("resolveCombatFeintWeaponSkill");
-    expect(source).toContain("<strong>Skill:</strong>");
+    expect(source).toContain("buildFeintSkillPreview({");
     expect(source).toContain("rollCombatFeintOnServer");
     expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
     expect(source).toContain('case "roll_feint"');

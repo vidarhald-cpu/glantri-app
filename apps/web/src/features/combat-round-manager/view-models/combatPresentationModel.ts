@@ -66,6 +66,7 @@ export interface ActiveCombatPresentation {
   readonly currentTaskSelection?: CombatRoundSelectionTarget;
   readonly displayParticipants: readonly CombatRoundParticipant[];
   readonly gmEvents: ReturnType<typeof buildActiveCombatLogPresentation>["gmEvents"];
+  readonly resultEvents: ReturnType<typeof buildActiveCombatLogPresentation>["resultEvents"];
   readonly identity: string;
   readonly inspectorPresentation: ActiveInspectorPresentationStore;
   readonly liveInspectorContext: ReturnType<typeof buildCombatRoundLiveInspectorContext>;
@@ -539,6 +540,7 @@ export function buildActiveCombatPresentation(input: {
     currentTaskSelection,
     displayParticipants,
     gmEvents: activeCombatLogPresentation.gmEvents,
+    resultEvents: activeCombatLogPresentation.resultEvents,
     identity: `${input.encounterId}:${input.encounterRevision}`,
     inspectorPresentation: createActiveInspectorPresentationStore(),
     liveInspectorContext,

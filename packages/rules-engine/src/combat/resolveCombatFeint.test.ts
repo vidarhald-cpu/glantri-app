@@ -3,6 +3,7 @@ import type { SkillDefinition } from "@glantri/domain";
 
 import {
   resolveCombatFeintSkillContest,
+  resolveCombatFeintSkillPreview,
   resolveCombatFeintSkillProfile,
   resolveCombatFeintTable,
   resolveHighestCombatFeintResistanceProfile,
@@ -81,6 +82,52 @@ describe("combat feint skill profiles", () => {
 });
 
 describe("canonical Feint Skill Contests", () => {
+  it("previews initiator modifiers without Observe or unrelated combat buckets", () => {
+    const contribution = (input: {
+      bucket: "general_fatigue" | "skill_ob" | "db_parry";
+      id: string;
+      sourceId: string;
+      value: number;
+    }) => ({
+      applicability: {},
+      bucket: input.bucket,
+      editPolicy: "system_only" as const,
+      id: input.id,
+      label: input.id,
+      lifetime: { kind: "round" as const, status: "active" as const },
+      ownerParticipantId: "attacker",
+      readOnly: true,
+      schemaVersion: 1,
+      sourceId: input.sourceId,
+      sourceKind: "system_derived" as const,
+      value: input.value,
+    });
+    const preview = resolveCombatFeintSkillPreview({
+      context: {
+        actionId: "feint_attack",
+        encounterId: "encounter-1",
+        ownerParticipantId: "attacker",
+        phase: "phase1",
+        roundNumber: 1,
+        skillId: "dodge",
+        step: "phase_1_actions",
+      },
+      governingStatValue: 16,
+      method: "movement",
+      modifierContributions: [
+        contribution({ bucket: "general_fatigue", id: "ce", sourceId: "ce-effect", value: -2 }),
+        contribution({ bucket: "skill_ob", id: "observe", sourceId: "observe-link", value: 8 }),
+        contribution({ bucket: "db_parry", id: "db", sourceId: "weapon-db", value: -4 }),
+      ],
+      observationRelationshipIds: new Set(["observe-link"]),
+      participantId: "attacker",
+      skill: { id: "dodge", label: "Dodge", totalXp: 6 },
+    });
+
+    expect(preview).toMatchObject({ baseSkill: 22, preDieTotal: 18 });
+    expect(preview.percentageContributions.map((entry) => entry.id)).toEqual(["ce"]);
+  });
+
   const roll = { dieResult: 6, openEndedD10s: [] as number[], rollD20: 6 };
   const relationships = [
     {

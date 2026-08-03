@@ -1,10 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveCombatSkillContest } from "./resolveCombatSkillContest";
+import {
+  resolveCombatSkillContest,
+  resolveCombatSkillContestPreview,
+} from "./resolveCombatSkillContest";
 
 const roll = { dieResult: 6, openEndedD10s: [] as number[], rollD20: 6 };
 
 describe("resolveCombatSkillContest", () => {
+  it("projects the same workbook percentage path before a die is rolled", () => {
+    const preview = resolveCombatSkillContestPreview({
+      contestType: "movement_feint",
+      governingStat: { id: "dex", label: "Dexterity", value: 16 },
+      participantId: "participant-1",
+      percentageContributions: [
+        {
+          category: "general_fatigue",
+          id: "combat-experience",
+          label: "Combat Experience",
+          unit: "percentage",
+          value: -2,
+        },
+      ],
+      role: "movement_feint_initiator",
+      skill: { id: "dodge", label: "Dodge", totalXp: 6 },
+    });
+
+    expect(preview).toMatchObject({
+      baseSkill: 22,
+      completeness: "complete",
+      derivedIntegerAdjustment: -4,
+      preDieTotal: 18,
+      totalPercentageAdjustment: -2,
+    });
+    expect(preview).not.toHaveProperty("openEndedDie");
+    expect(preview).not.toHaveProperty("finalResult");
+  });
+
   it("uses stat plus canonical total skill XP and keeps percentage units distinct", () => {
     const result = resolveCombatSkillContest({
       calculationId: "adjust-distance:resister",

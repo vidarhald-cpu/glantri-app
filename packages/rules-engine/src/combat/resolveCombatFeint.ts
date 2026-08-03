@@ -1,8 +1,12 @@
 import {
   buildCombatObservationSkillContestContribution,
   COMBAT_FEINT_OUTCOME_TABLE,
+  resolveCombatModifierContributions,
   type CombatObservationRelationship,
+  type CombatCalculationContext,
+  type CombatModifierContribution,
   type CombatSkillContestCalculation,
+  type CombatSkillContestPreview,
   type CombatSkillContestPercentageContribution,
   type OpenEndedD20Roll,
   type SkillDefinition,
@@ -13,7 +17,10 @@ import {
   type ParticipantSkillRollProfile,
   type ResolveParticipantSkillRollProfileInput,
 } from "../encounters/resolveParticipantSkillRollProfile";
-import { resolveCombatSkillContest } from "./resolveCombatSkillContest";
+import {
+  resolveCombatSkillContest,
+  resolveCombatSkillContestPreview,
+} from "./resolveCombatSkillContest";
 
 export type CombatFeintMethod = "movement" | "weapon";
 
@@ -89,6 +96,58 @@ export function resolveCombatFeintSkillContest(
     percentageContributions,
     role,
     roll: input.roll,
+    skill: input.skill,
+  });
+}
+
+export interface ResolveCombatFeintSkillPreviewInput {
+  context: CombatCalculationContext;
+  governingStatValue: number;
+  method: CombatFeintMethod;
+  modifierContributions?: readonly CombatModifierContribution[];
+  observationRelationshipIds?: ReadonlySet<string>;
+  participantId: string;
+  skill: { id: string; label: string; totalXp: number };
+  unknownSkillPenalty?: number;
+}
+
+/** Canonical pre-roll Feint profile. It never includes rolls, opponent totals, MM, or weapon data. */
+export function resolveCombatFeintSkillPreview(
+  input: ResolveCombatFeintSkillPreviewInput,
+): CombatSkillContestPreview {
+  const contributions = (input.modifierContributions ?? []).filter(
+    (contribution) => !input.observationRelationshipIds?.has(contribution.sourceId ?? ""),
+  );
+  const rows = [
+    ...resolveCombatModifierContributions({
+      bucket: "general_fatigue",
+      context: input.context,
+      contributions,
+    }).rows,
+    ...resolveCombatModifierContributions({
+      bucket: "skill_ob",
+      context: input.context,
+      contributions,
+    }).rows,
+  ];
+
+  return resolveCombatSkillContestPreview({
+    baseSkillAdjustment: input.unknownSkillPenalty,
+    contestType: input.method === "movement" ? "movement_feint" : "weapon_feint",
+    governingStat: { id: "dex", label: "Dexterity", value: input.governingStatValue },
+    participantId: input.participantId,
+    percentageContributions: rows
+      .filter((row) => row.value !== 0)
+      .map((row) => ({
+        category: row.bucket === "skill_ob" ? ("skill_ob" as const) : ("general_fatigue" as const),
+        id: row.id,
+        label: row.label,
+        provenance: row.sourceKind,
+        sourceId: row.sourceId,
+        unit: "percentage" as const,
+        value: row.value,
+      })),
+    role: input.method === "movement" ? "movement_feint_initiator" : "weapon_feint_initiator",
     skill: input.skill,
   });
 }

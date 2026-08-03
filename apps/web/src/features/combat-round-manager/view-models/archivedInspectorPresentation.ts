@@ -2,6 +2,7 @@ import {
   COMBAT_ROUND_STEPS,
   buildCombatRoundInspector,
   deriveCombatHistoryStepOutcome,
+  getCombatRoundEventsWithDerivedResultCoverage,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   type CombatRoundAttackRollResult,
@@ -348,8 +349,18 @@ export function buildArchivedInspectorPresentationIndex(input: {
 
   for (const [roundIndex, roundState] of input.roundStates.entries()) {
     const previousRoundState = input.roundStates[roundIndex - 1];
-    const gmEvents = projectGmCombatEvents({
+    const resultEvents = getCombatRoundEventsWithDerivedResultCoverage({
+      commands: roundState.commands,
+      encounterId: roundState.encounterId ?? "combat-history",
       events: roundState.events,
+      participants: roundState.participants,
+      phaseResolutionResults: roundState.phaseResolutionResults,
+      roundEndReview: roundState.roundEndReview,
+      roundNumber: roundState.roundNumber,
+      stepSnapshots: roundState.stepSnapshots,
+    });
+    const gmEvents = projectGmCombatEvents({
+      events: resultEvents,
       participants: roundState.participants,
     });
     const projectedEventById = new Map(gmEvents.map((event) => [event.id, event]));
@@ -396,7 +407,7 @@ export function buildArchivedInspectorPresentationIndex(input: {
           step,
         });
         const selectedEvents = selectCombatEventsForTrackerCell({
-          events: roundState.events,
+          events: resultEvents,
           participantId: participant.participantId,
           retainLatestWhenEmpty: false,
           step,

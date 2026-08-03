@@ -27,6 +27,16 @@ function readPanelSource(): string {
 }
 
 describe("CombatRoundManagerPanel", () => {
+  it("binds modifier-review commits to one canonical participant input snapshot", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("getOrCreateCombatModifierReviewInputSnapshot({");
+    expect(source).toContain("modifierReviewInputSnapshot!.combatContext");
+    expect(source).toContain("modifierReviewInputSnapshot?.expectedParticipantRevision");
+    expect(source).toContain("modifierReviewInputSnapshotsRef.current.clear()");
+    expect(source).not.toContain("onChange={submitCombatDeclarationOnServer}");
+  });
+
   it("keeps Feint-Attack GM adjudication inside the canonical current-action flow", () => {
     const source = readSource();
 

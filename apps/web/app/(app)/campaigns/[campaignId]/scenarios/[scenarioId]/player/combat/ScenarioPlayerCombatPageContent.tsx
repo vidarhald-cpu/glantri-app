@@ -98,6 +98,10 @@ import {
   sanitizePlayerCombatModifierContext,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
+  buildFeintSkillPreview,
+  FeintSkillPreview,
+} from "@/features/player-combat/FeintSkillPreview";
+import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
@@ -3795,6 +3799,40 @@ export default function ScenarioPlayerCombatPageContent({
           specializations: content?.specializations ?? [],
           sourceTemplateId: phaseCombatLoadoutSummaries.phase1.reference?.sourceTemplateId,
         });
+  const feintSkillPreview = useMemo(
+    () =>
+      buildFeintSkillPreview({
+        build: controlledBuild ?? undefined,
+        combatContext: projectedCombatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+        content,
+        currentInitiativeGroupId,
+        encounterId: encounterSession?.id ?? scenarioId,
+        method: feintMethod,
+        observationRelationships: combatRoundState?.observationRelationships,
+        participantId: selectedParticipant?.id ?? "unavailable-participant",
+        roundNumber: combatRoundState?.roundNumber ?? 1,
+        sheetSummary: selectedSheetSummary,
+        skill: content?.skills.find((skill) => skill.id === resolvedFeintAttackerSkill?.id),
+        targetParticipantId: normalizedFeintPhaseContexts.phase1?.targetParticipantId,
+      }),
+    [
+      combatRoundState?.observationRelationships,
+      combatRoundState?.roundNumber,
+      content,
+      controlledBuild,
+      currentInitiativeGroupId,
+      encounterSession?.id,
+      feintMethod,
+      normalizedFeintPhaseContexts.phase1?.targetParticipantId,
+      projectedCombatContextDraft,
+      resolvedFeintAttackerSkill?.id,
+      scenarioId,
+      selectedParticipant?.id,
+      selectedParticipant?.state.combatEffects,
+      selectedSheetSummary,
+    ],
+  );
   const distancePreferenceOptions = useMemo<PlayerCombatDistancePreferenceOption[]>(() => {
     const primaryTargetId =
       phaseCombatContextDrafts.phase1.targetParticipantId ??
@@ -4665,10 +4703,7 @@ export default function ScenarioPlayerCombatPageContent({
                           <option value="weapon">Weapon</option>
                         </select>
                       </label>
-                      <div>
-                        <strong>Skill:</strong> {resolvedFeintAttackerSkill?.label ?? "Unavailable"}
-                      </div>
-                      <div>Characteristic: Dexterity</div>
+                      <FeintSkillPreview preview={feintSkillPreview} />
                       <div>
                         Defender resists with their highest close-combat skill · Intelligence.
                       </div>

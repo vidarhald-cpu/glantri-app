@@ -757,7 +757,7 @@ const RESULT_COMPLETENESS_DERIVED_EVENT_TYPES = new Set<CombatStepEvent["type"]>
   "round_boundary",
 ]);
 
-function eventsWithDerivedResultCoverage(input: {
+export function getCombatRoundEventsWithDerivedResultCoverage(input: {
   commands: CompletedCombatRound["commands"] | CombatRoundState["commands"];
   encounterId: string;
   events: readonly CombatStepEvent[];
@@ -816,7 +816,7 @@ export function projectCombatHistory(input: {
   );
   const archivedRounds = state.rounds.map((round: CompletedCombatRound) =>
     projectRound({
-      events: eventsWithDerivedResultCoverage({
+      events: getCombatRoundEventsWithDerivedResultCoverage({
         commands: round.commands,
         encounterId: round.encounterId ?? state.encounterId ?? "combat-history",
         events: round.events,
@@ -838,7 +838,7 @@ export function projectCombatHistory(input: {
 
   return {
     activeRound: projectRound({
-      events: eventsWithDerivedResultCoverage({
+      events: getCombatRoundEventsWithDerivedResultCoverage({
         commands: state.commands,
         encounterId: state.encounterId ?? "combat-history",
         events: state.events,

@@ -10880,6 +10880,7 @@ describe("scenarios route contract", () => {
       payload: {
         actionId: "attack_parry",
         additionalActionNotes: "Review accepted by the GM.",
+        expectedParticipantRevision: "2026-07-30T08:00:00.000Z",
         combatContext: {
           modifierBuckets: {
             general: [],

@@ -1,7 +1,9 @@
 import {
   combatSkillContestCalculationSchema,
+  combatSkillContestPreviewSchema,
   combatSkillContestPercentageContributionSchema,
   type CombatSkillContestCalculation,
+  type CombatSkillContestPreview,
   type CombatSkillContestModifierCategory,
   type CombatSkillContestPercentageContribution,
   type CombatSkillContestRole,
@@ -36,22 +38,18 @@ export interface ResolveCombatSkillContestInput {
   visibility?: CombatSkillContestCalculation["visibility"];
 }
 
-/**
- * Canonical resolver for opposed combat Skill Contests.
- *
- * It composes the existing total-XP skill profile with the workbook-faithful
- * percentage-adjustment lookup. It deliberately has no access to weapon OB, DB,
- * shield, Parry, or other Weapon Resolution facts.
- */
-export function resolveCombatSkillContest(
-  input: ResolveCombatSkillContestInput,
-): CombatSkillContestCalculation {
+export type ResolveCombatSkillContestPreviewInput = Omit<
+  ResolveCombatSkillContestInput,
+  "calculationId" | "movementBurden" | "opponentParticipantId" | "roll" | "visibility"
+>;
+
+export function resolveCombatSkillContestPreview(
+  input: ResolveCombatSkillContestPreviewInput,
+): CombatSkillContestPreview {
   const contributionsById = new Map<string, CombatSkillContestPercentageContribution>();
   for (const contribution of input.percentageContributions ?? []) {
     const parsed = combatSkillContestPercentageContributionSchema.parse(contribution);
-    if (!contributionsById.has(parsed.id)) {
-      contributionsById.set(parsed.id, parsed);
-    }
+    if (!contributionsById.has(parsed.id)) contributionsById.set(parsed.id, parsed);
   }
   const percentageContributions = [...contributionsById.values()];
   const baseSkill =
@@ -66,18 +64,48 @@ export function resolveCombatSkillContest(
   if (!percentageTrace) {
     throw new RangeError("Skill Contest modifiers are outside the canonical workbook table.");
   }
-  const missingContributionPoints = [...new Set(input.missingContributionPoints ?? [])];
-  const preDieTotal = percentageTrace.finalValue;
+  const missingFacts = [...new Set(input.missingContributionPoints ?? [])];
+
+  return combatSkillContestPreviewSchema.parse({
+    baseSkill,
+    completeness: missingFacts.length > 0 ? "partial" : "complete",
+    contestType: input.contestType,
+    derivedIntegerAdjustment: percentageTrace.finalValue - baseSkill,
+    governingStat: input.governingStat,
+    missingFacts,
+    participantId: input.participantId,
+    percentageContributions,
+    preDieTotal: percentageTrace.finalValue,
+    role: input.role,
+    schemaVersion: 1,
+    skill: input.skill,
+    totalPercentageAdjustment: percentageTrace.rawModifierTotal,
+  });
+}
+
+/**
+ * Canonical resolver for opposed combat Skill Contests.
+ *
+ * It composes the existing total-XP skill profile with the workbook-faithful
+ * percentage-adjustment lookup. It deliberately has no access to weapon OB, DB,
+ * shield, Parry, or other Weapon Resolution facts.
+ */
+export function resolveCombatSkillContest(
+  input: ResolveCombatSkillContestInput,
+): CombatSkillContestCalculation {
+  const preview = resolveCombatSkillContestPreview(input);
+  const baseSkill = preview.baseSkill!;
+  const preDieTotal = preview.preDieTotal!;
 
   return combatSkillContestCalculationSchema.parse({
     baseSkill,
     calculationId: input.calculationId,
-    completeness: missingContributionPoints.length > 0 ? "partial" : "complete",
+    completeness: preview.completeness,
     contestType: input.contestType,
-    derivedIntegerAdjustment: preDieTotal - baseSkill,
+    derivedIntegerAdjustment: preview.derivedIntegerAdjustment,
     finalResult: preDieTotal + input.roll.dieResult,
     governingStat: input.governingStat,
-    missingContributionPoints,
+    missingContributionPoints: preview.missingFacts,
     movementBurden: input.movementBurden,
     openEndedDie: {
       openEndedD10s: input.roll.openEndedD10s,
@@ -86,11 +114,11 @@ export function resolveCombatSkillContest(
     },
     opponentParticipantId: input.opponentParticipantId,
     participantId: input.participantId,
-    percentageContributions,
+    percentageContributions: preview.percentageContributions,
     preDieTotal,
     role: input.role,
     skill: input.skill,
-    totalPercentageAdjustment: percentageTrace.rawModifierTotal,
+    totalPercentageAdjustment: preview.totalPercentageAdjustment,
     visibility: input.visibility ?? "roller_and_gm",
   });
 }

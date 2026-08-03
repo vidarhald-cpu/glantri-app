@@ -1,5 +1,6 @@
 import {
   combatRoundStateSchema,
+  combatRoundCommandSchema,
   combatStepEventSchema,
   type CombatRoundStepSnapshot,
 } from "@glantri/domain";
@@ -78,6 +79,52 @@ function archivedRound(
 }
 
 describe("archived inspector presentation ownership", () => {
+  it("retains exact command-backed Combat Experience results in archived GM inspection", () => {
+    const round = archivedRound();
+    const command = combatRoundCommandSchema.parse({
+      afterCursor: { participantId: "participant-1", roundNumber: 1, step: "DE" },
+      beforeCursor: { participantId: "participant-1", roundNumber: 1, step: "DE" },
+      createdAt: "2026-07-28T09:00:00.000Z",
+      facts: {
+        difficulty: 26,
+        finalTotal: 14,
+        openEndedD10s: [1, 8],
+        resultBand: "failed",
+        resultLabel: "Failed",
+        rollD20: 1,
+        rollTotal: -7,
+        skillTotal: 21,
+      },
+      id: "ce-command",
+      participantId: "participant-1",
+      roundNumber: 1,
+      step: "DE",
+      type: "roll_combat_experience",
+    });
+    const index = buildArchivedInspectorPresentationIndex({
+      buildHistoricalActionResult: () => ({ interpretedResult: "Archived result" }),
+      roundStates: [combatRoundStateSchema.parse({ ...round, commands: [command] })],
+    });
+
+    const exact = index.get({
+      participantId: "participant-1",
+      roundNumber: 1,
+      step: "select_actions",
+    });
+    const wrongStep = index.get({
+      participantId: "participant-1",
+      roundNumber: 1,
+      step: "review_action_modifiers",
+    });
+
+    expect(exact?.canonicalActionResultEvents).toContainEqual(
+      expect.objectContaining({ type: "combat_experience" }),
+    );
+    expect(wrongStep?.canonicalActionResultEvents).not.toContainEqual(
+      expect.objectContaining({ type: "combat_experience" }),
+    );
+  });
+
   it("builds immutable candidates once and reuses them across selection changes", () => {
     const buildHistoricalActionResult = vi.fn(() => ({
       interpretedResult: "Archived result",
