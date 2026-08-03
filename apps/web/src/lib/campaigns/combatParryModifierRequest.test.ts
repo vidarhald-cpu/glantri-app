@@ -9,6 +9,14 @@ import { buildCombatParryModifierRequest } from "./combatParryModifierRequest";
 
 const task = {
   actorAccess: { combatant: true, gm: true },
+  automation: {
+    authority: { kind: "unknown" },
+    eligibility: "unsupported",
+    schemaVersion: 1,
+    taskId: "parry-task",
+    warnings: [],
+    workClass: "not_applicable",
+  },
   contributesToProgression: true,
   executionGroupId: "parry-group",
   expectedCommand: "roll_parry",

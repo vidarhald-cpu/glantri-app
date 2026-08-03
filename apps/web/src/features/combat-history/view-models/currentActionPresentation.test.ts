@@ -39,6 +39,14 @@ function task(input: {
     : (input.owner ?? aria);
   return {
     actorAccess: { combatant: !input.gmOnly, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: input.id ?? `task:${input.kind}`,
+      warnings: [],
+      workClass: "not_applicable",
+    },
     contributesToProgression: true,
     executionGroupId: `group:${input.id ?? input.kind}`,
     expectedCommand: input.command ?? "roll_attack",

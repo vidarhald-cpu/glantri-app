@@ -9,6 +9,14 @@ import { buildPlayerCombatAttackModifierRequest } from "./playerCombatAttackRequ
 
 const task = {
   actorAccess: { combatant: true, gm: true },
+  automation: {
+    authority: { kind: "unknown" },
+    eligibility: "unsupported",
+    schemaVersion: 1,
+    taskId: "attack-task",
+    warnings: [],
+    workClass: "not_applicable",
+  },
   contributesToProgression: true,
   executionGroupId: "attack-group",
   expectedCommand: "roll_attack",

@@ -61,6 +61,14 @@ function task(
 ): CombatProgressionPresentationTask {
   return {
     actorAccess: { combatant: true, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: `task:${kind}`,
+      warnings: [],
+      workClass: "not_applicable",
+    },
     contributesToProgression: true,
     executionGroupId: "group-1",
     expectedCommand: "roll_attack",

@@ -9,6 +9,14 @@ function transitionTask(
 ): CombatProgressionPresentationTask {
   return {
     actorAccess: { combatant: false, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: "task:round-boundary:start-next-round",
+      warnings: [],
+      workClass: "not_applicable",
+    },
     contributesToProgression: true,
     executionGroupId: "group:round-boundary",
     expectedCommand: "advance_combat_boundary",

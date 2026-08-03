@@ -1,4 +1,5 @@
 import { deepFreeze } from "./internal";
+import { projectPlayerSafeCombatAutomationEligibility } from "../combatAutomationEligibility";
 import type {
   CombatantIdentity,
   CombatProgressionPresentationProjection,
@@ -70,6 +71,13 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       combatant: combatantMayAct,
       gm: task.allowedActors.includes("gm"),
     },
+    automation: {
+      ...task.automation,
+      authority: {
+        kind: task.automation.authority.kind,
+        participantId: task.automation.authority.participantId,
+      },
+    },
     // A submitted declaration remains GM-editable, but that optional edit is not blocking work.
     contributesToProgression: !(
       task.kind === "submit_declaration" &&
@@ -90,6 +98,17 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
     trackerFacet: task.trackerFacet,
     transition: task.transition,
   };
+}
+
+function visibleAutomation(
+  task: CombatProgressionPresentationTask,
+  viewer: CombatProgressionPresentationViewer,
+): CombatProgressionPresentationTask["automation"] {
+  if (viewer.kind === "gm") return task.automation;
+  return projectPlayerSafeCombatAutomationEligibility({
+    controlledParticipantIds: viewer.controlledParticipantIds,
+    fact: task.automation,
+  });
 }
 
 function visibleTaskIdentity(
@@ -195,6 +214,7 @@ export function projectCombatProgressionPresentation(input: {
           .map(presentationTask)
           .map((task) => ({
             ...task,
+            automation: visibleAutomation(task, input.viewer),
             identity: visibleTaskIdentity(task, input.viewer),
             owner:
               task.owner?.kind === "combatant"

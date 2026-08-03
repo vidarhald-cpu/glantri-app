@@ -25,6 +25,16 @@ function projection(input: {
   } satisfies CombatParticipationProjection;
   const task = {
     allowedActors: ["gm"],
+    automation: {
+      authority: { kind: "ownerless" },
+      eligibility: "not_allowed",
+      participationFactId: `fact-${input.counter}`,
+      schemaVersion: 1,
+      stopReason: "deterministic_already_handled",
+      taskId: `task-${input.counter}`,
+      warnings: [],
+      workClass: "not_applicable",
+    },
     blockerIds: [],
     executionGroupId: `group-${input.counter}`,
     expectedCommand: "advance_combat_boundary",
@@ -36,6 +46,7 @@ function projection(input: {
       completeness: "complete",
       factId: `fact-${input.counter}`,
       ordering: "ownerless_boundary",
+      ownership: { kind: "ownerless" },
       reason: "deterministic_boundary",
       status: "required",
       workClass,

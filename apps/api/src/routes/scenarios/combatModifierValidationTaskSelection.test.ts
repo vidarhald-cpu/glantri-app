@@ -7,6 +7,14 @@ import { selectCurrentCombatModifierValidationTask } from "./combatModifierValid
 function task(participantId: string): CombatProgressionTask {
   return {
     allowedActors: ["combatant", "gm"],
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: `attack:${participantId}`,
+      warnings: [],
+      workClass: "not_applicable",
+    },
     blockerIds: [],
     executionGroupId: "tied-attacks",
     expectedCommand: "roll_attack",

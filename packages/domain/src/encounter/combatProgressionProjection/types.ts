@@ -15,6 +15,10 @@ import type {
   CombatParticipationStatus,
   CombatParticipationWorkClass,
 } from "../combatParticipation";
+import type {
+  CombatAutomationEligibilityFact,
+  PlayerSafeCombatAutomationEligibilityFact,
+} from "../combatAutomationEligibility";
 
 export const COMBAT_PROGRESSION_BOUNDARIES = [
   "declaration",
@@ -262,6 +266,7 @@ export interface CombatProgressionBoundaryTransition {
 
 export interface CombatProgressionTask {
   readonly allowedActors: readonly CombatProgressionAllowedActor[];
+  readonly automation: CombatAutomationEligibilityFact;
   readonly blockerIds: readonly string[];
   readonly expectedCommand: CombatProgressionExpectedCommand;
   readonly executionGroupId: string;
@@ -279,6 +284,7 @@ export interface CombatProgressionTask {
     readonly reason: CombatParticipationReason;
     readonly status: CombatParticipationStatus;
     readonly workClass: CombatParticipationWorkClass;
+    readonly ownership: import("../combatParticipation").CombatParticipationOwnership;
   };
   readonly processId: string;
   readonly stageId: string;
@@ -393,6 +399,7 @@ export interface CombatProgressionPresentationTask {
     readonly combatant: boolean;
     readonly gm: boolean;
   };
+  readonly automation: PlayerSafeCombatAutomationEligibilityFact;
   readonly contributesToProgression: boolean;
   readonly executionGroupId: string;
   readonly id: string;

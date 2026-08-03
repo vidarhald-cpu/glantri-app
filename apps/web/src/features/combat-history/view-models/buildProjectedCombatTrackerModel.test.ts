@@ -78,6 +78,14 @@ function liveProgression(
   const step = input.step ?? "A1";
   const task: CombatProgressionPresentationTask = {
     actorAccess: { combatant: !input.gmOwned, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: "task-1",
+      warnings: [],
+      workClass: "not_applicable",
+    },
     contributesToProgression: true,
     executionGroupId: "group-1",
     expectedCommand: kind === "gm_advance_boundary" ? "advance_combat_boundary" : "roll_attack",

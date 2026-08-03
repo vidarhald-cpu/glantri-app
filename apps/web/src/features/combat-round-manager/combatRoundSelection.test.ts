@@ -35,6 +35,14 @@ function presentationTask(input: {
     : ({ id: "gm", kind: "gm", label: "Game Master" } as const);
   return {
     actorAccess: { combatant: false, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: input.id,
+      warnings: [],
+      workClass: "not_applicable",
+    },
     contributesToProgression: true,
     executionGroupId: `group:${input.id}`,
     expectedCommand: input.step === "M1" ? "review_modifiers_phase1" : "commit_adjust_distance",

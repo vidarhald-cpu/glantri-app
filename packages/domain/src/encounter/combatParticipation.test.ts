@@ -939,6 +939,47 @@ describe("canonical combat participation", () => {
 });
 
 describe("combat progression participation consumption", () => {
+  it("attaches canonical participation and automation eligibility to every current task", () => {
+    const active = activeState({
+      currentStep: "initiative_phase_1",
+      participants: [
+        participant("hero", declaration("attack_parry", "guard")),
+        participant("guard", declaration("attack_parry", "hero")),
+      ],
+    });
+    const participation = project(active, {
+      participantAuthorities: active.participants.map((entry) => ({
+        authority: "gm" as const,
+        participantId: entry.participantId,
+      })),
+    });
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(tasks.map((task) => task.kind)).toEqual(["roll_initiative", "roll_initiative"]);
+    expect(tasks.every((task) => task.participation !== undefined)).toBe(true);
+    expect(
+      tasks.every((task) => task.automation.participationFactId === task.participation?.factId),
+    ).toBe(true);
+    expect(tasks.map((task) => task.automation)).toEqual([
+      expect.objectContaining({
+        authority: expect.objectContaining({ kind: "gm_controlled_participant" }),
+        eligibility: "eligible",
+        workClass: "gm_roll",
+      }),
+      expect.objectContaining({
+        authority: expect.objectContaining({ kind: "gm_controlled_participant" }),
+        eligibility: "eligible",
+        workClass: "gm_roll",
+      }),
+    ]);
+  });
+
   it("retains legacy modifier review when canonical lifecycle completeness is unknown", () => {
     const active = activeState({
       currentStep: "review_action_modifiers",

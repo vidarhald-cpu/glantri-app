@@ -15,6 +15,7 @@ export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatRoundStep";
 export * from "./encounter/combatRoundEndProcesses";
 export * from "./encounter/combatActionProcesses";
+export * from "./encounter/combatAutomationEligibility";
 export * from "./encounter/combatAttackModifierValidation";
 export * from "./encounter/combatProgressionProjection";
 export * from "./encounter/combatParticipation";
