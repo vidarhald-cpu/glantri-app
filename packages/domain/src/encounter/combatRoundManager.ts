@@ -2249,6 +2249,19 @@ export const combatRoundStepSnapshotSchema = z.object({
   step: combatRoundStepSchema,
 });
 
+/**
+ * Canonical, GM-only workflow state created by an explicit Clear current step command.
+ * It keeps one restored deterministic stage open until the GM performs its next forward action.
+ */
+export const combatRoundGmBacktrackHoldSchema = z
+  .object({
+    participantId: idSchema.optional(),
+    roundNumber: z.number().int().positive(),
+    step: combatRoundStepSchema,
+  })
+  .strict();
+export type CombatRoundGmBacktrackHold = z.infer<typeof combatRoundGmBacktrackHoldSchema>;
+
 export interface CompletedCombatRound {
   activeParticipantId?: string;
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
@@ -2320,6 +2333,7 @@ export interface CombatRoundState {
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
+  gmBacktrackHold?: z.infer<typeof combatRoundGmBacktrackHoldSchema>;
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
   observationAttempts: CombatObservationAttempt[];
   observationRelationships: CombatObservationRelationship[];
@@ -2350,6 +2364,7 @@ const activeCombatRoundStateShape = {
   encounterId: idSchema.optional(),
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
+  gmBacktrackHold: combatRoundGmBacktrackHoldSchema.optional(),
   offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
   observationAttempts: z.array(combatObservationAttemptSchema).default([]),
   observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
@@ -3733,11 +3748,17 @@ export function recordCombatRoundGlobalParticipantCommand(input: {
     type: commandType,
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+  const consumesGmBacktrackHold =
+    normalized.gmBacktrackHold?.roundNumber === normalized.roundNumber &&
+    normalized.gmBacktrackHold.step === input.step &&
+    (normalized.gmBacktrackHold.participantId === undefined ||
+      normalized.gmBacktrackHold.participantId === input.participantId);
 
   return {
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: command.afterCursor,
+    gmBacktrackHold: consumesGmBacktrackHold ? undefined : normalized.gmBacktrackHold,
     selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
   };
@@ -17519,6 +17540,12 @@ export function initializeCombatRoundState(input: {
         participantIds.has(contact.affectedParticipantId),
     ),
     currentStep,
+    gmBacktrackHold:
+      existing?.gmBacktrackHold?.roundNumber === roundNumber &&
+      (existing.gmBacktrackHold.participantId === undefined ||
+        participantIds.has(existing.gmBacktrackHold.participantId))
+        ? existing.gmBacktrackHold
+        : undefined,
     phaseResolutionCursor: fallbackPhaseResolutionCursor
       ? fallbackPhaseResolutionCursor
       : currentStep === "select_actions" || !existingPhaseResolutionCursor
@@ -20030,6 +20057,7 @@ export function recordCombatRoundParticipantStepReview(input: {
   modifierReview?: CanonicalCombatModifierReviewTransaction;
   modifierReviewUndo?: Record<string, unknown>;
   previousDeclaration?: CombatRoundDeclaration;
+  suppressNoChangeResult?: boolean;
 }): CombatRoundState {
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
@@ -20060,6 +20088,14 @@ export function recordCombatRoundParticipantStepReview(input: {
           ...(input.previousDeclaration
             ? { previousDeclaration: combatRoundDeclarationSchema.parse(input.previousDeclaration) }
             : {}),
+          ...(input.state.gmBacktrackHold
+            ? {
+                previousGmBacktrackHold: combatRoundGmBacktrackHoldSchema.parse(
+                  input.state.gmBacktrackHold,
+                ),
+              }
+            : {}),
+          ...(input.suppressNoChangeResult ? { suppressNoChangeResult: true } : {}),
           status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
         },
         participantId: input.participantId,
@@ -20997,16 +21033,22 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
     const previousDeclaration = combatRoundDeclarationSchema.safeParse(
       command.facts.previousDeclaration,
     );
-    return previousDeclaration.success
-      ? combatRoundStateSchema.parse({
-          ...baseState,
-          participants: baseState.participants.map((participant) =>
+    const previousGmBacktrackHold = combatRoundGmBacktrackHoldSchema.safeParse(
+      command.facts.previousGmBacktrackHold,
+    );
+    return combatRoundStateSchema.parse({
+      ...baseState,
+      gmBacktrackHold: previousGmBacktrackHold.success
+        ? previousGmBacktrackHold.data
+        : undefined,
+      participants: previousDeclaration.success
+        ? baseState.participants.map((participant) =>
             participant.participantId === command.participantId
               ? { ...participant, declaration: previousDeclaration.data }
               : participant,
-          ),
-        })
-      : baseState;
+          )
+        : baseState.participants,
+    });
   }
 
   if (command.type !== "declare_action") return baseState;
@@ -23115,12 +23157,18 @@ function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
       })
     : normalized.stepSnapshots;
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+  const previousGmBacktrackHold = combatRoundGmBacktrackHoldSchema.safeParse(
+    command.facts.previousGmBacktrackHold,
+  );
 
   return combatRoundStateSchema.parse({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
+    gmBacktrackHold: previousGmBacktrackHold.success
+      ? previousGmBacktrackHold.data
+      : undefined,
     phaseResolutionCursor: undefined,
     selectedParticipantId: command.beforeCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
@@ -23462,6 +23510,36 @@ export function clearCombatRoundStep(input: {
   }
 
   return normalized;
+}
+
+export function holdCombatRoundForGmBacktrack(input: {
+  participantId?: string;
+  state: CombatRoundState;
+  step?: CombatRoundStep;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const step = input.step ?? normalized.currentStep;
+  const participantId =
+    input.participantId ??
+    normalized.currentCursor?.participantId ??
+    normalized.selectedParticipantId ??
+    normalized.participants[0]?.participantId;
+
+  if (
+    participantId &&
+    !normalized.participants.some((participant) => participant.participantId === participantId)
+  ) {
+    throw new RangeError("The GM backtrack participant is not in the active combat round.");
+  }
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    gmBacktrackHold: {
+      participantId,
+      roundNumber: normalized.roundNumber,
+      step,
+    },
+  });
 }
 
 export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {

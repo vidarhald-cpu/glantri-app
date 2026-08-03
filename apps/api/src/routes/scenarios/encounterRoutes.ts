@@ -38,6 +38,7 @@ import {
   buildCombatProgressionProjection,
   isCompleteDeterministicCombatTask,
   getCurrentExecutableCombatTasks,
+  holdCombatRoundForGmBacktrack,
   projectActiveCombatParticipation,
   runCombatDeterministicTransitionSuffix,
   buildCombatRoundDeclaredAttackOpportunities,
@@ -4155,6 +4156,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       edges: safeDistanceEdges,
     },
     events: [],
+    gmBacktrackHold: undefined,
     adjustDistanceProposals: roundState.adjustDistanceProposals
       .filter((proposal) =>
         isPlayerVisibleCombatRoundResultPair({
@@ -5467,6 +5469,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           roundNumber: roundState.roundNumber,
           scenarioParticipantId: scenarioParticipant.id,
         });
+        const suppressBacktrackNoChangeResult = Boolean(
+          roundState.gmBacktrackHold?.roundNumber === roundState.roundNumber &&
+            roundState.gmBacktrackHold.participantId === encounterParticipant.id &&
+            roundState.gmBacktrackHold.step === roundState.currentStep &&
+            modifierReview.changes.length === 0 &&
+            !modifierReview.input.publicNote,
+        );
         const nextParticipantState = applyCanonicalModifierReviewToParticipantState({
           createdAt: submittedAt,
           draftContext: submittedCombatContext,
@@ -5500,6 +5509,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: reviewedDeclarationState,
           step: roundState.currentStep,
           submittedBy: "gm",
+          suppressNoChangeResult: suppressBacktrackNoChangeResult,
         });
         const saved = await encounterService.commitCombatModifierReview({
           campaignId: access.campaignId,
@@ -9851,6 +9861,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
+      const participation = projectActiveCombatParticipation({
+        encounterRevision: encounter.updatedAt,
+        scenarioParticipants,
+        state: roundState,
+      });
       const submittedAt = new Date().toISOString();
       const nextRoundState = advanceCombatProgressionBoundary({
         command: {
@@ -9861,6 +9876,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         expectedCommandType: body.commandType,
         expectedExecutionGroupId: body.executionGroupId,
         expectedTaskId: body.taskId,
+        participation,
         state: roundState,
         stepSnapshots: body.stepSnapshots,
         targetBoundary: body.targetBoundary,
@@ -12194,7 +12210,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               step: selectedStep,
             })
           : clearCurrentCombatRoundStepAndRewind(roundState);
-      const nextRoundState = initializeMaterializedCombatRoundState({
+      const restoredRoundState = initializeMaterializedCombatRoundState({
         encounter: {
           ...encounter,
           combatRoundState: clearedRoundState,
@@ -12202,6 +12218,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         scenarioParticipants,
       });
+      const restoredParticipation = projectActiveCombatParticipation({
+        encounterRevision: encounter.updatedAt,
+        scenarioParticipants,
+        state: restoredRoundState,
+      });
+      const restoredProjection = buildCombatProgressionProjection(restoredRoundState, {
+        participation: restoredParticipation,
+      });
+      const restoredTask = getCurrentExecutableCombatTasks(restoredProjection)[0];
+      const nextRoundState =
+        restoredTask && isCompleteDeterministicCombatTask(restoredTask)
+          ? holdCombatRoundForGmBacktrack({
+              participantId:
+                selectedParticipantId ??
+                restoredRoundState.currentCursor?.participantId ??
+                restoredRoundState.selectedParticipantId,
+              state: restoredRoundState,
+              step: restoredRoundState.currentStep,
+            })
+          : restoredRoundState;
       const removedDeclareCommandParticipantIds = new Set(
         roundState.commands
           .filter(

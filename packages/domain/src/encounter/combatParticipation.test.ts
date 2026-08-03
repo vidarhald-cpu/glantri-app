@@ -1020,6 +1020,137 @@ describe("combat progression participation consumption", () => {
     );
   });
 
+  it("keeps an explicitly restored empty M1 as GM-owned human work", () => {
+    const active = activeState({
+      currentStep: "review_action_modifiers",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "M1" },
+        gmBacktrackHold: {
+          participantId: "hero",
+          roundNumber: 2,
+          step: "review_action_modifiers",
+        },
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { review_action_modifiers: "pending" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { review_action_modifiers: "pending" },
+        }),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(
+      fact(participation, {
+        family: "modifier_review",
+        participantId: "hero",
+        phase: "phase1",
+      }),
+    ).toMatchObject({
+      completeness: "complete",
+      reason: "unresolved_choice",
+      status: "required",
+      workClass: "human_decision",
+    });
+    expect(tasks).toContainEqual(
+      expect.objectContaining({
+        kind: "modifier_review",
+        owner: expect.objectContaining({ participantId: "hero" }),
+        state: "executable",
+      }),
+    );
+    expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(false);
+  });
+
+  it("keeps an explicitly restored empty M2 as GM-owned human work", () => {
+    const active = activeState({
+      currentStep: "review_phase_2_modifiers",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "M2" },
+        gmBacktrackHold: {
+          participantId: "hero",
+          roundNumber: 2,
+          step: "review_phase_2_modifiers",
+        },
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { review_phase_2_modifiers: "pending" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { review_phase_2_modifiers: "pending" },
+        }),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(
+      fact(participation, {
+        family: "modifier_review",
+        participantId: "hero",
+        phase: "phase2",
+      }),
+    ).toMatchObject({
+      completeness: "complete",
+      reason: "unresolved_choice",
+      status: "required",
+      workClass: "human_decision",
+    });
+    expect(tasks).toContainEqual(
+      expect.objectContaining({
+        kind: "modifier_review",
+        owner: expect.objectContaining({ participantId: "hero" }),
+        state: "executable",
+      }),
+    );
+    expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(false);
+  });
+
+  it("turns a restored initiative commit into an explicit GM continuation", () => {
+    const active = activeState({
+      currentStep: "initiative_phase_1",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "i1" },
+        gmBacktrackHold: {
+          participantId: "hero",
+          roundNumber: 2,
+          step: "initiative_phase_1",
+        },
+      },
+      participants: [participant("hero", declaration("attack_parry", "guard"))],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const commit = progression.boundary.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "commit_initiative");
+
+    expect(commit?.participation).toMatchObject({
+      reason: "unresolved_choice",
+      status: "required",
+      workClass: "human_decision",
+    });
+  });
+
   it("retains M1 review when a canonical proposal requires work", () => {
     const active = activeState({
       currentStep: "review_action_modifiers",

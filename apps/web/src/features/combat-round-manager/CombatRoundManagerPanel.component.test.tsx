@@ -27,6 +27,7 @@ import {
 const mocks = vi.hoisted(() => ({
   advanceDeterministic: vi.fn(),
   advanceCurrentStep: vi.fn(),
+  clearCurrentStep: vi.fn(),
   commitParticipantReview: vi.fn(),
   completeRemainingStep: vi.fn(),
   loadEncounter: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     ...actual,
     advanceDeterministicCombatOnServer: mocks.advanceDeterministic,
     advanceCombatRoundCurrentStepOnServer: mocks.advanceCurrentStep,
+    clearCurrentCombatRoundStepOnServer: mocks.clearCurrentStep,
     completeRemainingCombatStepOnServer: mocks.completeRemainingStep,
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
@@ -876,6 +878,51 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
 });
 
 describe("CombatRoundManagerPanel GM workflow selector", () => {
+  it("keeps an explicitly cleared empty M1 open without issuing another deterministic request", async () => {
+    const before = buildInitiativeEncounter();
+    const restoredBase = buildModifierReviewEncounter();
+    const restoredState = combatRoundStateSchema.parse({
+      ...restoredBase.combatRoundState,
+      currentCursor: { participantId: "encounter-attacker", roundNumber: 1, step: "M1" },
+      currentStep: "review_action_modifiers",
+      gmBacktrackHold: {
+        participantId: "encounter-attacker",
+        roundNumber: 1,
+        step: "review_action_modifiers",
+      },
+      selectedParticipantId: "encounter-attacker",
+      selectedStep: "review_action_modifiers",
+    });
+    const restored = encounterSessionSchema.parse({
+      ...restoredBase,
+      combatRoundState: restoredState,
+      updatedAt: "2026-07-23T10:01:30.000Z",
+    });
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.clearCurrentStep.mockResolvedValue({ encounter: restored, participants: [] });
+
+    render(<CombatRoundManagerPanel encounter={before} scenarioParticipants={participants} />);
+
+    await waitFor(() => expect(mocks.advanceDeterministic).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Clear current step" }));
+
+    await waitFor(() => expect(mocks.clearCurrentStep).toHaveBeenCalledTimes(1));
+
+    expect(
+      await screen.findByRole("button", { name: "Complete modifier review" }),
+    ).toBeInTheDocument();
+    const addButtons = screen.getAllByRole("button", { name: "Add" });
+    expect(addButtons.length).toBeGreaterThan(0);
+    fireEvent.click(addButtons[0]!);
+    expect(screen.getByRole("button", { name: "Complete modifier review" })).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.advanceDeterministic).toHaveBeenCalledTimes(1);
+    expect(mocks.clearCurrentStep).toHaveBeenCalledTimes(1);
+  });
+
   it("does not offer a bulk workflow for an empty modifier-review boundary", async () => {
     const encounter = buildModifierReviewEncounter();
     const participants = [

@@ -85,49 +85,109 @@ function freeze<T>(value: T): T {
   return value;
 }
 
+function isHeldForExplicitGmBacktrack(
+  context: ProjectionContext,
+  input: AddFactInput,
+): boolean {
+  const hold = context.state.gmBacktrackHold;
+  if (!hold || hold.roundNumber !== context.state.roundNumber) return false;
+  if ((input.completeness ?? "complete") !== "complete" || input.status === "blocked") return false;
+
+  const participantMatches =
+    hold.participantId === undefined ||
+    input.participantId === undefined ||
+    hold.participantId === input.participantId;
+  if (!participantMatches) return false;
+
+  if (
+    input.processFamily === "modifier_review" &&
+    ((hold.step === "review_action_modifiers" && input.phase === "phase1") ||
+      (hold.step === "review_phase_2_modifiers" && input.phase === "phase2"))
+  ) {
+    return input.status === "not_required" && input.workClass === "no_work";
+  }
+
+  if (input.status !== "required" || input.workClass !== "deterministic_transition") {
+    return false;
+  }
+
+  if (hold.step === "select_actions") {
+    return input.processFamily === "boundary" && input.step === "declaration_boundary";
+  }
+  if (hold.step === "initiative_phase_1") {
+    return input.processFamily === "boundary" && input.step === "commit_i1";
+  }
+  if (hold.step === "initiative_phase_2") {
+    return input.processFamily === "boundary" && input.step === "commit_i2";
+  }
+  if (
+    hold.step === "phase_1_actions" ||
+    hold.step === "review_phase_2_actions" ||
+    hold.step === "phase_1_damage"
+  ) {
+    return input.phase === "phase1";
+  }
+  if (
+    hold.step === "phase_2_actions" ||
+    hold.step === "review_phase_2_damage" ||
+    hold.step === "phase_2_damage"
+  ) {
+    return input.phase === "phase2";
+  }
+  return hold.step === "round_summary";
+}
+
 function addFact(context: ProjectionContext, input: AddFactInput): CombatParticipationFact {
+  const effectiveInput = isHeldForExplicitGmBacktrack(context, input)
+    ? {
+        ...input,
+        reason: "unresolved_choice" as const,
+        status: "required" as const,
+        workClass: "human_decision" as const,
+      }
+    : input;
   const identity = {
-    actionProcessId: input.actionProcessId,
-    attackResultId: input.attackResultId,
+    actionProcessId: effectiveInput.actionProcessId,
+    attackResultId: effectiveInput.attackResultId,
     encounterId: context.encounterId,
     encounterRevision: context.revision,
-    initiativeGroupId: input.initiativeGroupId,
-    opponentParticipantId: input.opponentParticipantId,
-    opportunityId: input.opportunityId,
-    pairId: input.pairId,
-    participantId: input.participantId,
-    phase: input.phase,
-    processFamily: input.processFamily,
-    processId: input.processId,
-    proposalId: input.proposalId,
+    initiativeGroupId: effectiveInput.initiativeGroupId,
+    opponentParticipantId: effectiveInput.opponentParticipantId,
+    opportunityId: effectiveInput.opportunityId,
+    pairId: effectiveInput.pairId,
+    participantId: effectiveInput.participantId,
+    phase: effectiveInput.phase,
+    processFamily: effectiveInput.processFamily,
+    processId: effectiveInput.processId,
+    proposalId: effectiveInput.proposalId,
     roundNumber: context.state.roundNumber,
     sequence: context.sequence,
-    step: input.step,
+    step: effectiveInput.step,
   };
   const id = [
     `combat-participation-v${CANONICAL_COMBAT_PARTICIPATION_SCHEMA_VERSION}`,
     context.encounterId,
     context.state.roundNumber,
-    input.processFamily,
-    input.step,
-    input.phase,
-    input.participantId,
-    input.opportunityId,
-    input.proposalId,
-    input.processId,
+    effectiveInput.processFamily,
+    effectiveInput.step,
+    effectiveInput.phase,
+    effectiveInput.participantId,
+    effectiveInput.opportunityId,
+    effectiveInput.proposalId,
+    effectiveInput.processId,
   ]
     .filter((part) => part !== undefined)
     .join(":");
   const fact = combatParticipationFactSchema.parse({
-    completeness: input.completeness ?? "complete",
+    completeness: effectiveInput.completeness ?? "complete",
     id,
     identity,
-    ordering: input.ordering ?? "none",
-    ownership: input.ownership,
-    reason: input.reason,
+    ordering: effectiveInput.ordering ?? "none",
+    ownership: effectiveInput.ownership,
+    reason: effectiveInput.reason,
     schemaVersion: CANONICAL_COMBAT_PARTICIPATION_SCHEMA_VERSION,
-    status: input.status,
-    workClass: input.workClass,
+    status: effectiveInput.status,
+    workClass: effectiveInput.workClass,
   });
   context.facts.push(fact);
   return fact;

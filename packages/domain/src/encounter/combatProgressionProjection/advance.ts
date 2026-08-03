@@ -178,17 +178,19 @@ export function advanceCombatProgressionBoundary(input: {
     const observationBoundary = resolveCombatObservationRoundBoundary({
       state: normalized,
     });
-    return advanceCombatRoundStep(observationBoundary.state, {
+    const completed = advanceCombatRoundStep(observationBoundary.state, {
       command: {
         ...input.command,
         facts: {
           ...input.command.facts,
           observationUndoFacts: observationBoundary.undoFacts,
+          previousGmBacktrackHold: normalized.gmBacktrackHold,
         },
       },
       stepSnapshots: input.stepSnapshots,
       visibility: input.visibility,
     });
+    return combatRoundStateSchema.parse({ ...completed, gmBacktrackHold: undefined });
   }
 
   const transitioned = transitionWithoutCommand({
@@ -222,6 +224,7 @@ export function advanceCombatProgressionBoundary(input: {
     createdByUserId: input.command.createdByUserId,
     facts: {
       currentBoundary: input.expectedBoundary,
+      previousGmBacktrackHold: normalized.gmBacktrackHold,
       previousStepSnapshots: normalized.stepSnapshots,
       requiredCompletedProcessIds: authorization.task.transition?.requiredCompletedProcessIds ?? [],
       targetBoundary: input.targetBoundary,
@@ -242,5 +245,6 @@ export function advanceCombatProgressionBoundary(input: {
   return combatRoundStateSchema.parse({
     ...transitioned,
     commands: [...transitioned.commands, command],
+    gmBacktrackHold: undefined,
   });
 }

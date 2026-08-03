@@ -1310,6 +1310,7 @@ function workflowCommandCandidates(input: {
       });
 
     if (command.type === "review_modifiers_phase1" || command.type === "review_modifiers_phase2") {
+      if (command.facts.suppressNoChangeResult === true) return [];
       const step =
         command.type === "review_modifiers_phase1"
           ? "review_action_modifiers"

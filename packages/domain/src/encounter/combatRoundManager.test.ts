@@ -117,6 +117,7 @@ import {
   removeCombatRoundEndParticipantReviewEffects,
   rollCombatRoundCombatExperience,
   hasCombatRoundCombatExperienceRoll,
+  holdCombatRoundForGmBacktrack,
   rollCombatRoundEndHealthCheck,
   rollCombatRoundEndDistanceControl,
   removeCombatRoundCommittedDamageEffects,
@@ -6152,6 +6153,49 @@ describe("combat round manager", () => {
     expect(rewound.selectedStep).toBe("select_actions");
     expect(rewound.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
     expect(rewound.participants[0]?.stepStatuses.select_actions).toBe("locked");
+  });
+
+  it("consumes an exact GM backtrack hold only when the restored review is completed", () => {
+    const state = combatRoundStateSchema.parse({
+      ...advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+      currentCursor: { participantId: "gladiator", roundNumber: 3, step: "M1" },
+      currentStep: "review_action_modifiers",
+      selectedParticipantId: "gladiator",
+      selectedStep: "review_action_modifiers",
+    });
+    const held = holdCombatRoundForGmBacktrack({
+      participantId: "gladiator",
+      state,
+      step: "review_action_modifiers",
+    });
+    const reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        commandId: "backtrack-review",
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: held,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+      suppressNoChangeResult: true,
+    });
+
+    expect(held.gmBacktrackHold).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "review_action_modifiers",
+    });
+    expect(
+      initializeCombatRoundState({
+        encounter: { ...encounter(), combatRoundState: held },
+      }).gmBacktrackHold,
+    ).toEqual(held.gmBacktrackHold);
+    expect(reviewed.gmBacktrackHold).toBeUndefined();
+    expect(reviewed.commands.at(-1)?.facts.suppressNoChangeResult).toBe(true);
+    expect(undoLatestCombatRoundCommand({ state: reviewed })?.gmBacktrackHold).toEqual(
+      held.gmBacktrackHold,
+    );
   });
 
   it("clears DE in place when called directly on the first step", () => {

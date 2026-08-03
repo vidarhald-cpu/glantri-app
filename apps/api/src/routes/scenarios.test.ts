@@ -16133,6 +16133,12 @@ describe("scenarios route contract", () => {
 
   it("clears a top-advance M1 command after the UI has landed on i1", async () => {
     const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const canonicalParticipant = makeCombatScenarioParticipant({
+      state: {
+        ...makeCombatScenarioParticipant().state,
+        combatEffects: { effects: [], events: [] },
+      },
+    });
     const reviewPhase1 = advanceCombatRoundStep(
       initializeCombatRoundState({ encounter: combatEncounter }),
     );
@@ -16149,6 +16155,7 @@ describe("scenarios route contract", () => {
       },
       user: mocks.adminUser,
     });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([canonicalParticipant]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -16171,6 +16178,11 @@ describe("scenarios route contract", () => {
       step: "M1",
     });
     expect(updatedEncounter.combatRoundState.currentStep).toBe("review_action_modifiers");
+    expect(updatedEncounter.combatRoundState.gmBacktrackHold).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "review_action_modifiers",
+    });
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("review_action_modifiers");
     expect(

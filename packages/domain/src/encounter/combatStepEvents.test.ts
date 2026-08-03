@@ -754,6 +754,24 @@ describe("deriveLegacyCombatStepEvents", () => {
     });
   });
 
+  it("does not fabricate a no-change result when an empty restored review is continued", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          facts: { suppressNoChangeResult: true },
+          id: "restored-empty-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it("records only accepted modifier-review changes against the preceding snapshot", () => {
     const snapshots = [
       combatRoundStepSnapshotSchema.parse({
