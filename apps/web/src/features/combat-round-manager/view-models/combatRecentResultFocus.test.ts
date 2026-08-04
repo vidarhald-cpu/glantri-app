@@ -172,6 +172,34 @@ describe("combat recent-result focus", () => {
     });
   });
 
+  it("focuses the first exact result when the source step previously had no result presentation", () => {
+    const candidate = createCombatRecentResultCandidate({
+      commandType: "roll_feint",
+      source: { participantId: "attacker", roundNumber: 1, step: "phase_1_actions" },
+      sourceTaskId: "task:feint-attacker",
+    });
+    const accepted = presentation([
+      group({
+        groupId: "group:feint-attacker",
+        lastSequence: 4,
+        resultIds: ["result:feint-attacker"],
+        sourceEventIds: ["event:feint-attacker"],
+      }),
+    ]);
+
+    expect(
+      resolveCombatRecentResultFocus({
+        acceptedPresentation: accepted,
+        acceptedRevision: "revision-2",
+        candidate: candidate!,
+      }),
+    ).toMatchObject({
+      groupId: "group:feint-attacker",
+      resultIds: ["result:feint-attacker"],
+      source: { participantId: "attacker", roundNumber: 1, step: "phase_1_actions" },
+    });
+  });
+
   it("allows same-cell Health feedback and ignores deterministic commands with no result", () => {
     const candidate = createCombatRecentResultCandidate({
       commandType: "roll_round_end_health_check",

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -14,6 +14,7 @@ import {
   encounterSessionSchema,
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
+  recordCombatRoundFeintRoll,
   recordCombatRoundDeclaration,
   recordCombatObservationRoll,
   rollCombatRoundCombatExperience,
@@ -33,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   loadEncounter: vi.fn(),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
+  rollFeint: vi.fn(),
   rollObservation: vi.fn(),
   setCombatExperienceDifficulty: vi.fn(),
   submitDeclaration: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
+    rollCombatFeintOnServer: mocks.rollFeint,
     rollCombatObservationOnServer: mocks.rollObservation,
     setCombatExperienceDifficultyOnServer: mocks.setCombatExperienceDifficulty,
     submitCombatDeclarationOnServer: mocks.submitDeclaration,
@@ -145,6 +148,7 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
 });
 
 import CombatRoundManagerPanel from "./CombatRoundManagerPanel";
+import { buildActiveCombatPresentation } from "./view-models/combatPresentationModel";
 import {
   beginCombatPerformanceInteraction,
   resetCombatPerformanceForTests,
@@ -435,6 +439,141 @@ function buildAttackReadyEncounter(): EncounterSession {
     ...encounter,
     combatRoundState: state.state,
   });
+}
+
+function buildFeintRollEncounter(): {
+  afterAttackerRoll: EncounterSession;
+  beforeAttackerRoll: EncounterSession;
+} {
+  const encounter = buildAttackReadyEncounter();
+  const base = combatRoundStateSchema.parse(encounter.combatRoundState);
+  const beforeState = combatRoundStateSchema.parse({
+    ...base,
+    currentCursor: { participantId: "encounter-attacker", roundNumber: 1, step: "A1" },
+    currentStep: "phase_1_actions",
+    feintProposals: [
+      {
+        attackerParticipantId: "encounter-attacker",
+        attackerSkillId: "dodge",
+        attackerSkillLabel: "Dodge",
+        defenderParticipantId: "encounter-defender",
+        defenderSkillId: "sword",
+        defenderSkillLabel: "Sword",
+        feasibility: "possible",
+        id: "feint-proposal",
+        method: "movement",
+        pairId: "encounter-attacker::encounter-defender",
+        phase1OpportunityId: "feint-opportunity",
+        phase2AttackOpportunityId: "feint-attack",
+        roundNumber: 1,
+        status: "awaiting_rolls",
+      },
+    ],
+    participants: base.participants.map((participant) =>
+      participant.participantId === "encounter-attacker"
+        ? {
+            ...participant,
+            declaration: {
+              actionId: "feint_attack",
+              attackOpportunities: [
+                {
+                  id: "feint-attack",
+                  origin: "feint_attack",
+                  phase: "phase2",
+                  slot: "attack_2",
+                  status: "committed",
+                  targetParticipantId: "encounter-defender",
+                },
+              ],
+              feint: {
+                attackerSkillId: "dodge",
+                attackerSkillLabel: "Dodge",
+                defenderSkillId: "sword",
+                defenderSkillLabel: "Sword",
+                method: "movement",
+                targetParticipantId: "encounter-defender",
+              },
+              phaseContexts: {
+                phase1: { targetParticipantId: "encounter-defender" },
+                phase2: { targetParticipantId: "encounter-defender" },
+              },
+              id: "declaration:feint-attacker",
+              roundNumber: 1,
+              submittedAt: "2026-07-23T10:01:00.000Z",
+              submittedBy: "gm",
+            },
+          }
+        : {
+            ...participant,
+            declaration: {
+              actionId: "parry",
+              id: "declaration:feint-defender",
+              roundNumber: 1,
+              submittedAt: "2026-07-23T10:01:01.000Z",
+              submittedBy: "gm",
+            },
+          },
+    ),
+    phaseResolutionCursor: {
+      participantId: "encounter-attacker",
+      phase: "phase1",
+      substep: "feint",
+    },
+    selectedParticipantId: "encounter-attacker",
+    selectedStep: "phase_1_actions",
+  });
+  const afterState = recordCombatRoundFeintRoll({
+    command: { createdAt: "2026-07-23T10:02:10.000Z", createdByUserId: "gm-1" },
+    proposalId: "feint-proposal",
+    result: {
+      adjustment: 0,
+      characteristic: "dex",
+      characteristicValue: 12,
+      finalTotal: 29,
+      id: "feint-attacker-roll",
+      openEndedD10s: [],
+      participantId: "encounter-attacker",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-07-23T10:02:10.000Z",
+      skillContestCalculation: {
+        baseSkill: 19,
+        calculationId: "feint-attacker-roll",
+        completeness: "partial",
+        contestType: "movement_feint",
+        derivedIntegerAdjustment: 0,
+        finalResult: 29,
+        governingStat: { id: "dex", label: "Dexterity", value: 12 },
+        missingContributionPoints: ["withdrawal_backout"],
+        openEndedDie: { openEndedD10s: [], rollD20: 10, rollTotal: 10 },
+        opponentParticipantId: "encounter-defender",
+        participantId: "encounter-attacker",
+        percentageContributions: [],
+        preDieTotal: 19,
+        role: "movement_feint_initiator",
+        skill: { id: "dodge", label: "Dodge", totalXp: 7 },
+        totalPercentageAdjustment: 0,
+        visibility: "roller_and_gm",
+      },
+      skillId: "dodge",
+      skillLabel: "Dodge",
+      skillXp: 7,
+    },
+    state: beforeState,
+  });
+
+  return {
+    afterAttackerRoll: encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: afterState,
+      updatedAt: "2026-07-23T10:02:10.000Z",
+    }),
+    beforeAttackerRoll: encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: beforeState,
+      updatedAt: "2026-07-23T10:02:00.000Z",
+    }),
+  };
 }
 
 function buildSecondDeclarationReadyEncounter(): {
@@ -923,7 +1062,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     expect(mocks.clearCurrentStep).toHaveBeenCalledTimes(1);
   });
 
-  it("does not offer a bulk workflow for an empty modifier-review boundary", async () => {
+  it("keeps an empty modifier review as an editable GM checkpoint", async () => {
     const encounter = buildModifierReviewEncounter();
     const participants = [
       scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
@@ -931,12 +1070,14 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     ];
     render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
 
-    await waitFor(() => expect(mocks.advanceDeterministic).toHaveBeenCalledTimes(1));
-    expect(mocks.advanceDeterministic.mock.calls[0]?.[0]).toMatchObject({
-      encounterId: encounter.id,
-      expectedRevision: encounter.updatedAt,
-    });
-    expect(screen.queryByRole("combobox", { name: "Workflow" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Complete modifier review" })).toBeEnabled();
+    const addButtons = screen.getAllByRole("button", { name: "Add" });
+    expect(addButtons.length).toBeGreaterThan(0);
+    fireEvent.click(addButtons[0]!);
+    fireEvent.change(screen.getByLabelText(/modifier value/i), { target: { value: "-2" } });
+    expect(screen.getByLabelText(/modifier value/i)).toHaveValue(-2);
+    expect(mocks.advanceDeterministic).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox", { name: "Workflow" })).toBeInTheDocument();
     expect(mocks.completeRemainingStep).not.toHaveBeenCalled();
   });
 
@@ -1098,9 +1239,100 @@ describe("CombatRoundManagerPanel Double Attack declaration form", () => {
       },
     });
   });
+
+  it("keeps both Movement and Weapon Feint Phase 1 free of attack presentation", async () => {
+    const encounter = buildEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "feint_attack" },
+    });
+
+    const phase1 = screen
+      .getAllByText("Phase 1")
+      .map((node) => node.closest("section"))
+      .find((section): section is HTMLElement =>
+        Boolean(section?.textContent?.includes("Feint method")),
+      );
+    const phase2 = screen
+      .getAllByText("Phase 2")
+      .map((node) => node.closest("section"))
+      .find((section): section is HTMLElement =>
+        Boolean(section?.textContent?.includes("Attack mode")),
+      );
+    expect(phase1).toBeDefined();
+    expect(phase2).toBeDefined();
+
+    expect(within(phase1!).queryByText("OB")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("DMB")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("DB")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("Attack mode")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("Parry context")).not.toBeInTheDocument();
+    expect(within(phase2!).getByText("OB")).toBeInTheDocument();
+    expect(within(phase2!).getByText("Attack mode")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Feint method" }), {
+      target: { value: "weapon" },
+    });
+
+    expect(within(phase1!).queryByText("OB")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("DMB")).not.toBeInTheDocument();
+    expect(within(phase1!).queryByText("Attack mode")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("combobox", { name: "Attack mode" })).toHaveLength(1);
+  });
 });
 
 describe("CombatRoundManagerPanel GM attack proxy", () => {
+  it("moves from the Feint initiator roll to the active defender task without History", async () => {
+    const { afterAttackerRoll, beforeAttackerRoll } = buildFeintRollEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.rollFeint.mockResolvedValue({ encounter: afterAttackerRoll });
+    const projectedTask = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse(beforeAttackerRoll.combatRoundState),
+    )
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks)
+      .find((task) => task.state === "executable");
+    expect(projectedTask?.kind).toBe("feint_attacker_roll");
+    const activePresentation = buildActiveCombatPresentation({
+      encounterId: beforeAttackerRoll.id,
+      encounterRevision: beforeAttackerRoll.updatedAt,
+      resolveStepStatus: ({ status }) => status,
+      roundState: combatRoundStateSchema.parse(beforeAttackerRoll.combatRoundState),
+      scenarioParticipants: participants,
+    });
+    expect(activePresentation.currentAction?.taskKind).toBe("feint_attacker_roll");
+    expect(activePresentation.currentAction?.primaryAction.label).toBe("Roll Feint");
+    expect(activePresentation.currentAction?.primaryAction.viewerMayInvoke).toBe(true);
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={beforeAttackerRoll}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Roll Feint" }));
+
+    await waitFor(() => expect(mocks.rollFeint).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: "Roll Feint resistance" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Current task" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume current task" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Action selector · History")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Combat inspector — Scyrian cavalry guy · Round 1 ·/),
+    ).toBeInTheDocument();
+  });
+
   it("presses the rendered source attack button without requiring Offensive Parry child identity", async () => {
     const encounter = buildAttackReadyEncounter();
     const attackReadyState = combatRoundStateSchema.parse(encounter.combatRoundState);

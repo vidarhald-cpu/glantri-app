@@ -280,12 +280,24 @@ describe("canonical combat participation", () => {
     });
   });
 
-  it("classifies empty, human, automatic, and blocked modifier review work", () => {
+  it("classifies empty, proposed, and blocked modifier reviews as GM checkpoints", () => {
     const state = activeState();
     const empty = project(state);
     expect(
       fact(empty, { family: "modifier_review", participantId: "hero", phase: "phase1" }),
-    ).toMatchObject({ reason: "no_modifier_work", status: "not_required", workClass: "no_work" });
+    ).toMatchObject({
+      ownership: { kind: "gm_owned", participantId: "hero" },
+      reason: "modifier_review_required",
+      status: "required",
+      workClass: "human_decision",
+    });
+    expect(
+      fact(empty, { family: "modifier_review", participantId: "hero", phase: "phase2" }),
+    ).toMatchObject({
+      reason: "modifier_review_required",
+      status: "required",
+      workClass: "human_decision",
+    });
 
     const humanReview = review("hero", "M1", {
       automaticProposals: [
@@ -328,9 +340,9 @@ describe("canonical combat participation", () => {
     expect(
       fact(classified, { family: "modifier_review", participantId: "guard", phase: "phase1" }),
     ).toMatchObject({
-      reason: "automatic_modifier_transition",
+      reason: "modifier_review_required",
       status: "required",
-      workClass: "deterministic_transition",
+      workClass: "human_decision",
     });
 
     const blocked = project(state, {
@@ -1024,7 +1036,7 @@ describe("combat progression participation consumption", () => {
     expect(task).toBeDefined();
   });
 
-  it("suppresses only complete empty M1 reviews and exposes the deterministic boundary", () => {
+  it("retains complete empty M1 reviews as ordered GM checkpoints", () => {
     const active = activeState({
       currentStep: "review_action_modifiers",
       overrides: {
@@ -1048,17 +1060,51 @@ describe("combat progression participation consumption", () => {
       process.stages.flatMap((stage) => stage.tasks),
     );
 
-    expect(tasks.filter((task) => task.kind === "modifier_review")).toEqual([]);
+    expect(tasks.filter((task) => task.kind === "modifier_review")).toHaveLength(2);
     expect(tasks).toContainEqual(
       expect.objectContaining({
-        kind: "gm_advance_boundary",
+        kind: "modifier_review",
+        owner: expect.objectContaining({ participantId: "hero" }),
         participation: expect.objectContaining({
           completeness: "complete",
           status: "required",
-          workClass: "deterministic_transition",
+          workClass: "human_decision",
         }),
       }),
     );
+    expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(false);
+  });
+
+  it("retains a complete empty M2 review as an ordered GM checkpoint", () => {
+    const active = activeState({
+      currentStep: "review_phase_2_modifiers",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "M2" },
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { review_phase_2_modifiers: "pending" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { review_phase_2_modifiers: "pending" },
+        }),
+      ],
+    });
+    const participation = project(active);
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(tasks.filter((task) => task.kind === "modifier_review")).toHaveLength(2);
+    expect(tasks[0]?.participation).toMatchObject({
+      status: "required",
+      workClass: "human_decision",
+    });
+    expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(false);
   });
 
   it("keeps an explicitly restored empty M1 as GM-owned human work", () => {
@@ -1098,7 +1144,7 @@ describe("combat progression participation consumption", () => {
       }),
     ).toMatchObject({
       completeness: "complete",
-      reason: "unresolved_choice",
+      reason: "modifier_review_required",
       status: "required",
       workClass: "human_decision",
     });
@@ -1149,7 +1195,7 @@ describe("combat progression participation consumption", () => {
       }),
     ).toMatchObject({
       completeness: "complete",
-      reason: "unresolved_choice",
+      reason: "modifier_review_required",
       status: "required",
       workClass: "human_decision",
     });
@@ -1228,7 +1274,7 @@ describe("combat progression participation consumption", () => {
     expect(task?.participation).toMatchObject({
       completeness: "complete",
       status: "required",
-      workClass: "deterministic_transition",
+      workClass: "human_decision",
     });
   });
 

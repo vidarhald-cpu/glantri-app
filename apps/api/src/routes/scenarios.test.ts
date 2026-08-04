@@ -8649,7 +8649,7 @@ describe("scenarios route contract", () => {
     expect(advance.json().stopReason).not.toBe("invalid_deterministic_task");
   });
 
-  it("consumes a bounded deterministic suffix without skipped initiative records", async () => {
+  it("consumes a bounded deterministic suffix after explicit M1 checkpoints without skipped initiative records", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
       participants: encounterParticipants,
@@ -8668,10 +8668,24 @@ describe("scenarios route contract", () => {
       submittedBy: "gm",
     });
     const m1State = advanceCombatRoundStep(bothDeclared);
+    const heroReviewed = recordCombatRoundParticipantStepReview({
+      command: { createdAt: "2026-07-30T08:01:00.000Z", createdByUserId: "gm-1" },
+      participantId: "encounter-participant-1",
+      state: m1State,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const reviewedM1 = recordCombatRoundParticipantStepReview({
+      command: { createdAt: "2026-07-30T08:01:10.000Z", createdByUserId: "gm-1" },
+      participantId: "encounter-participant-2",
+      state: heroReviewed,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
     const encounter = encounterSessionSchema.parse({
       ...baseEncounter,
-      combatRoundState: m1State,
-      currentRound: m1State.roundNumber,
+      combatRoundState: reviewedM1,
+      currentRound: reviewedM1.roundNumber,
     });
     const participants = [
       scenarioParticipantSchema.parse({
@@ -8702,9 +8716,9 @@ describe("scenarios route contract", () => {
     const participation = projectActiveCombatParticipation({
       encounterRevision: encounter.updatedAt,
       scenarioParticipants: participants,
-      state: m1State,
+      state: reviewedM1,
     });
-    const task = buildCombatProgressionProjection(m1State, { participation })
+    const task = buildCombatProgressionProjection(reviewedM1, { participation })
       .boundary.processes.flatMap((process) => process.stages)
       .flatMap((stage) => stage.tasks)
       .find((candidate) => candidate.kind === "gm_advance_boundary");
@@ -16178,11 +16192,7 @@ describe("scenarios route contract", () => {
       step: "M1",
     });
     expect(updatedEncounter.combatRoundState.currentStep).toBe("review_action_modifiers");
-    expect(updatedEncounter.combatRoundState.gmBacktrackHold).toEqual({
-      participantId: "encounter-participant-1",
-      roundNumber: 1,
-      step: "review_action_modifiers",
-    });
+    expect(updatedEncounter.combatRoundState.gmBacktrackHold).toBeUndefined();
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("review_action_modifiers");
     expect(

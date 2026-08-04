@@ -8505,9 +8505,18 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: scenarioParticipant.id,
         taskId: descriptor.taskId,
       });
-      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      setRoundState(nextRoundState, nextEncounter.updatedAt);
-      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      const next = getCombatRoundManagerStateFromCommandEnvelope({
+        encounter: nextEncounter,
+      });
+      // A GM may execute the current task after selecting its tracker cell directly. Once the
+      // accepted Feint roll replaces that task, the old explicit selection must not keep the
+      // inspector pinned to the completed initiator roll as History. Recent-result focus owns
+      // only the Results panel; ordinary canonical task selection owns every active panel.
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setInspectionSelection(next.inspectionSelection);
+      setRoundState(next.state, nextEncounter.updatedAt);
+      setSelectedRoundNumber(next.state.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
     } catch (caughtError) {
@@ -11070,34 +11079,6 @@ export default function CombatRoundManagerPanel({
                                 <FeintSkillPreview preview={inspectorFeintSkillPreview} />
                               )}
                               <div>Defender: highest close-combat skill · Intelligence</div>
-                              {inspectorDisplayDraft.feintMethod === "weapon" &&
-                              phaseModel.attackStats ? (
-                                <>
-                                  <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                                  <PlayerCombatAttackModeSelector
-                                    controlsDisabled={saving || inspectorIsHistorical}
-                                    emptyState={
-                                      inspectorIsHistorical
-                                        ? undefined
-                                        : phaseLoadoutSummary.attackModeUnavailableMessage
-                                    }
-                                    onChange={(attackModeId) =>
-                                      updateInspectorDraft({
-                                        phaseContexts: {
-                                          ...inspectorDraft.phaseContexts,
-                                          phase1: {
-                                            ...inspectorDraft.phaseContexts.phase1,
-                                            attackModeId,
-                                          },
-                                        },
-                                      })
-                                    }
-                                    options={phaseLoadoutSummary.attackModeOptions}
-                                    selectedAttackModeId={phaseModel.phaseContext.attackModeId}
-                                    readOnly={inspectorIsHistorical}
-                                  />
-                                </>
-                              ) : null}
                             </div>
                           ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
                             <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />

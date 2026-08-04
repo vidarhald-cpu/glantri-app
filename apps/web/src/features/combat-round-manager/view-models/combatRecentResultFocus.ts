@@ -69,12 +69,12 @@ export function createCombatRecentResultCandidate(input: {
   readonly source: CombatRecentResultSource;
   readonly sourceTaskId: string;
 }): CombatRecentResultCandidate | undefined {
-  if (!input.presentation || !RESULT_PRODUCING_COMMANDS.has(input.commandType)) return undefined;
+  if (!RESULT_PRODUCING_COMMANDS.has(input.commandType)) return undefined;
   return {
     commandType: input.commandType,
     source: input.source,
     sourceGroupFingerprints: Object.fromEntries(
-      (input.presentation.groups ?? []).map((group) => [group.groupId, groupFingerprint(group)]),
+      (input.presentation?.groups ?? []).map((group) => [group.groupId, groupFingerprint(group)]),
     ),
     sourceTaskId: input.sourceTaskId,
   };

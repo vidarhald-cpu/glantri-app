@@ -1447,7 +1447,7 @@ describe("player combat phase model", () => {
     });
   });
 
-  it("always exposes defense context for both Feint phases", () => {
+  it("treats Phase 1 Feint as a contest and Phase 2 as the committed attack", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -1456,19 +1456,35 @@ describe("player combat phase model", () => {
       reference,
     });
 
-    for (const phaseKey of ["phase1", "phase2"] as const) {
-      expect(
-        buildPlayerCombatPhasePanelModel({
-          actionId: "feint_attack",
-          attackStats,
-          defenseStats,
-          phaseCard: { ...phaseCard, phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2" },
-          phaseContext,
-          phaseKey,
-          secondaryActionId: "",
-        }).showDefenseContext,
-      ).toBe(true);
-    }
+    const phase1 = buildPlayerCombatPhasePanelModel({
+      actionId: "feint_attack",
+      attackStats,
+      defenseStats,
+      phaseCard,
+      phaseContext,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatPhasePanelModel({
+      actionId: "feint_attack",
+      attackStats,
+      defenseStats,
+      phaseCard: { ...phaseCard, phaseLabel: "Phase 2" },
+      phaseContext,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase1).toMatchObject({
+      showAttackLocationSelector: false,
+      showAttackStats: false,
+      showDefenseContext: false,
+    });
+    expect(phase2).toMatchObject({
+      showAttackLocationSelector: true,
+      showAttackStats: true,
+      showDefenseContext: true,
+    });
   });
 
   it("lets the current visible Feint target fill an older empty paired phase", () => {

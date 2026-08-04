@@ -23,7 +23,7 @@ function isSuppressedNoWork(input: {
   context: ProjectionBuildContext;
   participantId: string;
   phase: CombatRoundPhase;
-  processFamily: "initiative" | "modifier_review";
+  processFamily: "initiative";
 }): boolean {
   const fact = input.context.participation?.facts.find(
     (candidate) =>
@@ -191,14 +191,7 @@ export function buildModifierReviewProcess(
   const expectedCommand =
     phase === "phase1" ? "review_modifiers_phase1" : "review_modifiers_phase2";
   const pending = context.state.participants.filter(
-    (participant) =>
-      !isCompleteStatus(participant.stepStatuses[step]) &&
-      !isSuppressedNoWork({
-        context,
-        participantId: participant.participantId,
-        phase,
-        processFamily: "modifier_review",
-      }),
+    (participant) => !isCompleteStatus(participant.stepStatuses[step]),
   );
   // Each modifier-review boundary owns a fresh ordered participant iteration. A compatibility
   // cursor left by declaration, action resolution, or a Double Attack decision must not seed it.

@@ -282,6 +282,37 @@ describe("projectCombatActionGeneratedModifiers", () => {
     ]);
   });
 
+  it("applies attack-distance modifiers to Feint's Phase 2 attack, not its Phase 1 contest", () => {
+    const encounter = buildEncounter();
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "feint_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: encounter.participants[0],
+      phaseContexts: {
+        phase1: {
+          modifierBuckets: emptyModifierBuckets(),
+          targetParticipantId: "scenario-gladiator",
+        },
+        phase2: {
+          modifierBuckets: emptyModifierBuckets(),
+          targetParticipantId: "scenario-gladiator",
+        },
+      },
+      phaseWeaponNames: { phase2: "Broad sword" },
+      resolvedEquipmentState: buildWeaponEquipmentState() as unknown as EquipmentFeatureState,
+      roundState: buildRoundStateWithDistance(3),
+    });
+
+    expect(projectedContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        id: "generated:distance:phase2:ob-skill",
+        sourceActionId: "feint_attack",
+        sourcePhase: "phase2",
+        value: -2,
+      }),
+    ]);
+  });
+
   it("projects the Reactive attack phase 2 Initiative row after a phase-one attack", () => {
     const encounter = buildEncounter();
     const baseRoundState = initializeCombatRoundState({ encounter });

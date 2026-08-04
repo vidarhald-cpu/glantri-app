@@ -85,10 +85,7 @@ function freeze<T>(value: T): T {
   return value;
 }
 
-function isHeldForExplicitGmBacktrack(
-  context: ProjectionContext,
-  input: AddFactInput,
-): boolean {
+function isHeldForExplicitGmBacktrack(context: ProjectionContext, input: AddFactInput): boolean {
   const hold = context.state.gmBacktrackHold;
   if (!hold || hold.roundNumber !== context.state.roundNumber) return false;
   if ((input.completeness ?? "complete") !== "complete" || input.status === "blocked") return false;
@@ -440,40 +437,19 @@ function projectModifierReviews(context: ProjectionContext): void {
       const unresolvedRequiredRoll = review.requiredRolls.some(
         (roll) => roll.owner === "modifier_review" && roll.blocksReview && !roll.resolved,
       );
-      const humanWork =
-        review.decisions.length > 0 ||
-        review.automaticProposals.some(
-          (proposal) => proposal.owner === "modifier_review" && proposal.mayOverride,
-        );
-      const automaticWork = review.automaticProposals.some(
-        (proposal) => proposal.owner === "modifier_review",
-      );
       addFact(context, {
         ordering: "participant_sequence",
         ownership: { kind: "gm_owned", participantId: participant.participantId },
         participantId: participant.participantId,
         phase,
         processFamily: "modifier_review",
-        reason:
-          blocked || unresolvedRequiredRoll || humanWork
-            ? "modifier_review_required"
-            : automaticWork
-              ? "automatic_modifier_transition"
-              : "no_modifier_work",
-        status: blocked
-          ? "blocked"
-          : humanWork
-            ? "required"
-            : automaticWork
-              ? "required"
-              : "not_required",
+        // M1 and M2 are deliberate GM checkpoints. Even an otherwise empty canonical
+        // snapshot retains the unresolved decision to inspect or create a situational
+        // modifier and explicitly confirm progression.
+        reason: "modifier_review_required",
+        status: blocked || unresolvedRequiredRoll ? "blocked" : "required",
         step: reviewPhase,
-        workClass:
-          blocked || humanWork
-            ? "human_decision"
-            : automaticWork
-              ? "deterministic_transition"
-              : "no_work",
+        workClass: "human_decision",
       });
     }
   }

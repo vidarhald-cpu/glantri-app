@@ -747,7 +747,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
   const rawReferenceRow =
     preferredRawReferenceRow ??
     combatPanelModel.weaponRows?.find(
-      (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+      (row) =>
+        row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
     );
   if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
     return {
@@ -1085,6 +1086,7 @@ export function buildPlayerCombatPhasePanelModel(input: {
   });
   const isAdjustRangePhase =
     input.actionId === "adjust_range_attack" && input.phaseKey === "phase1";
+  const isFeintContestPhase = input.actionId === "feint_attack" && input.phaseKey === "phase1";
 
   return {
     attackStats: input.attackStats,
@@ -1099,9 +1101,9 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
-    // Defensive state belongs to the participant and phase, not to the offensive
-    // action selected for that phase. Render the shared defense/parry projection
-    // even when there is no attack opportunity.
-    showDefenseContext: true,
+    // Phase 1 Feint is a Skill Contest, not a weapon attack or defensive exchange. Its
+    // declaration preview is limited to the canonical contest profile. Phase 2 remains the
+    // ordinary committed attack and keeps the existing attack/defense context.
+    showDefenseContext: !isFeintContestPhase,
   };
 }
