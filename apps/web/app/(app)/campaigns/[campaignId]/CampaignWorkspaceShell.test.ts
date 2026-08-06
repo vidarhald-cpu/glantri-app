@@ -87,9 +87,10 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).not.toContain('workspaceTab="combat"');
     expect(source).toContain("GM_COMBAT_REFRESH_INTERVAL_MS");
     expect(source).toContain('workspaceState.activeTab !== "combat"');
-    expect(source).toContain("pollActiveEncounterRevision");
+    expect(source).toContain("pollGmCombatSnapshot");
     expect(source).toContain("loadEncounterRevision");
     expect(source).toContain("loadEncounterById");
+    expect(source).toContain("loadParticipants: loadScenarioParticipants");
     expect(source).not.toContain("refreshWorkspaceContextWithErrorHandling");
     expect(source).toContain("Combat Round Manager is a GM tool.");
     expect(source).toContain("Open Player combat");
@@ -109,6 +110,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("activeEncounterRequestIdRef.current !== requestId");
     expect(source).toContain("result.kind !== \"updated\"");
     expect(source).toContain("caughtError.status === 404");
+    expect(source).toContain("const intervalId = window.setInterval(refreshVisibleCombat");
     expect(source).not.toContain("loadScenarioEncounters");
   });
 

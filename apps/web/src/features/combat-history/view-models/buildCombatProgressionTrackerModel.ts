@@ -55,7 +55,8 @@ export function buildCombatProgressionTrackerIndex(
       if (stage.state !== "active") continue;
       for (const group of stage.executionGroups) {
         for (const task of group.tasks) {
-          if (task.contributesToProgression) currentTasks.push(task);
+          if (!task.contributesToProgression) continue;
+          currentTasks.push(task);
           const participantId = task.trackerFacet.owner?.participantId;
           if (!participantId) continue;
           const key = buildCombatTrackerCellKey({
@@ -71,13 +72,12 @@ export function buildCombatProgressionTrackerIndex(
 
   const byCellKey: Record<string, CombatTrackerLiveFacet> = {};
   for (const [cellKey, tasks] of tasksByCellKey) {
-    const progressionTasks = tasks.filter((task) => task.contributesToProgression);
-    const attention = progressionTasks.some(
+    const attention = tasks.some(
       (task) => classifyCombatTrackerTaskAttention(task) === "exceptional",
     )
       ? "exceptional"
       : "ordinary";
-    const primaryTask = [...(progressionTasks.length > 0 ? progressionTasks : tasks)].sort(
+    const primaryTask = [...tasks].sort(
       (left, right) => {
         const attentionDifference =
           Number(classifyCombatTrackerTaskAttention(right) === "exceptional") -
@@ -88,8 +88,8 @@ export function buildCombatProgressionTrackerIndex(
     )[0]!;
     byCellKey[cellKey] = {
       attention,
-      current: progressionTasks.length > 0,
-      executable: progressionTasks.some((task) => task.state === "executable"),
+      current: true,
+      executable: tasks.some((task) => task.state === "executable"),
       executionGroupIds: unique(tasks.map((task) => task.executionGroupId)),
       gmProxyAvailable: tasks.some((task) => task.actorAccess.gm),
       hover: buildCombatTrackerTaskHover(primaryTask),
@@ -102,7 +102,7 @@ export function buildCombatProgressionTrackerIndex(
       stageIds: unique(tasks.map((task) => task.stageId)),
       taskIds: tasks.map((task) => task.id),
       taskKinds: unique(tasks.map((task) => task.kind)) as CombatProgressionTaskKind[],
-      waiting: progressionTasks.some((task) => task.state === "waiting"),
+      waiting: tasks.some((task) => task.state === "waiting"),
     };
   }
 

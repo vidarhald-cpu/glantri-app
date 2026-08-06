@@ -52,8 +52,8 @@ import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/com
 import { PlayerRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 import CombatRoundManagerPanel from "@/features/combat-round-manager/CombatRoundManagerPanel";
 import { selectLatestCombatViewRevision } from "@/features/combat-history";
-import { pollActiveEncounterRevision } from "@/lib/campaigns/activeEncounterPolling";
 import { loadCampaignWorkspaceInitialData } from "@/lib/campaigns/campaignWorkspaceLoading";
+import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -344,11 +344,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       refreshInFlight = true;
       try {
         const accepted = activeEncounterRef.current;
-        const result = await pollActiveEncounterRevision({
+        const result = await pollGmCombatSnapshot({
           acceptedRevision:
             accepted?.id === polledEncounterId ? accepted.updatedAt : undefined,
           encounterId: polledEncounterId,
           loadEncounter: loadEncounterById,
+          loadParticipants: loadScenarioParticipants,
           loadRevision: loadEncounterRevision,
         });
 
@@ -360,6 +361,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           return;
         }
 
+        setScenarioParticipants((current) => [
+          ...current.filter(
+            (participant) => participant.scenarioId !== result.encounter.scenarioId,
+          ),
+          ...result.participants,
+        ]);
         acceptActiveEncounter(result.encounter);
         setError(undefined);
       } catch (caughtError) {
@@ -391,10 +398,8 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       }
     }
 
-    const intervalId = window.setInterval(
-      () => void refreshActiveCombatRevision(),
-      GM_COMBAT_REFRESH_INTERVAL_MS,
-    );
+    refreshVisibleCombat();
+    const intervalId = window.setInterval(refreshVisibleCombat, GM_COMBAT_REFRESH_INTERVAL_MS);
     window.addEventListener("focus", refreshVisibleCombat);
     document.addEventListener("visibilitychange", refreshVisibleCombat);
 

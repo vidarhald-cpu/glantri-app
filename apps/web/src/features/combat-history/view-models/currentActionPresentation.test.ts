@@ -400,10 +400,10 @@ describe("CurrentActionPresentation", () => {
     expect(result).toMatchObject({
       primaryAction: {
         enabled: false,
-        label: "Waiting for another combatant",
+        label: "Waiting for Aria",
         viewerMayInvoke: false,
       },
-      requiredNow: "Waiting for another combatant.",
+      requiredNow: "Waiting for Aria.",
       summary: "Borin hit Aria.",
       taskKind: "parry",
     });
@@ -763,20 +763,51 @@ describe("CurrentActionPresentation", () => {
       status: "awaiting_gm",
       summary: "Phase 1 is complete.",
     });
-    expect(result?.primaryAction).not.toHaveProperty("descriptor");
+    expect(result?.primaryAction.descriptor).toBeUndefined();
   });
 
-  it("shows Waiting for another combatant when the visible task belongs to someone else", () => {
+  it("selects an executable GM prerequisite before the player's blocked Combat Experience roll", () => {
+    const gmDifficulty = task({
+      command: "set_combat_experience_difficulty",
+      gmOnly: true,
+      id: "ce-difficulty",
+      kind: "combat_experience",
+    });
+    const playerRoll = task({
+      actor: aria,
+      command: "roll_combat_experience",
+      id: "ce-roll-aria",
+      kind: "combat_experience",
+      owner: aria,
+      state: "waiting",
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-2",
+      progression: progression({ boundary: "declaration", tasks: [gmDifficulty, playerRoll] }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: { enabled: false, label: "Waiting for GM" },
+      requiredActor: { label: "GM" },
+      requiredNow: "Waiting for GM.",
+      status: "awaiting_gm",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
+  });
+
+  it("names the participant who owns the current task", () => {
     const result = build(
       [task({ actor: borin, kind: "attack", owner: borin, target: aria })],
       "player",
     );
 
     expect(result?.status).toBe("waiting");
-    expect(result?.requiredNow).toBe("Waiting for another combatant.");
+    expect(result?.requiredNow).toBe("Waiting for Borin.");
     expect(result?.primaryAction).toMatchObject({
       enabled: false,
-      label: "Waiting for another combatant",
+      label: "Waiting for Borin",
       viewerMayInvoke: false,
     });
   });
@@ -1106,7 +1137,7 @@ describe("CurrentActionPresentation", () => {
     expect(opponent).toMatchObject({
       primaryAction: {
         enabled: false,
-        label: "Waiting for another combatant",
+        label: "Waiting for Aria",
         viewerMayInvoke: false,
       },
       summary:
@@ -1218,7 +1249,7 @@ describe("CurrentActionPresentation", () => {
     expect(afterDefenderRolled).toMatchObject({
       primaryAction: {
         enabled: false,
-        label: "Waiting for another combatant",
+        label: "Waiting for Aria",
       },
       requiredNow: "Waiting for Aria.",
       summary: "Your Brawling roll is recorded. Waiting for Aria.",

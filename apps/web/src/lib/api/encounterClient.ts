@@ -136,6 +136,7 @@ export async function createEncounterOnServer(input: {
 
 export async function loadEncounterById(encounterId: string): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(`/encounters/${encounterId}`, {
+    cache: "no-store",
     method: "GET",
   });
 
@@ -146,6 +147,7 @@ export async function loadEncounterRevision(
   encounterId: string,
 ): Promise<EncounterSessionRevision> {
   const payload = await sendJson<{ encounter: unknown }>(`/encounters/${encounterId}/revision`, {
+    cache: "no-store",
     method: "GET",
   });
 

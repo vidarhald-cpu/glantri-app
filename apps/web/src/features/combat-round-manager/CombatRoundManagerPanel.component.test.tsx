@@ -693,6 +693,57 @@ function buildSecondDeclarationReadyEncounter(): {
   };
 }
 
+function buildRemotePlayerDeclarationEncounters(): {
+  before: EncounterSession;
+  firstAccepted: EncounterSession;
+  bothAcceptedAtM1: EncounterSession;
+} {
+  const before = buildEncounter();
+  const base = combatRoundStateSchema.parse(before.combatRoundState);
+  const first = recordCombatRoundDeclaration({
+    command: { createdAt: "2026-07-23T10:01:00.000Z", createdByUserId: "player-attacker" },
+    declaration: {
+      actionId: "parry",
+      id: "declaration:remote-attacker",
+      roundNumber: base.roundNumber,
+      submittedAt: "2026-07-23T10:01:00.000Z",
+    },
+    participantId: "encounter-attacker",
+    state: base,
+    submittedBy: "player",
+  });
+  const both = recordCombatRoundDeclaration({
+    command: { createdAt: "2026-07-23T10:01:05.000Z", createdByUserId: "player-defender" },
+    declaration: {
+      actionId: "parry",
+      id: "declaration:remote-defender",
+      roundNumber: base.roundNumber,
+      submittedAt: "2026-07-23T10:01:05.000Z",
+    },
+    participantId: "encounter-defender",
+    state: first,
+    submittedBy: "player",
+  });
+  let atM1 = both;
+  for (let guard = 0; guard < 20 && atM1.currentStep !== "review_action_modifiers"; guard += 1) {
+    atM1 = advanceCombatRoundStep(atM1);
+  }
+
+  return {
+    before,
+    firstAccepted: encounterSessionSchema.parse({
+      ...before,
+      combatRoundState: first,
+      updatedAt: "2026-07-23T10:01:00.000Z",
+    }),
+    bothAcceptedAtM1: encounterSessionSchema.parse({
+      ...before,
+      combatRoundState: atM1,
+      updatedAt: "2026-07-23T10:01:06.000Z",
+    }),
+  };
+}
+
 function buildFinalParticipantReviewEncounter(): {
   beforeFinalReview: EncounterSession;
   afterFinalReview: EncounterSession;
@@ -1471,6 +1522,74 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
 });
 
 describe("CombatRoundManagerPanel post-mutation task adoption", () => {
+  it("adopts remote player declarations as one current tracker, inspector, and log revision", async () => {
+    const { before, bothAcceptedAtM1, firstAccepted } = buildRemotePlayerDeclarationEncounters();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const rendered = render(
+      <CombatRoundManagerPanel encounter={before} scenarioParticipants={participants} />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Declare action" })).toBeEnabled();
+    rendered.rerender(
+      <CombatRoundManagerPanel encounter={firstAccepted} scenarioParticipants={participants} />,
+    );
+
+    expect(
+      await screen.findByText(/Combat inspector — Scyrian cavalry guy · Round 1 · Declaration/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Declare action" })).toBeEnabled();
+    expect(screen.getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
+    const attackerDeclarationCell = screen.getByRole("button", {
+      name: /The Gladiator.*Round 1.*DE.*declared by player/i,
+    });
+    expect(within(attackerDeclarationCell).getByText("✓")).toBeInTheDocument();
+
+    rendered.rerender(
+      <CombatRoundManagerPanel encounter={bothAcceptedAtM1} scenarioParticipants={participants} />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Complete modifier review" })).toBeEnabled();
+    expect(
+      screen.getByRole("heading", { name: /Combat inspector — The Gladiator · Round 1/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
+    expect(screen.getByText(/Scyrian cavalry guy declared Parry/)).toBeInTheDocument();
+    expect(screen.getAllByText(/declared Parry/)).toHaveLength(2);
+  });
+
+  it("preserves manual inspection across a remote revision and resumes its newest current task", async () => {
+    const { bothAcceptedAtM1, firstAccepted } = buildRemotePlayerDeclarationEncounters();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const rendered = render(
+      <CombatRoundManagerPanel encounter={firstAccepted} scenarioParticipants={participants} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /The Gladiator.*Round 1.*DE.*declared by player/i,
+      }),
+    );
+
+    rendered.rerender(
+      <CombatRoundManagerPanel encounter={bothAcceptedAtM1} scenarioParticipants={participants} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Combat inspector — The Gladiator · Round 1 · Declaration/,
+      }),
+    ).toBeInTheDocument();
+    const resume = screen.getByRole("button", { name: "Resume current task" });
+    expect(resume).toBeEnabled();
+    fireEvent.click(resume);
+    expect(await screen.findByRole("button", { name: "Complete modifier review" })).toBeEnabled();
+  });
+
   it("routes empty final SU completion through the deterministic suffix", async () => {
     const { beforeFinalReview } = buildFinalParticipantReviewEncounter();
     const participants = [

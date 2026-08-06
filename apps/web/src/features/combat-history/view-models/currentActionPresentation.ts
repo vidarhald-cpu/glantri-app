@@ -306,10 +306,10 @@ function selectTask(
     progressionTasks.find(
       (task) => task.state === "executable" && viewerMayInvokeTask(task, viewer),
     ) ??
+    progressionTasks.find((task) => task.state === "executable") ??
     progressionTasks.find(
       (task) => viewer.kind === "player" && taskInvolvesControlledParticipant(task, controlled),
     ) ??
-    progressionTasks.find((task) => task.state === "executable") ??
     progressionTasks[0]
   );
 }
@@ -592,9 +592,10 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
 function requiredNowFor(
   task: CombatProgressionPresentationTask,
   status: CurrentActionPresentation["status"],
+  requiredActorLabel: string,
 ): string {
   if (status === "awaiting_gm") return "Waiting for GM.";
-  if (status === "waiting") return "Waiting for another combatant.";
+  if (status === "waiting") return `Waiting for ${requiredActorLabel}.`;
   switch (task.kind) {
     case "submit_declaration":
       return "Declare your action.";
@@ -666,11 +667,15 @@ function requiredNowFor(
   }
 }
 
-function waitingLabel(task: CombatProgressionPresentationTask, viewerMayInvoke: boolean): string {
+function waitingLabel(
+  task: CombatProgressionPresentationTask,
+  viewerMayInvoke: boolean,
+  requiredActorLabel: string,
+): string {
   if (viewerMayInvoke && task.state === "executable") return buttonLabel(task);
   return task.actorAccess.gm && !task.actorAccess.combatant
     ? "Waiting for GM"
-    : "Waiting for another combatant";
+    : `Waiting for ${requiredActorLabel}`;
 }
 
 function specialPresentation(
@@ -849,7 +854,7 @@ export function buildCurrentActionPresentation(
     : summaryFor({ action, actor, target, task });
   const requiredNow = waitingForParallelBrawlingRoll
     ? `Waiting for ${required.label}.`
-    : requiredNowFor(task, status);
+    : requiredNowFor(task, status, required.label);
 
   return Object.freeze({
     actionKind: task.presentationContext?.actionKind,
@@ -868,7 +873,7 @@ export function buildCurrentActionPresentation(
       descriptor: viewerMayInvoke ? descriptor : undefined,
       enabled: status === "executable",
       gmProxyAvailable,
-      label: waitingLabel(task, viewerMayInvoke),
+      label: waitingLabel(task, viewerMayInvoke, required.label),
       viewerMayInvoke,
     },
     processId: task.processId,

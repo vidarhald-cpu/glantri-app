@@ -334,6 +334,7 @@ describe("localServiceClient wire contract", () => {
       method: "GET",
       url: "https://api.example.test/encounters/encounter-1",
     });
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe("no-store");
   });
 
   it("loads compact encounter summaries and active revision metadata", async () => {
@@ -380,6 +381,7 @@ describe("localServiceClient wire contract", () => {
       "https://api.example.test/encounters/encounter-1/revision",
     );
     expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("GET");
+    expect(fetchMock.mock.calls[1]?.[1]?.cache).toBe("no-store");
   });
 
   it("updates encounter status through the narrow status endpoint", async () => {

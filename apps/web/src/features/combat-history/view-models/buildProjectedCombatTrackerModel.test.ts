@@ -58,6 +58,7 @@ function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection
 function liveProgression(
   input: {
     boundary?: CombatProgressionBoundaryKind;
+    contributesToProgression?: boolean;
     gmOwned?: boolean;
     kind?: CombatProgressionTaskKind;
     opponentId?: string;
@@ -86,7 +87,7 @@ function liveProgression(
       warnings: [],
       workClass: "not_applicable",
     },
-    contributesToProgression: true,
+    contributesToProgression: input.contributesToProgression ?? true,
     executionGroupId: "group-1",
     expectedCommand: kind === "gm_advance_boundary" ? "advance_combat_boundary" : "roll_attack",
     id: "task-1",
@@ -330,6 +331,27 @@ describe("buildProjectedCombatTrackerModel", () => {
       marker: "✓",
       status: "completed",
     });
+  });
+
+  it("does not let an optional GM declaration edit replace an accepted player declaration", () => {
+    const projection = history([
+      event({ ownerParticipantId: "aria", step: "select_actions", type: "declaration" }),
+    ]);
+    projection.progression = liveProgression({
+      boundary: "declaration",
+      contributesToProgression: false,
+      gmOwned: true,
+      kind: "submit_declaration",
+      step: "DE",
+      trackerOwnerId: "aria",
+    });
+
+    const cell = buildProjectedCombatTrackerModel({ history: projection }).cells[
+      "1:aria:select_actions"
+    ];
+    expect(cell).toMatchObject({ current: false, marker: "✓" });
+    expect(cell?.hoverText).toContain("action declared");
+    expect(cell?.hoverText).not.toContain("Awaiting GM");
   });
 
   it("returns from completed CE to an ordinary pending declaration dot", () => {
