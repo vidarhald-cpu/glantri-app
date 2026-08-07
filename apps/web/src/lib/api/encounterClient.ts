@@ -1112,9 +1112,6 @@ export async function rollCombatAttackOnServer(input: {
   attackIndex: number;
   attackModeId: string;
   attackerModifierFingerprint?: string;
-  defenderDb?: number;
-  defenderDbParryRaw?: number;
-  defenderModifierFingerprint?: string;
   effectCutoffInitiativeGroupId?: string;
   declarationId: string;
   defenderParticipantId: string;
@@ -1156,9 +1153,6 @@ export async function rollCombatAttackOnServer(input: {
         attackIndex: input.attackIndex,
         attackModeId: input.attackModeId,
         attackerModifierFingerprint: input.attackerModifierFingerprint,
-        defenderDb: input.defenderDb,
-        defenderDbParryRaw: input.defenderDbParryRaw,
-        defenderModifierFingerprint: input.defenderModifierFingerprint,
         effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
         declarationId: input.declarationId,
         defenderParticipantId: input.defenderParticipantId,

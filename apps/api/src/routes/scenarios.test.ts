@@ -1447,6 +1447,61 @@ function makeMovementBurdenEquipmentState(input: { characterId: string; load?: n
   };
 }
 
+function makeCanonicalWeaponDefenseEquipmentState(input: {
+  characterId: string;
+  templateId: string;
+}) {
+  const state = makeMovementBurdenEquipmentState({ characterId: input.characterId });
+  const template = weaponTemplates.find((candidate) => candidate.id === input.templateId);
+  if (!template) throw new Error(`Missing weapon fixture ${input.templateId}.`);
+  const itemId = `item-${input.templateId}`;
+  const locationId = `location-${input.characterId}-equipped`;
+  const templatesById = { ...state.templatesById, [template.id]: template };
+
+  return {
+    ...state,
+    activeLoadoutByCharacterId: {
+      [input.characterId]: {
+        ...state.activeLoadoutByCharacterId[input.characterId],
+        activePrimaryWeaponItemId: itemId,
+      },
+    },
+    itemsById: {
+      ...state.itemsById,
+      [itemId]: {
+        acquiredFrom: null,
+        category: "weapon",
+        characterId: input.characterId,
+        conditionState: "intact",
+        displayName: null,
+        id: itemId,
+        isFavorite: false,
+        isStackable: false,
+        material: "steel",
+        quality: "standard",
+        quantity: 1,
+        specificityType: "generic",
+        storageAssignment: { carryMode: "equipped", locationId },
+        templateId: template.id,
+      },
+    },
+    locationsById: {
+      ...state.locationsById,
+      [locationId]: {
+        availabilityClass: "with_you",
+        characterId: input.characterId,
+        id: locationId,
+        isAccessibleInEncounter: true,
+        isMobile: true,
+        name: "Equipped",
+        type: "equipped_system",
+      },
+    },
+    templates: { templatesById },
+    templatesById,
+  };
+}
+
 function makeCombatScenarioParticipantWithWeapon(
   overrides: Record<string, unknown> & { weaponName?: string; weaponRange?: string } = {},
 ) {
@@ -11819,7 +11874,13 @@ describe("scenarios route contract", () => {
           characterId: "character-1",
           id: "participant-1",
           snapshot: {
+            build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
             displayName: "The Gladiator",
+            equipmentState: makeCanonicalWeaponDefenseEquipmentState({
+              characterId: "character-1",
+              templateId: "weapon-template-longsword",
+            }),
+            sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
           },
           weaponName: "Long sword",
           weaponRange: "3.0",
@@ -11829,7 +11890,13 @@ describe("scenarios route contract", () => {
           controlledByUserId: "other-player",
           id: "participant-2",
           snapshot: {
+            build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
             displayName: "Scyrian cavalry guy",
+            equipmentState: makeCanonicalWeaponDefenseEquipmentState({
+              characterId: "character-2",
+              templateId: "weapon-template-broad-sword",
+            }),
+            sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
           },
           weaponName: "Broad sword",
           weaponRange: "2.0",
@@ -12037,8 +12104,6 @@ describe("scenarios route contract", () => {
       const attackResponse = await app.inject({
         method: "POST",
         payload: {
-          defenderDb: 99,
-          defenderDbParryRaw: 0,
           defenderScenarioParticipantId: "participant-1",
           ob: 0,
           obSkillRaw: 0,
@@ -13265,8 +13330,6 @@ describe("scenarios route contract", () => {
       attackContextAvailability: "complete",
       attackerModifierFingerprint: "v1:82d757a9",
       attackerParticipantId: "encounter-participant-1",
-      defenderDbParryRaw: -2,
-      defenderModifierFingerprint: "v1:920ced12",
       defenderParticipantId: "encounter-participant-2",
       encounterId: "encounter-1",
       expectedRevision: encounter.updatedAt,
@@ -13294,8 +13357,6 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         attackerModifierFingerprint: validation.attackerModifierFingerprint,
-        defenderDbParryRaw: validation.defenderDbParryRaw,
-        defenderModifierFingerprint: validation.defenderModifierFingerprint,
         defenderScenarioParticipantId: "participant-2",
         expectedRevision: validation.expectedRevision,
         modifierValidationTaskId: validation.taskId,
@@ -13321,7 +13382,149 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("still rejects a stale defender total for the post-Adjust Distance attack", async () => {
+  it("uses server-composed canonical defense instead of the live presentation snapshot", async () => {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    const misleadingState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      stepSnapshots: fixture.encounter.combatRoundState.stepSnapshots.map((snapshot) =>
+        snapshot.participantId === "encounter-participant-2" && snapshot.defenseSummary
+          ? {
+              ...snapshot,
+              defenseSummary: { ...snapshot.defenseSummary, db: "999", dm: "99" },
+            }
+          : snapshot,
+      ),
+    });
+    const defender = {
+      ...fixture.participants[1],
+      characterId: "character-2",
+      snapshot: {
+        ...fixture.participants[1]?.snapshot,
+        build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
+        displayName: "Scyrian cavalry guy",
+        equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+        sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+      },
+    };
+    setupCombatDeclarationRoute({
+      encounter: { ...fixture.encounter, combatRoundState: misleadingState },
+      participants: [fixture.participants[0], defender],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    const validation = historyResponse.json().history.currentAttackModifierValidation;
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const attackResponse = await app.inject({
+      method: "POST",
+      payload: {
+        attackerModifierFingerprint: validation.attackerModifierFingerprint,
+        defenderScenarioParticipantId: "participant-2",
+        expectedRevision: validation.expectedRevision,
+        modifierValidationTaskId: validation.taskId,
+        ob: 8,
+        obSkillRaw: validation.obSkillRaw,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
+    const updatedState = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    const command = updatedState.commands.at(-1);
+    const defenderCalculation = command?.facts.defenderCalculation as
+      | Record<string, unknown>
+      | undefined;
+    const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: updatedState,
+    });
+
+    expect(command).toMatchObject({
+      facts: {
+        defenderCalculation: {
+          authority: "canonical_scenario_state",
+          completeness: "complete",
+          dynamicRawPercentage: adjustRangePhase1DbParryModifierEntry.value,
+          participantId: "participant-2",
+          schemaVersion: 1,
+        },
+      },
+      type: "roll_attack",
+    });
+    expect(defenderCalculation?.["effectiveDb"]).not.toBe(999);
+    expect(attackResult?.defenderDb).toBe(defenderCalculation?.["effectiveDb"]);
+    expect(JSON.stringify(attackResponse.json())).not.toContain("defenderCalculation");
+    expect(JSON.stringify(attackResponse.json())).not.toContain("sourceSnapshotId");
+  });
+
+  it("uses the same private defender calculation for GM and player attack authority", async () => {
+    const execute = async (user: typeof mocks.playerUser) => {
+      const fixture = makePostAdjustDistanceAttackFixture();
+      const defender = {
+        ...fixture.participants[1],
+        characterId: "character-2",
+        snapshot: {
+          ...fixture.participants[1]?.snapshot,
+          build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
+          displayName: "Scyrian cavalry guy",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+          sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+        },
+      };
+      setupCombatDeclarationRoute({
+        encounter: fixture.encounter,
+        participants: [fixture.participants[0], defender],
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const historyResponse = await app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1/combat-history",
+      });
+      const validation = historyResponse.json().history.currentAttackModifierValidation;
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          attackerModifierFingerprint: validation.attackerModifierFingerprint,
+          defenderScenarioParticipantId: "participant-2",
+          expectedRevision: validation.expectedRevision,
+          modifierValidationTaskId: validation.taskId,
+          ob: 8,
+          obSkillRaw: validation.obSkillRaw,
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      const calculation = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session
+        .combatRoundState.commands.at(-1)?.facts.defenderCalculation;
+      await app.close();
+      return calculation;
+    };
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const playerCalculation = await execute(mocks.playerUser);
+    const gmCalculation = await execute(mocks.adminUser);
+    randomSpy.mockRestore();
+
+    expect(gmCalculation).toEqual(playerCalculation);
+    expect(gmCalculation).toMatchObject({
+      authority: "canonical_scenario_state",
+      effectiveDb: expect.any(Number),
+    });
+  });
+
+  it("ignores legacy client defender totals and resolves private defense server-side", async () => {
     const fixture = makePostAdjustDistanceAttackFixture();
     setupCombatDeclarationRoute({
       encounter: fixture.encounter,
@@ -13345,12 +13548,8 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      code: "defender_modifier_signature_mismatch",
-      error: "Defender modifiers changed. Refresh combat before rolling.",
-    });
-    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
   });
 
   it("marks a player A1 attack unavailable when its exact defender checkpoint is missing", async () => {
@@ -13391,8 +13590,6 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         attackerModifierFingerprint: validation.attackerModifierFingerprint,
-        defenderDbParryRaw: validation.defenderDbParryRaw,
-        defenderModifierFingerprint: validation.defenderModifierFingerprint,
         defenderScenarioParticipantId: "participant-2",
         expectedRevision: validation.expectedRevision,
         modifierValidationTaskId: validation.taskId,
@@ -13414,7 +13611,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("rejects a stale defender contribution set even when its raw total is unchanged", async () => {
+  it("ignores legacy client defender fingerprints and resolves the contribution set server-side", async () => {
     const fixture = makePostAdjustDistanceAttackFixture();
     setupCombatDeclarationRoute({
       encounter: fixture.encounter,
@@ -13439,12 +13636,8 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      code: "defender_modifier_signature_mismatch",
-      error: "Defender modifiers changed. Refresh combat before rolling.",
-    });
-    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a modifier descriptor from an older encounter revision", async () => {

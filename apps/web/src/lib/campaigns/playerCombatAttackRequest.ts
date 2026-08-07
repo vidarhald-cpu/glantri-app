@@ -5,8 +5,6 @@ import type {
 
 export interface PlayerCombatAttackModifierRequest {
   attackerModifierFingerprint: string;
-  defenderDbParryRaw: number;
-  defenderModifierFingerprint: string;
   effectCutoffInitiativeGroupId?: string;
   expectedRevision: string;
   initiativeGroupId?: string;
@@ -50,8 +48,6 @@ export function buildPlayerCombatAttackModifierRequest(input: {
 
   return {
     attackerModifierFingerprint: validation.attackerModifierFingerprint,
-    defenderDbParryRaw: validation.defenderDbParryRaw,
-    defenderModifierFingerprint: validation.defenderModifierFingerprint,
     effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
     expectedRevision: validation.expectedRevision,
     initiativeGroupId: validation.initiativeGroupId,

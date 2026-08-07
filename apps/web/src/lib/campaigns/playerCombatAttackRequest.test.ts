@@ -43,8 +43,6 @@ const validation = {
   attackContextAvailability: "complete",
   attackerModifierFingerprint: "v1:82d757a9",
   attackerParticipantId: "encounter-attacker",
-  defenderDbParryRaw: -2,
-  defenderModifierFingerprint: "v1:920ced12",
   defenderParticipantId: "encounter-defender",
   effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
   encounterId: "encounter-1",
@@ -72,8 +70,6 @@ describe("buildPlayerCombatAttackModifierRequest", () => {
   it("uses the canonical modifier values bound to the displayed attack task", () => {
     expect(buildPlayerCombatAttackModifierRequest(input)).toEqual({
       attackerModifierFingerprint: validation.attackerModifierFingerprint,
-      defenderDbParryRaw: -2,
-      defenderModifierFingerprint: validation.defenderModifierFingerprint,
       effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
       expectedRevision: validation.expectedRevision,
       initiativeGroupId: validation.initiativeGroupId,

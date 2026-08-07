@@ -432,6 +432,40 @@ export function buildLiveCombatModifierContributionProjection(
 }
 
 /**
+ * Projects the bounded direct-point DB compatibility rows separately from percentage DB/Parry.
+ * Callers must still resolve these contributions against their exact calculation context.
+ */
+export function buildLiveCombatFlatDbModifierContributions(
+  input: LiveCombatModifierContributionProjectionInput,
+): CombatModifierContribution[] {
+  const ownerParticipantId = input.ownerParticipantId ?? "unknown-participant";
+  const combatContext = mergePersistentCombatEffectModifiers({
+    combatContext: input.combatContext,
+    combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
+    currentRound: input.currentRound,
+  });
+  const context = {
+    ownerParticipantId,
+    ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+    ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+  };
+
+  return combatContext.modifierBuckets.situationDb.flatMap((entry) => {
+    if (entry.application !== "flat_db") return [];
+    const contribution = normalizeScenarioCombatModifierEntry({
+      bucket: "situation_db",
+      currentRound: input.currentRound,
+      entry,
+      ownerParticipantId,
+    });
+    return contribution && isCombatModifierContributionActive(contribution, context)
+      ? [contribution]
+      : [];
+  });
+}
+
+/**
  * Refreshes the disposable persistent-effect rows in a live scenario participant state.
  * The participant's combatEffects collection remains the source of truth; recorded combat
  * history snapshots are intentionally outside this boundary and are never rewritten here.

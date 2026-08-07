@@ -598,8 +598,6 @@ describe("combat history projection", () => {
       attackContextAvailability: "complete" as const,
       attackerModifierFingerprint: "v1:attacker",
       attackerParticipantId: "aria",
-      defenderDbParryRaw: -2,
-      defenderModifierFingerprint: "v1:defender",
       defenderParticipantId: "borin",
       encounterId: "encounter-1",
       expectedRevision: "revision-7",

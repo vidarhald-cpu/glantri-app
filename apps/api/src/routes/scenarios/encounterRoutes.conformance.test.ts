@@ -204,7 +204,8 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("initiativeValue: task.identity.initiativeValue");
     expect(source).toContain('code: "modifier_validation_task_mismatch"');
     expect(source).toContain('code: "attacker_modifier_signature_mismatch"');
-    expect(source).toContain('code: "defender_modifier_signature_mismatch"');
+    expect(source).toContain("resolveCanonicalScenarioParticipantDefense({");
+    expect(source).not.toContain('code: "defender_modifier_signature_mismatch"');
   });
 
   it("binds Offensive Parry Brawling to exact task and parry lineage", () => {

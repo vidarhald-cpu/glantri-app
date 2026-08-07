@@ -11,10 +11,14 @@ import {
   type CombatModifierContribution,
   type CombatModifierResolution,
 } from "./combatModifierContributions";
-import { buildLiveCombatModifierContributionProjection } from "./combatModifierProjection";
+import {
+  buildLiveCombatFlatDbModifierContributions,
+  buildLiveCombatModifierContributionProjection,
+} from "./combatModifierProjection";
 import { buildCombatObservationModifierContributions } from "./combatObservation";
 import {
   getCombatRoundCurrentInitiativeExecutionGroup,
+  getCombatRoundNextEventSequence,
   getCombatRoundPhaseActionStepForPhase,
   getCombatRoundParryReviewStepForPhase,
   type CombatRoundAttackOpportunity,
@@ -31,6 +35,7 @@ export interface CanonicalCombatAttackModifierFacts {
   attackerResolution: CombatModifierResolution;
   declaredOpportunity?: CombatRoundAttackOpportunity;
   defenderCombatContext: ScenarioParticipantCombatContext;
+  defenderFlatResolution: CombatModifierResolution;
   defenderResolution: CombatModifierResolution;
   pairKey: string;
 }
@@ -149,6 +154,7 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     phase: input.phase,
     state: input.state,
   })?.id;
+  const calculationSequence = getCombatRoundNextEventSequence(input.state);
   const attackerObservationContributions = buildCombatObservationModifierContributions({
     encounterId: input.encounterId,
     observerCombatantId: input.attackerCombatantId,
@@ -186,6 +192,14 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
       relationships: input.state.observationRelationships,
     }),
   ];
+  const defenderFlatContributions = buildLiveCombatFlatDbModifierContributions({
+    combatContext: defenderCombatContext,
+    combatEffects: input.defenderScenarioParticipant.state.combatEffects,
+    currentInitiativeGroupId,
+    currentRound: input.state.roundNumber,
+    encounterId: input.encounterId,
+    ownerParticipantId: input.defenderScenarioParticipant.id,
+  });
   const opportunityId = declaredOpportunity?.id ?? input.opportunityId;
   const attackerCalculationContext = {
     actionId: attackerActionId,
@@ -198,6 +212,8 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     proposalId: attackerProposalId,
     rollType: "attack",
     roundNumber: input.state.roundNumber,
+    initiativeSequence: calculationSequence,
+    simultaneousGroupId: currentInitiativeGroupId,
     step,
   } as const;
   const defenderCalculationContext = {
@@ -211,6 +227,8 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     proposalId: defenderFeintProposalId,
     rollType: "db",
     roundNumber: input.state.roundNumber,
+    initiativeSequence: calculationSequence,
+    simultaneousGroupId: currentInitiativeGroupId,
     step,
   } as const;
 
@@ -236,6 +254,11 @@ export function resolveCanonicalCombatAttackModifierFacts(input: {
     }),
     declaredOpportunity,
     defenderCombatContext,
+    defenderFlatResolution: resolveCombatModifierContributions({
+      bucket: "db_parry",
+      context: defenderCalculationContext,
+      contributions: defenderFlatContributions,
+    }),
     defenderResolution: combineCombatModifierResolutions({
       additional: resolveCombatWideGeneralModifiers({
         context: defenderCalculationContext,

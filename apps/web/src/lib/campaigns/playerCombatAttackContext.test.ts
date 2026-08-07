@@ -46,8 +46,6 @@ const validation = {
   attackContextAvailability: "complete",
   attackerModifierFingerprint: "v1:attacker",
   attackerParticipantId: "combatant-attacker",
-  defenderDbParryRaw: 0,
-  defenderModifierFingerprint: "v1:defender",
   defenderParticipantId: "combatant-defender",
   encounterId: "encounter-1",
   expectedRevision: "revision-2",

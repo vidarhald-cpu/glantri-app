@@ -1475,8 +1475,10 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       weaponTemplateId: projectedAttackTask?.identity.weaponTemplateId,
     });
     expect(request.attackerModifierFingerprint).toMatch(/^v1:/);
-    expect(request.defenderModifierFingerprint).toMatch(/^v1:/);
     expect(request.obSkillRaw).toBe(-2);
+    expect(request).not.toHaveProperty("defenderDb");
+    expect(request).not.toHaveProperty("defenderDbParryRaw");
+    expect(request).not.toHaveProperty("defenderModifierFingerprint");
     expect(request).not.toHaveProperty("declaredOpponentParticipantId");
     expect(request).not.toHaveProperty("offensiveParryAttemptId");
   });

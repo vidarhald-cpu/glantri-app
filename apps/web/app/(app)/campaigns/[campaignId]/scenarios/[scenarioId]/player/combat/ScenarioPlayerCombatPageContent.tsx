@@ -3206,8 +3206,6 @@ export default function ScenarioPlayerCombatPageContent({
         attackIndex: descriptor.attackIndex,
         attackModeId: descriptor.attackModeId,
         attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
-        defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
-        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId,

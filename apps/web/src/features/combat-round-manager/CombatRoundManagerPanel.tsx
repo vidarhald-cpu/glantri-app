@@ -9179,10 +9179,6 @@ export default function CombatRoundManagerPanel({
       scenarioParticipant: targetScenarioParticipant,
       scenarioParticipantId: descriptor.opponentParticipantId,
     });
-    const targetRoundParticipant = roundState.participants.find(
-      (participant) => participant.participantId === targetEncounterParticipant?.id,
-    );
-
     if (!targetIdentity || !targetScenarioParticipant || !targetEncounterParticipant) {
       setSaveError(
         descriptor.actionId === "feint_attack" && phase === "phase2"
@@ -9192,17 +9188,6 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    const targetPhaseSummary = buildScenarioParticipantPhaseSummary({
-      declaration: targetRoundParticipant?.declaration,
-      opponentCombatantId: selectedEncounterParticipant.id,
-      phaseKey: phase,
-      scenarioParticipant: targetScenarioParticipant,
-    });
-
-    if (!targetPhaseSummary.defenseStats) {
-      setSaveError(`Target ${phaseLabel} DB is not available.`);
-      return;
-    }
     const projectedAttackTask = projectedCurrentTasks.find((task) => task.id === descriptor.taskId);
     const modifierRequest = buildGmCombatAttackModifierRequest({
       attackerCombatantId: selectedEncounterParticipant.id,
@@ -9221,15 +9206,10 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    let defenderDb: number;
     let ob: number;
 
     try {
       ob = parseCombatInteger(canonicalAttackSummary.ob, `${phaseLabel} OB`);
-      defenderDb = parseCombatInteger(
-        targetPhaseSummary.defenseStats.db,
-        `Target ${phaseLabel} DB`,
-      );
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error
@@ -9252,9 +9232,6 @@ export default function CombatRoundManagerPanel({
         attackIndex: descriptor.attackIndex!,
         attackModeId: descriptor.attackModeId!,
         attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
-        defenderDb,
-        defenderDbParryRaw: modifierRequest.defenderDbParryRaw,
-        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId!,

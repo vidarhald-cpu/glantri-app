@@ -21,6 +21,7 @@ import {
   applyCommittedCombatFeintModifiers,
   applyCombatActionGeneratedModifiers,
   advanceCombatProgressionBoundary,
+  acceptedCombatDefenseCalculationSchema,
   authorizeCombatProgressionTask,
   backOutCombatRoundPhaseAttack,
   buildEncounterSessionRevisionFromMetadataView,
@@ -91,6 +92,7 @@ import {
   fingerprintCombatModifierResolution,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundCurrentInitiativeExecutionGroup,
+  getCombatRoundNextEventSequence,
   buildLiveCombatModifierContributionProjection,
   createCombatParticipantPairKey,
   getMergedCombatDbFlatAdjustmentTotal,
@@ -267,6 +269,7 @@ import { combatRoundStatesDiffer } from "./combatRoundPersistence";
 import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
+import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
 
 const campaignService = instrumentCombatService(new CampaignService(), {
   getCampaignById: {
@@ -2150,9 +2153,6 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
   attackIndex: number;
   attackModeId: string;
   declarationId: string;
-  defenderDb?: number;
-  defenderDbParryRaw?: number;
-  defenderModifierFingerprint?: string;
   effectCutoffInitiativeGroupId?: string;
   defenderParticipantId: string;
   modifierValidationTaskId?: string;
@@ -2184,10 +2184,6 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     typeof value.attackerModifierFingerprint === "string"
       ? value.attackerModifierFingerprint
       : undefined;
-  const defenderModifierFingerprint =
-    typeof value.defenderModifierFingerprint === "string"
-      ? value.defenderModifierFingerprint
-      : undefined;
 
   return {
     ...parsed,
@@ -2196,9 +2192,6 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     attackIndex: parseInteger(value.attackIndex, "attackIndex"),
     attackModeId: parseNonEmptyString(value.attackModeId, "attackModeId"),
     declarationId: parseNonEmptyString(value.declarationId, "declarationId"),
-    defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
-    defenderDbParryRaw: parseOptionalInteger(value.defenderDbParryRaw, "defenderDbParryRaw"),
-    defenderModifierFingerprint,
     effectCutoffInitiativeGroupId:
       value.effectCutoffInitiativeGroupId === undefined
         ? undefined
@@ -3096,29 +3089,38 @@ function buildCurrentAttackModifierValidation(input: {
         participant: attackerScenarioParticipant,
       })
     : undefined;
-  const latestDefenderSnapshot = findLatestCombatDefenseSnapshot({
-    defenderParticipantId: defenderEncounterParticipant.id,
-    phase: task.identity.phase,
-    state: input.roundState,
+  const canonicalDefense = resolveCanonicalScenarioParticipantDefense({
+    defenderResolution: facts.defenderResolution,
+    flatDbResolution: facts.defenderFlatResolution,
+    participant: defenderScenarioParticipant,
   });
-  const defenderDb = resolveAttackDefenderDb({
-    currentFlatAdjustment: getMergedCombatDbFlatAdjustmentTotal({
-      combatContext: facts.defenderCombatContext,
-      phase: task.identity.phase,
-    }),
-    snapshot: latestDefenderSnapshot,
-  });
+  const latestDefenderSnapshot =
+    canonicalDefense.completeness === "complete"
+      ? undefined
+      : findLegacyCombatDefenseSnapshot({
+          defenderParticipantId: defenderEncounterParticipant.id,
+          phase: task.identity.phase,
+          state: input.roundState,
+        });
+  const legacyDefenderDb = latestDefenderSnapshot
+    ? resolveLegacyAttackDefenderDb({
+        currentFlatAdjustment: getMergedCombatDbFlatAdjustmentTotal({
+          combatContext: facts.defenderCombatContext,
+          phase: task.identity.phase,
+        }),
+        snapshot: latestDefenderSnapshot,
+      })
+    : undefined;
 
   return {
     actionId: facts.attackerActionId,
     attackContextAvailability:
-      canonicalWeaponFacts?.weaponName && defenderDb !== undefined
+      canonicalWeaponFacts?.weaponName &&
+      (canonicalDefense.completeness === "complete" || legacyDefenderDb !== undefined)
         ? "complete"
         : "unavailable_required",
     attackerModifierFingerprint: fingerprintCombatModifierResolution(facts.attackerResolution),
     attackerParticipantId: attackerEncounterParticipant.id,
-    defenderDbParryRaw: facts.defenderResolution.total,
-    defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: defenderEncounterParticipant.id,
     effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
     encounterId: input.encounterId,
@@ -3134,7 +3136,7 @@ function buildCurrentAttackModifierValidation(input: {
   };
 }
 
-function findLatestCombatDefenseSnapshot(input: {
+function findLegacyCombatDefenseSnapshot(input: {
   defenderParticipantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
@@ -3150,9 +3152,8 @@ function findLatestCombatDefenseSnapshot(input: {
     );
 }
 
-function resolveAttackDefenderDb(input: {
+function resolveLegacyAttackDefenderDb(input: {
   currentFlatAdjustment: number;
-  fallbackDb?: number;
   snapshot?: CombatRoundStepSnapshot;
 }): number | undefined {
   const summary =
@@ -3166,7 +3167,84 @@ function resolveAttackDefenderDb(input: {
     ? snapshotDb +
         input.currentFlatAdjustment -
         (input.snapshot?.modifierSummary?.dbFlatAdjustment ?? 0)
-    : input.fallbackDb;
+    : undefined;
+}
+
+function buildAcceptedCombatDefenseCalculationFact(input: {
+  calculation: ReturnType<typeof resolveCanonicalScenarioParticipantDefense>;
+  cutoffInitiativeGroupId?: string;
+  cutoffSequence: number;
+  defenderResolution: ReturnType<
+    typeof resolveCanonicalCombatAttackModifierFacts
+  >["defenderResolution"];
+  flatResolution: ReturnType<
+    typeof resolveCanonicalCombatAttackModifierFacts
+  >["defenderFlatResolution"];
+  effectiveDb: number;
+  legacySnapshot?: CombatRoundStepSnapshot;
+}) {
+  if (input.calculation.completeness !== "complete") {
+    return acceptedCombatDefenseCalculationSchema.parse({
+      authority: "legacy_combat_round_step_snapshot" as const,
+      completeness: "legacy_incomplete" as const,
+      cutoffInitiativeGroupId: input.cutoffInitiativeGroupId,
+      cutoffSequence: input.cutoffSequence,
+      effectiveDb: input.effectiveDb,
+      schemaVersion: 1,
+      sourceSnapshotId: input.legacySnapshot?.id,
+    });
+  }
+
+  return acceptedCombatDefenseCalculationSchema.parse({
+    authority: input.calculation.authority,
+    baseDb: input.calculation.baseDb,
+    completeness: input.calculation.completeness,
+    cutoffInitiativeGroupId: input.cutoffInitiativeGroupId,
+    cutoffSequence: input.cutoffSequence,
+    dynamicContributions: input.defenderResolution.rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      sourceId: row.sourceId,
+      value: row.value,
+    })),
+    dynamicRawPercentage: input.defenderResolution.total,
+    effectiveDb: input.calculation.effectiveDb,
+    effectiveDm: input.calculation.effectiveDm,
+    equipment: input.calculation.equipment,
+    equipmentLoadoutRevision: input.calculation.equipmentLoadoutRevision,
+    flatContributions: input.flatResolution.rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      sourceId: row.sourceId,
+      value: row.value,
+    })),
+    flatDbAdjustment: input.calculation.flatDbAdjustment,
+    participantId: input.calculation.participantId,
+    percentageAdjustment: input.calculation.percentage.fullAdjustment,
+    percentageTrace: input.calculation.percentage.fullTrace,
+    schemaVersion: 1,
+    sourceSnapshotId: input.calculation.sourceSnapshotId,
+    toHitModifier: input.calculation.toHitModifier,
+  });
+}
+
+function getAcceptedCombatDefenseDm(input: {
+  attackResultId: string;
+  state: CombatRoundState;
+}): number | undefined {
+  const command = [...input.state.commands]
+    .reverse()
+    .find(
+      (candidate) =>
+        candidate.type === "roll_attack" &&
+        candidate.facts.attackResultId === input.attackResultId,
+    );
+  const calculation = acceptedCombatDefenseCalculationSchema.safeParse(
+    command?.facts.defenderCalculation,
+  );
+  return calculation.success && calculation.data.authority === "canonical_scenario_state"
+    ? calculation.data.effectiveDm
+    : undefined;
 }
 
 function buildCurrentParryModifierValidation(input: {
@@ -4078,6 +4156,12 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     !input.controlledEncounterParticipantIds.has(input.command.participantId)
   ) {
     return undefined;
+  }
+
+  if (input.command.type === "roll_attack") {
+    const safeFacts = { ...input.command.facts };
+    delete safeFacts.defenderCalculation;
+    return { ...input.command, facts: safeFacts };
   }
 
   if (
@@ -10722,11 +10806,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.attackSummary,
         );
-      const latestDefenderSnapshot = findLatestCombatDefenseSnapshot({
-        defenderParticipantId: defenderEncounterParticipant.id,
-        phase: body.phase,
-        state: roundState,
-      });
       const canonicalModifierFacts = resolveCanonicalCombatAttackModifierFacts({
         attackerCombatantId: encounterParticipant.id,
         attackerScenarioParticipant: scenarioParticipant,
@@ -10738,15 +10817,33 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
       });
       const weaponName = canonicalWeaponFacts.weaponName;
-      const defenderFlatDbAdjustment = getMergedCombatDbFlatAdjustmentTotal({
-        combatContext: canonicalModifierFacts.defenderCombatContext,
-        phase: body.phase,
+      const canonicalDefense = resolveCanonicalScenarioParticipantDefense({
+        defenderResolution: canonicalModifierFacts.defenderResolution,
+        flatDbResolution: canonicalModifierFacts.defenderFlatResolution,
+        participant: defenderScenarioParticipant,
       });
-      const defenderDb = resolveAttackDefenderDb({
-        currentFlatAdjustment: defenderFlatDbAdjustment,
-        fallbackDb: body.defenderDb,
-        snapshot: latestDefenderSnapshot,
-      });
+      const latestDefenderSnapshot =
+        canonicalDefense.completeness === "complete"
+          ? undefined
+          : findLegacyCombatDefenseSnapshot({
+              defenderParticipantId: defenderEncounterParticipant.id,
+              phase: body.phase,
+              state: roundState,
+            });
+      const defenderFlatDbAdjustment =
+        canonicalDefense.completeness === "complete"
+          ? canonicalDefense.flatDbAdjustment
+          : getMergedCombatDbFlatAdjustmentTotal({
+              combatContext: canonicalModifierFacts.defenderCombatContext,
+              phase: body.phase,
+            });
+      const defenderDb =
+        canonicalDefense.completeness === "complete"
+          ? canonicalDefense.effectiveDb
+          : resolveLegacyAttackDefenderDb({
+              currentFlatAdjustment: defenderFlatDbAdjustment,
+              snapshot: latestDefenderSnapshot,
+            });
 
       if (!weaponName || defenderDb === undefined) {
         return reply.code(409).send({
@@ -10760,23 +10857,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerCombatContext = canonicalModifierFacts.attackerCombatContext;
       const canonicalObSkillResolution = canonicalModifierFacts.attackerResolution;
       const canonicalDefenderDbParryResolution = canonicalModifierFacts.defenderResolution;
-      const canonicalDefenderDbParryRaw = canonicalDefenderDbParryResolution.total;
-      const recordedDefenderDbParryRaw =
-        body.defenderDbParryRaw ??
-        (latestDefenderSnapshot ? (latestDefenderSnapshot.modifierSummary?.dbRaw ?? 0) : undefined);
-
-      if (
-        recordedDefenderDbParryRaw === undefined ||
-        recordedDefenderDbParryRaw !== canonicalDefenderDbParryRaw ||
-        (body.defenderModifierFingerprint !== undefined &&
-          body.defenderModifierFingerprint !==
-            fingerprintCombatModifierResolution(canonicalDefenderDbParryResolution))
-      ) {
-        return reply.code(409).send({
-          code: "defender_modifier_signature_mismatch",
-          error: "Defender modifiers changed. Refresh combat before rolling.",
-        });
-      }
       const canonicalObSkillRaw = canonicalObSkillResolution.total;
 
       if (
@@ -10836,6 +10916,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               roundNumber: roundState.roundNumber,
             })
           : undefined);
+      const defenderCalculation = buildAcceptedCombatDefenseCalculationFact({
+        calculation: canonicalDefense,
+        cutoffInitiativeGroupId: body.effectCutoffInitiativeGroupId,
+        cutoffSequence: getCombatRoundNextEventSequence(roundState),
+        defenderResolution: canonicalDefenderDbParryResolution,
+        effectiveDb: defenderDb,
+        flatResolution: canonicalModifierFacts.defenderFlatResolution,
+        legacySnapshot: latestDefenderSnapshot,
+      });
       const attackResult = buildCombatRoundAttackRollResult({
         actionId,
         attackPhaseDefensivePenalty: declaredAttackPhaseDefensivePenalty
@@ -10878,6 +10967,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdAt: submittedAt,
           createdByUserId: user.id,
           facts: {
+            defenderCalculation,
             defenderFlatDbAdjustment,
             ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
             obSkillRaw: canonicalObSkillRaw,
@@ -10927,7 +11017,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         attackResult,
-        command: attackCommand,
+        command:
+          access.mode === "gm" || !attackCommand
+            ? attackCommand
+            : buildPlayerSafeCombatRoundCommandForUser({
+                command: attackCommand,
+                ...buildPlayerSafeCombatScopeForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+              }),
         commandEnvelope,
         encounter:
           access.mode === "gm"
@@ -11728,10 +11828,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const dmb =
         attackResult.weaponDmb ??
         parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
-      const defenderDm = parseCombatSummaryInteger(
-        latestDefenderSnapshot?.defenseSummary?.dm,
-        "Defender DM",
-      );
+      const defenderDm =
+        getAcceptedCombatDefenseDm({
+          attackResultId: getCombatRoundAttackResultId({
+            result: attackResult,
+            roundNumber: roundState.roundNumber,
+          }),
+          state: roundState,
+        }) ??
+        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
       const defenderEncounterParticipant = encounter.participants.find((participant) =>
         participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
       );
@@ -11931,10 +12036,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const dmb =
         attackResult.weaponDmb ??
         parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
-      const defenderDm = parseCombatSummaryInteger(
-        latestDefenderSnapshot?.defenseSummary?.dm,
-        "Defender DM",
-      );
+      const defenderDm =
+        getAcceptedCombatDefenseDm({
+          attackResultId: getCombatRoundAttackResultId({
+            result: attackResult,
+            roundNumber: roundState.roundNumber,
+          }),
+          state: roundState,
+        }) ??
+        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
       if (dmb === undefined || defenderDm === undefined) {
         return reply.code(409).send({ error: "Canonical damage inputs are not available." });
       }

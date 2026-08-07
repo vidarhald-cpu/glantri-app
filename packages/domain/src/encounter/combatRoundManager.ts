@@ -2963,7 +2963,7 @@ function appendCombatRoundEventForCommand(input: {
   };
 }
 
-function getNextCombatRoundEventSequence(state: CombatRoundState): number {
+export function getCombatRoundNextEventSequence(state: CombatRoundState): number {
   return state.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1;
 }
 
@@ -5145,7 +5145,7 @@ export function rollCombatRoundCombatExperience(input: {
                   commandId,
                   createdAt: input.command.createdAt,
                   createdRevision: input.createdRevision,
-                  createdSequence: getNextCombatRoundEventSequence(normalized),
+                  createdSequence: getCombatRoundNextEventSequence(normalized),
                   encounterId: input.encounterId,
                   eventId: createdCombatEffectEventId,
                   ownerParticipantId: targetParticipantId,
@@ -9440,7 +9440,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
     resolved.status === "resolved" &&
     resolved.winnerParticipantId === resolved.controllerParticipantId;
   const continuedContactId = buildContinuedContactId({ contestId: contest.id });
-  const lifecycleSequence = getNextCombatRoundEventSequence(normalized);
+  const lifecycleSequence = getCombatRoundNextEventSequence(normalized);
   const lifecycleContext = {
     createdAt: input.command.createdAt,
     createdRevision: input.command.createdRevision,
@@ -13652,7 +13652,7 @@ export function prepareCombatRoundEndReview(input: {
       return [
         participant.participantId,
         buildCombatRoundEndParticipantReview({
-          canonicalCutoff: getNextCombatRoundEventSequence(normalized),
+          canonicalCutoff: getCombatRoundNextEventSequence(normalized),
           combatEffects: participantInput?.combatEffects,
           healthStat: participantInput?.healthStat,
           participantId: participant.participantId,
@@ -13894,7 +13894,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
   const maintained =
     resolved.status === "resolved" &&
     resolved.winnerParticipantId === resolved.controllerParticipantId;
-  const terminalSequence = getNextCombatRoundEventSequence(normalized);
+  const terminalSequence = getCombatRoundNextEventSequence(normalized);
   const resolveProcessLifecycle = <
     T extends { canonicalLifecycle?: unknown; canonicalTransitions?: unknown[] },
   >(
@@ -14447,7 +14447,7 @@ export function commitCombatRoundEndParticipantReview(input: {
   });
   const effectApplication = applyCombatRoundEndReviewEffects({
     acceptedRevision: input.createdRevision,
-    acceptedSequence: getNextCombatRoundEventSequence(normalized),
+    acceptedSequence: getCombatRoundNextEventSequence(normalized),
     combatEffects: input.combatEffects,
     command: provisionalCommand,
     encounterId: input.encounterId,
@@ -14764,7 +14764,7 @@ export function rollCombatRoundEndHealthCheck(input: {
   const updatedBleedEffect = legacyUpdatedBleedEffect
     ? transitionPersistentCombatEffect({
         acceptedRevision: input.createdRevision,
-        acceptedSequence: getNextCombatRoundEventSequence(normalized),
+        acceptedSequence: getCombatRoundNextEventSequence(normalized),
         commandId,
         effect: legacyUpdatedBleedEffect,
         nextPayload:
@@ -16075,7 +16075,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     command,
     combatEffects: input.combatEffects,
     createdRevision: input.createdRevision,
-    createdSequence: getNextCombatRoundEventSequence(normalized),
+    createdSequence: getCombatRoundNextEventSequence(normalized),
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
     defenderScenarioParticipantId: input.defenderScenarioParticipantId,
@@ -19855,6 +19855,9 @@ function recordCombatRoundAttackCommand(input: {
       attackerParticipantId: input.result.attackerParticipantId,
       defenderParticipantId: input.result.defenderParticipantId,
       facts: {
+        gmReview: input.command.facts?.defenderCalculation
+          ? { defenderCalculation: input.command.facts.defenderCalculation }
+          : undefined,
         involvedOutcome: {
           actionId: input.result.actionId,
           attackPhaseDefensivePenalty: input.result.attackPhaseDefensivePenalty,

@@ -181,8 +181,6 @@ export interface CombatAttackModifierValidationProjection {
   attackContextAvailability: "complete" | "unavailable_required";
   attackerModifierFingerprint: string;
   attackerParticipantId: string;
-  defenderDbParryRaw: number;
-  defenderModifierFingerprint: string;
   defenderParticipantId: string;
   /** The current initiative group is also the effect cutoff for this attack calculation. */
   effectCutoffInitiativeGroupId?: string;

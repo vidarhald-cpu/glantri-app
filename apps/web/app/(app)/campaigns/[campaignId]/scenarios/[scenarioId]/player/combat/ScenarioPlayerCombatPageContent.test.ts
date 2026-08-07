@@ -156,7 +156,16 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
     expect(source).not.toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
     expect(source).toContain("buildPlayerCombatAttackModifierRequest");
-    expect(source).toContain("defenderDbParryRaw: modifierRequest.defenderDbParryRaw");
+    const attackRequestSource = source.slice(
+      source.indexOf("async function rollPhaseAttack"),
+      source.indexOf("async function rollCurrentParry"),
+    );
+    expect(attackRequestSource).not.toContain(
+      "defenderDbParryRaw: modifierRequest.defenderDbParryRaw",
+    );
+    expect(attackRequestSource).not.toContain(
+      "defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint",
+    );
     expect(source).toContain("expectedRevision: modifierRequest.expectedRevision");
     expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
     expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");

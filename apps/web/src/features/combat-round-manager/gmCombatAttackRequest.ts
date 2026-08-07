@@ -10,8 +10,6 @@ import type { CurrentActionCommandDescriptor } from "@/features/combat-history";
 
 export interface GmCombatAttackModifierRequest {
   attackerModifierFingerprint: string;
-  defenderDbParryRaw: number;
-  defenderModifierFingerprint: string;
   effectCutoffInitiativeGroupId?: string;
   expectedRevision: string;
   initiativeGroupId?: string;
@@ -76,8 +74,6 @@ export function buildGmCombatAttackModifierRequest(input: {
 
   return {
     attackerModifierFingerprint: fingerprintCombatModifierResolution(facts.attackerResolution),
-    defenderDbParryRaw: facts.defenderResolution.total,
-    defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     effectCutoffInitiativeGroupId: descriptor.initiativeGroupId,
     expectedRevision: descriptor.expectedRevision,
     initiativeGroupId: descriptor.initiativeGroupId,
