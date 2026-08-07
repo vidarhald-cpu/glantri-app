@@ -29,6 +29,7 @@ import {
   encounterSessionSchema,
   prepareCombatRoundEndReview,
   projectActiveCombatParticipation,
+  projectCombatNpcDeclarationProposal,
   rollCombatRoundCombatExperience,
   rollCombatRoundEndDistanceControl,
   recordCombatRoundAttackResult,
@@ -1899,6 +1900,127 @@ function makeStepAutomationFixture(input: {
   return { encounter: acceptedEncounter, participants };
 }
 
+function makeDeclarationAutomationFixture(input: {
+  attackParticipantIndex?: number;
+  inactiveTargetForParticipantIndex?: number;
+  manuallyDeclaredCount?: number;
+  playerControlledIndex?: number;
+}) {
+  const encounterParticipants = makeFourCombatEncounterParticipants();
+  const roundOneEncounter = makeCombatEncounterWithResolvedCombatExperience({
+    participants: encounterParticipants,
+  });
+  let roundOne = combatRoundStateSchema.parse(roundOneEncounter.combatRoundState);
+  for (const [index, participant] of encounterParticipants.entries()) {
+    const target = encounterParticipants[(index + 1) % encounterParticipants.length]!;
+    const actionId =
+      input.inactiveTargetForParticipantIndex === index || input.attackParticipantIndex === index
+        ? "attack_parry"
+        : "parry";
+    const phaseContexts =
+      actionId === "attack_parry" ? { phase1: testCombatPhaseContext(target.id) } : undefined;
+    const attackOpportunities =
+      actionId === "attack_parry"
+        ? buildCombatRoundDeclaredAttackOpportunities({
+            actionId,
+            participantId: participant.id,
+            phaseContexts,
+            roundNumber: 1,
+            sources: {
+              phase1: {
+                attackModeId: "mode-1",
+                sourceKind: "unarmed",
+                weaponSourceId: "unarmed:virtual-weapon-template-punch",
+                weaponSourceSlot: "virtual",
+                weaponTemplateId: "virtual-weapon-template-punch",
+              },
+            },
+          })
+        : undefined;
+    roundOne = recordCombatRoundDeclaration({
+      command: {
+        commandId: `round-1-declaration-${index + 1}`,
+        createdAt: `2026-08-07T09:00:0${index}.000Z`,
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId,
+        attackOpportunities,
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        id: `round:1:participant:${participant.id}:declaration`,
+        phaseContexts,
+        roundNumber: 1,
+        submittedAt: `2026-08-07T09:00:0${index}.000Z`,
+      },
+      participantId: participant.id,
+      state: { ...roundOne, currentStep: "review_action_modifiers" },
+      submittedBy: "gm",
+    });
+  }
+  const cleanRoundTwo = initializeCombatRoundState({
+    encounter: {
+      ...roundOneEncounter,
+      combatRoundState: undefined,
+      currentRound: 2,
+    },
+  });
+  let roundTwo = combatRoundStateSchema.parse({
+    ...cleanRoundTwo,
+    roundNumber: 2,
+    rounds: [{ ...roundOne, currentStep: "round_summary", roundNumber: 1 }],
+  });
+  for (let index = 0; index < (input.manuallyDeclaredCount ?? 0); index += 1) {
+    const participant = encounterParticipants[index]!;
+    roundTwo = recordCombatRoundDeclaration({
+      command: {
+        commandId: `round-2-manual-declaration-${index + 1}`,
+        createdAt: `2026-08-07T10:00:0${index}.000Z`,
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        id: `round:2:participant:${participant.id}:declaration`,
+        roundNumber: 2,
+        submittedAt: `2026-08-07T10:00:0${index}.000Z`,
+      },
+      participantId: participant.id,
+      state: roundTwo,
+      submittedBy: "gm",
+    });
+  }
+  const encounter = encounterSessionSchema.parse({
+    ...roundOneEncounter,
+    combatRoundState: roundTwo,
+    currentRound: 2,
+    updatedAt: "2026-08-07T10:02:00.000Z",
+  });
+  const inactiveTargetIndex =
+    input.inactiveTargetForParticipantIndex === undefined
+      ? undefined
+      : (input.inactiveTargetForParticipantIndex + 1) % encounterParticipants.length;
+  const participants = encounterParticipants.map((participant, index) => {
+    const characterId = `character-${index + 1}`;
+    return makeCombatScenarioParticipant({
+      characterId,
+      controlledByUserId: input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
+      id: participant.scenarioParticipantId,
+      isActive: inactiveTargetIndex !== index,
+      role: input.playerControlledIndex === index ? "player_character" : "npc",
+      snapshot: {
+        build: makeDodgeCharacterBuild(characterId, participant.label),
+        displayName: participant.label,
+        sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+      },
+      state: {
+        ...makeCombatScenarioParticipant().state,
+        combatEffects: { effects: [], events: [] },
+      },
+    }) as unknown as ScenarioParticipant;
+  });
+  return { encounter, participants };
+}
+
 function stepAutomationRequest(input: {
   encounter: EncounterSession;
   operationFamily: "accept_remaining" | "roll_remaining";
@@ -1913,7 +2035,15 @@ function stepAutomationRequest(input: {
   });
   const task = getCurrentExecutableCombatTasks(
     buildCombatProgressionProjection(state, { participation }),
-  )[0];
+  ).find((candidate) => {
+    if (candidate.kind !== "submit_declaration") return true;
+    const participantId =
+      candidate.owner?.kind === "combatant"
+        ? candidate.owner.participantId
+        : candidate.identity.participantId;
+    return !state.participants.find((participant) => participant.participantId === participantId)
+      ?.declaration;
+  });
   if (!task) throw new Error("Expected a current step-automation task.");
   return {
     encounterId: input.encounter.id,
@@ -12895,6 +13025,204 @@ describe("scenarios route contract", () => {
       state.participants.every((participant) => participant.initiatives.phase2 === undefined),
     ).toBe(true);
     expect(state.commands.some((command) => command.type === "roll_initiative_phase2")).toBe(false);
+  });
+
+  it("accepts remaining prior-round NPC declarations in DE and stops before M1", async () => {
+    const prepared = makeDeclarationAutomationFixture({ manuallyDeclaredCount: 1 });
+    const preparedState = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    expect(
+      projectCombatNpcDeclarationProposal({
+        encounterId: prepared.encounter.id,
+        encounterRevision: prepared.encounter.updatedAt,
+        participantId: "encounter-participant-2",
+        proposalSequence: 0,
+        state: preparedState,
+      }),
+    ).toMatchObject({ validation: { status: "complete" } });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "accept_remaining",
+      participants: prepared.participants,
+      runId: "declaration-complete-run",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      payload,
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 3,
+      stepComplete: true,
+      stopReason: "end_of_step",
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    expect(state.currentStep).toBe("review_action_modifiers");
+    expect(state.participants.every((participant) => participant.declaration)).toBe(true);
+    expect(
+      state.commands.filter(
+        (command) =>
+          command.roundNumber === 2 &&
+          command.type === "declare_action" &&
+          command.facts.declarationProposal !== undefined,
+      ),
+    ).toHaveLength(3);
+    expect(
+      state.commands.filter(
+        (command) => command.roundNumber === 2 && command.type === "declare_action",
+      ),
+    ).toHaveLength(4);
+    expect(state.commands.some((command) => command.type === "review_modifiers_phase1")).toBe(
+      false,
+    );
+
+    const commandCount = state.commands.length;
+    const retry = await app.inject({
+      method: "POST",
+      payload,
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json().workflow).toMatchObject({ alreadyAccepted: true, processedCount: 3 });
+    expect(combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands).toHaveLength(
+      commandCount,
+    );
+    await app.close();
+  });
+
+  it("stops before a carry-forward whose previous target is no longer valid", async () => {
+    const prepared = makeDeclarationAutomationFixture({ inactiveTargetForParticipantIndex: 1 });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "accept_remaining",
+        participants: prepared.participants,
+        runId: "declaration-invalid-target-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 1,
+      stepComplete: false,
+      stopParticipantId: "encounter-participant-2",
+      stopReason: "target_invalid",
+    });
+    expect(response.json().declarationProposal).toMatchObject({
+      participantId: "encounter-participant-2",
+      validation: { reasons: ["target_invalid"], status: "invalid" },
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    expect(state.participants[0]?.declaration).toBeDefined();
+    expect(state.participants[1]?.declaration).toBeUndefined();
+    expect(state.participants[2]?.declaration).toBeUndefined();
+  });
+
+  it("stops the contiguous declaration run before player-owned work", async () => {
+    const prepared = makeDeclarationAutomationFixture({ playerControlledIndex: 2 });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "accept_remaining",
+        participants: prepared.participants,
+        runId: "declaration-player-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 2,
+      stepComplete: false,
+      stopParticipantId: "encounter-participant-3",
+      stopReason: "player_action_required",
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    expect(state.participants.slice(0, 2).every((participant) => participant.declaration)).toBe(
+      true,
+    );
+    expect(state.participants[2]?.declaration).toBeUndefined();
+    expect(state.participants[3]?.declaration).toBeUndefined();
+  });
+
+  it("commits an accepted attack proposal through the ordinary declaration lineage", async () => {
+    const prepared = makeDeclarationAutomationFixture({
+      attackParticipantIndex: 0,
+      playerControlledIndex: 1,
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "accept_remaining",
+        participants: prepared.participants,
+        runId: "declaration-attack-parity-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 1,
+      stopReason: "player_action_required",
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    const declaration = state.participants[0]?.declaration;
+    expect(declaration).toMatchObject({
+      actionId: "attack_parry",
+      roundNumber: 2,
+      submittedBy: "gm",
+    });
+    expect(declaration?.attackOpportunities).toEqual([
+      expect.objectContaining({
+        attackModeId: "mode-1",
+        origin: "declared",
+        phase: "phase1",
+        status: "committed",
+        targetParticipantId: "encounter-participant-2",
+        weaponTemplateId: "virtual-weapon-template-punch",
+      }),
+    ]);
+    const declarationCommand = state.commands.find(
+      (command) => command.roundNumber === 2 && command.type === "declare_action",
+    );
+    expect(declarationCommand?.facts.declarationProposal).toMatchObject({
+      kind: "proposal_acceptance",
+      sourceCommandId: "round-1-declaration-1",
+      sourceRoundNumber: 1,
+    });
   });
 
   it("keeps the GM workflow endpoint private from player surfaces", async () => {

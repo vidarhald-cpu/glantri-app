@@ -27,6 +27,7 @@ import {
   buildEncounterSessionRevisionFromMetadataView,
   buildEncounterSessionSummaryFromMetadataView,
   buildCombatRoundCommandEnvelope,
+  buildCombatRoundDeclarationId,
   DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT,
   buildCombatRoundCommandId,
   buildCombatObservationModifierContributions,
@@ -43,6 +44,7 @@ import {
   getCombatStepAutomationCommandPrefix,
   holdCombatRoundForGmBacktrack,
   projectActiveCombatParticipation,
+  projectCombatNpcDeclarationProposal,
   runCombatDeterministicTransitionSuffix,
   runCombatStepAutomation,
   buildCombatRoundDeclaredAttackOpportunities,
@@ -87,6 +89,7 @@ import {
   combatRoundStepSnapshotSchema,
   combatStepAutomationStartRequestSchema,
   combatStepAutomationCommandLinkSchema,
+  combatNpcDeclarationProposalProvenanceSchema,
   encounterParticipantMembershipModeSchema,
   encounterSessionSchema,
   encounterStatusSchema,
@@ -98,6 +101,7 @@ import {
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundNextEventSequence,
+  getCombatNpcDeclarationProposalAttackSources,
   getCanonicalCombatModifierReviewState,
   buildLiveCombatModifierContributionProjection,
   createCombatParticipantPairKey,
@@ -195,6 +199,7 @@ import {
   skipCombatRoundCurrentPhaseAction,
   validateCombatDeclarationActionAvailability,
   validateCombatDeclarationTargets,
+  validateCombatNpcDeclarationProposal,
   upsertCombatRoundStepSnapshots,
   type CanonicalCombatModifierEffect,
   type CanonicalCombatModifierReviewDecision,
@@ -204,6 +209,8 @@ import {
   type CombatStepAutomationProjection,
   type CombatStepAutomationRunIdentity,
   type CombatStepAutomationStopReason,
+  type CombatNpcDeclarationProposal,
+  type CombatNpcDeclarationSourceStatus,
 } from "@glantri/domain";
 import {
   ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
@@ -228,6 +235,7 @@ import type {
   CombatRoundAttackDistanceModifierDetail,
   CombatRoundPhaseResolutionResult,
   CombatRoundDamageReview,
+  CombatRoundDeclaration,
   CombatRoundStepSnapshot,
   CombatRoundState,
   CombatProgressionBoundaryKind,
@@ -3444,6 +3452,540 @@ type ApiCombatStepAutomationProjection = CombatStepAutomationProjection<CombatRo
   participation: ReturnType<typeof projectActiveCombatParticipation>;
 };
 
+type ResolvedDeclaredWeaponSource = Extract<
+  ReturnType<typeof resolveDeclaredWeaponSource>,
+  { ok: true }
+>["source"];
+
+interface ApiCombatNpcDeclarationProposalResolution {
+  phaseSources: Readonly<Partial<Record<CombatRoundPhase, CombatAttackSourceRef>>>;
+  proposal: CombatNpcDeclarationProposal;
+  resolvedFeintWeapon?: ResolvedDeclaredWeaponSource;
+  resolvedWeapons: Readonly<Partial<Record<CombatRoundPhase, ResolvedDeclaredWeaponSource>>>;
+}
+
+function resolveProposalAttackSource(input: {
+  participant: ScenarioParticipant;
+  phase: CombatRoundPhase;
+  source: CombatAttackSourceRef;
+}): {
+  resolvedWeapon?: ResolvedDeclaredWeaponSource;
+  status: CombatNpcDeclarationSourceStatus;
+} {
+  if (input.source.sourceKind === "weapon") {
+    const resolution = resolveDeclaredWeaponSource({
+      participant: input.participant,
+      phaseLabel: input.phase === "phase1" ? "Phase 1" : "Phase 2",
+      source: input.source,
+    });
+    if (resolution.ok) return { resolvedWeapon: resolution.source, status: "valid" };
+    return {
+      status: resolution.error.includes("attack mode") ? "attack_mode_invalid" : "weapon_invalid",
+    };
+  }
+  const template =
+    input.source.templateId === punchTemplate.id
+      ? punchTemplate
+      : input.source.templateId === kickTemplate.id
+        ? kickTemplate
+        : undefined;
+  if (!template) return { status: "weapon_invalid" };
+  return {
+    status: template.attackModes?.some((mode) => mode.id === input.source.attackModeId)
+      ? "valid"
+      : "attack_mode_invalid",
+  };
+}
+
+function getCanonicalProposalTargetId(input: {
+  encounter: EncounterSession;
+  id?: string;
+  state: CombatRoundState;
+}): string | undefined {
+  if (!input.id) return undefined;
+  return findCombatRoundParticipantByAlias({ id: input.id, state: input.state })?.participantId;
+}
+
+function buildProposalContext(input: {
+  current: ScenarioParticipantCombatContext;
+  encounter: EncounterSession;
+  source?: ScenarioParticipantCombatContext;
+  state: CombatRoundState;
+}): ScenarioParticipantCombatContext {
+  const source: Partial<ScenarioParticipantCombatContext> = input.source ?? {};
+  return scenarioParticipantCombatContextSchema.parse({
+    attackModeId: source.attackModeId,
+    incomingAttackSide: source.incomingAttackSide,
+    mainHandParryDirection: source.mainHandParryDirection,
+    modifierBuckets: input.current.modifierBuckets,
+    offHandParryDirection: source.offHandParryDirection,
+    parrySource: source.parrySource,
+    selectedOpponentId: getCanonicalProposalTargetId({
+      encounter: input.encounter,
+      id: source.selectedOpponentId,
+      state: input.state,
+    }),
+    targetLocation: source.targetLocation,
+    targetParticipantId: getCanonicalProposalTargetId({
+      encounter: input.encounter,
+      id: source.targetParticipantId,
+      state: input.state,
+    }),
+  });
+}
+
+function resolveApiCombatNpcDeclarationProposal(input: {
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+  scenarioParticipants: readonly ScenarioParticipant[];
+  state: CombatRoundState;
+  task: CombatProgressionTask;
+}): ApiCombatNpcDeclarationProposalResolution | undefined {
+  const participantId =
+    input.task.owner?.kind === "combatant"
+      ? input.task.owner.participantId
+      : input.task.identity.participantId;
+  if (!participantId) return undefined;
+  const proposal = projectCombatNpcDeclarationProposal({
+    encounterId: input.encounter.id,
+    encounterRevision: input.encounter.updatedAt,
+    participantId,
+    proposalSequence: getCombatRoundNextEventSequence(input.state),
+    state: input.state,
+  });
+  if (!proposal) return undefined;
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: [...input.scenarioParticipants],
+  });
+  const validTargetParticipantIds = new Set<string>();
+  for (const encounterParticipant of membership.participants) {
+    if (encounterParticipant.id === participantId) continue;
+    const target = input.scenarioParticipants.find(
+      (candidate) =>
+        candidate.id === encounterParticipant.scenarioParticipantId ||
+        candidate.id === encounterParticipant.id,
+    );
+    if (!target?.isActive || target.state.health.dead) continue;
+    validTargetParticipantIds.add(encounterParticipant.id);
+    if (encounterParticipant.scenarioParticipantId) {
+      validTargetParticipantIds.add(encounterParticipant.scenarioParticipantId);
+    }
+    if (encounterParticipant.characterId) {
+      validTargetParticipantIds.add(encounterParticipant.characterId);
+    }
+  }
+
+  const phaseSources = getCombatNpcDeclarationProposalAttackSources(proposal);
+  const phaseSourceStatus: Partial<Record<CombatRoundPhase, CombatNpcDeclarationSourceStatus>> = {};
+  const resolvedWeapons: Partial<Record<CombatRoundPhase, ResolvedDeclaredWeaponSource>> = {};
+  for (const phase of ["phase1", "phase2"] as const) {
+    const source = phaseSources[phase];
+    if (!source) continue;
+    const resolution = resolveProposalAttackSource({
+      participant: input.participant,
+      phase,
+      source,
+    });
+    phaseSourceStatus[phase] = resolution.status;
+    if (resolution.resolvedWeapon) resolvedWeapons[phase] = resolution.resolvedWeapon;
+  }
+
+  const feintWeaponSource = proposal.sourceDeclaration.feint?.weaponSource;
+  const feintWeaponResolution = feintWeaponSource
+    ? resolveProposalAttackSource({
+        participant: input.participant,
+        phase: "phase1",
+        source: feintWeaponSource,
+      })
+    : undefined;
+  const feintTargetId = getCanonicalProposalTargetId({
+    encounter: input.encounter,
+    id: proposal.sourceDeclaration.feint?.targetParticipantId,
+    state: input.state,
+  });
+  const feintTarget = feintTargetId
+    ? input.scenarioParticipants.find((candidate) => {
+        const encounterParticipant = membership.participants.find(
+          (participant) => participant.id === feintTargetId,
+        );
+        return (
+          candidate.id === encounterParticipant?.scenarioParticipantId ||
+          candidate.id === encounterParticipant?.id
+        );
+      })
+    : undefined;
+  const defenderFeintProfile = feintTarget
+    ? resolveHighestCombatFeintResistanceProfile({
+        ...getScenarioParticipantFeintSkillInput(feintTarget),
+        skills: defaultCanonicalContent.skills,
+      })
+    : undefined;
+  const feintAttackerSkill =
+    proposal.sourceDeclaration.actionId !== "feint_attack"
+      ? undefined
+      : proposal.sourceDeclaration.feint?.method === "movement"
+        ? defaultCanonicalContent.skills.find((skill) => skill.id === "dodge")
+        : feintWeaponResolution?.resolvedWeapon
+          ? resolveCombatFeintWeaponSkillDefinition({
+              skills: defaultCanonicalContent.skills,
+              specializations: defaultCanonicalContent.specializations,
+              weaponSkill: feintWeaponResolution.resolvedWeapon.weaponSkill,
+            })
+          : undefined;
+  const adjustTarget = getCanonicalProposalTargetId({
+    encounter: input.encounter,
+    id: proposal.sourceDeclaration.adjustDistance?.targetParticipantId,
+    state: input.state,
+  });
+  const adjustDistanceEdge = adjustTarget
+    ? getDistanceEdgeBetweenParticipantAliases({
+        participantA: membership.participants.find((candidate) => candidate.id === participantId),
+        participantB: membership.participants.find((candidate) => candidate.id === adjustTarget),
+        state: input.state.distanceState,
+      })
+    : undefined;
+  const adjustDistanceValid =
+    proposal.sourceDeclaration.actionId !== "adjust_range_attack" ||
+    Boolean(
+      adjustTarget &&
+      adjustDistanceEdge &&
+      proposal.sourceDeclaration.adjustDistance &&
+      proposal.sourceDeclaration.adjustDistance.requestedDistance !== adjustDistanceEdge.distance,
+    );
+  let doubleAttackValid = true;
+  if (proposal.sourceDeclaration.actionId === "double_attack") {
+    const phase1 = phaseSources.phase1;
+    const phase2 = phaseSources.phase2;
+    const phase1Identity =
+      phase1?.sourceKind === "weapon"
+        ? phase1.scenarioItemId
+        : phase1
+          ? `${phase1.sourceKind}:${phase1.templateId}`
+          : undefined;
+    const phase2Identity =
+      phase2?.sourceKind === "weapon"
+        ? phase2.scenarioItemId
+        : phase2
+          ? `${phase2.sourceKind}:${phase2.templateId}`
+          : undefined;
+    doubleAttackValid = Boolean(
+      phase1Identity &&
+      phase2Identity &&
+      (phase1Identity !== phase2Identity || resolvedWeapons.phase2?.repeatEligible),
+    );
+  }
+  const actionAvailability = validateCombatDeclarationActionAvailability({
+    actionId: proposal.sourceDeclaration.actionId,
+    kind: "primary",
+  });
+  const secondaryAvailability = validateCombatDeclarationActionAvailability({
+    actionId: proposal.sourceDeclaration.secondaryActionId,
+    kind: "secondary",
+  });
+  const encounterParticipant = membership.participants.find(
+    (candidate) => candidate.id === participantId,
+  );
+  let movementValid =
+    proposal.sourceDeclaration.movementIntent?.distancePreferences.every((preference) =>
+      validTargetParticipantIds.has(preference.targetParticipantId),
+    ) ?? true;
+  if (movementValid && proposal.sourceDeclaration.movementIntent && encounterParticipant) {
+    try {
+      normalizeCombatDeclarationMovementIntent({
+        encounter: input.encounter,
+        encounterParticipant,
+        gmAuthorizedOperation: true,
+        movementIntent: proposal.sourceDeclaration.movementIntent,
+        roundState: input.state,
+      });
+    } catch {
+      movementValid = false;
+    }
+  }
+  const participantRuleValid =
+    proposal.sourceDeclaration.actionId !== "parry" ||
+    getScenarioParticipantDodgeSkillValue(input.participant) !== undefined;
+  const validation = validateCombatNpcDeclarationProposal({
+    facts: {
+      adjustDistanceValid,
+      currentDeclarationExists: Boolean(
+        input.state.participants.find((candidate) => candidate.participantId === participantId)
+          ?.declaration,
+      ),
+      declarationStillLegal:
+        actionAvailability.valid &&
+        secondaryAvailability.valid &&
+        doubleAttackValid &&
+        participantRuleValid,
+      feintValid:
+        proposal.sourceDeclaration.actionId !== "feint_attack" ||
+        Boolean(feintTarget && defenderFeintProfile && feintAttackerSkill),
+      feintWeaponStatus: feintWeaponResolution?.status,
+      movementValid,
+      participantActive: input.participant.isActive,
+      participantCapable:
+        !input.participant.state.health.dead && !input.participant.state.health.unconscious,
+      participantGmControlled: !input.participant.controlledByUserId,
+      phaseSourceStatus,
+      validTargetParticipantIds,
+    },
+    proposal,
+  });
+  return {
+    phaseSources,
+    proposal: validation,
+    resolvedFeintWeapon: feintWeaponResolution?.resolvedWeapon,
+    resolvedWeapons,
+  };
+}
+
+function prepareAcceptedNpcDeclarationProposal(input: {
+  encounter: EncounterSession;
+  encounterParticipant: EncounterSession["participants"][number];
+  participant: ScenarioParticipant;
+  resolution: ApiCombatNpcDeclarationProposalResolution;
+  scenarioParticipants: readonly ScenarioParticipant[];
+  state: CombatRoundState;
+  submittedAt: string;
+  userId: string;
+}):
+  | {
+      declaration: Omit<CombatRoundDeclaration, "submittedBy">;
+      participantState: ScenarioParticipantState;
+    }
+  | undefined {
+  const { proposal } = input.resolution;
+  if (proposal.validation.status !== "complete") return undefined;
+  const source = proposal.sourceDeclaration;
+  const currentContext = scenarioParticipantCombatContextSchema.parse(
+    input.participant.state.combat.combatContext ?? {},
+  );
+  const phaseContexts = {
+    phase1: source.phaseContexts?.phase1
+      ? buildProposalContext({
+          current: currentContext,
+          encounter: input.encounter,
+          source: source.phaseContexts.phase1,
+          state: input.state,
+        })
+      : undefined,
+    phase2: source.phaseContexts?.phase2
+      ? buildProposalContext({
+          current: currentContext,
+          encounter: input.encounter,
+          source: source.phaseContexts.phase2,
+          state: input.state,
+        })
+      : undefined,
+  };
+  for (const phase of ["phase1", "phase2"] as const) {
+    const sourceRef = input.resolution.phaseSources[phase];
+    if (sourceRef && phaseContexts[phase]) {
+      phaseContexts[phase] = scenarioParticipantCombatContextSchema.parse({
+        ...phaseContexts[phase],
+        attackModeId:
+          input.resolution.resolvedWeapons[phase]?.attackModeId ?? sourceRef.attackModeId,
+      });
+    }
+  }
+  const combatContext = buildProposalContext({
+    current: currentContext,
+    encounter: input.encounter,
+    source: source.combatContext,
+    state: input.state,
+  });
+  const movementIntent = normalizeCombatDeclarationMovementIntent({
+    encounter: input.encounter,
+    encounterParticipant: input.encounterParticipant,
+    gmAuthorizedOperation: true,
+    movementIntent: source.movementIntent,
+    roundState: input.state,
+  });
+  const secondaryActionContext =
+    source.secondaryActionId === "observe_opponent" && source.secondaryActionContext
+      ? scenarioParticipantSecondaryActionContextSchema.parse({
+          action: "observe_opponent",
+          targetParticipantId: getCanonicalProposalTargetId({
+            encounter: input.encounter,
+            id: source.secondaryActionContext.targetParticipantId,
+            state: input.state,
+          }),
+        })
+      : source.secondaryActionContext;
+  const opportunitySources: Parameters<
+    typeof buildCombatRoundDeclaredAttackOpportunities
+  >[0]["sources"] = {};
+  for (const phase of ["phase1", "phase2"] as const) {
+    const sourceRef = input.resolution.phaseSources[phase];
+    if (sourceRef) {
+      opportunitySources[phase] = buildDeclaredAttackOpportunitySource({
+        source: sourceRef,
+        weapon: input.resolution.resolvedWeapons[phase],
+      });
+    }
+  }
+  const attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+    actionId: source.actionId,
+    participantId: input.encounterParticipant.id,
+    phaseContexts,
+    roundNumber: input.state.roundNumber,
+    secondaryActionId: source.secondaryActionId,
+    sources: opportunitySources,
+  });
+  const attackPhaseDefensivePenalties = resolveCombatAttackPhaseDefensivePenalties({
+    commitment: "committed",
+    opportunities: attackOpportunities,
+    participantId: input.encounterParticipant.id,
+    roundNumber: input.state.roundNumber,
+  });
+  let feint: CombatRoundDeclaration["feint"];
+  if (source.actionId === "feint_attack" && source.feint) {
+    const targetParticipantId = getCanonicalProposalTargetId({
+      encounter: input.encounter,
+      id: source.feint.targetParticipantId,
+      state: input.state,
+    });
+    const targetEncounterParticipant = input.encounter.participants.find(
+      (participant) => participant.id === targetParticipantId,
+    );
+    const target = input.scenarioParticipants.find(
+      (participant) =>
+        participant.id === targetEncounterParticipant?.scenarioParticipantId ||
+        participant.id === targetEncounterParticipant?.id,
+    );
+    const defenderProfile = target
+      ? resolveHighestCombatFeintResistanceProfile({
+          ...getScenarioParticipantFeintSkillInput(target),
+          skills: defaultCanonicalContent.skills,
+        })
+      : undefined;
+    const attackerSkill =
+      source.feint.method === "movement"
+        ? defaultCanonicalContent.skills.find((skill) => skill.id === "dodge")
+        : input.resolution.resolvedFeintWeapon
+          ? resolveCombatFeintWeaponSkillDefinition({
+              skills: defaultCanonicalContent.skills,
+              specializations: defaultCanonicalContent.specializations,
+              weaponSkill: input.resolution.resolvedFeintWeapon.weaponSkill,
+            })
+          : undefined;
+    if (!targetParticipantId || !defenderProfile || !attackerSkill) return undefined;
+    feint = {
+      attackerSkillId: attackerSkill.id,
+      attackerSkillLabel: attackerSkill.name,
+      defenderSkillId: defenderProfile.skillId,
+      defenderSkillLabel: defenderProfile.skillName,
+      method: source.feint.method,
+      targetParticipantId,
+      weaponSource: source.feint.method === "weapon" ? source.feint.weaponSource : undefined,
+    };
+  }
+  let adjustDistance: CombatRoundDeclaration["adjustDistance"];
+  if (source.actionId === "adjust_range_attack" && source.adjustDistance) {
+    const targetParticipantId = getCanonicalProposalTargetId({
+      encounter: input.encounter,
+      id: source.adjustDistance.targetParticipantId,
+      state: input.state,
+    });
+    const targetParticipant = input.encounter.participants.find(
+      (participant) => participant.id === targetParticipantId,
+    );
+    const edge = getDistanceEdgeBetweenParticipantAliases({
+      participantA: input.encounterParticipant,
+      participantB: targetParticipant,
+      state: input.state.distanceState,
+    });
+    if (
+      !targetParticipantId ||
+      !edge ||
+      edge.distance === source.adjustDistance.requestedDistance
+    ) {
+      return undefined;
+    }
+    adjustDistance = {
+      currentDistance: edge.distance,
+      requestedDistance: source.adjustDistance.requestedDistance,
+      targetParticipantId,
+    };
+  }
+  const lifecycleSequence = getCombatRoundNextEventSequence(input.state);
+  const submittedCombatContext = applyGeneratedCombatActionModifiersForDeclaration({
+    actionId: source.actionId,
+    adjustDistance: adjustDistance
+      ? { ...adjustDistance, roundNumber: input.state.roundNumber }
+      : undefined,
+    attackPhaseDefensivePenalties,
+    combatContext,
+    encounterId: input.encounter.id,
+    encounterParticipant: input.encounterParticipant,
+    lifecycleContext: {
+      createdAt: input.submittedAt,
+      createdRevision: input.encounter.updatedAt,
+      createdSequence: lifecycleSequence,
+      encounterId: input.encounter.id,
+      ownerParticipantId: input.participant.id,
+      visibility: { audience: "involved", sourceIdentity: "public" },
+    },
+    movementIntent,
+    phaseAttackSources: input.resolution.phaseSources,
+    phaseContexts,
+    roundState: input.state,
+    scenarioParticipant: input.participant,
+    secondaryActionId: source.secondaryActionId,
+  });
+  const targetValidation = validateCombatDeclarationTargets({
+    actingParticipantId: input.encounterParticipant.id,
+    actionId: source.actionId,
+    movementKind: movementIntent?.mode,
+    phaseContexts,
+    secondaryActionContext,
+    secondaryActionId: source.secondaryActionId,
+    selectedOpponentId: submittedCombatContext.selectedOpponentId,
+  });
+  if (!targetValidation.valid) return undefined;
+  return {
+    declaration: {
+      actionId: source.actionId,
+      additionalActionNotes: source.additionalActionNotes,
+      adjustDistance,
+      attackOpportunities,
+      attackPhaseDefensivePenalties,
+      combatContext: submittedCombatContext,
+      feint,
+      id: buildCombatRoundDeclarationId({
+        participantId: input.encounterParticipant.id,
+        roundNumber: input.state.roundNumber,
+      }),
+      movementId: source.movementId,
+      movementIntent,
+      phaseContexts,
+      roundNumber: input.state.roundNumber,
+      secondaryActions: secondaryActionContext ? [secondaryActionContext] : undefined,
+      secondaryActionContext,
+      secondaryActionId: source.secondaryActionId,
+      submittedAt: input.submittedAt,
+      submittedByUserId: input.userId,
+    },
+    participantState: {
+      ...input.participant.state,
+      combat: {
+        ...input.participant.state.combat,
+        combatContext: submittedCombatContext,
+        declarationSubmittedAt: input.submittedAt,
+        declarationSubmittedByUserId: input.userId,
+        lastDeclaredActionId: source.actionId,
+        lastDeclaredEncounterId: input.encounter.id,
+        lastDeclaredMovementId: source.movementId,
+        lastDeclaredRoundNumber: input.state.roundNumber,
+        lastDeclaredSecondaryActionId: source.secondaryActionId,
+        lastDeclarationNotes: source.additionalActionNotes,
+        lastMovementIntent: movementIntent,
+      },
+    },
+  };
+}
+
 function projectApiCombatStepAutomation(input: {
   encounter: EncounterSession;
   scenarioParticipants: readonly ScenarioParticipant[];
@@ -3458,13 +4000,20 @@ function projectApiCombatStepAutomation(input: {
     state,
   });
   const progression = buildCombatProgressionProjection(state, { participation });
+  const tasks = getCurrentExecutableCombatTasks(progression).filter((task) => {
+    if (task.kind !== "submit_declaration") return true;
+    const participantId =
+      task.owner?.kind === "combatant" ? task.owner.participantId : task.identity.participantId;
+    return !state.participants.find((participant) => participant.participantId === participantId)
+      ?.declaration;
+  });
   return {
     participation,
     revision: input.encounter.updatedAt,
     roundNumber: state.roundNumber,
     state,
     step: state.currentStep,
-    tasks: getCurrentExecutableCombatTasks(progression),
+    tasks,
   };
 }
 
@@ -3564,6 +4113,31 @@ function classifyApiCombatStepAutomationTask(input: {
   if (owner.participant.controlledByUserId) {
     return { kind: "stop", reason: "player_action_required" };
   }
+  if (operationFamily === "accept_remaining" && task.kind === "submit_declaration") {
+    const resolution = resolveApiCombatNpcDeclarationProposal({
+      encounter: input.encounter,
+      participant: owner.participant,
+      scenarioParticipants: input.scenarioParticipants,
+      state: input.projection.state,
+      task,
+    });
+    if (!resolution) return { kind: "stop", reason: "declaration_review_required" };
+    if (resolution.proposal.validation.status === "complete") {
+      return { countsTowardProcessed: true, kind: "execute" };
+    }
+    if (resolution.proposal.validation.status === "legacy_incomplete") {
+      return { kind: "stop", reason: "incomplete_legacy_state" };
+    }
+    if (resolution.proposal.validation.status === "requires_review") {
+      return { kind: "stop", reason: "declaration_review_required" };
+    }
+    return {
+      kind: "stop",
+      reason: resolution.proposal.validation.reasons.includes("target_invalid")
+        ? "target_invalid"
+        : "invalid_proposal",
+    };
+  }
   if (task.participation?.completeness !== "complete") {
     return { kind: "stop", reason: "incomplete_legacy_state" };
   }
@@ -3589,9 +4163,6 @@ function classifyApiCombatStepAutomationTask(input: {
   }
 
   if (operationFamily === "accept_remaining") {
-    if (task.kind === "submit_declaration") {
-      return { kind: "stop", reason: "declaration_review_required" };
-    }
     if (task.kind !== "modifier_review") {
       return { kind: "stop", reason: "unsupported_task" };
     }
@@ -3696,6 +4267,29 @@ function attachCombatStepAutomationCommandLink(input: {
     commands: input.state.commands.map((command) =>
       command.id === input.commandId
         ? { ...command, facts: { ...command.facts, stepAutomation: link } }
+        : command,
+    ),
+  };
+}
+
+function attachCombatNpcDeclarationProposalProvenance(input: {
+  commandId: string;
+  proposal: CombatNpcDeclarationProposal;
+  state: CombatRoundState;
+}): CombatRoundState {
+  if (!input.proposal.sourceCommandId || !input.proposal.sourceDeclarationId) return input.state;
+  const provenance = combatNpcDeclarationProposalProvenanceSchema.parse({
+    kind: "proposal_acceptance",
+    proposalSchemaVersion: input.proposal.schemaVersion,
+    sourceCommandId: input.proposal.sourceCommandId,
+    sourceDeclarationId: input.proposal.sourceDeclarationId,
+    sourceRoundNumber: input.proposal.sourceRoundNumber,
+  });
+  return {
+    ...input.state,
+    commands: input.state.commands.map((command) =>
+      command.id === input.commandId
+        ? { ...command, facts: { ...command.facts, declarationProposal: provenance } }
         : command,
     ),
   };
@@ -10286,6 +10880,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (acceptedLinks.length > 0) {
         const currentTask = initial.tasks[0];
+        const currentOwner = currentTask
+          ? getStepAutomationScenarioParticipant({
+              scenarioParticipants: workingParticipants,
+              state: initial.state,
+              task: currentTask,
+            })
+          : undefined;
+        const declarationProposal =
+          currentTask?.kind === "submit_declaration" &&
+          currentOwner &&
+          !currentOwner.participant.controlledByUserId
+            ? resolveApiCombatNpcDeclarationProposal({
+                encounter: workingEncounter,
+                participant: currentOwner.participant,
+                scenarioParticipants: workingParticipants,
+                state: initial.state,
+                task: currentTask,
+              })?.proposal
+            : undefined;
         const currentDecision = currentTask
           ? classifyApiCombatStepAutomationTask({
               encounter: workingEncounter,
@@ -10313,6 +10926,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : "task_changed";
         return {
           commandEnvelope: buildCombatRoundCommandEnvelope({ state: initial.state }),
+          declarationProposal,
           encounter: workingEncounter,
           participants: workingParticipants,
           workflow: {
@@ -10391,13 +11005,104 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         execute: async ({ commandId, projection, task }) => {
           const apiProjection = projection as ApiCombatStepAutomationProjection;
           const countsTowardProcessed =
-            task.kind === "roll_initiative" || task.kind === "modifier_review";
+            task.kind === "roll_initiative" ||
+            task.kind === "modifier_review" ||
+            task.kind === "submit_declaration";
           const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
           const submittedAt = new Date(
             Math.max(Date.now(), Number.isFinite(priorRevisionTime) ? priorRevisionTime + 1 : 0),
           ).toISOString();
 
           try {
+            if (task.kind === "submit_declaration") {
+              const owner = getStepAutomationScenarioParticipant({
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              const encounterParticipant = owner
+                ? workingEncounter!.participants.find(
+                    (participant) => participant.id === owner.encounterParticipantId,
+                  )
+                : undefined;
+              const resolution = owner
+                ? resolveApiCombatNpcDeclarationProposal({
+                    encounter: workingEncounter!,
+                    participant: owner.participant,
+                    scenarioParticipants: workingParticipants,
+                    state: apiProjection.state,
+                    task,
+                  })
+                : undefined;
+              const prepared =
+                owner && encounterParticipant && resolution
+                  ? prepareAcceptedNpcDeclarationProposal({
+                      encounter: workingEncounter!,
+                      encounterParticipant,
+                      participant: owner.participant,
+                      resolution,
+                      scenarioParticipants: workingParticipants,
+                      state: apiProjection.state,
+                      submittedAt,
+                      userId: user.id,
+                    })
+                  : undefined;
+              if (!owner || !resolution || !prepared) {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: resolution?.proposal.validation.reasons.includes("target_invalid")
+                    ? ("target_invalid" as const)
+                    : resolution?.proposal.validation.status === "legacy_incomplete"
+                      ? ("incomplete_legacy_state" as const)
+                      : resolution?.proposal.validation.status === "requires_review"
+                        ? ("declaration_review_required" as const)
+                        : ("invalid_proposal" as const),
+                };
+              }
+              const declared = recordCombatRoundDeclaration({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                declaration: prepared.declaration,
+                participantId: owner.encounterParticipantId,
+                state: apiProjection.state,
+                submittedBy: "gm",
+              });
+              const linked = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: declared,
+                taskId: task.id,
+              });
+              const nextState = attachCombatNpcDeclarationProposalProvenance({
+                commandId,
+                proposal: resolution.proposal,
+                state: linked,
+              });
+              const savedParticipant = await encounterService.updateScenarioParticipantState({
+                participantId: owner.participant.id,
+                scenarioId,
+                state: prepared.participantState,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              workingParticipants = workingParticipants.map((participant) =>
+                participant.id === savedParticipant.id ? savedParticipant : participant,
+              );
+              return { kind: "accepted" as const, projection: project() };
+            }
+
             if (task.kind === "roll_initiative" && task.identity.phase) {
               const owner = getStepAutomationScenarioParticipant({
                 scenarioParticipants: workingParticipants,
@@ -10667,8 +11372,29 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
 
       const { final: finalProjection, ...workflowResult } = workflow;
+      const finalTask = finalProjection.tasks[0];
+      const finalOwner = finalTask
+        ? getStepAutomationScenarioParticipant({
+            scenarioParticipants: workingParticipants,
+            state: finalProjection.state,
+            task: finalTask,
+          })
+        : undefined;
+      const declarationProposal =
+        finalTask?.kind === "submit_declaration" &&
+        finalOwner &&
+        !finalOwner.participant.controlledByUserId
+          ? resolveApiCombatNpcDeclarationProposal({
+              encounter: workingEncounter,
+              participant: finalOwner.participant,
+              scenarioParticipants: workingParticipants,
+              state: finalProjection.state,
+              task: finalTask,
+            })?.proposal
+          : undefined;
       return {
         commandEnvelope: buildCombatRoundCommandEnvelope({ state: finalProjection.state }),
+        declarationProposal,
         encounter: workingEncounter,
         participants: workingParticipants,
         workflow: workflowResult,

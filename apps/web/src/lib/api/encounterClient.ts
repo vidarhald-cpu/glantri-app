@@ -24,6 +24,7 @@ import {
   CombatRoundStepSnapshot,
   CombatStepAutomationOperationFamily,
   CombatStepAutomationRunResult,
+  CombatNpcDeclarationProposal,
   EncounterParticipant,
   EncounterParticipantMembershipMode,
   EncounterSession,
@@ -1094,6 +1095,7 @@ export async function runGmCombatStepWorkflowOnServer(input: {
   runId: string;
 }): Promise<{
   commandEnvelope: CombatRoundCommandEnvelope;
+  declarationProposal?: CombatNpcDeclarationProposal;
   encounter: EncounterSession;
   participants: ScenarioParticipant[];
   workflow: CombatStepAutomationRunResult;

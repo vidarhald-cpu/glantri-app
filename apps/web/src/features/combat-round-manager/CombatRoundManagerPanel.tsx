@@ -14,6 +14,7 @@ import {
 
 import type {
   CombatRoundDeclaration,
+  CombatNpcDeclarationProposal,
   CombatProgressionBoundaryKind,
   CombatRoundAttackDirection,
   CombatRoundAttackRollResult,
@@ -87,6 +88,7 @@ import {
   getCombatRoundInitiativeRanks,
   getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundModifierPhaseForStep,
+  getCombatRoundNextEventSequence,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getHitLocationFullLabel,
@@ -99,6 +101,7 @@ import {
   hasCombatRoundCombatExperienceRoll,
   getWeaponPreferredDistances,
   reviewCombatRoundDamageResult,
+  projectCombatNpcDeclarationProposal,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -130,6 +133,7 @@ import {
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
+import { buildCombatNpcDeclarationProposalPresentation } from "./view-models/combatNpcDeclarationProposalPresentation";
 import { buildGmCombatParryModifierRequest } from "./gmCombatParryRequest";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
@@ -3928,6 +3932,8 @@ export default function CombatRoundManagerPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [stepWorkflowStatus, setStepWorkflowStatus] = useState<CombatStepAutomationRunResult>();
+  const [stepWorkflowDeclarationProposal, setStepWorkflowDeclarationProposal] =
+    useState<CombatNpcDeclarationProposal>();
   useEffect(() => {
     if (!saving) {
       settleCombatPerformanceInteraction();
@@ -4557,6 +4563,31 @@ export default function CombatRoundManagerPanel({
     ? buildCombatStepWorkflowStatusPresentation({
         participantLabelsById: new Map(Object.entries(roundParticipantLabelsById)),
         result: stepWorkflowStatus,
+      })
+    : undefined;
+  const currentDeclarationParticipantId = inspector.participant?.participantId;
+  const currentDeclarationProposalRevision = roundView.encounterRevision ?? encounter.updatedAt;
+  const currentDeclarationProposal =
+    currentActionPresentation?.taskKind === "submit_declaration" &&
+    currentDeclarationParticipantId &&
+    !selectedScenarioParticipant?.controlledByUserId &&
+    selectedRoundIsActive
+      ? stepWorkflowDeclarationProposal?.participantId === currentDeclarationParticipantId &&
+        stepWorkflowDeclarationProposal.roundNumber === roundState.roundNumber &&
+        stepWorkflowDeclarationProposal.proposalRevision === currentDeclarationProposalRevision
+        ? stepWorkflowDeclarationProposal
+        : projectCombatNpcDeclarationProposal({
+            encounterId: encounter.id,
+            encounterRevision: currentDeclarationProposalRevision,
+            participantId: currentDeclarationParticipantId,
+            proposalSequence: getCombatRoundNextEventSequence(roundState),
+            state: roundState,
+          })
+      : undefined;
+  const currentDeclarationProposalPresentation = currentDeclarationProposal
+    ? buildCombatNpcDeclarationProposalPresentation({
+        participantLabelsById: new Map(Object.entries(roundParticipantLabelsById)),
+        proposal: currentDeclarationProposal,
       })
     : undefined;
   const activeRoundEndDistanceProposals =
@@ -6442,7 +6473,9 @@ export default function CombatRoundManagerPanel({
   const inspectorBulkStepCompletionAvailable =
     inspectorCanExecuteSelectedStep &&
     (currentActionPresentation?.taskKind === "modifier_review" ||
-      currentActionPresentation?.taskKind === "roll_initiative") &&
+      currentActionPresentation?.taskKind === "roll_initiative" ||
+      (currentActionPresentation?.taskKind === "submit_declaration" &&
+        !selectedScenarioParticipant?.controlledByUserId)) &&
     !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
   const inspectorWorkflowSelectorAvailable =
     Boolean(currentActionPresentation?.primaryAction.descriptor) &&
@@ -6494,7 +6527,9 @@ export default function CombatRoundManagerPanel({
         <option disabled={!inspectorBulkStepCompletionAvailable} value="complete_remaining">
           {currentActionPresentation?.taskKind === "modifier_review"
             ? "Accept remaining NPC reviews"
-            : "Roll remaining GM initiative"}
+            : currentActionPresentation?.taskKind === "submit_declaration"
+              ? "Accept remaining NPC declarations"
+              : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
@@ -6502,7 +6537,9 @@ export default function CombatRoundManagerPanel({
   const inspectorBulkStepLabel =
     currentActionPresentation?.taskKind === "modifier_review"
       ? "Accept remaining NPC reviews"
-      : "Roll remaining GM initiative";
+      : currentActionPresentation?.taskKind === "submit_declaration"
+        ? "Accept remaining NPC declarations"
+        : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6517,7 +6554,9 @@ export default function CombatRoundManagerPanel({
           heading: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Modifier review"
-              : "Initiative"
+              : currentActionPresentation.taskKind === "submit_declaration"
+                ? "Declaration"
+                : "Initiative"
             : currentActionPresentation.heading,
           primaryAction: {
             ...currentActionPresentation.primaryAction,
@@ -6526,12 +6565,16 @@ export default function CombatRoundManagerPanel({
           requiredNow: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Stops at the first unresolved review."
-              : "Stops before player-owned or attention-required initiative."
+              : currentActionPresentation.taskKind === "submit_declaration"
+                ? "Stops at the first declaration requiring attention."
+                : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Accept straightforward GM-controlled participant reviews unchanged."
-              : "Roll eligible GM-controlled participant initiative in canonical order."
+              : currentActionPresentation.taskKind === "submit_declaration"
+                ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
+                : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -6970,6 +7013,29 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </section>
   ) : null;
+  const inspectorDeclarationProposal = currentDeclarationProposalPresentation ? (
+    <section
+      aria-label="Previous declaration proposal"
+      style={{
+        background: "#f8f6ef",
+        border: "1px solid #e2dccd",
+        borderRadius: 6,
+        display: "grid",
+        gap: "0.15rem",
+        padding: "0.4rem 0.5rem",
+      }}
+    >
+      <strong style={{ fontSize: "0.88rem" }}>
+        {currentDeclarationProposalPresentation.sourceLabel}
+      </strong>
+      <span>{currentDeclarationProposalPresentation.summary}</span>
+      {currentDeclarationProposalPresentation.reason ? (
+        <span style={{ color: "#7a3f26", fontSize: "0.88rem" }}>
+          Needs review: {currentDeclarationProposalPresentation.reason}
+        </span>
+      ) : null}
+    </section>
+  ) : null;
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
@@ -6978,9 +7044,11 @@ export default function CombatRoundManagerPanel({
     inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
     inspectorRoundEndDistanceControls ||
+    inspectorDeclarationProposal ||
     inspectorStepWorkflowStatus ? (
       <>
         {inspectorStepWorkflowStatus}
+        {inspectorDeclarationProposal}
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
@@ -7155,6 +7223,7 @@ export default function CombatRoundManagerPanel({
       setRecentResultFocus(undefined);
       setRecentResultRequest(undefined);
       setStepWorkflowStatus(undefined);
+      setStepWorkflowDeclarationProposal(undefined);
       manualSelectionRef.current = undefined;
       pendingSelectionRef.current = undefined;
       setSelectedRoundNumber(initialRoundState.roundNumber);
@@ -10228,11 +10297,12 @@ export default function CombatRoundManagerPanel({
         "review_modifiers_phase2",
         "roll_initiative_phase1",
         "roll_initiative_phase2",
+        "declare_action",
       ],
       presentation: currentActionPresentation,
-      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "phase", "taskId"],
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
     });
-    if (!descriptor?.phase) {
+    if (!descriptor) {
       setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
@@ -10250,6 +10320,7 @@ export default function CombatRoundManagerPanel({
     try {
       const {
         commandEnvelope,
+        declarationProposal,
         encounter: nextEncounter,
         participants,
         workflow,
@@ -10285,6 +10356,7 @@ export default function CombatRoundManagerPanel({
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setStepWorkflowStatus(workflow);
+      setStepWorkflowDeclarationProposal(declarationProposal);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(

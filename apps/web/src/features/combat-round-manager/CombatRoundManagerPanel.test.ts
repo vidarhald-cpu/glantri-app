@@ -559,6 +559,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(">Workflow</span>");
     expect(source).toContain('<option value="perform">Perform current action</option>');
     expect(source).toContain("Accept remaining NPC reviews");
+    expect(source).toContain("Accept remaining NPC declarations");
+    expect(source).toContain('aria-label="Previous declaration proposal"');
     expect(source).toContain("Roll remaining GM initiative");
     expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");

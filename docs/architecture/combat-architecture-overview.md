@@ -408,6 +408,14 @@ GM-controlled NPC prefix, permits deterministic closure only to expose the next
 step, and then stops. Its transient Workflow Status is presentation-only; accepted
 underlying commands remain the sole history, result, privacy, and undo authority.
 
+Declaration carry-forward is a DE-only consumer of this framework. Its immutable
+proposal comes from the participant's accepted declaration in the immediately
+preceding archived round, then is validated against the current authoritative
+participant, target, loadout, relationship, movement, and declaration capabilities.
+Acceptance invokes the ordinary declaration command path. Missing canonical fields
+or any changed circumstance stops the contiguous run; no archive-wide search,
+retargeting, source substitution, or tactical inference is allowed.
+
 GM Combat presentation is partitioned by ownership identity:
 
 1. **Archived Presentation** owns normalized completed-round facts, historical

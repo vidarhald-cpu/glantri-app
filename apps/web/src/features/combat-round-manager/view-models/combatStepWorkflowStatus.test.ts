@@ -67,4 +67,48 @@ describe("GM combat Workflow Status presentation", () => {
     expect(presentation.completion).toBe("Completed M1.");
     expect(presentation.stopMessage).toBeUndefined();
   });
+
+  it("reports completed declaration carry-forward without creating a combat result", () => {
+    const presentation = buildCombatStepWorkflowStatusPresentation({
+      participantLabelsById: new Map(),
+      result: result({
+        identity: {
+          ...result().identity,
+          operationFamily: "accept_remaining",
+          startingStep: "select_actions",
+        },
+        processedCount: 7,
+        stepComplete: true,
+        stopParticipantId: undefined,
+        stopReason: "end_of_step",
+      }),
+    });
+
+    expect(presentation).toMatchObject({
+      completion: "Completed DE.",
+      operationLabel: "Accept remaining NPC declarations",
+      processedSummary: "Accepted 7 NPC declarations.",
+    });
+  });
+
+  it("gives a concise changed-target stop message", () => {
+    const presentation = buildCombatStepWorkflowStatusPresentation({
+      participantLabelsById: new Map([["npc-8", "Orc Captain"]]),
+      result: result({
+        identity: {
+          ...result().identity,
+          operationFamily: "accept_remaining",
+          startingStep: "select_actions",
+        },
+        processedCount: 4,
+        stopParticipantId: "npc-8",
+        stopReason: "target_invalid",
+      }),
+    });
+
+    expect(presentation.stopParticipantLabel).toBe("Orc Captain");
+    expect(presentation.stopMessage).toBe(
+      "Previous target is no longer valid. GM declaration required.",
+    );
+  });
 });

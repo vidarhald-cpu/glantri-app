@@ -39,6 +39,7 @@ export * from "./encounter/combatAdjustDistance";
 export * from "./encounter/combatSkillContest";
 export * from "./encounter/combatModifierProjection";
 export * from "./encounter/combatModifierContributions";
+export * from "./encounter/combatNpcDeclarationProposal";
 export * from "./encounter/combatModifierLifecycle";
 export * from "./encounter/combatModifierLifecycleCompatibility";
 export * from "./encounter/combatModifierReview";

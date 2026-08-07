@@ -84,6 +84,14 @@ Combat Log describes the game world. Underlying accepted declarations, reviews, 
 rolls retain their normal canonical events and results; operational summaries such as
 processed counts and stop reasons never enter Combat Log or Results.
 
+NPC declaration proposals are conservative carry-forward of the immediately prior
+round's accepted intent. The GM explicitly starts acceptance during DE. The proposal
+retains the same canonical action, targets, sources, movement, and options; it never
+infers tactics, substitutes a target or weapon, or interprets free text. Changed,
+invalid, ambiguous, or incomplete circumstances stop before mutation and Workflow
+Status returns the exact NPC declaration to the GM. Completing DE may expose M1, but
+the declaration run never processes M1.
+
 ## Combat Situation
 
 Combat Situation explains. It shows the active modifiers, conditions,

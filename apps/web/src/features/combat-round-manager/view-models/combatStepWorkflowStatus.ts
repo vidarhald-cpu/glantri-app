@@ -15,6 +15,9 @@ function operationLabel(result: CombatStepAutomationRunResult): string {
       : "Roll remaining GM Phase 1 initiative";
   }
   if (result.identity.operationFamily === "accept_remaining") {
+    if (result.identity.startingStep === "select_actions") {
+      return "Accept remaining NPC declarations";
+    }
     return result.identity.startingStep === "review_phase_2_modifiers"
       ? "Accept remaining NPC M2 reviews"
       : "Accept remaining NPC M1 reviews";
@@ -33,9 +36,9 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
     case "warning_requires_acknowledgement":
       return "Review the warning before continuing.";
     case "invalid_proposal":
-      return "The proposal is no longer valid.";
+      return "Previous declaration is no longer valid. GM declaration required.";
     case "target_invalid":
-      return "The target is no longer valid.";
+      return "Previous target is no longer valid. GM declaration required.";
     case "participant_not_gm_controlled":
       return "This participant is not GM controlled.";
     case "stale_revision":
@@ -66,9 +69,14 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
 }): CombatStepWorkflowStatusPresentation {
   const { result } = input;
   const initiative = result.identity.operationFamily === "roll_remaining";
+  const declarations =
+    result.identity.operationFamily === "accept_remaining" &&
+    result.identity.startingStep === "select_actions";
   const processedSummary = initiative
     ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
-    : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
+    : declarations
+      ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
+      : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
   const completion = result.stepComplete
     ? result.identity.startingStep === "initiative_phase_1"
       ? "Completed Phase 1 initiative."
@@ -76,9 +84,11 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
         ? "Completed Phase 2 initiative."
         : result.identity.startingStep === "review_action_modifiers"
           ? "Completed M1."
-          : result.identity.startingStep === "review_phase_2_modifiers"
-            ? "Completed M2."
-            : "Completed the step."
+          : result.identity.startingStep === "select_actions"
+            ? "Completed DE."
+            : result.identity.startingStep === "review_phase_2_modifiers"
+              ? "Completed M2."
+              : "Completed the step."
     : undefined;
   return {
     completion,
