@@ -188,13 +188,14 @@ import {
   resolveEncounterLiveCombatModifierContext,
 } from "@/lib/campaigns/liveCombatModifiers";
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
+import { projectPlayerCombatAttackContextAvailability } from "@/lib/campaigns/playerCombatAttackContext";
 import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
-import { pollActiveEncounterRevision } from "@/lib/campaigns/activeEncounterPolling";
 import {
   createPlayerCombatHistoryRequestCoordinator,
   isMatchingPlayerCombatHistory,
   loadPlayerCombatSlowContext,
+  pollPlayerCombatSnapshot,
   shouldAcceptPlayerCombatEncounter,
   type PlayerCombatHistoryIdentity,
   type RevisionKeyedCombatHistory,
@@ -1081,6 +1082,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
   const [combatActionError, setCombatActionError] = useState<string>();
+  const [attackContextFailure, setAttackContextFailure] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [slowContextReady, setSlowContextReady] = useState(false);
   const [revisionRefreshPending, setRevisionRefreshPending] = useState(false);
@@ -1340,12 +1342,45 @@ export default function ScenarioPlayerCombatPageContent({
     setEncounterSession(undefined);
     setRevisionBoundHistory(undefined);
 
-    loadEncounterById(encounterId)
-      .then(async (candidate) => {
-        if (cancelled || encounterRequestIdRef.current !== requestId) return;
-        if (acceptEncounterSession(candidate)) {
-          await ensureCombatHistory(candidate);
+    const loadInitialCombatSnapshot = async () => {
+      const loadSnapshot = () =>
+        pollPlayerCombatSnapshot({
+          encounterId,
+          loadEncounter: loadEncounterById,
+          loadHistory: async (candidate) => {
+            const identity = getHistoryIdentity(candidate);
+            if (!identity) {
+              throw new Error("Player combat history perspective is unavailable.");
+            }
+            return historyCoordinator.request(identity);
+          },
+          loadParticipants: () =>
+            isGameMaster
+              ? loadScenarioParticipants(scenarioId)
+              : loadScenarioMyParticipant(scenarioId).then((participant) =>
+                  participant ? [participant] : [],
+                ),
+          loadRevision: loadEncounterRevision,
+        });
+      const first = await loadSnapshot();
+      const result = first.kind === "stale" ? await loadSnapshot() : first;
+      if (result.kind !== "updated") {
+        throw new Error("Unable to adopt one coherent player combat revision.");
+      }
+      return result;
+    };
+
+    loadInitialCombatSnapshot()
+      .then((result) => {
+        if (cancelled || encounterRequestIdRef.current !== requestId) {
+          return;
         }
+        acceptedEncounterRef.current = result.encounter;
+        acceptedHistoryRef.current = result.history;
+        setEncounterSession(result.encounter);
+        setSelectableParticipants([...result.participants]);
+        setRevisionBoundHistory(result.history);
+        setError(undefined);
       })
       .catch((caughtError) => {
         if (!cancelled && encounterRequestIdRef.current === requestId) {
@@ -1365,12 +1400,13 @@ export default function ScenarioPlayerCombatPageContent({
       encounterRequestIdRef.current += 1;
     };
   }, [
-    acceptEncounterSession,
     currentUser,
     encounterId,
-    ensureCombatHistory,
+    getHistoryIdentity,
+    historyCoordinator,
     historyPerspectiveKey,
     isGameMaster,
+    scenarioId,
     slowContextReady,
   ]);
 
@@ -1396,10 +1432,23 @@ export default function ScenarioPlayerCombatPageContent({
       if (refreshInFlight) return;
       refreshInFlight = true;
       try {
-        const result = await pollActiveEncounterRevision({
+        const result = await pollPlayerCombatSnapshot({
           acceptedRevision: acceptedEncounterRef.current?.updatedAt,
           encounterId: polledEncounterId,
           loadEncounter: loadEncounterById,
+          loadHistory: async (candidate) => {
+            const identity = getHistoryIdentity(candidate);
+            if (!identity) {
+              throw new Error("Player combat history perspective is unavailable.");
+            }
+            return historyCoordinator.request(identity);
+          },
+          loadParticipants: () =>
+            isGameMaster
+              ? loadScenarioParticipants(scenarioId)
+              : loadScenarioMyParticipant(scenarioId).then((participant) =>
+                  participant ? [participant] : [],
+                ),
           loadRevision: loadEncounterRevision,
           onNewerRevision: () => {
             if (!disposed) setRevisionRefreshPending(true);
@@ -1413,12 +1462,19 @@ export default function ScenarioPlayerCombatPageContent({
           }
           return;
         }
-        if (
-          acceptEncounterSession(result.encounter) &&
-          (await ensureCombatHistory(result.encounter))
-        ) {
-          setError(undefined);
-        }
+        acceptedEncounterRef.current = result.encounter;
+        acceptedHistoryRef.current = result.history;
+        setEncounterSession((current) =>
+          isCombatViewRevisionUnchanged({
+            acceptedUpdatedAt: current?.updatedAt,
+            candidateUpdatedAt: result.encounter.updatedAt,
+          })
+            ? current
+            : result.encounter,
+        );
+        setSelectableParticipants([...result.participants]);
+        setRevisionBoundHistory(result.history);
+        setError(undefined);
       } catch (caughtError) {
         if (!disposed) {
           if (caughtError instanceof ApiRequestError && caughtError.status === 404) {
@@ -1445,9 +1501,8 @@ export default function ScenarioPlayerCombatPageContent({
       }
     }
 
-    const intervalId = window.setInterval(() => {
-      void refreshActiveCombatRevision();
-    }, 5000);
+    refreshVisibleCombat();
+    const intervalId = window.setInterval(refreshVisibleCombat, 5000);
     window.addEventListener("focus", refreshVisibleCombat);
     document.addEventListener("visibilitychange", refreshVisibleCombat);
 
@@ -1464,6 +1519,10 @@ export default function ScenarioPlayerCombatPageContent({
     encounterSession?.id,
     encounterSession?.status,
     ensureCombatHistory,
+    getHistoryIdentity,
+    historyCoordinator,
+    isGameMaster,
+    scenarioId,
     sessionLoading,
   ]);
 
@@ -3117,7 +3176,7 @@ export default function ScenarioPlayerCombatPageContent({
     });
 
     if (!modifierRequest) {
-      setCombatActionError("Attack state changed. Review the current action before rolling.");
+      setAttackContextFailure("Attack context changed. Refreshing…");
       return;
     }
 
@@ -3138,6 +3197,7 @@ export default function ScenarioPlayerCombatPageContent({
     }
 
     setSavingCombatContext(true);
+    setAttackContextFailure(undefined);
 
     try {
       const { encounter, participant } = await rollCombatAttackOnServer({
@@ -3161,7 +3221,7 @@ export default function ScenarioPlayerCombatPageContent({
         obSkillRaw: modifierRequest.obSkillRaw,
         opportunityId: descriptor.opportunityId,
         phase: attackPhase,
-        scenarioParticipantId: descriptor.participantId,
+        scenarioParticipantId: selectedParticipant.id,
         taskId: descriptor.taskId,
         weaponInstanceId: descriptor.weaponInstanceId,
         weaponSourceId: descriptor.weaponSourceId,
@@ -3178,9 +3238,23 @@ export default function ScenarioPlayerCombatPageContent({
       acceptEncounterSession(encounter);
       setCombatActionError(undefined);
     } catch (caughtError) {
-      setCombatActionError(
-        caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.",
-      );
+      const code =
+        caughtError instanceof ApiRequestError &&
+        caughtError.payload &&
+        typeof caughtError.payload === "object" &&
+        "code" in caughtError.payload
+          ? (caughtError.payload as { code?: unknown }).code
+          : undefined;
+      if (code === "attack_context_unavailable") {
+        setCombatActionError(undefined);
+        setAttackContextFailure(
+          "Required attack context is unavailable. Ask the GM to reopen the modifier checkpoint.",
+        );
+      } else {
+        setCombatActionError(
+          caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.",
+        );
+      }
     } finally {
       setSavingCombatContext(false);
     }
@@ -3917,6 +3991,13 @@ export default function ScenarioPlayerCombatPageContent({
       phaseCombatContextDrafts[currentAttackPhase])
     : undefined;
   const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
+  const currentAttackTargetIdentity = currentAttackTargetParticipantId
+    ? resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: encounterSession?.participants ?? [],
+        fallbackParticipantIds: targetOptions.map((option) => option.id),
+        targetParticipantId: currentAttackTargetParticipantId,
+      })
+    : undefined;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
   const currentParryDefenseStats = currentResolutionPhase
     ? buildPlayerCombatDefenseStats({
@@ -3969,6 +4050,39 @@ export default function ScenarioPlayerCombatPageContent({
     currentAttackSourceMissing && currentAttackPhase
       ? `No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`
       : undefined;
+  const currentAttackContextAvailability = projectPlayerCombatAttackContextAvailability({
+    attackerParticipantId:
+      projectedRollTask?.owner?.kind === "combatant"
+        ? projectedRollTask.owner.participantId
+        : undefined,
+    attackSourceAvailable: currentAttackPhase
+      ? Boolean(
+          phaseCombatLoadoutSummaries[currentAttackPhase].requestAttackStats ??
+          phaseCombatLoadoutSummaries[currentAttackPhase].attackStats,
+        )
+      : false,
+    defenderParticipantId: currentAttackTargetIdentity?.encounterParticipantId,
+    encounterId,
+    encounterRevision: encounterSession?.updatedAt,
+    historyRevision: combatHistory?.sourceUpdatedAt,
+    refreshPending: revisionRefreshPending,
+    task: projectedRollTask,
+    validation: combatHistory?.currentAttackModifierValidation,
+  });
+  const currentAttackContextValidationMessage =
+    attackContextFailure ??
+    currentAttackSourceValidationMessage ??
+    (currentAttackContextAvailability.status === "loading" ||
+    currentAttackContextAvailability.status === "stale" ||
+    currentAttackContextAvailability.status === "unavailable_required"
+      ? currentAttackContextAvailability.message
+      : undefined);
+  useEffect(() => {
+    setAttackContextFailure(undefined);
+    setCombatActionError((current) =>
+      current === "Attack or defender combat summary is not available." ? undefined : current,
+    );
+  }, [encounterSession?.updatedAt, projectedRollTask?.id]);
   const targetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
@@ -4078,7 +4192,7 @@ export default function ScenarioPlayerCombatPageContent({
     controlsDisabled ||
     savingCombatContext ||
     !displayedParticipant ||
-    Boolean(declarationTargetValidationMessage || currentAttackSourceValidationMessage) ||
+    Boolean(declarationTargetValidationMessage || currentAttackContextValidationMessage) ||
     (currentActionPresentation?.taskKind === "distance_commit" &&
       currentActionPresentation.actionKind === "continued_contact_distance_control" &&
       continuedContactDistanceChoice.trim().length === 0) ||
@@ -5043,7 +5157,13 @@ export default function ScenarioPlayerCombatPageContent({
                 validationMessage={
                   combatExperienceValidationMessage ??
                   declarationTargetValidationMessage ??
-                  currentAttackSourceValidationMessage
+                  currentAttackContextValidationMessage
+                }
+                validationMessageTone={
+                  currentAttackContextAvailability.status === "loading" ||
+                  currentAttackContextAvailability.status === "stale"
+                    ? "neutral"
+                    : "error"
                 }
               />
             </div>

@@ -33,6 +33,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getOrCreateCombatModifierReviewInputSnapshot({");
     expect(source).toContain("modifierReviewInputSnapshot!.combatContext");
     expect(source).toContain("modifierReviewInputSnapshot?.expectedParticipantRevision");
+    expect(source).toContain("const reviewStepSnapshot = isModifierReview");
+    expect(source).toContain("reviewStepSnapshot,");
     expect(source).toContain("modifierReviewInputSnapshotsRef.current.clear()");
     expect(source).not.toContain("onChange={submitCombatDeclarationOnServer}");
   });

@@ -34,6 +34,7 @@ export function buildPlayerCombatAttackModifierRequest(input: {
     task.kind !== "attack" ||
     task.state !== "executable" ||
     !validation ||
+    validation.attackContextAvailability !== "complete" ||
     validation.taskId !== task.id ||
     validation.encounterId !== input.encounterId ||
     validation.expectedRevision !== input.encounterRevision ||

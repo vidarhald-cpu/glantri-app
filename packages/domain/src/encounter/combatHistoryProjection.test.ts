@@ -595,6 +595,7 @@ describe("combat history projection", () => {
     });
     const currentAttackModifierValidation = {
       actionId: "attack_parry",
+      attackContextAvailability: "complete" as const,
       attackerModifierFingerprint: "v1:attacker",
       attackerParticipantId: "aria",
       defenderDbParryRaw: -2,

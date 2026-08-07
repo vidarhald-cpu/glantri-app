@@ -186,6 +186,7 @@ import {
   skipCombatRoundCurrentPhaseAction,
   validateCombatDeclarationActionAvailability,
   validateCombatDeclarationTargets,
+  upsertCombatRoundStepSnapshots,
   type CanonicalCombatModifierEffect,
   type CanonicalCombatModifierReviewDecision,
   type CanonicalCombatModifierReviewProposal,
@@ -1129,6 +1130,7 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
   phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
   phaseAttackSources?: ReturnType<typeof parseCombatDeclarationPhaseAttackSources>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
+  reviewStepSnapshot?: CombatRoundStepSnapshot;
   scenarioParticipantId: string;
   secondaryActionContext?: ReturnType<typeof scenarioParticipantSecondaryActionContextSchema.parse>;
   secondaryActionId?: string;
@@ -1172,6 +1174,10 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
         : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
     phaseAttackSources: parseCombatDeclarationPhaseAttackSources(value.phaseAttackSources),
     phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
+    reviewStepSnapshot:
+      value.reviewStepSnapshot === undefined
+        ? undefined
+        : combatRoundStepSnapshotSchema.parse(value.reviewStepSnapshot),
     scenarioParticipantId,
     secondaryActionContext:
       value.secondaryActionContext === undefined
@@ -3084,9 +3090,31 @@ function buildCurrentAttackModifierValidation(input: {
     phase: task.identity.phase,
     state: input.roundState,
   });
+  const canonicalWeaponFacts = candidate
+    ? resolveCanonicalAttackOpportunityWeaponFacts({
+        opportunity: candidate,
+        participant: attackerScenarioParticipant,
+      })
+    : undefined;
+  const latestDefenderSnapshot = findLatestCombatDefenseSnapshot({
+    defenderParticipantId: defenderEncounterParticipant.id,
+    phase: task.identity.phase,
+    state: input.roundState,
+  });
+  const defenderDb = resolveAttackDefenderDb({
+    currentFlatAdjustment: getMergedCombatDbFlatAdjustmentTotal({
+      combatContext: facts.defenderCombatContext,
+      phase: task.identity.phase,
+    }),
+    snapshot: latestDefenderSnapshot,
+  });
 
   return {
     actionId: facts.attackerActionId,
+    attackContextAvailability:
+      canonicalWeaponFacts?.weaponName && defenderDb !== undefined
+        ? "complete"
+        : "unavailable_required",
     attackerModifierFingerprint: fingerprintCombatModifierResolution(facts.attackerResolution),
     attackerParticipantId: attackerEncounterParticipant.id,
     defenderDbParryRaw: facts.defenderResolution.total,
@@ -3104,6 +3132,41 @@ function buildCurrentAttackModifierValidation(input: {
     proposalId: facts.attackerProposalId,
     taskId: task.id,
   };
+}
+
+function findLatestCombatDefenseSnapshot(input: {
+  defenderParticipantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundStepSnapshot | undefined {
+  return [...input.state.stepSnapshots]
+    .reverse()
+    .find(
+      (snapshot) =>
+        snapshot.roundNumber === input.state.roundNumber &&
+        snapshot.participantId === input.defenderParticipantId &&
+        snapshot.phase === input.phase &&
+        (snapshot.defenseSummary ?? snapshot.phasePanels?.[input.phase]?.defenseSummary),
+    );
+}
+
+function resolveAttackDefenderDb(input: {
+  currentFlatAdjustment: number;
+  fallbackDb?: number;
+  snapshot?: CombatRoundStepSnapshot;
+}): number | undefined {
+  const summary =
+    input.snapshot?.defenseSummary ??
+    (input.snapshot?.phase
+      ? input.snapshot.phasePanels?.[input.snapshot.phase]?.defenseSummary
+      : undefined);
+  const snapshotDb = parseCombatSummaryInteger(summary?.db, "Defender DB");
+
+  return snapshotDb !== undefined
+    ? snapshotDb +
+        input.currentFlatAdjustment -
+        (input.snapshot?.modifierSummary?.dbFlatAdjustment ?? 0)
+    : input.fallbackDb;
 }
 
 function buildCurrentParryModifierValidation(input: {
@@ -5497,7 +5560,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           submittedBy: "gm",
         });
-        const nextRoundState = recordCombatRoundParticipantStepReview({
+        const reviewedRoundState = recordCombatRoundParticipantStepReview({
           command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
           modifierReview,
           modifierReviewUndo: {
@@ -5511,6 +5574,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           submittedBy: "gm",
           suppressNoChangeResult: suppressBacktrackNoChangeResult,
         });
+        if (
+          body.reviewStepSnapshot &&
+          (body.reviewStepSnapshot.participantId !== encounterParticipant.id ||
+            body.reviewStepSnapshot.roundNumber !== roundState.roundNumber ||
+            body.reviewStepSnapshot.step !== roundState.currentStep ||
+            body.reviewStepSnapshot.phase !==
+              (commandType === "review_modifiers_phase1" ? "phase1" : "phase2"))
+        ) {
+          return reply.code(409).send({
+            code: "identity_mismatch",
+            error: "The modifier-review combat summary belongs to another task.",
+          });
+        }
+        const nextRoundState = body.reviewStepSnapshot
+          ? upsertCombatRoundStepSnapshots({
+              snapshots: [body.reviewStepSnapshot],
+              state: reviewedRoundState,
+            })
+          : reviewedRoundState;
         const saved = await encounterService.commitCombatModifierReview({
           campaignId: access.campaignId,
           encounterId,
@@ -10640,15 +10722,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot.phase === body.phase &&
             snapshot.attackSummary,
         );
-      const latestDefenderSnapshot = [...roundState.stepSnapshots]
-        .reverse()
-        .find(
-          (snapshot) =>
-            snapshot.roundNumber === roundState.roundNumber &&
-            snapshot.participantId === defenderEncounterParticipant.id &&
-            snapshot.phase === body.phase &&
-            snapshot.defenseSummary,
-        );
+      const latestDefenderSnapshot = findLatestCombatDefenseSnapshot({
+        defenderParticipantId: defenderEncounterParticipant.id,
+        phase: body.phase,
+        state: roundState,
+      });
       const canonicalModifierFacts = resolveCanonicalCombatAttackModifierFacts({
         attackerCombatantId: encounterParticipant.id,
         attackerScenarioParticipant: scenarioParticipant,
@@ -10660,24 +10738,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
       });
       const weaponName = canonicalWeaponFacts.weaponName;
-      const snapshotDefenderDb = parseCombatSummaryInteger(
-        latestDefenderSnapshot?.defenseSummary?.db,
-        "Defender DB",
-      );
       const defenderFlatDbAdjustment = getMergedCombatDbFlatAdjustmentTotal({
         combatContext: canonicalModifierFacts.defenderCombatContext,
         phase: body.phase,
       });
-      const defenderDb =
-        snapshotDefenderDb !== undefined
-          ? snapshotDefenderDb +
-            defenderFlatDbAdjustment -
-            (latestDefenderSnapshot?.modifierSummary?.dbFlatAdjustment ?? 0)
-          : body.defenderDb;
+      const defenderDb = resolveAttackDefenderDb({
+        currentFlatAdjustment: defenderFlatDbAdjustment,
+        fallbackDb: body.defenderDb,
+        snapshot: latestDefenderSnapshot,
+      });
 
       if (!weaponName || defenderDb === undefined) {
         return reply.code(409).send({
-          error: "Attack or defender combat summary is not available.",
+          code: "attack_context_unavailable",
+          error: "Required attack context is unavailable. Refresh combat before rolling.",
         });
       }
 

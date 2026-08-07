@@ -347,9 +347,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(slowContext).toContain("loadScenarioParticipants(scenarioId)");
     expect(slowContext).not.toContain("loadEncounterById");
     expect(slowContext).not.toContain("loadCombatHistory");
-    expect(source).toContain("pollActiveEncounterRevision({");
+    expect(source).toContain("pollPlayerCombatSnapshot({");
     expect(source).toContain("loadRevision: loadEncounterRevision");
-    expect(source).toContain("ensureCombatHistory(result.encounter)");
+    expect(source).toContain("setRevisionBoundHistory(result.history)");
+    expect(source).toContain("setSelectableParticipants([...result.participants])");
     expect(source).toContain("historyCoordinator.request(identity)");
     expect(source).not.toContain("loadCombatHistory(");
     expect(source).not.toContain("encounterSession?.updatedAt, isGameMaster");
@@ -357,6 +358,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentEncounter: encounterSession");
     expect(brawlingHandler).toContain("acceptEncounterSession(encounter)");
     expect(brawlingHandler).not.toContain("loadCombatHistory");
+  });
+
+  it("keeps required A1 context failures scoped to Current Action", () => {
+    const source = readSource();
+
+    expect(source).toContain("projectPlayerCombatAttackContextAvailability({");
+    expect(source).toContain('code === "attack_context_unavailable"');
+    expect(source).toContain("setAttackContextFailure(");
+    expect(source).toContain("scenarioParticipantId: selectedParticipant.id");
+    expect(source).not.toContain(
+      'setCombatActionError("Attack or defender combat summary is not available.")',
+    );
   });
 
   it("shows player-owned damage-chain facts only to involved attackers and defenders", () => {

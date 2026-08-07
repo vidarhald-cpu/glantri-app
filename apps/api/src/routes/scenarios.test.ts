@@ -11231,6 +11231,21 @@ describe("scenarios route contract", () => {
             targetParticipantId: "encounter-target-1",
           },
         },
+        reviewStepSnapshot: {
+          committedAt: "2026-07-30T08:00:01.000Z",
+          defenseSummary: {
+            db: "11",
+            dm: "0",
+            parry: "9",
+            sourceName: "Sword / shield",
+          },
+          id: "snapshot:m1:encounter-participant-1",
+          participantId: "encounter-participant-1",
+          participantLabel: "The Gladiator",
+          phase: "phase1",
+          roundNumber: 1,
+          step: "review_action_modifiers",
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -11296,6 +11311,13 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
+    expect(updatedEncounter.combatRoundState.stepSnapshots).toContainEqual(
+      expect.objectContaining({
+        id: "snapshot:m1:encounter-participant-1",
+        participantId: "encounter-participant-1",
+        step: "review_action_modifiers",
+      }),
     );
   });
 
@@ -13240,6 +13262,7 @@ describe("scenarios route contract", () => {
     const validation = historyResponse.json().history.currentAttackModifierValidation;
     expect(validation).toMatchObject({
       actionId: "attack_parry",
+      attackContextAvailability: "complete",
       attackerModifierFingerprint: "v1:82d757a9",
       attackerParticipantId: "encounter-participant-1",
       defenderDbParryRaw: -2,
@@ -13252,6 +13275,8 @@ describe("scenarios route contract", () => {
       phase: "phase1",
       taskId: expect.any(String),
     });
+    expect(validation).not.toHaveProperty("defenderDb");
+    expect(validation).not.toHaveProperty("defenderInventory");
     const reloadResponse = await app.inject({
       method: "GET",
       url: "/encounters/encounter-1/combat-history",
@@ -13324,6 +13349,67 @@ describe("scenarios route contract", () => {
     expect(response.json()).toEqual({
       code: "defender_modifier_signature_mismatch",
       error: "Defender modifiers changed. Refresh combat before rolling.",
+    });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("marks a player A1 attack unavailable when its exact defender checkpoint is missing", async () => {
+    const roundState = {
+      ...makeOpenPhase1AttackRoundState(),
+      stepSnapshots: [],
+    };
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        participants: makeTwoCombatEncounterParticipants(),
+      },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    const validation = historyResponse.json().history.currentAttackModifierValidation;
+    expect(validation).toMatchObject({
+      attackContextAvailability: "unavailable_required",
+      attackerParticipantId: "encounter-participant-1",
+      defenderParticipantId: "encounter-participant-2",
+      expectedRevision: expect.any(String),
+      taskId: expect.any(String),
+    });
+
+    const attackResponse = await app.inject({
+      method: "POST",
+      payload: {
+        attackerModifierFingerprint: validation.attackerModifierFingerprint,
+        defenderDbParryRaw: validation.defenderDbParryRaw,
+        defenderModifierFingerprint: validation.defenderModifierFingerprint,
+        defenderScenarioParticipantId: "participant-2",
+        expectedRevision: validation.expectedRevision,
+        modifierValidationTaskId: validation.taskId,
+        ob: 10,
+        obSkillRaw: validation.obSkillRaw,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(attackResponse.statusCode).toBe(409);
+    expect(attackResponse.json()).toEqual({
+      code: "attack_context_unavailable",
+      error: "Required attack context is unavailable. Refresh combat before rolling.",
     });
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });

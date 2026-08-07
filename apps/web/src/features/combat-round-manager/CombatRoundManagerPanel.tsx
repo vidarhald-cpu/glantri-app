@@ -8304,6 +8304,31 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    const reviewStepSnapshot = isModifierReview
+      ? buildCombatRoundStepSnapshots(new Date().toISOString(), {
+          ...roundState,
+          participants: roundState.participants.map((participant) =>
+            participant.participantId === taskEncounterParticipant.id && participant.declaration
+              ? {
+                  ...participant,
+                  declaration: {
+                    ...participant.declaration,
+                    combatContext:
+                      !inspectorHasLocalModifierEdits && modifierReviewInputSnapshot
+                        ? modifierReviewInputSnapshot.combatContext
+                        : inspectorGeneratedCombatContext,
+                    phaseContexts: requestPhaseContexts,
+                  },
+                }
+              : participant,
+          ),
+        }).find(
+          (snapshot) =>
+            snapshot.participantId === taskEncounterParticipant.id &&
+            snapshot.step === roundState.currentStep,
+        )
+      : undefined;
+
     setSaving(true);
 
     try {
@@ -8363,6 +8388,7 @@ export default function CombatRoundManagerPanel({
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
         },
+        reviewStepSnapshot,
         scenarioParticipantId: taskScenarioParticipant.id,
         secondaryActionContext: inspectorDraft.secondaryActionContext,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,

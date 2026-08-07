@@ -524,6 +524,49 @@ describe("PlayerCombatModifierPanel", () => {
 });
 
 describe("PlayerCombatActionButtonPanel", () => {
+  it("scopes a loading attack context to Current Action and keeps the roll disabled", () => {
+    render(
+      <PlayerCombatActionButtonPanel
+        disabled
+        presentation={{
+          actionName: "Single Attack",
+          boundary: "phase1_resolution",
+          encounterId: "encounter-1",
+          encounterRevision: "revision-4",
+          heading: "Phase 1",
+          primaryAction: {
+            descriptor: {
+              commandType: "roll_attack",
+              encounterId: "encounter-1",
+              expectedBoundary: "phase1_resolution",
+              expectedRevision: "revision-4",
+              opportunityId: "opportunity-1",
+              phase: "phase1",
+              taskId: "task-1",
+            },
+            enabled: true,
+            gmProxyAvailable: true,
+            label: "Roll attack",
+            viewerMayInvoke: true,
+          },
+          reason: "",
+          requiredActor: { hidden: false, id: "aria", label: "Aria" },
+          requiredNow: "Roll attack.",
+          status: "executable",
+          summary: "Aria is attacking Borin.",
+          taskHeading: "Roll attack",
+          taskId: "task-1",
+          taskKind: "attack",
+        }}
+        validationMessage="Loading attack context…"
+        validationMessageTone="neutral"
+      />,
+    );
+
+    expect(screen.getByText("Loading attack context…")).toHaveStyle({ color: "#5e5a50" });
+    expect(screen.getByRole("button", { name: "Roll attack" })).toBeDisabled();
+  });
+
   it("renders a non-submit primary command and invokes the immutable descriptor once", () => {
     const onAction = vi.fn();
     const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());

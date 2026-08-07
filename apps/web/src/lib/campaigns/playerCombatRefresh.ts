@@ -1,4 +1,11 @@
-import type { CombatHistoryProjection, EncounterSession } from "@glantri/domain";
+import type {
+  CombatHistoryProjection,
+  EncounterSession,
+  EncounterSessionRevision,
+  ScenarioParticipant,
+} from "@glantri/domain";
+
+import { pollActiveEncounterRevision } from "./activeEncounterPolling";
 
 export async function loadPlayerCombatSlowContext<TContent, TParticipant, TProjection>(input: {
   loadContent: () => Promise<TContent>;
@@ -27,6 +34,60 @@ export interface PlayerCombatHistoryIdentity {
 export interface RevisionKeyedCombatHistory {
   history: CombatHistoryProjection;
   identity: PlayerCombatHistoryIdentity;
+}
+
+export type PlayerCombatSnapshotPollResult =
+  | { kind: "unchanged" }
+  | { kind: "stale" }
+  | {
+      encounter: EncounterSession;
+      history: RevisionKeyedCombatHistory;
+      kind: "updated";
+      participants: readonly ScenarioParticipant[];
+    };
+
+/** Loads one player-safe operational snapshot and adopts nothing until every revision agrees. */
+export async function pollPlayerCombatSnapshot(input: {
+  acceptedRevision?: string;
+  encounterId: string;
+  loadEncounter: (encounterId: string) => Promise<EncounterSession>;
+  loadHistory: (encounter: EncounterSession) => Promise<RevisionKeyedCombatHistory>;
+  loadParticipants: (scenarioId: string) => Promise<ScenarioParticipant[]>;
+  loadRevision: (encounterId: string) => Promise<EncounterSessionRevision>;
+  onNewerRevision?: (revision: EncounterSessionRevision) => void;
+}): Promise<PlayerCombatSnapshotPollResult> {
+  const encounterResult = await pollActiveEncounterRevision({
+    acceptedRevision: input.acceptedRevision,
+    encounterId: input.encounterId,
+    loadEncounter: input.loadEncounter,
+    loadRevision: input.loadRevision,
+    onNewerRevision: input.onNewerRevision,
+  });
+  if (encounterResult.kind !== "updated") return encounterResult;
+  if (!encounterResult.encounter.scenarioId) return { kind: "stale" };
+
+  const [history, participants, confirmedRevision] = await Promise.all([
+    input.loadHistory(encounterResult.encounter),
+    input.loadParticipants(encounterResult.encounter.scenarioId),
+    input.loadRevision(input.encounterId),
+  ]);
+  if (
+    confirmedRevision.encounterId !== input.encounterId ||
+    confirmedRevision.revision !== encounterResult.encounter.updatedAt ||
+    history.identity.encounterId !== input.encounterId ||
+    history.identity.revision !== confirmedRevision.revision ||
+    history.history.sourceEncounterId !== input.encounterId ||
+    history.history.sourceUpdatedAt !== confirmedRevision.revision
+  ) {
+    return { kind: "stale" };
+  }
+
+  return {
+    encounter: encounterResult.encounter,
+    history,
+    kind: "updated",
+    participants,
+  };
 }
 
 export function getPlayerCombatHistoryRequestKey(

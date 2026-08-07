@@ -40,6 +40,7 @@ const task = {
 
 const validation = {
   actionId: "attack_parry",
+  attackContextAvailability: "complete",
   attackerModifierFingerprint: "v1:82d757a9",
   attackerParticipantId: "encounter-attacker",
   defenderDbParryRaw: -2,
@@ -83,6 +84,15 @@ describe("buildPlayerCombatAttackModifierRequest", () => {
   });
 
   it.each([
+    [
+      "required attack context",
+      {
+        validation: {
+          ...validation,
+          attackContextAvailability: "unavailable_required" as const,
+        },
+      },
+    ],
     ["revision", { encounterRevision: "2026-07-20T09:59:59.000Z" }],
     ["task", { task: { ...task, id: "future-attack-task" } }],
     [

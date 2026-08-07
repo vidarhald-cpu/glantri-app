@@ -267,6 +267,7 @@ interface PlayerCombatActionButtonPanelProps {
   statusText?: string;
   presentation?: CurrentActionPresentation | null;
   validationMessage?: string;
+  validationMessageTone?: "error" | "neutral";
 }
 
 interface PlayerCombatActionResultSection {
@@ -1799,6 +1800,7 @@ export function PlayerCombatActionButtonPanel({
   statusText,
   presentation,
   validationMessage,
+  validationMessageTone = "error",
 }: PlayerCombatActionButtonPanelProps) {
   const primaryAction = presentation?.primaryAction;
   const actionDisabled =
@@ -1891,7 +1893,13 @@ export function PlayerCombatActionButtonPanel({
         <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
       ) : null}
       {validationMessage ? (
-        <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>
+        <div
+          style={{
+            color: validationMessageTone === "neutral" ? "#5e5a50" : "#8b3a1a",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+          }}
+        >
           {validationMessage}
         </div>
       ) : null}

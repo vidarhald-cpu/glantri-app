@@ -2,6 +2,7 @@ import {
   encounterSessionSchema,
   type CombatHistoryProjection,
   type EncounterSession,
+  type ScenarioParticipant,
 } from "@glantri/domain";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,6 +10,7 @@ import {
   createPlayerCombatHistoryRequestCoordinator,
   isMatchingPlayerCombatHistory,
   loadPlayerCombatSlowContext,
+  pollPlayerCombatSnapshot,
   shouldAcceptPlayerCombatEncounter,
 } from "./playerCombatRefresh";
 
@@ -40,6 +42,92 @@ function encounter(id: string, updatedAt: string): EncounterSession {
 }
 
 describe("player combat refresh coordination", () => {
+  it("adopts a newer encounter, participant context, and history only as one coherent revision", async () => {
+    const nextEncounter = {
+      ...encounter("encounter-1", "2026-01-01T00:02:00.000Z"),
+      scenarioId: "scenario-1",
+    };
+    const loadRevision = vi.fn().mockResolvedValue({
+      encounterId: "encounter-1",
+      revision: nextEncounter.updatedAt,
+      status: "active",
+      updatedAt: nextEncounter.updatedAt,
+    });
+    const participants = [{ id: "participant-1" }] as unknown as ScenarioParticipant[];
+
+    await expect(
+      pollPlayerCombatSnapshot({
+        acceptedRevision: "2026-01-01T00:01:00.000Z",
+        encounterId: "encounter-1",
+        loadEncounter: vi.fn().mockResolvedValue(nextEncounter),
+        loadHistory: vi.fn().mockResolvedValue({
+          history: history({ encounterId: "encounter-1", revision: nextEncounter.updatedAt }),
+          identity: { encounterId: "encounter-1", revision: nextEncounter.updatedAt },
+        }),
+        loadParticipants: vi.fn().mockResolvedValue(participants),
+        loadRevision,
+      }),
+    ).resolves.toEqual({
+      encounter: nextEncounter,
+      history: {
+        history: history({ encounterId: "encounter-1", revision: nextEncounter.updatedAt }),
+        identity: { encounterId: "encounter-1", revision: nextEncounter.updatedAt },
+      },
+      kind: "updated",
+      participants,
+    });
+    expect(loadRevision).toHaveBeenCalledTimes(2);
+  });
+
+  it("performs no context reload for an equivalent revision and rejects a mixed snapshot", async () => {
+    const revision = "2026-01-01T00:02:00.000Z";
+    const loadEncounter = vi.fn();
+    const loadHistory = vi.fn();
+    const loadParticipants = vi.fn();
+    const unchangedRevision = vi.fn().mockResolvedValue({
+      encounterId: "encounter-1",
+      revision,
+      status: "active",
+      updatedAt: revision,
+    });
+    await expect(
+      pollPlayerCombatSnapshot({
+        acceptedRevision: revision,
+        encounterId: "encounter-1",
+        loadEncounter,
+        loadHistory,
+        loadParticipants,
+        loadRevision: unchangedRevision,
+      }),
+    ).resolves.toEqual({ kind: "unchanged" });
+    expect(loadEncounter).not.toHaveBeenCalled();
+    expect(loadHistory).not.toHaveBeenCalled();
+    expect(loadParticipants).not.toHaveBeenCalled();
+
+    const nextEncounter = {
+      ...encounter("encounter-1", "2026-01-01T00:03:00.000Z"),
+      scenarioId: "scenario-1",
+    };
+    await expect(
+      pollPlayerCombatSnapshot({
+        acceptedRevision: revision,
+        encounterId: "encounter-1",
+        loadEncounter: vi.fn().mockResolvedValue(nextEncounter),
+        loadHistory: vi.fn().mockResolvedValue({
+          history: history({ encounterId: "encounter-1", revision }),
+          identity: { encounterId: "encounter-1", revision },
+        }),
+        loadParticipants: vi.fn().mockResolvedValue([]),
+        loadRevision: vi.fn().mockResolvedValue({
+          encounterId: "encounter-1",
+          revision: nextEncounter.updatedAt,
+          status: "active",
+          updatedAt: nextEncounter.updatedAt,
+        }),
+      }),
+    ).resolves.toEqual({ kind: "stale" });
+  });
+
   it("loads each slow-changing context source exactly once", async () => {
     const loadContent = vi.fn().mockResolvedValue({ version: 1 });
     const loadParticipants = vi.fn().mockResolvedValue([{ id: "participant-1" }]);

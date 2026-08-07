@@ -177,6 +177,8 @@ export interface CombatHistoryProjection {
 
 export interface CombatAttackModifierValidationProjection {
   actionId: string;
+  /** Whether every canonical, player-safe input required by the current attack is available. */
+  attackContextAvailability: "complete" | "unavailable_required";
   attackerModifierFingerprint: string;
   attackerParticipantId: string;
   defenderDbParryRaw: number;
