@@ -67,6 +67,23 @@ Current Action decides. It contains only unresolved work, its bounded inputs, an
 the control that accepts the current canonical command. Completed outcomes move to
 Results.
 
+## GM Step Automation and Workflow Status
+
+GM Step Automation is an explicit GM-started request to perform a contiguous prefix
+of routine GM-controlled NPC work. It is bounded to the current combat step and may
+execute only canonically eligible work in canonical task order. Deterministic closure
+may expose the next step, but the run never performs substantive work from that next
+step and never makes a tactical choice.
+
+Workflow Status describes application operation: what the explicit run processed,
+where it stopped, and whose attention is required. It is one transient GM-only story
+near Current Action, not a result, game-world event, technical log, or permanent
+history. A new run replaces the prior story.
+
+Combat Log describes the game world. Underlying accepted declarations, reviews, and
+rolls retain their normal canonical events and results; operational summaries such as
+processed counts and stop reasons never enter Combat Log or Results.
+
 ## Combat Situation
 
 Combat Situation explains. It shows the active modifiers, conditions,

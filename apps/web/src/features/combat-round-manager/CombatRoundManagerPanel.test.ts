@@ -549,7 +549,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Save review");
     expect(source).toContain("Skip this participant");
     expect(source).toContain("skipCurrentCombatPhaseActionOnServer");
-    expect(source).toContain("completeRemainingCombatStepOnServer");
+    expect(source).toContain("runGmCombatStepWorkflowOnServer");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
     expect(source).toContain("InspectorCurrentActionOutcomeSelection");
     expect(source).toContain('useState<InspectorCurrentActionOutcomeSelection>("perform")');
@@ -558,7 +558,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorSkipActionSelected");
     expect(source).toContain(">Workflow</span>");
     expect(source).toContain('<option value="perform">Perform current action</option>');
-    expect(source).toContain("Complete remaining step");
+    expect(source).toContain("Accept remaining NPC reviews");
+    expect(source).toContain("Roll remaining GM initiative");
     expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");
     expect(source).toContain("skipInspectorCurrentPhaseAction");

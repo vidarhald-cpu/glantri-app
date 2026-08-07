@@ -401,6 +401,13 @@ Tracker cells show live or completed markers only when that exact
 round/facet/participant has canonical task or result identity; no prior-round or
 “latest” fallback is permitted.
 
+GM Step Automation is server-owned orchestration over those same canonical tasks,
+not a separate auto-roll path. One explicit GM request is bound to the accepted
+revision and current combat step, processes only the contiguous eligible
+GM-controlled NPC prefix, permits deterministic closure only to expose the next
+step, and then stops. Its transient Workflow Status is presentation-only; accepted
+underlying commands remain the sole history, result, privacy, and undo authority.
+
 GM Combat presentation is partitioned by ownership identity:
 
 1. **Archived Presentation** owns normalized completed-round facts, historical

@@ -27,6 +27,7 @@ import {
   buildEncounterSessionRevisionFromMetadataView,
   buildEncounterSessionSummaryFromMetadataView,
   buildCombatRoundCommandEnvelope,
+  DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT,
   buildCombatRoundCommandId,
   buildCombatObservationModifierContributions,
   buildCombatObservationSkillContestContribution,
@@ -39,9 +40,11 @@ import {
   buildCombatProgressionProjection,
   isCompleteDeterministicCombatTask,
   getCurrentExecutableCombatTasks,
+  getCombatStepAutomationCommandPrefix,
   holdCombatRoundForGmBacktrack,
   projectActiveCombatParticipation,
   runCombatDeterministicTransitionSuffix,
+  runCombatStepAutomation,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   buildCombatRoundInitiativeResult,
@@ -82,6 +85,8 @@ import {
   combatDistanceSchema,
   combatRoundStepSchema,
   combatRoundStepSnapshotSchema,
+  combatStepAutomationStartRequestSchema,
+  combatStepAutomationCommandLinkSchema,
   encounterParticipantMembershipModeSchema,
   encounterSessionSchema,
   encounterStatusSchema,
@@ -93,10 +98,12 @@ import {
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundNextEventSequence,
+  getCanonicalCombatModifierReviewState,
   buildLiveCombatModifierContributionProjection,
   createCombatParticipantPairKey,
   getMergedCombatDbFlatAdjustmentTotal,
   projectCanonicalCombatModifierReviewPublicResult,
+  projectCanonicalCombatModifierReviewInput,
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultForOpportunity,
@@ -194,6 +201,9 @@ import {
   type CanonicalCombatModifierReviewProposal,
   type ActiveCombatDeterministicAdvanceDescriptor,
   type ScenarioParticipantState,
+  type CombatStepAutomationProjection,
+  type CombatStepAutomationRunIdentity,
+  type CombatStepAutomationStopReason,
 } from "@glantri/domain";
 import {
   ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
@@ -229,6 +239,7 @@ import type {
   CombatSkillContestType,
   CombatFeintProposal,
   CombatProgressionProjection,
+  CombatProgressionTask,
   EncounterParticipantReadSource,
   EncounterSession,
   MovementIntent,
@@ -270,6 +281,7 @@ import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
+import { resolveCanonicalCombatInitiativeBase } from "./combatInitiativeResolution";
 
 const campaignService = instrumentCombatService(new CampaignService(), {
   getCampaignById: {
@@ -3426,6 +3438,279 @@ function projectAcceptedDeterministicAdvance(input: {
         taskId: task.id,
       }
     : undefined;
+}
+
+type ApiCombatStepAutomationProjection = CombatStepAutomationProjection<CombatRoundState> & {
+  participation: ReturnType<typeof projectActiveCombatParticipation>;
+};
+
+function projectApiCombatStepAutomation(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: readonly ScenarioParticipant[];
+}): ApiCombatStepAutomationProjection {
+  const state = initializeMaterializedCombatRoundState({
+    encounter: input.encounter,
+    scenarioParticipants: [...input.scenarioParticipants],
+  });
+  const participation = projectActiveCombatParticipation({
+    encounterRevision: input.encounter.updatedAt,
+    scenarioParticipants: input.scenarioParticipants,
+    state,
+  });
+  const progression = buildCombatProgressionProjection(state, { participation });
+  return {
+    participation,
+    revision: input.encounter.updatedAt,
+    roundNumber: state.roundNumber,
+    state,
+    step: state.currentStep,
+    tasks: getCurrentExecutableCombatTasks(progression),
+  };
+}
+
+function getStepAutomationScenarioParticipant(input: {
+  scenarioParticipants: readonly ScenarioParticipant[];
+  state: CombatRoundState;
+  task: CombatProgressionTask;
+}): { encounterParticipantId: string; participant: ScenarioParticipant } | undefined {
+  const encounterParticipantId =
+    input.task.owner?.kind === "combatant"
+      ? input.task.owner.participantId
+      : input.task.identity.participantId;
+  const roundParticipant = input.state.participants.find(
+    (participant) => participant.participantId === encounterParticipantId,
+  );
+  const participant = roundParticipant?.scenarioParticipantId
+    ? input.scenarioParticipants.find(
+        (candidate) => candidate.id === roundParticipant.scenarioParticipantId,
+      )
+    : undefined;
+  return encounterParticipantId && participant
+    ? { encounterParticipantId, participant }
+    : undefined;
+}
+
+function getStraightforwardStepAutomationModifierReview(input: {
+  commandId: string;
+  encounter: EncounterSession;
+  participant: ScenarioParticipant;
+  state: CombatRoundState;
+  task: CombatProgressionTask;
+}) {
+  const roundParticipant = input.state.participants.find(
+    (participant) =>
+      participant.participantId ===
+      (input.task.owner?.kind === "combatant"
+        ? input.task.owner.participantId
+        : input.task.identity.participantId),
+  );
+  const declaration = roundParticipant?.declaration;
+  const phase = input.task.identity.phase === "phase1" ? "M1" : "M2";
+  if (!roundParticipant || !declaration || !input.task.identity.phase) return undefined;
+  const currentContext = scenarioParticipantCombatContextSchema.parse(
+    declaration.combatContext ?? input.participant.state.combat.combatContext,
+  );
+  const review = projectCanonicalCombatModifierReviewInput({
+    canonicalCutoff: getCombatRoundNextEventSequence(input.state),
+    commandId: input.commandId,
+    createdAt: input.encounter.updatedAt,
+    currentContext,
+    draftContext: currentContext,
+    encounterId: input.encounter.id,
+    participantState: input.participant.state,
+    phase,
+    revision: input.encounter.updatedAt,
+    roundNumber: input.state.roundNumber,
+    scenarioParticipantId: input.participant.id,
+  });
+  const straightforward =
+    getCanonicalCombatModifierReviewState(review) === "ready" &&
+    review.automaticProposals.every((proposal) => !proposal.mayOverride) &&
+    review.decisions.length === 0 &&
+    review.requiredRolls.every((roll) => !roll.blocksReview || roll.resolved);
+  return { currentContext, declaration, review, roundParticipant, straightforward };
+}
+
+function classifyApiCombatStepAutomationTask(input: {
+  encounter: EncounterSession;
+  operationFamily: "roll_remaining" | "accept_remaining" | "commit_remaining";
+  projection: ApiCombatStepAutomationProjection;
+  scenarioParticipants: readonly ScenarioParticipant[];
+  task: CombatProgressionTask;
+}):
+  | { kind: "execute"; countsTowardProcessed: boolean }
+  | { kind: "stop"; reason: CombatStepAutomationStopReason } {
+  const { operationFamily, task } = input;
+  if (
+    operationFamily === "roll_remaining" &&
+    task.kind === "commit_initiative" &&
+    task.participation?.workClass === "deterministic_transition"
+  ) {
+    return { countsTowardProcessed: false, kind: "execute" };
+  }
+  if (
+    operationFamily === "accept_remaining" &&
+    task.kind === "gm_advance_boundary" &&
+    task.participation?.workClass === "deterministic_transition"
+  ) {
+    return { countsTowardProcessed: false, kind: "execute" };
+  }
+  const owner = getStepAutomationScenarioParticipant({
+    scenarioParticipants: input.scenarioParticipants,
+    state: input.projection.state,
+    task,
+  });
+  if (!owner) return { kind: "stop", reason: "unsupported_task" };
+  if (owner.participant.controlledByUserId) {
+    return { kind: "stop", reason: "player_action_required" };
+  }
+  if (task.participation?.completeness !== "complete") {
+    return { kind: "stop", reason: "incomplete_legacy_state" };
+  }
+
+  if (operationFamily === "roll_remaining") {
+    if (task.kind !== "roll_initiative") return { kind: "stop", reason: "unsupported_task" };
+    if (task.automation.eligibility === "requires_warning") {
+      return { kind: "stop", reason: "warning_requires_acknowledgement" };
+    }
+    if (
+      task.automation.eligibility !== "eligible" ||
+      task.automation.authority.kind !== "gm_controlled_participant"
+    ) {
+      return {
+        kind: "stop",
+        reason:
+          task.automation.stopReason === "legacy_state"
+            ? "incomplete_legacy_state"
+            : "roll_not_eligible",
+      };
+    }
+    return { countsTowardProcessed: true, kind: "execute" };
+  }
+
+  if (operationFamily === "accept_remaining") {
+    if (task.kind === "submit_declaration") {
+      return { kind: "stop", reason: "declaration_review_required" };
+    }
+    if (task.kind !== "modifier_review") {
+      return { kind: "stop", reason: "unsupported_task" };
+    }
+    const review = getStraightforwardStepAutomationModifierReview({
+      commandId: `combat-step-automation-preview:${task.id}`,
+      encounter: input.encounter,
+      participant: owner.participant,
+      state: input.projection.state,
+      task,
+    });
+    return review?.straightforward
+      ? { countsTowardProcessed: true, kind: "execute" }
+      : { kind: "stop", reason: "modifier_review_required" };
+  }
+
+  return { kind: "stop", reason: "unsupported_task" };
+}
+
+function recordCanonicalServerCombatInitiative(input: {
+  commandId?: string;
+  encounter: EncounterSession;
+  encounterParticipantId: string;
+  initiativeBase: number;
+  phase: CombatRoundPhase;
+  scenarioParticipant: ScenarioParticipant;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+  submittedAt: string;
+  userId: string;
+}): { initiative: ReturnType<typeof buildCombatRoundInitiativeResult>; state: CombatRoundState } {
+  const initiativeProjection = buildLiveCombatModifierContributionProjection({
+    combatContext: input.scenarioParticipant.state.combat.combatContext,
+    combatEffects: input.scenarioParticipant.state.combatEffects,
+    currentRound: input.state.roundNumber,
+    encounterId: input.encounter.id,
+    ownerParticipantId: input.scenarioParticipant.id,
+  });
+  const calculationContext: CombatCalculationContext = {
+    encounterId: input.encounter.id,
+    ownerParticipantId: input.scenarioParticipant.id,
+    phase: input.phase,
+    roundNumber: input.state.roundNumber,
+    step: input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+  };
+  const initiativeResolution = resolveCombatModifierContributions({
+    bucket: "initiative",
+    context: calculationContext,
+    contributions: initiativeProjection.contributions,
+  });
+  const generalResolution = resolveCombatWideGeneralModifiers({
+    context: { ...calculationContext, rollType: "initiative" },
+    contributions: initiativeProjection.contributions,
+  });
+  const rawModifier = initiativeResolution.total + generalResolution.total;
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.initiativeBase,
+    rawModifiers: [{ label: "Initiative", value: rawModifier }],
+  });
+  const initiative = buildCombatRoundInitiativeResult({
+    baseInitiative: input.initiativeBase,
+    modifierAdjustment: (trace?.finalValue ?? input.initiativeBase) - input.initiativeBase,
+    roll: rollOpenEndedD6(),
+  });
+  return {
+    initiative,
+    state: recordCombatRoundInitiative({
+      command: {
+        commandId: input.commandId,
+        createdAt: input.submittedAt,
+        createdByUserId: input.userId,
+      },
+      initiative,
+      participantId: input.encounterParticipantId,
+      phase: input.phase,
+      state: input.state,
+      submittedBy: input.submittedBy,
+      visibility: input.encounter.roleplayState?.visibility,
+    }),
+  };
+}
+
+function attachCombatStepAutomationCommandLink(input: {
+  commandId: string;
+  countsTowardProcessed: boolean;
+  executionGroupId: string;
+  identity: CombatStepAutomationRunIdentity;
+  state: CombatRoundState;
+  taskId: string;
+}): CombatRoundState {
+  const link = combatStepAutomationCommandLinkSchema.parse({
+    countsTowardProcessed: input.countsTowardProcessed,
+    executionGroupId: input.executionGroupId,
+    operationFamily: input.identity.operationFamily,
+    runId: input.identity.runId,
+    schemaVersion: 1,
+    startingSequence: input.identity.startingSequence,
+    startingRevision: input.identity.startingRevision,
+    taskId: input.taskId,
+  });
+  return {
+    ...input.state,
+    commands: input.state.commands.map((command) =>
+      command.id === input.commandId
+        ? { ...command, facts: { ...command.facts, stepAutomation: link } }
+        : command,
+    ),
+  };
+}
+
+function getAcceptedCombatStepAutomationCommands(input: {
+  identity: Pick<CombatStepAutomationRunIdentity, "operationFamily" | "runId" | "startingRevision">;
+  state: CombatRoundState;
+}) {
+  const prefix = getCombatStepAutomationCommandPrefix(input.identity);
+  return input.state.commands.flatMap((command) => {
+    if (!command.id.startsWith(prefix)) return [];
+    const link = combatStepAutomationCommandLinkSchema.safeParse(command.facts.stepAutomation);
+    return link.success ? [{ command, link: link.data }] : [];
+  });
 }
 
 function hasAcceptedDeterministicCommand(input: {
@@ -7516,54 +7801,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const initiativeRoll = rollOpenEndedD6();
       const initiativeBase = body.initiativeBase ?? 0;
-      const initiativeProjection = buildLiveCombatModifierContributionProjection({
-        combatContext: scenarioParticipant.state.combat.combatContext,
-        combatEffects: scenarioParticipant.state.combatEffects,
-        currentRound: roundState.roundNumber,
-        encounterId,
-        ownerParticipantId: scenarioParticipant.id,
-      });
-      const initiativeCalculationContext: CombatCalculationContext = {
-        encounterId,
-        ownerParticipantId: scenarioParticipant.id,
-        phase,
-        roundNumber: roundState.roundNumber,
-        step: phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
-      };
-      const initiativeResolution = resolveCombatModifierContributions({
-        bucket: "initiative",
-        context: initiativeCalculationContext,
-        contributions: initiativeProjection.contributions,
-      });
-      const initiativeGeneralResolution = resolveCombatWideGeneralModifiers({
-        context: { ...initiativeCalculationContext, rollType: "initiative" },
-        contributions: initiativeProjection.contributions,
-      });
-      const initiativeRawModifier = initiativeResolution.total + initiativeGeneralResolution.total;
-      const initiativeModifierTrace = calculateWorkbookPercentageAdjustmentTrace({
-        baseValue: initiativeBase,
-        rawModifiers: [{ label: "Initiative", value: initiativeRawModifier }],
-      });
-      const rolledInitiative = buildCombatRoundInitiativeResult({
-        baseInitiative: initiativeBase,
-        modifierAdjustment:
-          (initiativeModifierTrace?.finalValue ?? initiativeBase) - initiativeBase,
-        roll: initiativeRoll,
-      });
       const submittedAt = new Date().toISOString();
-      const nextRoundState = recordCombatRoundInitiative({
-        command: {
-          createdAt: submittedAt,
-          createdByUserId: user.id,
-        },
-        initiative: rolledInitiative,
-        participantId: encounterParticipant.id,
+      const rolled = recordCanonicalServerCombatInitiative({
+        encounter,
+        encounterParticipantId: encounterParticipant.id,
+        initiativeBase,
         phase,
+        scenarioParticipant,
         state: roundState,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
-        visibility: encounter.roleplayState?.visibility,
+        submittedAt,
+        userId: user.id,
       });
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
@@ -7572,8 +7821,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioId,
         session: {
           ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
+          combatRoundState: rolled.state,
+          currentRound: rolled.state.roundNumber,
           updatedAt: submittedAt,
         },
       });
@@ -7586,7 +7835,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               scenarioParticipants,
               userId: user.id,
             }),
-        initiative: rolledInitiative,
+        initiative: rolled.initiative,
       };
     } catch (error) {
       return reply.code(400).send({
@@ -9977,6 +10226,461 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/run-gm-step-workflow", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      let workingEncounter = await encounterService.getEncounterById(encounterId);
+      if (!workingEncounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+      const scenarioId = workingEncounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          code: "unauthorized_actor",
+          error: "Only the GM can run combat step workflow actions.",
+        });
+      }
+      const start = combatStepAutomationStartRequestSchema.parse(request.body);
+      if (start.encounterId !== encounterId) {
+        return reply.code(409).send({
+          code: "task_changed",
+          error: "The combat workflow belongs to another encounter.",
+        });
+      }
+      let workingParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const initial = projectApiCombatStepAutomation({
+        encounter: workingEncounter,
+        scenarioParticipants: workingParticipants,
+      });
+      const acceptedLinks = getAcceptedCombatStepAutomationCommands({
+        identity: {
+          operationFamily: start.operationFamily,
+          runId: start.runId,
+          startingRevision: start.expectedRevision,
+        },
+        state: initial.state,
+      });
+      const startingSequence =
+        acceptedLinks[0]?.link.startingSequence ?? getCombatRoundNextEventSequence(initial.state);
+      const identity: CombatStepAutomationRunIdentity = {
+        encounterId,
+        gmActorUserId: user.id,
+        operationFamily: start.operationFamily,
+        runId: start.runId,
+        schemaVersion: 1,
+        startExecutionGroupId: start.expectedExecutionGroupId,
+        startingRevision: start.expectedRevision,
+        startingRound: start.expectedRound,
+        startingSequence,
+        startingStep: start.expectedStep,
+        startTaskId: start.expectedTaskId,
+      };
+
+      if (acceptedLinks.length > 0) {
+        const currentTask = initial.tasks[0];
+        const currentDecision = currentTask
+          ? classifyApiCombatStepAutomationTask({
+              encounter: workingEncounter,
+              operationFamily: start.operationFamily,
+              projection: initial,
+              scenarioParticipants: workingParticipants,
+              task: currentTask,
+            })
+          : undefined;
+        const stepComplete =
+          initial.roundNumber !== start.expectedRound || initial.step !== start.expectedStep;
+        const acceptedTasks = acceptedLinks.map(({ command, link }) => ({
+          commandId: command.id,
+          executionGroupId: link.executionGroupId,
+          kind: command.type,
+          participantId: command.participantId,
+          taskId: link.taskId,
+        }));
+        const stopReason = stepComplete
+          ? "end_of_step"
+          : currentDecision?.kind === "stop"
+            ? currentDecision.reason
+            : acceptedLinks.length >= DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT
+              ? "safety_limit_reached"
+              : "task_changed";
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: initial.state }),
+          encounter: workingEncounter,
+          participants: workingParticipants,
+          workflow: {
+            acceptedTasks,
+            alreadyAccepted: true,
+            attemptedTasks: acceptedTasks,
+            finalRevision: workingEncounter.updatedAt,
+            finalTask: currentTask
+              ? {
+                  executionGroupId: currentTask.executionGroupId,
+                  kind: currentTask.kind,
+                  participantId:
+                    currentTask.owner?.kind === "combatant"
+                      ? currentTask.owner.participantId
+                      : currentTask.identity.participantId,
+                  taskId: currentTask.id,
+                }
+              : undefined,
+            identity,
+            processedCount: acceptedLinks.filter(({ link }) => link.countsTowardProcessed).length,
+            stepComplete,
+            stopParticipantId:
+              currentTask?.owner?.kind === "combatant"
+                ? currentTask.owner.participantId
+                : currentTask?.identity.participantId,
+            stopReason,
+            stopTask: currentTask
+              ? {
+                  executionGroupId: currentTask.executionGroupId,
+                  kind: currentTask.kind,
+                  participantId:
+                    currentTask.owner?.kind === "combatant"
+                      ? currentTask.owner.participantId
+                      : currentTask.identity.participantId,
+                  taskId: currentTask.id,
+                }
+              : undefined,
+          },
+        };
+      }
+
+      if (workingEncounter.updatedAt !== start.expectedRevision) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Combat state changed before the workflow could start.",
+        });
+      }
+      const initialTask = initial.tasks[0];
+      if (
+        initial.roundNumber !== start.expectedRound ||
+        initial.step !== start.expectedStep ||
+        !initialTask ||
+        initialTask.id !== start.expectedTaskId ||
+        initialTask.executionGroupId !== start.expectedExecutionGroupId
+      ) {
+        return reply.code(409).send({
+          code: "task_changed",
+          error: "The current combat task changed before the workflow could start.",
+        });
+      }
+
+      const project = () =>
+        projectApiCombatStepAutomation({
+          encounter: workingEncounter!,
+          scenarioParticipants: workingParticipants,
+        });
+      const workflow = await runCombatStepAutomation({
+        classify: ({ projection, task }) =>
+          classifyApiCombatStepAutomationTask({
+            encounter: workingEncounter!,
+            operationFamily: start.operationFamily,
+            projection: projection as ApiCombatStepAutomationProjection,
+            scenarioParticipants: workingParticipants,
+            task,
+          }),
+        execute: async ({ commandId, projection, task }) => {
+          const apiProjection = projection as ApiCombatStepAutomationProjection;
+          const countsTowardProcessed =
+            task.kind === "roll_initiative" || task.kind === "modifier_review";
+          const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
+          const submittedAt = new Date(
+            Math.max(Date.now(), Number.isFinite(priorRevisionTime) ? priorRevisionTime + 1 : 0),
+          ).toISOString();
+
+          try {
+            if (task.kind === "roll_initiative" && task.identity.phase) {
+              const owner = getStepAutomationScenarioParticipant({
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              const roundParticipant = owner
+                ? apiProjection.state.participants.find(
+                    (participant) => participant.participantId === owner.encounterParticipantId,
+                  )
+                : undefined;
+              const opportunities = (
+                roundParticipant?.declaration?.attackOpportunities ?? []
+              ).filter(
+                (opportunity) =>
+                  opportunity.phase === task.identity.phase && opportunity.status === "committed",
+              );
+              if (!owner || opportunities.length !== 1) {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "roll_not_eligible" as const,
+                };
+              }
+              const base = resolveCanonicalCombatInitiativeBase({
+                opportunity: opportunities[0],
+                participant: owner.participant,
+              });
+              if (base.completeness !== "complete") {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "roll_not_eligible" as const,
+                };
+              }
+              const rolled = recordCanonicalServerCombatInitiative({
+                commandId,
+                encounter: workingEncounter!,
+                encounterParticipantId: owner.encounterParticipantId,
+                initiativeBase: base.initiativeBase,
+                phase: task.identity.phase,
+                scenarioParticipant: owner.participant,
+                state: apiProjection.state,
+                submittedAt,
+                submittedBy: "gm",
+                userId: user.id,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: rolled.state,
+                taskId: task.id,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { kind: "accepted" as const, projection: project() };
+            }
+
+            if (task.kind === "modifier_review") {
+              const owner = getStepAutomationScenarioParticipant({
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              const review = owner
+                ? getStraightforwardStepAutomationModifierReview({
+                    commandId,
+                    encounter: workingEncounter!,
+                    participant: owner.participant,
+                    state: apiProjection.state,
+                    task,
+                  })
+                : undefined;
+              if (!owner || !review?.straightforward) {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "modifier_review_required" as const,
+                };
+              }
+              const transaction = commitCanonicalCombatModifierReview({
+                acceptedRevision: workingEncounter!.updatedAt,
+                acceptedSequence: review.review.canonicalCutoff,
+                commandId,
+                review: review.review,
+              });
+              const nextParticipantState = applyCanonicalModifierReviewToParticipantState({
+                createdAt: submittedAt,
+                draftContext: review.currentContext,
+                state: owner.participant.state,
+                transaction,
+              });
+              const reviewedDeclarationState = recordCombatRoundDeclaration({
+                declaration: {
+                  ...review.declaration,
+                  combatContext: review.currentContext,
+                  submittedAt,
+                  submittedByUserId: user.id,
+                },
+                participantId: owner.encounterParticipantId,
+                state: apiProjection.state,
+                submittedBy: "gm",
+              });
+              const recorded = recordCombatRoundParticipantStepReview({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                modifierReview: transaction,
+                modifierReviewUndo: {
+                  combatContext: owner.participant.state.combat.combatContext,
+                  combatEffects: owner.participant.state.combatEffects,
+                },
+                participantId: owner.encounterParticipantId,
+                previousDeclaration: review.declaration,
+                state: reviewedDeclarationState,
+                step: apiProjection.state.currentStep,
+                submittedBy: "gm",
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: recorded,
+                taskId: task.id,
+              });
+              const saved = await encounterService.commitCombatModifierReview({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedEncounterRevision: workingEncounter!.updatedAt,
+                participant: owner.participant,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+                state: nextParticipantState,
+              });
+              workingEncounter = saved.encounter;
+              workingParticipants = workingParticipants.map((participant) =>
+                participant.id === saved.participant.id ? saved.participant : participant,
+              );
+              return { kind: "accepted" as const, projection: project() };
+            }
+
+            if (task.kind === "commit_initiative" && task.identity.phase) {
+              const nonParticipatingParticipantIds = new Set(
+                apiProjection.participation.facts.flatMap((fact) =>
+                  fact.identity.processFamily === "initiative" &&
+                  fact.identity.phase === task.identity.phase &&
+                  fact.status === "not_required" &&
+                  fact.workClass === "no_work" &&
+                  fact.completeness === "complete" &&
+                  fact.identity.participantId
+                    ? [fact.identity.participantId]
+                    : [],
+                ),
+              );
+              const committed = commitCombatRoundPhaseInitiativeResolution({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                nonParticipatingParticipantIds,
+                phase: task.identity.phase,
+                state: apiProjection.state,
+                visibility: workingEncounter!.roleplayState?.visibility,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed: false,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: committed.state,
+                taskId: task.id,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { kind: "accepted" as const, projection: project() };
+            }
+
+            if (task.kind === "gm_advance_boundary" && task.transition) {
+              const advanced = advanceCombatProgressionBoundary({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                expectedBoundary: task.transition.currentBoundary,
+                expectedCommandType: "advance_combat_boundary",
+                expectedExecutionGroupId: task.executionGroupId,
+                expectedTaskId: task.id,
+                participation: apiProjection.participation,
+                state: apiProjection.state,
+                targetBoundary: task.transition.targetBoundary,
+                visibility: workingEncounter!.roleplayState?.visibility,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed: false,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: advanced,
+                taskId: task.id,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { kind: "accepted" as const, projection: project() };
+            }
+
+            return {
+              kind: "stopped" as const,
+              projection: apiProjection,
+              reason: "unsupported_task" as const,
+            };
+          } catch (error) {
+            if (error instanceof EncounterCombatWriteError) {
+              const latestEncounter = await encounterService.getEncounterById(encounterId);
+              if (latestEncounter?.scenarioId === scenarioId) {
+                workingEncounter = latestEncounter;
+                workingParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+                const latest = project();
+                return {
+                  kind: "stopped" as const,
+                  projection: latest,
+                  reason:
+                    latest.tasks[0]?.id === task.id
+                      ? ("stale_revision" as const)
+                      : ("task_changed" as const),
+                };
+              }
+            }
+            return {
+              kind: "stopped" as const,
+              projection: project(),
+              reason: "persistence_failure" as const,
+            };
+          }
+        },
+        identity,
+        initial,
+      });
+
+      const { final: finalProjection, ...workflowResult } = workflow;
+      return {
+        commandEnvelope: buildCombatRoundCommandEnvelope({ state: finalProjection.state }),
+        encounter: workingEncounter,
+        participants: workingParticipants,
+        workflow: workflowResult,
+      };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
+      return reply.code(error instanceof RangeError ? 409 : 400).send({
+        error: error instanceof Error ? error.message : "Unable to run the combat workflow.",
+      });
+    }
+  });
 
   app.post("/encounters/:encounterId/combat-round/advance-current-step", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);

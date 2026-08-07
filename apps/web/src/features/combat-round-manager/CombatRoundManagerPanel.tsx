@@ -33,6 +33,7 @@ import type {
   CombatRoundStepStatus,
   CombatRoundInitiativeRank,
   CombatRoundStepSnapshot,
+  CombatStepAutomationRunResult,
   CombatDistance,
   CombatDistanceEdge,
   EncounterSession,
@@ -136,7 +137,6 @@ import {
   advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
-  completeRemainingCombatStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
   commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
@@ -160,6 +160,7 @@ import {
   rollCombatHitLocationOnServer,
   rollCurrentRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
+  runGmCombatStepWorkflowOnServer,
   saveCurrentCombatDamageReviewOnServer,
   resolveCurrentCombatPhaseDamageOnServer,
   setCombatExperienceDifficultyOnServer,
@@ -301,6 +302,7 @@ import {
   projectGmCombatEvents,
 } from "./view-models/activeInspectorPresentation";
 import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
+import { buildCombatStepWorkflowStatusPresentation } from "./view-models/combatStepWorkflowStatus";
 import {
   createCombatRecentResultCandidate,
   resolveCombatRecentResultFocus,
@@ -3925,6 +3927,7 @@ export default function CombatRoundManagerPanel({
   }>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
+  const [stepWorkflowStatus, setStepWorkflowStatus] = useState<CombatStepAutomationRunResult>();
   useEffect(() => {
     if (!saving) {
       settleCombatPerformanceInteraction();
@@ -4550,6 +4553,12 @@ export default function CombatRoundManagerPanel({
       ),
     [roundState.participants],
   );
+  const stepWorkflowStatusPresentation = stepWorkflowStatus
+    ? buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(Object.entries(roundParticipantLabelsById)),
+        result: stepWorkflowStatus,
+      })
+    : undefined;
   const activeRoundEndDistanceProposals =
     selectedRoundIsActive && inspector.step === "round_summary"
       ? (roundState.roundEndReview?.proposedDistances ?? []).filter((proposal) => proposal.accepted)
@@ -6433,7 +6442,8 @@ export default function CombatRoundManagerPanel({
   const inspectorBulkStepCompletionAvailable =
     inspectorCanExecuteSelectedStep &&
     (currentActionPresentation?.taskKind === "modifier_review" ||
-      currentActionPresentation?.taskKind === "roll_initiative");
+      currentActionPresentation?.taskKind === "roll_initiative") &&
+    !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
   const inspectorWorkflowSelectorAvailable =
     Boolean(currentActionPresentation?.primaryAction.descriptor) &&
     (inspectorSkipActionOutcomeSelectorAvailable || inspectorBulkStepCompletionAvailable);
@@ -6482,15 +6492,17 @@ export default function CombatRoundManagerPanel({
           Skip this participant
         </option>
         <option disabled={!inspectorBulkStepCompletionAvailable} value="complete_remaining">
-          Complete remaining step
+          {currentActionPresentation?.taskKind === "modifier_review"
+            ? "Accept remaining NPC reviews"
+            : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
   ) : null;
   const inspectorBulkStepLabel =
     currentActionPresentation?.taskKind === "modifier_review"
-      ? "Complete remaining modifier review"
-      : "Complete remaining initiative";
+      ? "Accept remaining NPC reviews"
+      : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6514,12 +6526,12 @@ export default function CombatRoundManagerPanel({
           requiredNow: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Stops at the first unresolved review."
-              : "Stops at the first required roll."
+              : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
-              ? "Accept eligible remaining modifier reviews unchanged."
-              : "Complete eligible remaining initiative."
+              ? "Accept straightforward GM-controlled participant reviews unchanged."
+              : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -6930,6 +6942,34 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </div>
   ) : null;
+  const inspectorStepWorkflowStatus = stepWorkflowStatusPresentation ? (
+    <section
+      aria-label="Workflow status"
+      style={{
+        background: "#f5f2e9",
+        border: "1px solid #ddd6c5",
+        borderRadius: 6,
+        display: "grid",
+        gap: "0.2rem",
+        padding: "0.45rem 0.55rem",
+      }}
+    >
+      <strong style={{ fontSize: "0.88rem" }}>Workflow</strong>
+      <span>{stepWorkflowStatusPresentation.operationLabel}</span>
+      <span>{stepWorkflowStatusPresentation.processedSummary}</span>
+      {stepWorkflowStatusPresentation.completion ? (
+        <span>{stepWorkflowStatusPresentation.completion}</span>
+      ) : null}
+      {stepWorkflowStatusPresentation.stopMessage ? (
+        <span>
+          {stepWorkflowStatusPresentation.stopParticipantLabel
+            ? `Stopped at ${stepWorkflowStatusPresentation.stopParticipantLabel}. `
+            : ""}
+          {stepWorkflowStatusPresentation.stopMessage}
+        </span>
+      ) : null}
+    </section>
+  ) : null;
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
@@ -6937,8 +6977,10 @@ export default function CombatRoundManagerPanel({
     inspectorAdjustDistanceControls ||
     inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
-    inspectorRoundEndDistanceControls ? (
+    inspectorRoundEndDistanceControls ||
+    inspectorStepWorkflowStatus ? (
       <>
+        {inspectorStepWorkflowStatus}
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
@@ -7112,6 +7154,7 @@ export default function CombatRoundManagerPanel({
       encounterScopeRef.current = encounter.id;
       setRecentResultFocus(undefined);
       setRecentResultRequest(undefined);
+      setStepWorkflowStatus(undefined);
       manualSelectionRef.current = undefined;
       pendingSelectionRef.current = undefined;
       setSelectedRoundNumber(initialRoundState.roundNumber);
@@ -10193,24 +10236,33 @@ export default function CombatRoundManagerPanel({
       setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
+    const operationFamily =
+      descriptor.commandType === "roll_initiative_phase1" ||
+      descriptor.commandType === "roll_initiative_phase2"
+        ? "roll_remaining"
+        : "accept_remaining";
+    if (operationFamily === "accept_remaining" && inspectorHasLocalModifierEdits) {
+      setSaveError("Save or cancel the current modifier draft before continuing the workflow.");
+      return;
+    }
 
     setSaving(true);
     try {
       const {
-        blocker,
         commandEnvelope,
         encounter: nextEncounter,
         participants,
-      } = await completeRemainingCombatStepOnServer({
+        workflow,
+      } = await runGmCombatStepWorkflowOnServer({
         currentEncounter: encounter,
         encounterId: encounter.id,
-        executionGroupId: descriptor.executionGroupId!,
+        expectedExecutionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
-        participantId: descriptor.participantId,
-        phase: descriptor.phase,
-        processId: descriptor.processId,
-        stageId: descriptor.stageId,
-        taskId: descriptor.taskId,
+        expectedRound: roundState.roundNumber,
+        expectedStep: roundState.currentStep,
+        expectedTaskId: descriptor.taskId,
+        operationFamily,
+        runId: crypto.randomUUID(),
       });
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -10232,12 +10284,11 @@ export default function CombatRoundManagerPanel({
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
-      setSaveError(blocker?.message);
+      setStepWorkflowStatus(workflow);
+      setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to complete the remaining combat step.",
+        caughtError instanceof Error ? caughtError.message : "Unable to run the combat workflow.",
       );
     } finally {
       setSaving(false);

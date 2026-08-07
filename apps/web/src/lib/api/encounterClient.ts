@@ -22,6 +22,8 @@ import {
   CombatRoundPhaseContexts,
   CombatRoundStep,
   CombatRoundStepSnapshot,
+  CombatStepAutomationOperationFamily,
+  CombatStepAutomationRunResult,
   EncounterParticipant,
   EncounterParticipantMembershipMode,
   EncounterSession,
@@ -1074,6 +1076,42 @@ export async function completeRemainingCombatStepOnServer(input: {
     `/encounters/${input.encounterId}/combat-round/complete-remaining-step`,
     {
       body: combatMutationBody(input),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
+export async function runGmCombatStepWorkflowOnServer(input: {
+  currentEncounter: EncounterSession;
+  encounterId: string;
+  expectedExecutionGroupId: string;
+  expectedRevision: string;
+  expectedRound: number;
+  expectedStep: CombatRoundStep;
+  expectedTaskId: string;
+  operationFamily: CombatStepAutomationOperationFamily;
+  runId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+  participants: ScenarioParticipant[];
+  workflow: CombatStepAutomationRunResult;
+}> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/run-gm-step-workflow`,
+    {
+      body: JSON.stringify({
+        encounterId: input.encounterId,
+        expectedExecutionGroupId: input.expectedExecutionGroupId,
+        expectedRevision: input.expectedRevision,
+        expectedRound: input.expectedRound,
+        expectedStep: input.expectedStep,
+        expectedTaskId: input.expectedTaskId,
+        operationFamily: input.operationFamily,
+        runId: input.runId,
+        schemaVersion: 1,
+      }),
       method: "POST",
     },
     input.currentEncounter,

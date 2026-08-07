@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   advanceCurrentStep: vi.fn(),
   clearCurrentStep: vi.fn(),
   commitParticipantReview: vi.fn(),
-  completeRemainingStep: vi.fn(),
+  runStepWorkflow: vi.fn(),
   loadEncounter: vi.fn(),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
@@ -47,7 +47,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     advanceDeterministicCombatOnServer: mocks.advanceDeterministic,
     advanceCombatRoundCurrentStepOnServer: mocks.advanceCurrentStep,
     clearCurrentCombatRoundStepOnServer: mocks.clearCurrentStep,
-    completeRemainingCombatStepOnServer: mocks.completeRemainingStep,
+    runGmCombatStepWorkflowOnServer: mocks.runStepWorkflow,
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
     rollCombatAttackOnServer: mocks.rollAttack,
@@ -1128,8 +1128,84 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     fireEvent.change(screen.getByLabelText(/modifier value/i), { target: { value: "-2" } });
     expect(screen.getByLabelText(/modifier value/i)).toHaveValue(-2);
     expect(mocks.advanceDeterministic).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox", { name: "Workflow" })).toBeInTheDocument();
-    expect(mocks.completeRemainingStep).not.toHaveBeenCalled();
+    expect(screen.queryByRole("combobox", { name: "Workflow" })).not.toBeInTheDocument();
+    expect(mocks.runStepWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("runs one GM step workflow request and renders transient status outside results and log", async () => {
+    const encounter = buildModifierReviewEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const state = combatRoundStateSchema.parse(encounter.combatRoundState);
+    mocks.runStepWorkflow.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state }),
+      encounter,
+      participants: [],
+      workflow: {
+        acceptedTasks: [
+          {
+            commandId: "workflow-command-1",
+            executionGroupId: "workflow-group-1",
+            kind: "modifier_review",
+            participantId: "encounter-attacker",
+            taskId: "workflow-task-1",
+          },
+        ],
+        alreadyAccepted: false,
+        attemptedTasks: [],
+        finalRevision: encounter.updatedAt,
+        finalTask: {
+          executionGroupId: "workflow-group-2",
+          kind: "modifier_review",
+          participantId: "encounter-defender",
+          taskId: "workflow-task-2",
+        },
+        identity: {
+          encounterId: encounter.id,
+          gmActorUserId: "gm-1",
+          operationFamily: "accept_remaining",
+          runId: "workflow-run-1",
+          schemaVersion: 1,
+          startExecutionGroupId: "workflow-group-1",
+          startingRevision: encounter.updatedAt,
+          startingRound: 1,
+          startingSequence: 4,
+          startingStep: "review_action_modifiers",
+          startTaskId: "workflow-task-1",
+        },
+        processedCount: 1,
+        stepComplete: false,
+        stopParticipantId: "encounter-defender",
+        stopReason: "modifier_review_required",
+        stopTask: {
+          executionGroupId: "workflow-group-2",
+          kind: "modifier_review",
+          participantId: "encounter-defender",
+          taskId: "workflow-task-2",
+        },
+      },
+    });
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workflow" }), {
+      target: { value: "complete_remaining" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Accept remaining NPC reviews" }));
+
+    await waitFor(() => expect(mocks.runStepWorkflow).toHaveBeenCalledTimes(1));
+    expect(mocks.runStepWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encounterId: encounter.id,
+        operationFamily: "accept_remaining",
+      }),
+    );
+    const status = await screen.findByRole("region", { name: "Workflow status" });
+    expect(within(status).getByText("Accepted 1 NPC review.")).toBeInTheDocument();
+    expect(within(status).getByText(/Stopped at Scyrian cavalry guy/)).toBeInTheDocument();
+    expect(screen.getByText("Combat Log")).toBeInTheDocument();
+    expect(screen.queryByText("GM Step Automation")).not.toBeInTheDocument();
   });
 
   it("does not offer bulk initiative for canonical nonparticipants", async () => {
@@ -1147,7 +1223,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     });
     expect(screen.queryByRole("combobox", { name: "Workflow" })).not.toBeInTheDocument();
     expect(screen.queryByText("Complete remaining initiative")).not.toBeInTheDocument();
-    expect(mocks.completeRemainingStep).not.toHaveBeenCalled();
+    expect(mocks.runStepWorkflow).not.toHaveBeenCalled();
   });
 });
 
