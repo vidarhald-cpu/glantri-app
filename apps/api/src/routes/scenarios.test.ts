@@ -29,6 +29,7 @@ import {
   initializeCombatRoundState,
   encounterSessionSchema,
   prepareCombatRoundEndReview,
+  projectProcessRestrictionToCanonicalModifierLifecycle,
   projectActiveCombatParticipation,
   projectCombatNpcDeclarationProposal,
   rollCombatRoundCombatExperience,
@@ -2659,6 +2660,23 @@ function setupMutableCombatRouteState<Participant extends { id: string; state: u
       return { encounter, participant: updatedParticipant };
     },
   );
+  mocks.encounterService.commitCombatParticipantStateMutations.mockImplementation(
+    async (update: {
+      participants: Array<{ participant: Participant; state: unknown }>;
+      session: EncounterSession;
+    }) => {
+      const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
+      const updatedParticipants = update.participants.map(({ participant, state }) => ({
+        ...participant,
+        state,
+      })) as Participant[];
+      currentParticipants = currentParticipants.map(
+        (participant) =>
+          updatedParticipants.find((candidate) => candidate.id === participant.id) ?? participant,
+      );
+      return { encounter, participants: updatedParticipants };
+    },
+  );
   mocks.scenarioService.getScenarioById.mockResolvedValue({
     campaignId: "campaign-1",
     id: "scenario-1",
@@ -2878,7 +2896,7 @@ function makeContinuedContactMaintenanceFixture(): {
   contactId: string;
   contestId: string;
   encounter: EncounterSession;
-  participants: Array<ReturnType<typeof makeCombatScenarioParticipant>>;
+  participants: ScenarioParticipant[];
 } {
   const encounterParticipants = makeTwoCombatEncounterParticipants();
   const baseEncounter = makeCombatEncounter({
@@ -2888,12 +2906,35 @@ function makeContinuedContactMaintenanceFixture(): {
   const baseState = initializeCombatRoundState({ encounter: baseEncounter });
   const contactId = "continued-contact-maintenance-1";
   const conditionId = "continued-contact-maintenance-1:unbalanced";
+  const contactLifecycle = projectProcessRestrictionToCanonicalModifierLifecycle({
+    context: {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdRevision: baseEncounter.updatedAt,
+      createdSequence: 1,
+      encounterId: baseEncounter.id,
+    },
+    duration: {
+      conditionId: contactId,
+      conditionKind: "contact_ended",
+      kind: "until_condition",
+      startPhase: "phase1",
+      startRound: 2,
+      startSequence: 1,
+    },
+    effectId: contactId,
+    effectKind: "continued_contact",
+    opponentParticipantId: "encounter-participant-2",
+    ownerParticipantId: "encounter-participant-1",
+    processId: contactId,
+    publicLabel: "Continued Contact",
+  }).effect;
   const withDeclarations = {
     ...baseState,
     continuedContacts: [
       {
         affectedParticipantId: "encounter-participant-2",
         brawlingContestResultId: "opening-contest-result-1",
+        canonicalLifecycle: contactLifecycle,
         controllerParticipantId: "encounter-participant-1",
         establishedPhase: "phase1" as const,
         establishedRound: 2,
@@ -2960,6 +3001,28 @@ function makeContinuedContactMaintenanceFixture(): {
     excludedRollPurposes: ["escape_continued_contact"],
     generalDamage: 0,
     id: conditionId,
+    canonicalLifecycle: projectProcessRestrictionToCanonicalModifierLifecycle({
+      context: {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdRevision: baseEncounter.updatedAt,
+        createdSequence: 1,
+        encounterId: baseEncounter.id,
+      },
+      duration: {
+        conditionId: contactId,
+        conditionKind: "contact_ended",
+        kind: "until_condition",
+        startPhase: "phase1",
+        startRound: 2,
+        startSequence: 1,
+      },
+      effectId: conditionId,
+      effectKind: "unbalanced",
+      opponentParticipantId: "participant-1",
+      ownerParticipantId: "participant-2",
+      processId: contactId,
+      publicLabel: "Unbalanced",
+    }).effect,
     modifierValue: -2,
     roundNumber: 2,
     sourceEventId: `${conditionId}:effect-event`,
@@ -2994,7 +3057,7 @@ function makeContinuedContactMaintenanceFixture(): {
         },
       },
       ...(input.state ? { state: input.state } : {}),
-    });
+    }) as unknown as ScenarioParticipant;
   const baseAffectedState = makeCombatScenarioParticipant().state;
   return {
     conditionId,
@@ -7671,6 +7734,230 @@ describe("scenarios route contract", () => {
       status: "awaiting_rolls",
     });
     expect(responseContest.affectedRoll).toBeUndefined();
+  });
+
+  it("lets each player-owned side execute its exact Continued Contact maintenance task", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.playerUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    try {
+      const controller = await app.inject({
+        method: "POST",
+        payload: {
+          contestId: prepared.contestId,
+          opponentParticipantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      });
+      expect(controller.statusCode, controller.body).toBe(200);
+      mocks.requireAuthenticatedUser.mockResolvedValue({
+        ...mocks.playerUser,
+        id: "other-player",
+      });
+      const affected = await app.inject({
+        method: "POST",
+        payload: {
+          contestId: prepared.contestId,
+          opponentParticipantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-2",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      });
+      expect(affected.statusCode, affected.body).toBe(200);
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).roundEndReview
+          ?.continuedContactMaintenanceContests[0],
+      ).toMatchObject({ affectedRollRecorded: true, controllerRollRecorded: true });
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("rolls contiguous GM Continued Contact sides, fences distance, and retries idempotently", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const participants = prepared.participants.map((participant) => ({
+      ...participant,
+      controlledByUserId: undefined,
+    }));
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "roll_remaining",
+      participants,
+      runId: "continued-contact-complete-run",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        identity: { startProcessFamily: "continued_contact" },
+        processedCount: 2,
+        stepComplete: true,
+        stopReason: "distance_decision_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(
+        state.commands.filter((command) => command.type === "roll_continued_contact_maintenance"),
+      ).toHaveLength(2);
+      expect(state.roundEndReview?.proposedDistances[0]?.status).toBe("pending_rolls");
+      const effect = fixture.participants[1]!.state.combatEffects?.effects.find(
+        (candidate) => candidate.id === prepared.conditionId,
+      );
+      expect(effect).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" }, version: 2 },
+        status: "expired",
+      });
+      const finalCommand = state.commands.at(-1)!;
+      expect(finalCommand.facts.continuedContactEffectTransition).toMatchObject({
+        nextEffect: { status: "expired" },
+        previousEffect: { status: "active" },
+        scenarioParticipantId: "participant-2",
+      });
+
+      const commandCount = state.commands.length;
+      const retry = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().workflow).toMatchObject({
+        alreadyAccepted: true,
+        processedCount: 2,
+        stopReason: "distance_decision_required",
+      });
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands,
+      ).toHaveLength(commandCount);
+
+      const clear = await app.inject({
+        method: "POST",
+        url: "/encounters/encounter-1/combat-round/clear-current-step",
+      });
+      expect(clear.statusCode, clear.body).toBe(200);
+      const restored = clear
+        .json()
+        .participants.find((participant: ScenarioParticipant) => participant.id === "participant-2")
+        .state.combatEffects.effects.find(
+          (candidate: { id: string }) => candidate.id === prepared.conditionId,
+        );
+      expect(restored).toEqual(
+        (finalCommand.facts.continuedContactEffectTransition as { previousEffect: unknown })
+          .previousEffect,
+      );
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("automates a GM controller and stops before the player-owned escape roll", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const participants = prepared.participants.map((participant, index) => ({
+      ...participant,
+      controlledByUserId: index === 0 ? undefined : "other-player",
+    }));
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload: stepAutomationRequest({
+          encounter: prepared.encounter,
+          operationFamily: "roll_remaining",
+          participants,
+          runId: "continued-contact-player-boundary-run",
+        }),
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 1,
+        stepComplete: false,
+        stopParticipantId: "encounter-participant-2",
+        stopReason: "player_action_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.roundEndReview?.continuedContactMaintenanceContests[0]).toMatchObject({
+        affectedRollRecorded: false,
+        controllerRollRecorded: true,
+      });
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("keeps encounter and mirrored effect unchanged when atomic escape persistence fails", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    try {
+      const controller = await app.inject({
+        method: "POST",
+        payload: {
+          contestId: prepared.contestId,
+          opponentParticipantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      });
+      expect(controller.statusCode).toBe(200);
+      mocks.encounterService.commitCombatParticipantStateMutation.mockRejectedValueOnce(
+        new Error("transaction failed"),
+      );
+      const affected = await app.inject({
+        method: "POST",
+        payload: {
+          contestId: prepared.contestId,
+          opponentParticipantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-2",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      });
+      expect(affected.statusCode).toBe(400);
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.roundEndReview?.continuedContactMaintenanceContests[0]).toMatchObject({
+        affectedRollRecorded: false,
+        controllerRollRecorded: true,
+      });
+      expect(state.continuedContacts[0]?.status).toBe("active");
+      expect(
+        fixture.participants[1]!.state.combatEffects?.effects.find(
+          (candidate) => candidate.id === prepared.conditionId,
+        ),
+      ).toMatchObject({ status: "active" });
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
   });
 
   it("returns the incremented revision and Start next round task after the final SU review", async () => {

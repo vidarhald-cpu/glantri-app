@@ -12890,10 +12890,67 @@ function buildCombatRoundEndDistanceProposalId(input: {
   return `round-end:${input.roundNumber}:distance:${input.pairKey}`;
 }
 
+function getContinuedContactCanonicalSequence(contact: z.infer<typeof continuedContactSchema>) {
+  const lifecycle = canonicalCombatModifierEffectSchema.safeParse(contact.canonicalLifecycle);
+  return lifecycle.success ? lifecycle.data.createdSequence : undefined;
+}
+
+/**
+ * Continued Contact maintenance is ordered by accepted creation sequence and then stable contact
+ * identity. Persisted array order is presentation/storage detail and is never task authority.
+ */
+export function sortContinuedContactsForMaintenance(
+  contacts: readonly z.infer<typeof continuedContactSchema>[],
+): z.infer<typeof continuedContactSchema>[] {
+  return [...contacts].sort((left, right) => {
+    const leftSequence = getContinuedContactCanonicalSequence(left);
+    const rightSequence = getContinuedContactCanonicalSequence(right);
+    if (leftSequence !== undefined || rightSequence !== undefined) {
+      if (leftSequence === undefined) return 1;
+      if (rightSequence === undefined) return -1;
+      if (leftSequence !== rightSequence) return leftSequence - rightSequence;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
+export function getConflictingContinuedContactIds(state: CombatRoundState): ReadonlySet<string> {
+  const controllersByPair = new Map<
+    string,
+    { conflicted: boolean; contactIds: string[]; controllerId: string }
+  >();
+  const conflicts = new Set<string>();
+  for (const contact of sortContinuedContactsForMaintenance(state.continuedContacts)) {
+    if (contact.status !== "active") continue;
+    const pairKey = makeDistancePairKey(
+      contact.controllerParticipantId,
+      contact.affectedParticipantId,
+    );
+    const existing = controllersByPair.get(pairKey);
+    if (!existing) {
+      controllersByPair.set(pairKey, {
+        conflicted: false,
+        contactIds: [contact.id],
+        controllerId: contact.controllerParticipantId,
+      });
+      continue;
+    }
+    existing.contactIds.push(contact.id);
+    if (existing.controllerId !== contact.controllerParticipantId) {
+      existing.conflicted = true;
+      existing.contactIds.forEach((id) => conflicts.add(id));
+    } else if (existing.conflicted) {
+      conflicts.add(contact.id);
+    }
+  }
+  return conflicts;
+}
+
 function buildContinuedContactMaintenanceContests(
   state: CombatRoundState,
 ): ContinuedContactMaintenanceContest[] {
   const normalized = combatRoundStateSchema.parse(state);
+  const conflictingContactIds = getConflictingContinuedContactIds(normalized);
   for (const condition of normalized.unbalancedConditions) {
     if (
       condition.status === "active" &&
@@ -12910,7 +12967,7 @@ function buildContinuedContactMaintenanceContests(
     }
   }
 
-  return normalized.continuedContacts.flatMap((contact) => {
+  return sortContinuedContactsForMaintenance(normalized.continuedContacts).flatMap((contact) => {
     if (contact.status !== "active" || contact.establishedRound >= normalized.roundNumber) {
       return [];
     }
@@ -12936,6 +12993,9 @@ function buildContinuedContactMaintenanceContests(
         controllerParticipantId: contact.controllerParticipantId,
         id: contestId,
         resultId: buildContinuedContactMaintenanceContestResultId({ contestId }),
+        reviewRequiredReason: conflictingContactIds.has(contact.id)
+          ? "conflicting_controllers"
+          : undefined,
         roundNumber: normalized.roundNumber,
         status: "awaiting_rolls",
         unbalancedConditionId: condition.id,
@@ -13870,6 +13930,12 @@ export function recordContinuedContactMaintenanceRoll(input: {
   );
   if (!contest || contest.status !== "awaiting_rolls") {
     throw new RangeError("Continued Contact maintenance is not awaiting rolls.");
+  }
+  if (
+    contest.reviewRequiredReason ||
+    getConflictingContinuedContactIds(normalized).has(contest.continuedContactId)
+  ) {
+    throw new RangeError("Continued Contact requires GM review before maintenance can be rolled.");
   }
   const isController = input.participantId === contest.controllerParticipantId;
   const isAffected = input.participantId === contest.affectedParticipantId;

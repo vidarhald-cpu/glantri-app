@@ -129,6 +129,7 @@ export const continuedContactMaintenanceContestSchema = z.object({
   id: idSchema,
   outcome: z.enum(["maintained", "escaped", "tie"]).optional(),
   resultId: idSchema,
+  reviewRequiredReason: z.enum(["conflicting_controllers"]).optional(),
   roundNumber: z.number().int().positive(),
   status: z.enum(["awaiting_rolls", "resolved", "cancelled"]).default("awaiting_rolls"),
   unbalancedConditionId: idSchema,

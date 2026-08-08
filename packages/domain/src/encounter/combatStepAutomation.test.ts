@@ -231,6 +231,60 @@ describe("canonical GM step automation", () => {
     expect(result.finalTask?.kind).toBe("gm_advance_boundary");
   });
 
+  it("keeps maintenance rolls across exact contacts and stops before distance work", async () => {
+    const controller = processTask(
+      "contact-a-controller",
+      "npc-a",
+      "contact:a",
+      "continued_contact_maintenance_roll",
+    );
+    const affected = processTask(
+      "contact-a-affected",
+      "npc-b",
+      "contact:a",
+      "continued_contact_maintenance_roll",
+    );
+    const nextContact = processTask(
+      "contact-b-controller",
+      "npc-c",
+      "contact:b",
+      "continued_contact_maintenance_roll",
+    );
+    const distance = processTask("distance", "npc-a", "distance", "distance_commit");
+    const contactIdentity = combatStepAutomationRunIdentitySchema.parse({
+      ...identity(),
+      startExecutionGroupId: controller.executionGroupId,
+      startProcessFamily: "continued_contact",
+      startProcessId: controller.processId,
+      startingStep: "round_summary",
+      startTaskId: controller.id,
+    });
+    const sequence = [[affected], [nextContact], [distance]];
+    let executions = 0;
+    const result = await runCombatStepAutomation({
+      classify: () => ({ countsTowardProcessed: true, kind: "execute" }),
+      execute: async () => ({
+        kind: "accepted",
+        projection: projection({
+          revision: `revision-${executions + 2}`,
+          step: "round_summary",
+          tasks: sequence[executions++] ?? [],
+        }),
+      }),
+      identity: contactIdentity,
+      initial: projection({ step: "round_summary", tasks: [controller] }),
+    });
+
+    expect(result.acceptedTasks.map((entry) => entry.taskId)).toEqual([
+      "contact-a-controller",
+      "contact-a-affected",
+      "contact-b-controller",
+    ]);
+    expect(result.processedCount).toBe(3);
+    expect(result.stepComplete).toBe(true);
+    expect(result.finalTask?.kind).toBe("distance_commit");
+  });
+
   it("stops before warnings and never executes the warned task", async () => {
     let executions = 0;
     const result = await runCombatStepAutomation({

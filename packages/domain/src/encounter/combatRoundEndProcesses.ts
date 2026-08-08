@@ -198,6 +198,7 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
                 ? []
                 : [
                     {
+                      allowedActors: contest.reviewRequiredReason ? [] : undefined,
                       continuedContactId: contest.continuedContactId,
                       contestId: contest.id,
                       expectedCommand: "roll_continued_contact_maintenance" as const,
@@ -213,6 +214,7 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
                 ? []
                 : [
                     {
+                      allowedActors: contest.reviewRequiredReason ? [] : undefined,
                       continuedContactId: contest.continuedContactId,
                       contestId: contest.id,
                       expectedCommand: "roll_continued_contact_maintenance" as const,

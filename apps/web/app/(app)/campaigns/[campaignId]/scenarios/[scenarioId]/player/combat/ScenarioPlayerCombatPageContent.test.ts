@@ -64,6 +64,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("commitCombatFeintResultOnServer");
   });
 
+  it("executes player-owned Continued Contact maintenance through the canonical command", () => {
+    const source = readSource();
+
+    expect(source).toContain("rollContinuedContactMaintenanceOnServer");
+    expect(source).toContain("async function rollContinuedContactMaintenance(");
+    expect(source).toContain('case "roll_continued_contact_maintenance"');
+    expect(source).toContain("contestId: descriptor.contestId");
+    expect(source).toContain("continuedContactId: descriptor.continuedContactId");
+    expect(source).toContain("opponentParticipantId: descriptor.opponentParticipantId");
+    expect(source).toContain("scenarioParticipantId: selectedParticipant.id");
+  });
+
   it("keeps the recovered combat panel importable without future placeholder panels", () => {
     const source = readSource();
 

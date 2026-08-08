@@ -955,16 +955,29 @@ function projectRoundEnd(context: ProjectionContext): void {
     ]) {
       const roll = participantRoll(context, side.participantId, "continued_contact");
       addFact(context, {
+        completeness: contest.reviewRequiredReason ? "complete" : roll.completeness,
         ordering: "pair_order",
         ownership: roles,
         pairId: contest.continuedContactId,
         participantId: side.participantId,
         processFamily: "continued_contact",
         processId: contest.id,
-        reason: side.recorded ? "already_resolved" : "continued_contact_due",
-        status: side.recorded ? "already_resolved" : roll.status,
+        reason: side.recorded
+          ? "already_resolved"
+          : contest.reviewRequiredReason
+            ? "stale_or_invalid_source"
+            : "continued_contact_due",
+        status: side.recorded
+          ? "already_resolved"
+          : contest.reviewRequiredReason
+            ? "blocked"
+            : roll.status,
         step: "maintenance_roll",
-        workClass: side.recorded ? "no_work" : roll.workClass,
+        workClass: side.recorded
+          ? "no_work"
+          : contest.reviewRequiredReason
+            ? "human_decision"
+            : roll.workClass,
       });
     }
   }

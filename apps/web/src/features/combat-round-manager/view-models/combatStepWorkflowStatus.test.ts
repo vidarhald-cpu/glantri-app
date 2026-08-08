@@ -221,6 +221,51 @@ describe("GM combat Workflow Status presentation", () => {
     });
   });
 
+  it("reports Continued Contact counts, player boundaries, and distance fences", () => {
+    const maintenanceResult = result({
+      identity: {
+        ...result().identity,
+        startProcessFamily: "continued_contact",
+        startingStep: "round_summary",
+      },
+      processedCount: 4,
+      stepComplete: true,
+      stopParticipantId: undefined,
+      stopReason: "end_of_step",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: maintenanceResult,
+      }),
+    ).toMatchObject({
+      completion: "Completed Continued Contact maintenance.",
+      operationLabel: "Roll remaining GM Continued Contact checks",
+      processedSummary: "Rolled 4 Continued Contact checks.",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["player-1", "The Gladiator"]]),
+        result: {
+          ...maintenanceResult,
+          processedCount: 1,
+          stepComplete: false,
+          stopParticipantId: "player-1",
+          stopReason: "player_action_required",
+        },
+      }),
+    ).toMatchObject({
+      stopMessage: "Player roll required.",
+      stopParticipantLabel: "The Gladiator",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: { ...maintenanceResult, stopReason: "distance_decision_required" },
+      }).stopMessage,
+    ).toBe("Distance decision required.");
+  });
+
   it("gives a concise changed-target stop message", () => {
     const presentation = buildCombatStepWorkflowStatusPresentation({
       participantLabelsById: new Map([["npc-8", "Orc Captain"]]),

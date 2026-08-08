@@ -27,6 +27,14 @@ function readPanelSource(): string {
 }
 
 describe("CombatRoundManagerPanel", () => {
+  it("offers bounded GM Continued Contact maintenance workflow without distance automation", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("Roll remaining GM Continued Contact checks");
+    expect(source).toContain('descriptor.commandType === "roll_continued_contact_maintenance"');
+    expect(source).toContain("Stops before player-owned, relationship-review, or distance work.");
+    expect(source).not.toContain("Accept remaining Continued Contact distances");
+  });
   it("binds modifier-review commits to one canonical participant input snapshot", () => {
     const source = readPanelSource();
 

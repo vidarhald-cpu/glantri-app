@@ -35,6 +35,8 @@ export const combatStepAutomationStopReasonSchema = z.enum([
   "combat_experience_review_required",
   "effect_review_required",
   "observation_review_required",
+  "continued_contact_review_required",
+  "distance_decision_required",
   "roll_not_eligible",
   "safety_limit_reached",
   "persistence_failure",
@@ -174,6 +176,9 @@ export function isCombatStepAutomationProjectionWithinScope<State>(input: {
   }
   if (identity.startProcessFamily === "observation") {
     return task.kind === "observation_roll";
+  }
+  if (identity.startProcessFamily === "continued_contact") {
+    return task.kind === "continued_contact_maintenance_roll";
   }
   return identity.startProcessId === undefined || task.processId === identity.startProcessId;
 }

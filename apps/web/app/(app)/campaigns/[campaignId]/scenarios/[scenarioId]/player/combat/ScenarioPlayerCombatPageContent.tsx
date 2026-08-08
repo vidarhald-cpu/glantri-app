@@ -165,6 +165,7 @@ import {
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
   rollCombatObservationOnServer,
+  rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
   rollCombatFeintOnServer,
   respondCombatAdjustDistanceOnServer,
@@ -3018,6 +3019,54 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollContinuedContactMaintenance(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.contestId ||
+      !descriptor.continuedContactId ||
+      !descriptor.executionGroupId ||
+      !descriptor.opponentParticipantId ||
+      !descriptor.processId ||
+      !descriptor.stageId
+    ) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const { encounter, participant } = await rollContinuedContactMaintenanceOnServer({
+        currentEncounter: encounterSession,
+        contestId: descriptor.contestId,
+        continuedContactId: descriptor.continuedContactId,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId,
+        expectedRevision: descriptor.expectedRevision,
+        opponentParticipantId: descriptor.opponentParticipantId,
+        processId: descriptor.processId,
+        scenarioParticipantId: selectedParticipant.id,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+      });
+      if (participant) {
+        setSelectableParticipants((current) =>
+          current.map((entry) => (entry.id === participant.id ? participant : entry)),
+        );
+      }
+      acceptEncounterSession(encounter);
+      setError(undefined);
+      setCombatActionError(undefined);
+    } catch (caughtError) {
+      setCombatActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to roll Continued Contact maintenance.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function backOutPhaseAttack(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
@@ -4248,6 +4297,11 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_observation":
         void invokeResultProducingProxyCommand(descriptor, () => rollObservation(descriptor));
+        return;
+      case "roll_continued_contact_maintenance":
+        void invokeResultProducingProxyCommand(descriptor, () =>
+          rollContinuedContactMaintenance(descriptor),
+        );
         return;
       case "respond_adjust_distance":
       case "roll_adjust_distance":

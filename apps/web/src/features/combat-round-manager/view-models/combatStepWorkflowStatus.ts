@@ -29,6 +29,13 @@ function isObservationRun(result: CombatStepAutomationRunResult): boolean {
   );
 }
 
+function isContinuedContactRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "continued_contact"
+  );
+}
+
 function operationLabel(result: CombatStepAutomationRunResult): string {
   if (result.identity.operationFamily === "roll_remaining") {
     if (isHealthRun(result)) {
@@ -36,6 +43,9 @@ function operationLabel(result: CombatStepAutomationRunResult): string {
     }
     if (isObservationRun(result)) {
       return "Roll remaining GM Observe checks";
+    }
+    if (isContinuedContactRun(result)) {
+      return "Roll remaining GM Continued Contact checks";
     }
     if (isCombatExperienceRun(result)) {
       return "Roll remaining GM Combat Experience";
@@ -60,7 +70,10 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
     case "end_of_step":
       return undefined;
     case "player_action_required":
-      return isCombatExperienceRun(result) || isHealthRun(result) || isObservationRun(result)
+      return isCombatExperienceRun(result) ||
+        isHealthRun(result) ||
+        isObservationRun(result) ||
+        isContinuedContactRun(result)
         ? "Player roll required."
         : "Player action required.";
     case "gm_decision_required":
@@ -92,6 +105,10 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
       return "Effect review required.";
     case "observation_review_required":
       return "Observe relationship requires review.";
+    case "continued_contact_review_required":
+      return "Continued Contact requires GM review.";
+    case "distance_decision_required":
+      return "Distance decision required.";
     case "roll_not_eligible":
       return "This roll requires manual attention.";
     case "safety_limit_reached":
@@ -110,38 +127,43 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
   const combatExperience = isCombatExperienceRun(result);
   const health = isHealthRun(result);
   const observation = isObservationRun(result);
+  const continuedContact = isContinuedContactRun(result);
   const declarations =
     result.identity.operationFamily === "accept_remaining" &&
     result.identity.startingStep === "select_actions";
-  const processedSummary = observation
-    ? `Rolled ${result.processedCount} NPC Observe check${result.processedCount === 1 ? "" : "s"}.`
-    : health
-      ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
-      : combatExperience
-        ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
-        : initiative
-          ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
-          : declarations
-            ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
-            : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
-  const completion = result.stepComplete
-    ? observation
-      ? "Completed Observe work."
+  const processedSummary = continuedContact
+    ? `Rolled ${result.processedCount} Continued Contact check${result.processedCount === 1 ? "" : "s"}.`
+    : observation
+      ? `Rolled ${result.processedCount} NPC Observe check${result.processedCount === 1 ? "" : "s"}.`
       : health
-        ? "Completed Health/Bleed work."
+        ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
         : combatExperience
-          ? "Completed Combat Experience."
-          : result.identity.startingStep === "initiative_phase_1"
-            ? "Completed Phase 1 initiative."
-            : result.identity.startingStep === "initiative_phase_2"
-              ? "Completed Phase 2 initiative."
-              : result.identity.startingStep === "review_action_modifiers"
-                ? "Completed M1."
-                : result.identity.startingStep === "select_actions"
-                  ? "Completed DE."
-                  : result.identity.startingStep === "review_phase_2_modifiers"
-                    ? "Completed M2."
-                    : "Completed the step."
+          ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
+          : initiative
+            ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
+            : declarations
+              ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
+              : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
+  const completion = result.stepComplete
+    ? continuedContact
+      ? "Completed Continued Contact maintenance."
+      : observation
+        ? "Completed Observe work."
+        : health
+          ? "Completed Health/Bleed work."
+          : combatExperience
+            ? "Completed Combat Experience."
+            : result.identity.startingStep === "initiative_phase_1"
+              ? "Completed Phase 1 initiative."
+              : result.identity.startingStep === "initiative_phase_2"
+                ? "Completed Phase 2 initiative."
+                : result.identity.startingStep === "review_action_modifiers"
+                  ? "Completed M1."
+                  : result.identity.startingStep === "select_actions"
+                    ? "Completed DE."
+                    : result.identity.startingStep === "review_phase_2_modifiers"
+                      ? "Completed M2."
+                      : "Completed the step."
     : undefined;
   return {
     completion,

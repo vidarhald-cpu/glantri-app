@@ -96,7 +96,9 @@ export function buildRoundEndProcesses(
                 : undefined,
               reason:
                 task.kind === "continued_contact_maintenance_roll"
-                  ? "Continued Contact is active."
+                  ? maintenanceContest?.reviewRequiredReason
+                    ? "Continued Contact requires GM review."
+                    : "Continued Contact is active."
                   : distanceProposal?.controlMode === "continued_contact"
                     ? "Continued Contact is active."
                     : healthProposal?.label,

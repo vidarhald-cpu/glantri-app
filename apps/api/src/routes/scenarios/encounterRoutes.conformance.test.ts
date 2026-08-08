@@ -244,6 +244,10 @@ describe("combat route canonical-conformance guards", () => {
     }
     expect(source).toContain('commandType: "roll_continued_contact_maintenance"');
     expect(source).toContain('rollPurpose: "escape_continued_contact"');
+    expect(source).toContain("attachContinuedContactEffectTransitionFacts({");
+    expect(source).toContain("commitCombatParticipantStateMutation({");
+    expect(source).toContain('startProcessFamily === "continued_contact"');
+    expect(source).toContain('reason: "continued_contact_review_required"');
   });
 
   it("authorizes proactive parry from the complete projected descriptor", () => {

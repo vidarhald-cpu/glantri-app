@@ -391,5 +391,67 @@ describe("Continued Contact maintenance", () => {
     ).toEqual(["hero", "guard", "mage", "raider"]);
     expect(new Set(tasks.map((task) => task.identity.contestId)).size).toBe(2);
     expect(reviewed.roundEndReview?.proposedDistances).toEqual([]);
+
+    const reloadedInReverseStorageOrder = prepareCombatRoundEndReview({
+      state: combatRoundStateSchema.parse({
+        ...expanded,
+        continuedContacts: [...expanded.continuedContacts].reverse(),
+      }),
+    });
+    expect(
+      reloadedInReverseStorageOrder.roundEndReview?.continuedContactMaintenanceContests.map(
+        (contest) => contest.continuedContactId,
+      ),
+    ).toEqual([CONTACT_ID, secondContactId]);
+  });
+
+  it("blocks reversed controllers for one pair before either maintenance roll", () => {
+    const source = state();
+    const reversedContactId = "contact:offensive-parry:reversed";
+    const reversedConditionId = buildUnbalancedConditionId({
+      continuedContactId: reversedContactId,
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: combatRoundStateSchema.parse({
+        ...source,
+        continuedContacts: [
+          ...source.continuedContacts,
+          {
+            ...source.continuedContacts[0],
+            affectedParticipantId: "hero",
+            controllerParticipantId: "guard",
+            id: reversedContactId,
+          },
+        ],
+        unbalancedConditions: [
+          ...source.unbalancedConditions,
+          {
+            ...source.unbalancedConditions[0],
+            affectedParticipantId: "hero",
+            id: reversedConditionId,
+            sourceContinuedContactId: reversedContactId,
+          },
+        ],
+      }),
+    });
+    expect(
+      reviewed.roundEndReview?.continuedContactMaintenanceContests.map(
+        (contest) => contest.reviewRequiredReason,
+      ),
+    ).toEqual(["conflicting_controllers", "conflicting_controllers"]);
+    const current = maintenanceTask(reviewed, "hero")!;
+    expect(current.allowedActors).toEqual([]);
+    expect(current.presentationContext?.reason).toBe("Continued Contact requires GM review.");
+    expect(() =>
+      recordContinuedContactMaintenanceRoll({
+        command: { createdAt: "2026-07-25T10:00:00.000Z" },
+        contestId: current.identity.contestId!,
+        executionGroupId: current.executionGroupId,
+        opponentParticipantId: current.identity.opponentParticipantId!,
+        participantId: "hero",
+        roll: roll("hero", 20),
+        state: reviewed,
+      }),
+    ).toThrow("Continued Contact requires GM review");
   });
 });
