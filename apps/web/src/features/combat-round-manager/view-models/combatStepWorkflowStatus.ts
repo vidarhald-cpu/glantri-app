@@ -15,8 +15,18 @@ function isCombatExperienceRun(result: CombatStepAutomationRunResult): boolean {
     : result.identity.startingStep === "select_actions";
 }
 
+function isHealthRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "health_bleed"
+  );
+}
+
 function operationLabel(result: CombatStepAutomationRunResult): string {
   if (result.identity.operationFamily === "roll_remaining") {
+    if (isHealthRun(result)) {
+      return "Roll remaining GM Health checks";
+    }
     if (isCombatExperienceRun(result)) {
       return "Roll remaining GM Combat Experience";
     }
@@ -40,7 +50,7 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
     case "end_of_step":
       return undefined;
     case "player_action_required":
-      return isCombatExperienceRun(result)
+      return isCombatExperienceRun(result) || isHealthRun(result)
         ? "Player roll required."
         : "Player action required.";
     case "gm_decision_required":
@@ -68,6 +78,8 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
       return "Declaration review required.";
     case "combat_experience_review_required":
       return "Combat Experience requires GM review.";
+    case "effect_review_required":
+      return "Effect review required.";
     case "roll_not_eligible":
       return "This roll requires manual attention.";
     case "safety_limit_reached":
@@ -84,30 +96,35 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
   const { result } = input;
   const initiative = result.identity.operationFamily === "roll_remaining";
   const combatExperience = isCombatExperienceRun(result);
+  const health = isHealthRun(result);
   const declarations =
     result.identity.operationFamily === "accept_remaining" &&
     result.identity.startingStep === "select_actions";
-  const processedSummary = combatExperience
-    ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
-    : initiative
-      ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
-      : declarations
-        ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
-        : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
+  const processedSummary = health
+    ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
+    : combatExperience
+      ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
+      : initiative
+        ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
+        : declarations
+          ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
+          : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
   const completion = result.stepComplete
-    ? combatExperience
-      ? "Completed Combat Experience."
-      : result.identity.startingStep === "initiative_phase_1"
-        ? "Completed Phase 1 initiative."
-        : result.identity.startingStep === "initiative_phase_2"
-          ? "Completed Phase 2 initiative."
-          : result.identity.startingStep === "review_action_modifiers"
-            ? "Completed M1."
-            : result.identity.startingStep === "select_actions"
-              ? "Completed DE."
-              : result.identity.startingStep === "review_phase_2_modifiers"
-                ? "Completed M2."
-                : "Completed the step."
+    ? health
+      ? "Completed Health/Bleed work."
+      : combatExperience
+        ? "Completed Combat Experience."
+        : result.identity.startingStep === "initiative_phase_1"
+          ? "Completed Phase 1 initiative."
+          : result.identity.startingStep === "initiative_phase_2"
+            ? "Completed Phase 2 initiative."
+            : result.identity.startingStep === "review_action_modifiers"
+              ? "Completed M1."
+              : result.identity.startingStep === "select_actions"
+                ? "Completed DE."
+                : result.identity.startingStep === "review_phase_2_modifiers"
+                  ? "Completed M2."
+                  : "Completed the step."
     : undefined;
   return {
     completion,

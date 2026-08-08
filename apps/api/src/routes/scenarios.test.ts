@@ -4,6 +4,7 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCombatRoundAttackRollResult,
+  buildDamagePersistentLifecycle,
   buildCombatHistorySourceViewFromPersistedSession,
   buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
@@ -31,6 +32,7 @@ import {
   projectActiveCombatParticipation,
   projectCombatNpcDeclarationProposal,
   rollCombatRoundCombatExperience,
+  rollCombatRoundEndHealthCheck,
   rollCombatRoundEndDistanceControl,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
@@ -2073,6 +2075,171 @@ function makeCombatExperienceAutomationFixture(input: {
   return { encounter, participants };
 }
 
+function makeHealthAutomationFixture(input: {
+  effectDecisionIndex?: number;
+  participantCount?: number;
+  playerControlledIndex?: number;
+  legacyIndex?: number;
+}) {
+  const participantCount = input.participantCount ?? 5;
+  const encounterParticipants = Array.from({ length: participantCount }, (_, index) =>
+    makeEncounterCombatParticipant({
+      id: `encounter-participant-${index + 1}`,
+      label: `NPC ${index + 1}`,
+      order: index,
+      scenarioParticipantId: `participant-${index + 1}`,
+    }),
+  );
+  const baseEncounter = makeCombatEncounter({
+    currentRound: 10,
+    participants: encounterParticipants,
+  }) as EncounterSession;
+  const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+  const effectsByParticipant = Object.fromEntries(
+    encounterParticipants.map((participant, index) => {
+      const effectId = `bleed-${index + 1}`;
+      const effect = {
+        ...(input.legacyIndex === index
+          ? {}
+          : {
+              canonicalLifecycle: buildDamagePersistentLifecycle({
+                context: {
+                  commandId: `damage-command-${index + 1}`,
+                  createdAt: "2026-08-09T09:00:00.000Z",
+                  createdRevision: "revision-created",
+                  createdSequence: index + 1,
+                  encounterId: baseEncounter.id,
+                  eventId: `bleed-event-${index + 1}`,
+                  ownerParticipantId: participant.scenarioParticipantId,
+                  roundNumber: 1,
+                },
+                effectId,
+                isStunned: false,
+                label: "Bleed",
+                modifierValue: 2,
+                status: "active",
+                type: "bleed",
+              }),
+            }),
+        createdAt: "2026-08-09T09:00:00.000Z",
+        effectGroup: "bleed" as const,
+        id: effectId,
+        modifierValue: 2,
+        roundNumber: 1,
+        sourceEventId: `bleed-event-${index + 1}`,
+        status: "active" as const,
+        targetParticipantId: participant.scenarioParticipantId,
+        type: "bleed" as const,
+        updatedAt: "2026-08-09T09:00:00.000Z",
+      };
+      const decisionEffectId = `decision-effect-${index + 1}`;
+      const decisionEffect =
+        input.effectDecisionIndex === index
+          ? {
+              canonicalLifecycle: buildDamagePersistentLifecycle({
+                context: {
+                  commandId: `decision-command-${index + 1}`,
+                  createdAt: "2026-08-09T09:00:00.000Z",
+                  createdRevision: "revision-created",
+                  createdSequence: participantCount + index + 1,
+                  encounterId: baseEncounter.id,
+                  eventId: `decision-event-${index + 1}`,
+                  ownerParticipantId: participant.scenarioParticipantId,
+                  roundNumber: 9,
+                },
+                durationRounds: 2,
+                effectId: decisionEffectId,
+                isStunned: false,
+                label: "Temporary penalty",
+                modifierValue: -1,
+                status: "active",
+                type: "general_modifier",
+              }),
+              createdAt: "2026-08-09T09:00:00.000Z",
+              duration: "2 rounds",
+              effectGroup: "general" as const,
+              id: decisionEffectId,
+              modifierValue: -1,
+              roundNumber: 9,
+              sourceEventId: `decision-event-${index + 1}`,
+              status: "active" as const,
+              targetParticipantId: participant.scenarioParticipantId,
+              type: "general_modifier" as const,
+              updatedAt: "2026-08-09T09:00:00.000Z",
+            }
+          : undefined;
+      return [
+        participant.id,
+        {
+          effects: [effect, ...(decisionEffect ? [decisionEffect] : [])],
+          events: [
+            {
+              createdAt: "2026-08-09T09:00:00.000Z",
+              description: "Bleeding wound",
+              id: `bleed-event-${index + 1}`,
+              sourceLabel: "Bleeding wound",
+              sourceType: "manual" as const,
+              targetParticipantId: participant.scenarioParticipantId,
+            },
+            ...(decisionEffect
+              ? [
+                  {
+                    createdAt: "2026-08-09T09:00:00.000Z",
+                    description: "Temporary penalty",
+                    id: `decision-event-${index + 1}`,
+                    sourceLabel: "Temporary penalty",
+                    sourceType: "manual" as const,
+                    targetParticipantId: participant.scenarioParticipantId,
+                  },
+                ]
+              : []),
+          ],
+        },
+      ];
+    }),
+  ) as Record<string, CombatEffectsState>;
+  const reviewed = prepareCombatRoundEndReview({
+    participantInputs: Object.fromEntries(
+      encounterParticipants.map((participant) => [
+        participant.id,
+        { combatEffects: effectsByParticipant[participant.id], healthStat: 6 },
+      ]),
+    ),
+    state: {
+      ...baseState,
+      currentCursor: {
+        participantId: encounterParticipants[0]!.id,
+        roundNumber: 10,
+        step: "SU",
+      },
+      currentStep: "round_summary",
+      selectedParticipantId: encounterParticipants[0]!.id,
+      selectedStep: "round_summary",
+    },
+  });
+  const encounter = encounterSessionSchema.parse({
+    ...baseEncounter,
+    combatRoundState: reviewed,
+    currentRound: reviewed.roundNumber,
+    updatedAt: "2026-08-09T10:00:00.000Z",
+  });
+  const participants = encounterParticipants.map(
+    (participant, index) =>
+      makeCombatScenarioParticipant({
+        controlledByUserId:
+          input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
+        id: participant.scenarioParticipantId,
+        role: input.playerControlledIndex === index ? "player_character" : "npc",
+        snapshot: { displayName: participant.label },
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: effectsByParticipant[participant.id],
+        },
+      }) as unknown as ScenarioParticipant,
+  );
+  return { encounter, participants };
+}
+
 function stepAutomationRequest(input: {
   encounter: EncounterSession;
   operationFamily: "accept_remaining" | "roll_remaining";
@@ -2326,6 +2493,16 @@ function setupMutableCombatRouteState<Participant extends { id: string; state: u
       );
 
       return updatedParticipant;
+    },
+  );
+  mocks.encounterService.commitCombatParticipantStateMutation.mockImplementation(
+    async (update: { participant: Participant; session: EncounterSession; state: unknown }) => {
+      const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
+      const updatedParticipant = { ...update.participant, state: update.state } as Participant;
+      currentParticipants = currentParticipants.map((participant) =>
+        participant.id === updatedParticipant.id ? updatedParticipant : participant,
+      );
+      return { encounter, participant: updatedParticipant };
     },
   );
   mocks.scenarioService.getScenarioById.mockResolvedValue({
@@ -13224,6 +13401,201 @@ describe("scenarios route contract", () => {
       processedCount: 0,
       stopReason: "gm_decision_required",
     });
+  });
+
+  it("rolls remaining canonical GM Health checks and stops before other SU work", async () => {
+    const prepared = makeHealthAutomationFixture({ participantCount: 5 });
+    const initialState = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "roll_remaining",
+      participants: prepared.participants,
+      runId: "health-complete-run",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const app = await buildScenarioTestApp();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        identity: { startProcessFamily: "health_bleed" },
+        processedCount: 5,
+        stepComplete: true,
+        stopReason: "end_of_step",
+      });
+      expect(response.json().workflow.finalTask).not.toMatchObject({ kind: "health_review" });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(
+        state.commands.filter((command) => command.type === "roll_round_end_health_check"),
+      ).toHaveLength(5);
+      expect(
+        state.commands.filter((command) => command.type === "commit_round_end_participant_review"),
+      ).toHaveLength(5);
+      expect(
+        state.commands.filter((command) => command.facts.stepAutomation !== undefined),
+      ).toHaveLength(10);
+      expect(state.events.filter((event) => event.type === "health_check")).toHaveLength(5);
+      expect(state.events.map((event) => String(event.type))).not.toContain("step_automation");
+
+      const firstParticipant = prepared.participants[0]!;
+      const firstRollId =
+        initialState.roundEndReview?.participantReviews["encounter-participant-1"]
+          ?.proposedHealthRolls[0]?.id;
+      const manual = rollCombatRoundEndHealthCheck({
+        combatEffects: firstParticipant.state.combatEffects,
+        command: {
+          commandId: "manual-health-parity",
+          createdAt: "2026-08-09T10:00:01.000Z",
+          createdByUserId: "gm-1",
+        },
+        createdRevision: prepared.encounter.updatedAt,
+        healthRollId: firstRollId,
+        participantId: "encounter-participant-1",
+        rng: () => 0.9,
+        rolledBy: "gm_proxy",
+        state: initialState,
+      });
+      const automatedFirst = state.commands.find(
+        (command) => command.type === "roll_round_end_health_check",
+      );
+      expect(automatedFirst?.facts).toMatchObject({
+        difficulty: manual.command.facts.difficulty,
+        finalTotal: manual.command.facts.finalTotal,
+        healthStat: manual.command.facts.healthStat,
+        nextBleedRate: manual.command.facts.nextBleedRate,
+        previousBleedRate: manual.command.facts.previousBleedRate,
+        rollD20: manual.command.facts.rollD20,
+        rollTotal: manual.command.facts.rollTotal,
+        success: manual.command.facts.success,
+      });
+
+      const commandCount = state.commands.length;
+      const retry = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().workflow).toMatchObject({
+        alreadyAccepted: true,
+        processedCount: 5,
+      });
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands,
+      ).toHaveLength(commandCount);
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("stops contiguous Health automation before player-owned and legacy-incomplete work", async () => {
+    const playerPrepared = makeHealthAutomationFixture({ playerControlledIndex: 3 });
+    const playerFixture = setupMutableCombatRouteState({
+      encounter: playerPrepared.encounter,
+      participants: playerPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const playerApp = await buildScenarioTestApp();
+    const playerResponse = await playerApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: playerPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: playerPrepared.participants,
+        runId: "health-player-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(playerResponse.statusCode, playerResponse.body).toBe(200);
+    expect(playerResponse.json().workflow).toMatchObject({
+      processedCount: 3,
+      stepComplete: false,
+      stopParticipantId: "encounter-participant-4",
+      stopReason: "player_action_required",
+    });
+    expect(
+      combatRoundStateSchema
+        .parse(playerFixture.encounter.combatRoundState)
+        .commands.filter((command) => command.type === "roll_round_end_health_check"),
+    ).toHaveLength(3);
+    await playerApp.close();
+
+    vi.clearAllMocks();
+    const legacyPrepared = makeHealthAutomationFixture({ legacyIndex: 1 });
+    const legacyFixture = setupMutableCombatRouteState({
+      encounter: legacyPrepared.encounter,
+      participants: legacyPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const legacyApp = await buildScenarioTestApp();
+    const legacyResponse = await legacyApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: legacyPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: legacyPrepared.participants,
+        runId: "health-legacy-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(legacyResponse.statusCode, legacyResponse.body).toBe(200);
+    expect(legacyResponse.json().workflow).toMatchObject({
+      processedCount: 1,
+      stopParticipantId: "encounter-participant-2",
+      stopReason: "incomplete_legacy_state",
+    });
+    expect(
+      combatRoundStateSchema
+        .parse(legacyFixture.encounter.combatRoundState)
+        .commands.filter((command) => command.type === "roll_round_end_health_check"),
+    ).toHaveLength(1);
+    await legacyApp.close();
+
+    vi.clearAllMocks();
+    const decisionPrepared = makeHealthAutomationFixture({ effectDecisionIndex: 0 });
+    const decisionFixture = setupMutableCombatRouteState({
+      encounter: decisionPrepared.encounter,
+      participants: decisionPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const decisionApp = await buildScenarioTestApp();
+    const decisionResponse = await decisionApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: decisionPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: decisionPrepared.participants,
+        runId: "health-effect-review-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(decisionResponse.statusCode, decisionResponse.body).toBe(200);
+    expect(decisionResponse.json().workflow).toMatchObject({
+      processedCount: 1,
+      stopParticipantId: "encounter-participant-1",
+      stopReason: "effect_review_required",
+    });
+    const decisionState = combatRoundStateSchema.parse(decisionFixture.encounter.combatRoundState);
+    expect(
+      decisionState.commands.filter((command) => command.type === "roll_round_end_health_check"),
+    ).toHaveLength(1);
+    expect(
+      decisionState.commands.filter(
+        (command) => command.type === "commit_round_end_participant_review",
+      ),
+    ).toHaveLength(0);
+    await decisionApp.close();
   });
 
   it("accepts straightforward M1 reviews only after an explicit GM workflow request", async () => {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { CombatProgressionTask } from "./combatProgressionProjection";
+import { combatParticipationProcessFamilySchema } from "./combatParticipation/types";
 import { combatRoundStepSchema } from "./combatRoundStep";
 
 export const CANONICAL_COMBAT_STEP_AUTOMATION_SCHEMA_VERSION = 1 as const;
@@ -32,6 +33,7 @@ export const combatStepAutomationStopReasonSchema = z.enum([
   "modifier_review_required",
   "declaration_review_required",
   "combat_experience_review_required",
+  "effect_review_required",
   "roll_not_eligible",
   "safety_limit_reached",
   "persistence_failure",
@@ -69,6 +71,7 @@ export const combatStepAutomationCommandLinkSchema = z.object({
   operationFamily: combatStepAutomationOperationFamilySchema,
   runId: z.string().min(1),
   schemaVersion: z.literal(CANONICAL_COMBAT_STEP_AUTOMATION_SCHEMA_VERSION),
+  startProcessFamily: combatParticipationProcessFamilySchema.optional(),
   startingSequence: z.number().int().nonnegative(),
   startingRevision: z.string().min(1),
   taskId: z.string().min(1),
@@ -84,6 +87,8 @@ export const combatStepAutomationRunIdentitySchema = z.object({
   startExecutionGroupId: z.string().min(1),
   /** Optional for v1 compatibility; new runs use it as an exact process-level fence. */
   startProcessId: z.string().min(1).optional(),
+  /** Optional for v1 compatibility; process-family consumers use it for bounded closure work. */
+  startProcessFamily: combatParticipationProcessFamilySchema.optional(),
   startingRevision: z.string().min(1),
   startingRound: z.number().int().positive(),
   startingSequence: z.number().int().nonnegative(),
@@ -150,6 +155,25 @@ export function getCombatStepAutomationCommandPrefix(
   return `combat-step-automation-v1:${identity.runId}:${identity.startingRevision}:${identity.operationFamily}:`;
 }
 
+export function isCombatStepAutomationProjectionWithinScope<State>(input: {
+  identity: CombatStepAutomationRunIdentity;
+  projection: CombatStepAutomationProjection<State>;
+}): boolean {
+  const { identity, projection } = input;
+  if (
+    projection.roundNumber !== identity.startingRound ||
+    projection.step !== identity.startingStep
+  ) {
+    return false;
+  }
+  const task = projection.tasks[0];
+  if (!task) return false;
+  if (identity.startProcessFamily === "health_bleed") {
+    return task.kind === "health_review" || task.kind === "effect_review";
+  }
+  return identity.startProcessId === undefined || task.processId === identity.startProcessId;
+}
+
 /**
  * Runs one finite, contiguous prefix of canonical tasks. The scheduler owns ordering and the
  * starting-step fence; callers own authorization, canonical command execution, and persistence.
@@ -182,10 +206,7 @@ export async function runCombatStepAutomation<State>(input: {
   let current = input.initial;
 
   const outsideScope = () =>
-    current.roundNumber !== identity.startingRound ||
-    current.step !== identity.startingStep ||
-    (identity.startProcessId !== undefined &&
-      current.tasks[0]?.processId !== identity.startProcessId);
+    !isCombatStepAutomationProjectionWithinScope({ identity, projection: current });
 
   const finish = (stopReason: CombatStepAutomationStopReason, stopTask?: CombatProgressionTask) => {
     const finalTask = current.tasks[0];

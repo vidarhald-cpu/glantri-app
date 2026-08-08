@@ -6478,6 +6478,9 @@ export default function CombatRoundManagerPanel({
         roundState.currentStep === "select_actions" &&
         inspectorCurrentCommandType === "roll_combat_experience" &&
         !selectedScenarioParticipant?.controlledByUserId) ||
+      (currentActionPresentation?.taskKind === "health_review" &&
+        inspectorCurrentCommandType === "roll_round_end_health_check" &&
+        !selectedScenarioParticipant?.controlledByUserId) ||
       (currentActionPresentation?.taskKind === "submit_declaration" &&
         !selectedScenarioParticipant?.controlledByUserId)) &&
     !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
@@ -6533,9 +6536,11 @@ export default function CombatRoundManagerPanel({
             ? "Accept remaining NPC reviews"
             : currentActionPresentation?.taskKind === "combat_experience"
               ? "Roll remaining GM Combat Experience"
-              : currentActionPresentation?.taskKind === "submit_declaration"
-                ? "Accept remaining NPC declarations"
-                : "Roll remaining GM initiative"}
+              : currentActionPresentation?.taskKind === "health_review"
+                ? "Roll remaining GM Health checks"
+                : currentActionPresentation?.taskKind === "submit_declaration"
+                  ? "Accept remaining NPC declarations"
+                  : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
@@ -6545,9 +6550,11 @@ export default function CombatRoundManagerPanel({
       ? "Accept remaining NPC reviews"
       : currentActionPresentation?.taskKind === "combat_experience"
         ? "Roll remaining GM Combat Experience"
-        : currentActionPresentation?.taskKind === "submit_declaration"
-          ? "Accept remaining NPC declarations"
-          : "Roll remaining GM initiative";
+        : currentActionPresentation?.taskKind === "health_review"
+          ? "Roll remaining GM Health checks"
+          : currentActionPresentation?.taskKind === "submit_declaration"
+            ? "Accept remaining NPC declarations"
+            : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6564,9 +6571,11 @@ export default function CombatRoundManagerPanel({
               ? "Modifier review"
               : currentActionPresentation.taskKind === "combat_experience"
                 ? "Combat Experience"
-                : currentActionPresentation.taskKind === "submit_declaration"
-                  ? "Declaration"
-                  : "Initiative"
+                : currentActionPresentation.taskKind === "health_review"
+                  ? "Health/Bleed"
+                  : currentActionPresentation.taskKind === "submit_declaration"
+                    ? "Declaration"
+                    : "Initiative"
             : currentActionPresentation.heading,
           primaryAction: {
             ...currentActionPresentation.primaryAction,
@@ -6577,18 +6586,22 @@ export default function CombatRoundManagerPanel({
               ? "Stops at the first unresolved review."
               : currentActionPresentation.taskKind === "combat_experience"
                 ? "Stops before player-owned or attention-required Combat Experience."
-                : currentActionPresentation.taskKind === "submit_declaration"
-                  ? "Stops at the first declaration requiring attention."
-                  : "Stops before player-owned or attention-required initiative."
+                : currentActionPresentation.taskKind === "health_review"
+                  ? "Stops before player-owned Health or attention-required effect work."
+                  : currentActionPresentation.taskKind === "submit_declaration"
+                    ? "Stops at the first declaration requiring attention."
+                    : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Accept straightforward GM-controlled participant reviews unchanged."
               : currentActionPresentation.taskKind === "combat_experience"
                 ? "Roll eligible GM-controlled NPC Combat Experience checks in canonical order."
-                : currentActionPresentation.taskKind === "submit_declaration"
-                  ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
-                  : "Roll eligible GM-controlled participant initiative in canonical order."
+                : currentActionPresentation.taskKind === "health_review"
+                  ? "Roll eligible GM-controlled NPC Health checks in canonical SU order."
+                  : currentActionPresentation.taskKind === "submit_declaration"
+                    ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
+                    : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -10312,6 +10325,7 @@ export default function CombatRoundManagerPanel({
         "roll_initiative_phase1",
         "roll_initiative_phase2",
         "roll_combat_experience",
+        "roll_round_end_health_check",
         "declare_action",
       ],
       presentation: currentActionPresentation,
@@ -10330,7 +10344,8 @@ export default function CombatRoundManagerPanel({
     const operationFamily =
       descriptor.commandType === "roll_initiative_phase1" ||
       descriptor.commandType === "roll_initiative_phase2" ||
-      descriptor.commandType === "roll_combat_experience"
+      descriptor.commandType === "roll_combat_experience" ||
+      descriptor.commandType === "roll_round_end_health_check"
         ? "roll_remaining"
         : "accept_remaining";
     if (operationFamily === "accept_remaining" && inspectorHasLocalModifierEdits) {

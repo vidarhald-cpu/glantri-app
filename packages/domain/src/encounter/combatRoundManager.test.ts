@@ -76,6 +76,7 @@ import {
   getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundEndHealthCheckPendingRollCount,
   getCombatRoundEndHealthCheckPendingRolls,
+  getCombatRoundEndHealthAutomationReviewDisposition,
   getNextCombatRoundEndTask,
   getFirstCombatStartExperienceRequiredParticipantId,
   getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId,
@@ -15139,6 +15140,117 @@ describe("combat round manager", () => {
     expect(
       restoredEffects.effects.find((effect) => effect.id === "external-bleed")?.canonicalLifecycle,
     ).toEqual(combatEffects.effects[0]?.canonicalLifecycle);
+    expect(
+      getCombatRoundEndHealthAutomationReviewDisposition({
+        participantId: "gladiator",
+        state: rolled.state,
+      }),
+    ).toBe("automatic");
+  });
+
+  it("keeps legacy Bleed and unrelated effect work outside automatic Health closure", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+      "round_summary",
+    );
+    const legacyEffects = combatEffectsWith([
+      {
+        effectGroup: "bleed",
+        id: "legacy-bleed",
+        modifierValue: 2,
+        roundNumber: 1,
+        type: "bleed",
+      },
+    ]);
+    const legacyReview = prepareCombatRoundEndReview({
+      participantInputs: { gladiator: { combatEffects: legacyEffects, healthStat: 0 } },
+      state: roundSummaryState,
+    });
+    const legacyRolled = rollCombatRoundEndHealthCheck({
+      command: { createdAt: "2026-01-01T00:11:00.000Z" },
+      combatEffects: legacyEffects,
+      participantId: "gladiator",
+      roll: { dieResult: 21, openEndedD10s: [1], rollD20: 20 },
+      state: legacyReview,
+    });
+
+    expect(
+      getCombatRoundEndHealthAutomationReviewDisposition({
+        participantId: "gladiator",
+        state: legacyRolled.state,
+      }),
+    ).toBe("incomplete_legacy_state");
+
+    const canonicalEffects = combatEffectsWith([
+      {
+        canonicalLifecycle: buildDamagePersistentLifecycle({
+          context: {
+            commandId: "damage-command-health-review",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdRevision: "revision-created",
+            createdSequence: 2,
+            encounterId: "encounter-1",
+            eventId: "event-health-review",
+            ownerParticipantId: "scenario-gladiator",
+            roundNumber: 1,
+          },
+          effectId: "canonical-bleed",
+          isStunned: false,
+          label: "Bleed",
+          modifierValue: 2,
+          status: "active",
+          type: "bleed",
+        }),
+        effectGroup: "bleed",
+        id: "canonical-bleed",
+        modifierValue: 2,
+        roundNumber: 1,
+        type: "bleed",
+      },
+      {
+        canonicalLifecycle: buildDamagePersistentLifecycle({
+          context: {
+            commandId: "damage-command-stunned-review",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdRevision: "revision-created",
+            createdSequence: 3,
+            encounterId: "encounter-1",
+            eventId: "event-stunned-review",
+            ownerParticipantId: "scenario-gladiator",
+            roundNumber: 1,
+          },
+          effectId: "stunned-review",
+          isStunned: true,
+          label: "Stunned",
+          modifierValue: -2,
+          status: "active",
+          type: "general_modifier",
+        }),
+        effectGroup: "general",
+        id: "stunned-review",
+        modifierValue: -2,
+        roundNumber: 1,
+        type: "general_modifier",
+      },
+    ]);
+    const decisionReview = prepareCombatRoundEndReview({
+      participantInputs: { gladiator: { combatEffects: canonicalEffects, healthStat: 0 } },
+      state: roundSummaryState,
+    });
+    const decisionRolled = rollCombatRoundEndHealthCheck({
+      command: { createdAt: "2026-01-01T00:12:00.000Z" },
+      combatEffects: canonicalEffects,
+      participantId: "gladiator",
+      roll: { dieResult: 21, openEndedD10s: [1], rollD20: 20 },
+      state: decisionReview,
+    });
+
+    expect(
+      getCombatRoundEndHealthAutomationReviewDisposition({
+        participantId: "gladiator",
+        state: decisionRolled.state,
+      }),
+    ).not.toBe("automatic");
   });
 
   it("does not reduce bleed on failed health roll", () => {

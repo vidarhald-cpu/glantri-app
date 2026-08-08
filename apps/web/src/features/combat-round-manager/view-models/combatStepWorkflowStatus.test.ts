@@ -141,6 +141,46 @@ describe("GM combat Workflow Status presentation", () => {
     ).toBe("Combat Experience requires GM review.");
   });
 
+  it("reports Health/Bleed completion and effect-review stops without technical details", () => {
+    const healthResult = result({
+      identity: {
+        ...result().identity,
+        startProcessFamily: "health_bleed",
+        startingStep: "round_summary",
+      },
+      processedCount: 5,
+      stepComplete: true,
+      stopParticipantId: undefined,
+      stopReason: "end_of_step",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: healthResult,
+      }),
+    ).toMatchObject({
+      completion: "Completed Health/Bleed work.",
+      operationLabel: "Roll remaining GM Health checks",
+      processedSummary: "Rolled 5 NPC Health checks.",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["npc-1", "Orc Captain"]]),
+        result: {
+          ...healthResult,
+          processedCount: 2,
+          stepComplete: false,
+          stopParticipantId: "npc-1",
+          stopReason: "effect_review_required",
+        },
+      }),
+    ).toMatchObject({
+      completion: undefined,
+      stopMessage: "Effect review required.",
+      stopParticipantLabel: "Orc Captain",
+    });
+  });
+
   it("gives a concise changed-target stop message", () => {
     const presentation = buildCombatStepWorkflowStatusPresentation({
       participantLabelsById: new Map([["npc-8", "Orc Captain"]]),

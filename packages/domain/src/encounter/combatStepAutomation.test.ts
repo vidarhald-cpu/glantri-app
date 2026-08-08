@@ -155,6 +155,48 @@ describe("canonical GM step automation", () => {
     expect(result.finalTask?.kind).toBe("submit_declaration");
   });
 
+  it("keeps Health/Bleed rolls and their effect-review closure inside one process-family fence", async () => {
+    const healthA = processTask("health-a", "npc-a", "health:npc-a", "health_review");
+    const closureA = processTask("closure-a", "npc-a", "effect:npc-a", "effect_review");
+    const healthB = processTask("health-b", "npc-b", "health:npc-b", "health_review");
+    const observe = processTask("observe-b", "npc-b", "observation", "observation_roll");
+    const healthIdentity = combatStepAutomationRunIdentitySchema.parse({
+      ...identity(),
+      startExecutionGroupId: healthA.executionGroupId,
+      startProcessFamily: "health_bleed",
+      startProcessId: healthA.processId,
+      startingStep: "round_summary",
+      startTaskId: healthA.id,
+    });
+    const sequence = [[closureA], [healthB], [observe]];
+    let executions = 0;
+    const result = await runCombatStepAutomation({
+      classify: ({ task: current }) => ({
+        countsTowardProcessed: current.kind === "health_review",
+        kind: "execute",
+      }),
+      execute: async () => ({
+        kind: "accepted",
+        projection: projection({
+          revision: `revision-${executions + 2}`,
+          step: "round_summary",
+          tasks: sequence[executions++] ?? [],
+        }),
+      }),
+      identity: healthIdentity,
+      initial: projection({ step: "round_summary", tasks: [healthA] }),
+    });
+
+    expect(result.acceptedTasks.map((entry) => entry.taskId)).toEqual([
+      "health-a",
+      "closure-a",
+      "health-b",
+    ]);
+    expect(result.processedCount).toBe(2);
+    expect(result.stepComplete).toBe(true);
+    expect(result.finalTask?.kind).toBe("observation_roll");
+  });
+
   it("stops before warnings and never executes the warned task", async () => {
     let executions = 0;
     const result = await runCombatStepAutomation({

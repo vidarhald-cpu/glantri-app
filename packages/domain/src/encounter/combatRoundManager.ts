@@ -13543,6 +13543,55 @@ export function getCombatRoundEndHealthCheckPendingRollCount(input: {
   return getCombatRoundEndHealthCheckPendingRolls(input).length;
 }
 
+export type CombatRoundEndHealthAutomationReviewDisposition =
+  | "automatic"
+  | "effect_review_required"
+  | "incomplete_legacy_state";
+
+/**
+ * Classifies only the participant-review closure immediately following canonical Health/Bleed
+ * rolls. It deliberately excludes unrelated effect lifecycle work and every unresolved choice.
+ */
+export function getCombatRoundEndHealthAutomationReviewDisposition(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundEndHealthAutomationReviewDisposition {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const review = normalized.roundEndReview?.participantReviews[input.participantId];
+  const canonical = review?.canonicalReview;
+  if (!review || !canonical) return "incomplete_legacy_state";
+  if (review.status !== "review_ready") return "effect_review_required";
+  if (canonical.requirements.some((requirement) => requirement.completeness !== "complete")) {
+    return "incomplete_legacy_state";
+  }
+  if (
+    review.warnings.length > 0 ||
+    canonical.requirements.some(
+      (requirement) => requirement.kind !== "health_check" || !requirement.resolved,
+    ) ||
+    canonical.proposals.length > 0 ||
+    review.proposedEffects.length > 0 ||
+    review.proposedRemovals.length > 0 ||
+    review.proposedHealthRolls.some((proposal) => proposal.accepted && proposal.status !== "rolled")
+  ) {
+    return "effect_review_required";
+  }
+  const rolledHealth = review.proposedHealthRolls.filter(
+    (proposal) => proposal.accepted && proposal.status === "rolled",
+  );
+  if (rolledHealth.length === 0) return "effect_review_required";
+  const canonicalBleedSourceIds = new Set(Object.keys(canonical.effectVersions));
+  if (
+    review.proposedDamage.some(
+      (proposal) => !canonicalBleedSourceIds.has(proposal.sourceEffectId),
+    ) ||
+    rolledHealth.some((proposal) => !canonicalBleedSourceIds.has(proposal.sourceEffectId))
+  ) {
+    return "incomplete_legacy_state";
+  }
+  return "automatic";
+}
+
 export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): string | undefined {
   const normalized = combatRoundStateSchema.parse(state);
   const review = normalized.roundEndReview;
