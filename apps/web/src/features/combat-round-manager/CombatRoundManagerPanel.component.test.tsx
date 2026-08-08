@@ -254,6 +254,18 @@ function buildCombatExperiencePendingEncounter(): EncounterSession {
   });
 }
 
+function buildCombatExperienceOpenEncounter(): EncounterSession {
+  const encounter = buildCombatExperiencePendingEncounter();
+  return encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: combatRoundStateSchema.parse(encounter.combatRoundState),
+    }),
+    updatedAt: "2026-07-23T10:00:01.000Z",
+  });
+}
+
 function buildModifierReviewEncounter(): EncounterSession {
   const encounter = buildEncounter();
   const base = combatRoundStateSchema.parse(encounter.combatRoundState);
@@ -887,19 +899,20 @@ function buildFinalObservationEncounter(): {
 }
 
 function scenarioParticipant(input: {
+  gmControlled?: boolean;
   id: string;
   name: string;
   order: number;
 }): ScenarioParticipant {
   return {
-    controlledByUserId: `user-${input.id}`,
+    controlledByUserId: input.gmControlled ? undefined : `user-${input.id}`,
     createdAt: "2026-07-23T10:00:00.000Z",
     displayOrder: input.order,
     factionId: null,
     id: input.id,
     isActive: true,
     joinSource: "scenario_setup",
-    role: "player_character",
+    role: input.gmControlled ? "npc" : "player_character",
     roleTag: null,
     scenarioId: "scenario-1",
     snapshot: {
@@ -1068,6 +1081,107 @@ describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
 });
 
 describe("CombatRoundManagerPanel GM workflow selector", () => {
+  it("offers one bounded GM Combat Experience workflow only after difficulty is fixed", async () => {
+    const pendingEncounter = buildCombatExperiencePendingEncounter();
+    const encounter = buildCombatExperienceOpenEncounter();
+    const participants = [
+      scenarioParticipant({
+        gmControlled: true,
+        id: "scenario-attacker",
+        name: "The Gladiator",
+        order: 0,
+      }),
+      scenarioParticipant({
+        gmControlled: true,
+        id: "scenario-defender",
+        name: "Scyrian cavalry guy",
+        order: 1,
+      }),
+    ];
+
+    const pending = render(
+      <CombatRoundManagerPanel
+        encounter={pendingEncounter}
+        scenarioParticipants={participants}
+      />,
+    );
+    expect(screen.queryByRole("combobox", { name: "Workflow" })).not.toBeInTheDocument();
+    pending.unmount();
+
+    const initialState = combatRoundStateSchema.parse(encounter.combatRoundState);
+    const firstRoll = rollCombatRoundCombatExperience({
+      command: {
+        commandId: "workflow-ce-command-1",
+        createdAt: "2026-07-23T10:00:02.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-attacker",
+      rng: () => 0.5,
+      skillTotal: 11,
+      state: initialState,
+    });
+    const updatedEncounter = encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: firstRoll.state,
+      updatedAt: "2026-07-23T10:00:02.000Z",
+    });
+    mocks.runStepWorkflow.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state: firstRoll.state }),
+      encounter: updatedEncounter,
+      participants,
+      workflow: {
+        acceptedTasks: [
+          {
+            commandId: "workflow-ce-command-1",
+            executionGroupId: "workflow-ce-group-1",
+            kind: "combat_experience",
+            participantId: "encounter-attacker",
+            taskId: "workflow-ce-task-1",
+          },
+        ],
+        alreadyAccepted: false,
+        attemptedTasks: [],
+        finalRevision: updatedEncounter.updatedAt,
+        identity: {
+          encounterId: encounter.id,
+          gmActorUserId: "gm-1",
+          operationFamily: "roll_remaining",
+          runId: "workflow-ce-run-1",
+          schemaVersion: 1,
+          startExecutionGroupId: "workflow-ce-group-1",
+          startProcessId: "round:1:boundary:declaration:process:combat_experience",
+          startingRevision: encounter.updatedAt,
+          startingRound: 1,
+          startingSequence: 2,
+          startingStep: "select_actions",
+          startTaskId: "workflow-ce-task-1",
+        },
+        processedCount: 1,
+        stepComplete: false,
+        stopParticipantId: "encounter-defender",
+        stopReason: "combat_experience_review_required",
+      },
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workflow" }), {
+      target: { value: "complete_remaining" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Roll remaining GM Combat Experience" }));
+
+    await waitFor(() => expect(mocks.runStepWorkflow).toHaveBeenCalledTimes(1));
+    expect(mocks.runStepWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encounterId: encounter.id,
+        expectedProcessId: expect.any(String),
+        operationFamily: "roll_remaining",
+      }),
+    );
+    const status = await screen.findByRole("region", { name: "Workflow status" });
+    expect(within(status).getByText("Rolled 1 NPC Combat Experience check.")).toBeInTheDocument();
+    expect(within(status).getByText(/Combat Experience requires GM review/)).toBeInTheDocument();
+  });
+
   it("keeps an explicitly cleared empty M1 open without issuing another deterministic request", async () => {
     const before = buildInitiativeEncounter();
     const restoredBase = buildModifierReviewEncounter();

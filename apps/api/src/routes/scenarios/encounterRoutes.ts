@@ -211,6 +211,7 @@ import {
   type CombatStepAutomationStopReason,
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
+  type ParticipantCombatExperienceSkillTotalLookup,
 } from "@glantri/domain";
 import {
   ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
@@ -4081,6 +4082,7 @@ function getStraightforwardStepAutomationModifierReview(input: {
 }
 
 function classifyApiCombatStepAutomationTask(input: {
+  combatExperienceSkillLookups?: ReadonlyMap<string, ParticipantCombatExperienceSkillTotalLookup>;
   encounter: EncounterSession;
   operationFamily: "roll_remaining" | "accept_remaining" | "commit_remaining";
   projection: ApiCombatStepAutomationProjection;
@@ -4090,6 +4092,13 @@ function classifyApiCombatStepAutomationTask(input: {
   | { kind: "execute"; countsTowardProcessed: boolean }
   | { kind: "stop"; reason: CombatStepAutomationStopReason } {
   const { operationFamily, task } = input;
+  if (
+    operationFamily === "roll_remaining" &&
+    task.kind === "combat_experience" &&
+    task.expectedCommand !== "roll_combat_experience"
+  ) {
+    return { kind: "stop", reason: "gm_decision_required" };
+  }
   if (
     operationFamily === "roll_remaining" &&
     task.kind === "commit_initiative" &&
@@ -4143,7 +4152,18 @@ function classifyApiCombatStepAutomationTask(input: {
   }
 
   if (operationFamily === "roll_remaining") {
-    if (task.kind !== "roll_initiative") return { kind: "stop", reason: "unsupported_task" };
+    if (task.kind !== "roll_initiative" && task.kind !== "combat_experience") {
+      return { kind: "stop", reason: "unsupported_task" };
+    }
+    if (task.kind === "combat_experience") {
+      if (input.projection.step !== "select_actions") {
+        return { kind: "stop", reason: "unsupported_task" };
+      }
+      const lookup = input.combatExperienceSkillLookups?.get(owner.participant.id);
+      if (!lookup || lookup.warning) {
+        return { kind: "stop", reason: "combat_experience_review_required" };
+      }
+    }
     if (task.automation.eligibility === "requires_warning") {
       return { kind: "stop", reason: "warning_requires_acknowledgement" };
     }
@@ -10854,6 +10874,39 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter: workingEncounter,
         scenarioParticipants: workingParticipants,
       });
+      const initialTask = initial.tasks[0];
+      const combatExperienceSkillLookups = new Map<
+        string,
+        ParticipantCombatExperienceSkillTotalLookup
+      >();
+      if (
+        start.operationFamily === "roll_remaining" &&
+        initialTask?.kind === "combat_experience" &&
+        initialTask.expectedCommand === "roll_combat_experience"
+      ) {
+        const combatExperienceOwners = initial.tasks.flatMap((task) => {
+          if (
+            task.kind !== "combat_experience" ||
+            task.expectedCommand !== "roll_combat_experience"
+          ) {
+            return [];
+          }
+          const owner = getStepAutomationScenarioParticipant({
+            scenarioParticipants: workingParticipants,
+            state: initial.state,
+            task,
+          });
+          return owner ? [owner.participant] : [];
+        });
+        await Promise.all(
+          combatExperienceOwners.map(async (participant) => {
+            combatExperienceSkillLookups.set(
+              participant.id,
+              await getCombatExperienceSkillLookupForScenarioParticipant(participant),
+            );
+          }),
+        );
+      }
       const acceptedLinks = getAcceptedCombatStepAutomationCommands({
         identity: {
           operationFamily: start.operationFamily,
@@ -10871,6 +10924,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         runId: start.runId,
         schemaVersion: 1,
         startExecutionGroupId: start.expectedExecutionGroupId,
+        startProcessId: start.expectedProcessId,
         startingRevision: start.expectedRevision,
         startingRound: start.expectedRound,
         startingSequence,
@@ -10901,6 +10955,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : undefined;
         const currentDecision = currentTask
           ? classifyApiCombatStepAutomationTask({
+              combatExperienceSkillLookups,
               encounter: workingEncounter,
               operationFamily: start.operationFamily,
               projection: initial,
@@ -10909,7 +10964,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             })
           : undefined;
         const stepComplete =
-          initial.roundNumber !== start.expectedRound || initial.step !== start.expectedStep;
+          initial.roundNumber !== start.expectedRound ||
+          initial.step !== start.expectedStep ||
+          currentTask?.processId !== start.expectedProcessId;
         const acceptedTasks = acceptedLinks.map(({ command, link }) => ({
           commandId: command.id,
           executionGroupId: link.executionGroupId,
@@ -10974,13 +11031,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "Combat state changed before the workflow could start.",
         });
       }
-      const initialTask = initial.tasks[0];
       if (
         initial.roundNumber !== start.expectedRound ||
         initial.step !== start.expectedStep ||
         !initialTask ||
         initialTask.id !== start.expectedTaskId ||
-        initialTask.executionGroupId !== start.expectedExecutionGroupId
+        initialTask.executionGroupId !== start.expectedExecutionGroupId ||
+        initialTask.processId !== start.expectedProcessId
       ) {
         return reply.code(409).send({
           code: "task_changed",
@@ -10996,6 +11053,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const workflow = await runCombatStepAutomation({
         classify: ({ projection, task }) =>
           classifyApiCombatStepAutomationTask({
+            combatExperienceSkillLookups,
             encounter: workingEncounter!,
             operationFamily: start.operationFamily,
             projection: projection as ApiCombatStepAutomationProjection,
@@ -11006,6 +11064,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           const apiProjection = projection as ApiCombatStepAutomationProjection;
           const countsTowardProcessed =
             task.kind === "roll_initiative" ||
+            task.kind === "combat_experience" ||
             task.kind === "modifier_review" ||
             task.kind === "submit_declaration";
           const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
@@ -11014,6 +11073,89 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ).toISOString();
 
           try {
+            if (task.kind === "combat_experience") {
+              const owner = getStepAutomationScenarioParticipant({
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              const lookup = owner
+                ? combatExperienceSkillLookups.get(owner.participant.id)
+                : undefined;
+              const trigger = owner
+                ? getCombatRoundRequiredCombatExperienceTrigger({
+                    participantId: owner.encounterParticipantId,
+                    state: apiProjection.state,
+                    visibility: workingEncounter!.roleplayState?.visibility,
+                  })
+                : undefined;
+              if (
+                !owner ||
+                !lookup ||
+                lookup.warning ||
+                trigger !== "combat_start" ||
+                !isCombatRoundCombatExperienceWindowOpen(apiProjection.state)
+              ) {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason:
+                    lookup?.warning || !lookup
+                      ? ("combat_experience_review_required" as const)
+                      : ("roll_not_eligible" as const),
+                };
+              }
+              const rolled = rollCombatRoundCombatExperience({
+                combatContext: owner.participant.state.combat.combatContext,
+                combatEffects: owner.participant.state.combatEffects,
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                createdRevision: workingEncounter!.updatedAt,
+                encounterId: workingEncounter!.id,
+                participantId: owner.encounterParticipantId,
+                scenarioId,
+                scenarioParticipantId: owner.participant.id,
+                skillTotal: lookup.skillTotal,
+                skillTotalSource: lookup.source,
+                state: apiProjection.state,
+                trigger,
+                visibility: workingEncounter!.roleplayState?.visibility,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: rolled.state,
+                taskId: task.id,
+              });
+              const saved = await encounterService.commitCombatParticipantStateMutation({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedEncounterRevision: workingEncounter!.updatedAt,
+                participant: owner.participant,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+                state: {
+                  ...owner.participant.state,
+                  combat: {
+                    ...owner.participant.state.combat,
+                    combatContext: rolled.combatContext,
+                  },
+                  combatEffects: rolled.combatEffects,
+                },
+              });
+              workingEncounter = saved.encounter;
+              workingParticipants = workingParticipants.map((participant) =>
+                participant.id === saved.participant.id ? saved.participant : participant,
+              );
+              return { kind: "accepted" as const, projection: project() };
+            }
+
             if (task.kind === "submit_declaration") {
               const owner = getStepAutomationScenarioParticipant({
                 scenarioParticipants: workingParticipants,

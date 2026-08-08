@@ -562,6 +562,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Accept remaining NPC declarations");
     expect(source).toContain('aria-label="Previous declaration proposal"');
     expect(source).toContain("Roll remaining GM initiative");
+    expect(source).toContain("Roll remaining GM Combat Experience");
     expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");
     expect(source).toContain("skipInspectorCurrentPhaseAction");

@@ -1087,6 +1087,7 @@ export async function runGmCombatStepWorkflowOnServer(input: {
   currentEncounter: EncounterSession;
   encounterId: string;
   expectedExecutionGroupId: string;
+  expectedProcessId: string;
   expectedRevision: string;
   expectedRound: number;
   expectedStep: CombatRoundStep;
@@ -1106,6 +1107,7 @@ export async function runGmCombatStepWorkflowOnServer(input: {
       body: JSON.stringify({
         encounterId: input.encounterId,
         expectedExecutionGroupId: input.expectedExecutionGroupId,
+        expectedProcessId: input.expectedProcessId,
         expectedRevision: input.expectedRevision,
         expectedRound: input.expectedRound,
         expectedStep: input.expectedStep,

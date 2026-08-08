@@ -91,6 +91,56 @@ describe("GM combat Workflow Status presentation", () => {
     });
   });
 
+  it("reports completed Combat Experience as a single GM workflow story", () => {
+    const presentation = buildCombatStepWorkflowStatusPresentation({
+      participantLabelsById: new Map(),
+      result: result({
+        identity: {
+          ...result().identity,
+          startProcessId: "round:1:boundary:declaration:process:combat_experience",
+          startingStep: "select_actions",
+        },
+        processedCount: 10,
+        stepComplete: true,
+        stopParticipantId: undefined,
+        stopReason: "end_of_step",
+      }),
+    });
+
+    expect(presentation).toMatchObject({
+      completion: "Completed Combat Experience.",
+      operationLabel: "Roll remaining GM Combat Experience",
+      processedSummary: "Rolled 10 NPC Combat Experience checks.",
+      stopMessage: undefined,
+    });
+  });
+
+  it("uses CE-specific wording for player and review stops", () => {
+    const combatExperienceResult = result({
+      identity: {
+        ...result().identity,
+        startProcessId: "round:1:boundary:declaration:process:combat_experience",
+        startingStep: "select_actions",
+      },
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["player-1", "The Gladiator"]]),
+        result: combatExperienceResult,
+      }).stopMessage,
+    ).toBe("Player roll required.");
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["npc-1", "Orc Captain"]]),
+        result: {
+          ...combatExperienceResult,
+          stopParticipantId: "npc-1",
+          stopReason: "combat_experience_review_required",
+        },
+      }).stopMessage,
+    ).toBe("Combat Experience requires GM review.");
+  });
+
   it("gives a concise changed-target stop message", () => {
     const presentation = buildCombatStepWorkflowStatusPresentation({
       participantLabelsById: new Map([["npc-8", "Orc Captain"]]),

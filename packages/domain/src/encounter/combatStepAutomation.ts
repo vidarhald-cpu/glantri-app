@@ -31,6 +31,7 @@ export const combatStepAutomationStopReasonSchema = z.enum([
   "hidden_choice",
   "modifier_review_required",
   "declaration_review_required",
+  "combat_experience_review_required",
   "roll_not_eligible",
   "safety_limit_reached",
   "persistence_failure",
@@ -40,6 +41,7 @@ export type CombatStepAutomationStopReason = z.infer<typeof combatStepAutomation
 export const combatStepAutomationStartRequestSchema = z.object({
   encounterId: z.string().min(1),
   expectedExecutionGroupId: z.string().min(1),
+  expectedProcessId: z.string().min(1),
   expectedRevision: z.string().min(1),
   expectedRound: z.number().int().positive(),
   expectedStep: combatRoundStepSchema,
@@ -80,6 +82,8 @@ export const combatStepAutomationRunIdentitySchema = z.object({
   runId: z.string().min(1),
   schemaVersion: z.literal(CANONICAL_COMBAT_STEP_AUTOMATION_SCHEMA_VERSION),
   startExecutionGroupId: z.string().min(1),
+  /** Optional for v1 compatibility; new runs use it as an exact process-level fence. */
+  startProcessId: z.string().min(1).optional(),
   startingRevision: z.string().min(1),
   startingRound: z.number().int().positive(),
   startingSequence: z.number().int().nonnegative(),
@@ -177,10 +181,15 @@ export async function runCombatStepAutomation<State>(input: {
   let processedCount = 0;
   let current = input.initial;
 
+  const outsideScope = () =>
+    current.roundNumber !== identity.startingRound ||
+    current.step !== identity.startingStep ||
+    (identity.startProcessId !== undefined &&
+      current.tasks[0]?.processId !== identity.startProcessId);
+
   const finish = (stopReason: CombatStepAutomationStopReason, stopTask?: CombatProgressionTask) => {
     const finalTask = current.tasks[0];
-    const stepComplete =
-      current.roundNumber !== identity.startingRound || current.step !== identity.startingStep;
+    const stepComplete = outsideScope();
     const result = combatStepAutomationRunResultSchema.parse({
       acceptedTasks,
       attemptedTasks,
@@ -200,7 +209,7 @@ export async function runCombatStepAutomation<State>(input: {
   };
 
   for (let index = 0; index < limit; index += 1) {
-    if (current.roundNumber !== identity.startingRound || current.step !== identity.startingStep) {
+    if (outsideScope()) {
       return finish("end_of_step");
     }
     const task = current.tasks[0];

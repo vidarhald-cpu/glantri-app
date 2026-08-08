@@ -6474,6 +6474,10 @@ export default function CombatRoundManagerPanel({
     inspectorCanExecuteSelectedStep &&
     (currentActionPresentation?.taskKind === "modifier_review" ||
       currentActionPresentation?.taskKind === "roll_initiative" ||
+      (currentActionPresentation?.taskKind === "combat_experience" &&
+        roundState.currentStep === "select_actions" &&
+        inspectorCurrentCommandType === "roll_combat_experience" &&
+        !selectedScenarioParticipant?.controlledByUserId) ||
       (currentActionPresentation?.taskKind === "submit_declaration" &&
         !selectedScenarioParticipant?.controlledByUserId)) &&
     !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
@@ -6527,9 +6531,11 @@ export default function CombatRoundManagerPanel({
         <option disabled={!inspectorBulkStepCompletionAvailable} value="complete_remaining">
           {currentActionPresentation?.taskKind === "modifier_review"
             ? "Accept remaining NPC reviews"
-            : currentActionPresentation?.taskKind === "submit_declaration"
-              ? "Accept remaining NPC declarations"
-              : "Roll remaining GM initiative"}
+            : currentActionPresentation?.taskKind === "combat_experience"
+              ? "Roll remaining GM Combat Experience"
+              : currentActionPresentation?.taskKind === "submit_declaration"
+                ? "Accept remaining NPC declarations"
+                : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
@@ -6537,9 +6543,11 @@ export default function CombatRoundManagerPanel({
   const inspectorBulkStepLabel =
     currentActionPresentation?.taskKind === "modifier_review"
       ? "Accept remaining NPC reviews"
-      : currentActionPresentation?.taskKind === "submit_declaration"
-        ? "Accept remaining NPC declarations"
-        : "Roll remaining GM initiative";
+      : currentActionPresentation?.taskKind === "combat_experience"
+        ? "Roll remaining GM Combat Experience"
+        : currentActionPresentation?.taskKind === "submit_declaration"
+          ? "Accept remaining NPC declarations"
+          : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6554,9 +6562,11 @@ export default function CombatRoundManagerPanel({
           heading: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Modifier review"
-              : currentActionPresentation.taskKind === "submit_declaration"
-                ? "Declaration"
-                : "Initiative"
+              : currentActionPresentation.taskKind === "combat_experience"
+                ? "Combat Experience"
+                : currentActionPresentation.taskKind === "submit_declaration"
+                  ? "Declaration"
+                  : "Initiative"
             : currentActionPresentation.heading,
           primaryAction: {
             ...currentActionPresentation.primaryAction,
@@ -6565,16 +6575,20 @@ export default function CombatRoundManagerPanel({
           requiredNow: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Stops at the first unresolved review."
-              : currentActionPresentation.taskKind === "submit_declaration"
-                ? "Stops at the first declaration requiring attention."
-                : "Stops before player-owned or attention-required initiative."
+              : currentActionPresentation.taskKind === "combat_experience"
+                ? "Stops before player-owned or attention-required Combat Experience."
+                : currentActionPresentation.taskKind === "submit_declaration"
+                  ? "Stops at the first declaration requiring attention."
+                  : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
               ? "Accept straightforward GM-controlled participant reviews unchanged."
-              : currentActionPresentation.taskKind === "submit_declaration"
-                ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
-                : "Roll eligible GM-controlled participant initiative in canonical order."
+              : currentActionPresentation.taskKind === "combat_experience"
+                ? "Roll eligible GM-controlled NPC Combat Experience checks in canonical order."
+                : currentActionPresentation.taskKind === "submit_declaration"
+                  ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
+                  : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -10297,10 +10311,17 @@ export default function CombatRoundManagerPanel({
         "review_modifiers_phase2",
         "roll_initiative_phase1",
         "roll_initiative_phase2",
+        "roll_combat_experience",
         "declare_action",
       ],
       presentation: currentActionPresentation,
-      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "participantId",
+        "processId",
+        "taskId",
+      ],
     });
     if (!descriptor) {
       setSaveError("Combat state changed. Review the current action before continuing.");
@@ -10308,7 +10329,8 @@ export default function CombatRoundManagerPanel({
     }
     const operationFamily =
       descriptor.commandType === "roll_initiative_phase1" ||
-      descriptor.commandType === "roll_initiative_phase2"
+      descriptor.commandType === "roll_initiative_phase2" ||
+      descriptor.commandType === "roll_combat_experience"
         ? "roll_remaining"
         : "accept_remaining";
     if (operationFamily === "accept_remaining" && inspectorHasLocalModifierEdits) {
@@ -10328,6 +10350,7 @@ export default function CombatRoundManagerPanel({
         currentEncounter: encounter,
         encounterId: encounter.id,
         expectedExecutionGroupId: descriptor.executionGroupId!,
+        expectedProcessId: descriptor.processId!,
         expectedRevision: descriptor.expectedRevision,
         expectedRound: roundState.roundNumber,
         expectedStep: roundState.currentStep,

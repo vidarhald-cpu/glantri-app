@@ -2021,6 +2021,58 @@ function makeDeclarationAutomationFixture(input: {
   return { encounter, participants };
 }
 
+function makeCombatExperienceAutomationFixture(input: {
+  difficultyFixed?: boolean;
+  participantCount?: number;
+  playerControlledIndex?: number;
+  warningIndex?: number;
+}) {
+  const participantCount = input.participantCount ?? 4;
+  const encounterParticipants = Array.from({ length: participantCount }, (_, index) =>
+    makeEncounterCombatParticipant({
+      id: `encounter-participant-${index + 1}`,
+      label: `NPC ${index + 1}`,
+      order: index,
+      scenarioParticipantId: `participant-${index + 1}`,
+    }),
+  );
+  const baseEncounter = encounterSessionSchema.parse(
+    makeCombatEncounter({ participants: encounterParticipants }),
+  );
+  const initial = initializeCombatRoundState({ encounter: baseEncounter });
+  const state = input.difficultyFixed
+    ? setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state: initial })
+    : initial;
+  const encounter = encounterSessionSchema.parse({
+    ...baseEncounter,
+    combatRoundState: state,
+    updatedAt: "2026-08-08T10:00:00.000Z",
+  });
+  const participants = encounterParticipants.map((participant, index) =>
+    makeCombatScenarioParticipant({
+      controlledByUserId:
+        input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
+      id: participant.scenarioParticipantId,
+      role: input.playerControlledIndex === index ? "player_character" : "npc",
+      snapshot: {
+        displayName: participant.label,
+        sheetSummary: {
+          skills: [
+            input.warningIndex === index
+              ? { effectiveSkillNumber: 11, skillId: "combat_experience" }
+              : { skillId: "combat_experience", totalSkill: 11 },
+          ],
+        },
+      },
+      state: {
+        ...makeCombatScenarioParticipant().state,
+        combatEffects: { effects: [], events: [] },
+      },
+    }) as unknown as ScenarioParticipant,
+  );
+  return { encounter, participants };
+}
+
 function stepAutomationRequest(input: {
   encounter: EncounterSession;
   operationFamily: "accept_remaining" | "roll_remaining";
@@ -2048,6 +2100,7 @@ function stepAutomationRequest(input: {
   return {
     encounterId: input.encounter.id,
     expectedExecutionGroupId: task.executionGroupId,
+    expectedProcessId: task.processId,
     expectedRevision: input.encounter.updatedAt,
     expectedRound: state.roundNumber,
     expectedStep: state.currentStep,
@@ -12956,6 +13009,221 @@ describe("scenarios route contract", () => {
       randomSpy.mockRestore();
       await app.close();
     }
+  });
+
+  it("rolls ten remaining GM Combat Experience checks and stops before declarations", async () => {
+    const prepared = makeCombatExperienceAutomationFixture({
+      difficultyFixed: true,
+      participantCount: 10,
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "roll_remaining",
+      participants: prepared.participants,
+      runId: "combat-experience-complete-run",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 10,
+        stepComplete: true,
+        stopReason: "end_of_step",
+      });
+      expect(response.json().workflow.finalTask).toMatchObject({ kind: "submit_declaration" });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.currentStep).toBe("select_actions");
+      expect(state.participants.every((participant) => participant.combatExperience)).toBe(true);
+      expect(state.participants.every((participant) => !participant.declaration)).toBe(true);
+      expect(
+        state.commands.filter((command) => command.type === "roll_combat_experience"),
+      ).toHaveLength(10);
+      expect(
+        state.commands.filter((command) => command.facts.stepAutomation !== undefined),
+      ).toHaveLength(10);
+
+      const manual = rollCombatRoundCombatExperience({
+        combatContext: prepared.participants[0]?.state.combat.combatContext,
+        combatEffects: prepared.participants[0]?.state.combatEffects,
+        command: {
+          commandId: "manual-parity",
+          createdAt: "2026-08-08T10:00:01.000Z",
+          createdByUserId: "gm-1",
+        },
+        createdRevision: prepared.encounter.updatedAt,
+        encounterId: prepared.encounter.id,
+        participantId: "encounter-participant-1",
+        rng: () => 0.5,
+        scenarioId: "scenario-1",
+        scenarioParticipantId: "participant-1",
+        skillTotal: 11,
+        skillTotalSource: "participant.snapshot.sheetSummary.draftView.skills.totalSkill",
+        state: combatRoundStateSchema.parse(prepared.encounter.combatRoundState),
+        trigger: "combat_start",
+      });
+      expect(state.participants[0]?.combatExperience).toMatchObject({
+        ...manual.result,
+        rolledAt: expect.any(String),
+        rolledByUserId: mocks.adminUser.id,
+      });
+      const firstSavedParticipant = response
+        .json()
+        .participants.find((participant: ScenarioParticipant) => participant.id === "participant-1");
+      expect(firstSavedParticipant.state.combatEffects.effects).toEqual([
+        expect.objectContaining({
+          duration: `${manual.result.durationRounds} ${
+            manual.result.durationRounds === 1 ? "round" : "rounds"
+          }`,
+          modifierValue: manual.result.modifierValue,
+          status: "active",
+        }),
+      ]);
+
+      const commandCount = state.commands.length;
+      const retry = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().workflow).toMatchObject({
+        alreadyAccepted: true,
+        processedCount: 10,
+      });
+      expect(combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands).toHaveLength(
+        commandCount,
+      );
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("rolls the contiguous GM Combat Experience prefix and stops before a player roll", async () => {
+    const prepared = makeCombatExperienceAutomationFixture({
+      difficultyFixed: true,
+      playerControlledIndex: 3,
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload: stepAutomationRequest({
+          encounter: prepared.encounter,
+          operationFamily: "roll_remaining",
+          participants: prepared.participants,
+          runId: "combat-experience-player-boundary-run",
+        }),
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 3,
+        stepComplete: false,
+        stopParticipantId: "encounter-participant-4",
+        stopReason: "player_action_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.participants.slice(0, 3).every((participant) => participant.combatExperience)).toBe(
+        true,
+      );
+      expect(state.participants[3]?.combatExperience).toBeUndefined();
+      expect(state.commands.filter((command) => command.type === "roll_combat_experience")).toHaveLength(
+        3,
+      );
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("stops before incomplete Combat Experience facts without mutating that participant", async () => {
+    const prepared = makeCombatExperienceAutomationFixture({
+      difficultyFixed: true,
+      warningIndex: 1,
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload: stepAutomationRequest({
+          encounter: prepared.encounter,
+          operationFamily: "roll_remaining",
+          participants: prepared.participants,
+          runId: "combat-experience-incomplete-run",
+        }),
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 1,
+        stopParticipantId: "encounter-participant-2",
+        stopReason: "combat_experience_review_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.participants[0]?.combatExperience).toBeDefined();
+      expect(state.participants[1]?.combatExperience).toBeUndefined();
+      expect(state.participants[2]?.combatExperience).toBeUndefined();
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("does not run Combat Experience automation before the GM fixes difficulty", async () => {
+    const prepared = makeCombatExperienceAutomationFixture({});
+    setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: prepared.participants,
+        runId: "combat-experience-difficulty-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 0,
+      stopReason: "gm_decision_required",
+    });
   });
 
   it("accepts straightforward M1 reviews only after an explicit GM workflow request", async () => {

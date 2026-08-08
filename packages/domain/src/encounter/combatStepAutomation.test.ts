@@ -70,6 +70,15 @@ function projection(input: {
   };
 }
 
+function processTask(
+  id: string,
+  participantId: string,
+  processId: string,
+  kind = "combat_experience",
+) {
+  return { ...task(id, participantId, kind), processId };
+}
+
 describe("canonical GM step automation", () => {
   it("processes a contiguous canonical prefix and stops before player work", async () => {
     const tasks = [task("initiative-a", "npc-a"), task("initiative-b", "player-b")];
@@ -110,6 +119,40 @@ describe("canonical GM step automation", () => {
     expect(result.stopReason).toBe("end_of_step");
     expect(result.finalTask?.kind).toBe("attack");
     expect(result.acceptedTasks).toHaveLength(1);
+  });
+
+  it("stops at an exact process fence even when the structural step is unchanged", async () => {
+    const combatExperience = processTask("ce-a", "npc-a", "combat-experience");
+    const declaration = processTask("de-a", "npc-a", "declaration", "submit_declaration");
+    const ceIdentity = combatStepAutomationRunIdentitySchema.parse({
+      ...identity(),
+      startExecutionGroupId: combatExperience.executionGroupId,
+      startProcessId: combatExperience.processId,
+      startingStep: "select_actions",
+      startTaskId: combatExperience.id,
+    });
+    let executions = 0;
+    const result = await runCombatStepAutomation({
+      classify: () => ({ countsTowardProcessed: true, kind: "execute" }),
+      execute: async () => {
+        executions += 1;
+        return {
+          kind: "accepted",
+          projection: projection({
+            revision: "revision-2",
+            step: "select_actions",
+            tasks: [declaration],
+          }),
+        };
+      },
+      identity: ceIdentity,
+      initial: projection({ step: "select_actions", tasks: [combatExperience] }),
+    });
+
+    expect(executions).toBe(1);
+    expect(result.stepComplete).toBe(true);
+    expect(result.stopReason).toBe("end_of_step");
+    expect(result.finalTask?.kind).toBe("submit_declaration");
   });
 
   it("stops before warnings and never executes the warned task", async () => {
