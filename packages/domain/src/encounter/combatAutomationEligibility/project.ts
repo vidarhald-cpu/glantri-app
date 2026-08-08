@@ -169,7 +169,9 @@ function missingPureRollFact(task: CombatAutomationTaskInput): CombatAutomationR
         ? undefined
         : "relationship_ambiguity";
     case "observation_roll":
-      return task.identity.observationAttemptId && task.identity.relationshipId
+      return task.identity.observationAttemptId &&
+        task.identity.opponentParticipantId &&
+        task.identity.relationshipId
         ? undefined
         : "relationship_ambiguity";
     case "health_review":
@@ -204,7 +206,6 @@ function processWarnings(task: CombatAutomationTaskInput): CombatAutomationReaso
   ) {
     return ["ordered_maneuver"];
   }
-  if (task.kind === "observation_roll") return ["hidden_information"];
   return [];
 }
 

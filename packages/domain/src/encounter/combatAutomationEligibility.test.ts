@@ -212,11 +212,16 @@ describe("canonical combat automation eligibility", () => {
           relationshipId: "relationship-1",
         },
       }),
-    ).toMatchObject({
-      eligibility: "requires_warning",
-      stopReason: "hidden_information",
-      warnings: ["hidden_information"],
-    });
+    ).toMatchObject({ eligibility: "eligible", warnings: [] });
+    expect(
+      classify("observation_roll", {
+        expectedCommand: "roll_observation",
+        identity: {
+          observationAttemptId: "attempt-1",
+          relationshipId: "relationship-1",
+        },
+      }),
+    ).toMatchObject({ eligibility: "blocked", stopReason: "relationship_ambiguity" });
   });
 
   it("keeps one ordinary actor's exact attack eligible while tactical selection stays excluded", () => {

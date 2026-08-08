@@ -820,6 +820,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollRoundEndHealthCheckOnServer");
     expect(source).toContain('"Roll remaining GM Health checks"');
     expect(source).toContain('descriptor.commandType === "roll_round_end_health_check"');
+    expect(source).toContain('"Roll remaining GM Observe checks"');
+    expect(source).toContain('descriptor.commandType === "roll_observation"');
     expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
     expect(source).toContain('case "health_review"');
     expect(source).toContain("Health check required for");

@@ -181,6 +181,46 @@ describe("GM combat Workflow Status presentation", () => {
     });
   });
 
+  it("reports Observe completion and relationship-review stops without hidden details", () => {
+    const observationResult = result({
+      identity: {
+        ...result().identity,
+        startProcessFamily: "observation",
+        startingStep: "round_summary",
+      },
+      processedCount: 4,
+      stepComplete: true,
+      stopParticipantId: undefined,
+      stopReason: "end_of_step",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: observationResult,
+      }),
+    ).toMatchObject({
+      completion: "Completed Observe work.",
+      operationLabel: "Roll remaining GM Observe checks",
+      processedSummary: "Rolled 4 NPC Observe checks.",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["npc-1", "Orc Captain"]]),
+        result: {
+          ...observationResult,
+          processedCount: 3,
+          stepComplete: false,
+          stopParticipantId: "npc-1",
+          stopReason: "observation_review_required",
+        },
+      }),
+    ).toMatchObject({
+      completion: undefined,
+      stopMessage: "Observe relationship requires review.",
+      stopParticipantLabel: "Orc Captain",
+    });
+  });
+
   it("gives a concise changed-target stop message", () => {
     const presentation = buildCombatStepWorkflowStatusPresentation({
       participantLabelsById: new Map([["npc-8", "Orc Captain"]]),

@@ -197,6 +197,40 @@ describe("canonical GM step automation", () => {
     expect(result.finalTask?.kind).toBe("observation_roll");
   });
 
+  it("keeps exact Observe tasks inside one process-family fence and stops before other SU work", async () => {
+    const observeA = processTask("observe-a", "npc-a", "observation", "observation_roll");
+    const observeB = processTask("observe-b", "npc-b", "observation", "observation_roll");
+    const boundary = processTask("boundary", "gm", "round-end", "gm_advance_boundary");
+    const observeIdentity = combatStepAutomationRunIdentitySchema.parse({
+      ...identity(),
+      startExecutionGroupId: observeA.executionGroupId,
+      startProcessFamily: "observation",
+      startProcessId: observeA.processId,
+      startingStep: "round_summary",
+      startTaskId: observeA.id,
+    });
+    const sequence = [[observeB], [boundary]];
+    let executions = 0;
+    const result = await runCombatStepAutomation({
+      classify: () => ({ countsTowardProcessed: true, kind: "execute" }),
+      execute: async () => ({
+        kind: "accepted",
+        projection: projection({
+          revision: `revision-${executions + 2}`,
+          step: "round_summary",
+          tasks: sequence[executions++] ?? [],
+        }),
+      }),
+      identity: observeIdentity,
+      initial: projection({ step: "round_summary", tasks: [observeA] }),
+    });
+
+    expect(result.acceptedTasks.map((entry) => entry.taskId)).toEqual(["observe-a", "observe-b"]);
+    expect(result.processedCount).toBe(2);
+    expect(result.stepComplete).toBe(true);
+    expect(result.finalTask?.kind).toBe("gm_advance_boundary");
+  });
+
   it("stops before warnings and never executes the warned task", async () => {
     let executions = 0;
     const result = await runCombatStepAutomation({

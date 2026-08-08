@@ -124,6 +124,7 @@ import {
   getCombatRoundEndDistanceProposalLifecycle,
   getCombatRoundEndHealthAutomationReviewDisposition,
   getCombatRoundEndHealthCheckPendingRolls,
+  getPendingCombatObservationAttempts,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundHitLocationResultId,
   getSingleAttackDeclaredDistanceForPenalty,
@@ -400,6 +401,152 @@ function buildObservationRollBasis(input: {
     skillLabel: input.profile.skillLabel,
     skillXp: input.profile.skillXp,
   };
+}
+
+type ApiCombatObservationRollContext =
+  | {
+      kind: "ready";
+      observerBasis: ReturnType<typeof buildObservationRollBasis>;
+      targetBasis: ReturnType<typeof buildObservationRollBasis>;
+    }
+  | {
+      kind: "stopped";
+      reason: "observation_review_required" | "target_invalid";
+    };
+
+/** Resolves one exact Observe contest entirely from canonical server-owned combat facts. */
+function resolveApiCombatObservationRollContext(input: {
+  encounter: EncounterSession;
+  observerParticipantId: string;
+  observationAttemptId: string;
+  relationshipId: string;
+  scenarioParticipants: readonly ScenarioParticipant[];
+  state: CombatRoundState;
+  targetParticipantId: string;
+}): ApiCombatObservationRollContext {
+  const observerEncounterParticipant = input.encounter.participants.find(
+    (participant) => participant.id === input.observerParticipantId,
+  );
+  const targetEncounterParticipant = input.encounter.participants.find(
+    (participant) => participant.id === input.targetParticipantId,
+  );
+  const scenarioParticipants = [...input.scenarioParticipants];
+  const observer = findScenarioParticipantForEncounterParticipant({
+    encounterParticipant: observerEncounterParticipant,
+    scenarioParticipants,
+  });
+  const target = findScenarioParticipantForEncounterParticipant({
+    encounterParticipant: targetEncounterParticipant,
+    scenarioParticipants,
+  });
+  if (!targetEncounterParticipant || !target?.isActive) {
+    return { kind: "stopped", reason: "target_invalid" };
+  }
+  if (!observerEncounterParticipant || !observer?.isActive) {
+    return { kind: "stopped", reason: "observation_review_required" };
+  }
+  const pending = getPendingCombatObservationAttempts(input.state).find(
+    (attempt) =>
+      attempt.attemptId === input.observationAttemptId &&
+      attempt.observerParticipantId === input.observerParticipantId &&
+      attempt.relationshipId === input.relationshipId &&
+      attempt.targetParticipantId === input.targetParticipantId,
+  );
+  if (!pending) return { kind: "stopped", reason: "observation_review_required" };
+
+  const observerProfile = resolveCombatObservationSkillProfile({
+    ...getScenarioParticipantFeintSkillInput(observer),
+    skills: defaultCanonicalContent.skills,
+  });
+  const targetProfile = resolveCombatObservationSkillProfile({
+    ...getScenarioParticipantFeintSkillInput(target),
+    skills: defaultCanonicalContent.skills,
+  });
+  if (!observerProfile || !targetProfile) {
+    return { kind: "stopped", reason: "observation_review_required" };
+  }
+
+  const observerModifierProjection = buildLiveCombatModifierContributionProjection({
+    combatContext: observer.state.combat.combatContext,
+    combatEffects: observer.state.combatEffects,
+    currentRound: input.state.roundNumber,
+    encounterId: input.encounter.id,
+    ownerParticipantId: observer.id,
+  });
+  const targetModifierProjection = buildLiveCombatModifierContributionProjection({
+    combatContext: target.state.combat.combatContext,
+    combatEffects: target.state.combatEffects,
+    currentRound: input.state.roundNumber,
+    encounterId: input.encounter.id,
+    ownerParticipantId: target.id,
+  });
+  const observerObservationContributions = buildCombatObservationModifierContributions({
+    encounterId: input.encounter.id,
+    observerCombatantId: observerEncounterParticipant.id,
+    observerParticipantId: observer.id,
+    opponentCombatantId: targetEncounterParticipant.id,
+    opponentParticipantId: target.id,
+    relationships: input.state.observationRelationships,
+  });
+  const targetObservationContributions = buildCombatObservationModifierContributions({
+    encounterId: input.encounter.id,
+    observerCombatantId: targetEncounterParticipant.id,
+    observerParticipantId: target.id,
+    opponentCombatantId: observerEncounterParticipant.id,
+    opponentParticipantId: observer.id,
+    relationships: input.state.observationRelationships,
+  });
+  const observationContext = (contextInput: {
+    ownerParticipantId: string;
+    opponentParticipantId: string;
+    skillId: string;
+  }): CombatCalculationContext => ({
+    actionId: "observe_opponent",
+    encounterId: input.encounter.id,
+    ownerParticipantId: contextInput.ownerParticipantId,
+    opponentParticipantId: contextInput.opponentParticipantId,
+    pairKey: createCombatParticipantPairKey(
+      contextInput.ownerParticipantId,
+      contextInput.opponentParticipantId,
+    ),
+    rollPurpose: "observe_opponent",
+    rollType: "observation",
+    roundNumber: input.state.roundNumber,
+    skillId: contextInput.skillId,
+    step: "round_summary",
+  });
+
+  try {
+    return {
+      kind: "ready",
+      observerBasis: buildObservationRollBasis({
+        context: observationContext({
+          ownerParticipantId: observer.id,
+          opponentParticipantId: target.id,
+          skillId: observerProfile.skillId,
+        }),
+        contributions: [
+          ...observerModifierProjection.contributions,
+          ...observerObservationContributions,
+        ],
+        profile: observerProfile,
+      }),
+      targetBasis: buildObservationRollBasis({
+        context: observationContext({
+          ownerParticipantId: target.id,
+          opponentParticipantId: observer.id,
+          skillId: targetProfile.skillId,
+        }),
+        contributions: [
+          ...targetModifierProjection.contributions,
+          ...targetObservationContributions,
+        ],
+        profile: targetProfile,
+      }),
+    };
+  } catch {
+    return { kind: "stopped", reason: "observation_review_required" };
+  }
 }
 
 function parseInteger(value: unknown, label: string): number {
@@ -4182,7 +4329,8 @@ function classifyApiCombatStepAutomationTask(input: {
     if (
       task.kind !== "roll_initiative" &&
       task.kind !== "combat_experience" &&
-      task.kind !== "health_review"
+      task.kind !== "health_review" &&
+      task.kind !== "observation_roll"
     ) {
       return { kind: "stop", reason: "unsupported_task" };
     }
@@ -4224,6 +4372,29 @@ function classifyApiCombatStepAutomationTask(input: {
       }
       if (review.canonicalReview.effectVersions[proposal.sourceEffectId] === undefined) {
         return { kind: "stop", reason: "incomplete_legacy_state" };
+      }
+    }
+    if (task.kind === "observation_roll") {
+      if (input.scopeProcessFamily !== "observation" || input.projection.step !== "round_summary") {
+        return { kind: "stop", reason: "unsupported_task" };
+      }
+      const observationAttemptId = task.identity.observationAttemptId;
+      const relationshipId = task.identity.relationshipId;
+      const targetParticipantId = task.identity.opponentParticipantId;
+      if (!observationAttemptId || !relationshipId || !targetParticipantId) {
+        return { kind: "stop", reason: "observation_review_required" };
+      }
+      const context = resolveApiCombatObservationRollContext({
+        encounter: input.encounter,
+        observerParticipantId: owner.encounterParticipantId,
+        observationAttemptId,
+        relationshipId,
+        scenarioParticipants: input.scenarioParticipants,
+        state: input.projection.state,
+        targetParticipantId,
+      });
+      if (context.kind === "stopped") {
+        return { kind: "stop", reason: context.reason };
       }
     }
     if (task.automation.eligibility === "requires_warning") {
@@ -9305,102 +9476,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(409).send({ code: authorization.code, error: authorization.message });
       }
 
-      const observerProfile = resolveCombatObservationSkillProfile({
-        ...getScenarioParticipantFeintSkillInput(observer),
-        skills: defaultCanonicalContent.skills,
+      const observationContext = resolveApiCombatObservationRollContext({
+        encounter,
+        observerParticipantId: observerEncounterParticipant.id,
+        observationAttemptId: body.observationAttemptId,
+        relationshipId: body.relationshipId,
+        scenarioParticipants,
+        state: roundState,
+        targetParticipantId: body.opponentParticipantId,
       });
-      const targetProfile = resolveCombatObservationSkillProfile({
-        ...getScenarioParticipantFeintSkillInput(target),
-        skills: defaultCanonicalContent.skills,
-      });
-      if (!observerProfile || !targetProfile) {
+      if (observationContext.kind === "stopped") {
         return reply.code(409).send({
           error:
-            "Observe Opponent requires canonical Intelligence-based Dodge or close-combat skill profiles.",
+            observationContext.reason === "target_invalid"
+              ? "The observed opponent is no longer available."
+              : "Observe Opponent requires exact canonical relationship and skill facts.",
         });
       }
-      const observerModifierProjection = buildLiveCombatModifierContributionProjection({
-        combatContext: observer.state.combat.combatContext,
-        combatEffects: observer.state.combatEffects,
-        currentRound: roundState.roundNumber,
-        encounterId,
-        ownerParticipantId: observer.id,
-      });
-      const targetModifierProjection = buildLiveCombatModifierContributionProjection({
-        combatContext: target.state.combat.combatContext,
-        combatEffects: target.state.combatEffects,
-        currentRound: roundState.roundNumber,
-        encounterId,
-        ownerParticipantId: target.id,
-      });
-      const observerObservationContributions = buildCombatObservationModifierContributions({
-        encounterId,
-        observerCombatantId: observerEncounterParticipant.id,
-        observerParticipantId: observer.id,
-        opponentCombatantId: targetEncounterParticipant!.id,
-        opponentParticipantId: target.id,
-        relationships: roundState.observationRelationships,
-      });
-      const targetObservationContributions = buildCombatObservationModifierContributions({
-        encounterId,
-        observerCombatantId: targetEncounterParticipant!.id,
-        observerParticipantId: target.id,
-        opponentCombatantId: observerEncounterParticipant.id,
-        opponentParticipantId: observer.id,
-        relationships: roundState.observationRelationships,
-      });
-      const observationContext = (input: {
-        ownerParticipantId: string;
-        opponentParticipantId: string;
-        skillId: string;
-      }): CombatCalculationContext => ({
-        actionId: "observe_opponent",
-        encounterId,
-        ownerParticipantId: input.ownerParticipantId,
-        opponentParticipantId: input.opponentParticipantId,
-        pairKey: createCombatParticipantPairKey(
-          input.ownerParticipantId,
-          input.opponentParticipantId,
-        ),
-        rollPurpose: "observe_opponent",
-        rollType: "observation",
-        roundNumber: roundState.roundNumber,
-        skillId: input.skillId,
-        step: "round_summary",
-      });
       const submittedAt = new Date().toISOString();
       const rolled = recordCombatObservationRoll({
         command: { createdAt: submittedAt, createdByUserId: user.id },
         completedAtRevision: submittedAt,
         executionGroupId: body.executionGroupId,
-        observerBasis: buildObservationRollBasis({
-          context: observationContext({
-            ownerParticipantId: observer.id,
-            opponentParticipantId: target.id,
-            skillId: observerProfile.skillId,
-          }),
-          contributions: [
-            ...observerModifierProjection.contributions,
-            ...observerObservationContributions,
-          ],
-          profile: observerProfile,
-        }),
+        observerBasis: observationContext.observerBasis,
         observerParticipantId: observerEncounterParticipant.id,
         observationAttemptId: body.observationAttemptId,
         relationshipId: body.relationshipId,
         state: roundState,
-        targetBasis: buildObservationRollBasis({
-          context: observationContext({
-            ownerParticipantId: target.id,
-            opponentParticipantId: observer.id,
-            skillId: targetProfile.skillId,
-          }),
-          contributions: [
-            ...targetModifierProjection.contributions,
-            ...targetObservationContributions,
-          ],
-          profile: targetProfile,
-        }),
+        targetBasis: observationContext.targetBasis,
         targetParticipantId: body.opponentParticipantId,
       });
       const savedEncounter = await encounterService.updateCombatEncounter({
@@ -10982,7 +11085,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         acceptedLinks[0]?.link.startingSequence ?? getCombatRoundNextEventSequence(initial.state);
       const startProcessFamily =
         acceptedLinks[0]?.link.startProcessFamily ??
-        (initialTask?.kind === "health_review" ? "health_bleed" : undefined);
+        (initialTask?.kind === "health_review"
+          ? "health_bleed"
+          : initialTask?.kind === "observation_roll"
+            ? "observation"
+            : undefined);
       const identity: CombatStepAutomationRunIdentity = {
         encounterId,
         gmActorUserId: user.id,
@@ -11135,6 +11242,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             task.kind === "roll_initiative" ||
             task.kind === "combat_experience" ||
             task.kind === "health_review" ||
+            task.kind === "observation_roll" ||
             task.kind === "modifier_review" ||
             task.kind === "submit_declaration";
           const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
@@ -11143,6 +11251,73 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ).toISOString();
 
           try {
+            if (task.kind === "observation_roll") {
+              const owner = getStepAutomationScenarioParticipant({
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              const observationAttemptId = task.identity.observationAttemptId;
+              const relationshipId = task.identity.relationshipId;
+              const targetParticipantId = task.identity.opponentParticipantId;
+              if (!owner || !observationAttemptId || !relationshipId || !targetParticipantId) {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "observation_review_required" as const,
+                };
+              }
+              const context = resolveApiCombatObservationRollContext({
+                encounter: workingEncounter!,
+                observerParticipantId: owner.encounterParticipantId,
+                observationAttemptId,
+                relationshipId,
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                targetParticipantId,
+              });
+              if (context.kind === "stopped") {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: context.reason,
+                };
+              }
+              const rolled = recordCombatObservationRoll({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                completedAtRevision: submittedAt,
+                executionGroupId: task.executionGroupId,
+                observerBasis: context.observerBasis,
+                observerParticipantId: owner.encounterParticipantId,
+                observationAttemptId,
+                relationshipId,
+                state: apiProjection.state,
+                targetBasis: context.targetBasis,
+                targetParticipantId,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: rolled.state,
+                taskId: task.id,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { kind: "accepted" as const, projection: project() };
+            }
+
             if (task.kind === "health_review") {
               const owner = getStepAutomationScenarioParticipant({
                 scenarioParticipants: workingParticipants,

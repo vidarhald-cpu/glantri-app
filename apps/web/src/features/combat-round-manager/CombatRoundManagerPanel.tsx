@@ -6481,6 +6481,9 @@ export default function CombatRoundManagerPanel({
       (currentActionPresentation?.taskKind === "health_review" &&
         inspectorCurrentCommandType === "roll_round_end_health_check" &&
         !selectedScenarioParticipant?.controlledByUserId) ||
+      (currentActionPresentation?.taskKind === "observation_roll" &&
+        inspectorCurrentCommandType === "roll_observation" &&
+        !selectedScenarioParticipant?.controlledByUserId) ||
       (currentActionPresentation?.taskKind === "submit_declaration" &&
         !selectedScenarioParticipant?.controlledByUserId)) &&
     !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
@@ -6538,9 +6541,11 @@ export default function CombatRoundManagerPanel({
               ? "Roll remaining GM Combat Experience"
               : currentActionPresentation?.taskKind === "health_review"
                 ? "Roll remaining GM Health checks"
-                : currentActionPresentation?.taskKind === "submit_declaration"
-                  ? "Accept remaining NPC declarations"
-                  : "Roll remaining GM initiative"}
+                : currentActionPresentation?.taskKind === "observation_roll"
+                  ? "Roll remaining GM Observe checks"
+                  : currentActionPresentation?.taskKind === "submit_declaration"
+                    ? "Accept remaining NPC declarations"
+                    : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
@@ -6552,9 +6557,11 @@ export default function CombatRoundManagerPanel({
         ? "Roll remaining GM Combat Experience"
         : currentActionPresentation?.taskKind === "health_review"
           ? "Roll remaining GM Health checks"
-          : currentActionPresentation?.taskKind === "submit_declaration"
-            ? "Accept remaining NPC declarations"
-            : "Roll remaining GM initiative";
+          : currentActionPresentation?.taskKind === "observation_roll"
+            ? "Roll remaining GM Observe checks"
+            : currentActionPresentation?.taskKind === "submit_declaration"
+              ? "Accept remaining NPC declarations"
+              : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6573,9 +6580,11 @@ export default function CombatRoundManagerPanel({
                 ? "Combat Experience"
                 : currentActionPresentation.taskKind === "health_review"
                   ? "Health/Bleed"
-                  : currentActionPresentation.taskKind === "submit_declaration"
-                    ? "Declaration"
-                    : "Initiative"
+                  : currentActionPresentation.taskKind === "observation_roll"
+                    ? "Observe Opponent"
+                    : currentActionPresentation.taskKind === "submit_declaration"
+                      ? "Declaration"
+                      : "Initiative"
             : currentActionPresentation.heading,
           primaryAction: {
             ...currentActionPresentation.primaryAction,
@@ -6588,9 +6597,11 @@ export default function CombatRoundManagerPanel({
                 ? "Stops before player-owned or attention-required Combat Experience."
                 : currentActionPresentation.taskKind === "health_review"
                   ? "Stops before player-owned Health or attention-required effect work."
-                  : currentActionPresentation.taskKind === "submit_declaration"
-                    ? "Stops at the first declaration requiring attention."
-                    : "Stops before player-owned or attention-required initiative."
+                  : currentActionPresentation.taskKind === "observation_roll"
+                    ? "Stops before player-owned or relationship-review Observe work."
+                    : currentActionPresentation.taskKind === "submit_declaration"
+                      ? "Stops at the first declaration requiring attention."
+                      : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
@@ -6599,9 +6610,11 @@ export default function CombatRoundManagerPanel({
                 ? "Roll eligible GM-controlled NPC Combat Experience checks in canonical order."
                 : currentActionPresentation.taskKind === "health_review"
                   ? "Roll eligible GM-controlled NPC Health checks in canonical SU order."
-                  : currentActionPresentation.taskKind === "submit_declaration"
-                    ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
-                    : "Roll eligible GM-controlled participant initiative in canonical order."
+                  : currentActionPresentation.taskKind === "observation_roll"
+                    ? "Roll exact GM-controlled NPC Observe contests in canonical SU order."
+                    : currentActionPresentation.taskKind === "submit_declaration"
+                      ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
+                      : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -10326,6 +10339,7 @@ export default function CombatRoundManagerPanel({
         "roll_initiative_phase2",
         "roll_combat_experience",
         "roll_round_end_health_check",
+        "roll_observation",
         "declare_action",
       ],
       presentation: currentActionPresentation,
@@ -10345,7 +10359,8 @@ export default function CombatRoundManagerPanel({
       descriptor.commandType === "roll_initiative_phase1" ||
       descriptor.commandType === "roll_initiative_phase2" ||
       descriptor.commandType === "roll_combat_experience" ||
-      descriptor.commandType === "roll_round_end_health_check"
+      descriptor.commandType === "roll_round_end_health_check" ||
+      descriptor.commandType === "roll_observation"
         ? "roll_remaining"
         : "accept_remaining";
     if (operationFamily === "accept_remaining" && inspectorHasLocalModifierEdits) {

@@ -53,6 +53,7 @@ import {
   makeDistancePairKey,
   setDistanceBetween,
   setCombatRoundCombatExperienceDifficulty,
+  undoLatestCombatRoundCommand,
 } from "@glantri/domain";
 import { weaponTemplates } from "@glantri/content/equipment";
 
@@ -2238,6 +2239,159 @@ function makeHealthAutomationFixture(input: {
       }) as unknown as ScenarioParticipant,
   );
   return { encounter, participants };
+}
+
+function makeObservationAutomationFixture(input: {
+  inactiveParticipantIndex?: number;
+  missingProfileIndex?: number;
+  observerCount?: number;
+  participantCount?: number;
+  playerControlledIndex?: number;
+}) {
+  const participantCount = input.participantCount ?? 4;
+  const observerCount = input.observerCount ?? participantCount;
+  const encounterParticipants = Array.from({ length: participantCount }, (_, index) =>
+    makeEncounterCombatParticipant({
+      id: `encounter-participant-${index + 1}`,
+      label: `NPC ${index + 1}`,
+      order: index,
+      scenarioParticipantId: `participant-${index + 1}`,
+    }),
+  );
+  const baseEncounter = encounterSessionSchema.parse(
+    makeCombatEncounter({ currentRound: 3, participants: encounterParticipants }),
+  );
+  const initial = initializeCombatRoundState({ encounter: baseEncounter });
+  const state = combatRoundStateSchema.parse({
+    ...initial,
+    currentCursor: {
+      participantId: encounterParticipants[0]?.id,
+      roundNumber: 3,
+      step: "SU",
+    },
+    currentStep: "round_summary",
+    observationRelationships: encounterParticipants
+      .slice(0, observerCount)
+      .map((observer, index) => {
+        const target = encounterParticipants[(index + 1) % participantCount]!;
+        return {
+          bestBonus: index === 0 ? 1 : 0,
+          completedAttempts: 0,
+          id: `observation:${observer.id}:${target.id}`,
+          observerParticipantId: observer.id,
+          roundsTowardNextAttempt: 2,
+          targetParticipantId: target.id,
+        };
+      }),
+    participants: initial.participants.map((participant, index) => {
+      const target = encounterParticipants[(index + 1) % participantCount]!;
+      return {
+        ...participant,
+        declaration:
+          index < observerCount
+            ? {
+                actionId: "parry",
+                id: `declaration:${participant.participantId}`,
+                roundNumber: 3,
+                secondaryActions: [{ action: "observe_opponent", targetParticipantId: target.id }],
+                secondaryActionContext: {
+                  action: "observe_opponent",
+                  targetParticipantId: target.id,
+                },
+                secondaryActionId: "observe_opponent",
+                submittedAt: "2026-08-10T09:00:00.000Z",
+                submittedBy: "gm",
+              }
+            : {
+                actionId: "parry",
+                id: `declaration:${participant.participantId}`,
+                roundNumber: 3,
+                submittedAt: "2026-08-10T09:00:00.000Z",
+                submittedBy: "gm",
+              },
+      };
+    }),
+    roundEndReview: {
+      participantReviews: Object.fromEntries(
+        encounterParticipants.map((participant) => [
+          participant.id,
+          { participantId: participant.id, status: "complete" },
+        ]),
+      ),
+      roundNumber: 3,
+    },
+    selectedParticipantId: encounterParticipants[0]?.id,
+    selectedStep: "round_summary",
+  });
+  const encounter = encounterSessionSchema.parse({
+    ...baseEncounter,
+    combatRoundState: state,
+    currentRound: 3,
+    updatedAt: "2026-08-10T10:00:00.000Z",
+  });
+  const participants = encounterParticipants.map((participant, index) => {
+    const characterId = `character-${index + 1}`;
+    return makeCombatScenarioParticipant({
+      characterId,
+      controlledByUserId: input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
+      id: participant.scenarioParticipantId,
+      isActive: input.inactiveParticipantIndex !== index,
+      role: input.playerControlledIndex === index ? "player_character" : "npc",
+      snapshot: {
+        ...(input.missingProfileIndex === index
+          ? {}
+          : { build: makeDodgeCharacterBuild(characterId, participant.label) }),
+        displayName: participant.label,
+        sourceUpdatedAt: "2026-08-10T09:00:00.000Z",
+      },
+      state: {
+        ...makeCombatScenarioParticipant().state,
+        combat: {
+          combatContext: {
+            modifierBuckets: {
+              ...emptyModifierBuckets(),
+              general:
+                input.missingProfileIndex === index
+                  ? [{ id: `ambiguous-observe-${index + 1}`, scope: "until", value: 999 }]
+                  : [],
+            },
+          },
+        },
+        combatEffects: { effects: [], events: [] },
+      },
+    }) as unknown as ScenarioParticipant;
+  });
+  return { encounter, participants };
+}
+
+function observationRollRequest(input: {
+  encounter: EncounterSession;
+  participants: readonly ScenarioParticipant[];
+}) {
+  const state = combatRoundStateSchema.parse(input.encounter.combatRoundState);
+  const task = getCurrentExecutableCombatTasks(
+    buildCombatProgressionProjection(state, {
+      participation: projectActiveCombatParticipation({
+        encounterRevision: input.encounter.updatedAt,
+        scenarioParticipants: input.participants,
+        state,
+      }),
+    }),
+  )[0]!;
+  const roundParticipant = state.participants.find(
+    (participant) => participant.participantId === task.identity.participantId,
+  );
+  return {
+    executionGroupId: task.executionGroupId,
+    expectedRevision: input.encounter.updatedAt,
+    observationAttemptId: task.identity.observationAttemptId,
+    opponentParticipantId: task.identity.opponentParticipantId,
+    processId: task.processId,
+    relationshipId: task.identity.relationshipId,
+    scenarioParticipantId: roundParticipant?.scenarioParticipantId,
+    stageId: task.stageId,
+    taskId: task.id,
+  };
 }
 
 function stepAutomationRequest(input: {
@@ -13596,6 +13750,247 @@ describe("scenarios route contract", () => {
       ),
     ).toHaveLength(0);
     await decisionApp.close();
+  });
+
+  it("rolls remaining exact GM Observe contests, preserves parity, and retries idempotently", async () => {
+    const prepared = makeObservationAutomationFixture({ participantCount: 4 });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "roll_remaining",
+      participants: prepared.participants,
+      runId: "observation-complete-run",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const app = await buildScenarioTestApp();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        identity: { startProcessFamily: "observation" },
+        processedCount: 4,
+        stepComplete: true,
+        stopReason: "end_of_step",
+      });
+      expect(response.json().workflow.finalTask).not.toMatchObject({ kind: "observation_roll" });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.commands.filter((command) => command.type === "roll_observation")).toHaveLength(
+        4,
+      );
+      expect(
+        state.commands.filter((command) => command.facts.stepAutomation !== undefined),
+      ).toHaveLength(4);
+      expect(state.observationAttempts).toHaveLength(4);
+      expect(state.observationRelationships[0]).toMatchObject({
+        bestBonus: 1,
+        completedAttempts: 1,
+        observerParticipantId: "encounter-participant-1",
+        targetParticipantId: "encounter-participant-2",
+      });
+      expect(state.events.map((event) => String(event.type))).not.toContain("step_automation");
+      const undone = undoLatestCombatRoundCommand({ state });
+      expect(undone?.observationAttempts).toHaveLength(3);
+      expect(undone?.observationRelationships.at(-1)).toMatchObject({
+        completedAttempts: 0,
+        observerParticipantId: "encounter-participant-4",
+        roundsTowardNextAttempt: 2,
+        targetParticipantId: "encounter-participant-1",
+      });
+
+      const commandCount = state.commands.length;
+      const retry = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().workflow).toMatchObject({
+        alreadyAccepted: true,
+        processedCount: 4,
+      });
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands,
+      ).toHaveLength(commandCount);
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+
+    vi.clearAllMocks();
+    const manualPrepared = makeObservationAutomationFixture({
+      observerCount: 1,
+      participantCount: 2,
+    });
+    setupMutableCombatRouteState({
+      encounter: manualPrepared.encounter,
+      participants: manualPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const manualRandomSpy = vi.spyOn(Math, "random").mockReturnValue(0.4);
+    const manualApp = await buildScenarioTestApp();
+    const manualResponse = await manualApp.inject({
+      method: "POST",
+      payload: observationRollRequest(manualPrepared),
+      url: "/encounters/encounter-1/combat-round/roll-observation",
+    });
+    expect(manualResponse.statusCode, manualResponse.body).toBe(200);
+    const manualAttempt = manualResponse.json().attempt;
+    manualRandomSpy.mockRestore();
+    await manualApp.close();
+
+    vi.clearAllMocks();
+    const automatedPrepared = makeObservationAutomationFixture({
+      observerCount: 1,
+      participantCount: 2,
+    });
+    const automatedFixture = setupMutableCombatRouteState({
+      encounter: automatedPrepared.encounter,
+      participants: automatedPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const automatedRandomSpy = vi.spyOn(Math, "random").mockReturnValue(0.4);
+    const automatedApp = await buildScenarioTestApp();
+    const automatedResponse = await automatedApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: automatedPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: automatedPrepared.participants,
+        runId: "observation-parity-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(automatedResponse.statusCode, automatedResponse.body).toBe(200);
+    const automatedAttempt = combatRoundStateSchema.parse(
+      automatedFixture.encounter.combatRoundState,
+    ).observationAttempts[0];
+    expect(automatedAttempt).toMatchObject({
+      bestBonusAfter: manualAttempt.bestBonusAfter,
+      candidateBonus: manualAttempt.candidateBonus,
+      difference: manualAttempt.difference,
+      observerRoll: manualAttempt.observerRoll,
+      targetRoll: manualAttempt.targetRoll,
+    });
+    automatedRandomSpy.mockRestore();
+    await automatedApp.close();
+  });
+
+  it("stops contiguous Observe automation at a player observer without blocking a player target", async () => {
+    const prepared = makeObservationAutomationFixture({
+      participantCount: 3,
+      playerControlledIndex: 2,
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: prepared.participants,
+        runId: "observation-player-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      processedCount: 2,
+      stepComplete: false,
+      stopParticipantId: "encounter-participant-3",
+      stopReason: "player_action_required",
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    expect(state.observationAttempts).toHaveLength(2);
+    expect(state.observationAttempts[1]).toMatchObject({
+      id: "observation:encounter-participant-2:encounter-participant-3:attempt:1",
+    });
+    expect(
+      state.commands.filter(
+        (command) =>
+          command.type === "roll_observation" &&
+          command.participantId === "encounter-participant-3",
+      ),
+    ).toHaveLength(0);
+    await app.close();
+  });
+
+  it("stops Observe automation before invalid targets or incomplete relationship profiles", async () => {
+    const ambiguousPrepared = makeObservationAutomationFixture({
+      missingProfileIndex: 2,
+      participantCount: 3,
+    });
+    const ambiguousFixture = setupMutableCombatRouteState({
+      encounter: ambiguousPrepared.encounter,
+      participants: ambiguousPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const ambiguousApp = await buildScenarioTestApp();
+    const ambiguousResponse = await ambiguousApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: ambiguousPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: ambiguousPrepared.participants,
+        runId: "observation-review-boundary-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(ambiguousResponse.statusCode, ambiguousResponse.body).toBe(200);
+    expect(ambiguousResponse.json().workflow).toMatchObject({
+      processedCount: 1,
+      stopParticipantId: "encounter-participant-2",
+      stopReason: "observation_review_required",
+    });
+    expect(
+      combatRoundStateSchema.parse(ambiguousFixture.encounter.combatRoundState).observationAttempts,
+    ).toHaveLength(1);
+    await ambiguousApp.close();
+
+    vi.clearAllMocks();
+    const invalidTargetPrepared = makeObservationAutomationFixture({
+      inactiveParticipantIndex: 1,
+      observerCount: 1,
+      participantCount: 2,
+    });
+    const invalidTargetFixture = setupMutableCombatRouteState({
+      encounter: invalidTargetPrepared.encounter,
+      participants: invalidTargetPrepared.participants,
+      user: mocks.adminUser,
+    });
+    const invalidTargetApp = await buildScenarioTestApp();
+    const invalidTargetResponse = await invalidTargetApp.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: invalidTargetPrepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: invalidTargetPrepared.participants,
+        runId: "observation-invalid-target-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    expect(invalidTargetResponse.statusCode, invalidTargetResponse.body).toBe(200);
+    expect(invalidTargetResponse.json().workflow).toMatchObject({
+      processedCount: 0,
+      stopReason: "target_invalid",
+    });
+    expect(
+      combatRoundStateSchema.parse(invalidTargetFixture.encounter.combatRoundState)
+        .observationAttempts,
+    ).toHaveLength(0);
+    await invalidTargetApp.close();
   });
 
   it("accepts straightforward M1 reviews only after an explicit GM workflow request", async () => {
