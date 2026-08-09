@@ -98,6 +98,125 @@ function retryableTransactionConflict() {
   );
 }
 
+function createAtomicStateClient(input?: { failCommit?: boolean; staleParticipantId?: string }) {
+  type StoredParticipant = { revision: Date; stateJson: unknown };
+  type StoredState = {
+    activeState: unknown;
+    encounterRevision: Date;
+    participants: Map<string, StoredParticipant>;
+  };
+  let committed: StoredState = {
+    activeState: combatRoundStateSchema.parse({
+      commands: [],
+      encounterId: "encounter-1",
+      participants: [{ label: "Aria", participantId: "aria" }],
+      roundNumber: 1,
+    }),
+    encounterRevision: new Date(revision1),
+    participants: new Map(
+      ["scenario-aria", "scenario-borin"].map((id) => [
+        id,
+        {
+          revision: new Date(revision1),
+          stateJson: { combat: {}, equipment: {}, health: {}, resources: {} },
+        },
+      ]),
+    ),
+  };
+  const client = {
+    $transaction: vi.fn(async (callback: (transaction: unknown) => Promise<unknown>) => {
+      const staged: StoredState = {
+        activeState: structuredClone(committed.activeState),
+        encounterRevision: new Date(committed.encounterRevision),
+        participants: new Map(
+          Array.from(committed.participants, ([id, participant]) => [
+            id,
+            {
+              revision: new Date(participant.revision),
+              stateJson: structuredClone(participant.stateJson),
+            },
+          ]),
+        ),
+      };
+      const transaction = {
+        encounter: {
+          findUniqueOrThrow: vi.fn(async (query: { select?: { combatStorageMode?: boolean } }) =>
+            query.select?.combatStorageMode
+              ? {
+                  combatArchiveCount: 0,
+                  combatStorageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
+                  updatedAt: staged.encounterRevision,
+                }
+              : { updatedAt: staged.encounterRevision },
+          ),
+          updateMany: vi.fn(async (query: { where: { updatedAt: Date } }) => {
+            if (query.where.updatedAt.getTime() !== staged.encounterRevision.getTime()) {
+              return { count: 0 };
+            }
+            staged.encounterRevision = new Date(revision2);
+            return { count: 1 };
+          }),
+        },
+        encounterActiveCombatState: {
+          upsert: vi.fn(
+            async (query: { create: { stateJson: unknown }; update: { stateJson: unknown } }) => {
+              staged.activeState = structuredClone(
+                query.update.stateJson ?? query.create.stateJson,
+              );
+              return {};
+            },
+          ),
+        },
+        encounterArchivedCombatRound: {
+          create: vi.fn(),
+          deleteMany: vi.fn(),
+        },
+        scenarioParticipant: {
+          updateMany: vi.fn(
+            async (query: {
+              data: { stateJson: unknown };
+              where: { id: string; updatedAt: Date };
+            }) => {
+              const participant = staged.participants.get(query.where.id);
+              if (
+                !participant ||
+                input?.staleParticipantId === query.where.id ||
+                participant.revision.getTime() !== query.where.updatedAt.getTime()
+              ) {
+                return { count: 0 };
+              }
+              participant.stateJson = structuredClone(query.data.stateJson);
+              participant.revision = new Date(revision2);
+              return { count: 1 };
+            },
+          ),
+        },
+      };
+      const result = await callback(transaction);
+      if (input?.failCommit) {
+        throw new Error("Injected transaction commit failure");
+      }
+      committed = staged;
+      return result;
+    }),
+    snapshot: () =>
+      structuredClone({
+        activeState: committed.activeState,
+        encounterRevision: committed.encounterRevision.toISOString(),
+        participants: Object.fromEntries(
+          Array.from(committed.participants, ([id, participant]) => [
+            id,
+            {
+              revision: participant.revision.toISOString(),
+              stateJson: participant.stateJson,
+            },
+          ]),
+        ),
+      }),
+  };
+  return client;
+}
+
 describe("combatStatePersistenceRepository", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -170,6 +289,9 @@ describe("combatStatePersistenceRepository", () => {
     });
 
     expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
     expect(client.scenarioParticipant.updateMany).toHaveBeenNthCalledWith(1, {
       data: { stateJson: expect.objectContaining({ combat: expect.any(Object) }) },
       where: {
@@ -214,6 +336,64 @@ describe("combatStatePersistenceRepository", () => {
       }),
     ).rejects.toMatchObject({ code: "stale_revision" });
     expect(client.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rolls back the encounter and every participant when participant N is stale", async () => {
+    const client = createAtomicStateClient({ staleParticipantId: "scenario-borin" });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+    const before = client.snapshot();
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        participantStateUpdates: ["scenario-aria", "scenario-borin"].map((participantId) => ({
+          expectedRevision: revision1,
+          participantId,
+          scenarioId: "scenario-1",
+          state: {
+            combat: { declarationSubmittedAt: "2026-07-26T10:00:02.000Z" },
+            equipment: {},
+            health: {},
+            resources: {},
+          } as never,
+        })),
+        scenarioId: "scenario-1",
+        session: buildSession(0),
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+
+    expect(client.snapshot()).toEqual(before);
+  });
+
+  it("rolls back participant and encounter writes when the serializable commit fails", async () => {
+    const client = createAtomicStateClient({ failCommit: true });
+    const repository = createPrismaCombatStatePersistenceRepository(client as never);
+    const before = client.snapshot();
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        participantStateUpdates: [
+          {
+            expectedRevision: revision1,
+            participantId: "scenario-aria",
+            scenarioId: "scenario-1",
+            state: {
+              combat: { declarationSubmittedAt: "2026-07-26T10:00:02.000Z" },
+              equipment: {},
+              health: {},
+              resources: {},
+            } as never,
+          },
+        ],
+        scenarioId: "scenario-1",
+        session: buildSession(0),
+      }),
+    ).rejects.toThrow("Injected transaction commit failure");
+
+    expect(client.snapshot()).toEqual(before);
   });
 
   it("ordinary split combat writes touch metadata and active state but not archives", async () => {

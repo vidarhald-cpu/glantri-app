@@ -2680,7 +2680,12 @@ function setupCombatDeclarationRoute(
     async (update: { session: unknown }) => update.session,
   );
   mocks.encounterService.commitCombatModifierReview.mockImplementation(
-    async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => {
+    async (update: {
+      participant: Record<string, unknown>;
+      scenarioId: string;
+      session: unknown;
+      state: unknown;
+    }) => {
       const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
       return {
         encounter,
@@ -2689,25 +2694,39 @@ function setupCombatDeclarationRoute(
     },
   );
   mocks.encounterService.commitCombatParticipantStateMutation.mockImplementation(
-    async (update: { participant: Record<string, unknown>; session: unknown; state: unknown }) => {
+    async (update: {
+      participant: Record<string, unknown>;
+      scenarioId: string;
+      session: unknown;
+      state: unknown;
+    }) => {
       const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
-      return {
-        encounter,
-        participant: { ...update.participant, state: update.state },
-      };
+      const participant = await mocks.encounterService.updateScenarioParticipantState({
+        participantId: update.participant.id,
+        scenarioId: update.scenarioId,
+        state: update.state,
+      });
+      return { encounter, participant };
     },
   );
   mocks.encounterService.commitCombatParticipantStateMutations.mockImplementation(
     async (update: {
       participants: Array<{ participant: Record<string, unknown>; state: unknown }>;
+      scenarioId: string;
       session: unknown;
-    }) => ({
-      encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
-      participants: update.participants.map(({ participant, state }) => ({
-        ...participant,
-        state,
-      })),
-    }),
+    }) => {
+      const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
+      const participants = await Promise.all(
+        update.participants.map(({ participant, state }) =>
+          mocks.encounterService.updateScenarioParticipantState({
+            participantId: participant.id,
+            scenarioId: update.scenarioId,
+            state,
+          }),
+        ),
+      );
+      return { encounter, participants };
+    },
   );
   mocks.encounterService.commitCombatModifierReviews.mockImplementation(
     async (update: {
@@ -2771,28 +2790,36 @@ function setupMutableCombatRouteState<Participant extends { id: string; state: u
     },
   );
   mocks.encounterService.commitCombatParticipantStateMutation.mockImplementation(
-    async (update: { participant: Participant; session: EncounterSession; state: unknown }) => {
+    async (update: {
+      participant: Participant;
+      scenarioId: string;
+      session: EncounterSession;
+      state: unknown;
+    }) => {
       const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
-      const updatedParticipant = { ...update.participant, state: update.state } as Participant;
-      currentParticipants = currentParticipants.map((participant) =>
-        participant.id === updatedParticipant.id ? updatedParticipant : participant,
-      );
+      const updatedParticipant = await mocks.encounterService.updateScenarioParticipantState({
+        participantId: update.participant.id,
+        scenarioId: update.scenarioId,
+        state: update.state,
+      });
       return { encounter, participant: updatedParticipant };
     },
   );
   mocks.encounterService.commitCombatParticipantStateMutations.mockImplementation(
     async (update: {
       participants: Array<{ participant: Participant; state: unknown }>;
+      scenarioId: string;
       session: EncounterSession;
     }) => {
       const encounter = await mocks.encounterService.updateEncounter({ session: update.session });
-      const updatedParticipants = update.participants.map(({ participant, state }) => ({
-        ...participant,
-        state,
-      })) as Participant[];
-      currentParticipants = currentParticipants.map(
-        (participant) =>
-          updatedParticipants.find((candidate) => candidate.id === participant.id) ?? participant,
+      const updatedParticipants = await Promise.all(
+        update.participants.map(({ participant, state }) =>
+          mocks.encounterService.updateScenarioParticipantState({
+            participantId: participant.id,
+            scenarioId: update.scenarioId,
+            state,
+          }),
+        ),
       );
       return { encounter, participants: updatedParticipants };
     },
@@ -6001,7 +6028,6 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
@@ -18743,7 +18769,6 @@ describe("scenarios route contract", () => {
         ],
       }),
     );
-    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
   it("clears a top-advance M1 command after the UI has landed on i1", async () => {

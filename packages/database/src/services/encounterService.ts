@@ -191,7 +191,7 @@ export class EncounterService {
       ),
     );
     if (participants.some((participant) => !participant)) {
-      throw new Error("A scenario participant disappeared after modifier review commit.");
+      throw new Error("A scenario participant disappeared after the atomic combat commit.");
     }
     return { encounter, participants: participants as ScenarioParticipant[] };
   }

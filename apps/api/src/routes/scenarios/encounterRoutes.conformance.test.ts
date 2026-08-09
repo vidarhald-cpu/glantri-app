@@ -313,7 +313,8 @@ describe("combat route canonical-conformance guards", () => {
     expect(nextRoute).toBeGreaterThan(routeStart);
     expect(routeSource).not.toContain("command: committed.command");
     expect(routeSource).toContain("commandEnvelope");
-    expect(routeSource).toContain("encounter: savedEncounter");
+    expect(routeSource).toContain("encounter: saved.encounter");
+    expect(routeSource).toContain("commitCombatParticipantStateMutations");
   });
 
   it("persists ordinary combat mutations through the revision-guarded split boundary", () => {
@@ -327,7 +328,10 @@ describe("combat route canonical-conformance guards", () => {
     expect(combatStart).toBeGreaterThanOrEqual(0);
     expect(roleplayStart).toBeGreaterThan(combatStart);
     expect(combatRoutes).toContain("updateCombatEncounter");
+    expect(combatRoutes).toContain("commitCombatParticipantStateMutation");
+    expect(combatRoutes).toContain("commitCombatParticipantStateMutations");
     expect(combatRoutes).not.toContain("encounterService.updateEncounter");
+    expect(combatRoutes).not.toContain("encounterService.updateScenarioParticipantState");
     expect(combatRoutes.match(/expectedRevision: encounter\.updatedAt/g)?.length).toBeGreaterThan(
       20,
     );

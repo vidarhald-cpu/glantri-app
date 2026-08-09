@@ -7483,26 +7483,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const participant = await encounterService.updateScenarioParticipantState({
-        participantId: scenarioParticipant.id,
-        scenarioId: encounter.scenarioId,
-        state: {
-          ...scenarioParticipant.state,
-          combat: {
-            ...scenarioParticipant.state.combat,
-            combatContext: submittedCombatContext,
-            declarationSubmittedAt: submittedAt,
-            declarationSubmittedByUserId: user.id,
-            lastDeclaredActionId: body.actionId,
-            lastDeclaredEncounterId: encounter.id,
-            lastDeclaredMovementId: body.movementId,
-            lastDeclaredRoundNumber: roundState.roundNumber,
-            lastDeclaredSecondaryActionId: body.secondaryActionId,
-            lastDeclarationNotes: body.additionalActionNotes,
-            lastMovementIntent: submittedMovementIntent,
-          },
+      const nextParticipantState = {
+        ...scenarioParticipant.state,
+        combat: {
+          ...scenarioParticipant.state.combat,
+          combatContext: submittedCombatContext,
+          declarationSubmittedAt: submittedAt,
+          declarationSubmittedByUserId: user.id,
+          lastDeclaredActionId: body.actionId,
+          lastDeclaredEncounterId: encounter.id,
+          lastDeclaredMovementId: body.movementId,
+          lastDeclaredRoundNumber: roundState.roundNumber,
+          lastDeclaredSecondaryActionId: body.secondaryActionId,
+          lastDeclarationNotes: body.additionalActionNotes,
+          lastMovementIntent: submittedMovementIntent,
         },
-      });
+      };
       const declaredRoundState = recordCombatRoundDeclaration({
         command:
           roundState.currentStep === "select_actions"
@@ -7554,10 +7550,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               submittedBy: "gm",
             })
           : declaredRoundState;
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
+      const saved = await encounterService.commitCombatParticipantStateMutation({
         campaignId: access.campaignId,
         encounterId,
+        expectedEncounterRevision: encounter.updatedAt,
+        participant: scenarioParticipant,
         scenarioId,
         session: {
           ...encounter,
@@ -7565,17 +7562,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           currentRound: nextRoundState.roundNumber,
           updatedAt: submittedAt,
         },
+        state: nextParticipantState,
       });
 
       const acceptedScenarioParticipants = scenarioParticipants.map((candidate) =>
-        candidate.id === participant.id ? participant : candidate,
+        candidate.id === saved.participant.id ? saved.participant : candidate,
       );
       const deterministicAdvance = projectAcceptedDeterministicAdvance({
-        encounter: savedEncounter,
+        encounter: saved.encounter,
         scenarioParticipants: acceptedScenarioParticipants,
       });
 
-      return { deterministicAdvance, encounter: savedEncounter, participant };
+      return { deterministicAdvance, encounter: saved.encounter, participant: saved.participant };
     } catch (error) {
       const persistenceErrorResponse = sendCombatWriteError(reply, error);
       if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
@@ -7662,9 +7660,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const nextDeclaration = nextRoundState.participants.find(
           (entry) => entry.participantId === encounterParticipant.id,
         )?.declaration;
-        const participant = await encounterService.updateScenarioParticipantState({
-          participantId: scenarioParticipant.id,
+        const saved = await encounterService.commitCombatParticipantStateMutation({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participant: scenarioParticipant,
           scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
           state: {
             ...scenarioParticipant.state,
             combat: {
@@ -7674,14 +7676,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         });
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId: encounter.scenarioId,
-          session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
-        });
-        return { encounter: savedEncounter, participant };
+        return { encounter: saved.encounter, participant: saved.participant };
       } catch (error) {
         return reply.code(400).send({
           error:
@@ -8133,24 +8128,29 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           roundState: nextRoundState,
           scenarioParticipants,
         });
-        const participants = [];
-        for (const [participantId, state] of recomputed.participantStatesById) {
-          participants.push(
-            await encounterService.updateScenarioParticipantState({
-              participantId,
-              scenarioId: encounter.scenarioId,
-              state,
-            }),
-          );
-        }
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
+        const participantMutations = Array.from(
+          recomputed.participantStatesById,
+          ([participantId, state]) => {
+            const participant = scenarioParticipants.find(
+              (candidate) => candidate.id === participantId,
+            );
+            if (!participant) {
+              throw new RangeError(
+                "A participant affected by the distance adjustment is no longer available.",
+              );
+            }
+            return { participant, state };
+          },
+        );
+        const saved = await encounterService.commitCombatParticipantStateMutations({
           campaignId: access.campaignId,
           encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participants: participantMutations,
           scenarioId: encounter.scenarioId,
           session: { ...encounter, combatRoundState: recomputed.roundState, updatedAt: createdAt },
         });
-        return { encounter: savedEncounter, participants };
+        return { encounter: saved.encounter, participants: saved.participants };
       } catch (error) {
         return reply.code(400).send({
           error:
@@ -8444,28 +8444,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         proposal: committedProposal,
       });
-      const [savedAttacker, savedDefender] = await Promise.all([
-        encounterService.updateScenarioParticipantState({
-          participantId: attacker.id,
-          scenarioId: encounter.scenarioId,
-          state: {
-            ...attacker.state,
-            combat: { ...attacker.state.combat, combatContext: modifiers.attackerCombatContext },
-          },
-        }),
-        encounterService.updateScenarioParticipantState({
-          participantId: defender.id,
-          scenarioId: encounter.scenarioId,
-          state: {
-            ...defender.state,
-            combat: { ...defender.state.combat, combatContext: modifiers.defenderCombatContext },
-          },
-        }),
-      ]);
+      const nextAttackerState = {
+        ...attacker.state,
+        combat: { ...attacker.state.combat, combatContext: modifiers.attackerCombatContext },
+      };
+      const nextDefenderState = {
+        ...defender.state,
+        combat: { ...defender.state.combat, combatContext: modifiers.defenderCombatContext },
+      };
       const nextRoundState = commitCombatRoundFeintResult({
-        attackerCombatContext: savedAttacker.state.combat.combatContext,
+        attackerCombatContext: nextAttackerState.combat.combatContext,
         command: { createdAt, createdByUserId: user.id },
-        defenderCombatContext: savedDefender.state.combat.combatContext,
+        defenderCombatContext: nextDefenderState.combat.combatContext,
         gmAttackerDbParryModifier,
         gmDefenderDbParryModifier,
         gmDefenderObDbModifier,
@@ -8477,14 +8467,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         proposalId,
         state: roundState,
       });
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
+      const saved = await encounterService.commitCombatParticipantStateMutations({
         campaignId: access.campaignId,
         encounterId,
+        expectedEncounterRevision: encounter.updatedAt,
+        participants: [
+          { participant: attacker, state: nextAttackerState },
+          { participant: defender, state: nextDefenderState },
+        ],
         scenarioId: encounter.scenarioId,
         session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
       });
-      return { encounter: savedEncounter, participants: [savedAttacker, savedDefender] };
+      return { encounter: saved.encounter, participants: saved.participants };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to commit the feint result.",
@@ -8589,62 +8583,76 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             state: roundState,
           }),
         );
-        const updatedParticipants =
+        const participantMutations =
           roundState.currentStep === "review_action_modifiers" ||
           roundState.currentStep === "review_phase_2_modifiers"
-            ? await Promise.all(
-                completed.completedParticipantIds.map(async (participantId) => {
-                  const encounterParticipant = encounter.participants.find(
-                    (participant) => participant.id === participantId,
+            ? completed.completedParticipantIds.map((participantId) => {
+                const encounterParticipant = encounter.participants.find(
+                  (participant) => participant.id === participantId,
+                );
+                const scenarioParticipant = scenarioParticipants.find(
+                  (participant) => participant.id === encounterParticipant?.scenarioParticipantId,
+                );
+                const declaration = completed.state.participants.find(
+                  (participant) => participant.participantId === participantId,
+                )?.declaration;
+                if (!encounterParticipant || !scenarioParticipant || !declaration) {
+                  throw new RangeError(
+                    "A participant in the remaining modifier review is no longer available.",
                   );
-                  const scenarioParticipant = scenarioParticipants.find(
-                    (participant) => participant.id === encounterParticipant?.scenarioParticipantId,
-                  );
-                  const declaration = completed.state.participants.find(
-                    (participant) => participant.participantId === participantId,
-                  )?.declaration;
-                  if (!encounterParticipant || !scenarioParticipant || !declaration) {
-                    throw new RangeError(
-                      "A participant in the remaining modifier review is no longer available.",
-                    );
-                  }
+                }
 
-                  return encounterService.updateScenarioParticipantState({
-                    participantId: scenarioParticipant.id,
-                    scenarioId,
-                    state: {
-                      ...scenarioParticipant.state,
-                      combat: {
-                        ...scenarioParticipant.state.combat,
-                        combatContext: scenarioParticipantCombatContextSchema.parse(
-                          declaration.combatContext ??
-                            scenarioParticipant.state.combat.combatContext,
-                        ),
-                      },
+                return {
+                  participant: scenarioParticipant,
+                  state: {
+                    ...scenarioParticipant.state,
+                    combat: {
+                      ...scenarioParticipant.state.combat,
+                      combatContext: scenarioParticipantCombatContextSchema.parse(
+                        declaration.combatContext ?? scenarioParticipant.state.combat.combatContext,
+                      ),
                     },
-                  });
-                }),
-              )
+                  },
+                };
+              })
             : [];
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId,
-          session: {
-            ...encounter,
-            combatRoundState: completed.state,
-            currentRound: completed.state.roundNumber,
-            updatedAt: submittedAt,
-          },
-        });
+        const saved =
+          participantMutations.length > 0
+            ? await encounterService.commitCombatParticipantStateMutations({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedEncounterRevision: encounter.updatedAt,
+                participants: participantMutations,
+                scenarioId,
+                session: {
+                  ...encounter,
+                  combatRoundState: completed.state,
+                  currentRound: completed.state.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              })
+            : {
+                encounter: await encounterService.updateCombatEncounter({
+                  expectedRevision: encounter.updatedAt,
+                  campaignId: access.campaignId,
+                  encounterId,
+                  scenarioId,
+                  session: {
+                    ...encounter,
+                    combatRoundState: completed.state,
+                    currentRound: completed.state.roundNumber,
+                    updatedAt: submittedAt,
+                  },
+                }),
+                participants: [] as ScenarioParticipant[],
+              };
 
         return {
           blocker: completed.blocker,
           commandEnvelope: buildCombatRoundCommandEnvelope({ state: completed.state }),
           completedParticipantIds: completed.completedParticipantIds,
-          encounter: savedEncounter,
-          participants: updatedParticipants,
+          encounter: saved.encounter,
+          participants: saved.participants,
           stoppedAtParticipantId: completed.stoppedAtParticipantId,
         };
       } catch (error) {
@@ -9064,22 +9072,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState: nextRoundState,
         scenarioParticipants,
       });
-      const participants = [];
-
-      for (const [participantId, state] of recomputed.participantStatesById) {
-        participants.push(
-          await encounterService.updateScenarioParticipantState({
-            participantId,
-            scenarioId,
-            state,
-          }),
-        );
-      }
-
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
+      const participantMutations = Array.from(
+        recomputed.participantStatesById,
+        ([participantId, state]) => {
+          const participant = scenarioParticipants.find(
+            (candidate) => candidate.id === participantId,
+          );
+          if (!participant) {
+            throw new RangeError("A participant affected by distance is no longer available.");
+          }
+          return { participant, state };
+        },
+      );
+      const saved = await encounterService.commitCombatParticipantStateMutations({
         campaignId: access.campaignId,
         encounterId,
+        expectedEncounterRevision: encounter.updatedAt,
+        participants: participantMutations,
         scenarioId,
         session: {
           ...encounter,
@@ -9090,13 +9099,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return {
-        encounter: savedEncounter,
+        encounter: saved.encounter,
         edge: getCombatRoundDistanceEdge({
           participantAId: body.participantAId,
           participantBId: body.participantBId,
           state: recomputed.roundState,
         }),
-        participants,
+        participants: saved.participants,
       };
     } catch (error) {
       return reply.code(400).send({
@@ -9262,9 +9271,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           trigger: combatExperienceTrigger,
           visibility: encounter.roleplayState?.visibility,
         });
-        const savedParticipant = await encounterService.updateScenarioParticipantState({
-          participantId: scenarioParticipant.id,
+        const saved = await encounterService.commitCombatParticipantStateMutation({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participant: scenarioParticipant,
           scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: rolled.state,
+            currentRound: rolled.state.roundNumber,
+            updatedAt: submittedAt,
+          },
           state: {
             ...scenarioParticipant.state,
             combat: {
@@ -9274,29 +9292,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             combatEffects: rolled.combatEffects,
           },
         });
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId,
-          session: {
-            ...encounter,
-            combatRoundState: rolled.state,
-            currentRound: rolled.state.roundNumber,
-            updatedAt: submittedAt,
-          },
-        });
 
         return {
           combatExperience: rolled.result,
           encounter: gmAuthorizedOperation
-            ? savedEncounter
+            ? saved.encounter
             : buildPlayerSafeCombatRollMutationEncounterForUser({
-                encounter: savedEncounter,
+                encounter: saved.encounter,
                 scenarioParticipants,
                 userId: user.id,
               }),
-          participant: savedParticipant,
+          participant: saved.participant,
         };
       } catch (error) {
         return reply.code(400).send({
@@ -10655,9 +10661,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
           visibility: encounter.roleplayState?.visibility,
         });
-        const savedParticipant = await encounterService.updateScenarioParticipantState({
-          participantId: scenarioParticipant.id,
+        const saved = await encounterService.commitCombatParticipantStateMutation({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participant: scenarioParticipant,
           scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: backedOut.state,
+            currentRound: backedOut.state.roundNumber,
+            updatedAt: submittedAt,
+          },
           state: {
             ...scenarioParticipant.state,
             combat: {
@@ -10666,23 +10681,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         });
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId,
-          session: {
-            ...encounter,
-            combatRoundState: backedOut.state,
-            currentRound: backedOut.state.roundNumber,
-            updatedAt: submittedAt,
-          },
-        });
 
         return {
           command: backedOut.command,
-          encounter: savedEncounter,
-          participant: savedParticipant,
+          encounter: saved.encounter,
+          participant: saved.participant,
         };
       } catch (error) {
         return reply.code(400).send({
@@ -11209,30 +11212,51 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
               if (nextState.roundNumber > state.roundNumber) {
-                const refreshed = await Promise.all(
-                  workingParticipants.map(async (participant) => {
-                    const currentContext = participant.state.combat.combatContext;
-                    const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
-                      expireCombatFeintGeneratedModifiersBeforeRound(
-                        currentContext,
-                        nextState.roundNumber,
-                      ),
+                const participantMutations = workingParticipants.flatMap((participant) => {
+                  const currentContext = participant.state.combat.combatContext;
+                  const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
+                    expireCombatFeintGeneratedModifiersBeforeRound(
+                      currentContext,
                       nextState.roundNumber,
-                    );
-                    if (JSON.stringify(nextContext) === JSON.stringify(currentContext)) {
-                      return participant;
-                    }
-                    return encounterService.updateScenarioParticipantState({
-                      participantId: participant.id,
-                      scenarioId,
+                    ),
+                    nextState.roundNumber,
+                  );
+                  if (JSON.stringify(nextContext) === JSON.stringify(currentContext)) {
+                    return [];
+                  }
+                  return [
+                    {
+                      participant,
                       state: {
                         ...participant.state,
                         combat: { ...participant.state.combat, combatContext: nextContext },
                       },
-                    });
-                  }),
-                );
-                workingParticipants = refreshed;
+                    },
+                  ];
+                });
+                if (participantMutations.length > 0) {
+                  const saved = await encounterService.commitCombatParticipantStateMutations({
+                    campaignId: access.campaignId,
+                    encounterId,
+                    expectedEncounterRevision: workingEncounter!.updatedAt,
+                    participants: participantMutations,
+                    scenarioId,
+                    session: {
+                      ...workingEncounter!,
+                      combatRoundState: nextState,
+                      currentRound: nextState.roundNumber,
+                      updatedAt: submittedAt,
+                    },
+                  });
+                  workingEncounter = saved.encounter;
+                  const savedById = new Map(
+                    saved.participants.map((participant) => [participant.id, participant]),
+                  );
+                  workingParticipants = workingParticipants.map(
+                    (participant) => savedById.get(participant.id) ?? participant,
+                  );
+                  return { revision: workingEncounter.updatedAt, state: nextState };
+                }
               }
               workingEncounter = await encounterService.updateCombatEncounter({
                 expectedRevision: workingEncounter!.updatedAt,
@@ -12189,15 +12213,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 proposal: resolution.proposal,
                 state: linked,
               });
-              const savedParticipant = await encounterService.updateScenarioParticipantState({
-                participantId: owner.participant.id,
-                scenarioId,
-                state: prepared.participantState,
-              });
-              workingEncounter = await encounterService.updateCombatEncounter({
-                campaignId: access.campaignId,
+              const saved = await encounterService.commitCombatParticipantStateMutation({
                 encounterId,
-                expectedRevision: workingEncounter!.updatedAt,
+                campaignId: access.campaignId,
+                expectedEncounterRevision: workingEncounter!.updatedAt,
+                participant: owner.participant,
                 scenarioId,
                 session: {
                   ...workingEncounter!,
@@ -12205,9 +12225,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   currentRound: nextState.roundNumber,
                   updatedAt: submittedAt,
                 },
+                state: prepared.participantState,
               });
+              workingEncounter = saved.encounter;
               workingParticipants = workingParticipants.map((participant) =>
-                participant.id === savedParticipant.id ? savedParticipant : participant,
+                participant.id === saved.participant.id ? saved.participant : participant,
               );
               return { kind: "accepted" as const, projection: project() };
             }
@@ -12589,53 +12611,67 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         targetBoundary: body.targetBoundary,
         visibility: encounter.roleplayState?.visibility,
       });
-      const refreshedParticipants =
+      const participantMutations =
         nextRoundState.roundNumber > roundState.roundNumber
-          ? (
-              await Promise.all(
-                scenarioParticipants.map(async (participant) => {
-                  const currentContext = participant.state.combat.combatContext;
-                  const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
-                    expireCombatFeintGeneratedModifiersBeforeRound(
-                      currentContext,
-                      nextRoundState.roundNumber,
-                    ),
-                    nextRoundState.roundNumber,
-                  );
-                  if (JSON.stringify(nextContext) === JSON.stringify(currentContext))
-                    return undefined;
-                  return encounterService.updateScenarioParticipantState({
-                    participantId: participant.id,
-                    scenarioId,
-                    state: {
-                      ...participant.state,
-                      combat: { ...participant.state.combat, combatContext: nextContext },
-                    },
-                  });
-                }),
-              )
-            ).filter((participant): participant is ScenarioParticipant => participant !== undefined)
+          ? scenarioParticipants.flatMap((participant) => {
+              const currentContext = participant.state.combat.combatContext;
+              const nextContext = expireAdjustDistanceAttackGeneratedModifiersBeforeRound(
+                expireCombatFeintGeneratedModifiersBeforeRound(
+                  currentContext,
+                  nextRoundState.roundNumber,
+                ),
+                nextRoundState.roundNumber,
+              );
+              if (JSON.stringify(nextContext) === JSON.stringify(currentContext)) return [];
+              return [
+                {
+                  participant,
+                  state: {
+                    ...participant.state,
+                    combat: { ...participant.state.combat, combatContext: nextContext },
+                  },
+                },
+              ];
+            })
           : [];
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
-        campaignId: access.campaignId,
-        encounterId,
-        scenarioId,
-        session: {
-          ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
-          updatedAt: submittedAt,
-        },
-      });
+      const saved =
+        participantMutations.length > 0
+          ? await encounterService.commitCombatParticipantStateMutations({
+              campaignId: access.campaignId,
+              encounterId,
+              expectedEncounterRevision: encounter.updatedAt,
+              participants: participantMutations,
+              scenarioId,
+              session: {
+                ...encounter,
+                combatRoundState: nextRoundState,
+                currentRound: nextRoundState.roundNumber,
+                updatedAt: submittedAt,
+              },
+            })
+          : {
+              encounter: await encounterService.updateCombatEncounter({
+                expectedRevision: encounter.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...encounter,
+                  combatRoundState: nextRoundState,
+                  currentRound: nextRoundState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              }),
+              participants: [] as ScenarioParticipant[],
+            };
       const commandEnvelope = buildCombatRoundCommandEnvelope({
         state: nextRoundState,
       });
 
       return {
         commandEnvelope,
-        encounter: savedEncounter,
-        participants: refreshedParticipants,
+        encounter: saved.encounter,
+        participants: saved.participants,
       };
     } catch (error) {
       return reply.code(400).send({
@@ -12916,18 +12952,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: reviewedState,
       });
 
-      await encounterService.updateScenarioParticipantState({
-        participantId: defenderScenarioParticipant.id,
-        scenarioId,
-        state: {
-          ...defenderScenarioParticipant.state,
-          combatEffects: committed.combatEffects,
-        },
-      });
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
+      const saved = await encounterService.commitCombatParticipantStateMutation({
         campaignId: access.campaignId,
         encounterId,
+        expectedEncounterRevision: encounter.updatedAt,
+        participant: defenderScenarioParticipant,
         scenarioId,
         session: {
           ...encounter,
@@ -12935,10 +12964,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           currentRound: committed.state.roundNumber,
           updatedAt: submittedAt,
         },
+        state: {
+          ...defenderScenarioParticipant.state,
+          combatEffects: committed.combatEffects,
+        },
       });
       const commandEnvelope = buildCombatRoundCommandEnvelope({ state: committed.state });
 
-      return { commandEnvelope, encounter: savedEncounter };
+      return { commandEnvelope, encounter: saved.encounter };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to commit phase damage.",
@@ -13050,44 +13083,44 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         });
-        const updatedParticipants = await Promise.all(
-          Object.entries(committed.combatContextsByParticipantId).map(
-            async ([encounterParticipantId, combatContext]) => {
-              const encounterParticipant = membership.participants.find(
-                (participant) => participant.id === encounterParticipantId,
-              );
-              const scenarioParticipant = encounterParticipant
-                ? scenarioParticipants.find(
-                    (participant) =>
-                      participant.id === encounterParticipant.scenarioParticipantId ||
-                      participant.id === encounterParticipant.id ||
-                      (encounterParticipant.characterId &&
-                        participant.characterId === encounterParticipant.characterId),
-                  )
-                : undefined;
+        const participantMutations = Object.entries(
+          committed.combatContextsByParticipantId,
+        ).flatMap(([encounterParticipantId, combatContext]) => {
+          const encounterParticipant = membership.participants.find(
+            (participant) => participant.id === encounterParticipantId,
+          );
+          const scenarioParticipant = encounterParticipant
+            ? scenarioParticipants.find(
+                (participant) =>
+                  participant.id === encounterParticipant.scenarioParticipantId ||
+                  participant.id === encounterParticipant.id ||
+                  (encounterParticipant.characterId &&
+                    participant.characterId === encounterParticipant.characterId),
+              )
+            : undefined;
 
-              if (!scenarioParticipant) {
-                return undefined;
-              }
+          if (!scenarioParticipant) {
+            return [];
+          }
 
-              return encounterService.updateScenarioParticipantState({
-                participantId: scenarioParticipant.id,
-                scenarioId,
-                state: {
-                  ...scenarioParticipant.state,
-                  combat: {
-                    ...scenarioParticipant.state.combat,
-                    combatContext,
-                  },
+          return [
+            {
+              participant: scenarioParticipant,
+              state: {
+                ...scenarioParticipant.state,
+                combat: {
+                  ...scenarioParticipant.state.combat,
+                  combatContext,
                 },
-              });
+              },
             },
-          ),
-        );
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
+          ];
+        });
+        const saved = await encounterService.commitCombatParticipantStateMutations({
           campaignId: access.campaignId,
           encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participants: participantMutations,
           scenarioId,
           session: {
             ...encounter,
@@ -13106,10 +13139,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return {
           commandEnvelope,
-          encounter: savedEncounter,
-          participants: updatedParticipants.filter(
-            (participant): participant is ScenarioParticipant => Boolean(participant),
-          ),
+          encounter: saved.encounter,
+          participants: saved.participants,
         };
       } catch (error) {
         return reply.code(400).send({
@@ -14076,6 +14107,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const createdCondition = nextRoundState.unbalancedConditions.find(
           (condition) => !previousConditionIds.has(condition.id) && condition.status === "active",
         );
+        let affectedParticipantMutation:
+          | { participant: ScenarioParticipant; state: ScenarioParticipant["state"] }
+          | undefined;
         if (createdCondition) {
           const affectedEncounterParticipant = resolveEncounterParticipantMembership({
             encounter,
@@ -14150,9 +14184,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           const combatEffects = combatEffectsStateSchema.parse(
             affectedScenarioParticipant.state.combatEffects,
           );
-          await encounterService.updateScenarioParticipantState({
-            participantId: affectedScenarioParticipant.id,
-            scenarioId,
+          affectedParticipantMutation = {
+            participant: affectedScenarioParticipant,
             state: {
               ...affectedScenarioParticipant.state,
               combatEffects: combatEffectsStateSchema.parse({
@@ -14204,28 +14237,46 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 ],
               }),
             },
-          });
+          };
         }
 
-        const savedEncounter = await encounterService.updateCombatEncounter({
-          expectedRevision: encounter.updatedAt,
-          campaignId: access.campaignId,
-          encounterId,
-          scenarioId,
-          session: {
-            ...encounter,
-            combatRoundState: nextRoundState,
-            currentRound: nextRoundState.roundNumber,
-            updatedAt: createdAt,
-          },
-        });
+        const saved = affectedParticipantMutation
+          ? await encounterService.commitCombatParticipantStateMutation({
+              campaignId: access.campaignId,
+              encounterId,
+              expectedEncounterRevision: encounter.updatedAt,
+              participant: affectedParticipantMutation.participant,
+              scenarioId,
+              session: {
+                ...encounter,
+                combatRoundState: nextRoundState,
+                currentRound: nextRoundState.roundNumber,
+                updatedAt: createdAt,
+              },
+              state: affectedParticipantMutation.state,
+            })
+          : {
+              encounter: await encounterService.updateCombatEncounter({
+                expectedRevision: encounter.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...encounter,
+                  combatRoundState: nextRoundState,
+                  currentRound: nextRoundState.roundNumber,
+                  updatedAt: createdAt,
+                },
+              }),
+              participant: undefined,
+            };
         return {
           command: nextRoundState.commands.at(-1),
           encounter:
             access.mode === "gm"
-              ? savedEncounter
+              ? saved.encounter
               : buildPlayerSafeCombatRollMutationEncounterForUser({
-                  encounter: savedEncounter,
+                  encounter: saved.encounter,
                   scenarioParticipants,
                   userId: user.id,
                 }),
@@ -15244,19 +15295,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           );
         }
       }
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
-        campaignId: access.campaignId,
-        encounterId,
-        scenarioId,
-        session: {
-          ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
-          updatedAt: submittedAt,
-        },
-      });
-      const updatedParticipants =
+      const participantMutations =
         declarationClearEncounterParticipantIds.size > 0 ||
         removedCombatExperienceCommands.length > 0 ||
         removedBackOutPhaseAttackCommands.length > 0 ||
@@ -15269,258 +15308,276 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedRoundEndHealthCheckCommands.length > 0 ||
         removedOffensiveParryBrawlingCommands.length > 0 ||
         removedContinuedContactMaintenanceCommands.length > 0
-          ? await Promise.all(
-              scenarioParticipants
-                .map((participant) => {
-                  const encounterParticipant = membership.participants.find(
-                    (entry) => entry.scenarioParticipantId === participant.id,
-                  );
+          ? scenarioParticipants.flatMap((participant) => {
+              const encounterParticipant = membership.participants.find(
+                (entry) => entry.scenarioParticipantId === participant.id,
+              );
 
-                  if (!encounterParticipant) {
-                    return undefined;
-                  }
+              if (!encounterParticipant) {
+                return [];
+              }
 
-                  let nextState = participant.state;
+              let nextState = participant.state;
 
-                  if (declarationClearEncounterParticipantIds.has(encounterParticipant.id)) {
-                    const restoredDeclaration = nextRoundState.participants.find(
-                      (entry) => entry.participantId === encounterParticipant.id,
-                    )?.declaration;
-                    nextState = restoredDeclaration
-                      ? {
-                          ...nextState,
-                          combat: {
-                            ...nextState.combat,
-                            combatContext:
-                              restoredDeclaration.combatContext ?? nextState.combat.combatContext,
-                            lastDeclaredActionId: restoredDeclaration.actionId,
-                            lastDeclaredEncounterId: encounter.id,
-                            lastDeclaredMovementId: restoredDeclaration.movementId,
-                            lastDeclaredRoundNumber: restoredDeclaration.roundNumber,
-                            lastDeclaredSecondaryActionId: restoredDeclaration.secondaryActionId,
-                            lastDeclarationNotes: restoredDeclaration.additionalActionNotes,
-                            lastMovementIntent: restoredDeclaration.movementIntent,
-                          },
-                        }
-                      : clearScenarioParticipantCombatDeclaration({
-                          ...participant,
-                          state: nextState,
-                        });
-                  }
-
-                  for (const command of removedCombatExperienceCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
-                    }
-
-                    nextState = {
-                      ...nextState,
-                      combat: {
-                        ...nextState.combat,
-                        combatContext: removeCombatRoundCombatExperienceCombatContextModifiers({
-                          combatContext: nextState.combat.combatContext,
-                          command,
-                        }),
-                      },
-                      combatEffects: removeCombatRoundCombatExperienceEffects({
-                        combatEffects: nextState.combatEffects,
-                        command,
-                      }),
-                    };
-                  }
-
-                  for (const command of removedBackOutPhaseAttackCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
-                    }
-
-                    nextState = {
-                      ...nextState,
-                      combat: {
-                        ...nextState.combat,
-                        combatContext: restoreCombatRoundBackOutCombatContextModifiers({
-                          combatContext: nextState.combat.combatContext,
-                          command,
-                        }),
-                      },
-                    };
-                  }
-
-                  for (const command of removedDoubleAttackDecisionCommands) {
-                    if (command.participantId !== encounterParticipant.id) continue;
-                    const restoredContext = nextRoundState.participants.find(
-                      (entry) => entry.participantId === encounterParticipant.id,
-                    )?.declaration?.combatContext;
-                    if (restoredContext) {
-                      nextState = {
-                        ...nextState,
-                        combat: { ...nextState.combat, combatContext: restoredContext },
-                      };
-                    }
-                  }
-
-                  for (const command of removedFeintCommitCommands) {
-                    const proposalId =
-                      typeof command.facts.proposalId === "string"
-                        ? command.facts.proposalId
-                        : undefined;
-                    const previousProposal = proposalId
-                      ? roundState.feintProposals.find((proposal) => proposal.id === proposalId)
-                      : undefined;
-                    if (
-                      !previousProposal ||
-                      (previousProposal.attackerParticipantId !== encounterParticipant.id &&
-                        previousProposal.defenderParticipantId !== encounterParticipant.id)
-                    ) {
-                      continue;
-                    }
-                    const restoredContext = nextRoundState.participants.find(
-                      (entry) => entry.participantId === encounterParticipant.id,
-                    )?.declaration?.combatContext;
-                    if (restoredContext) {
-                      nextState = {
-                        ...nextState,
-                        combat: { ...nextState.combat, combatContext: restoredContext },
-                      };
-                    }
-                  }
-
-                  for (const command of removedAttackCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
-                    }
-
-                    nextState = {
-                      ...nextState,
-                      combat: {
-                        ...nextState.combat,
-                        combatContext: removeDistanceGeneratedObSkillModifiers({
-                          combatContext: nextState.combat.combatContext,
-                          command,
-                        }),
-                      },
-                    };
-                  }
-
-                  for (const command of removedPhaseInitiativeResolutionCommitCommands) {
-                    nextState = {
+              if (declarationClearEncounterParticipantIds.has(encounterParticipant.id)) {
+                const restoredDeclaration = nextRoundState.participants.find(
+                  (entry) => entry.participantId === encounterParticipant.id,
+                )?.declaration;
+                nextState = restoredDeclaration
+                  ? {
                       ...nextState,
                       combat: {
                         ...nextState.combat,
                         combatContext:
-                          restoreCombatRoundPhaseInitiativeResolutionCombatContextModifiers({
-                            combatContext: nextState.combat.combatContext,
-                            command,
-                            participantId: encounterParticipant.id,
-                          }),
+                          restoredDeclaration.combatContext ?? nextState.combat.combatContext,
+                        lastDeclaredActionId: restoredDeclaration.actionId,
+                        lastDeclaredEncounterId: encounter.id,
+                        lastDeclaredMovementId: restoredDeclaration.movementId,
+                        lastDeclaredRoundNumber: restoredDeclaration.roundNumber,
+                        lastDeclaredSecondaryActionId: restoredDeclaration.secondaryActionId,
+                        lastDeclarationNotes: restoredDeclaration.additionalActionNotes,
+                        lastMovementIntent: restoredDeclaration.movementIntent,
                       },
-                    };
-                  }
-
-                  for (const command of removedCommittedDamageCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
                     }
+                  : clearScenarioParticipantCombatDeclaration({
+                      ...participant,
+                      state: nextState,
+                    });
+              }
 
-                    nextState = {
-                      ...nextState,
-                      combatEffects: removeCombatRoundCommittedDamageEffects({
-                        combatEffects: nextState.combatEffects,
+              for (const command of removedCombatExperienceCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
+
+                nextState = {
+                  ...nextState,
+                  combat: {
+                    ...nextState.combat,
+                    combatContext: removeCombatRoundCombatExperienceCombatContextModifiers({
+                      combatContext: nextState.combat.combatContext,
+                      command,
+                    }),
+                  },
+                  combatEffects: removeCombatRoundCombatExperienceEffects({
+                    combatEffects: nextState.combatEffects,
+                    command,
+                  }),
+                };
+              }
+
+              for (const command of removedBackOutPhaseAttackCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
+
+                nextState = {
+                  ...nextState,
+                  combat: {
+                    ...nextState.combat,
+                    combatContext: restoreCombatRoundBackOutCombatContextModifiers({
+                      combatContext: nextState.combat.combatContext,
+                      command,
+                    }),
+                  },
+                };
+              }
+
+              for (const command of removedDoubleAttackDecisionCommands) {
+                if (command.participantId !== encounterParticipant.id) continue;
+                const restoredContext = nextRoundState.participants.find(
+                  (entry) => entry.participantId === encounterParticipant.id,
+                )?.declaration?.combatContext;
+                if (restoredContext) {
+                  nextState = {
+                    ...nextState,
+                    combat: { ...nextState.combat, combatContext: restoredContext },
+                  };
+                }
+              }
+
+              for (const command of removedFeintCommitCommands) {
+                const proposalId =
+                  typeof command.facts.proposalId === "string"
+                    ? command.facts.proposalId
+                    : undefined;
+                const previousProposal = proposalId
+                  ? roundState.feintProposals.find((proposal) => proposal.id === proposalId)
+                  : undefined;
+                if (
+                  !previousProposal ||
+                  (previousProposal.attackerParticipantId !== encounterParticipant.id &&
+                    previousProposal.defenderParticipantId !== encounterParticipant.id)
+                ) {
+                  continue;
+                }
+                const restoredContext = nextRoundState.participants.find(
+                  (entry) => entry.participantId === encounterParticipant.id,
+                )?.declaration?.combatContext;
+                if (restoredContext) {
+                  nextState = {
+                    ...nextState,
+                    combat: { ...nextState.combat, combatContext: restoredContext },
+                  };
+                }
+              }
+
+              for (const command of removedAttackCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
+
+                nextState = {
+                  ...nextState,
+                  combat: {
+                    ...nextState.combat,
+                    combatContext: removeDistanceGeneratedObSkillModifiers({
+                      combatContext: nextState.combat.combatContext,
+                      command,
+                    }),
+                  },
+                };
+              }
+
+              for (const command of removedPhaseInitiativeResolutionCommitCommands) {
+                nextState = {
+                  ...nextState,
+                  combat: {
+                    ...nextState.combat,
+                    combatContext:
+                      restoreCombatRoundPhaseInitiativeResolutionCombatContextModifiers({
+                        combatContext: nextState.combat.combatContext,
                         command,
+                        participantId: encounterParticipant.id,
                       }),
-                    };
-                  }
+                  },
+                };
+              }
 
-                  for (const command of removedRoundEndParticipantReviewCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
-                    }
+              for (const command of removedCommittedDamageCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
 
-                    nextState = {
-                      ...nextState,
-                      combatEffects: removeCombatRoundEndParticipantReviewEffects({
-                        combatEffects: nextState.combatEffects,
-                        command,
-                      }),
-                    };
-                  }
+                nextState = {
+                  ...nextState,
+                  combatEffects: removeCombatRoundCommittedDamageEffects({
+                    combatEffects: nextState.combatEffects,
+                    command,
+                  }),
+                };
+              }
 
-                  for (const command of removedRoundEndHealthCheckCommands) {
-                    if (command.participantId !== encounterParticipant.id) {
-                      continue;
-                    }
+              for (const command of removedRoundEndParticipantReviewCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
 
-                    nextState = {
-                      ...nextState,
-                      combatEffects: removeCombatRoundEndHealthCheckEffects({
-                        combatEffects: nextState.combatEffects,
-                        command,
-                      }),
-                    };
-                  }
+                nextState = {
+                  ...nextState,
+                  combatEffects: removeCombatRoundEndParticipantReviewEffects({
+                    combatEffects: nextState.combatEffects,
+                    command,
+                  }),
+                };
+              }
 
-                  for (const command of removedOffensiveParryBrawlingCommands) {
-                    const conditionId =
-                      typeof command.facts.createdUnbalancedConditionId === "string"
-                        ? command.facts.createdUnbalancedConditionId
-                        : undefined;
-                    if (!conditionId) continue;
-                    const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
-                    nextState = {
-                      ...nextState,
-                      combatEffects: combatEffectsStateSchema.parse({
-                        effects: effects.effects.filter((effect) => effect.id !== conditionId),
-                        events: effects.events.filter(
-                          (event) => event.id !== `${conditionId}:effect-event`,
-                        ),
-                      }),
-                    };
-                  }
+              for (const command of removedRoundEndHealthCheckCommands) {
+                if (command.participantId !== encounterParticipant.id) {
+                  continue;
+                }
 
-                  for (const command of removedContinuedContactMaintenanceCommands) {
-                    if (
-                      command.facts.resolved !== true ||
-                      command.facts.contactMaintained !== false
-                    ) {
-                      continue;
-                    }
-                    const conditionId =
-                      typeof command.facts.unbalancedConditionId === "string"
-                        ? command.facts.unbalancedConditionId
-                        : undefined;
-                    if (!conditionId) continue;
-                    const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
-                    if (!effects.effects.some((effect) => effect.id === conditionId)) continue;
-                    nextState = {
-                      ...nextState,
-                      combatEffects: combatEffectsStateSchema.parse({
-                        ...effects,
-                        effects: effects.effects.map((effect) =>
-                          effect.id === conditionId
-                            ? combatEffectSchema.parse({
-                                ...effect,
-                                status: "active",
-                                updatedAt: submittedAt,
-                              })
-                            : effect,
-                        ),
-                      }),
-                    };
-                  }
+                nextState = {
+                  ...nextState,
+                  combatEffects: removeCombatRoundEndHealthCheckEffects({
+                    combatEffects: nextState.combatEffects,
+                    command,
+                  }),
+                };
+              }
 
-                  return nextState === participant.state
-                    ? undefined
-                    : encounterService.updateScenarioParticipantState({
-                        participantId: participant.id,
-                        scenarioId,
-                        state: nextState,
-                      });
-                })
-                .filter((update): update is Promise<ScenarioParticipant> => Boolean(update)),
-            )
+              for (const command of removedOffensiveParryBrawlingCommands) {
+                const conditionId =
+                  typeof command.facts.createdUnbalancedConditionId === "string"
+                    ? command.facts.createdUnbalancedConditionId
+                    : undefined;
+                if (!conditionId) continue;
+                const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
+                nextState = {
+                  ...nextState,
+                  combatEffects: combatEffectsStateSchema.parse({
+                    effects: effects.effects.filter((effect) => effect.id !== conditionId),
+                    events: effects.events.filter(
+                      (event) => event.id !== `${conditionId}:effect-event`,
+                    ),
+                  }),
+                };
+              }
+
+              for (const command of removedContinuedContactMaintenanceCommands) {
+                if (command.facts.resolved !== true || command.facts.contactMaintained !== false) {
+                  continue;
+                }
+                const conditionId =
+                  typeof command.facts.unbalancedConditionId === "string"
+                    ? command.facts.unbalancedConditionId
+                    : undefined;
+                if (!conditionId) continue;
+                const effects = combatEffectsStateSchema.parse(nextState.combatEffects);
+                if (!effects.effects.some((effect) => effect.id === conditionId)) continue;
+                nextState = {
+                  ...nextState,
+                  combatEffects: combatEffectsStateSchema.parse({
+                    ...effects,
+                    effects: effects.effects.map((effect) =>
+                      effect.id === conditionId
+                        ? combatEffectSchema.parse({
+                            ...effect,
+                            status: "active",
+                            updatedAt: submittedAt,
+                          })
+                        : effect,
+                    ),
+                  }),
+                };
+              }
+
+              return nextState === participant.state ? [] : [{ participant, state: nextState }];
+            })
           : [];
 
-      return { encounter: savedEncounter, participants: updatedParticipants };
+      const saved =
+        participantMutations.length > 0
+          ? await encounterService.commitCombatParticipantStateMutations({
+              campaignId: access.campaignId,
+              encounterId,
+              expectedEncounterRevision: encounter.updatedAt,
+              participants: participantMutations,
+              scenarioId,
+              session: {
+                ...encounter,
+                combatRoundState: nextRoundState,
+                currentRound: nextRoundState.roundNumber,
+                updatedAt: submittedAt,
+              },
+            })
+          : {
+              encounter: await encounterService.updateCombatEncounter({
+                expectedRevision: encounter.updatedAt,
+                campaignId: access.campaignId,
+                encounterId,
+                scenarioId,
+                session: {
+                  ...encounter,
+                  combatRoundState: nextRoundState,
+                  currentRound: nextRoundState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              }),
+              participants: [] as ScenarioParticipant[],
+            };
+
+      return saved;
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to clear combat round step.",
