@@ -297,7 +297,11 @@ import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
-import { resolveCanonicalCombatInitiativeBase } from "./combatInitiativeResolution";
+import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
+import {
+  resolveCanonicalAttackOffense,
+  resolveCanonicalParryBase,
+} from "./combatManualCalculationResolution";
 
 const campaignService = instrumentCombatService(new CampaignService(), {
   getCampaignById: {
@@ -2007,32 +2011,19 @@ function parseParticipantCommandBody(
 }
 
 function parseCombatInitiativeBody(body: unknown): ParsedCombatTaskCommandIdentity & {
-  initiativeBase?: number;
-  initiativeModifierAdjustment?: number;
+  expectedParticipantRevision: string;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Combat initiative payload");
   const parsed = parseParticipantCommandBody(value, "Combat initiative payload");
-  const initiativeBase = value.initiativeBase;
-  const initiativeModifierAdjustment = value.initiativeModifierAdjustment;
-
-  if (initiativeBase !== undefined && !Number.isInteger(initiativeBase)) {
-    throw new Error("initiativeBase must be an integer.");
-  }
-
-  if (
-    initiativeModifierAdjustment !== undefined &&
-    !Number.isInteger(initiativeModifierAdjustment)
-  ) {
-    throw new Error("initiativeModifierAdjustment must be an integer.");
-  }
 
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
-    initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
-    initiativeModifierAdjustment:
-      typeof initiativeModifierAdjustment === "number" ? initiativeModifierAdjustment : undefined,
+    expectedParticipantRevision: parseNonEmptyString(
+      value.expectedParticipantRevision,
+      "expectedParticipantRevision",
+    ),
   };
 }
 
@@ -2144,26 +2135,20 @@ function parseCombatObservationRollBody(body: unknown): ParsedCombatTaskCommandI
 }
 
 function parseRoundEndHealthCheckRollBody(body: unknown): ParsedCombatTaskCommandIdentity & {
-  difficulty?: number;
-  expectedParticipantRevision?: string;
+  expectedParticipantRevision: string;
   healthRollId: string;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Round-end health check roll payload");
   const parsed = parseParticipantCommandBody(value, "Round-end health check roll payload");
   const healthRollId = parseNonEmptyString(value.healthRollId, "healthRollId");
-  const difficulty = value.difficulty;
-  if (
-    difficulty !== undefined &&
-    (typeof difficulty !== "number" || !Number.isInteger(difficulty) || difficulty <= 0)
-  ) {
-    throw new Error("difficulty must be a positive integer.");
-  }
-
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
-    difficulty: typeof difficulty === "number" ? difficulty : undefined,
+    expectedParticipantRevision: parseNonEmptyString(
+      value.expectedParticipantRevision,
+      "expectedParticipantRevision",
+    ),
     healthRollId,
   };
 }
@@ -2318,14 +2303,6 @@ function parsePhaseAttackBackOutBody(body: unknown): ParsedCombatTaskCommandIden
   };
 }
 
-function parseOptionalInteger(value: unknown, label: string): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return parseInteger(value, label);
-}
-
 function parseNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${label} is required.`);
@@ -2341,11 +2318,9 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
   declarationId: string;
   effectCutoffInitiativeGroupId?: string;
   defenderParticipantId: string;
+  expectedParticipantRevision: string;
   modifierValidationTaskId?: string;
-  ob: number;
-  obSkillRaw: number;
   opportunityId: string;
-  attackerModifierFingerprint?: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
   weaponInstanceId?: string;
@@ -2366,11 +2341,6 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
     value.modifierValidationTaskId.trim().length > 0
       ? value.modifierValidationTaskId
       : undefined;
-  const attackerModifierFingerprint =
-    typeof value.attackerModifierFingerprint === "string"
-      ? value.attackerModifierFingerprint
-      : undefined;
-
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
@@ -2383,11 +2353,12 @@ function parseCombatAttackBody(body: unknown): ParsedCombatTaskCommandIdentity &
         ? undefined
         : parseNonEmptyString(value.effectCutoffInitiativeGroupId, "effectCutoffInitiativeGroupId"),
     defenderParticipantId,
+    expectedParticipantRevision: parseNonEmptyString(
+      value.expectedParticipantRevision,
+      "expectedParticipantRevision",
+    ),
     modifierValidationTaskId,
-    ob: parseInteger(value.ob, "ob"),
-    obSkillRaw: parseInteger(value.obSkillRaw, "obSkillRaw"),
     opportunityId: parseNonEmptyString(value.opportunityId, "opportunityId"),
-    attackerModifierFingerprint,
     phase,
     weaponInstanceId:
       value.weaponInstanceId === undefined
@@ -2418,25 +2389,19 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
 }
 
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
-  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
-  dbParryRaw: number;
-  defenderModifierFingerprint: string;
   effectCutoffInitiativeGroupId?: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
-  mainHandParryScore?: number;
+  expectedParticipantRevision: string;
   modifierValidationTaskId: string;
-  offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId?: string;
-  parryBase: number;
   parryPurpose: "ordinary_defense" | "offensive_parry";
   parrySourceId: string;
-  parrySourceLabel?: string;
   phase: CombatRoundPhase;
   processId: string;
   scenarioParticipantId: string;
@@ -2447,10 +2412,6 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   const value = parseBodyObject(body, "Combat parry payload");
   const parsed = parseParticipantCommandBody(value, "Combat parry payload");
   const attackResultId = parseNonEmptyString(value.attackResultId, "attackResultId");
-  const parrySourceLabel =
-    typeof value.parrySourceLabel === "string" && value.parrySourceLabel.trim().length > 0
-      ? value.parrySourceLabel
-      : undefined;
   if (value.commandType !== "roll_parry") {
     throw new Error("commandType must be roll_parry.");
   }
@@ -2488,18 +2449,12 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   return {
     ...parsed,
     ...parseCombatTaskCommandIdentity(value),
-    attackResultModifier: parseInteger(value.attackResultModifier, "attackResultModifier"),
     attackResultId,
     attackerParticipantId: parseNonEmptyString(
       value.attackerParticipantId,
       "attackerParticipantId",
     ),
     commandType: "roll_parry",
-    dbParryRaw: parseInteger(value.dbParryRaw, "dbParryRaw"),
-    defenderModifierFingerprint: parseNonEmptyString(
-      value.defenderModifierFingerprint,
-      "defenderModifierFingerprint",
-    ),
     effectCutoffInitiativeGroupId:
       value.effectCutoffInitiativeGroupId === undefined
         ? undefined
@@ -2510,21 +2465,21 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
       value.defenderParticipantId,
       "defenderParticipantId",
     ),
-    mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
+    expectedParticipantRevision: parseNonEmptyString(
+      value.expectedParticipantRevision,
+      "expectedParticipantRevision",
+    ),
     modifierValidationTaskId: parseNonEmptyString(
       value.modifierValidationTaskId,
       "modifierValidationTaskId",
     ),
-    offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
     offensiveParryAttemptId,
     opportunityId:
       value.opportunityId === undefined
         ? undefined
         : parseNonEmptyString(value.opportunityId, "opportunityId"),
-    parryBase: parseInteger(value.parryBase, "parryBase"),
     parryPurpose,
     parrySourceId: parseNonEmptyString(value.parrySourceId, "parrySourceId"),
-    parrySourceLabel,
     phase: combatRoundPhaseSchema.parse(value.phase),
     processId: parseNonEmptyString(value.processId, "processId"),
     stageId: parseNonEmptyString(value.stageId, "stageId"),
@@ -3422,8 +3377,7 @@ function getAcceptedCombatDefenseDm(input: {
     .reverse()
     .find(
       (candidate) =>
-        candidate.type === "roll_attack" &&
-        candidate.facts.attackResultId === input.attackResultId,
+        candidate.type === "roll_attack" && candidate.facts.attackResultId === input.attackResultId,
     );
   const calculation = acceptedCombatDefenseCalculationSchema.safeParse(
     command?.facts.defenderCalculation,
@@ -5542,6 +5496,7 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
 
   if (input.command.type === "roll_attack") {
     const safeFacts = { ...input.command.facts };
+    delete safeFacts.attackerCalculation;
     delete safeFacts.defenderCalculation;
     return { ...input.command, facts: safeFacts };
   }
@@ -7000,10 +6955,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         const suppressBacktrackNoChangeResult = Boolean(
           roundState.gmBacktrackHold?.roundNumber === roundState.roundNumber &&
-            roundState.gmBacktrackHold.participantId === encounterParticipant.id &&
-            roundState.gmBacktrackHold.step === roundState.currentStep &&
-            modifierReview.changes.length === 0 &&
-            !modifierReview.input.publicNote,
+          roundState.gmBacktrackHold.participantId === encounterParticipant.id &&
+          roundState.gmBacktrackHold.step === roundState.currentStep &&
+          modifierReview.changes.length === 0 &&
+          !modifierReview.input.publicNote,
         );
         const nextParticipantState = applyCanonicalModifierReviewToParticipantState({
           createdAt: submittedAt,
@@ -8835,6 +8790,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedParticipantRevision !== scenarioParticipant.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Participant combat state changed before initiative was rolled.",
+        });
+      }
+
       const gmAuthorizedOperation = access.mode === "gm";
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
@@ -8898,12 +8860,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const initiativeBase = body.initiativeBase ?? 0;
+      const initiativeContext = resolveCanonicalCombatInitiativeBaseForTask({
+        encounterParticipantId: encounterParticipant.id,
+        participant: scenarioParticipant,
+        phase,
+        state: roundState,
+      });
+      if (initiativeContext.completeness !== "complete") {
+        return reply.code(409).send({
+          code: "initiative_context_unavailable",
+          error: "Required initiative context is unavailable. Refresh combat before rolling.",
+        });
+      }
       const submittedAt = new Date().toISOString();
       const rolled = recordCanonicalServerCombatInitiative({
         encounter,
         encounterParticipantId: encounterParticipant.id,
-        initiativeBase,
+        initiativeBase: initiativeContext.initiativeBase,
         phase,
         scenarioParticipant,
         state: roundState,
@@ -10499,10 +10472,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (
-        !body.expectedParticipantRevision ||
-        body.expectedParticipantRevision !== scenarioParticipant.updatedAt
-      ) {
+      if (body.expectedParticipantRevision !== scenarioParticipant.updatedAt) {
         return reply.code(409).send({
           code: "stale_revision",
           error: "Participant effect state changed while the SU review was open.",
@@ -10538,7 +10508,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         combatEffects: scenarioParticipant.state.combatEffects,
         createdRevision: encounter.updatedAt,
-        difficulty: body.difficulty,
         healthRollId: body.healthRollId,
         participantId: encounterParticipant.id,
         rolledBy: gmAuthorizedOperation ? "gm_proxy" : "player",
@@ -11970,7 +11939,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 combatEffects: owner.participant.state.combatEffects,
                 command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
                 createdRevision: workingEncounter!.updatedAt,
-                difficulty: proposal.difficulty,
                 healthRollId: proposal.id,
                 participantId: owner.encounterParticipantId,
                 rolledBy: "gm_proxy",
@@ -12250,27 +12218,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 state: apiProjection.state,
                 task,
               });
-              const roundParticipant = owner
-                ? apiProjection.state.participants.find(
-                    (participant) => participant.participantId === owner.encounterParticipantId,
-                  )
-                : undefined;
-              const opportunities = (
-                roundParticipant?.declaration?.attackOpportunities ?? []
-              ).filter(
-                (opportunity) =>
-                  opportunity.phase === task.identity.phase && opportunity.status === "committed",
-              );
-              if (!owner || opportunities.length !== 1) {
+              if (!owner) {
                 return {
                   kind: "stopped" as const,
                   projection: apiProjection,
                   reason: "roll_not_eligible" as const,
                 };
               }
-              const base = resolveCanonicalCombatInitiativeBase({
-                opportunity: opportunities[0],
+              const base = resolveCanonicalCombatInitiativeBaseForTask({
+                encounterParticipantId: owner.encounterParticipantId,
                 participant: owner.participant,
+                phase: task.identity.phase,
+                state: apiProjection.state,
               });
               if (base.completeness !== "complete") {
                 return {
@@ -13233,6 +13192,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedParticipantRevision !== scenarioParticipant.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Attacker combat state changed before the attack was rolled.",
+        });
+      }
+
       if (
         access.mode !== "gm" &&
         (scenarioParticipant.controlledByUserId !== user.id ||
@@ -13441,18 +13407,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const canonicalDefenderDbParryResolution = canonicalModifierFacts.defenderResolution;
       const canonicalObSkillRaw = canonicalObSkillResolution.total;
 
-      if (
-        body.obSkillRaw !== canonicalObSkillRaw ||
-        (body.attackerModifierFingerprint !== undefined &&
-          body.attackerModifierFingerprint !==
-            fingerprintCombatModifierResolution(canonicalObSkillResolution))
-      ) {
-        return reply.code(409).send({
-          code: "attacker_modifier_signature_mismatch",
-          error: "Attack modifiers changed. Refresh combat before rolling.",
-        });
-      }
-
       const distanceModifierDetail = buildDistanceModifierDetailFromExistingEntry(
         findExistingDistanceModifierEntry({
           combatContext: attackerCombatContext,
@@ -13463,9 +13417,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             snapshot: latestAttackerSnapshot,
           }),
       );
-      // Phase/loadout OB already contains the committed round modifiers. Observation is
-      // opponent-specific, so apply only that direct-action layer here rather than
-      // recomputing (and duplicating) the whole phase modifier stack.
+      const canonicalOffense = resolveCanonicalAttackOffense({
+        attackerResolution: canonicalModifierFacts.attackerResolution,
+        opponentResolution: canonicalModifierFacts.attackerOpponentResolution,
+        opportunity: declaredOpportunity,
+        participant: scenarioParticipant,
+      });
+      if (canonicalOffense.completeness !== "complete") {
+        return reply.code(409).send({
+          code: "attack_context_unavailable",
+          error: "Required attack context is unavailable. Refresh combat before rolling.",
+        });
+      }
+      // Canonical pre-opponent OB already contains the committed round modifiers. Observation is
+      // opponent-specific, so apply only that direct-action layer here rather than duplicating the
+      // whole phase modifier stack.
       const opponentSpecificObModifierRows =
         canonicalModifierFacts.attackerOpponentResolution.rows.map((row) => ({
           label: `${row.label} · ${defenderScenarioParticipant.snapshot.displayName}`,
@@ -13473,7 +13439,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           value: row.value,
         }));
       const opponentSpecificObTrace = calculateWorkbookPercentageAdjustmentTrace({
-        baseValue: body.ob,
+        baseValue: canonicalOffense.preOpponentOb,
         rawModifiers: opponentSpecificObModifierRows.map((row) => ({
           label: row.label,
           value: row.value,
@@ -13553,9 +13519,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             defenderFlatDbAdjustment,
             ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
             obSkillRaw: canonicalObSkillRaw,
+            attackerCalculation: {
+              authority: canonicalOffense.authority,
+              baseOb: canonicalOffense.baseOb,
+              dynamicRawPercentage: canonicalOffense.dynamicRawPercentage,
+              effectiveOb: opponentSpecificObTrace.finalValue,
+              equipmentLoadoutRevision: canonicalOffense.equipmentLoadoutRevision,
+              opponentSpecificRawPercentage:
+                canonicalModifierFacts.attackerOpponentResolution.total,
+              participantId: canonicalOffense.participantId,
+              preOpponentOb: canonicalOffense.preOpponentOb,
+              schemaVersion: 1,
+              sourceSnapshotId: canonicalOffense.sourceSnapshotId,
+            },
             ...(opponentSpecificObModifierRows.length > 0
               ? {
-                  obBeforeOpponentSpecificModifier: body.ob,
+                  obBeforeOpponentSpecificModifier: canonicalOffense.preOpponentOb,
                   opponentSpecificObPercentageAdjustment:
                     opponentSpecificObTrace.percentageAdjustment,
                   opponentSpecificObRaw: canonicalModifierFacts.attackerOpponentResolution.total,
@@ -13682,6 +13661,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (body.expectedParticipantRevision !== scenarioParticipant.updatedAt) {
+        return reply.code(409).send({
+          code: "stale_revision",
+          error: "Defender combat state changed before the Parry was rolled.",
+        });
+      }
+
       if (
         access.mode !== "gm" &&
         (scenarioParticipant.controlledByUserId !== user.id ||
@@ -13774,15 +13760,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         phase: attackResult.phase,
         state: roundState,
       })?.id;
-      const canonicalDefenderModifierFingerprint = fingerprintCombatModifierResolution(
-        canonicalModifierFacts.defenderResolution,
-      );
       if (
         body.modifierValidationTaskId !== body.taskId ||
-        body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId ||
-        body.dbParryRaw !== canonicalModifierFacts.defenderResolution.total ||
-        body.defenderModifierFingerprint !== canonicalDefenderModifierFingerprint ||
-        body.attackResultModifier !== canonicalModifierFacts.attackResultModifier
+        body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId
       ) {
         return reply.code(409).send({
           code: "parry_modifier_signature_mismatch",
@@ -13801,8 +13781,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const roll = rollOpenEndedD20();
+      const canonicalParryBase = resolveCanonicalParryBase({
+        participant: scenarioParticipant,
+        usedMainHand: body.usedMainHand,
+        usedOffHand: body.usedOffHand,
+      });
+      if (canonicalParryBase.completeness !== "complete") {
+        return reply.code(409).send({
+          code: "parry_context_unavailable",
+          error: "Required Parry context is unavailable. Refresh combat before rolling.",
+        });
+      }
       const parry = resolveCombatParry({
-        parryBase: body.parryBase,
+        parryBase: canonicalParryBase.combinedParryScore,
         rawModifiers,
         rollTotal: roll.dieResult,
       });
@@ -13811,18 +13802,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         attackResultId: body.attackResultId,
         combinedParryScore: parry.parryBase,
         declaredOpponentParticipantId: body.declaredOpponentParticipantId,
-        mainHandParryScore: body.mainHandParryScore,
+        mainHandParryScore: canonicalParryBase.mainHandParryScore,
         modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
         modifierAdjustment: parry.modifierAdjustment,
         modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
         notes:
           "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
-        offHandParryScore: body.offHandParryScore,
+        offHandParryScore: canonicalParryBase.offHandParryScore,
         offensiveParryAttemptId: body.offensiveParryAttemptId,
         offensiveParryDeclarationId: body.declarationId,
         openEndedD10s: roll.openEndedD10s,
         parrySourceId: body.parrySourceId,
-        parrySourceLabel: body.parrySourceLabel,
+        parrySourceLabel: canonicalParryBase.parrySourceLabel,
         purpose: body.parryPurpose,
         rawModifierTotal: parry.rawModifierTotal,
         resultLabel: parry.success ? "Parry successful" : "Parry failed",
@@ -13832,8 +13823,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         success: parry.success,
         targetNumber: parry.targetNumber,
         total: parry.total,
-        usedMainHand: body.usedMainHand,
-        usedOffHand: body.usedOffHand,
+        usedMainHand: canonicalParryBase.usedMainHand,
+        usedOffHand: canonicalParryBase.usedOffHand,
       };
       const nextRoundState = recordCombatRoundParryResult({
         attackResult,
@@ -14417,8 +14408,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             roundNumber: roundState.roundNumber,
           }),
           state: roundState,
-        }) ??
-        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
+        }) ?? parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
       const defenderEncounterParticipant = encounter.participants.find((participant) =>
         participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
       );
@@ -14625,8 +14615,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             roundNumber: roundState.roundNumber,
           }),
           state: roundState,
-        }) ??
-        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
+        }) ?? parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.dm, "Defender DM");
       if (dmb === undefined || defenderDm === undefined) {
         return reply.code(409).send({ error: "Canonical damage inputs are not available." });
       }

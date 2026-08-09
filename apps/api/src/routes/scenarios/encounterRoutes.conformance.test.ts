@@ -198,12 +198,13 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("initiativeValue: input.identity.initiativeValue");
   });
 
-  it("binds attack modifier validation to the current initiative-group cutoff", () => {
+  it("binds server-owned attack calculation to the current task and initiative cutoff", () => {
     expect(source).toContain("effectCutoffInitiativeGroupId: task.identity.initiativeGroupId");
     expect(source).toContain("initiativeGroupId: task.identity.initiativeGroupId");
     expect(source).toContain("initiativeValue: task.identity.initiativeValue");
     expect(source).toContain('code: "modifier_validation_task_mismatch"');
-    expect(source).toContain('code: "attacker_modifier_signature_mismatch"');
+    expect(source).not.toContain('code: "attacker_modifier_signature_mismatch"');
+    expect(source).toContain("resolveCanonicalAttackOffense({");
     expect(source).toContain("resolveCanonicalScenarioParticipantDefense({");
     expect(source).not.toContain('code: "defender_modifier_signature_mismatch"');
   });
@@ -271,10 +272,10 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain('commandType: "roll_parry"');
     expect(source).toContain("commandType must be roll_parry.");
     expect(source).toContain("resolveCanonicalCombatParryModifierFacts({");
+    expect(source).toContain("resolveCanonicalParryBase({");
     expect(source).toContain('code: "parry_modifier_signature_mismatch"');
-    expect(source).toContain(
-      "body.defenderModifierFingerprint !== canonicalDefenderModifierFingerprint",
-    );
+    expect(source).not.toContain("parryBase: body.parryBase");
+    expect(source).not.toContain("body.defenderModifierFingerprint !==");
     expect(source).toContain("body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId");
   });
 

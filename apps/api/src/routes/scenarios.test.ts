@@ -477,6 +477,10 @@ async function buildScenarioTestApp() {
       .filter((task) => entry[1].includes(task.expectedCommand));
     const requestedParticipantId =
       typeof record.scenarioParticipantId === "string" ? record.scenarioParticipantId : undefined;
+    const requestedScenarioParticipant = scenarioParticipants.find(
+      (participant) => participant.id === requestedParticipantId,
+    );
+    record.expectedParticipantRevision ??= requestedScenarioParticipant?.updatedAt;
     const canonicalParticipantId = projectedEncounter.participants.find(
       (participant) =>
         participant.id === requestedParticipantId ||
@@ -1510,21 +1514,105 @@ function makeCanonicalWeaponDefenseEquipmentState(input: {
   };
 }
 
+function makeCanonicalCombatCalculationSnapshot(input: {
+  characterId: string;
+  displayName: string;
+}) {
+  const primary = weaponTemplates.find((candidate) => candidate.name === "Long sword");
+  const secondary = weaponTemplates.find((candidate) => candidate.name === "Dagger");
+  if (!primary || !secondary) throw new Error("Missing canonical combat calculation fixtures.");
+  const state = makeCanonicalWeaponDefenseEquipmentState({
+    characterId: input.characterId,
+    templateId: primary.id,
+  });
+  const secondaryItemId = `item-${input.characterId}-${secondary.id}`;
+  const secondaryLocationId = `location-${input.characterId}-secondary`;
+  const build = makeDodgeCharacterBuild(input.characterId, input.displayName);
+  return {
+    build: {
+      ...build,
+      progression: {
+        ...build.progression,
+        skills: [
+          ...build.progression.skills,
+          {
+            category: "secondary",
+            categoryId: "combat",
+            groupId: "basic_melee_training",
+            secondaryRanks: 8,
+            skillId: "parry",
+          },
+        ],
+      },
+    },
+    displayName: input.displayName,
+    equipmentState: {
+      ...state,
+      activeLoadoutByCharacterId: {
+        [input.characterId]: {
+          ...state.activeLoadoutByCharacterId[input.characterId],
+          activeSecondaryWeaponItemId: secondaryItemId,
+        },
+      },
+      itemsById: {
+        ...state.itemsById,
+        [secondaryItemId]: {
+          acquiredFrom: null,
+          category: "weapon",
+          characterId: input.characterId,
+          conditionState: "intact",
+          displayName: null,
+          id: secondaryItemId,
+          isFavorite: false,
+          isStackable: false,
+          material: "steel",
+          quality: "standard",
+          quantity: 1,
+          specificityType: "generic",
+          storageAssignment: { carryMode: "equipped", locationId: secondaryLocationId },
+          templateId: secondary.id,
+        },
+      },
+      locationsById: {
+        ...state.locationsById,
+        [secondaryLocationId]: {
+          availabilityClass: "with_you",
+          characterId: input.characterId,
+          id: secondaryLocationId,
+          isAccessibleInEncounter: true,
+          isMobile: true,
+          name: "Secondary",
+          type: "equipped_system",
+        },
+      },
+      templates: {
+        templatesById: { ...state.templatesById, [secondary.id]: secondary },
+      },
+      templatesById: { ...state.templatesById, [secondary.id]: secondary },
+    },
+    sourceUpdatedAt: "2026-07-30T07:59:00.000Z",
+  };
+}
+
 function makeCombatScenarioParticipantWithWeapon(
   overrides: Record<string, unknown> & { weaponName?: string; weaponRange?: string } = {},
 ) {
   const characterId = (overrides.characterId as string | undefined) ?? "character-1";
+  const weaponName = overrides.weaponName ?? "Long sword";
+  const template = weaponTemplates.find((candidate) => candidate.name === weaponName);
+  if (!template) throw new Error(`Missing weapon fixture ${weaponName}.`);
 
   return makeCombatScenarioParticipant({
     ...overrides,
     characterId,
     snapshot: {
+      build: makeDodgeCharacterBuild(characterId, "The Gladiator"),
       displayName: "The Gladiator",
-      equipmentState: makeWeaponEquipmentState({
+      equipmentState: makeCanonicalWeaponDefenseEquipmentState({
         characterId,
-        name: overrides.weaponName ?? "Long sword",
-        range: overrides.weaponRange ?? "3.0",
+        templateId: template.id,
       }),
+      sourceUpdatedAt: "2026-07-30T07:59:00.000Z",
       ...((overrides.snapshot as Record<string, unknown> | undefined) ?? {}),
     },
   });
@@ -2052,27 +2140,28 @@ function makeCombatExperienceAutomationFixture(input: {
     combatRoundState: state,
     updatedAt: "2026-08-08T10:00:00.000Z",
   });
-  const participants = encounterParticipants.map((participant, index) =>
-    makeCombatScenarioParticipant({
-      controlledByUserId:
-        input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
-      id: participant.scenarioParticipantId,
-      role: input.playerControlledIndex === index ? "player_character" : "npc",
-      snapshot: {
-        displayName: participant.label,
-        sheetSummary: {
-          skills: [
-            input.warningIndex === index
-              ? { effectiveSkillNumber: 11, skillId: "combat_experience" }
-              : { skillId: "combat_experience", totalSkill: 11 },
-          ],
+  const participants = encounterParticipants.map(
+    (participant, index) =>
+      makeCombatScenarioParticipant({
+        controlledByUserId:
+          input.playerControlledIndex === index ? `player-${index + 1}` : undefined,
+        id: participant.scenarioParticipantId,
+        role: input.playerControlledIndex === index ? "player_character" : "npc",
+        snapshot: {
+          displayName: participant.label,
+          sheetSummary: {
+            skills: [
+              input.warningIndex === index
+                ? { effectiveSkillNumber: 11, skillId: "combat_experience" }
+                : { skillId: "combat_experience", totalSkill: 11 },
+            ],
+          },
         },
-      },
-      state: {
-        ...makeCombatScenarioParticipant().state,
-        combatEffects: { effects: [], events: [] },
-      },
-    }) as unknown as ScenarioParticipant,
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: { effects: [], events: [] },
+        },
+      }) as unknown as ScenarioParticipant,
   );
   return { encounter, participants };
 }
@@ -2540,10 +2629,41 @@ function setupCombatDeclarationRoute(
     input.combatExperienceResolved === false
       ? unresolvedEncounter
       : withResolvedCombatStartExperience(baseEncounter);
-  const participant = makeCombatScenarioParticipant(input.participant);
-  const participants = input.participants
-    ? input.participants.map((entry) => makeCombatScenarioParticipant(entry))
+  const participant = makeCombatScenarioParticipant(
+    input.participant,
+  ) as unknown as ScenarioParticipant;
+  let participants: ScenarioParticipant[] = input.participants
+    ? input.participants.map(
+        (entry) => makeCombatScenarioParticipant(entry) as unknown as ScenarioParticipant,
+      )
     : [participant];
+  const calculationStep = (encounter.combatRoundState as CombatRoundState | undefined)?.currentStep;
+  if (
+    calculationStep === "initiative_phase_1" ||
+    calculationStep === "initiative_phase_2" ||
+    calculationStep === "phase_1_actions" ||
+    calculationStep === "phase_2_actions"
+  ) {
+    participants = participants.map((entry) => {
+      const snapshot = entry.snapshot as Record<string, unknown>;
+      if (snapshot.build && snapshot.equipmentState) return entry;
+      const characterId = entry.characterId ?? `character-${entry.id}`;
+      const canonicalSnapshot = makeCanonicalCombatCalculationSnapshot({
+        characterId,
+        displayName: entry.snapshot.displayName,
+      });
+      return makeCombatScenarioParticipant({
+        ...entry,
+        characterId,
+        snapshot: {
+          ...entry.snapshot,
+          build: snapshot.build ?? canonicalSnapshot.build,
+          equipmentState: snapshot.equipmentState ?? canonicalSnapshot.equipmentState,
+          sourceUpdatedAt: snapshot.sourceUpdatedAt ?? canonicalSnapshot.sourceUpdatedAt,
+        },
+      }) as unknown as ScenarioParticipant;
+    });
+  }
 
   if (input.user) {
     mocks.requireAuthenticatedUser.mockResolvedValue(input.user);
@@ -8685,6 +8805,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        difficulty: 999,
         expectedParticipantRevision: fixture.participants[0]!.updatedAt,
         healthRollId: fixture.healthRollId,
         scenarioParticipantId: "participant-1",
@@ -8705,6 +8826,7 @@ describe("scenarios route contract", () => {
 
     expect(healthRoll).toMatchObject({
       result: expect.objectContaining({
+        difficulty: 21,
         rolledBy: "player",
         rolledByUserId: "player-1",
         success: true,
@@ -13050,7 +13172,7 @@ describe("scenarios route contract", () => {
         url: "/encounters/encounter-1/combat-initiative",
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     };
     const commitPhaseInitiative = async (phase: "phase1" | "phase2") => {
       const response = await app.inject({
@@ -13376,6 +13498,12 @@ describe("scenarios route contract", () => {
           currentStep: "initiative_phase_1",
           participants: [
             {
+              declaration: {
+                actionId: "attack_parry",
+                roundNumber: 1,
+                submittedAt: "2026-01-01T00:00:30.000Z",
+                submittedBy: "player",
+              },
               initiatives: {},
               label: "The Gladiator",
               participantId: "encounter-participant-1",
@@ -13442,10 +13570,10 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().initiative.total).toBeGreaterThanOrEqual(1);
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json().initiative.total).toBeGreaterThanOrEqual(0);
     expect(response.json().initiative.rolls.length).toBeGreaterThanOrEqual(1);
-    expect(response.json().initiative.baseInitiative).toBe(3);
+    expect(response.json().initiative.baseInitiative).toBe(0);
     expect(response.json().initiative.modifierAdjustment).toBe(-1);
     expect(response.json().initiative.total).toBe(
       response.json().initiative.baseInitiative +
@@ -13473,7 +13601,7 @@ describe("scenarios route contract", () => {
       type: "roll_initiative_phase1",
     });
     expect(updatedEncounter.combatRoundState.events[0].facts.rollerPrivate).toMatchObject({
-      baseInitiative: 3,
+      baseInitiative: 0,
       modifierAdjustment: -1,
       total: response.json().initiative.total,
     });
@@ -13490,6 +13618,12 @@ describe("scenarios route contract", () => {
           currentStep: "initiative_phase_2",
           participants: [
             {
+              declaration: {
+                actionId: "parry_attack",
+                roundNumber: 1,
+                submittedAt: "2026-01-01T00:00:30.000Z",
+                submittedBy: "player",
+              },
               initiatives: { phase1: { rolls: [6, 6], total: 12 } },
               label: "The Gladiator",
               participantId: "encounter-participant-1",
@@ -13571,7 +13705,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().initiative).toMatchObject({
-      baseInitiative: 10,
+      baseInitiative: 0,
       modifierAdjustment: 6,
     });
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
@@ -13828,7 +13962,9 @@ describe("scenarios route contract", () => {
       });
       const firstSavedParticipant = response
         .json()
-        .participants.find((participant: ScenarioParticipant) => participant.id === "participant-1");
+        .participants.find(
+          (participant: ScenarioParticipant) => participant.id === "participant-1",
+        );
       expect(firstSavedParticipant.state.combatEffects.effects).toEqual([
         expect.objectContaining({
           duration: `${manual.result.durationRounds} ${
@@ -13850,9 +13986,9 @@ describe("scenarios route contract", () => {
         alreadyAccepted: true,
         processedCount: 10,
       });
-      expect(combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands).toHaveLength(
-        commandCount,
-      );
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands,
+      ).toHaveLength(commandCount);
     } finally {
       randomSpy.mockRestore();
       await app.close();
@@ -13892,13 +14028,13 @@ describe("scenarios route contract", () => {
         stopReason: "player_action_required",
       });
       const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
-      expect(state.participants.slice(0, 3).every((participant) => participant.combatExperience)).toBe(
-        true,
-      );
+      expect(
+        state.participants.slice(0, 3).every((participant) => participant.combatExperience),
+      ).toBe(true);
       expect(state.participants[3]?.combatExperience).toBeUndefined();
-      expect(state.commands.filter((command) => command.type === "roll_combat_experience")).toHaveLength(
-        3,
-      );
+      expect(
+        state.commands.filter((command) => command.type === "roll_combat_experience"),
+      ).toHaveLength(3);
     } finally {
       randomSpy.mockRestore();
       await app.close();
@@ -14917,9 +15053,9 @@ describe("scenarios route contract", () => {
       attackOpportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
       attackerParticipantId: "encounter-participant-1",
       declarationId: "round:1:participant:encounter-participant-1:declaration",
-      defenderDb: 11,
+      defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
-      ob: 10,
+      ob: 1,
       phase: "phase1",
       weaponSourceId: "unarmed:virtual-weapon-template-punch",
       weaponSourceSlot: "virtual",
@@ -15023,7 +15159,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("rejects a new live attack that omits the required Skill/OB total", async () => {
+  it("accepts a narrow live attack request without a client Skill/OB total", async () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: makeOpenPhase1AttackRoundState(),
@@ -15041,7 +15177,6 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         defenderScenarioParticipantId: "participant-2",
-        ob: 999,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
       },
@@ -15050,9 +15185,11 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "obSkillRaw must be an integer." });
-    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(
+      updatedEncounter.combatRoundState.commands.at(-1)?.facts.attackerCalculation,
+    ).toMatchObject({ authority: "canonical_scenario_state", effectiveOb: 1 });
   });
 
   it.each([
@@ -15081,6 +15218,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        attackerModifierFingerprint: "falsified-client-signature",
         defenderScenarioParticipantId: "participant-2",
         ob: 14,
         obSkillRaw: 2,
@@ -15095,7 +15233,7 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
-      ob: 14,
+      ob: 3,
       phase: "phase1",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
@@ -15105,7 +15243,7 @@ describe("scenarios route contract", () => {
       type: "roll_attack",
     });
     expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.rollerPrivate).toMatchObject({
-      ob: 14,
+      ob: 3,
     });
   });
 
@@ -15162,12 +15300,12 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
-      ob: 13,
+      ob: 4,
       phase: "phase1",
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: {
-        obBeforeOpponentSpecificModifier: 10,
+        obBeforeOpponentSpecificModifier: 1,
         obSkillRaw: 3,
         opponentSpecificObPercentageAdjustment: 3,
         opponentSpecificObRaw: 3,
@@ -15181,8 +15319,8 @@ describe("scenarios route contract", () => {
       type: "roll_attack",
     });
     expect(updatedEncounter.combatRoundState.events.at(-1)?.facts.rollerPrivate).toMatchObject({
-      ob: 13,
-      obBeforeOpponentSpecificModifier: 10,
+      ob: 4,
+      obBeforeOpponentSpecificModifier: 1,
       opponentSpecificObModifierRows: [
         {
           label: "Observe Opponent · Scyrian cavalry guy",
@@ -15192,7 +15330,7 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("rejects a live attack when the submitted Skill/OB total is stale", async () => {
+  it("ignores a falsified submitted Skill/OB total", async () => {
     const attackerState = makeCanonicalAttackModifierParticipantState();
 
     setupCombatDeclarationRoute({
@@ -15222,12 +15360,9 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      code: "attacker_modifier_signature_mismatch",
-      error: "Attack modifiers changed. Refresh combat before rolling.",
-    });
-    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1.ob).toBe(3);
   });
 
   it("uses the existing generated distance Skill/OB row for the current player phase 1 attack", async () => {
@@ -15295,7 +15430,7 @@ describe("scenarios route contract", () => {
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
 
     expect(attackResult).toMatchObject({
-      ob: 6,
+      ob: -3,
       phase: "phase1",
       weaponName: "Punch",
     });
@@ -15386,7 +15521,7 @@ describe("scenarios route contract", () => {
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
 
     expect(attackResult).toMatchObject({
-      ob: 10,
+      ob: -1,
       phase: "phase1",
       weaponName: "Punch",
     });
@@ -15446,6 +15581,11 @@ describe("scenarios route contract", () => {
         {
           controlledByUserId: "other-player",
           id: "participant-2",
+          snapshot: {
+            build: {},
+            displayName: "Scyrian cavalry guy",
+            equipmentState: {},
+          },
           state: defenderState,
         },
       ],
@@ -15470,7 +15610,7 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toMatchObject({
       defenderDb: 13,
-      ob: 10,
+      ob: 1,
     });
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: { defenderFlatDbAdjustment: -2 },
@@ -15675,8 +15815,9 @@ describe("scenarios route contract", () => {
         url: "/encounters/encounter-1/combat-round/roll-attack",
       });
       expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
-      const calculation = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session
-        .combatRoundState.commands.at(-1)?.facts.defenderCalculation;
+      const calculation = mocks.encounterService.updateEncounter.mock.calls
+        .at(-1)?.[0]
+        ?.session.combatRoundState.commands.at(-1)?.facts.defenderCalculation;
       await app.close();
       return calculation;
     };
@@ -15720,7 +15861,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
   });
 
-  it("marks a player A1 attack unavailable when its exact defender checkpoint is missing", async () => {
+  it("keeps a complete player A1 attack available without a presentation checkpoint", async () => {
     const roundState = {
       ...makeOpenPhase1AttackRoundState(),
       stepSnapshots: [],
@@ -15747,7 +15888,7 @@ describe("scenarios route contract", () => {
     });
     const validation = historyResponse.json().history.currentAttackModifierValidation;
     expect(validation).toMatchObject({
-      attackContextAvailability: "unavailable_required",
+      attackContextAvailability: "complete",
       attackerParticipantId: "encounter-participant-1",
       defenderParticipantId: "encounter-participant-2",
       expectedRevision: expect.any(String),
@@ -15771,12 +15912,8 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(attackResponse.statusCode).toBe(409);
-    expect(attackResponse.json()).toEqual({
-      code: "attack_context_unavailable",
-      error: "Required attack context is unavailable. Refresh combat before rolling.",
-    });
-    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(attackResponse.statusCode).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
   });
 
   it("ignores legacy client defender fingerprints and resolves the contribution set server-side", async () => {
@@ -15922,7 +16059,7 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
 
-    expect(attackResult.ob).toBe(8);
+    expect(attackResult.ob).toBe(-1);
     expect(updatedEncounter.combatRoundState.commands.at(-1)?.facts.distanceModifier).toMatchObject(
       {
         createdCombatModifierIds: [],
@@ -16193,9 +16330,9 @@ describe("scenarios route contract", () => {
     const attackResult = updatedEncounter.combatRoundState.participants[0].attackResults.phase2;
     expect(attackResult).toMatchObject({
       attackerParticipantId: "encounter-participant-1",
-      defenderDb: 11,
+      defenderDb: 8,
       defenderParticipantId: "encounter-participant-2",
-      ob: 9,
+      ob: 0,
       phase: "phase2",
       weaponName: "Kick",
     });
@@ -16303,7 +16440,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("allows the current defending player to roll the open phase 1 parry once", async () => {
+  it("uses canonical Parry values for the current defending player's roll", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],
       {
@@ -16398,12 +16535,22 @@ describe("scenarios route contract", () => {
       },
       participants: [
         {
+          characterId: "character-participant-1",
           controlledByUserId: "other-player",
           id: "participant-1",
+          snapshot: makeCanonicalCombatCalculationSnapshot({
+            characterId: "character-participant-1",
+            displayName: "The Gladiator",
+          }),
         },
         {
+          characterId: "character-participant-2",
           controlledByUserId: "player-1",
           id: "participant-2",
+          snapshot: makeCanonicalCombatCalculationSnapshot({
+            characterId: "character-participant-2",
+            displayName: "City guard",
+          }),
           state: canonicalDefenderState,
         },
       ],
@@ -16411,7 +16558,7 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
 
     const parryPayload = {
-      attackResultModifier: attackHit.defenderParryModifier,
+      attackResultModifier: 999,
       attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
       attackerParticipantId: "encounter-participant-1",
       commandType: "roll_parry",
@@ -16434,10 +16581,12 @@ describe("scenarios route contract", () => {
       expectedRevision: combatEncounter.updatedAt,
       modifierValidationTaskId: projectedParryTask?.id,
       opportunityId: projectedParryTask?.identity.opportunityId,
-      parryBase: 13,
+      mainHandParryScore: 999,
+      offHandParryScore: 999,
+      parryBase: 999,
       parryPurpose: projectedParryTask?.identity.parryPurpose,
       parrySourceId: projectedParryTask?.identity.parrySourceId,
-      parrySourceLabel: "Sword / shield",
+      parrySourceLabel: "Falsified client source",
       phase: "phase1",
       processId: projectedParryTask?.processId,
       scenarioParticipantId: "participant-2",
@@ -16482,8 +16631,8 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(missingRawResponse.statusCode).toBe(400);
-    expect(staleRawResponse.statusCode, JSON.stringify(staleRawResponse.json())).toBe(409);
+    expect(missingRawResponse.statusCode, JSON.stringify(missingRawResponse.json())).toBe(200);
+    expect(staleRawResponse.statusCode, JSON.stringify(staleRawResponse.json())).toBe(200);
     expect(staleTaskResponse.statusCode).toBe(409);
     expect(staleRevisionResponse.statusCode).toBe(409);
     expect(staleRevisionResponse.json()).toMatchObject({ code: "stale_revision" });
@@ -16512,9 +16661,9 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution,
     ).toMatchObject({
-      combinedParryScore: 13,
+      combinedParryScore: 7,
       modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
-      parrySourceLabel: "Sword / shield",
+      parrySourceLabel: "Long sword + Dagger",
       status: "resolved",
     });
   });
@@ -17498,8 +17647,13 @@ describe("scenarios route contract", () => {
           id: "participant-1",
         },
         {
+          characterId: "character-participant-2",
           controlledByUserId: "player-1",
           id: "participant-2",
+          snapshot: makeCanonicalCombatCalculationSnapshot({
+            characterId: "character-participant-2",
+            displayName: "City guard",
+          }),
         },
         {
           controlledByUserId: "other-player",

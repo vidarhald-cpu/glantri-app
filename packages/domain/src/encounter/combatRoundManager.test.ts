@@ -15097,6 +15097,7 @@ describe("combat round manager", () => {
       nextBleedRate: 2,
       previousBleedRate: 3,
       result: expect.objectContaining({
+        difficulty: 21,
         rolledBy: "player",
         rolledByUserId: "player-1",
       }),

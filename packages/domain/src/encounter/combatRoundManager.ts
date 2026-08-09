@@ -14811,7 +14811,6 @@ export function rollCombatRoundEndHealthCheck(input: {
   };
   combatEffects?: CombatEffectsState;
   createdRevision?: string;
-  difficulty?: number;
   healthRollId?: string;
   participantId: string;
   roll?: OpenEndedD20Roll;
@@ -14858,7 +14857,7 @@ export function rollCombatRoundEndHealthCheck(input: {
     });
   }
 
-  const difficulty = input.difficulty ?? healthRoll.difficulty;
+  const difficulty = healthRoll.difficulty;
   const roll = input.roll ?? rollOpenEndedD20(input.rng);
   const finalTotal = roll.dieResult + healthRoll.healthStat;
   const result = combatRoundEndHealthRollResultSchema.parse({

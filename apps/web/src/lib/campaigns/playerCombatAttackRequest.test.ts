@@ -69,13 +69,11 @@ const input = {
 describe("buildPlayerCombatAttackModifierRequest", () => {
   it("uses the canonical modifier values bound to the displayed attack task", () => {
     expect(buildPlayerCombatAttackModifierRequest(input)).toEqual({
-      attackerModifierFingerprint: validation.attackerModifierFingerprint,
       effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
       expectedRevision: validation.expectedRevision,
       initiativeGroupId: validation.initiativeGroupId,
       initiativeValue: validation.initiativeValue,
       modifierValidationTaskId: task.id,
-      obSkillRaw: -2,
     });
   });
 

@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
 
+import { weaponTemplates } from "@glantri/content/equipment";
 import type {
   CombatModifierContribution,
   CombatModifierResolution,
   ScenarioParticipant,
 } from "@glantri/domain";
-import { buildLiveCombatModifierContributionProjection } from "@glantri/domain";
+import {
+  buildLiveCombatModifierContributionProjection,
+  characterBuildSchema,
+} from "@glantri/domain";
 
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
+import {
+  resolveCanonicalAttackOffense,
+  resolveCanonicalParryBase,
+} from "./combatManualCalculationResolution";
 
 function buildParticipant(): ScenarioParticipant {
   const characterId = "character-defender";
@@ -102,6 +110,86 @@ function buildParticipant(): ScenarioParticipant {
     },
     updatedAt: "2026-08-07T10:00:00.000Z",
   } as unknown as ScenarioParticipant;
+}
+
+function buildArmedParticipant(): ScenarioParticipant {
+  const participant = buildParticipant();
+  const characterId = participant.characterId!;
+  const build = characterBuildSchema.parse(participant.snapshot.build);
+  const primary = weaponTemplates.find((template) => template.name === "Long sword");
+  const secondary = weaponTemplates.find((template) => template.name === "Dagger");
+  if (!primary || !secondary) throw new Error("Missing canonical weapon fixtures.");
+  const primaryItemId = "item-primary";
+  const secondaryItemId = "item-secondary";
+  const locationId = "location-equipped";
+  const item = (id: string, templateId: string) => ({
+    acquiredFrom: null,
+    category: "weapon" as const,
+    characterId,
+    conditionState: "intact" as const,
+    displayName: null,
+    id,
+    isFavorite: false,
+    isStackable: false,
+    material: "steel" as const,
+    quality: "standard" as const,
+    quantity: 1,
+    specificityType: "generic" as const,
+    storageAssignment: { carryMode: "equipped" as const, locationId },
+    templateId,
+  });
+  return {
+    ...participant,
+    snapshot: {
+      ...participant.snapshot,
+      build: {
+        ...build,
+        progression: {
+          ...build.progression,
+          skills: [
+            ...build.progression.skills,
+            {
+              category: "secondary",
+              categoryId: "combat",
+              groupId: "basic_melee_training",
+              secondaryRanks: 8,
+              skillId: "parry",
+            },
+          ],
+        },
+      },
+      equipmentState: {
+        activeLoadoutByCharacterId: {
+          [characterId]: {
+            activeAmmoItemIds: [],
+            activePrimaryWeaponItemId: primaryItemId,
+            activeSecondaryWeaponItemId: secondaryItemId,
+            characterId,
+            id: "loadout-defender",
+            isActive: true,
+            name: "Combat",
+            quickAccessItemIds: [],
+          },
+        },
+        itemsById: {
+          [primaryItemId]: item(primaryItemId, primary.id),
+          [secondaryItemId]: item(secondaryItemId, secondary.id),
+        },
+        locationsById: {
+          [locationId]: {
+            availabilityClass: "with_you",
+            characterId,
+            id: locationId,
+            isAccessibleInEncounter: true,
+            isMobile: true,
+            name: "Equipped",
+            type: "equipped_system",
+          },
+        },
+        templatesById: { [primary.id]: primary, [secondary.id]: secondary },
+      },
+    },
+  } as ScenarioParticipant;
 }
 
 function contribution(input: {
@@ -249,5 +337,103 @@ describe("server-owned combat defense resolution", () => {
         sameGroupCalculation.effectiveDb,
       );
     }
+  });
+});
+
+describe("server-owned manual combat inputs", () => {
+  it("derives attack base and dynamic offense from canonical build and source facts", () => {
+    const participant = buildArmedParticipant();
+    const primary = weaponTemplates.find((template) => template.name === "Long sword")!;
+    const calculation = resolveCanonicalAttackOffense({
+      attackerResolution: { bucket: "skill_ob", rows: [], total: -2 },
+      opponentResolution: { bucket: "skill_ob", rows: [], total: -1 },
+      opportunity: {
+        attackModeId: primary.attackModes![0]!.id,
+        id: "opportunity-1",
+        origin: "declared",
+        phase: "phase1",
+        slot: "attack_1",
+        sourceKind: "weapon",
+        status: "committed",
+        weaponInstanceId: "item-primary",
+        weaponSourceId: "item-primary",
+        weaponSourceSlot: "primary",
+        weaponTemplateId: primary.id,
+      },
+      participant,
+    });
+
+    expect(calculation).toMatchObject({
+      authority: "canonical_scenario_state",
+      completeness: "complete",
+      dynamicRawPercentage: -1,
+      participantId: "scenario-defender",
+    });
+    if (calculation.completeness === "complete") {
+      expect(calculation.baseOb).toEqual(expect.any(Number));
+      expect(calculation.preOpponentOb).toEqual(expect.any(Number));
+    }
+  });
+
+  it("derives the selected Parry source totals without accepting a client base", () => {
+    const calculation = resolveCanonicalParryBase({
+      participant: buildArmedParticipant(),
+      usedMainHand: true,
+      usedOffHand: true,
+    });
+
+    expect(calculation).toMatchObject({
+      authority: "canonical_scenario_state",
+      completeness: "complete",
+      parrySourceLabel: "Long sword + Dagger",
+      usedMainHand: true,
+      usedOffHand: true,
+    });
+    if (calculation.completeness === "complete") {
+      expect(calculation.combinedParryScore).toEqual(expect.any(Number));
+      expect(calculation.mainHandParryScore).toEqual(expect.any(Number));
+      expect(calculation.offHandParryScore).toEqual(expect.any(Number));
+    }
+  });
+
+  it("fails closed instead of accepting presentation totals for incomplete participants", () => {
+    expect(
+      resolveCanonicalParryBase({
+        participant: { ...buildParticipant(), snapshot: { displayName: "Defender" } },
+        usedMainHand: true,
+      }),
+    ).toMatchObject({
+      authority: "canonical_scenario_state",
+      completeness: "partial",
+    });
+  });
+
+  it("fails closed when a declared weapon source is absent from canonical equipment", () => {
+    const participant = buildArmedParticipant();
+    const primary = weaponTemplates.find((template) => template.name === "Long sword")!;
+
+    expect(
+      resolveCanonicalAttackOffense({
+        attackerResolution: { bucket: "skill_ob", rows: [], total: 0 },
+        opponentResolution: { bucket: "skill_ob", rows: [], total: 0 },
+        opportunity: {
+          attackModeId: primary.attackModes![0]!.id,
+          id: "missing-source-opportunity",
+          origin: "declared",
+          phase: "phase1",
+          slot: "attack_1",
+          sourceKind: "weapon",
+          status: "committed",
+          weaponInstanceId: "missing-item",
+          weaponSourceId: "missing-item",
+          weaponSourceSlot: "primary",
+          weaponTemplateId: primary.id,
+        },
+        participant,
+      }),
+    ).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["weapon_source_identity"],
+    });
   });
 });

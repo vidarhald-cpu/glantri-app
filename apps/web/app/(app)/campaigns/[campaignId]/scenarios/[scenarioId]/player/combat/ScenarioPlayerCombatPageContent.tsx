@@ -1037,20 +1037,6 @@ function _formatPlayerCombatInitiativeRank(input: {
   return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
 }
 
-function parsePlayerCombatInteger(value: string | undefined, label: string): number | undefined {
-  if (!value || value === "—" || value === "incomplete") {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed)) {
-    throw new Error(`${label} must be an integer.`);
-  }
-
-  return parsed;
-}
-
 function parsePlayerCombatDisplayInteger(value: string | undefined): number | undefined {
   if (!value || value === "—" || value === "incomplete") {
     return undefined;
@@ -2797,9 +2783,8 @@ export default function ScenarioPlayerCombatPageContent({
         currentEncounter: encounterSession,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
+        expectedParticipantRevision: selectedParticipant.updatedAt,
         expectedRevision: descriptor.expectedRevision,
-        initiativeBase: initiativeCalculation.baseInitiative,
-        initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment,
         scenarioParticipantId: descriptor.participantId,
         taskId: descriptor.taskId,
       });
@@ -3229,22 +3214,6 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    let ob: number;
-
-    try {
-      const parsedOb = parsePlayerCombatInteger(phaseAttackStats.ob, "Attack OB");
-
-      if (parsedOb === undefined) {
-        setError("Attack OB is not available.");
-        return;
-      }
-
-      ob = parsedOb;
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Attack OB is not available.");
-      return;
-    }
-
     setSavingCombatContext(true);
     setAttackContextFailure(undefined);
 
@@ -3254,18 +3223,16 @@ export default function ScenarioPlayerCombatPageContent({
         actionId: descriptor.actionId,
         attackIndex: descriptor.attackIndex,
         attackModeId: descriptor.attackModeId,
-        attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
+        expectedParticipantRevision: selectedParticipant.updatedAt,
         expectedRevision: modifierRequest.expectedRevision,
         initiativeGroupId: modifierRequest.initiativeGroupId,
         initiativeValue: modifierRequest.initiativeValue,
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
-        ob,
-        obSkillRaw: modifierRequest.obSkillRaw,
         opportunityId: descriptor.opportunityId,
         phase: attackPhase,
         scenarioParticipantId: selectedParticipant.id,
@@ -3376,17 +3343,15 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const encounter = await rollCombatParryOnServer({
         currentEncounter: encounterSession,
-        attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
         commandType: "roll_parry",
-        dbParryRaw: modifierRequest.dbParryRaw,
-        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: descriptor.participantId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId,
         executionGroupId: descriptor.executionGroupId,
+        expectedParticipantRevision: selectedParticipant.updatedAt,
         expectedRevision: descriptor.expectedRevision,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         initiativeGroupId: modifierRequest.initiativeGroupId,
@@ -3394,10 +3359,8 @@ export default function ScenarioPlayerCombatPageContent({
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
         offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,
-        parryBase: currentParryBase,
         parryPurpose: descriptor.parryPurpose,
         parrySourceId: descriptor.parrySourceId,
-        parrySourceLabel: currentParryDefenseStats?.sourceName,
         phase: descriptor.phase,
         processId: descriptor.processId,
         scenarioParticipantId: descriptor.participantId,
@@ -4046,16 +4009,6 @@ export default function ScenarioPlayerCombatPageContent({
       })
     : undefined;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
-  const currentParryDefenseStats = currentResolutionPhase
-    ? buildPlayerCombatDefenseStats({
-        mainHandParryItemLabel:
-          phaseCombatLoadoutSummaries[currentResolutionPhase].mainHandParryItemLabel,
-        offHandParryItemLabel:
-          phaseCombatLoadoutSummaries[currentResolutionPhase].offHandParryItemLabel,
-        phaseContext: phaseCombatContextDrafts[currentResolutionPhase],
-        reference: phaseCombatLoadoutSummaries[currentResolutionPhase].reference,
-      })
-    : null;
   const currentParryBase = currentResolutionPhase
     ? parsePlayerCombatDisplayInteger(
         phaseCombatLoadoutSummaries[currentResolutionPhase].baseDefenseStats?.parry,

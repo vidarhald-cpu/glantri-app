@@ -653,7 +653,6 @@ export async function commitRoundEndParticipantReviewOnServer(input: {
 
 export async function rollRoundEndHealthCheckOnServer(input: {
   currentEncounter?: EncounterSession;
-  difficulty?: number;
   encounterId: string;
   executionGroupId: string;
   expectedRevision: string;
@@ -672,7 +671,6 @@ export async function rollRoundEndHealthCheckOnServer(input: {
     `/encounters/${input.encounterId}/combat-round/roll-health-check`,
     {
       body: JSON.stringify({
-        difficulty: input.difficulty,
         healthRollId: input.healthRollId,
         scenarioParticipantId: input.scenarioParticipantId,
         executionGroupId: input.executionGroupId,
@@ -1027,9 +1025,8 @@ export async function rollCombatInitiativeOnServer(input: {
   currentEncounter?: EncounterSession;
   encounterId: string;
   executionGroupId: string;
+  expectedParticipantRevision: string;
   expectedRevision: string;
-  initiativeBase?: number;
-  initiativeModifierAdjustment?: number;
   scenarioParticipantId: string;
   taskId: string;
 }): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
@@ -1040,10 +1037,9 @@ export async function rollCombatInitiativeOnServer(input: {
     `/encounters/${input.encounterId}/combat-initiative`,
     {
       body: JSON.stringify({
-        initiativeBase: input.initiativeBase,
-        initiativeModifierAdjustment: input.initiativeModifierAdjustment,
         scenarioParticipantId: input.scenarioParticipantId,
         executionGroupId: input.executionGroupId,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
         taskId: input.taskId,
       }),
@@ -1153,18 +1149,16 @@ export async function rollCombatAttackOnServer(input: {
   actionId?: string;
   attackIndex: number;
   attackModeId: string;
-  attackerModifierFingerprint?: string;
   effectCutoffInitiativeGroupId?: string;
   declarationId: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
+  expectedParticipantRevision: string;
   expectedRevision: string;
   initiativeGroupId?: string;
   initiativeValue?: number;
   modifierValidationTaskId?: string;
-  ob: number;
-  obSkillRaw: number;
   opportunityId: string;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
@@ -1194,17 +1188,15 @@ export async function rollCombatAttackOnServer(input: {
         actionId: input.actionId,
         attackIndex: input.attackIndex,
         attackModeId: input.attackModeId,
-        attackerModifierFingerprint: input.attackerModifierFingerprint,
         effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
         declarationId: input.declarationId,
         defenderParticipantId: input.defenderParticipantId,
         executionGroupId: input.executionGroupId,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
         initiativeGroupId: input.initiativeGroupId,
         initiativeValue: input.initiativeValue,
         modifierValidationTaskId: input.modifierValidationTaskId,
-        ob: input.ob,
-        obSkillRaw: input.obSkillRaw,
         opportunityId: input.opportunityId,
         phase: input.phase,
         scenarioParticipantId: input.scenarioParticipantId,
@@ -1223,30 +1215,24 @@ export async function rollCombatAttackOnServer(input: {
 }
 
 export async function rollCombatParryOnServer(input: {
-  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
-  dbParryRaw: number;
-  defenderModifierFingerprint: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
+  expectedParticipantRevision: string;
   expectedRevision: string;
   effectCutoffInitiativeGroupId?: string;
   initiativeGroupId?: string;
   initiativeValue?: number;
-  mainHandParryScore?: number;
   modifierValidationTaskId: string;
-  offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId: string;
-  parryBase: number;
   parryPurpose: CombatParryPurpose;
   parrySourceId: string;
-  parrySourceLabel?: string;
   phase: "phase1" | "phase2";
   processId: string;
   scenarioParticipantId: string;
@@ -1260,29 +1246,23 @@ export async function rollCombatParryOnServer(input: {
     `/encounters/${input.encounterId}/combat-round/roll-parry`,
     {
       body: JSON.stringify({
-        attackResultModifier: input.attackResultModifier,
         attackResultId: input.attackResultId,
         attackerParticipantId: input.attackerParticipantId,
         commandType: input.commandType,
-        dbParryRaw: input.dbParryRaw,
-        defenderModifierFingerprint: input.defenderModifierFingerprint,
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
         executionGroupId: input.executionGroupId,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
         effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
         initiativeGroupId: input.initiativeGroupId,
         initiativeValue: input.initiativeValue,
-        mainHandParryScore: input.mainHandParryScore,
         modifierValidationTaskId: input.modifierValidationTaskId,
-        offHandParryScore: input.offHandParryScore,
         offensiveParryAttemptId: input.offensiveParryAttemptId,
         opportunityId: input.opportunityId,
-        parryBase: input.parryBase,
         parryPurpose: input.parryPurpose,
         parrySourceId: input.parrySourceId,
-        parrySourceLabel: input.parrySourceLabel,
         phase: input.phase,
         processId: input.processId,
         scenarioParticipantId: input.scenarioParticipantId,
@@ -1430,30 +1410,24 @@ export async function rollCombatObservationOnServer(input: {
 }
 
 export async function rollCombatParryCommandOnServer(input: {
-  attackResultModifier: number;
   attackResultId: string;
   attackerParticipantId: string;
   commandType: "roll_parry";
-  dbParryRaw: number;
-  defenderModifierFingerprint: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
   encounterId: string;
   executionGroupId: string;
+  expectedParticipantRevision: string;
   expectedRevision: string;
   effectCutoffInitiativeGroupId?: string;
   initiativeGroupId?: string;
   initiativeValue?: number;
-  mainHandParryScore?: number;
   modifierValidationTaskId: string;
-  offHandParryScore?: number;
   offensiveParryAttemptId?: string;
   opportunityId: string;
-  parryBase: number;
   parryPurpose: CombatParryPurpose;
   parrySourceId: string;
-  parrySourceLabel?: string;
   phase: "phase1" | "phase2";
   processId: string;
   scenarioParticipantId: string;
@@ -1475,29 +1449,23 @@ export async function rollCombatParryCommandOnServer(input: {
     `/encounters/${input.encounterId}/combat-round/roll-parry`,
     {
       body: JSON.stringify({
-        attackResultModifier: input.attackResultModifier,
         attackResultId: input.attackResultId,
         attackerParticipantId: input.attackerParticipantId,
         commandType: input.commandType,
-        dbParryRaw: input.dbParryRaw,
-        defenderModifierFingerprint: input.defenderModifierFingerprint,
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
         executionGroupId: input.executionGroupId,
+        expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
         effectCutoffInitiativeGroupId: input.effectCutoffInitiativeGroupId,
         initiativeGroupId: input.initiativeGroupId,
         initiativeValue: input.initiativeValue,
-        mainHandParryScore: input.mainHandParryScore,
         modifierValidationTaskId: input.modifierValidationTaskId,
-        offHandParryScore: input.offHandParryScore,
         offensiveParryAttemptId: input.offensiveParryAttemptId,
         opportunityId: input.opportunityId,
-        parryBase: input.parryBase,
         parryPurpose: input.parryPurpose,
         parrySourceId: input.parrySourceId,
-        parrySourceLabel: input.parrySourceLabel,
         phase: input.phase,
         processId: input.processId,
         scenarioParticipantId: input.scenarioParticipantId,

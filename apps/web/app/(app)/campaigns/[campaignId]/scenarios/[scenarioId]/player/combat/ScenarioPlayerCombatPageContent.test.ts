@@ -180,12 +180,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     );
     expect(source).toContain("expectedRevision: modifierRequest.expectedRevision");
     expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
-    expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
+    expect(attackRequestSource).not.toContain("obSkillRaw:");
     expect(source).toContain("createPlayerCombatHistoryRequestCoordinator");
     expect(source).toContain("isMatchingPlayerCombatHistory");
     expect(source).toContain("rollCombatParryOnServer");
     expect(source).toContain("buildCombatParryModifierRequest({");
-    expect(source).toContain("dbParryRaw: modifierRequest.dbParryRaw");
+    expect(source).not.toContain("dbParryRaw: modifierRequest.dbParryRaw");
     expect(source).toContain("if (participant) {");
     expect(source).toContain("chooseRoundEndContinuedContactDistanceOnServer({");
     expect(source).toContain("baseDefenseStats: buildPlayerCombatDefenseStats({");
@@ -203,7 +203,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("formatCombatInitiativeFormula");
     expect(source).toContain("buildEncounterInitiativeModifierCalculation");
     expect(source).toContain("initiativeCalculation");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment",
     );
     expect(source).toContain("formatPlayerCombatInitiativeRank");

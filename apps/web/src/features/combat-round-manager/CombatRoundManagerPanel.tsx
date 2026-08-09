@@ -3354,8 +3354,6 @@ function CombatDamageReviewPanel(input: {
 
 function CombatRoundEndParticipantReviewPanel(input: {
   controlsDisabled?: boolean;
-  difficultyDrafts: Record<string, string>;
-  onDifficultyDraftChange: (healthRollId: string, value: string) => void;
   observationPending?: boolean;
   participantLabel?: string;
   review?: RoundEndParticipantReview;
@@ -3445,48 +3443,32 @@ function CombatRoundEndParticipantReviewPanel(input: {
           {pendingHealthRolls.length > 0 ? (
             <section style={{ display: "grid", gap: "0.4rem" }}>
               <strong style={{ fontSize: "0.9rem" }}>Pending Health check</strong>
-              {pendingHealthRolls.map((proposal) => {
-                const difficultyValue =
-                  input.difficultyDrafts[proposal.id] ?? String(proposal.difficulty);
-
-                return (
-                  <div
-                    key={proposal.id}
-                    style={{
-                      borderTop: "1px solid #ddd3bf",
-                      display: "grid",
-                      gap: "0.3rem",
-                      paddingTop: "0.4rem",
-                    }}
-                  >
-                    <label style={{ display: "grid", gap: "0.2rem" }}>
-                      <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-                        {proposal.label}
-                      </span>
-                      <input
-                        disabled={input.controlsDisabled || proposal.status !== "pending"}
-                        inputMode="numeric"
-                        onChange={(event) =>
-                          input.onDifficultyDraftChange(proposal.id, event.target.value)
-                        }
-                        type="text"
-                        value={difficultyValue}
-                      />
-                    </label>
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                      Health +{proposal.healthStat} · pending
-                    </div>
-                    {proposal.warnings.map((warning, warningIndex) => (
-                      <div
-                        key={`end-review-health-roll-warning:${proposal.id}:${warningIndex}:${warning}`}
-                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
-                      >
-                        {warning}
-                      </div>
-                    ))}
+              {pendingHealthRolls.map((proposal) => (
+                <div
+                  key={proposal.id}
+                  style={{
+                    borderTop: "1px solid #ddd3bf",
+                    display: "grid",
+                    gap: "0.3rem",
+                    paddingTop: "0.4rem",
+                  }}
+                >
+                  <div style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    {proposal.label} · Difficulty {proposal.difficulty}
                   </div>
-                );
-              })}
+                  <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                    Health +{proposal.healthStat} · pending
+                  </div>
+                  {proposal.warnings.map((warning, warningIndex) => (
+                    <div
+                      key={`end-review-health-roll-warning:${proposal.id}:${warningIndex}:${warning}`}
+                      style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
+                    >
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              ))}
             </section>
           ) : null}
           {pendingRequirements.filter((requirement) => requirement.kind !== "health_check").length >
@@ -3962,9 +3944,6 @@ export default function CombatRoundManagerPanel({
   >({});
   const combatExperienceDifficultyRequestInFlightRef = useRef(false);
   const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
-  const [roundEndHealthDifficultyDrafts, setRoundEndHealthDifficultyDrafts] = useState<
-    Record<string, string>
-  >({});
   const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
     Record<string, string>
   >({});
@@ -7298,7 +7277,6 @@ export default function CombatRoundManagerPanel({
       setInspectorModifierEditedDraftKeys({});
       modifierReviewInputSnapshotsRef.current.clear();
       setParrySourceSelections({});
-      setRoundEndHealthDifficultyDrafts({});
       setSaveError(undefined);
       setScenarioParticipantOverrides({});
     }
@@ -9239,9 +9217,8 @@ export default function CombatRoundManagerPanel({
         currentEncounter: encounter,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
+        expectedParticipantRevision: scenarioParticipant.updatedAt,
         expectedRevision: descriptor.expectedRevision,
-        initiativeBase: inspectorInitiativeCalculation.baseInitiative,
-        initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment,
         scenarioParticipantId: scenarioParticipant.id,
         taskId: descriptor.taskId,
       });
@@ -9368,32 +9345,14 @@ export default function CombatRoundManagerPanel({
 
     const projectedAttackTask = projectedCurrentTasks.find((task) => task.id === descriptor.taskId);
     const modifierRequest = buildGmCombatAttackModifierRequest({
-      attackerCombatantId: selectedEncounterParticipant.id,
-      attackerScenarioParticipant: selectedScenarioParticipant,
-      defenderCombatantId: targetEncounterParticipant.id,
-      defenderScenarioParticipant: targetScenarioParticipant,
       descriptor,
       encounterId: roundView.encounterId,
       encounterRevision: roundView.encounterRevision,
       projectedTask: projectedAttackTask,
-      roundState,
     });
 
     if (!modifierRequest) {
       setSaveError("Combat state changed. Review the current action before rolling.");
-      return;
-    }
-
-    let ob: number;
-
-    try {
-      ob = parseCombatInteger(canonicalAttackSummary.ob, `${phaseLabel} OB`);
-    } catch (caughtError) {
-      setSaveError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to resolve ${phaseLabel} attack.`,
-      );
       return;
     }
 
@@ -9409,18 +9368,16 @@ export default function CombatRoundManagerPanel({
         actionId: descriptor.actionId,
         attackIndex: descriptor.attackIndex!,
         attackModeId: descriptor.attackModeId!,
-        attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         defenderParticipantId: targetIdentity.encounterParticipantId,
         declarationId: descriptor.declarationId!,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId!,
+        expectedParticipantRevision: selectedScenarioParticipant.updatedAt,
         expectedRevision: modifierRequest.expectedRevision,
         initiativeGroupId: modifierRequest.initiativeGroupId,
         initiativeValue: modifierRequest.initiativeValue,
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
-        ob,
-        obSkillRaw: modifierRequest.obSkillRaw,
         opportunityId: descriptor.opportunityId!,
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
@@ -9592,36 +9549,24 @@ export default function CombatRoundManagerPanel({
     try {
       const { commandEnvelope, encounter: nextEncounter } = await rollCombatParryCommandOnServer({
         currentEncounter: encounter,
-        attackResultModifier: modifierRequest.attackResultModifier,
         attackResultId: descriptor.attackResultId,
         attackerParticipantId: descriptor.opponentParticipantId,
         commandType: "roll_parry",
-        dbParryRaw: modifierRequest.dbParryRaw,
-        defenderModifierFingerprint: modifierRequest.defenderModifierFingerprint,
         defenderParticipantId: descriptor.participantId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId: encounter.id,
         executionGroupId: descriptor.executionGroupId,
+        expectedParticipantRevision: defenderScenarioParticipant.updatedAt,
         expectedRevision: descriptor.expectedRevision,
         effectCutoffInitiativeGroupId: modifierRequest.effectCutoffInitiativeGroupId,
         initiativeGroupId: modifierRequest.initiativeGroupId,
         initiativeValue: modifierRequest.initiativeValue,
-        mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
         modifierValidationTaskId: modifierRequest.modifierValidationTaskId,
-        offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
         offensiveParryAttemptId: descriptor.offensiveParryAttemptId,
         opportunityId: descriptor.opportunityId,
-        parryBase,
         parryPurpose: descriptor.parryPurpose,
         parrySourceId: descriptor.parrySourceId,
-        parrySourceLabel: formatSelectedCombatParrySourceName({
-          selection: {
-            usedMainHand,
-            usedOffHand,
-          },
-          sources,
-        }),
         phase,
         processId: descriptor.processId,
         scenarioParticipantId: defenderScenarioParticipant.id,
@@ -10194,16 +10139,9 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
-        const difficultyDraft = roundEndHealthDifficultyDrafts[pendingHealthRoll.id];
-        const difficulty =
-          difficultyDraft && difficultyDraft.trim().length > 0
-            ? parseCombatInteger(difficultyDraft, "Health difficulty")
-            : pendingHealthRoll.difficulty;
-
         const { encounter: nextEncounter, participant: updatedParticipant } =
           await rollRoundEndHealthCheckOnServer({
             currentEncounter: encounter,
-            difficulty,
             encounterId: encounter.id,
             executionGroupId: descriptor.executionGroupId!,
             expectedRevision: descriptor.expectedRevision,
@@ -11692,13 +11630,6 @@ export default function CombatRoundManagerPanel({
                           {inspectorRoundEndDistanceControlComplete ? (
                             <CombatRoundEndParticipantReviewPanel
                               controlsDisabled={saving || inspectorIsInspectionOnly}
-                              difficultyDrafts={roundEndHealthDifficultyDrafts}
-                              onDifficultyDraftChange={(healthRollId, value) =>
-                                setRoundEndHealthDifficultyDrafts((current) => ({
-                                  ...current,
-                                  [healthRollId]: value,
-                                }))
-                              }
                               observationPending={
                                 inspectorRoundEndTask?.kind === "observation_roll" &&
                                 inspectorRoundEndTask.owner?.kind === "combatant" &&

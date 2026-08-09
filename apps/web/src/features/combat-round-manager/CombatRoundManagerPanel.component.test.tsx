@@ -1100,10 +1100,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     ];
 
     const pending = render(
-      <CombatRoundManagerPanel
-        encounter={pendingEncounter}
-        scenarioParticipants={participants}
-      />,
+      <CombatRoundManagerPanel encounter={pendingEncounter} scenarioParticipants={participants} />,
     );
     expect(screen.queryByRole("combobox", { name: "Workflow" })).not.toBeInTheDocument();
     pending.unmount();
@@ -1664,8 +1661,9 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
       weaponSourceSlot: projectedAttackTask?.identity.weaponSourceSlot,
       weaponTemplateId: projectedAttackTask?.identity.weaponTemplateId,
     });
-    expect(request.attackerModifierFingerprint).toMatch(/^v1:/);
-    expect(request.obSkillRaw).toBe(-2);
+    expect(request).not.toHaveProperty("attackerModifierFingerprint");
+    expect(request).not.toHaveProperty("ob");
+    expect(request).not.toHaveProperty("obSkillRaw");
     expect(request).not.toHaveProperty("defenderDb");
     expect(request).not.toHaveProperty("defenderDbParryRaw");
     expect(request).not.toHaveProperty("defenderModifierFingerprint");

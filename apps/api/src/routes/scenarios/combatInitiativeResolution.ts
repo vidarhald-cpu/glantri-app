@@ -8,6 +8,8 @@ import {
   AnyEquipmentTemplateSchema,
   characterBuildSchema,
   type CombatRoundAttackOpportunity,
+  type CombatRoundPhase,
+  type CombatRoundState,
   type ScenarioParticipant,
   type WeaponTemplate,
 } from "@glantri/domain";
@@ -16,6 +18,8 @@ import {
   buildCombatStateCharacterInputs,
   getDerivedInitiativeValue,
 } from "@glantri/rules-engine";
+
+import { resolveCanonicalParticipantCalculationContext } from "./combatParticipantCalculationResolution";
 
 export type CanonicalCombatInitiativeBaseResolution =
   | { completeness: "complete"; initiativeBase: number }
@@ -80,4 +84,61 @@ export function resolveCanonicalCombatInitiativeBase(input: {
     return { completeness: "partial", missingFacts: ["initiative_calculation"] };
   }
   return { completeness: "complete", initiativeBase: initiative };
+}
+
+/** Selects the one exact declared phase opportunity before deriving its initiative base. */
+export function resolveCanonicalCombatInitiativeBaseForTask(input: {
+  encounterParticipantId: string;
+  participant: ScenarioParticipant;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CanonicalCombatInitiativeBaseResolution {
+  const roundParticipant = input.state.participants.find(
+    (participant) => participant.participantId === input.encounterParticipantId,
+  );
+  const opportunities = (roundParticipant?.declaration?.attackOpportunities ?? []).filter(
+    (opportunity) => opportunity.phase === input.phase && opportunity.status === "committed",
+  );
+  if (opportunities.length > 1) {
+    return { completeness: "partial", missingFacts: ["initiative_opportunity"] };
+  }
+  if (opportunities.length === 1) {
+    const opportunity = opportunities[0];
+    if (opportunity.weaponSourceSlot !== "virtual") {
+      const context = resolveCanonicalParticipantCalculationContext(input.participant);
+      const sourceItemId = opportunity.weaponInstanceId ?? opportunity.weaponSourceId;
+      const sourceItem =
+        context.completeness === "complete" && sourceItemId
+          ? context.itemsById.get(sourceItemId)
+          : undefined;
+      if (
+        context.completeness !== "complete" ||
+        !sourceItem ||
+        sourceItem.templateId !== opportunity.weaponTemplateId
+      ) {
+        return { completeness: "partial", missingFacts: ["initiative_weapon_source"] };
+      }
+    }
+    return resolveCanonicalCombatInitiativeBase({
+      opportunity,
+      participant: input.participant,
+    });
+  }
+  const context = resolveCanonicalParticipantCalculationContext(input.participant);
+  if (context.completeness !== "complete" || !context.primaryWeaponTemplate) {
+    return {
+      completeness: "partial",
+      missingFacts:
+        context.completeness === "complete"
+          ? ["initiative_weapon"]
+          : [...context.missingFacts, "initiative_opportunity"].sort(),
+    };
+  }
+  const initiativeBase = getDerivedInitiativeValue({
+    characterInputs: context.characterInputs,
+    template: context.primaryWeaponTemplate,
+  });
+  return typeof initiativeBase === "number" && Number.isInteger(initiativeBase)
+    ? { completeness: "complete", initiativeBase }
+    : { completeness: "partial", missingFacts: ["initiative_calculation"] };
 }

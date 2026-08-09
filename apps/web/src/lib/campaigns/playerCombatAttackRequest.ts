@@ -4,13 +4,11 @@ import type {
 } from "@glantri/domain";
 
 export interface PlayerCombatAttackModifierRequest {
-  attackerModifierFingerprint: string;
   effectCutoffInitiativeGroupId?: string;
   expectedRevision: string;
   initiativeGroupId?: string;
   initiativeValue?: number;
   modifierValidationTaskId: string;
-  obSkillRaw: number;
 }
 
 /**
@@ -47,12 +45,10 @@ export function buildPlayerCombatAttackModifierRequest(input: {
   }
 
   return {
-    attackerModifierFingerprint: validation.attackerModifierFingerprint,
     effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
     expectedRevision: validation.expectedRevision,
     initiativeGroupId: validation.initiativeGroupId,
     initiativeValue: validation.initiativeValue,
     modifierValidationTaskId: validation.taskId,
-    obSkillRaw: validation.obSkillRaw,
   };
 }

@@ -510,7 +510,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("loadoutModel: baseLoadoutModel");
     expect(source).toContain("parrySourceLabel");
     expect(source).toContain("buildGmCombatParryModifierRequest({");
-    expect(source).toContain("dbParryRaw: modifierRequest.dbParryRaw");
+    expect(source).not.toContain("dbParryRaw: modifierRequest.dbParryRaw");
     expect(source).not.toContain("modifierBreakdown: rawModifiers");
     expect(source).toContain('Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}');
     expect(source).toContain('Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}');
@@ -663,11 +663,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).not.toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
     expect(source).toContain("buildGmCombatAttackModifierRequest({");
-    expect(source).toContain("obSkillRaw: modifierRequest.obSkillRaw");
+    expect(source).not.toContain("obSkillRaw: modifierRequest.obSkillRaw");
     expect(source).toContain("buildTargetAwareEncounterLiveCombatModifierSummary");
     expect(source).toContain("resolveEncounterLiveCombatModifierContext");
     expect(source).toContain("requestAttackStats");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint",
     );
     expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
@@ -764,7 +764,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("buildEncounterInitiativeModifierCalculation");
     expect(source).toContain("inspectorInitiativeCalculation");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment",
     );
     expect(source).toContain("movementIntent: inspectorDraft.movementIntent");
