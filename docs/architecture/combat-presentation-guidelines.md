@@ -88,6 +88,12 @@ merely to make one action self-contained.
 
 Current Action contains unresolved work only.
 
+It describes the canonical operational position for the accepted revision. If the
+viewer owns that work, it presents the authorized control. If the work belongs to the
+GM or another participant, it presents a waiting state at the same tracker position.
+Viewer relevance must not select a later stage. Explicitly parallel work may remain
+actionable only within the canonical stage.
+
 It may contain:
 
 - the action and involved participants;
@@ -295,6 +301,11 @@ When a step or round becomes historical, preserve:
 History uses archived snapshots rather than current participant, equipment,
 modifier, calculation, or rule state. Nothing that occurs later may rewrite the
 historical presentation.
+
+Historical or manual selection is an inspection overlay. It may highlight another
+cell and open historical panels, but the canonical current marker remains visible and
+unchanged. Current-task navigation clears the overlay and returns to the shared live
+position.
 
 ## 16. Progressive disclosure and concision
 

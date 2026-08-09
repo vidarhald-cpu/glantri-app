@@ -289,6 +289,7 @@ import { resolveHistoricalFeintSkillLabel } from "./view-models/historicalFeintP
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 import {
+  getCombatRoundTimelineArrowMove,
   getAdjacentCombatRoundTimelineParticipantSelection,
   getAdjacentCombatRoundTimelineStepSelection,
   getCombatRoundTimelineCellKey,
@@ -2592,14 +2593,6 @@ function getEncounterScenarioParticipantIds(
   return encounterParticipants
     .map((participant) => participant.scenarioParticipantId ?? participant.id)
     .filter((participantId): participantId is string => Boolean(participantId));
-}
-
-function isGridArrowTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return ["BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
 }
 
 function formatStepStatus(status: string | undefined): string {
@@ -8243,23 +8236,15 @@ export default function CombatRoundManagerPanel({
   }
 
   function handleTimelineKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (isGridArrowTarget(event.target)) {
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      moveSelection({ stepOffset: 1 });
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      moveSelection({ stepOffset: -1 });
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveSelection({ participantOffset: 1 });
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveSelection({ participantOffset: -1 });
-    }
+    const target = event.target instanceof HTMLElement ? event.target : undefined;
+    const move = getCombatRoundTimelineArrowMove({
+      key: event.key,
+      targetIsContentEditable: target?.isContentEditable,
+      targetTagName: target?.tagName,
+    });
+    if (!move) return;
+    event.preventDefault();
+    moveSelection(move);
   }
 
   function updateInspectorDraft(patch: Partial<CombatInspectorDeclarationDraft>) {

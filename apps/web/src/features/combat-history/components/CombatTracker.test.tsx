@@ -72,6 +72,8 @@ describe("CombatTracker", () => {
 
     fireEvent.keyDown(screen.getByLabelText("Combat round timeline grid"), { key: "ArrowRight" });
     expect(onKeyDown).toHaveBeenCalledOnce();
+    fireEvent.keyDown(document.body, { key: "ArrowLeft" });
+    expect(onKeyDown).toHaveBeenCalledOnce();
   });
 
   it("renders a new-round empty cell as disabled after a prior-round attack marker", () => {
@@ -227,10 +229,25 @@ describe("CombatTracker", () => {
     const scrollWidth = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(900);
 
     try {
-      render(
+      const { rerender } = render(
         <CombatTracker
           followCurrent
           model={{ ...model, currentTaskCellKey: undefined }}
+          onInspect={vi.fn()}
+        />,
+      );
+      expect(scrollTo).toHaveBeenCalledOnce();
+
+      scrollTo.mockClear();
+      rerender(
+        <CombatTracker
+          followCurrent
+          model={{
+            ...model,
+            currentTaskCellKey: undefined,
+            rounds: [{ currentStep: "review_phase_2_modifiers", roundNumber: 1 }],
+            steps: ["select_actions", "review_phase_2_modifiers"],
+          }}
           onInspect={vi.fn()}
         />,
       );

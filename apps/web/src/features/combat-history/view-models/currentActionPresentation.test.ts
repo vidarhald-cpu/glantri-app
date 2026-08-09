@@ -130,7 +130,16 @@ function progression(
   input: {
     awaitingGmTransition?: boolean;
     boundary?: CombatProgressionBoundaryKind;
+    canonicalTask?: CombatProgressionPresentationTask;
+    canonicalTaskVisibility?: "redacted" | "unavailable" | "visible";
+    canonicalWaitingFor?: "combatant" | "gm" | "unknown";
     conflicted?: boolean;
+    executionStrategy?:
+      | "gm_review"
+      | "initiative_groups"
+      | "ordered_all"
+      | "parallel_all"
+      | "single_task";
     tasks?: readonly CombatProgressionPresentationTask[];
   } = {},
 ): CombatProgressionPresentationProjection {
@@ -139,6 +148,25 @@ function progression(
   return {
     awaitingGmTransition: input.awaitingGmTransition ?? false,
     boundary: { id: `boundary:${boundary}`, kind: boundary, roundNumber: 2 },
+    canonicalOperationalPosition:
+      input.canonicalTask || input.canonicalTaskVisibility
+        ? {
+            executionGroupId: input.canonicalTask?.executionGroupId,
+            executionStrategy: input.executionStrategy ?? "single_task",
+            processId: input.canonicalTask?.processId,
+            roundNumber: 2,
+            stageId: input.canonicalTask?.stageId,
+            task:
+              input.canonicalTaskVisibility === "redacted" ||
+              input.canonicalTaskVisibility === "unavailable"
+                ? undefined
+                : input.canonicalTask,
+            taskVisibility:
+              input.canonicalTaskVisibility ?? (input.canonicalTask ? "visible" : "unavailable"),
+            trackerFacet: input.canonicalTask?.trackerFacet ?? { step: "M2" },
+            waitingFor: input.canonicalWaitingFor ?? "gm",
+          }
+        : undefined,
     processes: tasks.length
       ? [
           {
@@ -858,6 +886,110 @@ describe("CurrentActionPresentation", () => {
     expect(player?.taskId).toBe("aria-task");
     expect(gmPlayer?.taskId).toBe(player?.taskId);
     expect(gmPlayer?.heading).toBe(player?.heading);
+  });
+
+  it("does not select a later viewer task while a redacted canonical M2 review is unresolved", () => {
+    const laterPlayerTask = task({
+      id: "later-player-task",
+      kind: "attack",
+      owner: aria,
+      target: borin,
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-1",
+      progression: progression({
+        boundary: "phase2_modifier_review",
+        canonicalTaskVisibility: "redacted",
+        canonicalWaitingFor: "gm",
+        tasks: [laterPlayerTask],
+      }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      boundary: "phase2_modifier_review",
+      primaryAction: { enabled: false, label: "Waiting for GM" },
+      requiredNow: "Waiting for GM modifier review.",
+      status: "awaiting_gm",
+      trackerFacet: "M2",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
+    expect(result?.taskId).toBeUndefined();
+  });
+
+  it("fails closed on an incomplete legacy operational position instead of falling forward", () => {
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-legacy",
+      progression: progression({
+        boundary: "declaration",
+        canonicalTaskVisibility: "unavailable",
+        tasks: [task({ id: "later", kind: "attack", owner: aria })],
+      }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: { enabled: false, label: "Action unavailable" },
+      requiredNow: "Waiting for the GM to repair the active combat state.",
+      status: "awaiting_gm",
+      taskHeading: "Combat state incomplete",
+    });
+    expect(result?.taskId).toBeUndefined();
+  });
+
+  it("keeps same-stage parallel authority separate from the canonical board task", () => {
+    const canonicalTask = task({ id: "borin-task", kind: "attack", owner: borin, target: aria });
+    const playerTask = {
+      ...task({ id: "aria-task", kind: "attack", owner: aria, target: borin }),
+      executionGroupId: canonicalTask.executionGroupId,
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-1",
+      progression: progression({
+        canonicalTask,
+        executionStrategy: "parallel_all",
+        tasks: [canonicalTask, playerTask],
+      }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: { enabled: true, viewerMayInvoke: true },
+      taskId: "aria-task",
+    });
+  });
+
+  it("keeps a viewer-owned same-stage task actionable when the canonical task identity is private", () => {
+    const hiddenCanonicalTask = task({
+      id: "hidden-initiative",
+      kind: "roll_initiative",
+      owner: borin,
+    });
+    const ownInitiative = {
+      ...task({ id: "own-initiative", kind: "roll_initiative", owner: aria }),
+      stageId: hiddenCanonicalTask.stageId,
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-1",
+      progression: progression({
+        boundary: "phase1_initiative",
+        canonicalTask: hiddenCanonicalTask,
+        canonicalTaskVisibility: "redacted",
+        executionStrategy: "initiative_groups",
+        tasks: [ownInitiative],
+      }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      boundary: "phase1_initiative",
+      primaryAction: { enabled: true, viewerMayInvoke: true },
+      taskId: "own-initiative",
+    });
   });
 
   it("changes only when the accepted revision or projected task changes", () => {

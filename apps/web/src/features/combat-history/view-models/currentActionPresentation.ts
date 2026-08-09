@@ -298,10 +298,27 @@ function viewerMayInvokeTask(
 
 function selectTask(
   tasks: readonly CombatProgressionPresentationTask[],
+  progression: CombatProgressionPresentationProjection,
   viewer: CurrentActionViewerContext,
 ): CombatProgressionPresentationTask | undefined {
   const progressionTasks = tasks.filter((task) => task.contributesToProgression);
+  const position = progression.canonicalOperationalPosition;
+  const canonicalTask = position?.task;
   const controlled = viewer.controlledParticipantIds ?? new Set<string>();
+  const viewerTaskInCanonicalStage = position?.stageId
+    ? progressionTasks.find(
+        (task) =>
+          task.stageId === position.stageId &&
+          task.state === "executable" &&
+          viewerMayInvokeTask(task, viewer),
+      )
+    : undefined;
+  if (canonicalTask) {
+    if (viewerMayInvokeTask(canonicalTask, viewer)) return canonicalTask;
+    if (viewerTaskInCanonicalStage) return viewerTaskInCanonicalStage;
+    return canonicalTask;
+  }
+  if (position) return viewerTaskInCanonicalStage;
   return (
     progressionTasks.find(
       (task) => task.state === "executable" && viewerMayInvokeTask(task, viewer),
@@ -710,7 +727,60 @@ function specialPresentation(
   });
 }
 
-function initiativeWaitingPresentation(
+function canonicalWaitingPresentation(
+  input: BuildCurrentActionPresentationInput,
+): CurrentActionPresentation {
+  const progression = input.progression!;
+  const position = progression.canonicalOperationalPosition!;
+  const boundary = progression.boundary.kind;
+  const waitingForGm = position.waitingFor === "gm";
+  const modifierReview =
+    boundary === "phase1_modifier_review" || boundary === "phase2_modifier_review";
+  const incomplete = position.taskVisibility === "unavailable";
+  const requiredActor: CombatPresentationSubject = waitingForGm
+    ? { hidden: false, id: "gm", label: "GM" }
+    : { hidden: true, label: "another participant" };
+  const requiredNow = incomplete
+    ? "Waiting for the GM to repair the active combat state."
+    : modifierReview && waitingForGm
+      ? "Waiting for GM modifier review."
+      : waitingForGm
+        ? "Waiting for GM."
+        : "Waiting for another participant.";
+  return Object.freeze({
+    actionName: incomplete ? "Combat state" : "Current combat task",
+    boundary,
+    encounterId: input.encounterId,
+    encounterRevision: input.encounterRevision ?? "",
+    heading: BOUNDARY_LABELS[boundary],
+    primaryAction: {
+      enabled: false,
+      gmProxyAvailable: false,
+      label: incomplete ? "Action unavailable" : waitingForGm ? "Waiting for GM" : "Waiting",
+      viewerMayInvoke: false,
+    },
+    reason: "",
+    requiredActor,
+    requiredNow,
+    status: waitingForGm || incomplete ? "awaiting_gm" : "waiting",
+    summary: incomplete
+      ? "The active encounter has incomplete canonical progression information."
+      : modifierReview
+        ? `${boundary === "phase1_modifier_review" ? "Phase 1" : "Phase 2"} modifiers are being reviewed.`
+        : `Combat remains at ${BOUNDARY_LABELS[boundary]}.`,
+    taskHeading: incomplete
+      ? "Combat state incomplete"
+      : modifierReview && waitingForGm
+        ? "Waiting for GM modifier review"
+        : waitingForGm
+          ? "Waiting for GM"
+          : "Waiting for another participant",
+    trackerFacet: position.trackerFacet.step,
+  });
+}
+
+/** Compatibility for presentation fixtures and legacy projections created before board position. */
+function legacyInitiativeWaitingPresentation(
   input: BuildCurrentActionPresentationInput,
 ): CurrentActionPresentation | undefined {
   if (input.viewer.kind !== "player") return undefined;
@@ -760,17 +830,27 @@ export function buildCurrentActionPresentation(
   ) {
     return specialPresentation(input);
   }
-  const initiativeWaiting = initiativeWaitingPresentation(input);
-  const controlled = input.viewer.controlledParticipantIds ?? new Set<string>();
-  const hasInvokableControlledTask = taskList(input.progression).some(
-    (task) =>
-      task.state === "executable" &&
-      task.owner?.kind === "combatant" &&
-      controlled.has(task.owner.participantId) &&
-      viewerMayInvokeTask(task, input.viewer),
-  );
-  if (initiativeWaiting && !hasInvokableControlledTask) return initiativeWaiting;
-  const task = selectTask(taskList(input.progression), input.viewer);
+  const selectedTask = selectTask(taskList(input.progression), input.progression, input.viewer);
+  if (
+    input.progression.canonicalOperationalPosition &&
+    input.progression.canonicalOperationalPosition.taskVisibility !== "visible" &&
+    !selectedTask
+  ) {
+    return canonicalWaitingPresentation(input);
+  }
+  if (!input.progression.canonicalOperationalPosition) {
+    const initiativeWaiting = legacyInitiativeWaitingPresentation(input);
+    const controlled = input.viewer.controlledParticipantIds ?? new Set<string>();
+    const hasInvokableControlledTask = taskList(input.progression).some(
+      (task) =>
+        task.state === "executable" &&
+        task.owner?.kind === "combatant" &&
+        controlled.has(task.owner.participantId) &&
+        viewerMayInvokeTask(task, input.viewer),
+    );
+    if (initiativeWaiting && !hasInvokableControlledTask) return initiativeWaiting;
+  }
+  const task = selectedTask;
   if (!task) return null;
 
   const action = actionName(task);

@@ -448,6 +448,26 @@ export interface CombatProgressionPresentationProcess {
   readonly stages: readonly CombatProgressionPresentationStage[];
 }
 
+/**
+ * One revision-bound board position shared by every presentation perspective. The full task is
+ * present only when that task is safe for the viewer; redaction may remove task/owner detail but
+ * never the round and tracker step.
+ */
+export interface CombatProgressionCanonicalOperationalPosition {
+  readonly executionGroupId?: string;
+  readonly executionStrategy?: CombatProgressionExecutionStrategy;
+  readonly processId?: string;
+  readonly roundNumber: number;
+  readonly stageId?: string;
+  readonly task?: CombatProgressionPresentationTask;
+  readonly taskVisibility: "redacted" | "unavailable" | "visible";
+  readonly trackerFacet: {
+    readonly owner?: CombatantIdentity;
+    readonly step: CombatRoundCursorStep;
+  };
+  readonly waitingFor: "combatant" | "gm" | "unknown";
+}
+
 /** Sanitized live progression facts suitable for shared GM/player presentation. */
 export interface CombatProgressionPresentationProjection {
   /** Player-safe indication that child work is complete and only the GM may open the next boundary. */
@@ -457,6 +477,7 @@ export interface CombatProgressionPresentationProjection {
     readonly kind: CombatProgressionBoundaryKind;
     readonly roundNumber: number;
   };
+  readonly canonicalOperationalPosition?: CombatProgressionCanonicalOperationalPosition;
   readonly executionOrder?: CombatProgressionExecutionOrder;
   readonly processes: readonly CombatProgressionPresentationProcess[];
   readonly roundNumber: number;

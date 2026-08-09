@@ -566,7 +566,7 @@ export function buildActiveCombatPresentation(input: {
       cellFacts: trackerCellFacts,
       rounds: [
         {
-          currentStep: input.roundState.currentStep,
+          currentStep: progressionTrackerIndex.currentStep ?? input.roundState.currentStep,
           roundNumber: input.roundState.roundNumber,
         },
       ],

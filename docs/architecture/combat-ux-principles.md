@@ -61,6 +61,24 @@ historical inspection or ordinary manual scrolling.
 
 Tracker selection is an inspection overlay. It never changes canonical progression.
 
+### Tracker as the combat board
+
+The tracker is the canonical visual state of combat. At one accepted encounter
+revision, every client shares one canonical operational position: round, step,
+process/stage, execution group, and current task where that detail is safe to show.
+Visibility and authority may change what a viewer knows or can do at that position,
+but may never move that viewer to a different apparent combat stage.
+
+The canonical operational position is not the viewer-actionable task. They coincide
+when the viewer owns the current work, and may differ for explicitly parallel work
+within the same canonical stage; otherwise Current Action presents a waiting state at the canonical position. A
+redacted task retains its safe round/step marker without exposing participant identity
+or private task detail.
+
+Historical/manual selection is an overlay and never replaces the canonical board
+position. `Current task` clears that overlay and returns focus to the shared live
+position.
+
 ## Current Action
 
 Current Action decides. It contains only unresolved work, its bounded inputs, and

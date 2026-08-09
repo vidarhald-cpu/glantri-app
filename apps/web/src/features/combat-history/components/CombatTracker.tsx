@@ -34,14 +34,14 @@ export function CombatTracker(input: {
   const cellRefs = useRef(new Map<string, HTMLButtonElement>());
   const stepHeaderRefs = useRef(new Map<string, HTMLTableCellElement>());
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const currentRound = input.model.rounds.find((round) => round.currentStep !== undefined);
+  const currentStepHeaderKey = currentRound?.currentStep
+    ? `${currentRound.roundNumber}:${currentRound.currentStep}`
+    : undefined;
 
   useEffect(() => {
     const cellKey = input.model.currentTaskCellKey;
-    const currentRound = input.model.rounds.find((round) => round.currentStep !== undefined);
-    const stepHeaderKey = currentRound?.currentStep
-      ? `${currentRound.roundNumber}:${currentRound.currentStep}`
-      : undefined;
-    if (!input.followCurrent || (!cellKey && !stepHeaderKey)) {
+    if (!input.followCurrent || (!cellKey && !currentStepHeaderKey)) {
       return;
     }
 
@@ -49,12 +49,17 @@ export function CombatTracker(input: {
       behavior: "auto",
       cell:
         (cellKey ? cellRefs.current.get(cellKey) : undefined) ??
-        (stepHeaderKey ? stepHeaderRefs.current.get(stepHeaderKey) : undefined),
+        (currentStepHeaderKey ? stepHeaderRefs.current.get(currentStepHeaderKey) : undefined),
       container: containerRef.current,
       mode: "center",
       padding: 96,
     });
-  }, [input.followCurrent, input.model.currentTaskCellKey, input.positionCurrentRequest]);
+  }, [
+    currentStepHeaderKey,
+    input.followCurrent,
+    input.model.currentTaskCellKey,
+    input.positionCurrentRequest,
+  ]);
 
   function assignTableRef(node: HTMLDivElement | null) {
     containerRef.current = node;
@@ -150,6 +155,7 @@ export function CombatTracker(input: {
                         roundIndex > 0 && stepIndex === 0
                           ? roundBoundaryStartBorder
                           : "1px solid #e3e1dc",
+                      boxShadow: round.currentStep === step ? "inset 0 -3px 0 #b7791f" : undefined,
                       fontWeight: round.currentStep === step ? 800 : 700,
                     }}
                     title={COMBAT_ROUND_STEP_LABELS[step]}
@@ -200,6 +206,7 @@ export function CombatTracker(input: {
                               ? roundBoundaryStartBorder
                               : "1px solid #e3e1dc",
                           borderTop: "1px solid #e3e1dc",
+                          boxShadow: cell.current ? "inset 0 0 0 2px #b7791f" : undefined,
                           outline: cell.selected ? "2px solid #2f5d62" : undefined,
                           outlineOffset: "-2px",
                         }}

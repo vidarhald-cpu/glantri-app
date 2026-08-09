@@ -401,6 +401,14 @@ Tracker cells show live or completed markers only when that exact
 round/facet/participant has canonical task or result identity; no prior-round or
 “latest” fallback is permitted.
 
+Each presentation projection also preserves one canonical operational position from
+that revision. Tracker focus follows this position, never the first task remaining
+after viewer filtering. Viewer-actionable work is a separate projection concern: it
+may provide controls for the same canonical task, or for explicitly parallel work in
+the same canonical stage, but it cannot advance the apparent board position. When a
+task or participant is private, the player projection retains the round and step and
+redacts the identity/detail. Privacy removes information, not stage.
+
 GM Step Automation is server-owned orchestration over those same canonical tasks,
 not a separate auto-roll path. One explicit GM request is bound to the accepted
 revision and current combat step, processes only the contiguous eligible

@@ -257,6 +257,39 @@ function parallelPhase2CombatExperienceProgression(
   };
 }
 
+function withCanonicalPosition(
+  progression: CombatProgressionPresentationProjection,
+  input: {
+    task?: CombatProgressionPresentationTask;
+    taskVisibility?: "redacted" | "unavailable" | "visible";
+    trackerOwner?: CombatProgressionPresentationTask["trackerFacet"]["owner"];
+    trackerStep?: CombatRoundCursorStep;
+    waitingFor?: "combatant" | "gm" | "unknown";
+  } = {},
+): CombatProgressionPresentationProjection {
+  const task = input.task ?? progression.processes[0]?.stages[0]?.executionGroups[0]?.tasks[0];
+  const taskVisibility = input.taskVisibility ?? "visible";
+  return {
+    ...progression,
+    canonicalOperationalPosition: {
+      executionGroupId: taskVisibility === "visible" ? task?.executionGroupId : undefined,
+      executionStrategy: "single_task",
+      processId: taskVisibility === "visible" ? task?.processId : undefined,
+      roundNumber: progression.roundNumber,
+      stageId: taskVisibility === "visible" ? task?.stageId : undefined,
+      task: taskVisibility === "visible" ? task : undefined,
+      taskVisibility,
+      trackerFacet: {
+        owner:
+          input.trackerOwner ??
+          (taskVisibility === "visible" ? task?.trackerFacet.owner : undefined),
+        step: input.trackerStep ?? task?.trackerFacet.step ?? "DE",
+      },
+      waitingFor: input.waitingFor ?? "gm",
+    },
+  };
+}
+
 describe("buildProjectedCombatTrackerModel", () => {
   it("builds the shared tracker model using projected rows and cell events", () => {
     const projection = history([event({ facts: { publicOutcome: { grazing: true } } })]);
@@ -273,6 +306,84 @@ describe("buildProjectedCombatTrackerModel", () => {
       marker: "H",
       selected: true,
     });
+  });
+
+  it("keeps historical selection separate from the canonical current marker", () => {
+    const projection = history([]);
+    projection.activeRound.snapshots.push(snapshot({ id: "summary", step: "round_summary" }));
+    projection.progression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "modifier_review", step: "M2" }),
+    );
+    const model = buildProjectedCombatTrackerModel({
+      history: projection,
+      selected: { participantId: "aria", roundNumber: 1, step: "round_summary" },
+    });
+
+    expect(model.currentTaskCellKey).toBe("1:aria:review_phase_2_modifiers");
+    expect(model.cells["1:aria:review_phase_2_modifiers"]).toMatchObject({
+      current: true,
+      selected: false,
+    });
+    expect(model.cells["1:aria:round_summary"]).toMatchObject({
+      current: false,
+      selected: true,
+    });
+  });
+
+  it("retains a redacted canonical M2 header without falling forward to a visible later task", () => {
+    const projection = history([]);
+    projection.progression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "attack", step: "A2" }),
+      { taskVisibility: "redacted", trackerStep: "M2", waitingFor: "gm" },
+    );
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(model.rounds).toEqual([{ currentStep: "review_phase_2_modifiers", roundNumber: 1 }]);
+    expect(model.currentTaskCellKey).toBeUndefined();
+    expect(Object.values(model.cells).filter((cell) => cell.current)).toHaveLength(0);
+    expect(model.cells["1:aria:phase_2_actions"]?.current).toBe(false);
+  });
+
+  it("keeps GM, GM Player, and Player perspectives on the same canonical step", () => {
+    const gmHistory = history([]);
+    gmHistory.rows.push({ displayName: "Borin", participantId: "borin" });
+    const gmProgression = liveProgression({
+      boundary: "phase2_modifier_review",
+      gmOwned: true,
+      kind: "modifier_review",
+      ownerId: "borin",
+      ownerLabel: "Borin",
+      step: "M2",
+      trackerOwnerId: "borin",
+    });
+    gmHistory.progression = withCanonicalPosition(gmProgression);
+
+    const playerHistory = history([]);
+    playerHistory.progression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "attack", step: "A2" }),
+      { taskVisibility: "redacted", trackerStep: "M2", waitingFor: "gm" },
+    );
+    const gm = buildProjectedCombatTrackerModel({ history: gmHistory });
+    const player = buildProjectedCombatTrackerModel({ history: playerHistory });
+    const gmPlayer = buildProjectedCombatTrackerModel({ history: playerHistory });
+
+    expect(gm.rounds[0]?.currentStep).toBe("review_phase_2_modifiers");
+    expect(player.rounds[0]?.currentStep).toBe(gm.rounds[0]?.currentStep);
+    expect(gmPlayer.rounds[0]?.currentStep).toBe(gm.rounds[0]?.currentStep);
+    expect(gm.currentTaskCellKey).toBe("1:borin:review_phase_2_modifiers");
+    expect(player.currentTaskCellKey).toBeUndefined();
+  });
+
+  it("renders exactly one canonical current cell when multiple visible tasks share a stage", () => {
+    const projection = history([]);
+    projection.rows.push({ displayName: "Borin", participantId: "borin" });
+    const parallel = parallelAdjustDistanceProgression(["aria", "borin"]);
+    const canonicalTask = parallel.processes[0]!.stages[0]!.executionGroups[0]!.tasks[0]!;
+    projection.progression = withCanonicalPosition(parallel, { task: canonicalTask });
+    const model = buildProjectedCombatTrackerModel({ history: projection });
+
+    expect(Object.values(model.cells).filter((cell) => cell.current)).toHaveLength(1);
+    expect(model.currentTaskCellKey).toBe("1:aria:phase_1_actions");
   });
 
   it("does not create rows, keys, or hover text for identities absent from projection", () => {

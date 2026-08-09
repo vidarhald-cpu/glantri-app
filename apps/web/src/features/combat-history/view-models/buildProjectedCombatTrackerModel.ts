@@ -296,7 +296,7 @@ export function buildProjectedCombatTrackerModel(input: {
   const activeRoundNumber = input.history.activeRound.roundNumber;
   const currentStep =
     progressionIndex.currentStep ??
-    (input.history.progression?.taskVisibility === "available"
+    (input.history.progression
       ? getCombatRoundStepForProgressionBoundary(input.history.progression.boundary.kind)
       : undefined);
   const rounds = [...input.history.archivedRounds, input.history.activeRound].map((round) => ({

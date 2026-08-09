@@ -33,6 +33,31 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('? "Resume current task"');
   });
 
+  it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {
+    const source = readSource();
+
+    expect(source).toContain("canonicalOperationalPosition.trackerFacet.step");
+    expect(source).toContain("onClick={selectCurrentTrackerPosition}");
+    expect(source).toContain("positionCurrentRequest={trackerPositionRequest}");
+    expect(source).toContain("tableRef={trackerRef}");
+    expect(source).toContain("onKeyDown={handleTrackerKeyDown}");
+    expect(source).toContain("getCombatRoundTimelineArrowMove({");
+    expect(source).toContain("event.preventDefault()");
+  });
+
+  it("renders tracker, Current Action, and inspector only from a coherent revision perspective", () => {
+    const source = readSource();
+
+    expect(source).toContain(
+      "revisionBoundHistory.history.sourceEncounterId === encounterSession.id",
+    );
+    expect(source).toContain(
+      "revisionBoundHistory.history.sourceUpdatedAt === encounterSession.updatedAt",
+    );
+    expect(source).toContain("perspectiveParticipantId: isGameMaster");
+    expect(source).toContain("revision: encounterSession.updatedAt");
+  });
+
   it("limits passive recent-result feedback to GM proxy actions and exact identities", () => {
     const source = readSource();
 

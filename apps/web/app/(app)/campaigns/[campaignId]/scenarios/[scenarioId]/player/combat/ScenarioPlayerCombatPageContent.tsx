@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
@@ -30,6 +37,7 @@ import {
   getDistanceEdgeBetweenParticipantAliases,
   getCombatDistanceParticipantAliases,
   getCombatRoundResolutionPhaseForStep,
+  getCombatRoundStepForProgressionBoundary,
   getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
   getPlayerCombatCurrentRollAction,
@@ -130,6 +138,11 @@ import {
   type CombatRecentResultFocus,
 } from "@/features/combat-round-manager/view-models/combatRecentResultFocus";
 import { getCurrentCombatRoundTaskSelection } from "@/features/combat-round-manager/combatRoundSelection";
+import {
+  getAdjacentCombatRoundTimelineParticipantSelection,
+  getAdjacentCombatRoundTimelineStepSelection,
+  getCombatRoundTimelineArrowMove,
+} from "@/features/combat-round-manager/combatRoundTimelineNavigation";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { ApiRequestError } from "@/lib/api/apiClient";
@@ -1076,7 +1089,6 @@ export default function ScenarioPlayerCombatPageContent({
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
   const [encounterSession, setEncounterSession] = useState<EncounterSession>();
   const [revisionBoundHistory, setRevisionBoundHistory] = useState<RevisionKeyedCombatHistory>();
-  const combatHistory = revisionBoundHistory?.history;
   const [combatLogSelection, setCombatLogSelection] = useState<CombatLogPresentationSelection>();
   const acceptedEncounterRef = useRef<EncounterSession | undefined>(undefined);
   const acceptedHistoryRef = useRef<RevisionKeyedCombatHistory | undefined>(undefined);
@@ -1092,6 +1104,8 @@ export default function ScenarioPlayerCombatPageContent({
   }
   const historyCoordinator = historyCoordinatorRef.current;
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
+  const [trackerPositionRequest, setTrackerPositionRequest] = useState(0);
+  const trackerRef = useRef<HTMLDivElement | null>(null);
   const [recentResultFocus, setRecentResultFocus] = useState<CombatRecentResultFocus>();
   const [recentResultRequest, setRecentResultRequest] = useState<{
     readonly acceptedRevision: string;
@@ -1144,6 +1158,21 @@ export default function ScenarioPlayerCombatPageContent({
     useState<DoubleAttackPhase2Decision>("continue");
   const controlsDisabled = readOnlyInspection || revisionRefreshPending;
   const historyPerspectiveKey = isGameMaster ? selectedParticipantId : "player";
+  const combatHistory =
+    encounterSession &&
+    revisionBoundHistory &&
+    isMatchingPlayerCombatHistory({
+      candidate: revisionBoundHistory,
+      identity: {
+        encounterId: encounterSession.id,
+        perspectiveParticipantId: isGameMaster ? selectedParticipantId || undefined : undefined,
+        revision: encounterSession.updatedAt,
+      },
+    }) &&
+    revisionBoundHistory.history.sourceEncounterId === encounterSession.id &&
+    revisionBoundHistory.history.sourceUpdatedAt === encounterSession.updatedAt
+      ? revisionBoundHistory.history
+      : undefined;
   selectedParticipantIdRef.current = selectedParticipantId;
 
   const getHistoryIdentity = useCallback(
@@ -1803,9 +1832,13 @@ export default function ScenarioPlayerCombatPageContent({
       task.owner.participantId === selectedRoundParticipant?.participantId &&
       task.contributesToProgression,
   );
-  const currentCombatStep = selectedProgressionTasks[0]
-    ? getCombatRoundStepForCursorStep(selectedProgressionTasks[0].trackerFacet.step)
-    : (combatRoundState?.currentStep ?? "select_actions");
+  const currentCombatStep = combatHistory?.progression?.canonicalOperationalPosition
+    ? getCombatRoundStepForCursorStep(
+        combatHistory.progression.canonicalOperationalPosition.trackerFacet.step,
+      )
+    : combatHistory?.progression
+      ? getCombatRoundStepForProgressionBoundary(combatHistory.progression.boundary.kind)
+      : (combatRoundState?.currentStep ?? "select_actions");
   const currentActionPresentation = useMemo(
     () =>
       buildCurrentActionPresentation({
@@ -4191,6 +4224,7 @@ export default function ScenarioPlayerCombatPageContent({
   const currentActionDomainValidationDisabled =
     controlsDisabled ||
     savingCombatContext ||
+    !combatHistory ||
     !displayedParticipant ||
     Boolean(declarationTargetValidationMessage || currentAttackContextValidationMessage) ||
     (currentActionPresentation?.taskKind === "distance_commit" &&
@@ -4383,6 +4417,64 @@ export default function ScenarioPlayerCombatPageContent({
     selectedCombatExperienceRequired &&
     selectedCombatExperienceTrigger === "combat_start";
 
+  function selectCurrentTrackerPosition() {
+    setRecentResultFocus(undefined);
+    setRecentResultRequest(undefined);
+    setHistoryInspection(undefined);
+    setTrackerPositionRequest((current) => current + 1);
+    window.requestAnimationFrame(() => trackerRef.current?.focus({ preventScroll: true }));
+  }
+
+  function handleTrackerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!playerCombatTrackerModel) return;
+    const target = event.target instanceof HTMLElement ? event.target : undefined;
+    const move = getCombatRoundTimelineArrowMove({
+      key: event.key,
+      targetIsContentEditable: target?.isContentEditable,
+      targetTagName: target?.tagName,
+    });
+    if (!move) return;
+
+    const currentRound = playerCombatTrackerModel.rounds.find(
+      (round) => round.currentStep !== undefined,
+    );
+    const currentCell = playerCombatTrackerModel.currentTaskCellKey
+      ? playerCombatTrackerModel.cells[playerCombatTrackerModel.currentTaskCellKey]
+      : undefined;
+    const selection = historyInspection ?? {
+      participantId:
+        currentCell?.participantId ?? playerCombatTrackerModel.rows[0]?.participantId ?? "",
+      roundNumber:
+        currentRound?.roundNumber ?? playerCombatTrackerModel.rounds.at(-1)?.roundNumber ?? 1,
+      step: currentCell?.step ?? currentRound?.currentStep ?? "select_actions",
+    };
+    const nextSelection =
+      "stepOffset" in move
+        ? getAdjacentCombatRoundTimelineStepSelection({
+            participantId: selection.participantId,
+            roundNumbers: playerCombatTrackerModel.rounds.map((round) => round.roundNumber),
+            selectedRoundNumber: selection.roundNumber,
+            step: selection.step,
+            stepOffset: move.stepOffset,
+          })
+        : getAdjacentCombatRoundTimelineParticipantSelection({
+            participantId: selection.participantId,
+            participantIds: playerCombatTrackerModel.rows.map((row) => row.participantId),
+            participantOffset: move.participantOffset,
+            roundNumber: selection.roundNumber,
+            step: selection.step,
+          });
+    if (!nextSelection.participantId) return;
+    event.preventDefault();
+    setRecentResultFocus(undefined);
+    setRecentResultRequest(undefined);
+    setHistoryInspection({
+      participantId: nextSelection.participantId,
+      roundNumber: nextSelection.roundNumber,
+      step: nextSelection.step,
+    });
+  }
+
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
   }
@@ -4486,12 +4578,10 @@ export default function ScenarioPlayerCombatPageContent({
           >
             <strong>Combat history</strong>
             <button
-              disabled={!historyInspection}
-              onClick={() => {
-                setRecentResultFocus(undefined);
-                setRecentResultRequest(undefined);
-                setHistoryInspection(undefined);
-              }}
+              disabled={
+                !playerCombatTrackerModel.rounds.some((round) => round.currentStep !== undefined)
+              }
+              onClick={selectCurrentTrackerPosition}
               type="button"
             >
               {historyInspection ? "Resume current task" : "Current task"}
@@ -4500,6 +4590,7 @@ export default function ScenarioPlayerCombatPageContent({
           <CombatTracker
             followCurrent={!historyInspection}
             model={playerCombatTrackerModel}
+            onKeyDown={handleTrackerKeyDown}
             onInspect={(cell) => {
               setRecentResultFocus(undefined);
               setRecentResultRequest(undefined);
@@ -4509,6 +4600,8 @@ export default function ScenarioPlayerCombatPageContent({
                 step: cell.step,
               });
             }}
+            positionCurrentRequest={trackerPositionRequest}
+            tableRef={trackerRef}
           />
         </section>
       ) : null}

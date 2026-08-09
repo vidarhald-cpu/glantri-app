@@ -185,6 +185,12 @@ describe("CombatProgressionProjection", () => {
       },
     });
     expect(playerView.awaitingGmTransition).toBe(true);
+    expect(playerView.canonicalOperationalPosition).toMatchObject({
+      roundNumber: 2,
+      taskVisibility: "redacted",
+      trackerFacet: { owner: undefined, step: "DE" },
+      waitingFor: "gm",
+    });
     expect(
       playerView.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)),
     ).not.toContainEqual(expect.objectContaining({ kind: "gm_advance_boundary" }));
@@ -256,6 +262,18 @@ describe("CombatProgressionProjection", () => {
         message: "An active legacy declaration cannot enter canonical execution.",
       }),
     );
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["hero"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero"]),
+      },
+    });
+    expect(playerView.canonicalOperationalPosition).toMatchObject({
+      taskVisibility: "unavailable",
+      trackerFacet: { step: "A1" },
+    });
   });
 
   it.each([
@@ -298,6 +316,47 @@ describe("CombatProgressionProjection", () => {
       );
     },
   );
+
+  it("keeps visible and hidden player perspectives at the same canonical i1 task stage", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        currentStep: "initiative_phase_1",
+        cursorParticipantId: "hero",
+        cursorStep: "i1",
+      }),
+    );
+    const visible = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+    const hidden = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["guard"]),
+      },
+    });
+
+    expect(visible.canonicalOperationalPosition).toMatchObject({
+      task: {
+        kind: "roll_initiative",
+        trackerFacet: { owner: { participantId: "hero" }, step: "i1" },
+      },
+      taskVisibility: "visible",
+      waitingFor: "combatant",
+    });
+    expect(hidden.canonicalOperationalPosition).toMatchObject({
+      task: undefined,
+      taskVisibility: "redacted",
+      trackerFacet: { owner: undefined, step: "i1" },
+    });
+    expect(JSON.stringify(hidden)).not.toContain("hero");
+  });
 
   it("projects the first unresolved Phase 2 modifier review when the cursor row is complete", () => {
     const current = state({
@@ -763,6 +822,19 @@ describe("CombatProgressionProjection", () => {
     const difficultyTask = projection.boundary.processes[0]?.stages[0]?.tasks.find(
       (task) => task.expectedCommand === "set_combat_experience_difficulty",
     );
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["hero"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+    expect(playerView.canonicalOperationalPosition).toMatchObject({
+      taskVisibility: "redacted",
+      trackerFacet: { owner: undefined, step: "DE" },
+      waitingFor: "gm",
+    });
     expect(
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },
@@ -2224,6 +2296,76 @@ describe("authorizeCombatProgressionTask", () => {
     expect(serialized).not.toContain("blocker");
     expect(serialized).not.toContain("diagnostic");
     expect(serialized).not.toContain("proposalId");
+  });
+
+  it.each([
+    ["M1", "review_action_modifiers", "phase1_modifier_review"],
+    ["M2", "review_phase_2_modifiers", "phase2_modifier_review"],
+  ] as const)(
+    "keeps the player board at %s while the GM reviews another visible participant",
+    (cursorStep, currentStep, boundary) => {
+      const projection = buildCombatProgressionProjection(
+        state({
+          currentStep,
+          cursorParticipantId: "guard",
+          cursorStep,
+          participantOverrides: [
+            { stepStatuses: { [currentStep]: "complete" } },
+            { stepStatuses: {} },
+          ],
+        }),
+      );
+      const playerView = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["hero"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["hero", "guard"]),
+        },
+      });
+
+      expect(playerView.boundary.kind).toBe(boundary);
+      expect(playerView.canonicalOperationalPosition).toMatchObject({
+        roundNumber: 2,
+        task: {
+          actorAccess: { combatant: false, gm: true },
+          kind: "modifier_review",
+          trackerFacet: { owner: { participantId: "guard" }, step: cursorStep },
+        },
+        taskVisibility: "visible",
+        waitingFor: "gm",
+      });
+    },
+  );
+
+  it("retains a hidden canonical M2 stage without leaking or substituting the player's later work", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        currentStep: "review_phase_2_modifiers",
+        cursorParticipantId: "guard",
+        cursorStep: "M2",
+        participantOverrides: [
+          { stepStatuses: { review_phase_2_modifiers: "complete" } },
+          { stepStatuses: {} },
+        ],
+      }),
+    );
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["hero"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero"]),
+      },
+    });
+
+    expect(playerView.canonicalOperationalPosition).toMatchObject({
+      task: undefined,
+      taskVisibility: "redacted",
+      trackerFacet: { owner: undefined, step: "M2" },
+      waitingFor: "gm",
+    });
+    expect(JSON.stringify(playerView)).not.toContain("guard");
   });
 
   it("fails closed for relevant projection contradictions without exposing diagnostics", () => {

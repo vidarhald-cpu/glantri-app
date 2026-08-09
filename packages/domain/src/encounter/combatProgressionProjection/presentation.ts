@@ -2,6 +2,7 @@ import { deepFreeze } from "./internal";
 import { projectPlayerSafeCombatAutomationEligibility } from "../combatAutomationEligibility";
 import type {
   CombatantIdentity,
+  CombatProgressionCanonicalOperationalPosition,
   CombatProgressionPresentationProjection,
   CombatProgressionPresentationTask,
   CombatProgressionProjection,
@@ -201,11 +202,43 @@ function isInternalDeterministicTask(task: CombatProgressionTask): boolean {
   );
 }
 
+function canonicalOperationalTask(projection: CombatProgressionProjection):
+  | {
+      executionStrategy: CombatProgressionCanonicalOperationalPosition["executionStrategy"];
+      task: CombatProgressionTask;
+    }
+  | undefined {
+  for (const process of projection.boundary.processes) {
+    for (const stage of process.stages) {
+      if (stage.state !== "active") continue;
+      for (const group of stage.executionGroups) {
+        if (group.completionState === "complete") continue;
+        const tasks = group.tasks.filter((task) => !isInternalDeterministicTask(task));
+        const task = tasks.find((candidate) => candidate.state === "executable") ?? tasks[0];
+        if (task) return { executionStrategy: group.executionStrategy, task };
+      }
+    }
+  }
+  return undefined;
+}
+
+function waitingFor(
+  task: CombatProgressionTask | undefined,
+): CombatProgressionCanonicalOperationalPosition["waitingFor"] {
+  if (!task) return "unknown";
+  if (task.allowedActors.length === 1 && task.allowedActors[0] === "gm") return "gm";
+  if (task.owner?.kind === "combatant" || task.allowedActors.includes("combatant")) {
+    return "combatant";
+  }
+  return task.allowedActors.includes("gm") ? "gm" : "unknown";
+}
+
 /** Removes private authorization, blocker, diagnostic, proposal contents, and calculations. */
 export function projectCombatProgressionPresentation(input: {
   projection: CombatProgressionProjection;
   viewer: CombatProgressionPresentationViewer;
 }): CombatProgressionPresentationProjection {
+  const canonical = canonicalOperationalTask(input.projection);
   const processes = input.projection.boundary.processes.flatMap((process) => {
     const stages = process.stages.flatMap((stage) => {
       const executionGroups = stage.executionGroups.flatMap((group) => {
@@ -273,6 +306,27 @@ export function projectCombatProgressionPresentation(input: {
       ),
     ),
   );
+  const canonicalTask = canonical
+    ? processes
+        .flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .find((task) => task.id === canonical.task.id)
+    : undefined;
+  const canonicalGroupVisible = Boolean(
+    canonical &&
+    processes.some((process) =>
+      process.stages.some((stage) =>
+        stage.executionGroups.some((group) => group.id === canonical.task.executionGroupId),
+      ),
+    ),
+  );
+  const canonicalStageVisible = Boolean(
+    canonical &&
+    processes.some((process) =>
+      process.stages.some((stage) => stage.id === canonical.task.stageId),
+    ),
+  );
   const visibleParticipantIds =
     input.viewer.kind === "player" ? input.viewer.visibleParticipantIds : undefined;
   const executionOrder = input.projection.executionOrder
@@ -315,6 +369,34 @@ export function projectCombatProgressionPresentation(input: {
       id: input.projection.boundary.id,
       kind: input.projection.boundary.kind,
       roundNumber: input.projection.boundary.roundNumber,
+    },
+    canonicalOperationalPosition: {
+      executionGroupId: canonicalGroupVisible ? canonical?.task.executionGroupId : undefined,
+      executionStrategy: canonical?.executionStrategy,
+      processId: canonicalStageVisible ? canonical?.task.processId : undefined,
+      roundNumber: input.projection.roundNumber,
+      stageId: canonicalStageVisible ? canonical?.task.stageId : undefined,
+      task: canonicalTask,
+      taskVisibility: canonicalTask ? "visible" : canonical ? "redacted" : "unavailable",
+      trackerFacet: {
+        owner: canonicalTask?.trackerFacet.owner,
+        step:
+          canonical?.task.trackerFacet.step ??
+          (
+            {
+              declaration: "DE",
+              phase1_modifier_review: "M1",
+              phase1_initiative: "i1",
+              phase1_resolution: "A1",
+              phase2_modifier_review: "M2",
+              phase2_initiative: "i2",
+              phase2_resolution: "A2",
+              round_end: "SU",
+              round_boundary: "SU",
+            } as const
+          )[input.projection.boundary.kind],
+      },
+      waitingFor: waitingFor(canonical?.task),
     },
     executionOrder,
     processes,

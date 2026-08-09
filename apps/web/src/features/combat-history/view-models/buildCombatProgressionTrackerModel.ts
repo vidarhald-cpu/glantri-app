@@ -70,6 +70,22 @@ export function buildCombatProgressionTrackerIndex(
     }
   }
 
+  const canonicalPosition = progression.canonicalOperationalPosition;
+  const canonicalStep = canonicalPosition
+    ? getCombatRoundStepForCursorStep(canonicalPosition.trackerFacet.step)
+    : currentTasks[0]
+      ? getCombatRoundStepForCursorStep(currentTasks[0].trackerFacet.step)
+      : undefined;
+  const canonicalParticipantId = canonicalPosition?.trackerFacet.owner?.participantId;
+  const canonicalCellKey =
+    canonicalStep && canonicalParticipantId
+      ? buildCombatTrackerCellKey({
+          participantId: canonicalParticipantId,
+          roundNumber: progression.roundNumber,
+          step: canonicalStep,
+        })
+      : undefined;
+
   const byCellKey: Record<string, CombatTrackerLiveFacet> = {};
   for (const [cellKey, tasks] of tasksByCellKey) {
     const attention = tasks.some(
@@ -88,7 +104,7 @@ export function buildCombatProgressionTrackerIndex(
     )[0]!;
     byCellKey[cellKey] = {
       attention,
-      current: true,
+      current: canonicalPosition ? cellKey === canonicalCellKey : true,
       executable: tasks.some((task) => task.state === "executable"),
       executionGroupIds: unique(tasks.map((task) => task.executionGroupId)),
       gmProxyAvailable: tasks.some((task) => task.actorAccess.gm),
@@ -109,10 +125,12 @@ export function buildCombatProgressionTrackerIndex(
   return {
     byCellKey,
     conflicted: false,
-    currentStep: currentTasks[0]
-      ? getCombatRoundStepForCursorStep(currentTasks[0].trackerFacet.step)
-      : undefined,
-    currentTaskIds: currentTasks.map((task) => task.id),
+    currentStep: canonicalStep,
+    currentTaskIds: canonicalPosition
+      ? canonicalPosition.task
+        ? [canonicalPosition.task.id]
+        : []
+      : currentTasks.map((task) => task.id),
   };
 }
 
