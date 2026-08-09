@@ -2764,12 +2764,14 @@ function makeDistanceControlReviewFixture(): {
     participantInputs: {
       "encounter-participant-1": {
         distanceControl: {
+          calculationReadiness: { completeness: "complete", reasons: [], schemaVersion: 1 },
           dodgeSkillTotal: 8,
           generalFatigueModifier: -1,
         },
       },
       "encounter-participant-2": {
         distanceControl: {
+          calculationReadiness: { completeness: "complete", reasons: [], schemaVersion: 1 },
           dodgeSkillTotal: 4,
           generalFatigueModifier: 0,
         },
@@ -7529,6 +7531,133 @@ describe("scenarios route contract", () => {
         percentageContributions: [expect.objectContaining({ category: "movement_mm", value: -1 })],
       }),
     });
+  });
+
+  it("rolls contiguous GM distance checks once and stops at manual distance review", async () => {
+    const prepared = makeDistanceControlReviewFixture();
+    const participants = prepared.participants.map((participant) =>
+      scenarioParticipantSchema.parse({
+        ...participant,
+        controlledByUserId: undefined,
+        createdAt: participant.updatedAt,
+        joinSource: "gm_added",
+      }),
+    );
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const payload = stepAutomationRequest({
+      encounter: prepared.encounter,
+      operationFamily: "roll_remaining",
+      participants,
+      runId: "distance-roll-complete-run",
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        identity: { startProcessFamily: "ordinary_distance_roll" },
+        processedCount: 2,
+        stepComplete: true,
+        stopReason: "distance_review_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(
+        state.commands.filter((command) => command.type === "roll_round_end_distance_control"),
+      ).toHaveLength(2);
+      expect(state.roundEndReview?.proposedDistances[0]).toMatchObject({ status: "rolled" });
+      expect(state.roundEndReview?.proposedDistances[0]?.appliedDistance).toBeUndefined();
+      expect(state.distanceState.edges).toEqual(
+        combatRoundStateSchema.parse(prepared.encounter.combatRoundState).distanceState.edges,
+      );
+
+      const commandCount = state.commands.length;
+      const retry = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().workflow).toMatchObject({
+        alreadyAccepted: true,
+        processedCount: 2,
+        stopReason: "distance_review_required",
+      });
+      expect(
+        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).commands,
+      ).toHaveLength(commandCount);
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
+  });
+
+  it("stops before a compatibility-fallback distance calculation without rolling", async () => {
+    const prepared = makeDistanceControlReviewFixture();
+    const state = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    const proposal = state.roundEndReview!.proposedDistances[0]!;
+    const fallbackState = combatRoundStateSchema.parse({
+      ...state,
+      roundEndReview: {
+        ...state.roundEndReview,
+        proposedDistances: [
+          {
+            ...proposal,
+            currentDistanceSource: "compatibility_fallback",
+            warnings: ["Current distance was unavailable; using 2 for this review."],
+          },
+        ],
+      },
+    });
+    const encounter = { ...prepared.encounter, combatRoundState: fallbackState };
+    const participants = prepared.participants.map((participant) =>
+      scenarioParticipantSchema.parse({
+        ...participant,
+        controlledByUserId: undefined,
+        createdAt: participant.updatedAt,
+        joinSource: "gm_added",
+      }),
+    );
+    const fixture = setupMutableCombatRouteState({
+      encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const payload = stepAutomationRequest({
+      encounter,
+      operationFamily: "roll_remaining",
+      participants,
+      runId: "distance-fallback-blocked-run",
+    });
+    const app = await buildScenarioTestApp();
+    try {
+      const response = await app.inject({
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 0,
+        stepComplete: false,
+        stopReason: "distance_calculation_review_required",
+      });
+      expect(
+        combatRoundStateSchema
+          .parse(fixture.encounter.combatRoundState)
+          .commands.filter((command) => command.type === "roll_round_end_distance_control"),
+      ).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
   });
 
   it("authorizes the projected GM distance commit through the round-end command route", async () => {

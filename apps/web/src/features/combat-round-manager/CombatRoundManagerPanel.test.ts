@@ -32,6 +32,8 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("Roll remaining GM Continued Contact checks");
     expect(source).toContain('descriptor.commandType === "roll_continued_contact_maintenance"');
+    expect(source).toContain("Roll remaining GM distance-control checks");
+    expect(source).toContain('descriptor.commandType === "roll_round_end_distance_control"');
     expect(source).toContain("Stops before player-owned, relationship-review, or distance work.");
     expect(source).not.toContain("Accept remaining Continued Contact distances");
   });

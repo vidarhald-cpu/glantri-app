@@ -165,7 +165,7 @@ function missingPureRollFact(task: CombatAutomationTaskInput): CombatAutomationR
         ? undefined
         : "relationship_ambiguity";
     case "distance_roll":
-      return task.identity.proposalId && task.identity.pairId
+      return task.identity.proposalId && task.identity.pairId && task.identity.opponentParticipantId
         ? undefined
         : "relationship_ambiguity";
     case "observation_roll":

@@ -212,9 +212,10 @@ import {
   type ActiveCombatDeterministicAdvanceDescriptor,
   type ScenarioParticipantState,
   type CombatStepAutomationProjection,
+  type CombatStepAutomationProcessFamily,
   type CombatStepAutomationRunIdentity,
   type CombatStepAutomationStopReason,
-  type CombatParticipationProcessFamily,
+  type CombatRoundEndDistanceCalculationReadiness,
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
@@ -692,12 +693,24 @@ function buildRoundEndParticipantInputs(input: {
         Object.values(scenarioParticipant.state.combat.combatContext?.modifierBuckets ?? {}).some(
           (entries) => entries.length > 0,
         );
+      const movementBurden = resolveScenarioParticipantMovementBurden(scenarioParticipant);
+      const readinessReasons: CombatRoundEndDistanceCalculationReadiness["reasons"] = [
+        ...(sheetFacts.dodgeSkillTotal === undefined ? (["dodge_facts"] as const) : []),
+        ...(sheetFacts.dodgeStatValue === undefined ? (["dexterity_facts"] as const) : []),
+        ...(movementBurden.completeness !== "complete" ? (["movement_modifier"] as const) : []),
+      ];
+      const calculationReadiness: CombatRoundEndDistanceCalculationReadiness = {
+        completeness: readinessReasons.length === 0 ? "complete" : "incomplete",
+        reasons: readinessReasons,
+        schemaVersion: 1,
+      };
       return [
         [
           roundParticipant.participantId,
           {
             combatEffects: scenarioParticipant.state.combatEffects,
             distanceControl: {
+              calculationReadiness,
               dodgeSkillLabel: sheetFacts.dodgeSkillLabel,
               dodgeSkillXp: sheetFacts.dodgeSkillXp,
               dodgeSkillTotal: sheetFacts.dodgeSkillTotal,
@@ -4233,13 +4246,121 @@ function getStraightforwardStepAutomationModifierReview(input: {
   return { currentContext, declaration, review, roundParticipant, straightforward };
 }
 
+function resolveApiCombatDistanceAutomationContext(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: readonly ScenarioParticipant[];
+  state: CombatRoundState;
+  task: CombatProgressionTask;
+}):
+  | {
+      kind: "complete";
+      distanceInputs: ReturnType<typeof buildRoundEndDistanceControlInputs>;
+      opponent: ScenarioParticipant;
+      opponentCombatantId: string;
+      owner: NonNullable<ReturnType<typeof getStepAutomationScenarioParticipant>>;
+      proposal: CombatRoundEndDistanceProposal;
+    }
+  | { kind: "stopped"; reason: CombatStepAutomationStopReason } {
+  if (input.task.kind !== "distance_roll") {
+    return { kind: "stopped", reason: "unsupported_task" };
+  }
+  const owner = getStepAutomationScenarioParticipant({
+    scenarioParticipants: input.scenarioParticipants,
+    state: input.state,
+    task: input.task,
+  });
+  const proposal = input.state.roundEndReview?.proposedDistances.find(
+    (candidate) => candidate.id === input.task.identity.proposalId,
+  );
+  const opponentCombatantId = input.task.identity.opponentParticipantId;
+  if (!owner || !proposal || !opponentCombatantId) {
+    return { kind: "stopped", reason: "distance_calculation_review_required" };
+  }
+  const normalizedPair = createCombatParticipantPairKey(
+    proposal.participantAId,
+    proposal.participantBId,
+  );
+  const [normalizedParticipantAId, normalizedParticipantBId] = normalizedPair.split("::");
+  const expectedOpponentId =
+    owner.encounterParticipantId === proposal.participantAId
+      ? proposal.participantBId
+      : owner.encounterParticipantId === proposal.participantBId
+        ? proposal.participantAId
+        : undefined;
+  const side =
+    owner.encounterParticipantId === proposal.participantAId
+      ? proposal.participantA
+      : owner.encounterParticipantId === proposal.participantBId
+        ? proposal.participantB
+        : undefined;
+  if (
+    proposal.controlMode !== "ordinary" ||
+    proposal.pairKey !== normalizedPair ||
+    proposal.participantAId !== normalizedParticipantAId ||
+    proposal.participantBId !== normalizedParticipantBId ||
+    input.task.identity.pairId !== normalizedPair ||
+    expectedOpponentId !== opponentCombatantId ||
+    side?.participantId !== owner.encounterParticipantId ||
+    side.status !== "pending"
+  ) {
+    return { kind: "stopped", reason: "invalid_proposal" };
+  }
+  const currentEdge = getCombatRoundDistanceEdge({
+    participantAId: proposal.participantAId,
+    participantBId: proposal.participantBId,
+    state: input.state,
+  });
+  if (
+    proposal.currentDistanceSource !== "canonical" ||
+    !currentEdge ||
+    currentEdge.distance !== proposal.currentDistance ||
+    proposal.warnings.length > 0 ||
+    side.warnings.length > 0 ||
+    side.calculationReadiness?.completeness !== "complete"
+  ) {
+    return { kind: "stopped", reason: "distance_calculation_review_required" };
+  }
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: [...input.scenarioParticipants],
+  });
+  const opponentCombatant = membership.participants.find(
+    (participant) => participant.id === opponentCombatantId,
+  );
+  const opponent = opponentCombatant?.scenarioParticipantId
+    ? input.scenarioParticipants.find(
+        (participant) => participant.id === opponentCombatant.scenarioParticipantId,
+      )
+    : undefined;
+  if (!opponent) {
+    return { kind: "stopped", reason: "distance_calculation_review_required" };
+  }
+  const distanceInputs = buildRoundEndDistanceControlInputs({
+    encounter: input.encounter,
+    roundState: input.state,
+    scenarioParticipants: [...input.scenarioParticipants],
+  });
+  const currentReadiness = distanceInputs[owner.encounterParticipantId]?.calculationReadiness;
+  if (currentReadiness?.completeness !== "complete") {
+    return { kind: "stopped", reason: "distance_calculation_review_required" };
+  }
+  return {
+    distanceInputs,
+    kind: "complete",
+    opponent,
+    opponentCombatantId,
+    owner,
+    proposal,
+  };
+}
+
 function classifyApiCombatStepAutomationTask(input: {
   combatExperienceSkillLookups?: ReadonlyMap<string, ParticipantCombatExperienceSkillTotalLookup>;
   encounter: EncounterSession;
   operationFamily: "roll_remaining" | "accept_remaining" | "commit_remaining";
   projection: ApiCombatStepAutomationProjection;
   scenarioParticipants: readonly ScenarioParticipant[];
-  scopeProcessFamily?: CombatParticipationProcessFamily;
+  scopeProcessFamily?: CombatStepAutomationProcessFamily;
   task: CombatProgressionTask;
 }):
   | { kind: "execute"; countsTowardProcessed: boolean }
@@ -4322,6 +4443,21 @@ function classifyApiCombatStepAutomationTask(input: {
         : "invalid_proposal",
     };
   }
+  if (operationFamily === "roll_remaining" && task.kind === "distance_roll") {
+    if (
+      input.scopeProcessFamily !== "ordinary_distance_roll" ||
+      input.projection.step !== "round_summary"
+    ) {
+      return { kind: "stop", reason: "unsupported_task" };
+    }
+    const context = resolveApiCombatDistanceAutomationContext({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+      state: input.projection.state,
+      task,
+    });
+    if (context.kind === "stopped") return { kind: "stop", reason: context.reason };
+  }
   if (task.participation?.completeness !== "complete") {
     return { kind: "stop", reason: "incomplete_legacy_state" };
   }
@@ -4332,7 +4468,8 @@ function classifyApiCombatStepAutomationTask(input: {
       task.kind !== "combat_experience" &&
       task.kind !== "health_review" &&
       task.kind !== "observation_roll" &&
-      task.kind !== "continued_contact_maintenance_roll"
+      task.kind !== "continued_contact_maintenance_roll" &&
+      task.kind !== "distance_roll"
     ) {
       return { kind: "stop", reason: "unsupported_task" };
     }
@@ -11249,7 +11386,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             ? "observation"
             : initialTask?.kind === "continued_contact_maintenance_roll"
               ? "continued_contact"
-              : undefined);
+              : initialTask?.kind === "distance_roll"
+                ? "ordinary_distance_roll"
+                : undefined);
       const identity: CombatStepAutomationRunIdentity = {
         encounterId,
         gmActorUserId: user.id,
@@ -11313,7 +11452,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ? identity.startProcessFamily === "continued_contact" &&
             (currentTask?.kind === "distance_roll" || currentTask?.kind === "distance_commit")
             ? "distance_decision_required"
-            : "end_of_step"
+            : identity.startProcessFamily === "ordinary_distance_roll" &&
+                currentTask?.kind === "distance_commit"
+              ? "distance_review_required"
+              : "end_of_step"
           : currentDecision?.kind === "stop"
             ? currentDecision.reason
             : acceptedLinks.length >= DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT
@@ -11407,6 +11549,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             task.kind === "health_review" ||
             task.kind === "observation_roll" ||
             task.kind === "continued_contact_maintenance_roll" ||
+            task.kind === "distance_roll" ||
             task.kind === "modifier_review" ||
             task.kind === "submit_declaration";
           const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
@@ -11415,6 +11558,79 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ).toISOString();
 
           try {
+            if (task.kind === "distance_roll") {
+              const context = resolveApiCombatDistanceAutomationContext({
+                encounter: workingEncounter!,
+                scenarioParticipants: workingParticipants,
+                state: apiProjection.state,
+                task,
+              });
+              if (context.kind === "stopped") {
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: context.reason,
+                };
+              }
+              const openEndedRoll = rollOpenEndedD20();
+              const calculation = resolveAdjustDistanceSkillContestCalculation({
+                calculationId: `${context.proposal.id}:roll:${context.owner.encounterParticipantId}`,
+                contestType: "round_end_adjust_distance",
+                encounterId,
+                modifierContributions:
+                  context.distanceInputs[context.owner.encounterParticipantId]
+                    ?.modifierContributions,
+                opponentCombatantId: context.opponentCombatantId,
+                opponentLabel: context.opponent.snapshot.displayName,
+                opponentScenarioParticipantId: context.opponent.id,
+                participant: context.owner.participant,
+                participantCombatantId: context.owner.encounterParticipantId,
+                proposalId: context.proposal.id,
+                role: getRoundEndAdjustDistanceRole({
+                  participantId: context.owner.encounterParticipantId,
+                  proposal: context.proposal,
+                }),
+                roll: openEndedRoll,
+                roundNumber: apiProjection.state.roundNumber,
+                roundState: apiProjection.state,
+                step: "round_summary",
+              });
+              const rolled = rollCombatRoundEndDistanceControl({
+                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                distanceProposalId: context.proposal.id,
+                participantId: context.owner.encounterParticipantId,
+                result: buildRoundEndDistanceRollResult({
+                  calculation,
+                  createdAt: submittedAt,
+                  createdByUserId: user.id,
+                  rolledAtRound: apiProjection.state.roundNumber,
+                  rolledBy: "gm_proxy",
+                }),
+                state: apiProjection.state,
+              });
+              const nextState = attachCombatStepAutomationCommandLink({
+                commandId,
+                countsTowardProcessed,
+                executionGroupId: task.executionGroupId,
+                identity,
+                state: rolled.state,
+                taskId: task.id,
+              });
+              workingEncounter = await encounterService.updateCombatEncounter({
+                campaignId: access.campaignId,
+                encounterId,
+                expectedRevision: workingEncounter!.updatedAt,
+                scenarioId,
+                session: {
+                  ...workingEncounter!,
+                  combatRoundState: nextState,
+                  currentRound: nextState.roundNumber,
+                  updatedAt: submittedAt,
+                },
+              });
+              return { kind: "accepted" as const, projection: project() };
+            }
+
             if (task.kind === "continued_contact_maintenance_roll") {
               const owner = getStepAutomationScenarioParticipant({
                 scenarioParticipants: workingParticipants,
@@ -12303,7 +12519,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (workflowResult.finalTask?.kind === "distance_roll" ||
           workflowResult.finalTask?.kind === "distance_commit")
           ? { ...workflowResult, stopReason: "distance_decision_required" as const }
-          : workflowResult;
+          : identity.startProcessFamily === "ordinary_distance_roll" &&
+              workflowResult.stopReason === "end_of_step" &&
+              workflowResult.finalTask?.kind === "distance_commit"
+            ? { ...workflowResult, stopReason: "distance_review_required" as const }
+            : workflowResult;
       const finalTask = finalProjection.tasks[0];
       const finalOwner = finalTask
         ? getStepAutomationScenarioParticipant({

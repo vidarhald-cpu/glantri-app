@@ -784,11 +784,28 @@ describe("canonical combat participation", () => {
                 accepted: true,
                 appliesFromRound: 3,
                 currentDistance: 2,
+                currentDistanceSource: "canonical",
                 id: "distance-1",
                 pairKey: "guard::hero",
-                participantA: { participantId: "hero", status: "pending" },
+                participantA: {
+                  calculationReadiness: {
+                    completeness: "complete",
+                    reasons: [],
+                    schemaVersion: 1,
+                  },
+                  participantId: "hero",
+                  status: "pending",
+                },
                 participantAId: "hero",
-                participantB: { participantId: "guard", status: "pending" },
+                participantB: {
+                  calculationReadiness: {
+                    completeness: "complete",
+                    reasons: [],
+                    schemaVersion: 1,
+                  },
+                  participantId: "guard",
+                  status: "pending",
+                },
                 participantBId: "guard",
                 requiresContest: true,
                 status: "pending_rolls",
@@ -812,13 +829,18 @@ describe("canonical combat participation", () => {
         { authority: "gm", participantId: "guard", role: "affected" },
       ],
     });
-    expect(
-      fact(projection, {
-        family: "distance_control",
-        participantId: "hero",
-        step: "distance_roll",
-      }),
-    ).toMatchObject({ reason: "distance_control_due", status: "required" });
+    const distance = fact(projection, {
+      family: "distance_control",
+      participantId: "hero",
+      step: "distance_roll",
+    });
+    expect(distance).toMatchObject({
+      completeness: "complete",
+      identity: { opponentParticipantId: "guard" },
+      ownership: { kind: "player_owned", participantId: "hero" },
+      reason: "distance_control_due",
+      status: "required",
+    });
   });
 
   it("projects pending Observe Opponent work without leaking it to another player", () => {

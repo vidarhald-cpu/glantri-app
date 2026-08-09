@@ -36,6 +36,13 @@ function isContinuedContactRun(result: CombatStepAutomationRunResult): boolean {
   );
 }
 
+function isDistanceRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "ordinary_distance_roll"
+  );
+}
+
 function operationLabel(result: CombatStepAutomationRunResult): string {
   if (result.identity.operationFamily === "roll_remaining") {
     if (isHealthRun(result)) {
@@ -46,6 +53,9 @@ function operationLabel(result: CombatStepAutomationRunResult): string {
     }
     if (isContinuedContactRun(result)) {
       return "Roll remaining GM Continued Contact checks";
+    }
+    if (isDistanceRun(result)) {
+      return "Roll remaining GM distance-control checks";
     }
     if (isCombatExperienceRun(result)) {
       return "Roll remaining GM Combat Experience";
@@ -73,7 +83,8 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
       return isCombatExperienceRun(result) ||
         isHealthRun(result) ||
         isObservationRun(result) ||
-        isContinuedContactRun(result)
+        isContinuedContactRun(result) ||
+        isDistanceRun(result)
         ? "Player roll required."
         : "Player action required.";
     case "gm_decision_required":
@@ -109,6 +120,10 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
       return "Continued Contact requires GM review.";
     case "distance_decision_required":
       return "Distance decision required.";
+    case "distance_calculation_review_required":
+      return "Distance calculation requires review.";
+    case "distance_review_required":
+      return "GM distance review required.";
     case "roll_not_eligible":
       return "This roll requires manual attention.";
     case "safety_limit_reached":
@@ -128,42 +143,47 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
   const health = isHealthRun(result);
   const observation = isObservationRun(result);
   const continuedContact = isContinuedContactRun(result);
+  const distance = isDistanceRun(result);
   const declarations =
     result.identity.operationFamily === "accept_remaining" &&
     result.identity.startingStep === "select_actions";
-  const processedSummary = continuedContact
-    ? `Rolled ${result.processedCount} Continued Contact check${result.processedCount === 1 ? "" : "s"}.`
-    : observation
-      ? `Rolled ${result.processedCount} NPC Observe check${result.processedCount === 1 ? "" : "s"}.`
-      : health
-        ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
-        : combatExperience
-          ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
-          : initiative
-            ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
-            : declarations
-              ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
-              : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
-  const completion = result.stepComplete
-    ? continuedContact
-      ? "Completed Continued Contact maintenance."
+  const processedSummary = distance
+    ? `Rolled ${result.processedCount} NPC distance check${result.processedCount === 1 ? "" : "s"}.`
+    : continuedContact
+      ? `Rolled ${result.processedCount} Continued Contact check${result.processedCount === 1 ? "" : "s"}.`
       : observation
-        ? "Completed Observe work."
+        ? `Rolled ${result.processedCount} NPC Observe check${result.processedCount === 1 ? "" : "s"}.`
         : health
-          ? "Completed Health/Bleed work."
+          ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
           : combatExperience
-            ? "Completed Combat Experience."
-            : result.identity.startingStep === "initiative_phase_1"
-              ? "Completed Phase 1 initiative."
-              : result.identity.startingStep === "initiative_phase_2"
-                ? "Completed Phase 2 initiative."
-                : result.identity.startingStep === "review_action_modifiers"
-                  ? "Completed M1."
-                  : result.identity.startingStep === "select_actions"
-                    ? "Completed DE."
-                    : result.identity.startingStep === "review_phase_2_modifiers"
-                      ? "Completed M2."
-                      : "Completed the step."
+            ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
+            : initiative
+              ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
+              : declarations
+                ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
+                : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
+  const completion = result.stepComplete
+    ? distance
+      ? "Completed distance rolls."
+      : continuedContact
+        ? "Completed Continued Contact maintenance."
+        : observation
+          ? "Completed Observe work."
+          : health
+            ? "Completed Health/Bleed work."
+            : combatExperience
+              ? "Completed Combat Experience."
+              : result.identity.startingStep === "initiative_phase_1"
+                ? "Completed Phase 1 initiative."
+                : result.identity.startingStep === "initiative_phase_2"
+                  ? "Completed Phase 2 initiative."
+                  : result.identity.startingStep === "review_action_modifiers"
+                    ? "Completed M1."
+                    : result.identity.startingStep === "select_actions"
+                      ? "Completed DE."
+                      : result.identity.startingStep === "review_phase_2_modifiers"
+                        ? "Completed M2."
+                        : "Completed the step."
     : undefined;
   return {
     completion,

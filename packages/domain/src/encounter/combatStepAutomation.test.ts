@@ -285,6 +285,40 @@ describe("canonical GM step automation", () => {
     expect(result.finalTask?.kind).toBe("distance_commit");
   });
 
+  it("keeps ordinary distance rolls in their exact family and stops before GM commit", async () => {
+    const first = processTask("distance-a", "npc-a", "distance", "distance_roll");
+    const second = processTask("distance-b", "npc-b", "distance", "distance_roll");
+    const commit = processTask("distance-commit", "gm", "distance", "distance_commit");
+    const distanceIdentity = combatStepAutomationRunIdentitySchema.parse({
+      ...identity(),
+      startExecutionGroupId: first.executionGroupId,
+      startProcessFamily: "ordinary_distance_roll",
+      startProcessId: first.processId,
+      startingStep: "round_summary",
+      startTaskId: first.id,
+    });
+    const sequence = [[second], [commit]];
+    let executions = 0;
+    const result = await runCombatStepAutomation({
+      classify: () => ({ countsTowardProcessed: true, kind: "execute" }),
+      execute: async () => ({
+        kind: "accepted",
+        projection: projection({
+          revision: `revision-${executions + 2}`,
+          step: "round_summary",
+          tasks: sequence[executions++] ?? [],
+        }),
+      }),
+      identity: distanceIdentity,
+      initial: projection({ step: "round_summary", tasks: [first] }),
+    });
+
+    expect(result.acceptedTasks.map((entry) => entry.taskId)).toEqual(["distance-a", "distance-b"]);
+    expect(result.processedCount).toBe(2);
+    expect(result.stepComplete).toBe(true);
+    expect(result.finalTask?.kind).toBe("distance_commit");
+  });
+
   it("stops before warnings and never executes the warned task", async () => {
     let executions = 0;
     const result = await runCombatStepAutomation({

@@ -22,6 +22,7 @@ import {
   getCombatRoundPhaseInitiativeChoice,
   getPendingCombatObservationAttempts,
   isCombatStartExperienceRollRequired,
+  sortCombatRoundEndDistanceProposals,
   type CombatRoundPhase,
   type CombatRoundState,
 } from "../combatRoundManager";
@@ -982,7 +983,7 @@ function projectRoundEnd(context: ProjectionContext): void {
     }
   }
 
-  for (const proposal of review?.proposedDistances ?? []) {
+  for (const proposal of sortCombatRoundEndDistanceProposals(review?.proposedDistances ?? [])) {
     const ownership = pairOwnership(
       context,
       proposal.participantAId,
@@ -994,9 +995,26 @@ function projectRoundEnd(context: ProjectionContext): void {
       const due = proposal.accepted && side.status === "pending";
       const resolved = side.status === "rolled" || side.status === "not_required";
       const roll = participantRoll(context, side.participantId, "distance_control");
+      const opponentParticipantId =
+        side.participantId === proposal.participantAId
+          ? proposal.participantBId
+          : proposal.participantAId;
+      const legacyIncomplete =
+        proposal.currentDistanceSource === undefined || side.calculationReadiness === undefined;
+      const calculationIncomplete =
+        proposal.currentDistanceSource === "compatibility_fallback" ||
+        proposal.warnings.length > 0 ||
+        side.warnings.length > 0 ||
+        side.calculationReadiness?.completeness === "incomplete";
       addFact(context, {
+        completeness: legacyIncomplete
+          ? "legacy_incomplete"
+          : calculationIncomplete
+            ? "partial"
+            : "complete",
         ordering: "pair_order",
-        ownership,
+        opponentParticipantId,
+        ownership: roll.ownership,
         pairId: proposal.pairKey,
         participantId: side.participantId,
         processFamily: "distance_control",

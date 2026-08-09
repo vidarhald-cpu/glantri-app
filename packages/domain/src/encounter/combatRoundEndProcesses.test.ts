@@ -6,7 +6,9 @@ import {
 } from "./combatRoundEndProcesses";
 import {
   combatRoundStateSchema,
+  combatRoundEndDistanceProposalSchema,
   rollCombatRoundEndDistanceControl,
+  sortCombatRoundEndDistanceProposals,
   undoLatestCombatRoundCommand,
   type CombatRoundEndDistanceRollResult,
   type CombatRoundState,
@@ -145,6 +147,40 @@ function distanceRollResult(input: {
 }
 
 describe("combat round-end process plans", () => {
+  it("sorts copied active distance proposals by normalized pair and proposal identity", () => {
+    const proposal = (
+      pairKey: string,
+      id: string,
+      participantAId: string,
+      participantBId: string,
+    ) =>
+      combatRoundEndDistanceProposalSchema.parse({
+        appliesFromRound: 4,
+        currentDistance: 2,
+        currentDistanceSource: "canonical",
+        id,
+        pairKey,
+        participantA: { participantId: participantAId, status: "pending" },
+        participantAId,
+        participantB: { participantId: participantBId, status: "pending" },
+        participantBId,
+        requiresContest: true,
+        status: "pending_rolls",
+      });
+    const persisted = [
+      proposal("mage::orc", "proposal-b", "mage", "orc"),
+      proposal("guard::hero", "proposal-z", "guard", "hero"),
+      proposal("guard::hero", "proposal-a", "guard", "hero"),
+    ];
+
+    expect(sortCombatRoundEndDistanceProposals(persisted).map((entry) => entry.id)).toEqual([
+      "proposal-a",
+      "proposal-z",
+      "proposal-b",
+    ]);
+    expect(persisted.map((entry) => entry.id)).toEqual(["proposal-b", "proposal-z", "proposal-a"]);
+  });
+
   it("builds an immutable deterministic prepare process without mutating state", () => {
     const source = state();
     const before = JSON.stringify(source);

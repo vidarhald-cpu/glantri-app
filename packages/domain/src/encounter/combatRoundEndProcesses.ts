@@ -2,6 +2,7 @@ import {
   combatRoundStateSchema,
   getPendingCombatObservationAttempts,
   getCombatRoundEndDistanceProposalLifecycle,
+  sortCombatRoundEndDistanceProposals,
   sortCombatRoundParticipantsByInitiative,
   type CombatRoundCommandType,
   type CombatRoundState,
@@ -249,7 +250,7 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
 
   const distanceRollTasks: CombatRoundEndProcessTaskPlan[] = maintenancePending
     ? []
-    : validReview.proposedDistances.flatMap((proposal) => {
+    : sortCombatRoundEndDistanceProposals(validReview.proposedDistances).flatMap((proposal) => {
         if (
           !proposal.accepted ||
           getCombatRoundEndDistanceProposalLifecycle(proposal) !== "pending_rolls"
@@ -291,7 +292,7 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
       });
   const distanceCommit = maintenancePending
     ? undefined
-    : validReview.proposedDistances.find(
+    : sortCombatRoundEndDistanceProposals(validReview.proposedDistances).find(
         (proposal) =>
           proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved",
       );

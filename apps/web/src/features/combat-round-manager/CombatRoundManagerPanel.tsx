@@ -6487,6 +6487,9 @@ export default function CombatRoundManagerPanel({
       (currentActionPresentation?.taskKind === "continued_contact_maintenance_roll" &&
         inspectorCurrentCommandType === "roll_continued_contact_maintenance" &&
         !selectedScenarioParticipant?.controlledByUserId) ||
+      (currentActionPresentation?.taskKind === "distance_roll" &&
+        inspectorCurrentCommandType === "roll_round_end_distance_control" &&
+        !selectedScenarioParticipant?.controlledByUserId) ||
       (currentActionPresentation?.taskKind === "submit_declaration" &&
         !selectedScenarioParticipant?.controlledByUserId)) &&
     !(currentActionPresentation?.taskKind === "modifier_review" && inspectorHasLocalModifierEdits);
@@ -6548,9 +6551,11 @@ export default function CombatRoundManagerPanel({
                   ? "Roll remaining GM Observe checks"
                   : currentActionPresentation?.taskKind === "continued_contact_maintenance_roll"
                     ? "Roll remaining GM Continued Contact checks"
-                    : currentActionPresentation?.taskKind === "submit_declaration"
-                      ? "Accept remaining NPC declarations"
-                      : "Roll remaining GM initiative"}
+                    : currentActionPresentation?.taskKind === "distance_roll"
+                      ? "Roll remaining GM distance-control checks"
+                      : currentActionPresentation?.taskKind === "submit_declaration"
+                        ? "Accept remaining NPC declarations"
+                        : "Roll remaining GM initiative"}
         </option>
       </select>
     </label>
@@ -6566,9 +6571,11 @@ export default function CombatRoundManagerPanel({
             ? "Roll remaining GM Observe checks"
             : currentActionPresentation?.taskKind === "continued_contact_maintenance_roll"
               ? "Roll remaining GM Continued Contact checks"
-              : currentActionPresentation?.taskKind === "submit_declaration"
-                ? "Accept remaining NPC declarations"
-                : "Roll remaining GM initiative";
+              : currentActionPresentation?.taskKind === "distance_roll"
+                ? "Roll remaining GM distance-control checks"
+                : currentActionPresentation?.taskKind === "submit_declaration"
+                  ? "Accept remaining NPC declarations"
+                  : "Roll remaining GM initiative";
   const inspectorWorkflowActionLabel = inspectorSkipActionSelected
     ? `Skip ${getPlayerCombatStepLabel(inspector.step).toLowerCase()} for ${
         inspector.participant?.label ?? "participant"
@@ -6591,9 +6598,11 @@ export default function CombatRoundManagerPanel({
                     ? "Observe Opponent"
                     : currentActionPresentation.taskKind === "continued_contact_maintenance_roll"
                       ? "Continued Contact"
-                      : currentActionPresentation.taskKind === "submit_declaration"
-                        ? "Declaration"
-                        : "Initiative"
+                      : currentActionPresentation.taskKind === "distance_roll"
+                        ? "Distance control"
+                        : currentActionPresentation.taskKind === "submit_declaration"
+                          ? "Declaration"
+                          : "Initiative"
             : currentActionPresentation.heading,
           primaryAction: {
             ...currentActionPresentation.primaryAction,
@@ -6610,9 +6619,11 @@ export default function CombatRoundManagerPanel({
                     ? "Stops before player-owned or relationship-review Observe work."
                     : currentActionPresentation.taskKind === "continued_contact_maintenance_roll"
                       ? "Stops before player-owned, relationship-review, or distance work."
-                      : currentActionPresentation.taskKind === "submit_declaration"
-                        ? "Stops at the first declaration requiring attention."
-                        : "Stops before player-owned or attention-required initiative."
+                      : currentActionPresentation.taskKind === "distance_roll"
+                        ? "Stops before player-owned, incomplete, or GM distance-review work."
+                        : currentActionPresentation.taskKind === "submit_declaration"
+                          ? "Stops at the first declaration requiring attention."
+                          : "Stops before player-owned or attention-required initiative."
             : `${inspectorWorkflowActionLabel}.`,
           summary: inspectorBulkStepCompletionSelected
             ? currentActionPresentation.taskKind === "modifier_review"
@@ -6625,9 +6636,11 @@ export default function CombatRoundManagerPanel({
                     ? "Roll exact GM-controlled NPC Observe contests in canonical SU order."
                     : currentActionPresentation.taskKind === "continued_contact_maintenance_roll"
                       ? "Roll exact GM-controlled Continued Contact maintenance sides in canonical order."
-                      : currentActionPresentation.taskKind === "submit_declaration"
-                        ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
-                        : "Roll eligible GM-controlled participant initiative in canonical order."
+                      : currentActionPresentation.taskKind === "distance_roll"
+                        ? "Roll exact GM-controlled ordinary distance contests in canonical pair order."
+                        : currentActionPresentation.taskKind === "submit_declaration"
+                          ? "Accept valid prior-round GM-controlled NPC declarations in canonical order."
+                          : "Roll eligible GM-controlled participant initiative in canonical order."
             : currentActionPresentation.summary,
         }
       : currentActionPresentation;
@@ -10354,6 +10367,7 @@ export default function CombatRoundManagerPanel({
         "roll_round_end_health_check",
         "roll_observation",
         "roll_continued_contact_maintenance",
+        "roll_round_end_distance_control",
         "declare_action",
       ],
       presentation: currentActionPresentation,
@@ -10375,7 +10389,8 @@ export default function CombatRoundManagerPanel({
       descriptor.commandType === "roll_combat_experience" ||
       descriptor.commandType === "roll_round_end_health_check" ||
       descriptor.commandType === "roll_observation" ||
-      descriptor.commandType === "roll_continued_contact_maintenance"
+      descriptor.commandType === "roll_continued_contact_maintenance" ||
+      descriptor.commandType === "roll_round_end_distance_control"
         ? "roll_remaining"
         : "accept_remaining";
     if (operationFamily === "accept_remaining" && inspectorHasLocalModifierEdits) {

@@ -159,7 +159,7 @@ describe("combat route canonical-conformance guards", () => {
     expect(resolverSource).not.toContain("calculateDB");
     expect(resolverSource).not.toContain("shield");
 
-    expect(source.match(/resolveAdjustDistanceSkillContestCalculation\(\{/g)?.length).toBe(3);
+    expect(source.match(/resolveAdjustDistanceSkillContestCalculation\(\{/g)?.length).toBe(4);
     expect(source).toContain('contestType: "adjust_distance_attack"');
     expect(source).toContain('contestType: "round_end_adjust_distance"');
   });

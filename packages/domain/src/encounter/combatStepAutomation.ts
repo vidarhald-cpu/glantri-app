@@ -17,6 +17,14 @@ export type CombatStepAutomationOperationFamily = z.infer<
   typeof combatStepAutomationOperationFamilySchema
 >;
 
+export const combatStepAutomationProcessFamilySchema = z.union([
+  combatParticipationProcessFamilySchema,
+  z.literal("ordinary_distance_roll"),
+]);
+export type CombatStepAutomationProcessFamily = z.infer<
+  typeof combatStepAutomationProcessFamilySchema
+>;
+
 export const combatStepAutomationStopReasonSchema = z.enum([
   "end_of_step",
   "player_action_required",
@@ -37,6 +45,8 @@ export const combatStepAutomationStopReasonSchema = z.enum([
   "observation_review_required",
   "continued_contact_review_required",
   "distance_decision_required",
+  "distance_calculation_review_required",
+  "distance_review_required",
   "roll_not_eligible",
   "safety_limit_reached",
   "persistence_failure",
@@ -74,7 +84,7 @@ export const combatStepAutomationCommandLinkSchema = z.object({
   operationFamily: combatStepAutomationOperationFamilySchema,
   runId: z.string().min(1),
   schemaVersion: z.literal(CANONICAL_COMBAT_STEP_AUTOMATION_SCHEMA_VERSION),
-  startProcessFamily: combatParticipationProcessFamilySchema.optional(),
+  startProcessFamily: combatStepAutomationProcessFamilySchema.optional(),
   startingSequence: z.number().int().nonnegative(),
   startingRevision: z.string().min(1),
   taskId: z.string().min(1),
@@ -91,7 +101,7 @@ export const combatStepAutomationRunIdentitySchema = z.object({
   /** Optional for v1 compatibility; new runs use it as an exact process-level fence. */
   startProcessId: z.string().min(1).optional(),
   /** Optional for v1 compatibility; process-family consumers use it for bounded closure work. */
-  startProcessFamily: combatParticipationProcessFamilySchema.optional(),
+  startProcessFamily: combatStepAutomationProcessFamilySchema.optional(),
   startingRevision: z.string().min(1),
   startingRound: z.number().int().positive(),
   startingSequence: z.number().int().nonnegative(),
@@ -179,6 +189,9 @@ export function isCombatStepAutomationProjectionWithinScope<State>(input: {
   }
   if (identity.startProcessFamily === "continued_contact") {
     return task.kind === "continued_contact_maintenance_roll";
+  }
+  if (identity.startProcessFamily === "ordinary_distance_roll") {
+    return task.kind === "distance_roll";
   }
   return identity.startProcessId === undefined || task.processId === identity.startProcessId;
 }

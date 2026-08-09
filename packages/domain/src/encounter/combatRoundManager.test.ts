@@ -13828,6 +13828,7 @@ describe("combat round manager", () => {
     expect(getNextCombatRoundEndTask({ state: reviewed })).toEqual({
       distanceProposalId: proposal?.id,
       kind: "distance_roll",
+      opponentParticipantId: "guard",
       pairKey: proposal?.pairKey,
       participantId: "gladiator",
     });
@@ -13890,6 +13891,7 @@ describe("combat round manager", () => {
     expect(getNextCombatRoundEndTask({ state: gladiatorRolled.state })).toEqual({
       distanceProposalId: proposal?.id,
       kind: "distance_roll",
+      opponentParticipantId: "gladiator",
       pairKey: proposal?.pairKey,
       participantId: "guard",
     });

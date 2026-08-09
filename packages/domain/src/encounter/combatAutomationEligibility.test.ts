@@ -130,7 +130,11 @@ describe("canonical combat automation eligibility", () => {
       "distance_roll",
       {
         expectedCommand: "roll_round_end_distance_control",
-        identity: { pairId: "hero:guard", proposalId: "distance-1" },
+        identity: {
+          opponentParticipantId: "guard",
+          pairId: "hero:guard",
+          proposalId: "distance-1",
+        },
       },
       [],
     ],

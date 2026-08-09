@@ -615,7 +615,27 @@ export type CombatRoundEndDistanceRollResult = z.infer<
   typeof combatRoundEndDistanceRollResultSchema
 >;
 
+export const combatRoundEndDistanceCalculationReadinessReasonSchema = z.enum([
+  "dodge_facts",
+  "dexterity_facts",
+  "movement_modifier",
+  "modifier_projection",
+]);
+export type CombatRoundEndDistanceCalculationReadinessReason = z.infer<
+  typeof combatRoundEndDistanceCalculationReadinessReasonSchema
+>;
+
+export const combatRoundEndDistanceCalculationReadinessSchema = z.object({
+  completeness: z.enum(["complete", "incomplete"]),
+  reasons: z.array(combatRoundEndDistanceCalculationReadinessReasonSchema).default([]),
+  schemaVersion: z.literal(1),
+});
+export type CombatRoundEndDistanceCalculationReadiness = z.infer<
+  typeof combatRoundEndDistanceCalculationReadinessSchema
+>;
+
 export const combatRoundEndDistanceControlSideSchema = z.object({
+  calculationReadiness: combatRoundEndDistanceCalculationReadinessSchema.optional(),
   desiredDistance: combatDistanceSchema.optional(),
   dodgeSkillTotal: z.number().int().default(0),
   generalFatigueModifier: z.number().int().default(0),
@@ -638,6 +658,7 @@ export const combatRoundEndDistanceProposalSchema = z.object({
   controllerParticipantId: idSchema.optional(),
   controlMode: z.enum(["ordinary", "continued_contact"]).default("ordinary"),
   currentDistance: combatDistanceSchema,
+  currentDistanceSource: z.enum(["canonical", "compatibility_fallback"]).optional(),
   gmOverrideDistance: combatDistanceSchema.optional(),
   id: idSchema,
   notes: z.string().min(1).optional(),
@@ -669,6 +690,15 @@ export const combatRoundEndDistanceProposalSchema = z.object({
   winnerParticipantId: idSchema.optional(),
 });
 export type CombatRoundEndDistanceProposal = z.infer<typeof combatRoundEndDistanceProposalSchema>;
+
+/** Canonical active-work order. Historical arrays retain their persisted presentation order. */
+export function sortCombatRoundEndDistanceProposals(
+  proposals: readonly CombatRoundEndDistanceProposal[],
+): CombatRoundEndDistanceProposal[] {
+  return [...proposals].sort(
+    (left, right) => left.pairKey.localeCompare(right.pairKey) || left.id.localeCompare(right.id),
+  );
+}
 
 export type CombatRoundEndDistanceProposalLifecycle = "pending_rolls" | "resolved" | "applied";
 
@@ -12441,6 +12471,7 @@ export type CombatRoundEndTask =
   | {
       distanceProposalId: string;
       kind: "distance_roll";
+      opponentParticipantId: string;
       pairKey: string;
       participantId: string;
     }
@@ -12528,7 +12559,7 @@ export function getNextCombatRoundEndTask(input: {
     }
   }
 
-  for (const proposal of roundEndReview.proposedDistances) {
+  for (const proposal of sortCombatRoundEndDistanceProposals(roundEndReview.proposedDistances)) {
     if (!isAcceptedDistanceProposalPending(proposal)) {
       continue;
     }
@@ -12537,6 +12568,7 @@ export function getNextCombatRoundEndTask(input: {
       return {
         distanceProposalId: proposal.id,
         kind: "distance_roll",
+        opponentParticipantId: proposal.participantBId,
         pairKey: proposal.pairKey,
         participantId: proposal.participantAId,
       };
@@ -12546,15 +12578,16 @@ export function getNextCombatRoundEndTask(input: {
       return {
         distanceProposalId: proposal.id,
         kind: "distance_roll",
+        opponentParticipantId: proposal.participantAId,
         pairKey: proposal.pairKey,
         participantId: proposal.participantBId,
       };
     }
   }
 
-  const commitReadyProposal = roundEndReview.proposedDistances.find(
-    isAcceptedDistanceProposalCommitReady,
-  );
+  const commitReadyProposal = sortCombatRoundEndDistanceProposals(
+    roundEndReview.proposedDistances,
+  ).find(isAcceptedDistanceProposalCommitReady);
 
   if (commitReadyProposal) {
     return {
@@ -12791,6 +12824,7 @@ function buildCombatRoundBleedAccumulationNotes(input: {
 }
 
 export interface CombatRoundEndDistanceControlParticipantInput {
+  calculationReadiness?: CombatRoundEndDistanceCalculationReadiness;
   dodgeSkillTotal?: number;
   generalFatigueModifier?: number;
   modifierContributions?: readonly CombatModifierContribution[];
@@ -12836,6 +12870,7 @@ function buildCombatRoundEndDistanceControlSide(input: {
   }
 
   return combatRoundEndDistanceControlSideSchema.parse({
+    calculationReadiness: input.participantInput?.calculationReadiness,
     desiredDistance: input.desiredDistance,
     dodgeSkillTotal: input.participantInput?.dodgeSkillTotal ?? 0,
     generalFatigueModifier:
@@ -13148,7 +13183,7 @@ function buildCombatRoundEndDistanceProposals(input: {
     }
   }
 
-  return [...preferencesByPair.entries()].map(([pairKey, entry]) => {
+  const proposals = [...preferencesByPair.entries()].map(([pairKey, entry]) => {
     const currentEdge = getDistanceEdgeBetween(
       normalized.distanceState,
       entry.participantAId,
@@ -13211,6 +13246,7 @@ function buildCombatRoundEndDistanceProposals(input: {
       controllerParticipantId: controller?.participantId,
       controlMode: controlledByContinuedContact ? "continued_contact" : "ordinary",
       currentDistance,
+      currentDistanceSource: currentEdge ? "canonical" : "compatibility_fallback",
       id: buildCombatRoundEndDistanceProposalId({
         pairKey,
         roundNumber: normalized.roundNumber,
@@ -13244,6 +13280,8 @@ function buildCombatRoundEndDistanceProposals(input: {
       warnings,
     });
   });
+
+  return sortCombatRoundEndDistanceProposals(proposals);
 }
 
 function getCombatRoundEndReviewParticipantStatus(

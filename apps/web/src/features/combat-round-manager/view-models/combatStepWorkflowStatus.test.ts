@@ -266,6 +266,48 @@ describe("GM combat Workflow Status presentation", () => {
     ).toBe("Distance decision required.");
   });
 
+  it("reports distance-roll completion and preserves the manual GM review boundary", () => {
+    const distanceResult = result({
+      identity: {
+        ...result().identity,
+        startProcessFamily: "ordinary_distance_roll",
+        startingStep: "round_summary",
+      },
+      processedCount: 6,
+      stepComplete: true,
+      stopParticipantId: undefined,
+      stopReason: "distance_review_required",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: distanceResult,
+      }),
+    ).toMatchObject({
+      completion: "Completed distance rolls.",
+      operationLabel: "Roll remaining GM distance-control checks",
+      processedSummary: "Rolled 6 NPC distance checks.",
+      stopMessage: "GM distance review required.",
+    });
+    expect(
+      buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["player-1", "The Gladiator"]]),
+        result: {
+          ...distanceResult,
+          processedCount: 1,
+          stepComplete: false,
+          stopParticipantId: "player-1",
+          stopReason: "player_action_required",
+        },
+      }),
+    ).toMatchObject({
+      completion: undefined,
+      processedSummary: "Rolled 1 NPC distance check.",
+      stopMessage: "Player roll required.",
+      stopParticipantLabel: "The Gladiator",
+    });
+  });
+
   it("gives a concise changed-target stop message", () => {
     const presentation = buildCombatStepWorkflowStatusPresentation({
       participantLabelsById: new Map([["npc-8", "Orc Captain"]]),
