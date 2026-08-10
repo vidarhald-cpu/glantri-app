@@ -79,6 +79,15 @@ Historical/manual selection is an overlay and never replaces the canonical board
 position. `Current task` clears that overlay and returns focus to the shared live
 position.
 
+The amber live marker and green inspection cursor have separate meanings. Amber
+marks where combat is; green marks the exact context rendered in the panels below.
+During auto-follow they coincide. Explicit history navigation moves only the green
+cursor, and `Current task` returns it to the canonical operational context.
+
+Canonical stage order gates active-round presentation. Suppressing a participant's
+unneeded task does not complete or open a later cell: a future no-work stage remains
+neutral until the shared board reaches it.
+
 ## Current Action
 
 Current Action decides. It contains only unresolved work, its bounded inputs, and
@@ -121,6 +130,8 @@ affect the selected participant. It is not an editor or event history.
 Results prove. They are chronological, append-only presentations of accepted
 actions, calculations, and consequences. One canonical process remains one coherent
 result group. Undo is the ordinary mechanism that removes a committed result.
+Workflow transitions such as boundary advancement remain available as provenance
+and concise Combat Log narration, but are not participant combat Results.
 
 ## History
 

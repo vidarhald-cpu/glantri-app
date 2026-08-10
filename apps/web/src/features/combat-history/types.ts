@@ -146,6 +146,8 @@ export interface CombatTrackerModel {
   cells: Record<string, CombatTrackerCellView>;
   currentTaskCellKey?: string;
   legend: readonly CombatTrackerLegendItem[];
+  /** Cell used by operational auto-follow. It may be viewer-safe when the exact owner is hidden. */
+  operationalCursorCellKey?: string;
   rounds: CombatTrackerRoundView[];
   rows: CombatTrackerRowView[];
   selectedCellKey?: string;

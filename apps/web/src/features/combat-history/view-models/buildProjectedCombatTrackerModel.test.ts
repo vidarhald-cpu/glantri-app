@@ -308,7 +308,7 @@ describe("buildProjectedCombatTrackerModel", () => {
     });
   });
 
-  it("keeps historical selection separate from the canonical current marker", () => {
+  it("rejects a future active-round selection and keeps the cursor on canonical M2", () => {
     const projection = history([]);
     projection.activeRound.snapshots.push(snapshot({ id: "summary", step: "round_summary" }));
     projection.progression = withCanonicalPosition(
@@ -316,18 +316,189 @@ describe("buildProjectedCombatTrackerModel", () => {
     );
     const model = buildProjectedCombatTrackerModel({
       history: projection,
+      operationalParticipantId: "aria",
       selected: { participantId: "aria", roundNumber: 1, step: "round_summary" },
     });
 
     expect(model.currentTaskCellKey).toBe("1:aria:review_phase_2_modifiers");
     expect(model.cells["1:aria:review_phase_2_modifiers"]).toMatchObject({
       current: true,
+      selected: true,
+    });
+    expect(model.cells["1:aria:round_summary"]).toMatchObject({
+      completed: false,
+      current: false,
+      inspectable: false,
+      marker: "·",
+      selected: false,
+    });
+  });
+
+  it("stage-gates future no-work cells despite synthetic SU boundary evidence", () => {
+    const projection = history([
+      event({
+        completeness: "legacy_derived",
+        id: "legacy-boundary",
+        step: "round_summary",
+        type: "round_boundary",
+      }),
+    ]);
+    projection.activeRound.snapshots.push(
+      snapshot({ id: "future-summary", step: "round_summary" }),
+    );
+    projection.progression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "modifier_review", step: "M2" }),
+    );
+
+    const model = buildProjectedCombatTrackerModel({
+      history: projection,
+      operationalParticipantId: "aria",
+    });
+
+    expect(model.operationalCursorCellKey).toBe("1:aria:review_phase_2_modifiers");
+    expect(model.selectedCellKey).toBe(model.operationalCursorCellKey);
+    expect(model.cells["1:aria:review_phase_2_modifiers"]).toMatchObject({
+      current: true,
+      inspectable: true,
+      selected: true,
+    });
+    for (const step of [
+      "initiative_phase_2",
+      "phase_2_actions",
+      "review_phase_2_actions",
+      "phase_2_damage",
+      "round_summary",
+    ] as const) {
+      expect(model.cells[`1:aria:${step}`]).toMatchObject({
+        completed: false,
+        current: false,
+        inspectable: false,
+        marker: "·",
+        selected: false,
+      });
+    }
+    expect(
+      getProjectedCombatHistoryCellEvents({
+        history: projection,
+        selection: { participantId: "aria", roundNumber: 1, step: "round_summary" },
+      }).map((entry) => entry.id),
+    ).toEqual(["legacy-boundary"]);
+  });
+
+  it("keeps a waiting player at a privacy-safe Round 2 M2 cursor instead of SU", () => {
+    const projection = history([
+      event({
+        completeness: "legacy_derived",
+        id: "gladiator-legacy-boundary",
+        ownerParticipantId: "gladiator",
+        roundNumber: 2,
+        step: "round_summary",
+        type: "round_boundary",
+      }),
+    ]);
+    projection.rows = [
+      { displayName: "The Gladiator", participantId: "gladiator" },
+      { displayName: "Scyrian cavalry guy", participantId: "scyrian" },
+    ];
+    projection.activeRound = {
+      ...projection.activeRound,
+      roundNumber: 2,
+      snapshots: [
+        snapshot({
+          id: "gladiator-future-summary",
+          participant: { displayName: "The Gladiator", participantId: "gladiator" },
+          roundNumber: 2,
+          step: "round_summary",
+        }),
+      ],
+    };
+    const roundOneProgression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "attack", step: "A2" }),
+      { taskVisibility: "redacted", trackerStep: "M2", waitingFor: "gm" },
+    );
+    projection.progression = {
+      ...roundOneProgression,
+      boundary: { ...roundOneProgression.boundary, roundNumber: 2 },
+      canonicalOperationalPosition: roundOneProgression.canonicalOperationalPosition
+        ? { ...roundOneProgression.canonicalOperationalPosition, roundNumber: 2 }
+        : undefined,
+      roundNumber: 2,
+    };
+
+    const model = buildProjectedCombatTrackerModel({
+      history: projection,
+      operationalParticipantId: "gladiator",
+    });
+
+    expect(model.rounds).toEqual([{ currentStep: "review_phase_2_modifiers", roundNumber: 2 }]);
+    expect(model.currentTaskCellKey).toBeUndefined();
+    expect(model.operationalCursorCellKey).toBe("2:gladiator:review_phase_2_modifiers");
+    expect(model.cells["2:gladiator:review_phase_2_modifiers"]).toMatchObject({
+      current: false,
+      inspectable: true,
+      selected: true,
+    });
+    expect(model.cells["2:gladiator:round_summary"]).toMatchObject({
+      completed: false,
+      inspectable: false,
+      marker: "·",
+      selected: false,
+    });
+    expect(JSON.stringify(model)).not.toContain("Hidden NPC");
+  });
+
+  it("keeps an archived green cursor separate from the active amber M2 marker", () => {
+    const projection = history([]);
+    projection.archivedRounds = [
+      {
+        events: [
+          event({
+            completeness: "legacy_derived",
+            id: "archived-boundary",
+            step: "round_summary",
+            type: "round_boundary",
+          }),
+        ],
+        observationRelationships: [],
+        roundNumber: 1,
+        snapshots: [snapshot({ id: "archived-summary", step: "round_summary" })],
+      },
+    ];
+    projection.activeRound = {
+      events: [],
+      observationRelationships: [],
+      roundNumber: 2,
+      snapshots: [],
+    };
+    const roundOneProgression = withCanonicalPosition(
+      liveProgression({ boundary: "phase2_modifier_review", kind: "modifier_review", step: "M2" }),
+    );
+    projection.progression = {
+      ...roundOneProgression,
+      boundary: { ...roundOneProgression.boundary, roundNumber: 2 },
+      canonicalOperationalPosition: roundOneProgression.canonicalOperationalPosition
+        ? { ...roundOneProgression.canonicalOperationalPosition, roundNumber: 2 }
+        : undefined,
+      roundNumber: 2,
+    };
+
+    const model = buildProjectedCombatTrackerModel({
+      history: projection,
+      operationalParticipantId: "aria",
+      selected: { participantId: "aria", roundNumber: 1, step: "round_summary" },
+    });
+
+    expect(model.cells["2:aria:review_phase_2_modifiers"]).toMatchObject({
+      current: true,
       selected: false,
     });
     expect(model.cells["1:aria:round_summary"]).toMatchObject({
       current: false,
+      historical: true,
       selected: true,
     });
+    expect(model.operationalCursorCellKey).toBe("2:aria:review_phase_2_modifiers");
+    expect(model.selectedCellKey).toBe("1:aria:round_summary");
   });
 
   it("retains a redacted canonical M2 header without falling forward to a visible later task", () => {
@@ -928,17 +1099,21 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(cell).toMatchObject({ historical: true, marker: "H", status: "historical" });
   });
 
-  it("keeps canonical current work independent from local inspector selection", () => {
+  it("does not allow local inspection to move ahead of canonical current work", () => {
     const projection = history([]);
     projection.progression = liveProgression();
     const model = buildProjectedCombatTrackerModel({
       history: projection,
+      operationalParticipantId: "aria",
       selected: { participantId: "aria", roundNumber: 1, step: "phase_1_damage" },
     });
 
     expect(model.currentTaskCellKey).toBe("1:aria:phase_1_actions");
-    expect(model.cells["1:aria:phase_1_actions"].current).toBe(true);
-    expect(model.cells["1:aria:phase_1_damage"].selected).toBe(true);
+    expect(model.cells["1:aria:phase_1_actions"]).toMatchObject({ current: true, selected: true });
+    expect(model.cells["1:aria:phase_1_damage"]).toMatchObject({
+      inspectable: false,
+      selected: false,
+    });
   });
 
   it("represents ordinary waiting work without exceptional attention", () => {

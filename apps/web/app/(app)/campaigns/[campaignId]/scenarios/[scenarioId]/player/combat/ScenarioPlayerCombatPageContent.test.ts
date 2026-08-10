@@ -308,12 +308,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("visibilitychange");
     expect(source).toContain("loadRevision: loadEncounterRevision");
     expect(source).toContain("buildProjectedCombatTrackerModel");
+    expect(source).toContain("operationalParticipantId: selectedRoundParticipant?.participantId");
     expect(source).toContain("combatHistory?.progression");
     expect(source).toContain("perspectiveParticipantId,");
     expect(source).not.toContain("buildCombatProgressionProjection");
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("setHistoryInspection({");
     expect(source).toContain("setHistoryInspection(undefined)");
+    expect(source).toContain("cell.cellKey === playerCombatTrackerModel.operationalCursorCellKey");
+    expect(source).toContain("if (!nextCell?.inspectable) return");
     expect(source).toContain("PlayerCombatHistoryInspector");
     expect(source).toContain("historyInspection ? (");
     expect(source).not.toContain("commitCurrentCombatPhaseDamageOnServer");

@@ -668,6 +668,7 @@ export function buildCombatTrackerBasePresentation(input: {
     },
     currentTaskCellKey: input.active.tracker.currentTaskCellKey,
     legend: input.active.tracker.legend,
+    operationalCursorCellKey: input.active.tracker.currentTaskCellKey,
     rounds: [
       ...input.archived.roundNumbers.map((roundNumber) => ({ roundNumber })),
       {

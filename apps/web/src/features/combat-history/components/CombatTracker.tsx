@@ -40,7 +40,7 @@ export function CombatTracker(input: {
     : undefined;
 
   useEffect(() => {
-    const cellKey = input.model.currentTaskCellKey;
+    const cellKey = input.model.operationalCursorCellKey ?? input.model.currentTaskCellKey;
     if (!input.followCurrent || (!cellKey && !currentStepHeaderKey)) {
       return;
     }
@@ -58,6 +58,7 @@ export function CombatTracker(input: {
     currentStepHeaderKey,
     input.followCurrent,
     input.model.currentTaskCellKey,
+    input.model.operationalCursorCellKey,
     input.positionCurrentRequest,
   ]);
 

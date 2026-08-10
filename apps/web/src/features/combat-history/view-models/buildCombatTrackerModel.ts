@@ -403,14 +403,16 @@ export function buildCombatTrackerModel(input: {
       waiting: Boolean(facts.progression?.waiting),
     };
   }
+  const currentTaskCellKey = Object.values(cells).find(
+    (cell) =>
+      input.cellFacts.find((facts) => buildCombatTrackerCellKey(facts) === cell.cellKey)
+        ?.progression?.current,
+  )?.cellKey;
   return {
     cells,
-    currentTaskCellKey: Object.values(cells).find(
-      (cell) =>
-        input.cellFacts.find((facts) => buildCombatTrackerCellKey(facts) === cell.cellKey)
-          ?.progression?.current,
-    )?.cellKey,
+    currentTaskCellKey,
     legend: COMBAT_TRACKER_MARKER_MEANINGS,
+    operationalCursorCellKey: currentTaskCellKey,
     rounds: [...input.rounds],
     rows: [...input.rows],
     selectedCellKey: Object.values(cells).find((cell) => cell.selected)?.cellKey,

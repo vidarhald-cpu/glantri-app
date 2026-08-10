@@ -307,6 +307,17 @@ cell and open historical panels, but the canonical current marker remains visibl
 unchanged. Current-task navigation clears the overlay and returns to the shared live
 position.
 
+The green tracker outline is the inspection cursor and always identifies the context
+shown in the panels. The amber marker is the independent canonical board position.
+Auto-follow keeps them together; only explicit inspection may separate them. Active-
+round cells after the canonical step remain pending even when a participant will have
+no task there or compatibility history contains later-shaped evidence.
+
+Round, phase, and boundary advancement are workflow/progression evidence rather than
+participant combat results. Preserve their canonical history for provenance and use
+existing concise transition wording in Combat Log, but do not render generic boundary
+advancement in participant Results.
+
 ## 16. Progressive disclosure and concision
 
 Default presentation is concise.

@@ -995,8 +995,7 @@ function supplementalEntries(input: {
         event.type === "action_skipped" ||
         event.type === "effect_review" ||
         event.type === "participant_su_review" ||
-        event.type === "health_check" ||
-        event.type === "round_boundary") &&
+        event.type === "health_check") &&
       !loggedSourceIds.has(event.id)
     ) {
       const item = buildCombatEventResultModel([event], {

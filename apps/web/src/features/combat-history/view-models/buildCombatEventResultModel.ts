@@ -704,12 +704,15 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
 }
 
 export function buildCombatEventResultModel(
-  events: readonly ProjectedCombatHistoryEvent[],
+  sourceEvents: readonly ProjectedCombatHistoryEvent[],
   instrumentation?: {
     calculationStage?: string;
     resultStage?: string;
   },
 ): CombatEventResultModel {
+  // Boundary advancement is workflow provenance, not a participant combat result. Keep the
+  // projected event available to history/Combat Log consumers without rendering it in Results.
+  const events = sourceEvents.filter((event) => event.type !== "round_boundary");
   const canonicalResolvedObservationEventByAttemptId = new Map<string, string>();
   const resolvedObservationAttemptIds = new Set(
     events.flatMap((event) => {

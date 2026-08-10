@@ -398,6 +398,24 @@ describe("buildCombatStepResultPresentation", () => {
     expect(result.emptyState).toBe("No results recorded for this character in the current step.");
   });
 
+  it("does not project generic boundary advancement as a current participant result", () => {
+    const boundary = historyEvent("round_boundary", 1, {
+      completeness: "legacy_derived",
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+
+    const result = build({
+      boundary: "round_end",
+      events: [boundary, { ...boundary, id: "duplicate-boundary", sequence: 2 }],
+      participantId: "gladiator",
+      step: "round_summary",
+    });
+
+    expect(result.entries).toEqual([]);
+    expect(result.emptyState).toBe("No results recorded for this character in the current step.");
+  });
+
   it("filters unrelated third-party results", () => {
     const result = build({
       events: [attackEvent],

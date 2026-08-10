@@ -18,6 +18,9 @@ describe("combat UX architecture", () => {
     expect(principles).toContain("Combat Situation explains.");
     expect(principles).toContain("Results prove.");
     expect(principles).toContain("Current Action decides.");
+    expect(principles).toContain("The amber live marker and green inspection cursor");
+    expect(principles).toContain("a future no-work stage remains");
+    expect(principles).toContain("are not participant combat Results");
     expect(principles).toContain("Transient feedback is for transient actions.");
     expect(principles).toContain("Permanent UI is for persistent state.");
   });

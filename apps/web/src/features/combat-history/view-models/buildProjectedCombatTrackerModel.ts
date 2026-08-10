@@ -44,8 +44,11 @@ function markerForEvents(input: {
   historical: boolean;
   initiativeCommitted: boolean;
   liveFacet?: CombatTrackerLiveFacet;
+  stageReached: boolean;
   stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
+  if (!input.stageReached) return { kind: "not_reached", marker: "·" };
+
   const initiative = input.events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative?.facts.privateCalculation?.total ??
@@ -290,6 +293,7 @@ export function getProjectedCombatHistoryCellEvents(input: {
 
 export function buildProjectedCombatTrackerModel(input: {
   history: CombatHistoryProjection;
+  operationalParticipantId?: string;
   selected?: CombatHistoryInspectionSelection;
 }): CombatTrackerModel {
   const progressionIndex = buildCombatProgressionTrackerIndex(input.history.progression);
@@ -354,6 +358,42 @@ export function buildProjectedCombatTrackerModel(input: {
         : undefined,
     )
     .find((cellKey) => cellKey !== undefined && progressionIndex.byCellKey[cellKey]?.current);
+  const canonicalOwnerParticipantId = rows.find((row) => {
+    if (!currentStep) return false;
+    const cellKey = buildCombatTrackerCellKey({
+      participantId: row.participantId,
+      roundNumber: activeRoundNumber,
+      step: currentStep,
+    });
+    return progressionIndex.byCellKey[cellKey]?.current;
+  })?.participantId;
+  const requestedOperationalParticipantId = input.operationalParticipantId;
+  const requestedOperationalParticipantIsVisible = rows.some(
+    (row) => row.participantId === requestedOperationalParticipantId,
+  );
+  const operationalParticipantId =
+    canonicalOwnerParticipantId ??
+    (requestedOperationalParticipantId && requestedOperationalParticipantIsVisible
+      ? requestedOperationalParticipantId
+      : undefined);
+  const operationalSelection =
+    currentStep && operationalParticipantId
+      ? {
+          participantId: operationalParticipantId,
+          roundNumber: activeRoundNumber,
+          step: currentStep,
+        }
+      : undefined;
+  const selectedRoundIsActive = input.selected?.roundNumber === activeRoundNumber;
+  const selectedStepIndex = input.selected ? COMBAT_ROUND_STEPS.indexOf(input.selected.step) : -1;
+  const currentStepIndex = currentStep ? COMBAT_ROUND_STEPS.indexOf(currentStep) : -1;
+  const selectedStageReached =
+    input.selected !== undefined &&
+    (!selectedRoundIsActive || currentStepIndex < 0 || selectedStepIndex <= currentStepIndex);
+  const cursorSelection = selectedStageReached ? input.selected : operationalSelection;
+  const operationalCursorCellKey = operationalSelection
+    ? buildCombatTrackerCellKey(operationalSelection)
+    : undefined;
 
   for (const row of rows) {
     for (const round of [...input.history.archivedRounds, input.history.activeRound]) {
@@ -365,32 +405,43 @@ export function buildProjectedCombatTrackerModel(input: {
         };
         const cellKey = buildCombatTrackerCellKey(selection);
         const cellEvents = cellEventsByKey.get(cellKey) ?? [];
+        const participantResultEvents = cellEvents.filter(
+          (event) => event.type !== "round_boundary",
+        );
         const snapshot = snapshotByKey.get(cellKey);
         const liveFacet =
           round.roundNumber === activeRoundNumber ? progressionIndex.byCellKey[cellKey] : undefined;
         const current = Boolean(liveFacet?.current);
         const selected =
-          input.selected?.participantId === row.participantId &&
-          input.selected.roundNumber === round.roundNumber &&
-          input.selected.step === step;
+          cursorSelection?.participantId === row.participantId &&
+          cursorSelection.roundNumber === round.roundNumber &&
+          cursorSelection.step === step;
+        const historical = round.roundNumber !== activeRoundNumber;
+        const stageReached =
+          historical ||
+          currentStepIndex < 0 ||
+          COMBAT_ROUND_STEPS.indexOf(step) <= currentStepIndex;
         const initiativeCommitted = initiativeIsCommitted({
           historical: round.roundNumber !== activeRoundNumber,
           progression: input.history.progression,
           step,
         });
         const marker = markerForEvents({
-          events: cellEvents,
+          events: participantResultEvents,
           hasSnapshot: Boolean(snapshot),
           historical: round.roundNumber !== activeRoundNumber,
           initiativeCommitted,
           liveFacet,
+          stageReached,
           stepOutcome: snapshot?.stepOutcome,
         });
-        const inspectable = current || Boolean(snapshot) || cellEvents.length > 0;
+        const inspectable =
+          stageReached &&
+          (current || selected || Boolean(snapshot) || participantResultEvents.length > 0);
         const hoverDetail =
           liveFacet?.hover.text ??
           snapshot?.stepOutcome?.message ??
-          formatProjectedCombatTrackerHoverDetail(cellEvents, {
+          formatProjectedCombatTrackerHoverDetail(participantResultEvents, {
             revealInitiativeTotal: initiativeCommitted,
           });
         const fallbackHoverText = inspectable ? "Recorded history is incomplete." : "Not opened.";
@@ -402,7 +453,6 @@ export function buildProjectedCombatTrackerModel(input: {
             text: hoverDetail ?? fallbackHoverText,
             waiting: false,
           } as const);
-        const historical = round.roundNumber !== activeRoundNumber;
         cells[cellKey] = {
           attention: liveFacet?.attention ?? "ordinary",
           cellKey,
@@ -440,13 +490,14 @@ export function buildProjectedCombatTrackerModel(input: {
     cells,
     currentTaskCellKey,
     legend: COMBAT_TRACKER_MARKER_MEANINGS,
+    operationalCursorCellKey,
     rounds,
     rows: rows.map((row) => ({
       label: row.displayName,
       participantId: row.participantId,
-      selected: input.selected?.participantId === row.participantId,
+      selected: cursorSelection?.participantId === row.participantId,
     })),
-    selectedCellKey: input.selected ? buildCombatTrackerCellKey(input.selected) : undefined,
+    selectedCellKey: cursorSelection ? buildCombatTrackerCellKey(cursorSelection) : undefined,
     steps: COMBAT_ROUND_STEPS,
   };
 }

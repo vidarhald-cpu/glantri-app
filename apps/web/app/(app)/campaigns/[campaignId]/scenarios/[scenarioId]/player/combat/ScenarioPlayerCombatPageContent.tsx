@@ -1676,10 +1676,11 @@ export default function ScenarioPlayerCombatPageContent({
       combatHistory
         ? buildProjectedCombatTrackerModel({
             history: combatHistory,
+            operationalParticipantId: selectedRoundParticipant?.participantId,
             selected: historyInspection,
           })
         : undefined,
-    [combatHistory, historyInspection],
+    [combatHistory, historyInspection, selectedRoundParticipant?.participantId],
   );
   const playerCombatLog = combatHistory?.combatLog;
   useEffect(() => {
@@ -4438,8 +4439,11 @@ export default function ScenarioPlayerCombatPageContent({
     const currentRound = playerCombatTrackerModel.rounds.find(
       (round) => round.currentStep !== undefined,
     );
-    const currentCell = playerCombatTrackerModel.currentTaskCellKey
-      ? playerCombatTrackerModel.cells[playerCombatTrackerModel.currentTaskCellKey]
+    const operationalCellKey =
+      playerCombatTrackerModel.operationalCursorCellKey ??
+      playerCombatTrackerModel.currentTaskCellKey;
+    const currentCell = operationalCellKey
+      ? playerCombatTrackerModel.cells[operationalCellKey]
       : undefined;
     const selection = historyInspection ?? {
       participantId:
@@ -4465,6 +4469,11 @@ export default function ScenarioPlayerCombatPageContent({
             step: selection.step,
           });
     if (!nextSelection.participantId) return;
+    const nextCell =
+      playerCombatTrackerModel.cells[
+        `${nextSelection.roundNumber}:${nextSelection.participantId}:${nextSelection.step}`
+      ];
+    if (!nextCell?.inspectable) return;
     event.preventDefault();
     setRecentResultFocus(undefined);
     setRecentResultRequest(undefined);
@@ -4594,11 +4603,15 @@ export default function ScenarioPlayerCombatPageContent({
             onInspect={(cell) => {
               setRecentResultFocus(undefined);
               setRecentResultRequest(undefined);
-              setHistoryInspection({
-                participantId: cell.participantId,
-                roundNumber: cell.roundNumber,
-                step: cell.step,
-              });
+              setHistoryInspection(
+                cell.cellKey === playerCombatTrackerModel.operationalCursorCellKey
+                  ? undefined
+                  : {
+                      participantId: cell.participantId,
+                      roundNumber: cell.roundNumber,
+                      step: cell.step,
+                    },
+              );
             }}
             positionCurrentRequest={trackerPositionRequest}
             tableRef={trackerRef}

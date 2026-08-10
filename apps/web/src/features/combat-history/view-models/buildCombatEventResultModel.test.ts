@@ -58,6 +58,31 @@ function resultEnvelope(): CombatResultEnvelope {
 }
 
 describe("buildCombatEventResultModel", () => {
+  it("excludes workflow boundary provenance from participant combat results", () => {
+    const boundary = event("round_boundary", 1, {
+      completeness: "legacy_derived",
+      resultEnvelope: {
+        ...resultEnvelope(),
+        actionType: "round_boundary",
+        conciseOutcome: {
+          details: ["Combat boundary advanced"],
+          label: "Round boundary",
+        },
+      },
+      step: "round_summary",
+    });
+    const attack = event("attack", 2);
+
+    const model = buildCombatEventResultModel([boundary, attack]);
+
+    expect(model.items.map((item) => item.type)).toEqual(["attack"]);
+    expect(
+      model.groups?.flatMap((group) => group.subordinateResults).map((result) => result.heading),
+    ).toEqual(["Attack"]);
+    expect(boundary.completeness).toBe("legacy_derived");
+    expect(boundary.resultEnvelope?.conciseOutcome.details).toEqual(["Combat boundary advanced"]);
+  });
+
   it("retains the canonical envelope for archived result presentation", () => {
     const envelope = resultEnvelope();
     const model = buildCombatEventResultModel([
