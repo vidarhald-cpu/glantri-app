@@ -1,0 +1,47 @@
+name: Rule decision
+description: Record source evidence, conflict, and a Glantri implementation ruling request
+title: "Rule decision: "
+labels: []
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Rule question
+      description: State the exact behavior that needs a product-owner ruling.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and provenance
+      description: Cite documents/pages/sections and workbooks/sheets/cells/formulas precisely, plus relevant code/tests.
+    validations:
+      required: true
+  - type: textarea
+    id: conflict
+    attributes:
+      label: Conflict or computerized-play limitation
+      description: Describe disagreement, error, omission, manual shortcut, or opportunity for improved calculation.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and recommendation
+      description: Give materially different behaviors, consequences, and a recommendation if available.
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Executable examples
+      description: Give concrete inputs/actions/expected results that can become tests.
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Implementation consequences
+      description: List affected rules, data/contracts, UI, compatibility, migration, and superseded decisions.
+    validations:
+      required: true

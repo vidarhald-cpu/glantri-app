@@ -1,0 +1,97 @@
+name: Implementation task
+description: Define a ready, owned, and verifiable Glantri implementation slice
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Complete enough detail that an agent can work without inventing scope, rules, or a development baseline.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: State the user-visible or operational result.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: Explain impact and priority.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List what is in scope and explicitly out of scope.
+      placeholder: |
+        In scope:
+        -
+
+        Out of scope:
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: ownership
+    attributes:
+      label: Ownership and coordination
+      description: Name the primary area, affected areas, owner/integration owner, and reserved hotspots.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Accepted baseline and Git authority
+      description: Give exact branch/SHA, intended task branch/worktree, local/push/PR authority, and confirmed PR target if any.
+    validations:
+      required: true
+  - type: textarea
+    id: rule_basis
+    attributes:
+      label: Rule basis
+      description: Cite source evidence, conflicts, approved rulings/deviations, and rule status. Use Not rule-dependent if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Contracts affected
+      description: List API, schema, persistence, event, command, synchronization, and UI read-model effects.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance examples
+      description: Give concrete scenarios with actions and expected results.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: List tests, manual/browser evidence, compatibility/migration checks, and required CI jobs.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and integration order
+      description: List blockers, upstream contracts, dependent work, hotspot schedule, and merge order.
+    validations:
+      required: true
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Product-owner decisions
+      description: List unresolved product/rule/UX decisions or enter None.
+    validations:
+      required: true
+  - type: textarea
+    id: integration_plan
+    attributes:
+      label: Large or cross-area integration plan
+      description: If unusually large/high-risk/cross-area, explain why it cannot be sliced and give contract order, hotspot owners, review, verification, compatibility, rollback, and follow-ups.
