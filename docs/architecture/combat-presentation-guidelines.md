@@ -133,6 +133,10 @@ step.
 Each committed action creates one coherent result entry. Subordinate rolls,
 responses, consequences, and calculations belong within that result entry or as
 canonically ordered subordinate events. Later events append below earlier events.
+Accepted attack and response rolls appear immediately even when Current Action has
+already advanced to the next actor. Pairwise SU rolls retain the canonical pair and
+the directional roller/opponent side; internal empty-work closure is not a combat
+result.
 
 Existing results must not:
 

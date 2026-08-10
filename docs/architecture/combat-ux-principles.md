@@ -94,15 +94,19 @@ snapshot, viewer filtering, or a workflow boundary event is not completion evide
 
 SU is a shared board checkpoint. Deterministic work may prepare SU and close empty
 participant reviews without restoring per-participant acknowledgement controls, but
-the deterministic suffix stops after that work. The final SU-to-next-round action is
-an explicit GM round-end checkpoint so every surface can present SU before the round
-boundary is accepted.
+those closures are workflow bookkeeping, not participant Results or Combat Log events.
+Continued Contact, distance, Health/Bleed, Observe, and their deterministic consequences
+finish before the final stage-level GM review. The final SU-to-next-round action is an
+explicit GM round-end checkpoint so every surface can present SU before the round boundary
+is accepted.
 
 ## Current Action
 
 Current Action decides. It contains only unresolved work, its bounded inputs, and
 the control that accepts the current canonical command. Completed outcomes move to
-Results.
+Results. An accepted roll remains visible there while Current Action advances to the
+next participant or waiting state; the roller receives that revision-bound feedback
+without an acknowledgement action.
 
 ## GM Step Automation and Workflow Status
 
@@ -139,7 +143,8 @@ affect the selected participant. It is not an editor or event history.
 
 Results prove. They are chronological, append-only presentations of accepted
 actions, calculations, and consequences. One canonical process remains one coherent
-result group. Undo is the ordinary mechanism that removes a committed result.
+result group, with distinct attacks, responses, rolls, and consequences retained in
+canonical sequence. Undo is the ordinary mechanism that removes a committed result.
 Workflow transitions such as boundary advancement remain available as provenance
 and concise Combat Log narration, but are not participant combat Results.
 

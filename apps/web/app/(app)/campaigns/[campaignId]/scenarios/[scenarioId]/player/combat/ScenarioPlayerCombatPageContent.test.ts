@@ -58,10 +58,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("revision: encounterSession.updatedAt");
   });
 
-  it("limits passive recent-result feedback to GM proxy actions and exact identities", () => {
+  it("shows passive exact-identity recent-result feedback for player and GM rolls", () => {
     const source = readSource();
 
-    expect(source).toContain("isGameMaster && selectedRoundParticipant");
+    expect(source).not.toContain("isGameMaster && selectedRoundParticipant");
+    expect(source).toContain("const candidate = selectedRoundParticipant");
     expect(source).toContain("createCombatRecentResultCandidate({");
     expect(source).toContain("resolveCombatRecentResultFocus({");
     expect(source).toContain("selectCombatRecentResultPresentation({");
@@ -576,6 +577,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Waiting for opponent distance-control roll.");
     expect(source).toContain("Waiting for GM to commit distance control.");
     expect(source).toContain("Distance control committed: distance");
+    expect(source).toContain('aria-label="Your accepted distance-control result"');
+    expect(source).toContain("selectedDistanceControlOwnCalculation");
     expect(source).not.toContain("opponentSide.desiredDistance");
     expect(source).not.toContain("opponentSide.result");
     expect(source).not.toContain("combatExperienceStatusText");

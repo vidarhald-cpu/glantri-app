@@ -860,6 +860,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Distance roll");
     expect(source).toContain("Distance pair");
     expect(source).toContain("GM override");
+    expect(source).toContain('aria-label="Distance-control decision context"');
+    expect(source).toContain("Current distance {proposal.currentDistance}");
+    expect(source).toContain("proposed next-round distance");
+    expect(source).toContain("buildCombatCalculationPresentationLines(calculation)");
     expect(source).toContain('"Engagement distance"');
     expect(source).toContain('"Choose engagement distance."');
     expect(source).toContain("chosenDistance: controlledByContinuedContact");

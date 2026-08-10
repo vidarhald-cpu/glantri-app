@@ -59,7 +59,9 @@ import {
 } from "@glantri/domain";
 
 import {
+  buildCombatCalculationPresentationLines,
   buildCurrentActionPresentation,
+  buildDodgeCalculationPresentationFromSnapshot,
   buildHistoricalObservationRelationships,
   buildCombatStepResultPresentation,
   buildProjectedCombatTrackerModel,
@@ -1825,9 +1827,8 @@ export default function ScenarioPlayerCombatPageContent({
     selectedParticipantStoredDeclarationThisRound &&
     selectedStoredDeclarationTargetValidation?.valid,
   );
-  const selectedProgressionTasks = getCombatProgressionPresentationTasks(
-    combatHistory?.progression,
-  ).filter(
+  const progressionTasks = getCombatProgressionPresentationTasks(combatHistory?.progression);
+  const selectedProgressionTasks = progressionTasks.filter(
     (task) =>
       task.owner?.kind === "combatant" &&
       task.owner.participantId === selectedRoundParticipant?.participantId &&
@@ -1926,7 +1927,6 @@ export default function ScenarioPlayerCombatPageContent({
   );
   useEffect(() => {
     if (
-      !isGameMaster ||
       !recentResultRequest ||
       recentResultRequest.acceptedRevision !== combatHistory?.sourceUpdatedAt
     ) {
@@ -1941,7 +1941,7 @@ export default function ScenarioPlayerCombatPageContent({
     if (!focus) return;
     setRecentResultFocus(focus);
     setHistoryInspection(undefined);
-    if (canonicalTaskSelection?.participantId) {
+    if (isGameMaster && canonicalTaskSelection?.participantId) {
       const participant = combatRoundState?.participants.find(
         (candidate) => candidate.participantId === canonicalTaskSelection.participantId,
       );
@@ -1981,6 +1981,11 @@ export default function ScenarioPlayerCombatPageContent({
     (task) =>
       (task.kind === "distance_roll" || task.kind === "distance_commit") &&
       task.state === "executable",
+  );
+  const canonicalDistanceControlProgressionTask = progressionTasks.find(
+    (task) =>
+      (task.kind === "distance_roll" || task.kind === "distance_commit") &&
+      task.id === combatHistory?.progression?.canonicalOperationalPosition?.task?.id,
   );
   const selectedHealthProgressionTask = selectedProgressionTasks.find(
     (task) => task.kind === "health_review" && task.state === "executable",
@@ -2152,22 +2157,19 @@ export default function ScenarioPlayerCombatPageContent({
     const participantId = selectedRoundParticipant?.participantId;
     const proposals = combatRoundState?.roundEndReview?.proposedDistances ?? [];
 
-    if (
-      !participantId ||
-      combatRoundState?.currentStep !== "round_summary" ||
-      !selectedDistanceControlProgressionTask
-    ) {
+    if (!participantId || combatRoundState?.currentStep !== "round_summary") {
       return undefined;
     }
 
-    const proposal = proposals.find((candidate) => {
-      if (
-        !candidate.accepted ||
-        candidate.id !== selectedDistanceControlProgressionTask.identity.proposalId
-      ) {
+    const distanceControlTask =
+      selectedDistanceControlProgressionTask ?? canonicalDistanceControlProgressionTask;
+    const selectedProposalId = distanceControlTask?.identity.proposalId;
+    const eligibleProposals = proposals.filter((candidate) => {
+      if (!candidate.accepted || candidate.status === "committed") {
         return false;
       }
-      if (selectedDistanceControlProgressionTask.kind === "distance_commit") {
+      if (selectedProposalId && candidate.id !== selectedProposalId) return false;
+      if (distanceControlTask?.kind === "distance_commit") {
         return (
           candidate.controlMode === "continued_contact" &&
           candidate.controllerParticipantId === participantId &&
@@ -2175,13 +2177,14 @@ export default function ScenarioPlayerCombatPageContent({
         );
       }
       return (
-        candidate.requiresContest &&
-        ((candidate.participantAId === participantId &&
-          candidate.participantA.status === "pending") ||
-          (candidate.participantBId === participantId &&
-            candidate.participantB.status === "pending"))
+        candidate.participantAId === participantId || candidate.participantBId === participantId
       );
     });
+    const proposal = selectedProposalId
+      ? eligibleProposals[0]
+      : eligibleProposals.length === 1
+        ? eligibleProposals[0]
+        : undefined;
 
     if (!proposal) {
       return undefined;
@@ -2194,6 +2197,8 @@ export default function ScenarioPlayerCombatPageContent({
       : proposal.participantAId;
     const ownSide = isParticipantA ? proposal.participantA : proposal.participantB;
     const opponentSide = isParticipantA ? proposal.participantB : proposal.participantA;
+
+    if (ownParticipantId === opponentParticipantId) return undefined;
 
     return {
       opponentLabel: roundParticipantLabelsById[opponentParticipantId] ?? opponentParticipantId,
@@ -2209,12 +2214,25 @@ export default function ScenarioPlayerCombatPageContent({
     combatRoundState?.currentStep,
     roundParticipantLabelsById,
     selectedRoundParticipant?.participantId,
+    canonicalDistanceControlProgressionTask,
     selectedDistanceControlProgressionTask,
   ]);
   const selectedRoundEndReview =
     combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
       ? combatRoundState.roundEndReview?.participantReviews[selectedRoundParticipant.participantId]
       : undefined;
+  const selectedDistanceControlOwnCalculation = selectedDistanceControlProposal?.ownSide.result
+    ? buildDodgeCalculationPresentationFromSnapshot({
+        actor: {
+          label: selectedDistanceControlProposal.ownLabel,
+          participantId: selectedDistanceControlProposal.ownParticipantId,
+        },
+        calculationId: `${selectedDistanceControlProposal.proposal.id}:player-own-roll`,
+        calculationType: "distance_control_roll",
+        facts: selectedDistanceControlProposal.ownSide.result,
+        label: "Your distance-control roll",
+      })
+    : undefined;
   const selectedPendingHealthRoll =
     combatRoundState?.currentStep === "round_summary" &&
     selectedRoundParticipant &&
@@ -4237,19 +4255,18 @@ export default function ScenarioPlayerCombatPageContent({
     descriptor: CurrentActionCommandDescriptor,
     operation: () => Promise<void>,
   ) {
-    const candidate =
-      isGameMaster && selectedRoundParticipant
-        ? createCombatRecentResultCandidate({
-            commandType: descriptor.commandType,
-            presentation: currentStepResultPresentation,
-            source: {
-              participantId: selectedRoundParticipant.participantId,
-              roundNumber: combatRoundState?.roundNumber ?? 0,
-              step: currentCombatStep,
-            },
-            sourceTaskId: descriptor.taskId,
-          })
-        : undefined;
+    const candidate = selectedRoundParticipant
+      ? createCombatRecentResultCandidate({
+          commandType: descriptor.commandType,
+          presentation: currentStepResultPresentation,
+          source: {
+            participantId: selectedRoundParticipant.participantId,
+            roundNumber: combatRoundState?.roundNumber ?? 0,
+            step: currentCombatStep,
+          },
+          sourceTaskId: descriptor.taskId,
+        })
+      : undefined;
     const acceptedBefore = acceptedEncounterRef.current;
     await operation();
     const acceptedAfter = acceptedEncounterRef.current;
@@ -5204,6 +5221,23 @@ export default function ScenarioPlayerCombatPageContent({
                           Gen/Fatigue{" "}
                           {selectedDistanceControlProposal.ownSide.generalFatigueModifier}
                         </div>
+                        {selectedDistanceControlOwnCalculation ? (
+                          <div
+                            aria-label="Your accepted distance-control result"
+                            style={{ display: "grid", gap: "0.15rem" }}
+                          >
+                            <strong>{selectedDistanceControlOwnCalculation.label}</strong>
+                            {buildCombatCalculationPresentationLines(
+                              selectedDistanceControlOwnCalculation,
+                            ).map((line, index) => (
+                              <div
+                                key={`${selectedDistanceControlOwnCalculation.calculationId}:${index}`}
+                              >
+                                {line}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         <div>
                           {formatDistanceControlOpponentStatus({
                             opponentLabel: selectedDistanceControlProposal.opponentLabel,
@@ -5284,10 +5318,7 @@ export default function ScenarioPlayerCombatPageContent({
                 recentPresentation={recentResultPresentation}
               />
             ) : recentResultPresentation ? (
-              <CombatStepResultList
-                presentation={recentResultPresentation}
-                title="Recent result"
-              />
+              <CombatStepResultList presentation={recentResultPresentation} title="Recent result" />
             ) : null}
           </div>
         </section>

@@ -299,6 +299,28 @@ describe("combat route canonical-conformance guards", () => {
     expect(helperSource).toContain("characteristicAverage: profile.avgStats");
   });
 
+  it("binds a distance-control roll to the canonical opposite proposal side", () => {
+    const routeStart = source.indexOf(
+      '"/encounters/:encounterId/combat-round/roll-distance-control"',
+    );
+    const nextRoute = source.indexOf(
+      '"/encounters/:encounterId/combat-round/roll-current-distance-control"',
+      routeStart,
+    );
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).toContain("const canonicalOpponentParticipantId =");
+    expect(routeSource).toContain(
+      "canonicalOpponentParticipantId !== body.opponentParticipantId",
+    );
+    expect(routeSource).toContain(
+      "opponentScenarioParticipant.id === scenarioParticipant.id",
+    );
+    expect(routeSource).not.toContain("participants.find((participant, index)");
+  });
+
   it("does not duplicate the initiative commit command beside the authoritative encounter", () => {
     const routeStart = source.indexOf(
       '"/encounters/:encounterId/combat-round/commit-phase-initiative-resolution"',

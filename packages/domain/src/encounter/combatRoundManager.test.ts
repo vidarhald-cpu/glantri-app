@@ -5147,6 +5147,7 @@ describe("combat round manager", () => {
 
     expect(committed.command.facts.deterministicNoWorkCompletion).toBe(true);
     expect(event).toMatchObject({ type: "participant_su_review" });
+    expect(event?.facts.publicOutcome).toEqual({ changed: false, workflowOnly: true });
     expect(event?.facts.resultPresentation).toBeUndefined();
   });
 
@@ -15442,7 +15443,10 @@ describe("combat round manager", () => {
       status: "committed",
       type: "participant_su_review",
     });
-    expect(committed.state.events.at(-1)?.facts.publicOutcome).toEqual({});
+    expect(committed.state.events.at(-1)?.facts.publicOutcome).toEqual({
+      changed: true,
+      workflowOnly: false,
+    });
     expect(committed.state.events.at(-1)?.facts.gmReview).toMatchObject({
       acceptedDamageProposalIds: expect.any(Array),
       updatedEffects: expect.any(Array),

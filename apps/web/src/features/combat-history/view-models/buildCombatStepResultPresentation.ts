@@ -457,6 +457,41 @@ function supplementalEntries(input: {
   }
 
   return input.events.flatMap((event): OrderedEntry[] => {
+    if (event.type === "distance_control_roll" && !loggedSourceIds.has(event.id)) {
+      const item = buildCombatEventResultModel([event], {
+        calculationStage: "panel_active_calculation_presentation",
+        resultStage: "panel_active_attack_parry_result_presentation",
+      }).items[0];
+      if (!item) return [];
+      return [
+        {
+          entry: {
+            actor: identitySubject(event, "roller") ?? identitySubject(event, "actor"),
+            calculations: calculationsForEvents({
+              events: [event],
+              participantId: input.participantId,
+              viewer: input.viewer,
+            }),
+            category: "distance",
+            heading: "Distance control roll",
+            id: `current-step:${event.id}`,
+            processId: event.resultEnvelope?.actionInstanceId,
+            proposalId:
+              typeof visibleOutcome(event, "proposalId") === "string"
+                ? (visibleOutcome(event, "proposalId") as string)
+                : undefined,
+            resultEnvelopes: event.resultEnvelope ? [event.resultEnvelope] : undefined,
+            sourceEventIds: [event.id],
+            state: "final",
+            summary: item.summary,
+            target: identitySubject(event, "target") ?? identitySubject(event, "defender"),
+          },
+          order: event.sequence,
+          semanticOrder: 0,
+        },
+      ];
+    }
+
     if (event.type === "observation") {
       const observationStatus = visibleOutcome(event, "observationStatus");
       const noProgressReason = visibleOutcome(event, "observationNoProgressReason");
@@ -994,7 +1029,9 @@ function supplementalEntries(input: {
         event.type === "initiative" ||
         event.type === "action_skipped" ||
         event.type === "effect_review" ||
-        event.type === "participant_su_review" ||
+        (event.type === "participant_su_review" &&
+          visibleOutcome(event, "workflowOnly") !== true &&
+          visibleOutcome(event, "changed") !== false) ||
         event.type === "health_check") &&
       !loggedSourceIds.has(event.id)
     ) {

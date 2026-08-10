@@ -632,7 +632,7 @@ describe("CombatLogProjection", () => {
           damageApplied: [{ amount: 2, bleedType: "internal", proposalId: "bleed-1" }],
           status: "complete",
         },
-        publicOutcome: {},
+        publicOutcome: { changed: true, workflowOnly: false },
         rollerPrivate: { healthRoll: 18 },
       },
       id: "su-review-event",
@@ -649,9 +649,31 @@ describe("CombatLogProjection", () => {
       "Scyrian Cavalry suffered 2 damage from internal bleeding.",
     );
     expect(result.events.map((entry) => entry.summary)).toContain(
-      "Scyrian Cavalry completed round-end review.",
+      "Scyrian Cavalry's round-end effects were updated.",
     );
     expect(JSON.stringify(result)).not.toMatch(/healthRoll|acceptedHealthRollIds/);
+  });
+
+  it("keeps deterministic empty participant closure out of the human Combat Log", () => {
+    const review = event({
+      actorParticipantId: "scyrian",
+      facts: {
+        gmReview: {},
+        involvedOutcome: { status: "complete" },
+        publicOutcome: { changed: false, workflowOnly: true },
+        rollerPrivate: {},
+      },
+      id: "technical-su-closure",
+      ownerParticipantId: "scyrian",
+      sequence: 0,
+      status: "committed",
+      step: "round_summary",
+      type: "participant_su_review",
+    });
+
+    expect(project(state({ events: [review] })).events).toEqual([
+      expect.objectContaining({ category: "round", summary: "Round 1 began." }),
+    ]);
   });
 
   it("is deterministic, immutable, reload-idempotent, and removes undone source events only", () => {

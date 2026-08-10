@@ -14726,6 +14726,15 @@ export function commitCombatRoundEndParticipantReview(input: {
             })),
           status: nextStatus,
         },
+        publicOutcome: {
+          changed:
+            participantReview.proposedDamage.some(
+              (proposal) => proposal.accepted && proposal.amount > 0,
+            ) ||
+            participantReview.proposedEffects.some((proposal) => proposal.accepted) ||
+            participantReview.proposedRemovals.some((proposal) => proposal.accepted),
+          workflowOnly: input.deterministicNoWorkCompletion === true,
+        },
         resultPresentation: input.deterministicNoWorkCompletion
           ? undefined
           : {

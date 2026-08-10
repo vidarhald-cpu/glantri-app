@@ -924,8 +924,12 @@ describe("buildCombatStepResultPresentation", () => {
       viewer: "gm",
     });
 
-    expect(result.entries).toHaveLength(1);
-    expect(result.entries[0]).toMatchObject({
+    expect(result.entries.map((entry) => entry.heading)).toEqual([
+      "Distance control roll",
+      "Distance control roll",
+      "Distance control",
+    ]);
+    expect(result.entries[2]).toMatchObject({
       calculations: [
         { actor: { label: "The Gladiator" } },
         { actor: { label: "Scyrian cavalry guy" } },
@@ -934,7 +938,90 @@ describe("buildCombatStepResultPresentation", () => {
       outcome: "Proposed distance: 4",
       summary: "Scyrian cavalry guy won the distance-control contest.",
     });
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups?.[0]?.subordinateResults.map((entry) => entry.heading)).toEqual([
+      "Distance control roll",
+      "Distance control roll",
+      "Distance control",
+    ]);
     expect(JSON.stringify(result)).not.toMatch(/participant[_ ]?[ab]/i);
+  });
+
+  it("shows a player's accepted distance roll while the opponent remains pending", () => {
+    const roll = historyEvent("distance_control_roll", 1, {
+      facts: {
+        involvedOutcome: { currentDistance: 3, proposalId: "distance-proposal-1" },
+        privateCalculation: {
+          dodgeSkillTotal: 17,
+          finalTotal: 23,
+          generalFatigueModifier: 0,
+          openEndedD10s: [],
+          rollD20: 6,
+          rollTotal: 6,
+        },
+        publicOutcome: {},
+      },
+      identities: [
+        {
+          displayName: "The Gladiator",
+          participantId: "gladiator",
+          role: "roller",
+          visibility: "visible",
+        },
+        {
+          displayName: "Scyrian cavalry guy",
+          participantId: "scyrian",
+          role: "target",
+          visibility: "visible",
+        },
+      ],
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+
+    const result = build({
+      boundary: "round_end",
+      events: [roll],
+      participantId: "gladiator",
+      step: "round_summary",
+      viewer: "player",
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      actor: { id: "gladiator", label: "The Gladiator" },
+      heading: "Distance control roll",
+      target: { id: "scyrian", label: "Scyrian cavalry guy" },
+    });
+    expect(calculationLines(result.entries[0]?.calculations[0])).toContain("Result: 23");
+  });
+
+  it("does not present current or legacy deterministic empty SU closure as a combat result", () => {
+    const closure = historyEvent("participant_su_review", 1, {
+      facts: {
+        involvedOutcome: { status: "complete" },
+        publicOutcome: { changed: false, workflowOnly: true },
+      },
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+    const legacyClosure = historyEvent("participant_su_review", 2, {
+      facts: {
+        involvedOutcome: { status: "complete" },
+        publicOutcome: { changed: false },
+      },
+      ownerParticipantId: "gladiator",
+      step: "round_summary",
+    });
+
+    expect(
+      build({
+        boundary: "round_end",
+        events: [closure, legacyClosure],
+        participantId: "gladiator",
+        step: "round_summary",
+      }).entries,
+    ).toEqual([]);
   });
 
   it("shows a rolled Combat Experience result immediately and clears it after declaration", () => {

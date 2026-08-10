@@ -83,6 +83,21 @@ describe("buildCombatEventResultModel", () => {
     expect(boundary.resultEnvelope?.conciseOutcome.details).toEqual(["Combat boundary advanced"]);
   });
 
+  it("excludes current and legacy deterministic empty participant closures from archived Results", () => {
+    const closure = event("participant_su_review", 1, {
+      facts: { publicOutcome: { changed: false, workflowOnly: true } },
+      status: "committed",
+      step: "round_summary",
+    });
+    const legacyClosure = event("participant_su_review", 2, {
+      facts: { publicOutcome: { changed: false } },
+      status: "committed",
+      step: "round_summary",
+    });
+
+    expect(buildCombatEventResultModel([closure, legacyClosure]).items).toEqual([]);
+  });
+
   it("retains the canonical envelope for archived result presentation", () => {
     const envelope = resultEnvelope();
     const model = buildCombatEventResultModel([

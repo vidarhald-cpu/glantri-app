@@ -1154,6 +1154,7 @@ function roundEndParticipantCandidates(input: {
                 publicOutcome: {
                   changeSummaries,
                   changed: changeSummaries.length > 0,
+                  workflowOnly: command?.value.facts.deterministicNoWorkCompletion === true,
                 },
               },
               involvedParticipantIds: [review.participantId],

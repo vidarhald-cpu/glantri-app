@@ -652,26 +652,31 @@ function projectRoundEndReview(input: {
       );
     });
   }
-  candidates.push(
-    baseCandidate({
-      actor,
-      category: "state_change",
-      encounterId: input.encounterId,
-      eventId: `${input.event.id}:review`,
-      occurredAt: input.event.occurredAt,
-      phase: "round_end",
-      presentationTargetId: presentationTargetId("participant_review", input.event.id),
-      presentationTargetKind: "participant_review",
-      presentationTargetSourceId: input.event.id,
-      roundNumber: input.event.roundNumber,
-      semanticOrder: candidates.length + 1,
-      sourceEventIds: [input.event.id],
-      sourceRevision: input.sourceRevision,
-      sourceSequence: input.event.sequence,
-      summary: `${actor.displayName} completed round-end review.`,
-      summaryFacts: { kind: "review_completed", review: "participant" },
-    }),
-  );
+  if (
+    input.event.facts.publicOutcome.changed === true &&
+    input.event.facts.publicOutcome.workflowOnly !== true
+  ) {
+    candidates.push(
+      baseCandidate({
+        actor,
+        category: "state_change",
+        encounterId: input.encounterId,
+        eventId: `${input.event.id}:review`,
+        occurredAt: input.event.occurredAt,
+        phase: "round_end",
+        presentationTargetId: presentationTargetId("participant_review", input.event.id),
+        presentationTargetKind: "participant_review",
+        presentationTargetSourceId: input.event.id,
+        roundNumber: input.event.roundNumber,
+        semanticOrder: candidates.length + 1,
+        sourceEventIds: [input.event.id],
+        sourceRevision: input.sourceRevision,
+        sourceSequence: input.event.sequence,
+        summary: `${actor.displayName}'s round-end effects were updated.`,
+        summaryFacts: { kind: "review_completed", review: "participant" },
+      }),
+    );
+  }
   return candidates;
 }
 

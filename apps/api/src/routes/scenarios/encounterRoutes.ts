@@ -9929,12 +9929,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!proposal) {
           return reply.code(409).send({ error: "Distance-control proposal is unavailable." });
         }
+        const canonicalOpponentParticipantId =
+          proposal.participantAId === encounterParticipant.id
+            ? proposal.participantBId
+            : proposal.participantBId === encounterParticipant.id
+              ? proposal.participantAId
+              : undefined;
+        if (
+          !canonicalOpponentParticipantId ||
+          canonicalOpponentParticipantId === encounterParticipant.id ||
+          canonicalOpponentParticipantId !== body.opponentParticipantId
+        ) {
+          return reply.code(409).send({
+            error: "Distance-control pair identity changed. Refresh the current task.",
+          });
+        }
         const membership = resolveEncounterParticipantMembership({
           encounter,
           scenarioParticipants,
         });
         const opponentEncounterParticipant = membership.participants.find(
-          (participant) => participant.id === body.opponentParticipantId,
+          (participant) => participant.id === canonicalOpponentParticipantId,
         );
         const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
           ? scenarioParticipants.find(
@@ -9944,6 +9959,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
         if (!opponentEncounterParticipant || !opponentScenarioParticipant) {
           return reply.code(409).send({ error: "Distance-control opponent is unavailable." });
+        }
+        if (opponentScenarioParticipant.id === scenarioParticipant.id) {
+          return reply.code(409).send({
+            error: "Distance-control pair identity is invalid for this encounter.",
+          });
         }
         const distanceInputs = buildRoundEndDistanceControlInputs({
           encounter,

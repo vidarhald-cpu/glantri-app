@@ -742,7 +742,14 @@ export function buildCombatEventResultModel(
   );
   const items = [...events]
     .filter((event) => {
-      if (event.type === "participant_su_review" && event.status === "proposed") return false;
+      if (
+        event.type === "participant_su_review" &&
+        (event.status === "proposed" ||
+          factValue(event, "workflowOnly") === true ||
+          factValue(event, "changed") === false)
+      ) {
+        return false;
+      }
       const attemptId = factValue(event, "observationAttemptId");
       if (
         event.type === "observation" &&

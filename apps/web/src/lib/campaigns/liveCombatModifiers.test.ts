@@ -35,6 +35,30 @@ function effect(overrides: Partial<CombatEffectsState["effects"][number]>) {
 }
 
 describe("live combat modifiers", () => {
+  it("drops a self-target resolved through another participant alias instead of creating a pair", () => {
+    const context = resolveEncounterLiveCombatModifierContext({
+      ownerCombatantId: "combatant-a",
+      ownerParticipantId: "participant-a",
+      participants: [
+        {
+          characterId: "character-a",
+          id: "combatant-a",
+          label: "The Gladiator",
+          scenarioParticipantId: "participant-a",
+        },
+      ],
+      targetParticipantId: "character-a",
+    });
+
+    expect(context).toMatchObject({
+      ownerCombatantId: "combatant-a",
+      ownerParticipantId: "participant-a",
+    });
+    expect(context.opponentCombatantId).toBeUndefined();
+    expect(context.opponentParticipantId).toBeUndefined();
+    expect(() => buildTargetAwareEncounterLiveCombatModifierSummary({ context })).not.toThrow();
+  });
+
   it("projects an ordered Observe Opponent relationship into both target-aware live buckets", () => {
     const context = resolveEncounterLiveCombatModifierContext({
       actionId: "attack",

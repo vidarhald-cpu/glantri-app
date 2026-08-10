@@ -861,6 +861,81 @@ function buildRoundEndDistancePairLabel(
   return `${participantALabel} ↔ ${participantBLabel}`;
 }
 
+function CombatRoundEndDistanceDecisionContext(input: {
+  participantLabelsById: Record<string, string>;
+  proposal: CombatRoundEndDistanceProposal;
+}) {
+  const { proposal } = input;
+  const participantALabel =
+    input.participantLabelsById[proposal.participantAId] ?? proposal.participantAId;
+  const participantBLabel =
+    input.participantLabelsById[proposal.participantBId] ?? proposal.participantBId;
+  const sideRows = [
+    { label: participantALabel, side: proposal.participantA },
+    { label: participantBLabel, side: proposal.participantB },
+  ];
+  const winnerLabel = proposal.winnerParticipantId
+    ? (input.participantLabelsById[proposal.winnerParticipantId] ?? proposal.winnerParticipantId)
+    : undefined;
+  const rationale =
+    proposal.outcome === "tie"
+      ? "Tie: keep the current distance unless the GM overrides."
+      : winnerLabel
+        ? `${winnerLabel}'s higher accepted total supplies the proposal.`
+        : proposal.outcome === "uncontested"
+          ? "No opposed roll was required."
+          : proposal.outcome === "controller_choice"
+            ? "Continued Contact grants the controller the distance choice."
+            : "Waiting for the required accepted roll totals.";
+
+  return (
+    <div
+      aria-label="Distance-control decision context"
+      style={{
+        borderTop: "1px solid #ddd3bf",
+        display: "grid",
+        gap: "0.3rem",
+        paddingTop: "0.4rem",
+      }}
+    >
+      <div>
+        Current distance {proposal.currentDistance} · proposed next-round distance{" "}
+        {proposal.proposedDistance ?? "pending"}
+      </div>
+      <div>
+        Preferences · {participantALabel}: {proposal.participantA.desiredDistance ?? "none"} ·{" "}
+        {participantBLabel}: {proposal.participantB.desiredDistance ?? "none"}
+      </div>
+      {sideRows.map(({ label, side }) => {
+        const calculation = side.result
+          ? buildDodgeCalculationPresentationFromSnapshot({
+              actor: { label, participantId: side.participantId },
+              calculationId: `${proposal.id}:gm-review:${side.participantId}`,
+              calculationType: "distance_control_roll",
+              facts: side.result,
+              label: `${label} calculation`,
+            })
+          : undefined;
+        return (
+          <div key={`${proposal.id}:gm-review:${side.participantId}`}>
+            <strong>{label}</strong>
+            {calculation ? (
+              <div style={{ display: "grid", gap: "0.1rem" }}>
+                {buildCombatCalculationPresentationLines(calculation).map((line, index) => (
+                  <div key={`${calculation.calculationId}:${index}`}>{line}</div>
+                ))}
+              </div>
+            ) : (
+              <div>{side.status === "pending" ? "Roll pending" : "Roll not required"}</div>
+            )}
+          </div>
+        );
+      })}
+      <div>{rationale}</div>
+    </div>
+  );
+}
+
 function buildRoundEndDistanceRollOptionKey(input: {
   participantId: string;
   proposalId: string;
@@ -6696,6 +6771,10 @@ export default function CombatRoundManagerPanel({
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
           Distance control: {inspectorRoundEndDistanceAction.option.pairLabel}
         </div>
+        <CombatRoundEndDistanceDecisionContext
+          participantLabelsById={roundParticipantLabelsById}
+          proposal={inspectorRoundEndDistanceAction.option.proposal}
+        />
       </div>
     ) : inspectorRoundEndDistanceAction?.kind === "commit" ? (
       <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -6754,6 +6833,10 @@ export default function CombatRoundManagerPanel({
             ))}
           </select>
         </label>
+        <CombatRoundEndDistanceDecisionContext
+          participantLabelsById={roundParticipantLabelsById}
+          proposal={inspectorRoundEndDistanceAction.proposal}
+        />
       </div>
     ) : null;
   const inspectorFeintControls = inspectorFeintProposal ? (

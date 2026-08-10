@@ -103,7 +103,7 @@ export function resolveEncounterLiveCombatModifierContext(input: {
   step?: CombatRoundStep;
   targetParticipantId?: string;
 }): EncounterLiveCombatModifierContext {
-  const opponent = input.targetParticipantId
+  const candidateOpponent = input.targetParticipantId
     ? input.participants.find(
         (participant) =>
           participant.id === input.targetParticipantId ||
@@ -111,6 +111,21 @@ export function resolveEncounterLiveCombatModifierContext(input: {
           participant.characterId === input.targetParticipantId,
       )
     : undefined;
+  const ownerAliases = new Set(
+    [input.ownerCombatantId, input.ownerParticipantId].filter((identity): identity is string =>
+      Boolean(identity),
+    ),
+  );
+  const opponentAliases = [
+    candidateOpponent?.id,
+    candidateOpponent?.scenarioParticipantId,
+    candidateOpponent?.characterId,
+  ].filter((identity): identity is string => Boolean(identity));
+  // A stale declaration/selection may point back at the inspected participant through another
+  // alias. That is not an opponent context and must not be allowed to fabricate a self-pair.
+  const opponent = opponentAliases.some((identity) => ownerAliases.has(identity))
+    ? undefined
+    : candidateOpponent;
 
   return {
     actionId: input.actionId,
