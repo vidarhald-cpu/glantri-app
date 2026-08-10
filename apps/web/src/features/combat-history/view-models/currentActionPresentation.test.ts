@@ -794,6 +794,35 @@ describe("CurrentActionPresentation", () => {
     expect(result?.primaryAction.descriptor).toBeUndefined();
   });
 
+  it("holds a player at the privacy-safe SU round-end checkpoint", () => {
+    const base = progression({ boundary: "round_boundary", tasks: [] });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-2",
+      progression: {
+        ...base,
+        canonicalOperationalPosition: {
+          executionStrategy: "gm_review",
+          roundNumber: 1,
+          taskVisibility: "redacted",
+          trackerFacet: { step: "SU" },
+          waitingFor: "gm",
+        },
+      },
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      heading: "Round boundary",
+      primaryAction: { enabled: false, label: "Waiting for GM" },
+      requiredNow: "Waiting for GM to complete round-end review.",
+      status: "awaiting_gm",
+      summary: "Round-end work is complete. The GM must open the next round.",
+      trackerFacet: "SU",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
+  });
+
   it("selects an executable GM prerequisite before the player's blocked Combat Experience roll", () => {
     const gmDifficulty = task({
       command: "set_combat_experience_difficulty",

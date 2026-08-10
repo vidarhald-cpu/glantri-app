@@ -13,6 +13,11 @@ inspection cursor and names the exact panel context. Auto-follow selects a viewe
 cell at the canonical step; explicit history selection moves only the green cursor.
 Active-round marker evidence is stage-gated, so compatibility events or empty future
 work cannot mark a later cell complete before the canonical board reaches it.
+Checks require accepted completion evidence for that exact participant and step;
+unrelated results such as Combat Experience, generic snapshots, task suppression,
+and privacy filtering never imply completion. SU remains visible as the shared
+round-end checkpoint after deterministic internal work and before the GM explicitly
+opens the next round.
 
 Projected `round_boundary` events remain readable compatibility/provenance evidence,
 but generic boundary advancement is workflow history and is filtered from participant

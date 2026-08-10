@@ -13,6 +13,7 @@ export * from "./view-models/selectCombatEventsForTrackerCell";
 export * from "./view-models/buildCombatTrackerModel";
 export * from "./view-models/buildCombatProgressionTrackerModel";
 export * from "./view-models/buildProjectedCombatTrackerModel";
+export * from "./view-models/combatTrackerCompletionEvidence";
 export * from "./view-models/combatViewRevision";
 export * from "./view-models/combatLogSelection";
 export * from "./view-models/combatTrackerTaskPresentation";

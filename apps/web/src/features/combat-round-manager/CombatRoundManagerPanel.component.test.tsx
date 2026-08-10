@@ -5,7 +5,6 @@ import {
   buildCombatRoundCommandEnvelope,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
-  advanceCombatProgressionBoundary,
   advanceCombatRoundStep,
   combatRoundStateSchema,
   completeRemainingCombatRoundStep,
@@ -1806,7 +1805,7 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     expect(mocks.advanceCurrentStep).not.toHaveBeenCalled();
   });
 
-  it("keeps the final observation result passive while its deterministic suffix advances", async () => {
+  it("keeps the final observation result passive while exposing the SU board checkpoint", async () => {
     const { afterObservation, beforeObservation, boundaryTask } = buildFinalObservationEncounter();
     const participants = [
       scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
@@ -1817,30 +1816,6 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
         state: combatRoundStateSchema.parse(afterObservation.combatRoundState),
       }),
       encounter: afterObservation,
-    });
-    const afterSuffixState = advanceCombatProgressionBoundary({
-      command: {
-        createdAt: "2026-07-23T10:03:40.000Z",
-        createdByUserId: "gm-1",
-      },
-      expectedBoundary: boundaryTask.transition!.currentBoundary,
-      expectedCommandType: "complete_round",
-      expectedExecutionGroupId: boundaryTask.executionGroupId,
-      expectedTaskId: boundaryTask.id,
-      state: combatRoundStateSchema.parse(afterObservation.combatRoundState),
-      targetBoundary: boundaryTask.transition!.targetBoundary,
-    });
-    const afterSuffix = encounterSessionSchema.parse({
-      ...afterObservation,
-      combatRoundState: afterSuffixState,
-      currentRound: afterSuffixState.roundNumber,
-      updatedAt: "2026-07-23T10:03:40.000Z",
-    });
-    mocks.advanceDeterministic.mockResolvedValueOnce({
-      encounter: afterSuffix,
-      executedTaskIds: [boundaryTask.id],
-      participants: [],
-      stopReason: "blocked_or_human_work",
     });
     render(
       <CombatRoundManagerPanel
@@ -1856,10 +1831,10 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
 
     expect(await screen.findByText("Recent result")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Roll observation" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Continue combat" })).not.toBeInTheDocument();
-    await waitFor(() => expect(mocks.advanceDeterministic).toHaveBeenCalledTimes(1));
+    expect(boundaryTask.expectedCommand).toBe("complete_round");
+    expect(screen.getByRole("button", { name: "Open next round" })).toBeEnabled();
+    expect(mocks.advanceDeterministic).not.toHaveBeenCalled();
     expect(screen.getByText("Recent result")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Declare action" })).toBeEnabled();
     expect(mocks.advanceCurrentStep).not.toHaveBeenCalled();
   });
 });

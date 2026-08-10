@@ -345,7 +345,12 @@ function projectDeclarations(context: ProjectionContext): void {
     const availability = actionId
       ? validateCombatDeclarationActionAvailability({ actionId, kind: "primary" })
       : undefined;
-    const resolved = participant.declaration?.submittedAt !== undefined || actionId !== undefined;
+    const declarationStatus = participant.stepStatuses.select_actions;
+    const resolved =
+      declarationStatus === "submitted" ||
+      declarationStatus === "gmEdited" ||
+      declarationStatus === "complete" ||
+      declarationStatus === "locked";
     const forcedNoAction = Boolean(
       source?.completeness === "complete" && source.forcedNoAction && source.legalChoiceCount === 0,
     );
@@ -1199,13 +1204,13 @@ function projectRoundEnd(context: ProjectionContext): void {
 
   addFact(context, {
     ordering: "ownerless_boundary",
-    ownership: { kind: "ownerless" },
+    ownership: { kind: "gm_owned" },
     processFamily: "boundary",
     processId: plan.id,
-    reason: plan.complete ? "deterministic_boundary" : "no_su_work",
+    reason: plan.complete ? "unresolved_choice" : "no_su_work",
     status: plan.complete ? "required" : "conditional",
     step: "round_boundary",
-    workClass: "deterministic_transition",
+    workClass: plan.complete ? "human_decision" : "no_work",
   });
 }
 

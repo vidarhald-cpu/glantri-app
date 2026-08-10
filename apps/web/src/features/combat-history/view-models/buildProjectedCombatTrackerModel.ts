@@ -24,6 +24,7 @@ import {
   getCombatTrackerFacetStatus,
   getCombatTrackerPendingMarkerKind,
 } from "./combatTrackerTaskPresentation";
+import { hasProjectedCombatTrackerCompletionEvidence } from "./combatTrackerCompletionEvidence";
 
 export interface CombatHistoryInspectionSelection {
   participantId: string;
@@ -40,11 +41,11 @@ function outcomeBoolean(
 
 function markerForEvents(input: {
   events: readonly ProjectedCombatHistoryEvent[];
-  hasSnapshot: boolean;
   historical: boolean;
   initiativeCommitted: boolean;
   liveFacet?: CombatTrackerLiveFacet;
   stageReached: boolean;
+  step: CombatRoundStep;
   stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
   if (!input.stageReached) return { kind: "not_reached", marker: "·" };
@@ -81,10 +82,7 @@ function markerForEvents(input: {
   if (feintEvent?.type === "feint_impossible") {
     return { kind: "skipped", marker: "–" };
   }
-  if (feintEvent && !input.liveFacet?.current)
-    return input.historical
-      ? { kind: "complete", marker: "✓" }
-      : { kind: "not_reached", marker: "·" };
+  if (feintEvent && !input.liveFacet?.current) return { kind: "not_reached", marker: "·" };
   const adjustDistanceEvent = [...input.events]
     .reverse()
     .find((event) => event.type.startsWith("adjust_distance_"));
@@ -94,10 +92,7 @@ function markerForEvents(input: {
   if (adjustDistanceEvent?.type === "adjust_distance_roll" && !input.liveFacet?.current) {
     return { kind: "complete", marker: "✓" };
   }
-  if (adjustDistanceEvent && !input.liveFacet?.current)
-    return input.historical
-      ? { kind: "complete", marker: "✓" }
-      : { kind: "not_reached", marker: "·" };
+  if (adjustDistanceEvent && !input.liveFacet?.current) return { kind: "not_reached", marker: "·" };
 
   const skipped = input.events.some(
     (event) => event.status === "skipped" || event.status === "not_applicable",
@@ -107,7 +102,7 @@ function markerForEvents(input: {
   if (
     input.liveFacet?.current &&
     input.liveFacet.taskKinds.includes("gm_advance_boundary") &&
-    (input.events.length > 0 || input.hasSnapshot)
+    hasProjectedCombatTrackerCompletionEvidence({ events: input.events, step: input.step })
   ) {
     return { kind: "complete", marker: "✓" };
   }
@@ -117,7 +112,7 @@ function markerForEvents(input: {
   }
   const hasRecordedCompletion = initiative
     ? input.initiativeCommitted
-    : input.events.length > 0 || input.hasSnapshot;
+    : hasProjectedCombatTrackerCompletionEvidence({ events: input.events, step: input.step });
   if (hasRecordedCompletion) return { kind: "complete", marker: "✓" };
   return { kind: "not_reached", marker: "·" };
 }
@@ -428,11 +423,11 @@ export function buildProjectedCombatTrackerModel(input: {
         });
         const marker = markerForEvents({
           events: participantResultEvents,
-          hasSnapshot: Boolean(snapshot),
           historical: round.roundNumber !== activeRoundNumber,
           initiativeCommitted,
           liveFacet,
           stageReached,
+          step,
           stepOutcome: snapshot?.stepOutcome,
         });
         const inspectable =

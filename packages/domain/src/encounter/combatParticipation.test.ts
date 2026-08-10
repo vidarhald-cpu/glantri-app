@@ -264,6 +264,45 @@ describe("canonical combat participation", () => {
     });
   });
 
+  it("does not treat a draft action id as an accepted declaration", () => {
+    const projection = project(
+      activeState({
+        participants: [
+          participant("hero", declaration("parry"), {
+            stepStatuses: { select_actions: "pending" },
+          }),
+          participant("guard"),
+        ],
+      }),
+    );
+
+    expect(fact(projection, { family: "declaration", participantId: "hero" })).toMatchObject({
+      reason: "declaration_required",
+      status: "required",
+    });
+  });
+
+  it.each([
+    ["player submission", "submitted"],
+    ["GM submission or NPC proposal acceptance", "gmEdited"],
+  ] as const)("accepts %s as canonical DE completion evidence", (_label, status) => {
+    const projection = project(
+      activeState({
+        participants: [
+          participant("hero", declaration("parry"), {
+            stepStatuses: { select_actions: status },
+          }),
+          participant("guard"),
+        ],
+      }),
+    );
+
+    expect(fact(projection, { family: "declaration", participantId: "hero" })).toMatchObject({
+      reason: "already_resolved",
+      status: "already_resolved",
+    });
+  });
+
   it("blocks unavailable legacy declarations rather than guessing participation", () => {
     const projection = project(
       activeState({
@@ -753,6 +792,30 @@ describe("canonical combat participation", () => {
     expect(
       fact(projection, { family: "effect_review", participantId: "guard", step: "SU_effect" }),
     ).toMatchObject({ reason: "no_su_work", status: "not_required" });
+  });
+
+  it("classifies completed SU as a GM-owned board checkpoint rather than a deterministic suffix", () => {
+    const projection = project(
+      activeState({
+        currentStep: "round_summary",
+        overrides: {
+          roundEndReview: {
+            participantReviews: {
+              guard: { participantId: "guard", status: "complete" },
+              hero: { participantId: "hero", status: "complete" },
+            },
+            roundNumber: 2,
+          },
+        },
+      }),
+    );
+
+    expect(fact(projection, { family: "boundary", step: "round_boundary" })).toMatchObject({
+      ownership: { kind: "gm_owned" },
+      reason: "unresolved_choice",
+      status: "required",
+      workClass: "human_decision",
+    });
   });
 
   it("classifies Continued Contact and distance control with distinct pair roles", () => {

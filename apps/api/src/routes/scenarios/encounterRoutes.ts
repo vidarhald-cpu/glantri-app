@@ -4320,6 +4320,9 @@ function classifyApiCombatStepAutomationTask(input: {
   | { kind: "execute"; countsTowardProcessed: boolean }
   | { kind: "stop"; reason: CombatStepAutomationStopReason } {
   const { operationFamily, task } = input;
+  if (task.kind === "gm_advance_boundary" && task.expectedCommand === "complete_round") {
+    return { kind: "stop", reason: "gm_decision_required" };
+  }
   if (
     operationFamily === "roll_remaining" &&
     task.kind === "combat_experience" &&

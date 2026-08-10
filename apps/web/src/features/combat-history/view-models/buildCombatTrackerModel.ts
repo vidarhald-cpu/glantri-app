@@ -18,6 +18,7 @@ import {
   getCombatTrackerFacetStatus,
   getCombatTrackerPendingMarkerKind,
 } from "./combatTrackerTaskPresentation";
+import { getCombatTrackerStatusCompletionKind } from "./combatTrackerCompletionEvidence";
 
 export const COMBAT_TRACKER_MARKER_MEANINGS: readonly CombatTrackerLegendItem[] = [
   {
@@ -71,20 +72,6 @@ function attackPhase(step: CombatRoundStep): boolean {
   return step === "phase_1_actions" || step === "phase_2_actions";
 }
 
-function statusKind(status: string | undefined): CombatTrackerMarkerKind {
-  switch (status) {
-    case "submitted":
-    case "gmEdited":
-    case "complete":
-      return "complete";
-    case "locked":
-    case "skipped":
-      return "skipped";
-    default:
-      return "not_reached";
-  }
-}
-
 function markerMeaning(kind: CombatTrackerMarkerKind): CombatTrackerLegendItem {
   return (
     COMBAT_TRACKER_MARKER_MEANINGS.find((meaning) => meaning.kind === kind) ??
@@ -106,7 +93,7 @@ export function getCombatTrackerCellMarkerKind(
     !attackPhase(input.step) &&
     input.progression?.current &&
     input.progression.taskKinds.includes("gm_advance_boundary") &&
-    statusKind(input.status) === "complete"
+    getCombatTrackerStatusCompletionKind(input.status) === "complete"
   ) {
     return "complete";
   }
@@ -134,10 +121,10 @@ export function getCombatTrackerCellMarkerKind(
       input.status === "locked"
     )
       return "skipped";
-    if (statusKind(input.status) === "complete") return "skipped";
+    if (getCombatTrackerStatusCompletionKind(input.status) === "complete") return "skipped";
     return input.progression?.current
       ? getCombatTrackerPendingMarkerKind(input.progression)
-      : statusKind(input.status);
+      : getCombatTrackerStatusCompletionKind(input.status);
   }
   if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {
     const parryStatus = input.phaseResolutionResult?.parryResolution.status;
@@ -151,7 +138,7 @@ export function getCombatTrackerCellMarkerKind(
     )
       return "skipped";
     if (input.progression?.current) return getCombatTrackerPendingMarkerKind(input.progression);
-    if (statusKind(input.status) === "complete") return "skipped";
+    if (getCombatTrackerStatusCompletionKind(input.status) === "complete") return "skipped";
   }
   if (input.step === "phase_1_damage" || input.step === "phase_2_damage") {
     const resolution = input.phaseResolutionResult;
@@ -165,11 +152,11 @@ export function getCombatTrackerCellMarkerKind(
     )
       return "skipped";
     if (input.progression?.current) return getCombatTrackerPendingMarkerKind(input.progression);
-    if (statusKind(input.status) === "complete") return "skipped";
+    if (getCombatTrackerStatusCompletionKind(input.status) === "complete") return "skipped";
   }
   return input.progression?.current
     ? getCombatTrackerPendingMarkerKind(input.progression)
-    : statusKind(input.status);
+    : getCombatTrackerStatusCompletionKind(input.status);
 }
 
 function initiativeSource(input: CombatTrackerCellFacts): string {
@@ -380,8 +367,8 @@ export function buildCombatTrackerModel(input: {
       hoverText: `${facts.participantLabel} · Round ${facts.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[facts.step]}: ${hover.text}`,
       initiativeValue: Boolean(
         markerKind === "roll_result" &&
-          facts.initiativeCommitted &&
-          facts.initiativeTotal !== undefined,
+        facts.initiativeCommitted &&
+        facts.initiativeTotal !== undefined,
       ),
       inspectable: facts.inspectable,
       marker,

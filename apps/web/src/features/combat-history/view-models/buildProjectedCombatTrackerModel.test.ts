@@ -637,7 +637,9 @@ describe("buildProjectedCombatTrackerModel", () => {
   });
 
   it("returns from completed CE to an ordinary pending declaration dot", () => {
-    const projection = history([]);
+    const projection = history([
+      event({ ownerParticipantId: "aria", step: "select_actions", type: "combat_experience" }),
+    ]);
     projection.progression = liveProgression({
       boundary: "declaration",
       kind: "submit_declaration",
@@ -647,6 +649,41 @@ describe("buildProjectedCombatTrackerModel", () => {
     expect(
       buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:select_actions"],
     ).toMatchObject({ attention: "ordinary", marker: "·" });
+  });
+
+  it("does not treat CE or a generic declaration snapshot as accepted DE completion", () => {
+    const projection = history([
+      event({ ownerParticipantId: "aria", step: "select_actions", type: "combat_experience" }),
+    ]);
+    projection.activeRound.snapshots = [snapshot({ step: "select_actions" })];
+    projection.progression = liveProgression({
+      boundary: "declaration",
+      kind: "submit_declaration",
+      step: "DE",
+    });
+
+    expect(
+      buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:select_actions"],
+    ).toMatchObject({ completed: false, current: true, marker: "·" });
+  });
+
+  it("uses the same accepted declaration evidence after player, GM, or NPC acceptance", () => {
+    for (const id of ["player-declaration", "gm-declaration", "npc-declaration"]) {
+      const projection = history([
+        event({ id, ownerParticipantId: "aria", step: "select_actions", type: "declaration" }),
+      ]);
+      projection.progression = liveProgression({
+        boundary: "declaration",
+        gmOwned: true,
+        kind: "gm_advance_boundary",
+        step: "DE",
+        targetBoundary: "phase1_modifier_review",
+      });
+
+      expect(
+        buildProjectedCombatTrackerModel({ history: projection }).cells["1:aria:select_actions"],
+      ).toMatchObject({ completed: true, marker: "✓" });
+    }
   });
 
   it("marks recorded initiative complete and shows its number only after GM commit", () => {

@@ -602,7 +602,9 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
     case "round_end_prepare":
       return "Begin round end";
     case "gm_advance_boundary":
-      return boundaryButtonLabel(task.transition?.targetBoundary);
+      return task.expectedCommand === "complete_round"
+        ? "Open next round"
+        : boundaryButtonLabel(task.transition?.targetBoundary);
   }
 }
 
@@ -680,7 +682,9 @@ function requiredNowFor(
     case "round_end_prepare":
       return "Begin round end.";
     case "gm_advance_boundary":
-      return boundaryInstruction(task.transition?.targetBoundary);
+      return task.expectedCommand === "complete_round"
+        ? "Open next round."
+        : boundaryInstruction(task.transition?.targetBoundary);
   }
 }
 
@@ -736,6 +740,7 @@ function canonicalWaitingPresentation(
   const waitingForGm = position.waitingFor === "gm";
   const modifierReview =
     boundary === "phase1_modifier_review" || boundary === "phase2_modifier_review";
+  const roundEndCheckpoint = boundary === "round_boundary";
   const incomplete = position.taskVisibility === "unavailable";
   const requiredActor: CombatPresentationSubject = waitingForGm
     ? { hidden: false, id: "gm", label: "GM" }
@@ -744,9 +749,11 @@ function canonicalWaitingPresentation(
     ? "Waiting for the GM to repair the active combat state."
     : modifierReview && waitingForGm
       ? "Waiting for GM modifier review."
-      : waitingForGm
-        ? "Waiting for GM."
-        : "Waiting for another participant.";
+      : roundEndCheckpoint && waitingForGm
+        ? "Waiting for GM to complete round-end review."
+        : waitingForGm
+          ? "Waiting for GM."
+          : "Waiting for another participant.";
   return Object.freeze({
     actionName: incomplete ? "Combat state" : "Current combat task",
     boundary,
@@ -767,14 +774,18 @@ function canonicalWaitingPresentation(
       ? "The active encounter has incomplete canonical progression information."
       : modifierReview
         ? `${boundary === "phase1_modifier_review" ? "Phase 1" : "Phase 2"} modifiers are being reviewed.`
-        : `Combat remains at ${BOUNDARY_LABELS[boundary]}.`,
+        : roundEndCheckpoint
+          ? "Round-end work is complete. The GM must open the next round."
+          : `Combat remains at ${BOUNDARY_LABELS[boundary]}.`,
     taskHeading: incomplete
       ? "Combat state incomplete"
       : modifierReview && waitingForGm
         ? "Waiting for GM modifier review"
-        : waitingForGm
-          ? "Waiting for GM"
-          : "Waiting for another participant",
+        : roundEndCheckpoint && waitingForGm
+          ? "Waiting for GM round-end review"
+          : waitingForGm
+            ? "Waiting for GM"
+            : "Waiting for another participant",
     trackerFacet: position.trackerFacet.step,
   });
 }

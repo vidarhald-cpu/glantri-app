@@ -44,8 +44,8 @@ tracker unless an explicit combat rule requires it.
 
 The combat workspace keeps a stable three-column by two-row arrangement:
 
-| Declaration | Phase 1 | Phase 2 |
-| --- | --- | --- |
+| Declaration      | Phase 1                              | Phase 2 |
+| ---------------- | ------------------------------------ | ------- |
 | Combat Situation | Current Action or Historical Context | Results |
 
 Panel widths and horizontal ownership remain stable. Content expands vertically
@@ -87,6 +87,16 @@ cursor, and `Current task` returns it to the canonical operational context.
 Canonical stage order gates active-round presentation. Suppressing a participant's
 unneeded task does not complete or open a later cell: a future no-work stage remains
 neutral until the shared board reaches it.
+
+A tracker check is accepted canonical completion evidence for that participant and
+step. The absence or suppression of a task, an unrelated same-cell result, a generic
+snapshot, viewer filtering, or a workflow boundary event is not completion evidence.
+
+SU is a shared board checkpoint. Deterministic work may prepare SU and close empty
+participant reviews without restoring per-participant acknowledgement controls, but
+the deterministic suffix stops after that work. The final SU-to-next-round action is
+an explicit GM round-end checkpoint so every surface can present SU before the round
+boundary is accepted.
 
 ## Current Action
 

@@ -42,6 +42,11 @@ export function getCurrentExecutableCombatTasks(
 }
 
 export function isCompleteDeterministicCombatTask(task: CombatProgressionTask): boolean {
+  // SU -> next round is an explicit board checkpoint. Internal round-end preparation may run as
+  // a deterministic suffix, but the suffix must leave this GM action visible on the shared board.
+  if (task.kind === "gm_advance_boundary" && task.expectedCommand === "complete_round") {
+    return false;
+  }
   return Boolean(
     task.participation &&
     task.participation.completeness === "complete" &&

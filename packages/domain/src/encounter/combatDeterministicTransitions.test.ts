@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getCurrentExecutableCombatTasks,
+  isCompleteDeterministicCombatTask,
   runCombatDeterministicTransitionSuffix,
   type CombatDeterministicTransitionProjection,
 } from "./combatDeterministicTransitions";
@@ -9,6 +10,7 @@ import type { CombatParticipationProjection } from "./combatParticipation";
 import type { CombatProgressionProjection } from "./combatProgressionProjection";
 
 function projection(input: {
+  command?: "advance_combat_boundary" | "complete_round";
   counter: number;
   deterministic?: boolean;
   revision?: string;
@@ -37,7 +39,7 @@ function projection(input: {
     },
     blockerIds: [],
     executionGroupId: `group-${input.counter}`,
-    expectedCommand: "advance_combat_boundary",
+    expectedCommand: input.command ?? "advance_combat_boundary",
     id: `task-${input.counter}`,
     identity: { executionGroupId: `group-${input.counter}` },
     kind: "gm_advance_boundary",
@@ -102,6 +104,27 @@ function projection(input: {
 }
 
 describe("deterministic combat transition suffix", () => {
+  it("never consumes the explicit SU-to-next-round board checkpoint", async () => {
+    const current = projection({ command: "complete_round", counter: 0 });
+    const task = getCurrentExecutableCombatTasks(current.progression)[0]!;
+    let executions = 0;
+
+    expect(isCompleteDeterministicCombatTask(task)).toBe(false);
+    const result = await runCombatDeterministicTransitionSuffix({
+      execute: async ({ projection: accepted }) => {
+        executions += 1;
+        return { revision: accepted.revision, state: accepted.state };
+      },
+      initial: current,
+      project: () => current,
+    });
+
+    expect(executions).toBe(0);
+    expect(result.executedTaskIds).toEqual([]);
+    expect(result.final).toBe(current);
+    expect(result.stopReason).toBe("blocked_or_human_work");
+  });
+
   it("ignores optional executable tasks retained in a completed declaration stage", () => {
     const current = projection({ counter: 0 });
     const activeProcess = current.progression.boundary.processes[0]!;

@@ -243,6 +243,12 @@ There are two explicit compatibility boundaries:
 - `complete_round` temporarily returns the legacy full response because the GM
   tracker still needs the newly archived round from the encounter.
 
+The deterministic transition suffix may prepare round end and close canonically
+empty SU participant reviews, but `complete_round` is not a deterministic task. It
+remains an explicit GM-owned SU board checkpoint. Accepting that checkpoint through
+the compatibility response supplies the newly archived round and the active next
+round together; no archive rescan or client-side reconstruction is involved.
+
 Moving GM historical tracker/inspection to revision-keyed history is required before
 removing the round-boundary exception. New commands must not create additional
 full-response exceptions.
