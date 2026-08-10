@@ -8,6 +8,7 @@ import type {
 } from "@glantri/domain";
 import {
   getCombatDeclarationAttackPhases,
+  resolveCombatDeclarationParticipantIdentity,
   resolveCombatFeintWeaponSkillDefinition,
   resolvePreferredAttackMode,
   scenarioParticipantCombatContextSchema,
@@ -84,12 +85,10 @@ export function resolveCanonicalCombatTargetIdentity(input: {
     }
   | undefined {
   if (!input.targetParticipantId) return undefined;
-  const participant = input.encounterParticipants.find(
-    (candidate) =>
-      candidate.id === input.targetParticipantId ||
-      candidate.scenarioParticipantId === input.targetParticipantId ||
-      candidate.characterId === input.targetParticipantId,
-  );
+  const participant = resolveCombatDeclarationParticipantIdentity({
+    participantId: input.targetParticipantId,
+    participants: input.encounterParticipants,
+  })?.participant;
   if (!participant && input.fallbackParticipantIds?.includes(input.targetParticipantId)) {
     return {
       encounterParticipantId: input.targetParticipantId,

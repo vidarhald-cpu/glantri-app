@@ -158,6 +158,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("const currentModifierPhase = getPlayerCombatModifierDisplayPhase({");
     expect(source).toContain("phaseKey: currentModifierPhase");
     expect(source).toContain("validateCombatDeclarationTargets");
+    expect(source).toContain("participantIdentities: combatRoundState?.participants");
+    expect(source).toContain("canonicalizeCombatObserveTargetContext({");
+    expect(source).toContain("secondaryActionContext: requestSecondaryActionContext");
     expect(source).toContain("targetValidation");
     expect(source).toContain("declarationTargetValidationMessage");
     expect(source).toContain("combatExperienceValidationMessage ??");

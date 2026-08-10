@@ -1434,6 +1434,29 @@ describe("player combat phase model", () => {
     });
   });
 
+  it("does not let a legacy character alias shadow an exact encounter target", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [
+          {
+            characterId: "encounter-defender",
+            id: "encounter-attacker",
+            scenarioParticipantId: "scenario-attacker",
+          },
+          {
+            characterId: "character-defender",
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof resolveCanonicalCombatTargetIdentity>[0]["encounterParticipants"],
+        targetParticipantId: "encounter-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "encounter-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
   it("resolves a fallback scenario-roster target when encounter membership is implicit", () => {
     expect(
       resolveCanonicalCombatTargetIdentity({

@@ -190,6 +190,7 @@ import {
   projectCombatHistory,
   withCombatHistoryRoundState,
   removeDistanceGeneratedObSkillModifiers,
+  resolveCombatDeclarationParticipantIdentity,
   resolveCombatFeintWeaponSkillDefinition,
   scenarioParticipantCombatContextSchema,
   scenarioCombatModifierEntrySchema,
@@ -6740,10 +6741,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
       const selectedObserveOpponent =
         body.secondaryActionId === "observe_opponent"
-          ? findCombatRoundParticipantByAlias({
-              id: body.secondaryActionContext?.targetParticipantId,
-              state: roundState,
-            })
+          ? resolveCombatDeclarationParticipantIdentity({
+              participantId: body.secondaryActionContext?.targetParticipantId,
+              participants: roundState.participants,
+            })?.participant
           : undefined;
       if (
         body.secondaryActionId === "observe_opponent" &&
@@ -7474,6 +7475,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         actingParticipantId: encounterParticipant.id,
         actionId: body.actionId,
         movementKind: submittedMovementIntent?.mode,
+        participantIdentities: roundState.participants,
         phaseContexts: declarationPhaseContexts,
         secondaryActionContext: canonicalSecondaryActionContext,
         selectedOpponentId: submittedCombatContext.selectedOpponentId,

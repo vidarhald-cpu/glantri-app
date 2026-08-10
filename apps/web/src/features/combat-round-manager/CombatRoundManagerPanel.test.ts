@@ -430,6 +430,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Committed");
     expect(source).toContain("phaseKey: inspectorModifierPhase");
     expect(source).toContain("validateCombatDeclarationTargets");
+    expect(source).toContain("participantIdentities: selectedTimelineRoundState.participants");
+    expect(source).toContain("canonicalizeCombatObserveTargetContext({");
+    expect(source).toContain("resolveCombatDeclarationParticipantIdentity({");
+    expect(source).toContain("secondaryActionContext: requestSecondaryActionContext");
     expect(source).toContain("inspectorTargetValidation");
     expect(source).toContain("inspectorTargetValidationMessage");
     expect(source).toContain("validationMessage={inspectorActionValidationMessage}");

@@ -20,7 +20,9 @@ secondaryActionContext:
 
 Observe Opponent's selector belongs in Phase 1, not in the general action-selector panel and not in
 an attack-owned target field. The acting participant is ineligible. The context persists with the
-declaration, snapshots, history, reload, recommit, and undo.
+declaration, snapshots, history, reload, recommit, and undo. Editable scenario/character aliases
+are normalized against the canonical round roster at the request boundary: an exact encounter
+participant ID wins, unique legacy aliases remain compatible, and ambiguous aliases fail closed.
 
 ## Compatibility
 

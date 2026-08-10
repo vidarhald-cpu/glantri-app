@@ -55,6 +55,7 @@ import {
   buildCombatRoundPhaseResolutionResult,
   buildLiveCombatModifierContributionProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
+  canonicalizeCombatObserveTargetContext,
   buildCombatRoundInspector,
   canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
@@ -102,6 +103,7 @@ import {
   getWeaponPreferredDistances,
   reviewCombatRoundDamageResult,
   projectCombatNpcDeclarationProposal,
+  resolveCombatDeclarationParticipantIdentity,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -5243,6 +5245,7 @@ export default function CombatRoundManagerPanel({
         actingParticipantId: inspector.participant?.participantId,
         actionId: inspectorDraft.actionId || undefined,
         movementKind: inspectorDraft.movementIntent.mode,
+        participantIdentities: selectedTimelineRoundState.participants,
         phaseContexts: inspectorDraft.phaseContexts,
         secondaryActionContext: inspectorDraft.secondaryActionContext,
         selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
@@ -5256,6 +5259,7 @@ export default function CombatRoundManagerPanel({
       inspectorDraft.secondaryActionId,
       inspectorDraft.movementIntent.mode,
       inspector.participant?.participantId,
+      selectedTimelineRoundState.participants,
     ],
   );
   const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
@@ -8442,9 +8446,10 @@ export default function CombatRoundManagerPanel({
       return;
     }
     const taskScenarioParticipant = scenarioParticipantForTask(descriptor);
-    const taskEncounterParticipant = encounter.participants.find((participant) =>
-      getCombatDistanceParticipantAliases(participant).includes(descriptor.participantId!),
-    );
+    const taskEncounterParticipant = resolveCombatDeclarationParticipantIdentity({
+      participantId: descriptor.participantId,
+      participants: encounter.participants,
+    })?.participant;
     if (!encounter.scenarioId || !taskScenarioParticipant || !taskEncounterParticipant) {
       return;
     }
@@ -8517,6 +8522,7 @@ export default function CombatRoundManagerPanel({
           actingParticipantId: taskEncounterParticipant.id,
           actionId: inspectorDraft.actionId || undefined,
           movementKind: inspectorDraft.movementIntent.mode,
+          participantIdentities: roundState.participants,
           phaseContexts: requestPhaseContexts,
           secondaryActionContext: inspectorDraft.secondaryActionContext,
           selectedOpponentId: inspectorDraft.combatContext.selectedOpponentId,
@@ -8525,6 +8531,14 @@ export default function CombatRoundManagerPanel({
 
     if (!targetValidation.valid) {
       setSaveError(targetValidation.message ?? "Select a target for each attack phase.");
+      return;
+    }
+    const requestSecondaryActionContext = canonicalizeCombatObserveTargetContext({
+      participants: roundState.participants,
+      secondaryActionContext: inspectorDraft.secondaryActionContext,
+    });
+    if (inspectorDraft.secondaryActionId === "observe_opponent" && !requestSecondaryActionContext) {
+      setSaveError("Select an active opponent to observe.");
       return;
     }
 
@@ -8614,7 +8628,7 @@ export default function CombatRoundManagerPanel({
         },
         reviewStepSnapshot,
         scenarioParticipantId: taskScenarioParticipant.id,
-        secondaryActionContext: inspectorDraft.secondaryActionContext,
+        secondaryActionContext: requestSecondaryActionContext,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
@@ -8718,9 +8732,10 @@ export default function CombatRoundManagerPanel({
   function scenarioParticipantForTask(descriptor: CurrentActionCommandDescriptor) {
     const participantId = descriptor.participantId;
     if (!participantId) return undefined;
-    const encounterParticipant = encounter.participants.find((participant) =>
-      getCombatDistanceParticipantAliases(participant).includes(participantId),
-    );
+    const encounterParticipant = resolveCombatDeclarationParticipantIdentity({
+      participantId,
+      participants: encounter.participants,
+    })?.participant;
     return encounterParticipant
       ? findScenarioParticipantForEncounterParticipant({
           encounterParticipant,

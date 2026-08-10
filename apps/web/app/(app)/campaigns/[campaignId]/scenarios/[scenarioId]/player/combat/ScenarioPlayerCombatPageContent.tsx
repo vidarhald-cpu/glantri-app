@@ -22,6 +22,7 @@ import {
   type CombatRoundStep,
   type CombatDistance,
   buildLiveCombatModifierContributionProjection,
+  canonicalizeCombatObserveTargetContext,
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
   formatOpenEndedD20RollBreakdown,
@@ -1808,6 +1809,7 @@ export default function ScenarioPlayerCombatPageContent({
         actingParticipantId: selectedRoundParticipant?.participantId,
         actionId: selectedRoundDeclaration.actionId,
         movementKind: selectedRoundDeclaration.movementIntent?.mode,
+        participantIdentities: combatRoundState?.participants,
         phaseContexts: selectedRoundDeclaration.phaseContexts,
         secondaryActionContext: selectedRoundDeclaration.secondaryActionContext,
         selectedOpponentId: selectedRoundDeclaration.combatContext?.selectedOpponentId,
@@ -2657,6 +2659,7 @@ export default function ScenarioPlayerCombatPageContent({
       actingParticipantId: selectedRoundParticipant?.participantId,
       actionId: selectedActionId || undefined,
       movementKind: selectedMovementIntent.mode,
+      participantIdentities: combatRoundState?.participants,
       phaseContexts: requestPhaseContexts,
       secondaryActionContext,
       selectedOpponentId: combatContextDraft.selectedOpponentId,
@@ -2665,6 +2668,14 @@ export default function ScenarioPlayerCombatPageContent({
 
     if (!targetValidation.valid) {
       setError(targetValidation.message ?? "Select a target for each attack phase.");
+      return;
+    }
+    const requestSecondaryActionContext = canonicalizeCombatObserveTargetContext({
+      participants: combatRoundState?.participants ?? [],
+      secondaryActionContext,
+    });
+    if (selectedSecondaryActionId === "observe_opponent" && !requestSecondaryActionContext) {
+      setError("Select an active opponent to observe.");
       return;
     }
 
@@ -2718,7 +2729,7 @@ export default function ScenarioPlayerCombatPageContent({
           phase2: phaseCombatLoadoutSummaries.phase2.attackStats?.weaponName,
         },
         scenarioParticipantId: descriptor.participantId!,
-        secondaryActionContext,
+        secondaryActionContext: requestSecondaryActionContext,
         secondaryActionId: selectedSecondaryActionId || undefined,
         taskId: descriptor.taskId,
       });
@@ -4141,6 +4152,7 @@ export default function ScenarioPlayerCombatPageContent({
         actingParticipantId: selectedRoundParticipant?.participantId,
         actionId: selectedActionId || undefined,
         movementKind: selectedMovementIntent.mode,
+        participantIdentities: combatRoundState?.participants,
         phaseContexts: phaseCombatContextDrafts,
         secondaryActionContext,
         selectedOpponentId: combatContextDraft.selectedOpponentId,
@@ -4148,6 +4160,7 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [
       combatContextDraft.selectedOpponentId,
+      combatRoundState?.participants,
       phaseCombatContextDrafts,
       secondaryActionContext,
       selectedActionId,

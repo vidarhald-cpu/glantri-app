@@ -11123,6 +11123,73 @@ describe("scenarios route contract", () => {
     ).toBe("encounter-participant-2");
   });
 
+  it("keeps an exact Observe opponent identity ahead of a colliding legacy actor alias", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants().map((participant, index) =>
+      index === 0 ? { ...participant, characterId: "encounter-participant-2" } : participant,
+    ) as unknown as EncounterSession["participants"];
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participant: {
+        characterId: "encounter-participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
+          displayName: "Scyrian cavalry guy",
+        },
+      },
+      participants: [
+        {
+          characterId: "encounter-participant-2",
+          id: "participant-1",
+          snapshot: {
+            build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
+            displayName: "Scyrian cavalry guy",
+          },
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: { displayName: "The Gladiator" },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-1",
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "encounter-participant-2",
+        },
+        secondaryActionId: "observe_opponent",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    const savedRoundState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+    expect(
+      savedRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.declaration,
+    ).toMatchObject({
+      actionId: "parry",
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: "encounter-participant-2",
+      },
+      secondaryActionId: "observe_opponent",
+    });
+  });
+
   it("rejects GM Double Attack declarations unless both attack phases have targets", async () => {
     setupCombatDeclarationRoute({ user: mocks.adminUser });
     const app = await buildScenarioTestApp();

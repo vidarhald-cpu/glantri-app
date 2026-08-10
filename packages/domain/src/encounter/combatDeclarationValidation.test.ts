@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalizeCombatObserveTargetContext,
   getCombatDeclarationAttackPhases,
   getCombatDeclarationActionLabel,
+  resolveCombatDeclarationParticipantIdentity,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
 
@@ -100,6 +102,89 @@ describe("combat declaration target validation", () => {
         secondaryActionContext: {
           action: "observe_opponent",
           targetParticipantId: "actor",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({
+      message: "Observe Opponent cannot target the acting participant.",
+      valid: false,
+    });
+  });
+
+  it("resolves Observe identities through one exact-first canonical participant roster", () => {
+    const participants = [
+      {
+        characterId: "scenario-target",
+        participantId: "encounter-actor",
+        scenarioParticipantId: "scenario-actor",
+      },
+      {
+        characterId: "character-target",
+        participantId: "encounter-target",
+        scenarioParticipantId: "scenario-target",
+      },
+    ];
+
+    expect(
+      resolveCombatDeclarationParticipantIdentity({
+        participantId: "encounter-target",
+        participants,
+      }),
+    ).toMatchObject({ canonicalParticipantId: "encounter-target" });
+    expect(
+      resolveCombatDeclarationParticipantIdentity({
+        participantId: "scenario-target",
+        participants,
+      }),
+    ).toBeUndefined();
+    expect(
+      canonicalizeCombatObserveTargetContext({
+        participants,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "encounter-target",
+        },
+      }),
+    ).toEqual({
+      action: "observe_opponent",
+      targetParticipantId: "encounter-target",
+    });
+  });
+
+  it("validates Observe self-targeting after canonical alias resolution", () => {
+    const participantIdentities = [
+      {
+        characterId: "character-actor",
+        participantId: "encounter-actor",
+        scenarioParticipantId: "scenario-actor",
+      },
+      {
+        characterId: "character-target",
+        participantId: "encounter-target",
+        scenarioParticipantId: "scenario-target",
+      },
+    ];
+
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "encounter-actor",
+        actionId: "parry",
+        participantIdentities,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "scenario-target",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({ valid: true });
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "encounter-actor",
+        actionId: "parry",
+        participantIdentities,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "character-actor",
         },
         secondaryActionId: "observe_opponent",
       }),
