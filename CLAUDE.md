@@ -12,6 +12,13 @@
 - Do not approve/cancel deployments, deploy, edit production settings or secrets, request production write access, or use available credentials to bypass these rules.
 - A future shared integration branch does not change these rules unless its ownership and merge authority have been explicitly approved and documented.
 
+## Operating boundary and tooling
+
+- Normal Glantri work is limited to the assigned repository/worktree, existing standard local development and file-processing tools, Glantri GitHub within the authority above, and Glantri sources explicitly stored in the repository or project context.
+- Use existing local compilers, linters, test runners, Git, Docker/database tooling, Prisma, and local file readers/converters on Glantri files without separate approval.
+- Obtain explicit user approval before installing software, extensions, global utilities, or packages outside the normal repository dependency workflow; enabling an external service; or granting permissions or access beyond the assigned workspace.
+- Installed tools do not authorize external transmission or destructive/external actions. Do not use external AI/cloud analysis, signed-in personal services, publishing/deployment services, or live personal Drive access unless the Glantri task requires it and the user explicitly approves where appropriate.
+
 ## Required task start
 
 1. Read `AGENTS.md`, `docs/process/control-plane.md`, `docs/process/development-baseline.md`, and `docs/architecture/ownership.md`.

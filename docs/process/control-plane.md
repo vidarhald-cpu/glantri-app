@@ -33,6 +33,49 @@ Historical issues, milestones, and Claude-created architecture work are preserve
 
 Credentials do not confer product or release authority. Agents must not merge to `main`, approve/cancel deployments, deploy, change Azure production configuration/secrets, or request production write access.
 
+## Least privilege and development tooling
+
+### Normal Glantri operating boundary
+
+An agent's default operating boundary is:
+
+- the assigned Glantri repository or isolated worktree;
+- existing standard local development and file-processing tools;
+- the Glantri GitHub repository, subject to the separate read/write, push, PR, merge, and release authority in this control plane and the task contract; and
+- Glantri source material explicitly stored in the repository or supplied through the Glantri project context.
+
+Anything outside that boundary needs a concrete task reason and the approval required below. Technical reachability, an existing login, a credential, or an installed tool does not expand the task's scope or the agent's authority.
+
+### Routine local tool use
+
+Existing standard local tools may be used on Glantri files inside the assigned worktree without separate approval. This includes compilers and typecheckers, formatters and linters, test runners, Git tooling, Docker and local database tooling, Prisma, and local PDF, Office, Excel, and general file readers or converters.
+
+The normal repository dependency workflow may install dependencies already declared by the repository and make task-authorized dependency changes using the repository's package manager. It does not authorize installing unrelated or global software.
+
+### Actions that require explicit approval
+
+Obtain explicit user approval, tied to a concrete task need, before:
+
+- installing new software, VS Code extensions, global utilities, or packages outside the normal repository dependency workflow;
+- enabling a new external service or integration;
+- granting new macOS permissions or filesystem access outside the assigned workspace;
+- granting personal-cloud or account access; or
+- granting computer-control, Accessibility, screen-recording/screen-capture, or other expanded privileges.
+
+If an existing tool cannot complete the task without one of these changes, stop and request the narrowest useful permission or installation rather than treating the task itself as blanket approval.
+
+### External transmission and personal services
+
+An installed VS Code extension or local tool is not automatically approved to transmit Glantri repository or source content. External AI or cloud analysis, signed-in personal services, publishing/deployment services, and any other tool that sends project content outside the approved Glantri/GitHub environment require explicit approval before use.
+
+Personal ChatGPT capabilities such as Calendar or Sites may exist for unrelated user purposes. Glantri agents must not use them unless the Glantri task explicitly requires them and the user approves their use where appropriate. Their presence does not make them part of the Glantri control plane.
+
+The personal Google Drive connector has been deliberately disconnected. Current Glantri source workbooks are tracked local snapshots, and live personal Drive access is not required or part of the default workflow. When a source workbook changes, use a deliberate source-ingestion flow: export or otherwise obtain the approved snapshot, replace the tracked repository copy, record provenance as needed, and commit the change. Do not silently substitute a live personal-Drive version.
+
+### Tool availability does not grant action authority
+
+Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter GitHub, production, or Azure configuration.
+
 ## Work lifecycle
 
 Use these Project statuses:

@@ -17,6 +17,13 @@ These instructions apply to every coding agent. Tool-specific guidance such as `
 
 See `docs/process/control-plane.md` and `docs/process/development-baseline.md` for the complete operating model.
 
+## Operating boundary and tooling
+
+- Normal Glantri work is limited to the assigned repository/worktree, existing standard local development and file-processing tools, the Glantri GitHub repository under the authority rules above, and Glantri source material explicitly stored in the repository or project context.
+- Existing compilers, typecheckers, formatters, linters, test runners, Git, Docker/local database tooling, Prisma, and local PDF/Office/Excel/file readers or converters may be used on Glantri files without separate approval.
+- Explicit user approval is required before installing software, VS Code extensions, global utilities, or packages outside the normal repository dependency workflow; enabling an external service/integration; or granting new permissions, account access, personal-cloud access, computer control, or filesystem access outside the assigned workspace.
+- An installed tool is not permission to transmit Glantri content externally. Do not use external AI/cloud analysis, personal ChatGPT services, publishing/deployment services, or live personal Drive access for Glantri unless the task requires it and the user explicitly approves where appropriate. Tool availability never grants authority to push, merge, deploy, delete, publish, or take another destructive/external action.
+
 ## Start every non-trivial task with a contract
 
 Before implementation, identify:
