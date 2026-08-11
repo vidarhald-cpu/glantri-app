@@ -15797,13 +15797,13 @@ describe("combat round manager", () => {
         state: activeRound!,
       }),
     ).toBeUndefined();
-    expect(activeRound?.participants[0]?.attackResultsByOpportunity).toBeUndefined();
+    expect(activeRound?.participants[0]?.attackResultsByOpportunity).toEqual({});
     expect(activeRound?.participants[0]?.attackResults).toEqual({});
     expect(activeRound?.participants[0]?.initiatives).toEqual({});
     expect(
       activeRound?.participants.every(
         (participant) =>
-          participant.attackResultsByOpportunity === undefined &&
+          Object.keys(participant.attackResultsByOpportunity ?? {}).length === 0 &&
           Object.keys(participant.attackResults).length === 0 &&
           Object.keys(participant.initiatives).length === 0,
       ),

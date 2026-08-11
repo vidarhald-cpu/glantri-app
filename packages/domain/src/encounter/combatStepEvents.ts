@@ -13,6 +13,7 @@ import {
   getCombatRoundDamageResultId,
   getCombatRoundEndDistanceProposalLifecycle,
   getPreviousCombatRoundStep,
+  normalizeCombatRoundParticipantAttackResultAuthority,
   type CombatRoundCommand,
   type CombatRoundCommandType,
   type CombatRoundEndReview,
@@ -283,7 +284,12 @@ function parseLegacyInputs(input: DeriveLegacyCombatStepEventsInput) {
       : [];
   });
   const participants = (input.participants ?? []).flatMap((value, sourceIndex) => {
-    const parsed = combatRoundParticipantStateSchema.safeParse(value);
+    const parsed = combatRoundParticipantStateSchema.safeParse(
+      normalizeCombatRoundParticipantAttackResultAuthority({
+        participant: value,
+        roundNumber: input.roundNumber,
+      }),
+    );
     return parsed.success ? [{ sourceIndex, value: parsed.data }] : [];
   });
   const resolutions = (input.phaseResolutionResults ?? []).flatMap((value, sourceIndex) => {
@@ -1139,8 +1145,7 @@ function roundEndParticipantCandidates(input: {
                 },
                 involvedOutcome: { status: review.status },
                 resultPresentation: {
-                  actionInstanceId:
-                    review.canonicalReview?.reviewId ?? command?.value.id,
+                  actionInstanceId: review.canonicalReview?.reviewId ?? command?.value.id,
                   calculationReferences: [],
                   committedConsequences: [],
                   conciseOutcome: {
@@ -1334,7 +1339,8 @@ function workflowCommandCandidates(input: {
       const canonicalPublicReview = canonicalReview.success
         ? projectCanonicalCombatModifierReviewPublicResult({ transaction: canonicalReview.data })
         : undefined;
-      const acceptedReview = canonicalPublicReview ?? (publicReview.success ? publicReview.data : undefined);
+      const acceptedReview =
+        canonicalPublicReview ?? (publicReview.success ? publicReview.data : undefined);
       const resultLabel = acceptedReview
         ? acceptedReview.resultLabel
         : snapshotAvailable
@@ -1366,9 +1372,7 @@ function workflowCommandCandidates(input: {
                 conciseOutcome: {
                   details: [
                     resultLabel,
-                    ...(acceptedReview?.publicNote
-                      ? [acceptedReview.publicNote]
-                      : []),
+                    ...(acceptedReview?.publicNote ? [acceptedReview.publicNote] : []),
                   ],
                   label: "Modifier review",
                 },
