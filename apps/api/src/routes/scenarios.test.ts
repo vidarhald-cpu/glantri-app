@@ -2565,7 +2565,9 @@ function withCanonicalTestAttackLineage(input: Record<string, unknown>) {
             return canonical ? { ...canonical, ...opportunity } : opportunity;
           }) ?? generated;
         const attackResults = { ...participant.attackResults };
-        const attackResultsByOpportunity = { ...(participant.attackResultsByOpportunity ?? {}) };
+        const attackResultsByOpportunity: NonNullable<
+          typeof participant.attackResultsByOpportunity
+        > = {};
         for (const phase of ["phase1", "phase2"] as const) {
           const result = attackResults[phase];
           const opportunity = opportunities.find((candidate) => candidate.phase === phase);
@@ -17987,8 +17989,20 @@ describe("scenarios route contract", () => {
     expect(
       responseRoundState.participants.find(
         (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-3",
+      )?.attackResultsByOpportunity,
+    ).toEqual({});
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
           participant.participantId === "encounter-participant-4",
       )?.attackResults,
+    ).toEqual({});
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-4",
+      )?.attackResultsByOpportunity,
     ).toEqual({});
     expect(
       responseRoundState.participants.find(
@@ -18193,8 +18207,20 @@ describe("scenarios route contract", () => {
     expect(
       responseRoundState.participants.find(
         (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.attackResultsByOpportunity,
+    ).toEqual({});
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
           participant.participantId === "encounter-participant-2",
       )?.attackResults,
+    ).toEqual({});
+    expect(
+      responseRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-2",
+      )?.attackResultsByOpportunity,
     ).toEqual({});
   });
 

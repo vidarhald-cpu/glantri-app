@@ -96,6 +96,7 @@ import {
   encounterStatusSchema,
   ensureDistanceEdgesForParticipantPairs,
   ensureCombatRoundEndReviewPrepared,
+  deriveCombatRoundAttackResultsCompatibility,
   expireCombatFeintGeneratedModifiersBeforeRound,
   expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   fingerprintCombatModifierResolution,
@@ -234,7 +235,6 @@ import type {
   CombatAttackSourceRef,
   CombatDistanceWeaponLike,
   CombatRoundAttackOpportunity,
-  CombatRoundAttackResults,
   CombatRoundCommand,
   CombatRoundEndDistanceControlSide,
   CombatRoundEndDistanceProposal,
@@ -5864,32 +5864,6 @@ function sanitizePlayerSafeCurrentCombatResultResolution(
   };
 }
 
-function sanitizePlayerSafeCurrentCombatAttackResults(input: {
-  attackResults: CombatRoundAttackResults;
-  controlledEncounterParticipantIds: Set<string>;
-  visibleParticipantIds: Set<string>;
-}): CombatRoundAttackResults {
-  const attackResults: CombatRoundAttackResults = {};
-
-  for (const phase of combatRoundPhaseSchema.options) {
-    const result = input.attackResults[phase];
-
-    if (
-      result &&
-      isPlayerVisibleCombatRoundResultPair({
-        attackerParticipantId: result.attackerParticipantId,
-        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
-        defenderParticipantId: result.defenderParticipantId,
-        visibleParticipantIds: input.visibleParticipantIds,
-      })
-    ) {
-      attackResults[phase] = result;
-    }
-  }
-
-  return attackResults;
-}
-
 function sanitizePlayerSafeCurrentCombatResultsState(input: {
   controlledEncounterParticipantIds: Set<string>;
   state: CombatRoundState;
@@ -5897,26 +5871,27 @@ function sanitizePlayerSafeCurrentCombatResultsState(input: {
 }): CombatRoundState {
   return {
     ...input.state,
-    participants: input.state.participants.map((participant) => ({
-      ...participant,
-      attackResultsByOpportunity: participant.attackResultsByOpportunity
-        ? Object.fromEntries(
-            Object.entries(participant.attackResultsByOpportunity).filter(([, result]) =>
-              isPlayerVisibleCombatRoundResultPair({
-                attackerParticipantId: result.attackerParticipantId,
-                controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
-                defenderParticipantId: result.defenderParticipantId,
-                visibleParticipantIds: input.visibleParticipantIds,
-              }),
-            ),
-          )
-        : undefined,
-      attackResults: sanitizePlayerSafeCurrentCombatAttackResults({
-        attackResults: participant.attackResults,
-        controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
-        visibleParticipantIds: input.visibleParticipantIds,
-      }),
-    })),
+    participants: input.state.participants.map((participant) => {
+      const attackResultsByOpportunity = Object.fromEntries(
+        Object.entries(participant.attackResultsByOpportunity ?? {}).filter(([, result]) =>
+          isPlayerVisibleCombatRoundResultPair({
+            attackerParticipantId: result.attackerParticipantId,
+            controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
+            defenderParticipantId: result.defenderParticipantId,
+            visibleParticipantIds: input.visibleParticipantIds,
+          }),
+        ),
+      );
+
+      return {
+        ...participant,
+        attackResultsByOpportunity,
+        attackResults: deriveCombatRoundAttackResultsCompatibility({
+          attackResultsByOpportunity,
+          participantId: participant.participantId,
+        }),
+      };
+    }),
     phaseResolutionResults: input.state.phaseResolutionResults
       .filter((result) =>
         isPlayerVisibleCombatRoundResultPair({
