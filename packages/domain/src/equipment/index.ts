@@ -3,3 +3,4 @@ export * from "./schemas";
 export * from "./derived";
 export * from "./validation";
 export * from "./weapon";
+export * from "./itemFacts";

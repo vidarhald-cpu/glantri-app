@@ -39,6 +39,7 @@ export * from "./encounters/resolveEncounterCritical";
 export * from "./encounters/resolveEncounterDamage";
 export * from "./encounters/roleplayTransitions";
 export * from "./equipment/manageCharacterEquipment";
+export * from "./equipment/projectEquipmentItem";
 export * from "./professions/resolveEffectiveProfessionPackage";
 export * from "./sheets/buildCharacterSheetSummary";
 export * from "./skills/calculateGms";
