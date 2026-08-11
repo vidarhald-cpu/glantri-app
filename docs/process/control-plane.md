@@ -164,20 +164,15 @@ Recommended cadence:
 - Acceptance checkpoint for completed user-visible slices.
 - Monthly reconciliation of the Project, issues, documentation, branches, and released version.
 
-## Current exceptional context: PR #200 and initial `dev`
+## Published `dev` and PR #200 provenance
 
-PR #200 is overwhelmingly accumulated work from the product owner's ChatGPT/Codex development process, not unknown third-party code. Its size reflects a long-lived development stream without an available merge path to `main`.
+`dev` is the active development integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`; later accepted `dev` SHAs are recorded by task contracts and merge handoffs without replacing that fixed initial reference.
 
-Treat it as a baseline/integration-management problem:
+Ruleset `20708650` requires PRs plus successful `ci` and `docker-test` checks for `dev`, requires zero approving reviews, and blocks force-pushes and deletion. Ordinary task branches start from an exact accepted `dev` SHA and return through PRs targeting `dev`.
 
-- freeze unrelated scope accumulation;
-- map its functional slices and reserved hotspots;
-- reconcile its published history, the accepted local continuation, current `main`, and the approved control-plane bootstrap into one verified candidate;
-- publish that accepted candidate as `dev` only after verification and branch-rule readiness;
-- start subsequent tasks from exact accepted `dev` SHAs in isolated worktrees; and
-- involve the external maintainer only when a future accepted release moves from `dev` toward `main` and Azure.
+PR #200 is superseded provenance, not the active development baseline. Its head `4179034ef13c1713a23bddad7bf9ce01fc4880ea` is an ancestor of `dev`; its work, the 50 local continuation commits, `main` reconciliation, and the control-plane bootstrap were incorporated into the accepted `dev` lineage. Closing it as unmerged does not reject its work, and it must not be retargeted to manufacture a new baseline.
 
-Do not make historical cleanup or mechanically splitting PR #200 a prerequisite for this control-plane bootstrap. Its eventual integration still needs architecture, compatibility, verification, and playtest review.
+`main` remains production/release only. A future accepted release moves from `dev` toward `main` with the required production-boundary support, and the released `main` state is then reconciled back into `dev` before a newer development baseline is accepted.
 
 ## Repository versus GitHub work
 
@@ -198,17 +193,13 @@ Keep in GitHub:
 - PR review/check/merge state;
 - environment and deployment status visible to authorized maintainers.
 
-## GitHub configuration still required
+## Active repository operating state
 
-These are separate administrative actions and are not performed by the local reconciliation candidate:
+- `dev` is published, protected, and used for ordinary task PRs.
+- `main` and Azure production remain outside ordinary development authority.
+- Pushes to `dev` run CI but do not trigger the `main`-only production deployment workflow.
+- The exact accepted parent and resulting `dev` SHA are recorded for each task.
+- Release-PR checks and production-support procedure are confirmed separately before a future `dev -> main` release.
+- Automatic deletion of merged task branches remains a separate repository-administration decision.
 
-1. Finish and accept the locally reconciled initial `dev` candidate under `docs/process/development-baseline.md`.
-2. Verify working GitHub authentication/tooling for the authorized push and rules operations.
-3. Create/push `dev` at the accepted candidate SHA; do not update `main` or production.
-4. Protect `dev` with the approved task-PR/check rules and confirm the product-owner/project process can merge ordinary development PRs.
-5. Verify the first push CI and confirm that no `deploy.yml`/production run is triggered.
-6. Confirm the release-PR checks and external production-support procedure for a future `dev -> main` release.
-7. Decide whether automatic deletion of merged task branches is safe for `dev`.
-8. Maintain the existing operational Project, labels, views, and access with least privilege.
-
-Do not perform broad historical issue/milestone/branch cleanup until the operational system is working.
+Do not perform broad historical issue, milestone, or branch cleanup as part of ordinary task publication.

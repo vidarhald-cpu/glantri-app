@@ -25,20 +25,26 @@ short-lived task branches/worktrees
 
 Credentials never replace task authorization. Pushes, PR creation/updates, branch-rule changes, and merges require the authority stated in the task contract and this policy.
 
-## Initial `dev` reconciliation (2026-08-11)
+## Operational baseline status (2026-08-11)
 
-The approved local reconciliation recipe preserves application history, current production/main history, and the control-plane bootstrap:
+- `dev` is the active integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`.
+- Ruleset `20708650` requires a PR plus successful `ci` and `docker-test` checks for `dev`. It requires zero approving reviews and blocks force-pushes and deletion.
+- Ordinary task branches start from an exact accepted `dev` SHA and their PRs target `dev`.
+- `main` remains production/release only. After every production release, reconcile the released `main` state back into `dev` before accepting a newer development baseline.
+- PR #200 is superseded provenance, not the active development baseline. Its head, `4179034ef13c1713a23bddad7bf9ce01fc4880ea`, is an ancestor of the accepted `dev` lineage.
 
-1. **R0:** `9d6f2dc0f695631fbe2e603dbeec850f7512d8e5`, the clean accepted local application head containing the 50 local commits beyond PR #200's published head.
+The current accepted `dev` SHA advances through compliant task PRs and is recorded in each task contract and merge handoff. The initial baseline above remains the fixed publication reference.
+
+## Initial `dev` reconciliation provenance
+
+The accepted initial baseline preserves application history, production/main reconciliation, and the control-plane bootstrap:
+
+1. **R0:** `9d6f2dc0f695631fbe2e603dbeec850f7512d8e5`, the accepted application head containing the 50 local continuation commits beyond PR #200's published head.
 2. **M1:** merge exact fetched `origin/main` SHA `ab08677b0e48f574d57ca94cc394064cb3a7a1b0` into R0 with `--no-ff`.
 3. **M2:** merge exact approved bootstrap head `fe0a63108f3e2745f55b3c4aec871e7410c26117` into M1 with `--no-ff`, retaining bootstrap commits `6d9ffb1e`, `3b6565b0`, and `fe0a6310` in ancestry.
-4. **P1:** add one narrow documentation-policy synchronization commit adopting this `dev` authority model and the standing-documentation policy below.
-5. Run the complete reconciliation verification gate and obtain product-owner acceptance.
-6. Only then create/push `dev` at the reported verified candidate SHA and apply the approved development branch rules.
+4. **P1 and publication repair:** synchronize the development policy, complete the verification gate, and repair the candidate to accepted SHA `2203f37e196e2de34cf911ea4fa08ac9feb6f8be` before publication.
 
-As of the reconciliation preflight, remote `dev` is absent. A local reconciliation candidate is not yet the shared baseline merely because its commits exist. Publication, branch protection, push CI, and acceptance are separate prerequisites.
-
-Use merges rather than rebasing or cherry-picking this initial history. The merge topology preserves correspondence with PR #200, the 50 local continuation commits, `main` changes #189-#191, and the approved bootstrap lineage.
+The merge topology preserves correspondence with PR #200, the 50 local continuation commits, `main` changes #189-#191, and the approved bootstrap lineage. Closing PR #200 as superseded and unmerged preserves that provenance and does not reject its work; do not retarget it.
 
 ## Normal task policy after publication
 
@@ -71,7 +77,7 @@ The initial reconciliation inherited 470 files that fail a full-repository Prett
 
 The required gate is `pnpm format:check:changed -- <accepted-parent-sha>`. It runs `git diff --check` and Prettier on added, copied, modified, renamed, type-changed, or unmerged files relative to the accepted parent. CI supplies the PR base or prior push SHA and falls back to reconciliation candidate `581841e99afd536d41cce4e5a5bac5a09f2be194` for a new branch. Thus every post-baseline touched file must be formatted while untouched historical debt remains non-blocking.
 
-After publication, verify remote `dev`, its CI run, required checks/rules, task-PR target behavior, and absence of production deployment. PR #200 may then be closed as superseded while its provenance is preserved; it should not be retargeted merely to manufacture the new baseline.
+For every published baseline change, verify remote `dev`, required checks, task-PR target behavior, and absence of production deployment. Record the resulting `dev` SHA in the task handoff.
 
 ## Standing documentation economy
 
