@@ -5,6 +5,8 @@ import type {
   SyncPushResponse
 } from "@glantri/shared";
 
+import { parseResponse } from "../api/apiClient";
+
 export interface SyncClient {
   pull<TPayload = unknown>(request: SyncPullRequest): Promise<SyncPullResponse<TPayload>>;
   push<TPayload = unknown>(request: SyncPushRequest<TPayload>): Promise<SyncPushResponse>;
@@ -22,8 +24,10 @@ export class HttpSyncClient implements SyncClient {
       url.searchParams.set("cursor", request.cursor);
     }
 
-    const response = await fetch(url);
-    return response.json();
+    const response = await fetch(url, {
+      credentials: "include"
+    });
+    return parseResponse<SyncPullResponse<TPayload>>(response);
   }
 
   async push<TPayload = unknown>(
@@ -31,12 +35,13 @@ export class HttpSyncClient implements SyncClient {
   ): Promise<SyncPushResponse> {
     const response = await fetch(new URL("/sync", this.baseUrl), {
       body: JSON.stringify(request),
+      credentials: "include",
       headers: {
         "content-type": "application/json"
       },
       method: "POST"
     });
 
-    return response.json();
+    return parseResponse<SyncPushResponse>(response);
   }
 }
