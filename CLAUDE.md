@@ -1,134 +1,81 @@
-# Glantri — AI-assistentguide
+# Glantri — Claude operating guide
 
-## Hva er dette prosjektet?
+`AGENTS.md` is the shared, authoritative instruction file for all coding agents. Read it completely before doing any work. This file adds Claude-specific reminders and codebase orientation; it does not grant additional authority. If these files ever conflict, stop and report the conflict.
 
-Digital bordspill-assistent for Rolemaster. Se `docs/architecture/system-overview.md` for full systemforståelse. Se `docs/audits/teknisk-gjennomgang-2026-05-07.md` for teknisk kontekst og kjente problemområder.
+## Non-negotiable authority boundaries
 
-## Viktige kommandoer
+- Work only inside the development repository and GitHub scope authorized by the task contract.
+- Do not assume `main` is the work baseline or PR target. Use the exact branch and commit SHA named in the task contract.
+- Create or switch branches/worktrees only when the task authorizes it. Never continue accumulating unrelated work on a long-lived feature branch.
+- Do not push or create/update a PR unless the task or user explicitly authorizes it and names a confirmed target.
+- Never merge to `main`. The external maintainer owns `main` merges, release decisions, production approvals, and production/Azure configuration.
+- Do not approve/cancel deployments, deploy, edit production settings or secrets, request production write access, or use available credentials to bypass these rules.
+- A future shared integration branch does not change these rules unless its ownership and merge authority have been explicitly approved and documented.
+
+## Operating boundary and tooling
+
+- Normal Glantri work is limited to the assigned repository/worktree, existing standard local development and file-processing tools, Glantri GitHub within the authority above, and Glantri sources explicitly stored in the repository or project context.
+- Use existing local compilers, linters, test runners, Git, Docker/database tooling, Prisma, and local file readers/converters on Glantri files without separate approval.
+- Obtain explicit user approval before installing software, extensions, global utilities, or packages outside the normal repository dependency workflow; enabling an external service; or granting permissions or access beyond the assigned workspace.
+- Installed tools do not authorize external transmission or destructive/external actions. Do not use external AI/cloud analysis, signed-in personal services, publishing/deployment services, or live personal Drive access unless the Glantri task requires it and the user explicitly approves where appropriate.
+
+## Required task start
+
+1. Read `AGENTS.md`, `docs/process/control-plane.md`, `docs/process/development-baseline.md`, and `docs/architecture/ownership.md`.
+2. Confirm the task contract, its acceptance-dimension applicability, exact baseline SHA, owned area, reserved hotspots, and Git authorization. For user-visible work, also read the normative `docs/product/product-presentation-principles.md`.
+3. Inspect current source, architecture notes, and tests for the affected area.
+4. If the task lacks a safe baseline, requires an unapproved rule decision, or overlaps a reserved hotspot without coordination, stop and report the blocker.
+
+## Rule governance
+
+PDFs, texts, and spreadsheets are evidence and provenance, not unquestionable implementation truth. Cite them precisely, but do not silently treat every source value as binding.
+
+- Record conflicts, ambiguities, source errors, and computerized-play deviations.
+- An approved Glantri implementation ruling may correct, simplify, replace, or improve a source rule.
+- Material rulings belong in `docs/decisions/rules/` and require focused examples/tests.
+- Without an approved ruling, do not invent a resolution for a source conflict.
+- Keep raw import, enrichment, normalization, derivation, and verification separate.
+- Existing tests show current behavior; they are not independent proof of the correct product rule.
+
+Current approved combat convention: `effectiveSkillNumber` is total combat skill XP, including direct and group-derived contributions.
+
+## Codebase orientation
+
+Glantri is a TypeScript monorepo:
+
+- `apps/web`: Next.js frontend.
+- `apps/api`: Fastify routes and server orchestration.
+- `packages/domain`: independent shared schemas, domain state, and contracts.
+- `packages/rules-engine`: deterministic game calculations; imports only from domain.
+- `packages/database`: repositories and outward-facing services.
+- `packages/content` and `packages/importers`: content and source ingestion.
+
+Key conventions:
+
+- Apps may import packages; packages never import apps.
+- Zod schemas are shared from domain rather than duplicated.
+- Database repositories are internal; callers use services.
+- `@glantri/test-scenarios` is test/e2e only.
+- Web API calls use domain clients in `apps/web/src/lib/api/`; do not add direct component `fetch` calls.
+- `apps/web/app/` is a thin route layer. Feature logic belongs in `apps/web/src/features/<feature>/`.
+- Pure game calculations belong in `packages/rules-engine`.
+- Preserve canonical helpers and extracted components; do not create parallel calculation paths.
+
+Large web features normally use `components/`, `hooks/`, `state/`, `view-models/`, tests, and a responsibility README. File size above roughly 500 lines is a review signal, not a mandatory split.
+
+## Verification
+
+Use the checks required by the task contract. The usual full set is:
 
 ```bash
-# Installer avhengigheter
-pnpm install
-
-# Kjør alle sjekker (gjør dette før du committer)
 pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
-
-# Per pakke
-pnpm --filter @glantri/api typecheck
-pnpm --filter @glantri/api test
-pnpm --filter @glantri/web test
-pnpm --filter @glantri/web typecheck
-
-# DB-integrasjonstester (krever DATABASE_URL_TEST)
-DATABASE_URL_TEST=postgresql://postgres:postgres@localhost:5432/glantri_test pnpm --filter @glantri/database test
-
-# Playwright smoke (krever kjørende API og web)
-PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:4000 pnpm --filter @glantri/web playwright
 ```
 
-## Kodekonvensjoner
+API/database/end-to-end changes may also require database integration tests and Playwright/Docker checks. Documentation-only work should validate templates, references, and `git diff --check`.
 
-### Generelt
-- **Ingen kommentarer** med mindre WHY er ikke-åpenbart (skjulte invarianter, workarounds, ikke-intuitive valg)
-- **Ikke design for fremtiden** — tre like linjer er bedre enn tidlig abstraksjon
-- **Ingen feilhåndtering** for scenarior som ikke kan skje. Bare valider ved systemgrenser (brukerinput, eksterne API-er)
+## Handoff
 
-### TypeScript
-- Zod-skjemaer defineres i `packages/domain` og deles på tvers. Aldri dupliser skjemaer
-- `packages/test-scenarios` er kun for tester — aldri importer i runtime-kode
-- `apiConfig.ts` er eneste sted `NEXT_PUBLIC_API_BASE_URL` refereres i web-appen
-
-### API (`apps/api`)
-- Ruter er organisert i `routes/` med én fil per domene
-- `scenarios/`-mappen er en faset-struktur: `scenarios.ts` orchestrerer, domenefiler håndterer faktiske ruter
-- Auth-kontroll via `requireAuthenticatedUser` (spiller+) eller `requireAdminUser` (GM/admin)
-- Parsing av request-input via hjelpefunksjoner i `scenarios/parsing.ts` — ikke inline parsing i handlers
-
-### Database (`packages/database`)
-- Services eksponeres utad, repositories er interne
-- Integrasjonstester (`.integration.test.ts`) krever `DATABASE_URL_TEST` og tilbakestiller egne tabeller mellom suites
-- Aldri importer fra `@glantri/test-scenarios` i produksjonskode
-
-### Web (`apps/web`)
-- API-kall går via domeneklienter i `src/lib/api/` — ikke direkte `fetch` i komponenter
-- **Ny kode importerer alltid direkte fra domeneklienten** (`characterClient`, `campaignClient` osv.) — ikke fra `localServiceClient.ts` (bakoverkompatibilitetsbarrel)
-- `apps/web/app/` er **kun** route-lag: routing, layout og adgangskontroll. Ingen state, ingen fetch, ingen forretningslogikk
-- All featurelogikk hører i `apps/web/src/features/<feature>/` — se `features/chargen/` som referanseimplementasjon
-
-### Ny kode — hvor legger du det?
-
-| Kode | Rett sted |
-|------|-----------|
-| Ny UI-feature | `apps/web/src/features/<feature>/` med tynn route i `app/.../page.tsx` |
-| Ny API-rutegruppe | `apps/api/src/routes/<feature>/` med `routes.ts`, `handlers.ts`, `parse.ts`, `access.ts` |
-| Ny domenetype eller Zod-schema | `packages/domain/src/<domain>/` |
-| Ren spillregelberegning | `packages/rules-engine/src/<domain>/` |
-| Ny databaseoperasjon | `packages/database/src/services/<domain>/` — repositories er interne |
-| API request/response-kontrakt | `packages/domain/src/api/` |
-| Ny testfixture | `packages/test-scenarios` — kun `*.test.ts`, `*.test.tsx`, `e2e/` |
-
-### Importregler
-
-1. `apps/*` kan importere fra `packages/*` — aldri omvendt
-2. `packages/rules-engine` importerer kun fra `packages/domain` — ikke fra `apps/*` eller `packages/database`
-3. `packages/domain` er bunn i lagkaken: ingen imports fra `content`, `database`, `rules-engine`, `apps/*`
-4. `@glantri/test-scenarios` er forbudt utenfor `*.test.ts`, `*.test.tsx` og `e2e/`
-5. `apps/web/app/` bruker `@/`-alias til `apps/web/src/` — ikke lange `../../src/`-stier
-6. Repositories i `packages/database` er interne — utsiden bruker services
-7. Ny beregningslogikk hører i `packages/rules-engine`, ikke i web-features
-
-### Feature-mønster (`apps/web/src/features/<feature>/`)
-
-Store features følger denne strukturen:
-
-```
-<feature>/
-  README.md          ← ansvar, entrypoints, state, API-kall, testkommandoer
-  index.ts
-  components/        ← rene presentasjonskomponenter, ingen sideeffekter
-  hooks/             ← datalasting og sideeffekter (useXData.ts)
-  state/             ← reducer/state machine med useReducer, ikke mange useState
-  view-models/       ← filtrering, sortering og displaymodeller (rene funksjoner)
-  tests/
-```
-
-- `page.tsx` i `app/` er tynn wrapper — ingen state, ingen fetch, bare layout
-- State-maskin i `state/` er testbar uten React
-- View models er rene funksjoner — testbare uten DOM
-- Komponenter i `components/` renderer data, sender events — ingen forretningslogikk
-
-### Filstørrelse
-
-Over ~500 linjer er et tegn på at filen har for mange ansvar. Unntakene er generert data og testfiler. Se `routes/scenarios/` (API) og feature-mønsteret (web) som referanse for hvordan splitt gjøres.
-
-## Dokumentasjonspolicy
-
-**Oppdater alltid dette før ny kode:**
-1. Lukk issues som er ferdig (referér til PR-nummer i kommentar)
-2. Oppdater `docs/testing-regression-matrix.md` hvis ny testdekning er lagt til
-3. Oppdater denne filen (`CLAUDE.md`) hvis nye konvensjoner er etablert
-4. Oppdater `docs/architecture/system-overview.md` ved strukturelle endringer
-
-## Issue- og branch-workflow
-
-- Branch fra `main`: `refactor/`, `feat/`, `fix/`, `test/`, `ci/`, `docs/`
-- Commit-meldinger refererer issue-nummer: `feat: legg til /ready endpoint (#43)`
-- PR til `main` — CI må være grønt før merge
-- Etter merge: lukk issues med kommentar om hvilken PR som løste det
-
-## CI-signaler
-
-CI kjøres i to jobber:
-1. **`ci`** — typecheck + lint + test + build
-2. **`docker-test`** — Docker-images + Postgres + DB-integrasjonstester + Playwright smoke
-
-Post-deploy: `GET /ready` sjekkes mot produksjons-API.
-
-## Kjente mønstre å følge
-
-- **Splitt store filer** etter domene, ikke etter teknisk lag. Se `routes/scenarios/` som referanseimplementasjon
-- **Golden tests** for rules-engine: hardkod forventede verdier fra kildearbeidsboken, ikke beregn via produksjonskoden. Oppgi workbook/sheet/celle-referanse i testnavn
-- **Kontraktstester** for API-endepunkter: test at HTTP-kontrakten (statuskoder, svarform) er stabil, ikke implementasjonsdetaljer
+Report the outcome, changed files, decisions, verification, exact baseline/branch, whether anything was pushed or submitted as a PR, and unresolved risks. Do not close historical issues or rewrite milestones as a prerequisite unless the current task explicitly adopts them.

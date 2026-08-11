@@ -83,4 +83,4 @@ Optional overrides:
 
 `pnpm db:backup` prefers a local `pg_dump` binary. If that is unavailable, it falls back to `docker exec glantri-postgres pg_dump`.
 
-If neither path is available, install PostgreSQL client tools locally or make sure the repo's Docker Postgres container is running with `pnpm db:up`.
+If neither path is available, use the repo's Docker Postgres container with `pnpm db:up`, or obtain explicit user approval before installing PostgreSQL client tools locally.

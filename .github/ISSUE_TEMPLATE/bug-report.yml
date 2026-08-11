@@ -1,0 +1,48 @@
+name: Bug report
+description: Capture a defect without losing it or automatically interrupting active work
+title: ""
+labels: []
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened, where, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: State the expected result and cite a decision/source when rule-dependent.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Give the smallest reliable setup and sequence.
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Blocking current validation or use
+        - Architectural or recurring risk
+        - Non-blocking backlog defect
+    validations:
+      required: true
+  - type: textarea
+    id: area
+    attributes:
+      label: Functional area and evidence
+      description: Name the likely area and attach logs, screenshots, character/scenario identifiers, or rule references without secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Note frequency, workaround, regression range, and related issues/PRs.
