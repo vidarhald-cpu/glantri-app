@@ -32,6 +32,9 @@ Explain impact and why this task has priority.
 - Local branch/worktree name:
 - Local-only, push authorized, or PR authorized:
 - Intended PR target, if confirmed:
+- Required reading (exact repository paths):
+
+Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
 
 ### Rule basis
 
@@ -243,13 +246,13 @@ A task is not `Ready` when a materially applicable acceptance dimension is omitt
 
 ### Applicability examples
 
-| Task                                                   | Functional             | Mechanical/rules                          | Presentation          | Information-flow/privacy                      | Product quality | Perspective matrix                                  |
-| ------------------------------------------------------ | ---------------------- | ----------------------------------------- | --------------------- | --------------------------------------------- | --------------- | --------------------------------------------------- |
-| Rename an internal helper with identical behavior      | Regression only        | Not applicable                            | Regression only       | Regression only if projection code is touched | Not applicable  | Not applicable                                      |
-| Add a unique item description field and GM editor      | Required               | Not applicable unless mechanically active | Required              | Required if players may see it                | Required        | Required when GM/player visibility differs          |
-| Add an item-specific OB variation                      | Required               | Required                                  | Required if displayed | Required if item traits can be hidden         | Required        | Required when multiple viewers see different detail |
-| Fix accepted Combat results disappearing after advance | Required               | Regression only unless values change      | Required              | Required for participant-safe result detail   | Required        | Required                                            |
-| Improve an internal query plan without changing output | Required               | Not applicable                            | Regression only       | Regression only                               | Not applicable  | Not applicable                                      |
+| Task                                                   | Functional      | Mechanical/rules                          | Presentation          | Information-flow/privacy                      | Product quality | Perspective matrix                                  |
+| ------------------------------------------------------ | --------------- | ----------------------------------------- | --------------------- | --------------------------------------------- | --------------- | --------------------------------------------------- |
+| Rename an internal helper with identical behavior      | Regression only | Not applicable                            | Regression only       | Regression only if projection code is touched | Not applicable  | Not applicable                                      |
+| Add a unique item description field and GM editor      | Required        | Not applicable unless mechanically active | Required              | Required if players may see it                | Required        | Required when GM/player visibility differs          |
+| Add an item-specific OB variation                      | Required        | Required                                  | Required if displayed | Required if item traits can be hidden         | Required        | Required when multiple viewers see different detail |
+| Fix accepted Combat results disappearing after advance | Required        | Regression only unless values change      | Required              | Required for participant-safe result detail   | Required        | Required                                            |
+| Improve an internal query plan without changing output | Required        | Not applicable                            | Regression only       | Regression only                               | Not applicable  | Not applicable                                      |
 
 ## Cross-area integration plan
 

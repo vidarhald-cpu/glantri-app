@@ -49,6 +49,16 @@ body:
     validations:
       required: true
   - type: textarea
+    id: required_reading
+    attributes:
+      label: Required reading
+      description: List exact repository paths needed for this task. AGENTS.md is always required; do not say read all architecture docs.
+      placeholder: |
+        - AGENTS.md
+        - docs/area-or-process-document-required-for-this-task.md
+    validations:
+      required: true
+  - type: textarea
     id: rule_basis
     attributes:
       label: Rule basis

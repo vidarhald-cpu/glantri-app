@@ -8,31 +8,44 @@ This document describes durable operating policy. GitHub Issues and one GitHub P
 
 ## Sources of truth
 
-| Information | Authoritative location |
-| --- | --- |
-| Product priorities and current work status | GitHub Project and linked Issues/PRs |
-| Task contract and implementation discussion | GitHub Issue and PR |
-| Product and presentation quality | `docs/product/product-presentation-principles.md` plus area and task contracts |
-| Architecture and ownership policy | Repository documentation |
-| Approved rule and architecture rulings | `docs/decisions/` |
-| Source evidence and provenance | `docs/source/`, `docs/rules/`, cited external material |
-| Current implementation behavior | Code plus tests, interpreted with approved decisions |
+| Information                                 | Authoritative location                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| Product priorities and current work status  | GitHub Project and linked Issues/PRs                                           |
+| Task contract and implementation discussion | GitHub Issue and PR                                                            |
+| Product and presentation quality            | `docs/product/product-presentation-principles.md` plus area and task contracts |
+| Architecture and ownership policy           | Repository documentation                                                       |
+| Approved rule and architecture rulings      | `docs/decisions/`                                                              |
+| Source evidence and provenance              | `docs/source/`, `docs/rules/`, cited external material                         |
+| Current implementation behavior             | Code plus tests, interpreted with approved decisions                           |
 
 Chat is useful for exploration and product discussion but is not durable project state. Material decisions must be recorded in the repository or linked GitHub issue before dependent implementation is accepted.
 
 Historical issues, milestones, and Claude-created architecture work are preserved as input. They do not become the current operational backlog until triaged and deliberately adopted.
 
+## Documentation loading and maintenance
+
+Mandatory agent reading is an architectural and resource cost. Only information required for safe, effective execution belongs in the always-read layer.
+
+- `AGENTS.md` and tool-specific top-level guides contain short operating rules and links.
+- Each task contract names the exact additional repository paths required for that task; blanket directions such as `read all architecture docs` are not acceptable.
+- Area-specific contracts are read only when the task touches that area.
+- Decisions, audits, historical reports, and provenance are on-demand references.
+- A new standing document needs a clear reason to join the mandatory reading set. Task- or area-specific detail remains scoped below the top level.
+- Periodically prune duplication and move fuller explanations into the linked process, area, or decision document that owns them.
+
+This is an efficiency and resource principle, not a rigid line-count rule. The task still requires enough current context to work safely.
+
 ## Authority model
 
-| Role | Owns | Does not own |
-| --- | --- | --- |
-| Product owner | Priority, Glantri rule/UX rulings, acceptance, portfolio choices | Production deployment mechanics |
-| External maintainer | `main` merge, release decision, production approval, Azure production configuration | Routine task implementation unless separately participating |
-| Architecture/control-plane agent | Task decomposition, ownership, contract design, cross-area planning, decision records, verification review | Unapproved product rulings or production authority |
-| Implementation agent | Changes and tests inside an authorized task contract | Undeclared scope, unapproved rules, shared-baseline selection, `main` merge, production actions |
-| Integration owner | Coordination and merge order for one cross-area task | Standing authority over `main` or production |
+| Role                             | Owns                                                                                                                                                                      | Does not own                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Product owner                    | Priority, Glantri rule/UX rulings, acceptance, portfolio choices, `dev` creation/protection, ordinary task-PR review/merge, development integration and release readiness | Production deployment mechanics                                                                               |
+| External maintainer              | Production-release/deployment support at the future `dev -> main -> Azure` boundary                                                                                       | Development baselines, `dev`, routine task work, ordinary development PRs, backlog, or architecture decisions |
+| Architecture/control-plane agent | Task decomposition, ownership, contract design, cross-area planning, decision records, verification review                                                                | Unapproved product rulings or production authority                                                            |
+| Implementation agent             | Changes and tests inside an authorized task contract                                                                                                                      | Undeclared scope, unapproved rules, shared-baseline selection, `main` merge, production actions               |
+| Integration owner                | Coordination and merge order for one cross-area task                                                                                                                      | Standing authority over `main` or production                                                                  |
 
-Credentials do not confer product or release authority. Agents must not merge to `main`, approve/cancel deployments, deploy, change Azure production configuration/secrets, or request production write access.
+Credentials do not confer product or release authority. Agents must not merge to `main`, approve/cancel deployments, deploy, change Azure production configuration/secrets, or request production write access. `dev` authority does not broaden into `main` or production authority.
 
 ## Least privilege and development tooling
 
@@ -113,7 +126,7 @@ An issue reaches `Ready` only when its task contract supplies an exact baseline,
 7. Open a development PR only when the target and push/PR authority are confirmed.
 8. Review code, decisions, tests, compatibility, hotspot coordination, and user-visible evidence.
 9. Move user-visible work to `Acceptance`; only the product owner accepts product behavior.
-10. Merge into the authorized development target according to documented authority. `main` remains external-maintainer-only.
+10. Merge an accepted ordinary task PR into `dev` under the product-owner-controlled development process. Release preparation from `dev` to `main` is a separate production-boundary workflow.
 
 One coherent behavior or architecture slice is the governing PR size rule. There is no rigid changed-file cap. An unusually large, high-risk, or cross-area PR must include an integration plan describing why it cannot be sliced safely, contract/merge order, hotspot ownership, review stages, verification, compatibility, rollback, and follow-up modularization.
 
@@ -150,7 +163,7 @@ Recommended cadence:
 - Acceptance checkpoint for completed user-visible slices.
 - Monthly reconciliation of the Project, issues, documentation, branches, and released version.
 
-## Current exceptional context: PR #200
+## Current exceptional context: PR #200 and initial `dev`
 
 PR #200 is overwhelmingly accumulated work from the product owner's ChatGPT/Codex development process, not unknown third-party code. Its size reflects a long-lived development stream without an available merge path to `main`.
 
@@ -158,9 +171,10 @@ Treat it as a baseline/integration-management problem:
 
 - freeze unrelated scope accumulation;
 - map its functional slices and reserved hotspots;
-- establish the exact accepted committed development state;
-- start subsequent tasks from that explicit state in isolated worktrees;
-- let the external maintainer determine how the accumulated state eventually reaches `main`.
+- reconcile its published history, the accepted local continuation, current `main`, and the approved control-plane bootstrap into one verified candidate;
+- publish that accepted candidate as `dev` only after verification and branch-rule readiness;
+- start subsequent tasks from exact accepted `dev` SHAs in isolated worktrees; and
+- involve the external maintainer only when a future accepted release moves from `dev` toward `main` and Azure.
 
 Do not make historical cleanup or mechanically splitting PR #200 a prerequisite for this control-plane bootstrap. Its eventual integration still needs architecture, compatibility, verification, and playtest review.
 
@@ -185,16 +199,15 @@ Keep in GitHub:
 
 ## GitHub configuration still required
 
-These are separate administrative actions and are not performed by this bootstrap branch:
+These are separate administrative actions and are not performed by the local reconciliation candidate:
 
-1. Confirm the exact `main` ruleset, required reviews/checks, who may update/merge it, and whether any `main` update triggers production.
-2. Confirm whether a non-production integration branch is permitted, who may create/update/merge it, and what CI/preview behavior it triggers.
-3. Decide the initial integration baseline, including the pushed and local-only portions of the PR #200 development stream.
-4. Create or verify one GitHub Project and configure the statuses/fields above.
-5. Add a minimal label vocabulary: `area:*`, `type:*`, `priority:P0-P3`, `risk:high`, `risk:cross-area`, and `needs:*`.
-6. Create saved views for Needs decision, Acceptance, Portfolio choices, and each active functional area.
-7. Decide whether automatic deletion of merged task branches is safe for the approved development target.
-8. Confirm which checks should be required for development PRs and eventual release PRs.
-9. Grant GitHub Project read/write scopes only if board inspection or automation is explicitly desired.
+1. Finish and accept the locally reconciled initial `dev` candidate under `docs/process/development-baseline.md`.
+2. Verify working GitHub authentication/tooling for the authorized push and rules operations.
+3. Create/push `dev` at the accepted candidate SHA; do not update `main` or production.
+4. Protect `dev` with the approved task-PR/check rules and confirm the product-owner/project process can merge ordinary development PRs.
+5. Verify the first push CI and confirm that no `deploy.yml`/production run is triggered.
+6. Confirm the release-PR checks and external production-support procedure for a future `dev -> main` release.
+7. Decide whether automatic deletion of merged task branches is safe for `dev`.
+8. Maintain the existing operational Project, labels, views, and access with least privilege.
 
 Do not perform broad historical issue/milestone/branch cleanup until the operational system is working.

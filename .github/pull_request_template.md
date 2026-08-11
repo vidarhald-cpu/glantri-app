@@ -3,6 +3,7 @@
 - Task/issue:
 - Intended outcome:
 - Accepted parent baseline branch/SHA:
+- Required reading completed:
 - PR target and authority confirmation:
 
 ## Scope
@@ -53,7 +54,7 @@ If this PR is unusually large, high-risk, or cross-area, link or include the int
 - [ ] Verification evidence is included, with pre-existing failures distinguished.
 - [ ] Product-quality, presentation, privacy, `Needs decision`, and deliberately deferred P3 findings are reported.
 - [ ] No production/Azure configuration or deployment approval was changed.
-- [ ] This PR does not authorize an agent to merge to `main`; release authority remains with the external maintainer.
+- [ ] This PR does not authorize an agent to merge to `main` or act on Azure/production; external-maintainer involvement is limited to the production-release boundary.
 
 ## Remaining risks and follow-ups
 
