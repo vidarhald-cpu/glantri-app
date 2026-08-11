@@ -65,15 +65,46 @@ body:
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance examples
-      description: Give concrete scenarios with actions and expected results.
+      label: Acceptance examples and dimensions
+      description: Give concrete scenarios and apply docs/process/task-contract.md to every dimension.
+      placeholder: |
+        Functional: Required / Regression only / Not applicable / Needs decision
+        - Criteria and examples:
+
+        Mechanical/rules: Required / Regression only / Not applicable / Needs decision
+        - Criteria and examples:
+
+        Presentation: Required / Regression only / Not applicable / Needs decision
+        - Criteria and examples:
+
+        Information-flow/privacy: Required / Regression only / Not applicable / Needs decision
+        - Criteria and examples:
+
+        Product quality: Required / Regression only / Not applicable / Needs decision
+        - Criteria and examples:
+
+        Perspective matrix: Required / Regression only / Not applicable / Needs decision
+        - GM, actor/Player A, target/Player B, uninvolved player, and other materially different views:
     validations:
       required: true
   - type: textarea
     id: verification
     attributes:
       label: Verification
-      description: List tests, manual/browser evidence, compatibility/migration checks, and required CI jobs.
+      description: List proportionate evidence and use Not applicable with a reason instead of empty categories.
+      placeholder: |
+        Unit/component tests:
+        Mechanical/rules examples or golden tests:
+        Integration/API/contract tests:
+        Information-flow/sanitization tests:
+        Synthetic browser/Playwright evidence:
+        Isolated development-browser/manual evidence, only when required:
+        Reload/history/undo/stale-state checks:
+        Accessibility/responsive checks:
+        Migration/compatibility checks:
+        Performance/security checks:
+        Required CI jobs:
+        Product-owner acceptance script:
     validations:
       required: true
   - type: textarea

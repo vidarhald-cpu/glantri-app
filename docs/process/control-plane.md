@@ -12,6 +12,7 @@ This document describes durable operating policy. GitHub Issues and one GitHub P
 | --- | --- |
 | Product priorities and current work status | GitHub Project and linked Issues/PRs |
 | Task contract and implementation discussion | GitHub Issue and PR |
+| Product and presentation quality | `docs/product/product-presentation-principles.md` plus area and task contracts |
 | Architecture and ownership policy | Repository documentation |
 | Approved rule and architecture rulings | `docs/decisions/` |
 | Source evidence and provenance | `docs/source/`, `docs/rules/`, cited external material |
@@ -99,7 +100,7 @@ Suggested Project fields:
 
 Priority is separate from defect severity. Small defects can remain durably recorded at P3 without interrupting active work.
 
-An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, and required decisions. See `docs/process/task-contract.md`.
+An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
 
 ## Implementation flow
 

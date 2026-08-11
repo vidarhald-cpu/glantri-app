@@ -41,6 +41,7 @@ Before implementation, identify:
 A task is not ready if an agent would need to invent a product rule, choose an unconfirmed shared baseline, or edit a hotspot without coordination.
 
 Use `.github/ISSUE_TEMPLATE/implementation-task.yml` or `docs/process/task-contract.md` as the contract format.
+Apply the normative `docs/product/product-presentation-principles.md` to user-visible work, and record each acceptance dimension's applicability as defined by the task contract. Do not invent criteria for genuinely internal work.
 
 ## Pre-flight reading
 
@@ -52,6 +53,7 @@ Read, when present:
 - `docs/architecture/current-refactor-priorities.md`
 - `docs/architecture/recent-architecture-changes.md`
 - `docs/product/campaign-scenario-encounter-workflows.md`
+- `docs/product/product-presentation-principles.md` for user-visible work
 - `docs/testing-regression-matrix.md`
 
 Then inspect the current source and tests relevant to the task. Do not rely on older branches or conversations.

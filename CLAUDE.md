@@ -22,7 +22,7 @@
 ## Required task start
 
 1. Read `AGENTS.md`, `docs/process/control-plane.md`, `docs/process/development-baseline.md`, and `docs/architecture/ownership.md`.
-2. Confirm the task contract, exact baseline SHA, owned area, reserved hotspots, and Git authorization.
+2. Confirm the task contract, its acceptance-dimension applicability, exact baseline SHA, owned area, reserved hotspots, and Git authorization. For user-visible work, also read the normative `docs/product/product-presentation-principles.md`.
 3. Inspect current source, architecture notes, and tests for the affected area.
 4. If the task lacks a safe baseline, requires an unapproved rule decision, or overlaps a reserved hotspot without coordination, stop and report the blocker.
 

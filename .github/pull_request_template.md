@@ -34,9 +34,13 @@ If this PR is unusually large, high-risk, or cross-area, link or include the int
 
 ## Verification and review evidence
 
+- Acceptance results: Functional; Mechanical/rules; Presentation; Information-flow/privacy; Product quality:
 - Automated checks:
-- Manual/browser scenarios:
+- Perspective-matrix and absent/private-fact evidence:
+- Product-owner manual script and browser scenarios:
 - UI screenshots/interaction evidence:
+- Reload/history/undo/stale-state evidence:
+- Accessibility/responsive evidence:
 - Migration/compatibility notes:
 - Performance/security notes:
 
@@ -47,6 +51,7 @@ If this PR is unusually large, high-risk, or cross-area, link or include the int
 - [ ] Rule conflicts/deviations are recorded and approved where required.
 - [ ] Reserved hotspots and cross-area order were coordinated.
 - [ ] Verification evidence is included, with pre-existing failures distinguished.
+- [ ] Product-quality, presentation, privacy, `Needs decision`, and deliberately deferred P3 findings are reported.
 - [ ] No production/Azure configuration or deployment approval was changed.
 - [ ] This PR does not authorize an agent to merge to `main`; release authority remains with the external maintainer.
 
