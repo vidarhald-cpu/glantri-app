@@ -2151,6 +2151,149 @@ export const combatRoundParticipantStateSchema = z.object({
   ),
 });
 
+function isCombatRoundAttackAuthorityRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function combatRoundAttackResultsAreIdentical(
+  left: CombatRoundAttackRollResult,
+  right: CombatRoundAttackRollResult,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function getCombatRoundCanonicalAttackResultKey(input: {
+  result: CombatRoundAttackRollResult;
+  roundNumber: number;
+}): string {
+  return (
+    input.result.attackOpportunityId ??
+    getCombatRoundAttackResultId({ result: input.result, roundNumber: input.roundNumber })
+  );
+}
+
+/**
+ * The only boundary that materializes the legacy phase-shaped compatibility read.
+ * All live mutations and privacy filtering operate on the canonical map first.
+ */
+export function deriveCombatRoundAttackResultsCompatibility(input: {
+  attackResultsByOpportunity?: Record<string, CombatRoundAttackRollResult>;
+  participantId: string;
+}): CombatRoundAttackResults {
+  const attackResults: CombatRoundAttackResults = {};
+
+  for (const phase of combatRoundPhaseSchema.options) {
+    const phaseResults = Object.values(input.attackResultsByOpportunity ?? {}).filter(
+      (result) => result.phase === phase,
+    );
+
+    if (phaseResults.length > 1) {
+      throw new RangeError(
+        `Attack-result authority invariant failed for participant ${input.participantId}: ` +
+          `${phaseResults.length} distinct ${phase} results cannot be represented by the compatibility view.`,
+      );
+    }
+
+    if (phaseResults[0]) {
+      attackResults[phase] = phaseResults[0];
+    }
+  }
+
+  return attackResults;
+}
+
+function normalizeCombatRoundParticipantAttackResultAuthorityInput(input: {
+  participant: unknown;
+  roundNumber: number;
+}): unknown {
+  if (!isCombatRoundAttackAuthorityRecord(input.participant)) {
+    return input.participant;
+  }
+
+  const participantId =
+    typeof input.participant.participantId === "string"
+      ? input.participant.participantId
+      : "unknown participant";
+  const canonicalByIdentity = new Map<string, CombatRoundAttackRollResult>();
+  const storedCanonical = isCombatRoundAttackAuthorityRecord(
+    input.participant.attackResultsByOpportunity,
+  )
+    ? input.participant.attackResultsByOpportunity
+    : {};
+
+  const addCanonicalResult = (rawResult: unknown, source: string) => {
+    const result = combatRoundAttackRollResultSchema.parse(rawResult);
+    const identity = getCombatRoundCanonicalAttackResultKey({
+      result,
+      roundNumber: input.roundNumber,
+    });
+    const existing = canonicalByIdentity.get(identity);
+
+    if (existing && !combatRoundAttackResultsAreIdentical(existing, result)) {
+      throw new RangeError(
+        `Attack-result authority invariant failed for ${identity}: conflicting ${source} and canonical results.`,
+      );
+    }
+
+    canonicalByIdentity.set(identity, existing ?? result);
+  };
+
+  for (const [storedKey, rawResult] of Object.entries(storedCanonical)) {
+    addCanonicalResult(rawResult, `map entry ${storedKey}`);
+  }
+
+  const legacyResults = isCombatRoundAttackAuthorityRecord(input.participant.attackResults)
+    ? input.participant.attackResults
+    : {};
+  for (const phase of combatRoundPhaseSchema.options) {
+    const rawResult = legacyResults[phase];
+    if (rawResult === undefined) continue;
+    const result = combatRoundAttackRollResultSchema.parse(rawResult);
+    if (result.phase !== phase) {
+      throw new RangeError(
+        `Attack-result authority invariant failed for participant ${participantId}: ` +
+          `${phase} compatibility result declares ${result.phase}.`,
+      );
+    }
+    addCanonicalResult(result, `${phase} compatibility slot`);
+  }
+
+  const attackResultsByOpportunity = Object.fromEntries(canonicalByIdentity);
+  return {
+    ...input.participant,
+    attackResultsByOpportunity,
+    attackResults: deriveCombatRoundAttackResultsCompatibility({
+      attackResultsByOpportunity,
+      participantId,
+    }),
+  };
+}
+
+function normalizeCombatRoundAttackResultAuthorityInput(value: unknown): unknown {
+  if (!isCombatRoundAttackAuthorityRecord(value) || !Array.isArray(value.participants)) {
+    return value;
+  }
+
+  const roundNumber =
+    typeof value.roundNumber === "number" && Number.isInteger(value.roundNumber)
+      ? value.roundNumber
+      : 1;
+  return {
+    ...value,
+    participants: value.participants.map((participant) =>
+      normalizeCombatRoundParticipantAttackResultAuthorityInput({ participant, roundNumber }),
+    ),
+  };
+}
+
+/** Normalizes one legacy/current participant row when a round-aware consumer reads it directly. */
+export function normalizeCombatRoundParticipantAttackResultAuthority(input: {
+  participant: unknown;
+  roundNumber: number;
+}): unknown {
+  return normalizeCombatRoundParticipantAttackResultAuthorityInput(input);
+}
+
 const combatRoundPhasePanelSnapshotSchema = z.object({
   attackModeLabel: z.string().optional(),
   attackSummary: z
@@ -2322,34 +2465,37 @@ export interface CompletedCombatRound {
 }
 
 export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTypeDef, unknown> =
-  z.object({
-    activeParticipantId: idSchema.optional(),
-    combatExperienceDifficulty: z.number().int().positive().optional(),
-    commands: z.array(combatRoundCommandSchema).default([]),
-    continuedContacts: z.array(continuedContactSchema).default([]),
-    completedAt: z.string().datetime().optional(),
-    completedByUserId: idSchema.optional(),
-    currentCursor: combatRoundCursorSchema.optional(),
-    currentStep: combatRoundStepSchema.default("round_summary"),
-    distanceState: combatDistanceStateSchema.optional(),
-    encounterId: idSchema.optional(),
-    events: combatStepEventArraySchema.default([]),
-    feintProposals: z.array(combatFeintProposalSchema).default([]),
-    offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
-    observationAttempts: z.array(combatObservationAttemptSchema).default([]),
-    observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
-    adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
-    phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
-    phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
-    phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
-    participants: z.array(combatRoundParticipantStateSchema).default([]),
-    roundEndReview: combatRoundEndReviewSchema.optional(),
-    roundNumber: z.number().int().positive(),
-    selectedParticipantId: idSchema.optional(),
-    selectedStep: combatRoundStepSchema.optional(),
-    stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
-    unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
-  });
+  z.preprocess(
+    normalizeCombatRoundAttackResultAuthorityInput,
+    z.object({
+      activeParticipantId: idSchema.optional(),
+      combatExperienceDifficulty: z.number().int().positive().optional(),
+      commands: z.array(combatRoundCommandSchema).default([]),
+      continuedContacts: z.array(continuedContactSchema).default([]),
+      completedAt: z.string().datetime().optional(),
+      completedByUserId: idSchema.optional(),
+      currentCursor: combatRoundCursorSchema.optional(),
+      currentStep: combatRoundStepSchema.default("round_summary"),
+      distanceState: combatDistanceStateSchema.optional(),
+      encounterId: idSchema.optional(),
+      events: combatStepEventArraySchema.default([]),
+      feintProposals: z.array(combatFeintProposalSchema).default([]),
+      offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
+      observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+      observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
+      adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
+      phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
+      phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
+      phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
+      participants: z.array(combatRoundParticipantStateSchema).default([]),
+      roundEndReview: combatRoundEndReviewSchema.optional(),
+      roundNumber: z.number().int().positive(),
+      selectedParticipantId: idSchema.optional(),
+      selectedStep: combatRoundStepSchema.optional(),
+      stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
+      unbalancedConditions: z.array(unbalancedCombatConditionSchema).default([]),
+    }),
+  );
 
 export interface CombatRoundState {
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
@@ -2418,12 +2564,19 @@ export const activeCombatRoundStateSchema: z.ZodType<
   ActiveCombatRoundState,
   z.ZodTypeDef,
   unknown
-> = z.object(activeCombatRoundStateShape).strict();
+> = z.preprocess(
+  normalizeCombatRoundAttackResultAuthorityInput,
+  z.object(activeCombatRoundStateShape).strict(),
+);
 
-export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, unknown> = z.object({
-  ...activeCombatRoundStateShape,
-  rounds: z.array(completedCombatRoundSchema).default([]),
-});
+export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, unknown> =
+  z.preprocess(
+    normalizeCombatRoundAttackResultAuthorityInput,
+    z.object({
+      ...activeCombatRoundStateShape,
+      rounds: z.array(completedCombatRoundSchema).default([]),
+    }),
+  );
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
 export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema>;
@@ -2468,14 +2621,11 @@ function getCombatRoundObservationDeclaration(
 function getCombatRoundAttackResults(state: CombatRoundState): CombatRoundAttackRollResult[] {
   const results = new Map<string, CombatRoundAttackRollResult>();
   for (const participant of state.participants) {
-    for (const result of [
-      ...Object.values(participant.attackResults),
-      ...Object.values(participant.attackResultsByOpportunity ?? {}),
-    ]) {
-      if (!result) continue;
-      const key =
-        result.attackOpportunityId ??
-        `${result.attackerParticipantId}:${result.defenderParticipantId}:${result.phase}:${result.rolledAt}`;
+    for (const result of Object.values(participant.attackResultsByOpportunity ?? {})) {
+      const key = getCombatRoundCanonicalAttackResultKey({
+        result,
+        roundNumber: state.roundNumber,
+      });
       results.set(key, result);
     }
   }
@@ -5488,13 +5638,7 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const outgoingResults = normalized.participants
     .filter((participant) => participant.participantId === input.participantId)
-    .flatMap((participant) =>
-      [
-        ...Object.values(participant.attackResultsByOpportunity ?? {}),
-        participant.attackResults.phase1,
-        participant.attackResults.phase2,
-      ].filter((result): result is CombatRoundAttackRollResult => Boolean(result)),
-    )
+    .flatMap((participant) => Object.values(participant.attackResultsByOpportunity ?? {}))
     .filter((result) => !input.phase || result.phase === input.phase);
   const affectedParticipantIds = new Set<string>([input.participantId]);
   const affectedDefenderSteps = new Map<string, Partial<Record<CombatRoundStep, "pending">>>();
@@ -5548,12 +5692,11 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
     },
     participants: normalized.participants.map((participant) => {
       if (participant.participantId === input.participantId) {
-        const nextAttackResults =
-          input.phase === "phase1"
-            ? { ...participant.attackResults, phase1: undefined }
-            : input.phase === "phase2"
-              ? { ...participant.attackResults, phase2: undefined }
-              : {};
+        const attackResultsByOpportunity = Object.fromEntries(
+          Object.entries(participant.attackResultsByOpportunity ?? {}).filter(
+            ([, result]) => input.phase !== undefined && result.phase !== input.phase,
+          ),
+        );
         const phaseStepStatuses =
           input.phase === "phase1"
             ? {
@@ -5578,14 +5721,11 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
 
         return {
           ...participant,
-          attackResultsByOpportunity: participant.attackResultsByOpportunity
-            ? Object.fromEntries(
-                Object.entries(participant.attackResultsByOpportunity).filter(
-                  ([, result]) => input.phase !== undefined && result.phase !== input.phase,
-                ),
-              )
-            : undefined,
-          attackResults: nextAttackResults,
+          attackResultsByOpportunity,
+          attackResults: deriveCombatRoundAttackResultsCompatibility({
+            attackResultsByOpportunity,
+            participantId: participant.participantId,
+          }),
           stepStatuses: {
             ...participant.stepStatuses,
             ...phaseStepStatuses,
@@ -5619,9 +5759,13 @@ function participantStateFromEncounterParticipant(input: {
   existing?: CombatRoundParticipantState;
   participant: EncounterParticipant;
 }): CombatRoundParticipantState {
+  const attackResultsByOpportunity = input.existing?.attackResultsByOpportunity ?? {};
   return {
-    attackResults: input.existing?.attackResults ?? {},
-    attackResultsByOpportunity: input.existing?.attackResultsByOpportunity,
+    attackResults: deriveCombatRoundAttackResultsCompatibility({
+      attackResultsByOpportunity,
+      participantId: input.participant.id,
+    }),
+    attackResultsByOpportunity,
     characterId: input.participant.characterId,
     combatExperience: input.existing?.combatExperience,
     declaration: input.existing?.declaration,
@@ -5857,25 +6001,14 @@ export function getCombatRoundAttackResultsForParticipantPhase(input: {
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
   const resultsForParticipant = (participant: CombatRoundParticipantState) => {
-    const canonical = Object.values(participant.attackResultsByOpportunity ?? {}).filter(
-      (result) => result.phase === input.phase,
-    );
-    const legacy = participant.attackResults[input.phase];
-    const results = legacy ? [...canonical, legacy] : canonical;
-    return [
-      ...new Map(
-        results.map((result) => [
-          result.attackOpportunityId ??
-            getCombatRoundAttackResultId({ result, roundNumber: normalized.roundNumber }),
-          result,
-        ]),
-      ).values(),
-    ].sort(
-      (left, right) =>
-        (left.attackIndex ?? Number.MAX_SAFE_INTEGER) -
-          (right.attackIndex ?? Number.MAX_SAFE_INTEGER) ||
-        left.rolledAt.localeCompare(right.rolledAt),
-    );
+    return Object.values(participant.attackResultsByOpportunity ?? {})
+      .filter((result) => result.phase === input.phase)
+      .sort(
+        (left, right) =>
+          (left.attackIndex ?? Number.MAX_SAFE_INTEGER) -
+            (right.attackIndex ?? Number.MAX_SAFE_INTEGER) ||
+          left.rolledAt.localeCompare(right.rolledAt),
+      );
   };
   const outgoing = normalized.participants.find(
     (participant) => participant.participantId === input.participantId,
@@ -5893,25 +6026,12 @@ export function getCombatRoundAttackResultsForParticipantPhase(input: {
   return { incoming, outgoing };
 }
 
-/** Canonical persisted attack results, with legacy phase slots included read-only and deduplicated. */
+/** Returns canonical persisted attack results in stable presentation order. */
 export function getCombatRoundParticipantAttackResults(input: {
   participant: CombatRoundParticipantState;
   roundNumber: number;
 }): CombatRoundAttackRollResult[] {
-  const canonical = Object.values(input.participant.attackResultsByOpportunity ?? {});
-  const legacy = [
-    input.participant.attackResults.phase1,
-    input.participant.attackResults.phase2,
-  ].filter((result): result is CombatRoundAttackRollResult => result !== undefined);
-  return [
-    ...new Map(
-      [...canonical, ...legacy].map((result) => [
-        result.attackOpportunityId ??
-          getCombatRoundAttackResultId({ result, roundNumber: input.roundNumber }),
-        result,
-      ]),
-    ).values(),
-  ].sort(
+  return Object.values(input.participant.attackResultsByOpportunity ?? {}).sort(
     (left, right) =>
       left.rolledAt.localeCompare(right.rolledAt) ||
       (left.attackIndex ?? Number.MAX_SAFE_INTEGER) -
@@ -8394,8 +8514,6 @@ export function getCombatRoundAttackResultById(input: {
   attackResultId: string;
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
-  const phases: CombatRoundPhase[] = ["phase1", "phase2"];
-
   for (const participant of input.state.participants) {
     const canonicalResult = Object.values(participant.attackResultsByOpportunity ?? {}).find(
       (result) =>
@@ -8403,19 +8521,6 @@ export function getCombatRoundAttackResultById(input: {
         input.attackResultId,
     );
     if (canonicalResult) return canonicalResult;
-    for (const phase of phases) {
-      const result = participant.attackResults[phase];
-
-      if (
-        result &&
-        getCombatRoundAttackResultId({
-          result,
-          roundNumber: input.state.roundNumber,
-        }) === input.attackResultId
-      ) {
-        return result;
-      }
-    }
   }
 
   return undefined;
@@ -8512,12 +8617,8 @@ export function getCombatRoundAttackResultForOpportunity(input: {
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
   return input.state.participants
-    .flatMap((participant) => [
-      ...Object.values(participant.attackResultsByOpportunity ?? {}),
-      participant.attackResults.phase1,
-      participant.attackResults.phase2,
-    ])
-    .find((result) => result?.attackOpportunityId === input.opportunityId);
+    .flatMap((participant) => Object.values(participant.attackResultsByOpportunity ?? {}))
+    .find((result) => result.attackOpportunityId === input.opportunityId);
 }
 
 export interface CombatRoundAttackDistanceModifierDetail {
@@ -8930,8 +9031,11 @@ export function ensureCombatRoundPhaseResolutionResultsForPhase(input: {
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
   const results = normalized.participants
-    .map((participant) => participant.attackResults[input.phase])
-    .filter((result): result is CombatRoundAttackRollResult => result !== undefined)
+    .flatMap((participant) =>
+      Object.values(participant.attackResultsByOpportunity ?? {}).filter(
+        (result) => result.phase === input.phase,
+      ),
+    )
     .map((attackResult) => {
       const existing = getCombatRoundPhaseResolutionResultForAttack({
         attackResult,
@@ -16343,23 +16447,10 @@ function getCombatRoundAttackResultForAttackResultId(input: {
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const phases: CombatRoundPhase[] = ["phase1", "phase2"];
-
-  for (const participant of normalized.participants) {
-    for (const phase of phases) {
-      const result = participant.attackResults[phase];
-
-      if (
-        result &&
-        getCombatRoundAttackResultId({ result, roundNumber: normalized.roundNumber }) ===
-          input.attackResultId
-      ) {
-        return result;
-      }
-    }
-  }
-
-  return undefined;
+  return getCombatRoundAttackResultById({
+    attackResultId: input.attackResultId,
+    state: normalized,
+  });
 }
 
 function getCombatRoundPhaseDamageCommitTarget(input: {
@@ -16845,12 +16936,11 @@ function combatRoundStateHasPhaseResolutionEvidence(input: {
 
   if (
     input.participants.some((participant) => {
-      const result = participant.attackResults[input.cursor.phase];
-
-      return (
-        result !== undefined &&
-        (result.attackerParticipantId === input.cursor.participantId ||
-          result.defenderParticipantId === input.cursor.participantId)
+      return Object.values(participant.attackResultsByOpportunity ?? {}).some(
+        (result) =>
+          result.phase === input.cursor.phase &&
+          (result.attackerParticipantId === input.cursor.participantId ||
+            result.defenderParticipantId === input.cursor.participantId),
       );
     })
   ) {
@@ -17034,6 +17124,7 @@ function resetCombatRoundPhaseProgress(
   return {
     ...participant,
     attackResults: {},
+    attackResultsByOpportunity: {},
     stepStatuses: {
       ...participant.stepStatuses,
       phase_1_actions: "pending",
@@ -17052,7 +17143,7 @@ function resetCombatRoundParticipantToRoundStart(
   return {
     ...participant,
     attackResults: {},
-    attackResultsByOpportunity: undefined,
+    attackResultsByOpportunity: {},
     combatExperience: undefined,
     declaration: undefined,
     initiatives: {},
@@ -17865,8 +17956,18 @@ export function advanceCombatRoundStep(
     const unresolvedDoubleAttack = normalized.participants.find(
       (participant) =>
         participant.declaration?.actionId === "double_attack" &&
-        Boolean(participant.attackResults.phase1) &&
-        !participant.attackResults.phase2 &&
+        Boolean(
+          getCombatRoundOutgoingAttackResultForParticipantPhase({
+            participantId: participant.participantId,
+            phase: "phase1",
+            state: normalized,
+          }),
+        ) &&
+        !getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: participant.participantId,
+          phase: "phase2",
+          state: normalized,
+        }) &&
         !getCombatRoundDoubleAttackPhase2Decision({
           participantId: participant.participantId,
           state: normalized,
@@ -18077,10 +18178,13 @@ export function advanceCombatRoundStep(
     phaseResolutionStatuses: startsNextRound ? {} : withSnapshots.phaseResolutionStatuses,
     participants: withSnapshots.participants.map((participant) => ({
       ...participant,
-      attackResultsByOpportunity: startsNextRound
-        ? undefined
-        : participant.attackResultsByOpportunity,
-      attackResults: startsNextRound ? {} : participant.attackResults,
+      attackResultsByOpportunity: startsNextRound ? {} : participant.attackResultsByOpportunity,
+      attackResults: startsNextRound
+        ? {}
+        : deriveCombatRoundAttackResultsCompatibility({
+            attackResultsByOpportunity: participant.attackResultsByOpportunity,
+            participantId: participant.participantId,
+          }),
       declaration: startsNextRound ? undefined : participant.declaration,
       initiatives: startsNextRound ? {} : participant.initiatives,
       stepStatuses: startsNextRound
@@ -19543,10 +19647,23 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
   if (normalized.currentStep !== "review_phase_2_modifiers") {
     throw new RangeError("Double Attack phase-2 decision is only available during phase-2 review.");
   }
-  if (!participant.attackResults.phase1) {
+  if (
+    !getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: input.participantId,
+      phase: "phase1",
+      state: normalized,
+    })
+  ) {
     throw new RangeError("Resolve Attack 1 before deciding whether to continue Double Attack.");
   }
-  if (participant.attackResults.phase2 || getCombatRoundDoubleAttackPhase2Decision(input)) {
+  if (
+    getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: input.participantId,
+      phase: "phase2",
+      state: normalized,
+    }) ||
+    getCombatRoundDoubleAttackPhase2Decision(input)
+  ) {
     throw new RangeError("Double Attack phase-2 decision has already been recorded.");
   }
 
@@ -20155,19 +20272,22 @@ export function recordCombatRoundAttackResult(input: {
             next: recordedResult.attackPhaseDefensivePenalty,
           })
         : participant.declaration?.attackPhaseDefensivePenalties;
+      const canonicalResultKey = getCombatRoundCanonicalAttackResultKey({
+        result: recordedResult,
+        roundNumber: normalized.roundNumber,
+      });
+      const attackResultsByOpportunity = {
+        ...(participant.attackResultsByOpportunity ?? {}),
+        [canonicalResultKey]: recordedResult,
+      };
 
       return {
         ...participant,
-        attackResultsByOpportunity: recordedResult.attackOpportunityId
-          ? {
-              ...(participant.attackResultsByOpportunity ?? {}),
-              [recordedResult.attackOpportunityId]: recordedResult,
-            }
-          : participant.attackResultsByOpportunity,
-        attackResults: {
-          ...participant.attackResults,
-          [recordedResult.phase]: recordedResult,
-        },
+        attackResultsByOpportunity,
+        attackResults: deriveCombatRoundAttackResultsCompatibility({
+          attackResultsByOpportunity,
+          participantId: participant.participantId,
+        }),
         declaration:
           participant.declaration && nextAttackPhaseDefensivePenalties
             ? {
@@ -20910,49 +21030,21 @@ function clearCombatRoundStepLegacy(input: {
       : normalized.phaseResolutionResults,
     phaseResolutionStatuses: nextPhaseResolutionStatuses,
     participants: normalized.participants.map((participant) => {
-      const nextAttackResults = { ...participant.attackResults };
       const nextAttackResultsByOpportunity = {
         ...(participant.attackResultsByOpportunity ?? {}),
       };
       const nextInitiatives = { ...participant.initiatives };
-
-      if (
+      const clearsRecordedAttack =
         participant.participantId === selectedAttackResultForClear?.attackerParticipantId &&
-        selectedAttackResultForClear.attackOpportunityId
-      ) {
-        delete nextAttackResultsByOpportunity[selectedAttackResultForClear.attackOpportunityId];
-      }
+        (clearsPhaseActionRedo || clearsAutoCreatedPendingParry);
 
-      if (
-        input.step === "phase_1_actions" &&
-        clearsPhaseActionRedo &&
-        participant.participantId === selectedAttackResultForClear?.attackerParticipantId
-      ) {
-        delete nextAttackResults.phase1;
-      }
-
-      if (
-        input.step === "phase_2_actions" &&
-        clearsPhaseActionRedo &&
-        participant.participantId === selectedAttackResultForClear?.attackerParticipantId
-      ) {
-        delete nextAttackResults.phase2;
-      }
-
-      if (
-        clearsAutoCreatedPendingParry &&
-        selectedAttackResultForClear?.phase === "phase1" &&
-        participant.participantId === selectedAttackResultForClear.attackerParticipantId
-      ) {
-        delete nextAttackResults.phase1;
-      }
-
-      if (
-        clearsAutoCreatedPendingParry &&
-        selectedAttackResultForClear?.phase === "phase2" &&
-        participant.participantId === selectedAttackResultForClear.attackerParticipantId
-      ) {
-        delete nextAttackResults.phase2;
+      if (clearsRecordedAttack && selectedAttackResultForClear) {
+        delete nextAttackResultsByOpportunity[
+          getCombatRoundCanonicalAttackResultKey({
+            result: selectedAttackResultForClear,
+            roundNumber: normalized.roundNumber,
+          })
+        ];
       }
 
       if (
@@ -20998,10 +21090,11 @@ function clearCombatRoundStepLegacy(input: {
 
       return {
         ...participant,
-        attackResultsByOpportunity: Object.keys(nextAttackResultsByOpportunity).length
-          ? nextAttackResultsByOpportunity
-          : undefined,
-        attackResults: nextAttackResults,
+        attackResultsByOpportunity: nextAttackResultsByOpportunity,
+        attackResults: deriveCombatRoundAttackResultsCompatibility({
+          attackResultsByOpportunity: nextAttackResultsByOpportunity,
+          participantId: participant.participantId,
+        }),
         declaration:
           input.step === "select_actions" && participant.participantId === selectedParticipantId
             ? undefined
@@ -21202,9 +21295,7 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
     );
     return combatRoundStateSchema.parse({
       ...baseState,
-      gmBacktrackHold: previousGmBacktrackHold.success
-        ? previousGmBacktrackHold.data
-        : undefined,
+      gmBacktrackHold: previousGmBacktrackHold.success ? previousGmBacktrackHold.data : undefined,
       participants: previousDeclaration.success
         ? baseState.participants.map((participant) =>
             participant.participantId === command.participantId
@@ -23330,9 +23421,7 @@ function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
-    gmBacktrackHold: previousGmBacktrackHold.success
-      ? previousGmBacktrackHold.data
-      : undefined,
+    gmBacktrackHold: previousGmBacktrackHold.success ? previousGmBacktrackHold.data : undefined,
     phaseResolutionCursor: undefined,
     selectedParticipantId: command.beforeCursor.participantId ?? normalized.selectedParticipantId,
     selectedStep,
@@ -24559,11 +24648,11 @@ function findCombatRoundLatestEventAttackResult(input: {
     return undefined;
   }
 
-  const participant = input.state.participants.find(
-    (entry) => entry.participantId === input.command.participantId,
-  );
-
-  return participant?.attackResults[input.command.phase];
+  return getCombatRoundOutgoingAttackResultForParticipantPhase({
+    participantId: input.command.participantId,
+    phase: input.command.phase,
+    state: input.state,
+  });
 }
 
 function getCombatRoundLatestEventForCommand(input: {

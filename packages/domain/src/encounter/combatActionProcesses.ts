@@ -6,6 +6,8 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundDoubleAttackPhase2Decision,
   getCombatRoundOffensiveParryAttemptIdentity,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantAttackResults,
   type CombatRoundAttackOpportunity,
   type CombatRoundCommandType,
   type CombatRoundPhase,
@@ -114,7 +116,12 @@ export interface CombatActionProcessTaskDescriptor {
   readonly expectedCommand: CombatRoundCommandType;
   readonly opportunityId: string;
   readonly offensiveParryAttemptId?: string;
-  readonly owner: "attacker" | "defender" | "gm" | "offensive_parry_controller" | "offensive_parry_responder";
+  readonly owner:
+    | "attacker"
+    | "defender"
+    | "gm"
+    | "offensive_parry_controller"
+    | "offensive_parry_responder";
   readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
@@ -490,7 +497,13 @@ function buildStandardAdapter(input: {
       const allOpportunities = contextualOpportunities.filter(
         (entry) => entry.participantId === context.participantId,
       );
-      const firstAttackComplete = Boolean(participant.attackResults.phase1);
+      const firstAttackComplete = Boolean(
+        getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: context.participantId,
+          phase: "phase1",
+          state,
+        }),
+      );
       const decision =
         input.actionKind === "double_attack"
           ? getCombatRoundDoubleAttackPhase2Decision({
@@ -518,7 +531,12 @@ function buildStandardAdapter(input: {
         ];
         if (input.actionKind === "reactive_attack") {
           const trigger = state.participants
-            .flatMap((entry) => entry.attackResults.phase1 ?? [])
+            .flatMap((entry) =>
+              getCombatRoundParticipantAttackResults({
+                participant: entry,
+                roundNumber: state.roundNumber,
+              }).filter((attackResult) => attackResult.phase === "phase1"),
+            )
             .filter((attackResult) => attackResult.defenderParticipantId === context.participantId)
             .some(
               (attackResult) =>

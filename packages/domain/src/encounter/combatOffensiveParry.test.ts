@@ -406,7 +406,7 @@ describe("Offensive Parry rules", () => {
       currentCursor: { participantId: "attacker", roundNumber: 1, step: "A1" },
       participants: state().participants.map((participant) =>
         participant.participantId === "attacker"
-          ? { ...participant, attackResults: {} }
+          ? { ...participant, attackResults: {}, attackResultsByOpportunity: {} }
           : participant,
       ),
       phaseResolutionCursor: {

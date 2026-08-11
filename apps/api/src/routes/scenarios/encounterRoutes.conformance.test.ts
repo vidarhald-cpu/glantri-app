@@ -77,6 +77,28 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).not.toContain("getPlayerCombatCurrentRollAction");
   });
 
+  it("filters canonical attack results before deriving player-safe phase compatibility", () => {
+    const sanitizerStart = source.indexOf(
+      "function sanitizePlayerSafeCurrentCombatResultsState(input:",
+    );
+    const sanitizerEnd = source.indexOf(
+      "function buildPlayerSafeCombatRollMutationEncounterForUser(input:",
+      sanitizerStart,
+    );
+    const sanitizerSource = source.slice(sanitizerStart, sanitizerEnd);
+
+    expect(sanitizerStart).toBeGreaterThanOrEqual(0);
+    expect(sanitizerEnd).toBeGreaterThan(sanitizerStart);
+    expect(sanitizerSource).toContain(
+      "Object.entries(participant.attackResultsByOpportunity ?? {}).filter",
+    );
+    expect(sanitizerSource).toContain("deriveCombatRoundAttackResultsCompatibility({");
+    expect(sanitizerSource).not.toContain("participant.attackResults[");
+    expect(sanitizerSource.indexOf("Object.fromEntries(")).toBeLessThan(
+      sanitizerSource.indexOf("deriveCombatRoundAttackResultsCompatibility({"),
+    );
+  });
+
   it("requires the boundary command execution group and command type", () => {
     expect(source).toContain("expectedCommandType: body.commandType");
     expect(source).toContain("expectedExecutionGroupId: body.executionGroupId");
@@ -312,12 +334,8 @@ describe("combat route canonical-conformance guards", () => {
     expect(routeStart).toBeGreaterThanOrEqual(0);
     expect(nextRoute).toBeGreaterThan(routeStart);
     expect(routeSource).toContain("const canonicalOpponentParticipantId =");
-    expect(routeSource).toContain(
-      "canonicalOpponentParticipantId !== body.opponentParticipantId",
-    );
-    expect(routeSource).toContain(
-      "opponentScenarioParticipant.id === scenarioParticipant.id",
-    );
+    expect(routeSource).toContain("canonicalOpponentParticipantId !== body.opponentParticipantId");
+    expect(routeSource).toContain("opponentScenarioParticipant.id === scenarioParticipant.id");
     expect(routeSource).not.toContain("participants.find((participant, index)");
   });
 
